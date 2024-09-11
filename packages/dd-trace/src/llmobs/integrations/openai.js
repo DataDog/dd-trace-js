@@ -15,7 +15,7 @@ class OpenAIIntegration extends BaseLLMObsIntegration {
     return 'openai'
   }
 
-  setSpanStartTags (span, resource, inputs) {
+  setSpanStartTags (span, parent, resource, inputs) {
     const methodName = this._gateResource(this._normalizeOpenAIResourceName(resource))
     if (!methodName) return // we will not trace all openai methods for llmobs
 
@@ -27,7 +27,8 @@ class OpenAIIntegration extends BaseLLMObsIntegration {
     this._tagger.setLLMObsSpanTags(span, kind, {
       modelProvider: 'openai',
       mlApp: getMlApp(span, this._config.llmobs.mlApp),
-      sessionId: getSessionId(span)
+      sessionId: getSessionId(span),
+      parentLLMObsSpan: parent
     }, name)
 
     if (operation === 'completion') {

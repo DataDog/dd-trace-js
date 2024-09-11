@@ -15,6 +15,7 @@ describe('TracerProxy', () => {
   let NoopProxy
   let noop
   let appsecSdk
+  let llmobsSdk
   let noopAppsecSdk
   let Config
   let config
@@ -32,6 +33,8 @@ describe('TracerProxy', () => {
   let dogStatsD
   let noopDogStatsDClient
   let NoopDogStatsDClient
+  let LLMObsSDK
+  let llmobs
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = false
@@ -119,6 +122,7 @@ describe('TracerProxy', () => {
     NoopAppsecSdk = sinon.stub().returns(noopAppsecSdk)
     PluginManager = sinon.stub().returns(pluginManager)
     NoopDogStatsDClient = sinon.stub().returns(noopDogStatsDClient)
+    LLMObsSDK = sinon.stub().returns(llmobsSdk)
 
     config = {
       tracing: true,
@@ -131,7 +135,8 @@ describe('TracerProxy', () => {
       remoteConfig: {
         enabled: true
       },
-      configure: sinon.spy()
+      configure: sinon.spy(),
+      llmobs: {}
     }
     Config = sinon.stub().returns(config)
 
@@ -153,6 +158,11 @@ describe('TracerProxy', () => {
     }
 
     iast = {
+      enable: sinon.spy(),
+      disable: sinon.spy()
+    }
+
+    llmobs = {
       enable: sinon.spy(),
       disable: sinon.spy()
     }
@@ -194,7 +204,9 @@ describe('TracerProxy', () => {
       './appsec/sdk': AppsecSdk,
       './dogstatsd': dogStatsD,
       './noop/dogstatsd': NoopDogStatsDClient,
-      './flare': flare
+      './flare': flare,
+      './llmobs/sdk': LLMObsSDK,
+      './llmobs': llmobs
     })
 
     proxy = new Proxy()
@@ -470,6 +482,22 @@ describe('TracerProxy', () => {
         proxy.init()
 
         expect(iast.enable).not.to.have.been.called
+      })
+
+      it('should enable llmobs when configured', () => {
+        config.llmobs = { enabled: true }
+
+        proxy.init()
+
+        expect(llmobs.enable).to.have.been.calledOnce
+      })
+
+      it('should not enable llmobs when it is not configured', () => {
+        config.llmobs = { enabled: false }
+
+        proxy.init()
+
+        expect(llmobs.enable).not.to.have.been.called
       })
 
       it('should not load the profiler when not configured', () => {

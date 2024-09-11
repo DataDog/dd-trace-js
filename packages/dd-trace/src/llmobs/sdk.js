@@ -1,6 +1,6 @@
 'use strict'
 
-const { SPAN_KIND, OUTPUT_VALUE } = require('./constants')
+const { SPAN_KIND, OUTPUT_VALUE, TRACE_ID } = require('./constants')
 
 const {
   validKind,
@@ -20,8 +20,6 @@ const logger = require('../log')
 const AgentlessWriter = require('./writers/spans/agentless')
 const AgentProxyWriter = require('./writers/spans/agentProxy')
 
-const NoopSpan = require('../noop/span')
-
 class LLMObs {
   constructor (tracer, llmobsModule, config) {
     this._config = config
@@ -38,9 +36,9 @@ class LLMObs {
     return this._config.llmobs.enabled
   }
 
-  enable (options) {
+  enable (options = {}) {
     if (this.enabled) {
-      logger.debug('LLMObs already enabled.')
+      logger.debug('LLMObs is already enabled.')
       return
     }
 
@@ -73,7 +71,7 @@ class LLMObs {
 
   disable () {
     if (!this.enabled) {
-      logger.debug('LLMObs already disabled.')
+      logger.debug('LLMObs is already disabled.')
       return
     }
 
@@ -90,21 +88,31 @@ class LLMObs {
   }
 
   annotate (span, options) {
-    if (!this.enabled) return
+    if (!this.enabled) {
+      logger.warn(
+        'Annotate called while LLMObs is disabled. Not annotating span.'
+      )
+      return
+    }
 
     if (!span) {
-      span = this._tracer.scope().active()
+      span = this.active()
     }
 
     if ((span && !options) && !(span instanceof Span)) {
       options = span
-      span = this._tracer.scope().active()
+      span = this.active()
     }
 
     if (!span) {
       logger.warn('No span provided and no active LLMObs-generated span found')
       return
     }
+    if (!options) {
+      logger.warn('No options provided for annotation.')
+      return
+    }
+
     if (!isLLMSpan(span)) {
       logger.warn('Span must be an LLMObs-generated span')
       return
@@ -148,25 +156,46 @@ class LLMObs {
   }
 
   exportSpan (span) {
-    if (!this.enabled) return
+    if (!this.enabled) {
+      logger.warn('Span exported while LLMObs is disabled. Span will not be exported.')
+      return
+    }
+
+    span = span || this.active()
+
+    if (!span) {
+      logger.warn('No span provided and no active LLMObs-generated span found')
+      return
+    }
+
+    if (!isLLMSpan(span)) {
+      logger.warn('Span must be an LLMObs-generated span')
+      return
+    }
+
     try {
-      span = span || this._tracer.scope().active()
-
-      if (!isLLMSpan(span)) return
-
       return {
-        traceId: span.context().toTraceId(true),
+        traceId: span.context()._tags[TRACE_ID],
         spanId: span.context().toSpanId()
       }
     } catch {
+      logger.warn('Faild to export span. Span must be a valid Span object.')
       return undefined // invalid span kind
     }
   }
 
-  submitEvaluation (llmobsSpanContext, options) {
+  submitEvaluation (llmobsSpanContext, options = {}) {
     if (!this.enabled) {
       logger.warn(
         'LLMObs.submitEvaluation() called when LLMObs is not enabled. Evaluation metric data will not be sent.'
+      )
+      return
+    }
+
+    if (!this._config.llmobs.apiKey || !this._config.apiKey) {
+      logger.warn(
+        'DD_API_KEY is required for sending evaluation metrics. Evaluation metric data will not be sent.\n' +
+        'Ensure this configuration is set before running your application.'
       )
       return
     }
@@ -192,7 +221,7 @@ class LLMObs {
     }
 
     const { label, value, tags } = options
-    const metricType = options.metricType.toLowerCase()
+    const metricType = options.metricType?.toLowerCase()
     if (!label) {
       logger.warn('label must be the specified name of the evaluation metric')
       return
@@ -242,8 +271,14 @@ class LLMObs {
   }
 
   startSpan (kind, options = {}) {
-    if (!this.enabled) return new NoopSpan(this._tracer)
-    if (!validKind(kind)) return
+    if (!this.enabled) {
+      logger.warn('Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.')
+    }
+
+    const valid = validKind(kind)
+    if (!valid) {
+      logger.warn(`Invalid span kind specified: ${kind}. Span will not be sent to LLM Observability.`)
+    }
 
     const name = getName(kind, options)
 
@@ -257,12 +292,16 @@ class LLMObs {
       childOf: this._tracer.scope().active()
     })
 
-    this._tagger.setLLMObsSpanTags(span, kind, llmobsOptions)
-
     const oldStore = storage.getStore()
+    const parentLLMObsSpan = oldStore?.llmobsSpan
+
+    this._tagger.setLLMObsSpanTags(span, valid && kind, {
+      ...llmobsOptions,
+      parentLLMObsSpan
+    })
     const newStore = span ? span._store : oldStore
 
-    storage.enterWith({ ...newStore, span }) // preserve context
+    storage.enterWith({ ...newStore, span, llmobsSpan: span }) // preserve context
 
     return new Proxy(span, {
       get (target, key) {
@@ -284,8 +323,14 @@ class LLMObs {
       options = {}
     }
 
-    if (!this.enabled) return fn(new NoopSpan(this._tracer), () => {})
-    if (!validKind(kind)) return fn(new NoopSpan(this._tracer), () => {})
+    if (!this.enabled) {
+      logger.warn('Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.')
+    }
+
+    const valid = validKind(kind)
+    if (!valid) {
+      logger.warn(`Invalid span kind specified: ${kind}. Span will not be sent to LLM Observability.`)
+    }
 
     const name = getName(kind, options)
 
@@ -296,14 +341,53 @@ class LLMObs {
 
     if (fn.length > 1) {
       return this._tracer.trace(name, spanOptions, (span, cb) => {
-        this._tagger.setLLMObsSpanTags(span, kind, llmobsOptions)
-        return fn(span, cb)
+        const oldStore = storage.getStore()
+        const parentLLMObsSpan = oldStore?.llmobsSpan
+        storage.enterWith({ ...oldStore, llmobsSpan: span })
+
+        this._tagger.setLLMObsSpanTags(span, valid && kind, {
+          ...llmobsOptions,
+          parentLLMObsSpan
+        })
+
+        return fn(span, err => {
+          // is this needed? with the use of `activate` internally, it should restore
+          // the context from what it was before the `enterWith` above...
+          storage.enterWith(oldStore)
+          cb(err)
+        })
       })
     }
 
     return this._tracer.trace(name, spanOptions, span => {
-      this._tagger.setLLMObsSpanTags(span, kind, llmobsOptions)
-      return fn(span)
+      const oldStore = storage.getStore()
+      const parentLLMObsSpan = oldStore?.llmobsSpan
+      storage.enterWith({ ...oldStore, llmobsSpan: span })
+
+      this._tagger.setLLMObsSpanTags(span, valid && kind, {
+        ...llmobsOptions,
+        parentLLMObsSpan
+      })
+
+      try {
+        const result = fn(span)
+
+        if (result && typeof result.then === 'function') {
+          return result.then(value => {
+            storage.enterWith(oldStore)
+            return value
+          }).catch(err => {
+            storage.enterWith(oldStore)
+            throw err
+          })
+        }
+
+        storage.enterWith(oldStore)
+        return result
+      } catch (e) {
+        storage.enterWith(oldStore)
+        throw e
+      }
     })
   }
 
@@ -312,9 +396,6 @@ class LLMObs {
       fn = options
       options = {}
     }
-
-    if (!this.enabled) return fn
-    if (!validKind(kind)) return fn
 
     const name = getName(kind, options, fn)
 
@@ -326,27 +407,52 @@ class LLMObs {
     const llmobs = this
 
     function wrapped () {
-      const span = llmobs._tracer.scope().active()
+      if (!llmobs.enabled) {
+        logger.warn('Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.')
+      }
 
-      llmobs._tagger.setLLMObsSpanTags(span, kind, llmobsOptions)
+      const valid = validKind(kind)
+      if (!valid) {
+        logger.warn(`Invalid span kind specified: ${kind}. Span will not be sent to LLM Observability.`)
+      }
+
+      const span = llmobs._tracer.scope().active()
+      const oldStore = storage.getStore()
+      const parentLLMObsSpan = oldStore?.llmobsSpan
+      storage.enterWith({ ...oldStore, llmobsSpan: span })
+
+      llmobs._tagger.setLLMObsSpanTags(span, valid && kind, {
+        ...llmobsOptions,
+        parentLLMObsSpan
+      })
       llmobs.annotate(span, { inputData: getFunctionArguments(fn, arguments) })
 
-      const result = fn.apply(this, arguments)
+      try {
+        const result = fn.apply(this, arguments)
 
-      if (result && typeof result.then === 'function') {
-        return result.then(value => {
-          if (value && kind !== 'retrieval' && !span.context()._tags[OUTPUT_VALUE]) {
-            llmobs.annotate(span, { outputData: value })
-          }
-          return value
-        })
+        if (result && typeof result.then === 'function') {
+          return result.then(value => {
+            if (value && kind !== 'retrieval' && !span.context()._tags[OUTPUT_VALUE]) {
+              llmobs.annotate(span, { outputData: value })
+            }
+            storage.enterWith(oldStore)
+            return value
+          }).catch(err => {
+            storage.enterWith(oldStore)
+            throw err
+          })
+        }
+
+        if (result && kind !== 'retrieval' && !span.context()._tags[OUTPUT_VALUE]) {
+          llmobs.annotate(span, { outputData: result })
+          storage.enterWith(oldStore)
+        }
+
+        return result
+      } catch (e) {
+        storage.enterWith(oldStore)
+        throw e
       }
-
-      if (result && kind !== 'retrieval' && !span.context()._tags[OUTPUT_VALUE]) {
-        llmobs.annotate(span, { outputData: result })
-      }
-
-      return result
     }
 
     return this._tracer.wrap(name, spanOptions, wrapped) // try and have it call `startSpan` for this class
@@ -374,6 +480,11 @@ class LLMObs {
     } catch {
       logger.warn('Failed to flush LLMObs spans and evaluation metrics')
     }
+  }
+
+  active () {
+    const store = storage.getStore()
+    return store?.llmobsSpan
   }
 
   _extractOptions (options) {

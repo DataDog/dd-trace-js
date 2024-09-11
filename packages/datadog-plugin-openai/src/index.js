@@ -205,7 +205,8 @@ class OpenApiPlugin extends TracingPlugin {
         metadata: {
           apiKey,
           basePath
-        }
+        },
+        parent: store.llmobsSpan
       })
     }
 

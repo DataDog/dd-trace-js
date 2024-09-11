@@ -5,7 +5,6 @@ const {
   SPAN_TYPE
 } = require('../../../../ext/tags')
 const {
-  PROPAGATED_PARENT_ID_KEY,
   MODEL_NAME,
   MODEL_PROVIDER,
   SESSION_ID,
@@ -21,14 +20,12 @@ const {
   INPUT_MESSAGES,
   OUTPUT_MESSAGES,
   TAGS,
-  NAME
+  NAME,
+  PROPAGATED_PARENT_ID_KEY,
+  TRACE_ID,
+  PROPAGATED_TRACE_ID_KEY
 } = require('./constants')
-
-const {
-  getLLMObsParentId,
-  getMlApp,
-  getSessionId
-} = require('./util')
+const { generateTraceId } = require('./util')
 
 class LLMObsTagger {
   constructor (config) {
@@ -40,24 +37,43 @@ class LLMObsTagger {
     }
   }
 
-  setLLMObsSpanTags (span, kind, { modelName, modelProvider, sessionId, mlApp }, name) {
-    span.setTag(SPAN_TYPE, 'llm')
+  setLLMObsSpanTags (
+    span,
+    kind,
+    { modelName, modelProvider, sessionId, mlApp, parentLLMObsSpan } = {},
+    name
+  ) {
+    if (kind) span.setTag(SPAN_TYPE, 'llm') // only mark it as an llm span if it was a valid kind
     if (name) span.setTag(NAME, name)
 
     span.setTag(SPAN_KIND, kind)
     if (modelName) span.setTag(MODEL_NAME, modelName)
     if (modelProvider) span.setTag(MODEL_PROVIDER, modelProvider)
 
-    sessionId = sessionId || getSessionId(span)
+    if (!parentLLMObsSpan) {
+      const maybePropagatedTraceId = span.context()._trace.tags[PROPAGATED_TRACE_ID_KEY]
+      if (maybePropagatedTraceId) {
+        span.setTag(TRACE_ID, maybePropagatedTraceId)
+      } else {
+        // making this 128 bit by default
+        const traceId = generateTraceId()
+        span.setTag(TRACE_ID, traceId)
+      }
+    } else {
+      span.setTag(TRACE_ID, parentLLMObsSpan.context()._tags[TRACE_ID])
+    }
+
+    sessionId = sessionId || parentLLMObsSpan?.context()._tags[SESSION_ID]
     if (sessionId) span.setTag(SESSION_ID, sessionId)
 
-    if (!mlApp) mlApp = getMlApp(span, this._config.llmobs.mlApp)
+    if (!mlApp) mlApp = parentLLMObsSpan?.context()._tags[ML_APP] || this._config.llmobs.mlApp
     span.setTag(ML_APP, mlApp)
 
-    if (!span.context()._tags[PROPAGATED_PARENT_ID_KEY]) {
-      const parentId = getLLMObsParentId(span) || 'undefined'
-      span.setTag(PARENT_ID_KEY, parentId)
-    }
+    const parentId =
+      parentLLMObsSpan?.context().toSpanId() ||
+      span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ||
+      'undefined'
+    span.setTag(PARENT_ID_KEY, parentId)
   }
 
   tagLLMIO (span, inputData, outputData) {
@@ -177,6 +193,8 @@ class LLMObsTagger {
           if (typeof content !== 'string') {
             return undefined
           }
+
+          message.content = content
 
           if (role && typeof role !== 'string') {
             return undefined

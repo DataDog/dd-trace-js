@@ -8,12 +8,9 @@ const {
   injectCh
 } = require('./integrations/channels')
 
-const tracer = require('../../../../')
 const log = require('../log')
-const { isLLMSpan, getLLMObsParentId } = require('./util')
-const { PROPAGATED_PARENT_ID_KEY } = require('./constants')
-
-// TODO(sam.brenner) integration enablement can happen here too
+const { PROPAGATED_PARENT_ID_KEY, PROPAGATED_TRACE_ID_KEY, TRACE_ID } = require('./constants')
+const { storage } = require('../../../datadog-core')
 
 function enable (config) {
   registerPlugins(config)
@@ -32,22 +29,17 @@ function disable () {
   if (injectCh.hasSubscribers) injectCh.unsubscribe(handleLLMObsParentIdInjection)
 }
 
-// TODO(sam.brenner) remove this once LLMObs submits APM skeleton spans
-function handleLLMObsParentIdInjection ({ spanContext, carrier }) {
-  const span = tracer.scope().active() // this is one above the outbound span
-  if (!span) {
-    log.warn('No active span to inject LLMObs parent ID info.')
+function handleLLMObsParentIdInjection ({ carrier }) {
+  const parent = storage.getStore().llmobsSpan
+  if (!parent) {
+    log.warn('No active span to inject LLMObs info.')
     return
   }
 
-  let parentId
-  if (isLLMSpan(span)) {
-    parentId = span.context().toSpanId()
-  } else {
-    parentId = getLLMObsParentId(span)
-  }
+  const parentId = parent?.context().toSpanId()
+  const traceId = parent?.context()._tags[TRACE_ID]
 
-  carrier['x-datadog-tags'] += `,${PROPAGATED_PARENT_ID_KEY}=${parentId}`
+  carrier['x-datadog-tags'] += `,${PROPAGATED_PARENT_ID_KEY}=${parentId},${PROPAGATED_TRACE_ID_KEY}=${traceId}`
 }
 
 module.exports = { enable, disable }

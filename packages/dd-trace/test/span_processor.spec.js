@@ -15,6 +15,8 @@ describe('SpanProcessor', () => {
   let config
   let SpanSampler
   let sample
+  let LLMObsSpanProcessor
+  let LLMObsSpanProcessorInstance
 
   beforeEach(() => {
     tracer = {}
@@ -45,6 +47,9 @@ describe('SpanProcessor', () => {
       flushMinSpans: 3,
       stats: {
         enabled: false
+      },
+      llmobs: {
+        enabled: false
       }
     }
     format = sinon.stub().returns({ formatted: true })
@@ -54,9 +59,15 @@ describe('SpanProcessor', () => {
       sample
     })
 
+    LLMObsSpanProcessorInstance = {
+      process: sinon.stub()
+    }
+    LLMObsSpanProcessor = sinon.stub().returns(LLMObsSpanProcessorInstance)
+
     SpanProcessor = proxyquire('../src/span_processor', {
       './format': format,
-      './span_sampler': SpanSampler
+      './span_sampler': SpanSampler,
+      './llmobs/span_processor': LLMObsSpanProcessor
     })
     processor = new SpanProcessor(exporter, prioritySampler, config)
   })
@@ -123,7 +134,8 @@ describe('SpanProcessor', () => {
             maxPerSecond: 456
           }
         ]
-      }
+      },
+      llmobs: { enabled: false }
     }
 
     const processor = new SpanProcessor(exporter, prioritySampler, config)
@@ -136,6 +148,9 @@ describe('SpanProcessor', () => {
     const config = {
       tracing: false,
       stats: {
+        enabled: false
+      },
+      llmobs: {
         enabled: false
       }
     }
@@ -150,5 +165,25 @@ describe('SpanProcessor', () => {
     expect(trace).to.have.deep.property('finished', [])
     expect(finishedSpan.context()).to.have.deep.property('_tags', {})
     expect(exporter.export).not.to.have.been.called
+  })
+
+  it('should initialize and call the LLMObs span processor', () => {
+    const config = {
+      llmobs: {
+        enabled: true
+      },
+      stats: {
+        enabled: false
+      }
+    }
+
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+
+    processor.process(finishedSpan)
+
+    expect(LLMObsSpanProcessor).to.have.been.calledWith(config)
+    expect(LLMObsSpanProcessorInstance.process).to.have.been.calledWith(finishedSpan)
   })
 })

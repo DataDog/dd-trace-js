@@ -1,9 +1,8 @@
 'use strict'
 
 class NoopLLMObs {
-  constructor () {
-    this._config = {}
-    this._tracer = {}
+  constructor (noopTracer) {
+    this._tracer = noopTracer
   }
 
   get enabled () {
@@ -20,11 +19,35 @@ class NoopLLMObs {
 
   submitEvaluation (llmobsSpanContext, options) {}
 
-  startSpan (kind, options) {}
+  startSpan (kind, options) {
+    return this._tracer.startSpan(kind, options)
+  }
 
-  trace (kind, options, fn) {}
+  trace (kind, options, fn) {
+    if (!fn) {
+      fn = options
+      options = {}
+    }
 
-  wrap (kind, options, fn) {}
+    if (typeof fn !== 'function') return
+
+    options = options || {}
+
+    return this._tracer.trace(kind, options, fn)
+  }
+
+  wrap (kind, options, fn) {
+    if (!fn) {
+      fn = options
+      options = {}
+    }
+
+    if (typeof fn !== 'function') return fn
+
+    options = options || {}
+
+    return this._tracer.wrap(kind, options, fn)
+  }
 }
 
 module.exports = NoopLLMObs

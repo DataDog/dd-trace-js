@@ -17,7 +17,6 @@ const { SSIHeuristics } = require('./profiling/ssi-heuristics')
 const telemetryLog = require('dc-polyfill').channel('datadog:telemetry:log')
 const appsecStandalone = require('./appsec/standalone')
 const LLMObsSDK = require('./llmobs/sdk')
-const NoopLLMObs = require('./llmobs/noop')
 
 class LazyModule {
   constructor (provider) {
@@ -189,9 +188,7 @@ class Tracer extends NoopProxy {
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         this.appsec = new AppsecSdk(this._tracer, config)
-        this.llmobs = config.llmobs.enabled
-          ? new LLMObsSDK(this._tracer, this._modules.llmobs, config)
-          : new NoopLLMObs()
+        this.llmobs = new LLMObsSDK(this._tracer, this._modules.llmobs, config)
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {

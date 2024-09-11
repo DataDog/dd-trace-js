@@ -16,7 +16,8 @@ const {
   TAGS,
   PARENT_ID_KEY,
   SESSION_ID,
-  NAME
+  NAME,
+  TRACE_ID
 } = require('./constants')
 
 const {
@@ -94,17 +95,16 @@ class LLMObsSpanProcessor {
 
     const metrics = JSON.parse(tags[METRICS] || '{}')
 
-    // TODO: remove when not walking up the trace anymore
-    // this will be stitched together on the backend
-
     const mlApp = tags[ML_APP]
     const sessionId = tags[SESSION_ID]
     const parentId = tags[PARENT_ID_KEY]
 
     const name = tags[NAME] || span._name
 
+    const traceId = tags[TRACE_ID]
+
     const llmObsSpanEvent = {
-      trace_id: span.context().toTraceId(true),
+      trace_id: traceId,
       span_id: span.context().toSpanId(),
       parent_id: parentId,
       name,

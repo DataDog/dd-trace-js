@@ -5,9 +5,9 @@ const OpenAIIntegration = require('./openai')
 const plugins = {}
 
 // TODO(sam.brenner) should we be using the tracer here instead of passing the span?
-function handleSpanStart ({ span, integration, resource, inputs }) {
+function handleSpanStart ({ span, integration, resource, inputs, parent }) {
   const plugin = plugins[integration]
-  if (plugin) plugin.setSpanStartTags(span, resource, inputs)
+  if (plugin) plugin.setSpanStartTags(span, parent, resource, inputs)
 }
 
 function handleSpanEnd ({ span, integration, resource, response, error }) {

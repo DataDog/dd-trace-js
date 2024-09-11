@@ -2,6 +2,7 @@
 
 const { SPAN_KINDS, PARENT_ID_KEY, PROPAGATED_PARENT_ID_KEY, ML_APP, SESSION_ID } = require('./constants')
 const { SPAN_TYPE } = require('../../../../ext/tags')
+const id = require('../id')
 
 function validKind (kind) {
   return SPAN_KINDS.includes(kind)
@@ -208,6 +209,12 @@ function getFunctionArguments (fn, args = []) {
   }
 }
 
+function generateTraceId () {
+  return Math.floor(Date.now() / 1000).toString(16)
+    .padStart(8, '0')
+    .padEnd(16, '0') + id().toString(16).padStart(16, '0')
+}
+
 module.exports = {
   validKind,
   getName,
@@ -216,5 +223,6 @@ module.exports = {
   getMlApp,
   getSessionId,
   encodeUnicode,
-  getFunctionArguments
+  getFunctionArguments,
+  generateTraceId
 }
