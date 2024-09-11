@@ -102,7 +102,7 @@ describe('RASP - sql_injection', () => {
       sinon.assert.notCalled(waf.run)
     })
 
-    it('should not analyze sql injection if no url', () => {
+    it('should not analyze sql injection if no query', () => {
       const ctx = {
         query: {}
       }
