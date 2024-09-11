@@ -130,31 +130,35 @@ function getChannelPromise (channelToPublishTo) {
   })
 }
 
-function getFilteredPickles (runtimeOrCoodinator, suitesToSkip) {
-  if (runtimeOrCoodinator.sourcedPickles) {
-    return runtimeOrCoodinator.sourcedPickles.reduce((acc, sourcedPickle) => {
-      const { pickle } = sourcedPickle
-      const testSuitePath = getTestSuitePath(pickle.uri, process.cwd())
+function getShouldBeSkippedSuite (pickle, suitesToSkip) {
+  const testSuitePath = getTestSuitePath(pickle.uri, process.cwd())
+  const isUnskippable = isMarkedAsUnskippable(pickle)
+  const isSkipped = suitesToSkip.includes(testSuitePath)
 
-      const isUnskippable = isMarkedAsUnskippable(pickle)
-      const isSkipped = suitesToSkip.includes(testSuitePath)
+  return [isSkipped && !isUnskippable, testSuitePath]
+}
 
-      if (isSkipped && !isUnskippable) {
-        acc.skippedSuites.add(testSuitePath)
-      } else {
-        acc.picklesToRun.push(sourcedPickle)
-      }
-      return acc
-    }, { skippedSuites: new Set(), picklesToRun: [] })
-  }
-  return runtimeOrCoodinator.pickleIds.reduce((acc, pickleId) => {
-    const test = runtimeOrCoodinator.eventDataCollector.getPickle(pickleId)
-    const testSuitePath = getTestSuitePath(test.uri, process.cwd())
+// From cucumber@>=11
+function getFilteredPicklesNew (coordinator, suitesToSkip) {
+  return coordinator.sourcedPickles.reduce((acc, sourcedPickle) => {
+    const { pickle } = sourcedPickle
+    const [shouldBeSkipped, testSuitePath] = getShouldBeSkippedSuite(pickle, suitesToSkip)
 
-    const isUnskippable = isMarkedAsUnskippable(test)
-    const isSkipped = suitesToSkip.includes(testSuitePath)
+    if (shouldBeSkipped) {
+      acc.skippedSuites.add(testSuitePath)
+    } else {
+      acc.picklesToRun.push(sourcedPickle)
+    }
+    return acc
+  }, { skippedSuites: new Set(), picklesToRun: [] })
+}
 
-    if (isSkipped && !isUnskippable) {
+function getFilteredPickles (runtime, suitesToSkip) {
+  return runtime.pickleIds.reduce((acc, pickleId) => {
+    const pickle = runtime.eventDataCollector.getPickle(pickleId)
+    const [shouldBeSkipped, testSuitePath] = getShouldBeSkippedSuite(pickle, suitesToSkip)
+
+    if (shouldBeSkipped) {
       acc.skippedSuites.add(testSuitePath)
     } else {
       acc.picklesToRun.push(pickleId)
@@ -163,19 +167,19 @@ function getFilteredPickles (runtimeOrCoodinator, suitesToSkip) {
   }, { skippedSuites: new Set(), picklesToRun: [] })
 }
 
-function getPickleByFile (runtimeOrCoodinator) {
-  // new version
-  if (runtimeOrCoodinator.sourcedPickles) {
-    return runtimeOrCoodinator.sourcedPickles.reduce((acc, { pickle }) => {
-      if (acc[pickle.uri]) {
-        acc[pickle.uri].push(pickle)
-      } else {
-        acc[pickle.uri] = [pickle]
-      }
-      return acc
-    }, {})
-  }
+// From cucumber@>=11
+function getPickleByFileNew (coordinator) {
+  return coordinator.sourcedPickles.reduce((acc, { pickle }) => {
+    if (acc[pickle.uri]) {
+      acc[pickle.uri].push(pickle)
+    } else {
+      acc[pickle.uri] = [pickle]
+    }
+    return acc
+  }, {})
+}
 
+function getPickleByFile (runtimeOrCoodinator) {
   return runtimeOrCoodinator.pickleIds.reduce((acc, pickleId) => {
     const test = runtimeOrCoodinator.eventDataCollector.getPickle(pickleId)
     if (acc[test.uri]) {
@@ -323,7 +327,8 @@ function testCaseHook (TestCaseRunner) {
   return TestCaseRunner
 }
 
-function getOptions (adapterOrCoordinator) {
+// Valid for old and new cucumber versions
+function getCucumberOptions (adapterOrCoordinator) {
   if (adapterOrCoordinator.adapter) {
     return adapterOrCoordinator.adapter.worker?.options || adapterOrCoordinator.adapter.options
   }
@@ -335,7 +340,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     if (!libraryConfigurationCh.hasSubscribers) {
       return start.apply(this, arguments)
     }
-    const options = getOptions(this)
+    const options = getCucumberOptions(this)
 
     if (!isParallel && this.adapter?.options) {
       isParallel = options.parallel > 0
@@ -366,7 +371,10 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       skippableSuites = skippableResponse.skippableSuites
 
       if (!errorSkippableRequest) {
-        const filteredPickles = getFilteredPickles(this, skippableSuites)
+        const filteredPickles = isCoordinator
+          ? getFilteredPicklesNew(this, skippableSuites)
+          : getFilteredPickles(this, skippableSuites)
+
         const { picklesToRun } = filteredPickles
         const oldPickles = isCoordinator ? this.sourcedPickles : this.pickleIds
 
@@ -387,7 +395,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       }
     }
 
-    pickleByFile = getPickleByFile(this)
+    pickleByFile = isCoordinator ? getPickleByFileNew(this) : getPickleByFile(this)
 
     const processArgv = process.argv.slice(2).join(' ')
     const command = process.env.npm_lifecycle_script || `cucumber-js ${processArgv}`
@@ -443,10 +451,10 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
   }
 }
 
-function getWrappedRunTestCase (runTestCaseFunction, isNewerVersion) {
+function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion) {
   return async function () {
     let pickle
-    if (isNewerVersion) {
+    if (isNewerCucumberVersion) {
       pickle = arguments[0].pickle
     } else {
       pickle = this.eventDataCollector.getPickle(arguments[0])
@@ -470,7 +478,8 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerVersion) {
         numRetriesByPickleId.set(pickle.id, 0)
       }
     }
-    const runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
+    // TODO: for >=11 we could use `runTestCaseResult` instead of accumulating results in `lastStatusByPickleId`
+    let runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
 
     const testStatuses = lastStatusByPickleId.get(pickle.id)
     const lastTestStatus = testStatuses[testStatuses.length - 1]
@@ -478,11 +487,12 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerVersion) {
     if (isEarlyFlakeDetectionEnabled && lastTestStatus !== 'skip' && isNew) {
       for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
         numRetriesByPickleId.set(pickle.id, retryIndex + 1)
-        await runTestCaseFunction.apply(this, arguments)
+        runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
       }
     }
     let testStatus = lastTestStatus
-    if (isEarlyFlakeDetectionEnabled) {
+    let shouldBePassedByEFD = false
+    if (isNew && isEarlyFlakeDetectionEnabled) {
       /**
        * If Early Flake Detection (EFD) is enabled the logic is as follows:
        * - If all attempts for a test are failing, the test has failed and we will let the test process fail.
@@ -492,7 +502,9 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerVersion) {
        */
       testStatus = getTestStatusFromRetries(testStatuses)
       if (testStatus === 'pass') {
-        this.success = true // MIGHT NOT BE COMPATIBLE WITH >=11
+        // for cucumber@>=11, setting `this.success` does not work, so we have to change the returned value
+        shouldBePassedByEFD = true
+        this.success = true
       }
     }
 
@@ -520,6 +532,10 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerVersion) {
       }
 
       testSuiteFinishCh.publish({ status: testSuiteStatus, testSuitePath })
+    }
+
+    if (isNewerCucumberVersion && isNew && isEarlyFlakeDetectionEnabled) {
+      return shouldBePassedByEFD
     }
 
     return runTestCaseResult
