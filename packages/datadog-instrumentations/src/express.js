@@ -36,15 +36,15 @@ function wrapResponseJson (json) {
   }
 }
 
-const responseRenderStartChannel = tracingChannel('datadog:express:response:render')
+const responseRenderChannel = tracingChannel('datadog:express:response:render')
 
 function wrapResponseRender (render) {
   return function wrappedRender (view, options, callback) {
-    if (!responseRenderStartChannel.start.hasSubscribers) {
+    if (!responseRenderChannel.start.hasSubscribers) {
       return render.apply(this, arguments)
     }
 
-    return responseRenderStartChannel.traceSync(
+    return responseRenderChannel.traceSync(
       render,
       {
         req: this.req,
