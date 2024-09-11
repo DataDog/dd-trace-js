@@ -105,25 +105,18 @@ function getRangesFromYaml (job) {
     errorMsg(job.env.PLUGINS, 'ERROR in YAML', 'You must use matrix.range instead of env.PACKAGE_VERSION_RANGE')
     process.exitCode = 1
   }
-  if (job.strategy && job.strategy.matrix && job.strategy.matrix['node-version']) {
+  if (job.strategy && job.strategy.matrix && job.strategy.matrix.range) {
     const possibilities = [job.strategy.matrix]
     if (job.strategy.matrix.include) {
       possibilities.push(...job.strategy.matrix.include)
     }
-    for (const possibility of possibilities) {
-      let nodeVersion = possibility['node-version']
-      if (!Array.isArray(nodeVersion)) {
-        nodeVersion = [nodeVersion]
+    return possibilities.map(possibility => {
+      if (possibility.range) {
+        return [possibility.range].flat()
+      } else {
+        return undefined
       }
-      nodeVersion = nodeVersion.map(v => Number(v))
-      if (nodeVersion.includes(nodeMajor)) {
-        if (possibility.range) {
-          return [possibility.range].flat()
-        }
-      }
-    }
-  } else if (job.strategy && job.strategy.matrix && job.strategy.matrix.range) {
-    return job.strategy.matrix.range
+    }).flat()
   }
 
   return null

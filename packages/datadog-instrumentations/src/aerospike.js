@@ -4,7 +4,6 @@ const {
   addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const { NODE_MAJOR } = require('../../../version')
 
 const tracingChannel = require('dc-polyfill').tracingChannel
 const ch = tracingChannel('apm:aerospike:command')
@@ -38,24 +37,10 @@ function wrapProcess (process) {
   }
 }
 
-const versions = (() => {
-  switch (NODE_MAJOR) {
-    case 16:
-      return ['>=4.0.0 <5.2.0']
-    case 18:
-      return ['>=5.2.0']
-    case 20:
-      return ['>=5.5.0']
-    case 22:
-      return ['>=5.12.1']
-    default:
-  }
-})()
-
 addHook({
   name: 'aerospike',
   file: 'lib/commands/command.js',
-  versions
+  versions: ['^3.16.2', '4', '5']
 },
 commandFactory => {
   return shimmer.wrapFunction(commandFactory, f => wrapCreateCommand(f))

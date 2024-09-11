@@ -19,7 +19,7 @@ jobs:
     strategy:
       matrix:
         node-version: [16]
-        range: ['>=4.0.0 <5.2.0']
+        range: ['>=3.16.2 <5.2.0']
         aerospike-image: [ce-5.7.0.15]
         include:
           - node-version: 18
