@@ -92,6 +92,7 @@ module.exports = {
   oracledb: () => require('../oracledb'),
   openai: () => require('../openai'),
   paperplane: () => require('../paperplane'),
+  passport: () => require('../passport'),
   'passport-http': () => require('../passport-http'),
   'passport-local': () => require('../passport-local'),
   pg: () => require('../pg'),
