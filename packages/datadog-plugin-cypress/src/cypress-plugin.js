@@ -30,8 +30,7 @@ const {
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   getTestSessionName,
-  TEST_SESSION_NAME,
-  TEST_LEVEL_EVENT_TYPES
+  TEST_SESSION_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -257,6 +256,7 @@ class CypressPlugin {
       childOf: this.testModuleSpan,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
+        [TEST_SESSION_NAME]: this.testSessionName,
         ...this.testEnvironmentMetadata,
         ...testSuiteSpanMetadata
       }
@@ -267,7 +267,8 @@ class CypressPlugin {
     const testSuiteTags = {
       [TEST_COMMAND]: this.command,
       [TEST_COMMAND]: this.command,
-      [TEST_MODULE]: TEST_FRAMEWORK_NAME
+      [TEST_MODULE]: TEST_FRAMEWORK_NAME,
+      [TEST_SESSION_NAME]: this.testSessionName
     }
     if (this.testSuiteSpan) {
       testSuiteTags[TEST_SUITE_ID] = this.testSuiteSpan.context().toSpanId()
@@ -391,22 +392,13 @@ class CypressPlugin {
       testSessionSpanMetadata[TEST_EARLY_FLAKE_ENABLED] = 'true'
     }
 
-    const testSessionName = getTestSessionName(this.tracer._tracer._config, this.command, this.testEnvironmentMetadata)
-
-    if (this.tracer._tracer._exporter?.setMetadataTags) {
-      const metadataTags = {}
-      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-        metadataTags[testLevel] = {
-          [TEST_SESSION_NAME]: testSessionName
-        }
-      }
-      this.tracer._tracer._exporter.setMetadataTags(metadataTags)
-    }
+    this.testSessionName = getTestSessionName(this.tracer._tracer._config, this.command, this.testEnvironmentMetadata)
 
     this.testSessionSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
       childOf,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
+        [TEST_SESSION_NAME]: this.testSessionName,
         ...this.testEnvironmentMetadata,
         ...testSessionSpanMetadata
       }
@@ -417,6 +409,7 @@ class CypressPlugin {
       childOf: this.testSessionSpan,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
+        [TEST_SESSION_NAME]: this.testSessionName,
         ...this.testEnvironmentMetadata,
         ...testModuleSpanMetadata
       }

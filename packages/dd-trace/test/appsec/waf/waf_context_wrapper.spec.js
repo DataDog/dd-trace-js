@@ -6,11 +6,16 @@ const addresses = require('../../../src/appsec/addresses')
 const { wafRunFinished } = require('../../../src/appsec/channels')
 
 describe('WAFContextWrapper', () => {
+  const knownAddresses = new Set([
+    addresses.HTTP_INCOMING_QUERY,
+    addresses.HTTP_INCOMING_GRAPHQL_RESOLVER
+  ])
+
   it('Should send HTTP_INCOMING_QUERY only once', () => {
     const ddwafContext = {
       run: sinon.stub()
     }
-    const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0')
+    const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
       persistent: {
@@ -28,7 +33,7 @@ describe('WAFContextWrapper', () => {
     const ddwafContext = {
       run: sinon.stub()
     }
-    const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0')
+    const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
       persistent: {
@@ -53,11 +58,31 @@ describe('WAFContextWrapper', () => {
     }, 1000)
   })
 
+  it('Should ignore run without known addresses', () => {
+    const ddwafContext = {
+      run: sinon.stub()
+    }
+    const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
+
+    const payload = {
+      persistent: {
+        'persistent-unknown-address': { key: 'value' }
+      },
+      ephemeral: {
+        'ephemeral-unknown-address': { key: 'value' }
+      }
+    }
+
+    wafContextWrapper.run(payload)
+
+    expect(ddwafContext.run).to.have.not.been.called
+  })
+
   it('should publish the payload in the dc channel', () => {
     const ddwafContext = {
       run: sinon.stub().returns([])
     }
-    const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0')
+    const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
     const payload = {
       persistent: {
         [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
@@ -93,7 +118,7 @@ describe('WAFContextWrapper', () => {
         '../../log': log
       })
 
-      wafContextWrapper = new ProxiedWafContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0')
+      wafContextWrapper = new ProxiedWafContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
     })
 
     afterEach(() => {
