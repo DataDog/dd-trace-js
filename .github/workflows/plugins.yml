@@ -19,19 +19,27 @@ jobs:
     strategy:
       matrix:
         node-version: [16]
-        range: ['>=3.16.2 <5.2.0']
+        range: ['>=4.0.0 <5.2.0']
         aerospike-image: [ce-5.7.0.15]
+        test-image: [ubuntu-latest]
         include:
+          - node-version: 14 # yes, out of range, but the only way to test the oldest version
+            range: '^3.16.2'
+            aerospike-image: ce-5.7.0.15
+            test-image: ubuntu-20.04
           - node-version: 18
             range: '>=5.2.0'
             aerospike-image: ce-6.4.0.3
+            test-image: ubuntu-latest
           - node-version: 20
             range: '>=5.5.0'
             aerospike-image: ce-6.4.0.3
+            test-image: ubuntu-latest
           - node-version: 22
             range: '>=5.12.1'
             aerospike-image: ce-6.4.0.3
-    runs-on: ubuntu-latest
+            test-image: ubuntu-latest
+    runs-on: ${{ matrix.test-image }}
     services:
       aerospike:
         image: aerospike:${{ matrix.aerospike-image }}
