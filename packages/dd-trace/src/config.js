@@ -252,11 +252,33 @@ class Config {
       maybeFile(options.appsec.blockedTemplateGraphql),
       maybeFile(process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON)
     )
-    const DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = coalesce(
-      options.appsec.eventTracking && options.appsec.eventTracking.mode,
-      process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
-      'safe'
+
+    const DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING_ENABLED = coalesce(
+      options.appsec.eventTracking?.enabled,
+      process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING_ENABLED &&
+      isTrue(process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING_ENABLED),
+      true
+    )
+
+    // little util for retrocompatibility, delete in next major
+    function convertEventTrackingMode (mode) {
+      if (typeof mode !== 'string') return mode
+
+      mode = mode.toLowerCase()
+
+      if (mode === 'extended') return 'ident'
+      if (mode === 'safe') return 'anon'
+
+      return mode
+    }
+
+    const DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE = coalesce(
+      convertEventTrackingMode(options.appsec.eventTracking?.mode),
+      process.env.DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
+      convertEventTrackingMode(process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING), // TODO: make it deprecated
+      'ident'
     ).toLowerCase()
+
     const DD_API_SECURITY_ENABLED = coalesce(
       options.appsec?.apiSecurity?.enabled,
       process.env.DD_API_SECURITY_ENABLED && isTrue(process.env.DD_API_SECURITY_ENABLED),
@@ -319,8 +341,9 @@ class Config {
     this.appsec = {
       blockedTemplateGraphql: DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON,
       eventTracking: {
-        enabled: ['extended', 'safe'].includes(DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING),
-        mode: DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING
+        enabled: DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING_ENABLED &&
+          ['anon', 'ident'].includes(DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE),
+        mode: DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE
       },
       apiSecurity: {
         enabled: DD_API_SECURITY_ENABLED,
