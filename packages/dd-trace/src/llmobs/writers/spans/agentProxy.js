@@ -6,7 +6,6 @@ const LLMObsBaseSpanWriter = require('./base')
 class LLMObsAgentProxySpanWriter extends LLMObsBaseSpanWriter {
   constructor (config) {
     super({
-      config,
       intake: config.hostname || 'localhost',
       protocol: 'http:',
       endpoint: EVP_PROXY_AGENT_ENDPOINT,

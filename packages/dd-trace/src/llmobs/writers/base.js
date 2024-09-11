@@ -8,7 +8,7 @@ const logger = require('../../log')
 const { encodeUnicode } = require('../util')
 
 class BaseLLMObsWriter {
-  constructor ({ interval, timeout, endpoint, intake, eventType, protocol, port, config }) {
+  constructor ({ interval, timeout, endpoint, intake, eventType, protocol, port }) {
     this._interval = interval || 1000 // 1s
     this._timeout = timeout || 5000 // 5s
     this._eventType = eventType
@@ -28,11 +28,15 @@ class BaseLLMObsWriter {
       'Content-Type': 'application/json'
     }
 
-    this._periodic = setInterval(this.flush.bind(this), this._interval).unref()
-    process.once('beforeExit', () => {
-      clearInterval(this._periodic)
+    this._periodic = setInterval(() => {
       this.flush()
+    }, this._interval).unref()
+
+    process.once('beforeExit', () => {
+      this.destroy()
     })
+
+    this._destroyed = false
 
     logger.debug(`Started ${this.constructor.name} to ${this._url}`)
   }
@@ -60,7 +64,8 @@ class BaseLLMObsWriter {
     const options = {
       headers: this._headers,
       method: 'POST',
-      url: this._url
+      url: this._url,
+      timeout: this._timeout
     }
 
     request(payload, options, (err, resp, code) => {
@@ -79,6 +84,16 @@ class BaseLLMObsWriter {
   }
 
   makePayload (events) {}
+
+  destroy () {
+    if (!this._destroyed) {
+      logger.debug(`Stopping ${this.constructor.name}`)
+      clearInterval(this._periodic)
+      process.removeListener('beforeExit', this.destroy)
+      this.flush()
+      this._destroyed = true
+    }
+  }
 
   _encode (payload) {
     return JSON.stringify(payload, (key, value) => {

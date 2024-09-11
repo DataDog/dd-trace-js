@@ -1,3 +1,5 @@
+'use strict'
+
 const {
   EVP_EVENT_SIZE_LIMIT,
   EVP_PAYLOAD_SIZE_LIMIT,
