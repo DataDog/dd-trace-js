@@ -225,7 +225,7 @@ describe('Dynamic Instrumentation', function () {
       generateProbeConfig({ where: { foo: 'bar' } }) // TODO: Use valid schema for method probe instead
     ]]
 
-    for (const [title, config, costumErrorDiagnosticsObj] of unsupporedOrInvalidProbes) {
+    for (const [title, config, customErrorDiagnosticsObj] of unsupporedOrInvalidProbes) {
       it(title, function (done) {
         let receivedAckUpdate = false
 
@@ -247,7 +247,7 @@ describe('Dynamic Instrumentation', function () {
         }, {
           ddsource: 'dd_debugger',
           service: 'node',
-          debugger: { diagnostics: costumErrorDiagnosticsObj ?? { probeId, version: 0, status: 'ERROR' } }
+          debugger: { diagnostics: customErrorDiagnosticsObj ?? { probeId, version: 0, status: 'ERROR' } }
         }]
 
         agent.on('debugger-diagnostics', ({ payload }) => {
