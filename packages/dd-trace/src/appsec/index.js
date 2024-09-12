@@ -25,7 +25,7 @@ const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { isBlocked, block, setTemplates, getBlockingAction } = require('./blocking')
-const { passportTrackEvent } = require('./passport')
+const { setCollectionMode, passportTrackEvent } = require('./passport')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
 const rasp = require('./rasp')
@@ -66,6 +66,7 @@ function enable (_config) {
     responseSetHeader.subscribe(onResponseSetHeader)
 
     if (_config.appsec.eventTracking.enabled) {
+      setCollectionMode(_config.appsec.eventTracking.mode)
       passportVerify.subscribe(onPassportVerify)
     }
 
