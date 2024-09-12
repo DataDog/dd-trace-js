@@ -335,14 +335,8 @@ describe('Dynamic Instrumentation', function () {
         }
       ]
 
-      agent.on('debugger-diagnostics', async ({ payload }) => {
-        try {
-          if (payload.debugger.diagnostics.status === 'INSTALLED') await triggers.shift()()
-        } catch (err) {
-          // Nessecary hack: Any errors thrown inside of an async function is invisible to Mocha unless the outer `it`
-          // callback is also `async` (which we can't do in this case since we rely on the `done` callback).
-          done(err)
-        }
+      agent.on('debugger-diagnostics', ({ payload }) => {
+        if (payload.debugger.diagnostics.status === 'INSTALLED') triggers.shift()().catch(done)
       })
 
       agent.on('debugger-input', ({ payload }) => {
