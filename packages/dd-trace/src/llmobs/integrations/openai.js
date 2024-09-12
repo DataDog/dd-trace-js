@@ -134,9 +134,10 @@ class OpenAIIntegration extends BaseLLMObsIntegration {
         const toolCallsInfo = []
         for (const toolCall of message.tool_calls) {
           const toolCallInfo = {
-            ...toolCall,
-            arguments: JSON.parse(toolCall.function.arguments)
-            // name: toolCall.function.name,
+            arguments: JSON.parse(toolCall.function.arguments),
+            name: toolCall.function.name,
+            tool_id: toolCall.id,
+            type: toolCall.type
           }
           toolCallsInfo.push(toolCallInfo)
         }

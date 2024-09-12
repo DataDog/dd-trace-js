@@ -109,13 +109,13 @@ describe('span processor', () => {
         parent_id: '1234',
         name: 'test',
         tags: [
-          'version:undefined',
-          'env:undefined',
-          'service:undefined',
+          'version:',
+          'env:',
+          'service:',
           'source:integration',
           'ml_app:myApp',
           'dd-trace.version:x.y.z',
-          'error:undefined',
+          'error:0',
           'language:javascript'
         ],
         start_ns: 0,

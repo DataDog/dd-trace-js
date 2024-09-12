@@ -78,6 +78,11 @@ describe('module', () => {
     })
   })
 
+  after(() => {
+    // this will cause integration tests to error otherwise
+    delete require.cache[require.resolve('../../src/llmobs')]
+  })
+
   it('enables', () => {
     const config = {}
     llmobsModule.enable(config)

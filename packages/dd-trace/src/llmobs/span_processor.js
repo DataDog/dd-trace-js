@@ -84,10 +84,12 @@ class LLMObsSpanProcessor {
     if (spanKind === 'retrieval' && tags[OUTPUT_DOCUMENTS]) {
       output.documents = JSON.parse(tags[OUTPUT_DOCUMENTS])
     }
-    if (tags.error) {
-      meta[ERROR_MESSAGE] = tags[ERROR_MESSAGE]
-      meta[ERROR_TYPE] = tags[ERROR_TYPE]
-      meta[ERROR_STACK] = tags[ERROR_STACK]
+
+    const error = tags.error
+    if (error) {
+      meta[ERROR_MESSAGE] = tags[ERROR_MESSAGE] || error.message || error.code
+      meta[ERROR_TYPE] = tags[ERROR_TYPE] || error.name
+      meta[ERROR_STACK] = tags[ERROR_STACK] || error.stack
     }
 
     if (input) meta.input = input
@@ -108,7 +110,7 @@ class LLMObsSpanProcessor {
       span_id: span.context().toSpanId(),
       parent_id: parentId,
       name,
-      tags: this._processTags(span, mlApp, sessionId),
+      tags: this._processTags(span, mlApp, sessionId, error),
       start_ns: Math.round(span._startTime * 1e6),
       duration: Math.round(span._duration * 1e6),
       status: tags.error ? 'error' : 'ok',
@@ -121,7 +123,7 @@ class LLMObsSpanProcessor {
     return llmObsSpanEvent
   }
 
-  _processTags (span, mlApp, sessionId) {
+  _processTags (span, mlApp, sessionId, error) {
     let tags = {
       version: this._config.version,
       env: this._config.env,
@@ -129,15 +131,15 @@ class LLMObsSpanProcessor {
       source: 'integration',
       ml_app: mlApp,
       'dd-trace.version': tracerVersion,
-      error: span.error,
+      error: Number(!!error) || 0,
       language: 'javascript'
     }
-    const errType = span.context()._tags[ERROR_TYPE]
+    const errType = span.context()._tags[ERROR_TYPE] || error?.name
     if (errType) tags.error_type = errType
     if (sessionId) tags.session_id = sessionId
     const existingTags = JSON.parse(span.context()._tags[TAGS] || '{}')
     if (existingTags) tags = { ...tags, ...existingTags }
-    return Object.entries(tags).map(([key, value]) => `${key}:${value}`)
+    return Object.entries(tags).map(([key, value]) => `${key}:${value ?? ''}`)
   }
 }
 

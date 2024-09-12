@@ -17,6 +17,7 @@
     "test": "SERVICES=* yarn services && mocha --expose-gc 'packages/dd-trace/test/setup/node.js' 'packages/*/test/**/*.spec.js'",
     "test:appsec": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" --exclude \"packages/dd-trace/test/appsec/**/*.plugin.spec.js\" \"packages/dd-trace/test/appsec/**/*.spec.js\"",
     "test:appsec:ci": "nyc --no-clean --include \"packages/dd-trace/src/appsec/**/*.js\" --exclude \"packages/dd-trace/test/appsec/**/*.plugin.spec.js\" -- npm run test:appsec",
+    "test:llmobs": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/dd-trace/test/llmobs/**/*.spec.js\"",
     "test:appsec:plugins": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/dd-trace/test/appsec/**/*.@($(echo $PLUGINS)).plugin.spec.js\"",
     "test:appsec:plugins:ci": "yarn services && nyc --no-clean --include \"packages/dd-trace/src/appsec/**/*.js\" -- npm run test:appsec:plugins",
     "test:trace:core": "tap packages/dd-trace/test/*.spec.js \"packages/dd-trace/test/{ci-visibility,datastreams,encode,exporters,opentelemetry,opentracing,plugins,service-naming,telemetry}/**/*.spec.js\"",
