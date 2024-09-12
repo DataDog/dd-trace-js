@@ -1,13 +1,11 @@
 'use strict'
 
 const { workerData: { rcPort } } = require('node:worker_threads')
-const mutexify = require('mutexify/promise')
 const { getScript, probes, breakpoints } = require('./state')
 const session = require('./session')
 const { ackReceived, ackInstalled, ackError } = require('./status')
 const log = require('../../log')
 
-const lock = mutexify()
 let sessionStarted = false
 
 // Example log line probe (simplified):
@@ -156,4 +154,11 @@ async function removeBreakpoint ({ id }) {
   breakpoints.delete(breakpointId)
 
   if (breakpoints.size === 0) await stop()
+}
+
+async function lock () {
+  if (lock.p) await lock.p
+  let resolve
+  lock.p = new Promise((_resolve) => { resolve = _resolve }).then(() => { lock.p = null })
+  return resolve
 }
