@@ -102,6 +102,7 @@ describe('IAST Index', () => {
     let mockVulnerabilityReporter
     let mockIast
     let mockOverheadController
+    let appsecFsPlugin
 
     const config = new Config({
       experimental: {
@@ -125,15 +126,35 @@ describe('IAST Index', () => {
         startGlobalContext: sinon.stub(),
         finishGlobalContext: sinon.stub()
       }
+      appsecFsPlugin = {
+        enable: sinon.stub(),
+        disable: sinon.stub()
+      }
       mockIast = proxyquire('../../../src/appsec/iast', {
         './vulnerability-reporter': mockVulnerabilityReporter,
-        './overhead-controller': mockOverheadController
+        './overhead-controller': mockOverheadController,
+        '../rasp/fs-plugin': appsecFsPlugin
       })
     })
 
     afterEach(() => {
       sinon.restore()
       mockIast.disable()
+    })
+
+    describe('enable', () => {
+      it('should enable AppsecFsPlugin', () => {
+        mockIast.enable(config)
+        expect(appsecFsPlugin.enable).to.have.been.calledOnceWithExactly('iast')
+      })
+    })
+
+    describe('disable', () => {
+      it('should disable AppsecFsPlugin', () => {
+        mockIast.enable(config)
+        mockIast.disable()
+        expect(appsecFsPlugin.disable).to.have.been.calledOnceWithExactly('iast')
+      })
     })
 
     describe('managing overhead controller global context', () => {

@@ -5,6 +5,7 @@ const { setUncaughtExceptionCaptureCallbackStart } = require('../channels')
 const { block } = require('../blocking')
 const ssrf = require('./ssrf')
 const sqli = require('./sql_injection')
+const lfi = require('./lfi')
 
 const { DatadogRaspAbortError } = require('./utils')
 
@@ -85,6 +86,7 @@ function handleUncaughtExceptionMonitor (err) {
 function enable (config) {
   ssrf.enable(config)
   sqli.enable(config)
+  lfi.enable(config)
 
   process.on('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
 }
@@ -92,6 +94,7 @@ function enable (config) {
 function disable () {
   ssrf.disable()
   sqli.disable()
+  lfi.disable()
 
   process.off('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
 }
