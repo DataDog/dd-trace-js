@@ -535,7 +535,7 @@ class Config {
     this._setValue(defaults, 'telemetry.dependencyCollection', true)
     this._setValue(defaults, 'telemetry.enabled', true)
     this._setValue(defaults, 'telemetry.heartbeatInterval', 60000)
-    this._setValue(defaults, 'telemetry.logCollection', true)
+    this._setValue(defaults, 'telemetry.logCollection', false)
     this._setValue(defaults, 'telemetry.metrics', true)
     this._setValue(defaults, 'traceId128BitGenerationEnabled', true)
     this._setValue(defaults, 'traceId128BitLoggingEnabled', false)
