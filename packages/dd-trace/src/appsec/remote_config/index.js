@@ -5,7 +5,7 @@ const Activation = require('../activation')
 const RemoteConfigManager = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
 const apiSecuritySampler = require('../api_security_sampler')
-const { setCollectionMode } = require('./passport')
+const { setCollectionMode } = require('../passport')
 
 let rc
 
