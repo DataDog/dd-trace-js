@@ -94,6 +94,7 @@ class WAFContextWrapper {
       }
 
       Reporter.reportSchemas(result.derivatives)
+      Reporter.reportFingerprints(result.derivatives)
 
       if (wafRunFinished.hasSubscribers) {
         wafRunFinished.publish({ payload })

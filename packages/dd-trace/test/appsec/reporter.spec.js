@@ -328,6 +328,10 @@ describe('reporter', () => {
     it('should call addTags', () => {
       const schemaValue = [{ key: [8] }]
       const derivatives = {
+        '_dd.appsec.fp.http.endpoint': 'endpoint_fingerprint',
+        '_dd.appsec.fp.http.header': 'header_fingerprint',
+        '_dd.appsec.fp.http.network': 'network_fingerprint',
+        '_dd.appsec.fp.session': 'session_fingerprint',
         '_dd.appsec.s.req.headers': schemaValue,
         '_dd.appsec.s.req.query': schemaValue,
         '_dd.appsec.s.req.params': schemaValue,
@@ -346,6 +350,43 @@ describe('reporter', () => {
         '_dd.appsec.s.req.cookies': schemaEncoded,
         '_dd.appsec.s.req.body': schemaEncoded,
         'custom.processor.output': schemaEncoded
+      })
+    })
+  })
+
+  describe('reportFingerprints', () => {
+    it('should not call addTags if parameter is undefined', () => {
+      Reporter.reportFingerprints(undefined)
+      sinon.assert.notCalled(span.addTags)
+    })
+
+    it('should call addTags with an empty array', () => {
+      Reporter.reportFingerprints([])
+      sinon.assert.calledOnceWithExactly(span.addTags, {})
+    })
+
+    it('should call addTags', () => {
+      const schemaValue = [{ key: [8] }]
+      const derivatives = {
+        '_dd.appsec.fp.http.endpoint': 'endpoint_fingerprint',
+        '_dd.appsec.fp.http.header': 'header_fingerprint',
+        '_dd.appsec.fp.http.network': 'network_fingerprint',
+        '_dd.appsec.fp.session': 'session_fingerprint',
+        '_dd.appsec.s.req.headers': schemaValue,
+        '_dd.appsec.s.req.query': schemaValue,
+        '_dd.appsec.s.req.params': schemaValue,
+        '_dd.appsec.s.req.cookies': schemaValue,
+        '_dd.appsec.s.req.body': schemaValue,
+        'custom.processor.output': schemaValue
+      }
+
+      Reporter.reportFingerprints(derivatives)
+
+      sinon.assert.calledOnceWithExactly(span.addTags,{
+        '_dd.appsec.fp.http.endpoint': 'endpoint_fingerprint',
+        '_dd.appsec.fp.http.header': 'header_fingerprint',
+        '_dd.appsec.fp.http.network': 'network_fingerprint',
+        '_dd.appsec.fp.session': 'session_fingerprint'
       })
     })
   })
