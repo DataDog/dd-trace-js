@@ -733,6 +733,26 @@ declare namespace tracer {
     propagationStyle?: string[] | PropagationStyle
 
     llmobs?: llmobs.LLMObsEnableOptions
+    
+    /**
+     * Cloud payload report as tags
+     */
+    cloudPayloadTagging?: {
+      /**
+       *  Additional JSONPath queries to replace with `redacted` in request payloads
+       *  Undefined or invalid JSONPath queries disable the feature for requests.
+       */
+      request?: string,
+      /**
+       *  Additional JSONPath queries to replace with `redacted` in response payloads
+       *  Undefined or invalid JSONPath queries disable the feature for responses.
+       */
+      response?: string,
+      /**
+       *  Maximum depth of payload traversal for tags
+       */
+      maxDepth?: number
+    }
   }
 
   /**

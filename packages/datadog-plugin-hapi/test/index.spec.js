@@ -4,6 +4,7 @@ const axios = require('axios')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { AsyncLocalStorage } = require('async_hooks')
 
 const versionRange = parseInt(process.versions.node.split('.')[0]) > 14
   ? '<17 || >18'
@@ -346,6 +347,30 @@ describe('Plugin', () => {
 
         axios
           .get(`http://localhost:${port}/user/123`)
+          .catch(() => {})
+      })
+
+      it('should persist AsyncLocalStorage context', (done) => {
+        const als = new AsyncLocalStorage()
+        const path = '/path'
+
+        server.ext('onRequest', (request, h) => {
+          als.enterWith({ path: request.path })
+          return reply(request, h)
+        })
+
+        server.route({
+          method: 'GET',
+          path,
+          handler: async (request, h) => {
+            expect(als.getStore()).to.deep.equal({ path })
+            done()
+            return h.response ? h.response() : h()
+          }
+        })
+
+        axios
+          .get(`http://localhost:${port}${path}`)
           .catch(() => {})
       })
     })

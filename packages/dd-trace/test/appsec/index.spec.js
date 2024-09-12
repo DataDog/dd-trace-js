@@ -1182,6 +1182,7 @@ describe('IP blocking', function () {
         }).then(() => {
           throw new Error('Not expected')
         }).catch((err) => {
+          expect(err.message).to.not.equal('Not expected')
           expect(err.response.status).to.be.equal(500)
           expect(err.response.data).to.deep.equal(jsonDefaultContent)
         })
@@ -1196,6 +1197,7 @@ describe('IP blocking', function () {
         }).then(() => {
           throw new Error('Not expected')
         }).catch((err) => {
+          expect(err.message).to.not.equal('Not expected')
           expect(err.response.status).to.be.equal(500)
           expect(err.response.data).to.deep.equal(htmlDefaultContent)
         })
@@ -1241,6 +1243,7 @@ describe('IP blocking', function () {
         }).then(() => {
           throw new Error('Not resolve expected')
         }).catch((err) => {
+          expect(err.message).to.not.equal('Not resolve expected')
           expect(err.response.status).to.be.equal(301)
           expect(err.response.headers.location).to.be.equal('/error')
         })

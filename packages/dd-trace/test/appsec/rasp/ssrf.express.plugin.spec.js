@@ -1,26 +1,16 @@
 'use strict'
 
 const Axios = require('axios')
-const agent = require('../plugins/agent')
-const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
+const agent = require('../../plugins/agent')
+const appsec = require('../../../src/appsec')
+const Config = require('../../../src/config')
 const path = require('path')
 const { assert } = require('chai')
+const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 function noop () {}
 
-describe('RASP', () => {
-  function getWebSpan (traces) {
-    for (const trace of traces) {
-      for (const span of trace) {
-        if (span.type === 'web') {
-          return span
-        }
-      }
-    }
-    throw new Error('web span not found')
-  }
-
+describe('RASP - ssrf', () => {
   withVersions('express', 'express', expressVersion => {
     let app, server, axios
 
@@ -29,7 +19,7 @@ describe('RASP', () => {
     })
 
     before((done) => {
-      const express = require(`../../../../versions/express@${expressVersion}`).get()
+      const express = require(`../../../../../versions/express@${expressVersion}`).get()
       const expressApp = express()
 
       expressApp.get('/', (req, res) => {
@@ -39,7 +29,7 @@ describe('RASP', () => {
       appsec.enable(new Config({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'rasp_rules.json'),
+          rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
           rasp: { enabled: true }
         }
       }))
@@ -67,15 +57,8 @@ describe('RASP', () => {
           if (!e.response) {
             throw e
           }
-          return await agent.use((traces) => {
-            const span = getWebSpan(traces)
-            assert.property(span.meta, '_dd.appsec.json')
-            assert(span.meta['_dd.appsec.json'].includes('rasp-ssrf-rule-id-1'))
-            assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
-            assert(span.metrics['_dd.appsec.rasp.duration'] > 0)
-            assert(span.metrics['_dd.appsec.rasp.duration_ext'] > 0)
-            assert.property(span.meta_struct, '_dd.stack')
-          })
+
+          return checkRaspExecutedAndHasThreat(agent, 'rasp-ssrf-rule-id-1')
         }
 
         assert.fail('Request should be blocked')
@@ -92,11 +75,7 @@ describe('RASP', () => {
 
             axios.get('/?host=www.datadoghq.com')
 
-            await agent.use((traces) => {
-              const span = getWebSpan(traces)
-              assert.notProperty(span.meta, '_dd.appsec.json')
-              assert.notProperty(span.meta_struct || {}, '_dd.stack')
-            })
+            return checkRaspExecutedAndNotThreat(agent)
           })
 
           it('Should detect threat doing a GET request', async () => {
@@ -137,7 +116,7 @@ describe('RASP', () => {
           let axiosToTest
 
           beforeEach(() => {
-            axiosToTest = require(`../../../../versions/axios@${axiosVersion}`).get()
+            axiosToTest = require(`../../../../../versions/axios@${axiosVersion}`).get()
           })
 
           it('Should not detect threat', async () => {
@@ -148,10 +127,7 @@ describe('RASP', () => {
 
             axios.get('/?host=www.datadoghq.com')
 
-            await agent.use((traces) => {
-              const span = getWebSpan(traces)
-              assert.notProperty(span.meta, '_dd.appsec.json')
-            })
+            return checkRaspExecutedAndNotThreat(agent)
           })
 
           it('Should detect threat doing a GET request', async () => {
@@ -209,7 +185,7 @@ describe('RASP', () => {
       appsec.enable(new Config({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'rasp_rules.json'),
+          rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
           rasp: { enabled: true }
         }
       }))
@@ -260,15 +236,7 @@ describe('RASP', () => {
 
       assert.equal(response.status, 200)
 
-      await agent.use((traces) => {
-        const span = getWebSpan(traces)
-        assert.property(span.meta, '_dd.appsec.json')
-        assert(span.meta['_dd.appsec.json'].includes('rasp-ssrf-rule-id-1'))
-        assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
-        assert(span.metrics['_dd.appsec.rasp.duration'] > 0)
-        assert(span.metrics['_dd.appsec.rasp.duration_ext'] > 0)
-        assert.property(span.meta_struct, '_dd.stack')
-      })
+      return checkRaspExecutedAndHasThreat(agent, 'rasp-ssrf-rule-id-1')
     })
   })
 })

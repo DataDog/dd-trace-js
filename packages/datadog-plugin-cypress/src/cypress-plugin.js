@@ -29,7 +29,8 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
-  NUM_FAILED_TEST_RETRIES
+  getTestSessionName,
+  TEST_SESSION_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -229,16 +230,16 @@ class CypressPlugin {
               isCodeCoverageEnabled,
               isEarlyFlakeDetectionEnabled,
               earlyFlakeDetectionNumRetries,
-              isFlakyTestRetriesEnabled
+              isFlakyTestRetriesEnabled,
+              flakyTestRetriesCount
             }
           } = libraryConfigurationResponse
           this.isSuitesSkippingEnabled = isSuitesSkippingEnabled
           this.isCodeCoverageEnabled = isCodeCoverageEnabled
           this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
           this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
-          this.isFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
-          if (this.isFlakyTestRetriesEnabled) {
-            this.cypressConfig.retries.runMode = NUM_FAILED_TEST_RETRIES
+          if (isFlakyTestRetriesEnabled) {
+            this.cypressConfig.retries.runMode = flakyTestRetriesCount
           }
         }
         return this.cypressConfig
@@ -250,10 +251,12 @@ class CypressPlugin {
     const testSuiteSpanMetadata =
       getTestSuiteCommonTags(this.command, this.frameworkVersion, suite, TEST_FRAMEWORK_NAME)
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
+
     return this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
       childOf: this.testModuleSpan,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
+        [TEST_SESSION_NAME]: this.testSessionName,
         ...this.testEnvironmentMetadata,
         ...testSuiteSpanMetadata
       }
@@ -264,7 +267,8 @@ class CypressPlugin {
     const testSuiteTags = {
       [TEST_COMMAND]: this.command,
       [TEST_COMMAND]: this.command,
-      [TEST_MODULE]: TEST_FRAMEWORK_NAME
+      [TEST_MODULE]: TEST_FRAMEWORK_NAME,
+      [TEST_SESSION_NAME]: this.testSessionName
     }
     if (this.testSuiteSpan) {
       testSuiteTags[TEST_SUITE_ID] = this.testSuiteSpan.context().toSpanId()
@@ -388,10 +392,13 @@ class CypressPlugin {
       testSessionSpanMetadata[TEST_EARLY_FLAKE_ENABLED] = 'true'
     }
 
+    this.testSessionName = getTestSessionName(this.tracer._tracer._config, this.command, this.testEnvironmentMetadata)
+
     this.testSessionSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
       childOf,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
+        [TEST_SESSION_NAME]: this.testSessionName,
         ...this.testEnvironmentMetadata,
         ...testSessionSpanMetadata
       }
@@ -402,6 +409,7 @@ class CypressPlugin {
       childOf: this.testSessionSpan,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
+        [TEST_SESSION_NAME]: this.testSessionName,
         ...this.testEnvironmentMetadata,
         ...testModuleSpanMetadata
       }

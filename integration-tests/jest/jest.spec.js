@@ -31,7 +31,8 @@ const {
   JEST_DISPLAY_NAME,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_SOURCE_START,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  TEST_SESSION_NAME
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
@@ -149,19 +150,23 @@ describe('jest CommonJS', () => {
         )
         assert.equal(suites.length, 2)
         assert.exists(sessionEventContent)
+        assert.equal(sessionEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
         assert.exists(moduleEventContent)
+        assert.equal(moduleEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
 
         assert.include(testOutput, expectedStdout)
 
-        // Can read DD_TAGS
         tests.forEach(testEvent => {
+          assert.equal(testEvent.meta[TEST_SESSION_NAME], 'my-test-session')
+          assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
+          assert.exists(testEvent.metrics[TEST_SOURCE_START])
+          // Can read DD_TAGS
           assert.propertyVal(testEvent.meta, 'test.customtag', 'customvalue')
           assert.propertyVal(testEvent.meta, 'test.customtag2', 'customvalue2')
         })
 
-        tests.forEach(testEvent => {
-          assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
-          assert.exists(testEvent.metrics[TEST_SOURCE_START])
+        suites.forEach(testSuite => {
+          assert.equal(testSuite.meta[TEST_SESSION_NAME], 'my-test-session')
         })
 
         done()
@@ -171,7 +176,8 @@ describe('jest CommonJS', () => {
         cwd,
         env: {
           ...envVars,
-          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
+          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+          DD_SESSION_NAME: 'my-test-session'
         },
         stdio: 'pipe'
       })
@@ -428,17 +434,29 @@ describe('jest CommonJS', () => {
         cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
-          RUN_IN_PARALLEL: true
+          RUN_IN_PARALLEL: true,
+          DD_SESSION_NAME: 'my-test-session'
         },
         stdio: 'pipe'
       })
 
       receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000).then(eventsRequests => {
-        const eventTypes = eventsRequests.map(({ payload }) => payload)
+        const events = eventsRequests.map(({ payload }) => payload)
           .flatMap(({ events }) => events)
-          .map(event => event.type)
+        const eventTypes = events.map(event => event.type)
 
         assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+
+        // it propagates test session name to the test and test suite events in parallel mode
+        tests.forEach(testEvent => {
+          assert.equal(testEvent.meta[TEST_SESSION_NAME], 'my-test-session')
+        })
+        testSuites.forEach(testSuite => {
+          assert.equal(testSuite.meta[TEST_SESSION_NAME], 'my-test-session')
+        })
+
         done()
       }).catch(done)
     })
@@ -2230,6 +2248,102 @@ describe('jest CommonJS', () => {
         eventsPromise.then(() => {
           done()
         }).catch(done)
+      })
+    })
+
+    it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.equal(tests.length, 3)
+          assert.includeMembers(tests.map(test => test.resource), [
+            // does not retry anything
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries will not retry passed tests',
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests'
+          ])
+
+          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+          assert.equal(retriedTests.length, 0)
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-flaky/flaky-',
+            DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.equal(tests.length, 5)
+          // only one retry
+          assert.includeMembers(tests.map(test => test.resource), [
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries will not retry passed tests',
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests',
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests'
+          ])
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-flaky/flaky-',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => done()).catch(done)
       })
     })
   })

@@ -70,7 +70,7 @@ describe('telemetry', () => {
       },
       circularObject,
       appsec: { enabled: true },
-      profiling: { enabled: true },
+      profiling: { enabled: 'true' },
       peerServiceMapping: {
         service_1: 'remapped_service_1',
         service_2: 'remapped_service_2'

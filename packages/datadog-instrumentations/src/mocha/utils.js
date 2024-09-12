@@ -3,8 +3,7 @@
 const {
   getTestSuitePath,
   removeEfdStringFromTestName,
-  addEfdStringToTestName,
-  NUM_FAILED_TEST_RETRIES
+  addEfdStringToTestName
 } = require('../../../dd-trace/src/plugins/util/test')
 const { channel, AsyncResource } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
@@ -114,7 +113,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
     }
     // Flaky test retries does not work in parallel mode
     if (libraryConfig?.isFlakyTestRetriesEnabled) {
-      this.retries(NUM_FAILED_TEST_RETRIES)
+      this.retries(libraryConfig?.flakyTestRetriesCount)
     }
     // The reason why the wrapping logic is here is because we need to cover
     // `afterEach` and `beforeEach` hooks as well.
