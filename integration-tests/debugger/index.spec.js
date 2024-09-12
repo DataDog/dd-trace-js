@@ -7,6 +7,7 @@ const Axios = require('axios')
 const { assert } = require('chai')
 const { assertObjectContains, assertUUID, createSandbox, FakeAgent, spawnProc } = require('../helpers')
 const { ACKNOWLEDGED, ERROR } = require('../../packages/dd-trace/src/appsec/remote_config/apply_states')
+const { version } = require('../../package.json')
 
 const probeFile = 'debugger/target-app/index.js'
 const probeLineNo = 9
@@ -294,7 +295,7 @@ describe('Dynamic Instrumentation', function () {
           logger: {
             name: 'debugger/target-app/index.js',
             method: 'handler',
-            version: 2,
+            version,
             thread_name: 'MainThread'
           },
           'debugger.snapshot': {

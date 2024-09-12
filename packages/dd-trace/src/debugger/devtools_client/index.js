@@ -7,6 +7,7 @@ const send = require('./send')
 const { ackEmitting } = require('./status')
 const { parentThreadId } = require('./config')
 const log = require('../../log')
+const { version } = require('../../../../../package.json')
 
 require('./remote_config')
 
@@ -29,7 +30,7 @@ session.on('Debugger.paused', async ({ params }) => {
     // must exist in the same file since the debugger can only pause the main thread in one location.
     name: probes[0].location.file, // name of the class/type/file emitting the snapshot
     method: params.callFrames[0].functionName, // name of the method/function emitting the snapshot
-    version: 2, // version of the snapshot format (not currently used or enforced)
+    version,
     thread_id: threadId,
     thread_name: threadName
   }
