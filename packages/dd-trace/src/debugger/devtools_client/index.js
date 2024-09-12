@@ -5,8 +5,9 @@ const { breakpoints } = require('./state')
 const session = require('./session')
 const send = require('./send')
 const { ackEmitting } = require('./status')
-require('./remote_config')
 const log = require('../../log')
+
+require('./remote_config')
 
 session.on('Debugger.paused', async ({ params }) => {
   const start = process.hrtime.bigint()
