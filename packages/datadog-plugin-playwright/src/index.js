@@ -70,6 +70,7 @@ class PlaywrightPlugin extends CiPlugin {
     this.addSub('ci:playwright:test-suite:start', (testSuiteAbsolutePath) => {
       const store = storage.getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
+      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
 
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
@@ -79,6 +80,10 @@ class PlaywrightPlugin extends CiPlugin {
       )
       if (this.testSessionName) {
         testSuiteMetadata[TEST_SESSION_NAME] = this.testSessionName
+      }
+      if (testSourceFile) {
+        testSuiteMetadata[TEST_SOURCE_FILE] = testSourceFile
+        testSuiteMetadata[TEST_SOURCE_START] = 1
       }
 
       const testSuiteSpan = this.tracer.startSpan('playwright.test_suite', {
