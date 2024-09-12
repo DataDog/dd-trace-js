@@ -130,7 +130,7 @@ jobs:
   aws-sdk:
     strategy:
       matrix:
-        node-version: ['18', '22.6']
+        node-version: ['18', 'latest']
     runs-on: ubuntu-latest
     services:
       localstack:
@@ -412,7 +412,7 @@ jobs:
   http:
     strategy:
       matrix:
-        node-version: ['18', '20', '22.6']
+        node-version: ['18', '20', 'latest']
     runs-on: ubuntu-latest
     env:
       PLUGINS: http
@@ -652,7 +652,7 @@ jobs:
       matrix:
         version:
           - 18
-          - 22.6
+          - latest
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
