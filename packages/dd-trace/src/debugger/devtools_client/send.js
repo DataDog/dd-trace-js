@@ -1,7 +1,6 @@
 'use strict'
 
 const config = require('./config')
-const log = require('../../log')
 const request = require('../../exporters/common/request')
 
 module.exports = send
@@ -9,7 +8,7 @@ module.exports = send
 const ddsource = 'dd_debugger'
 const service = config.service
 
-async function send (message, logger, snapshot) {
+function send (message, logger, snapshot, cb) {
   const opts = {
     method: 'POST',
     url: config.url,
@@ -25,7 +24,5 @@ async function send (message, logger, snapshot) {
     'debugger.snapshot': snapshot
   }
 
-  request(JSON.stringify(payload), opts, (err) => {
-    if (err) log.error(err)
-  })
+  request(JSON.stringify(payload), opts, cb)
 }
