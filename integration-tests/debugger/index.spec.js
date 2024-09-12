@@ -294,7 +294,8 @@ describe('Dynamic Instrumentation', function () {
           logger: {
             name: 'debugger/target-app/index.js',
             method: 'handler',
-            version: 2
+            version: 2,
+            thread_name: 'MainThread'
           },
           'debugger.snapshot': {
             probe: {
@@ -307,8 +308,7 @@ describe('Dynamic Instrumentation', function () {
         }
 
         assertObjectContains(payload, expected)
-        assert.isNumber(payload.logger.thread_id)
-        assert.isTrue(payload.logger.thread_name.endsWith('node'))
+        assert.match(payload.logger.thread_id, /^pid:\d+$/)
         assertUUID(payload['debugger.snapshot'].id)
         assert.isNumber(payload['debugger.snapshot'].timestamp)
         assert.isTrue(payload['debugger.snapshot'].timestamp > Date.now() - 1000 * 60)

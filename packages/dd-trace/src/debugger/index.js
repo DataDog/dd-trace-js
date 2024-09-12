@@ -1,7 +1,7 @@
 'use strict'
 
 const { join } = require('path')
-const { Worker, MessageChannel } = require('worker_threads')
+const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
 const log = require('../log')
 
 let worker = null
@@ -40,7 +40,12 @@ function start (config, rc) {
     {
       execArgv: [], // Avoid worker thread inheriting the `-r` command line argument
       env, // Avoid worker thread inheriting the `NODE_OPTIONS` environment variable (in case it contains `-r`)
-      workerData: { config: serializableConfig(config), rcPort: rcChannel.port1, configPort: configChannel.port1 },
+      workerData: {
+        config: serializableConfig(config),
+        parentThreadId,
+        rcPort: rcChannel.port1,
+        configPort: configChannel.port1
+      },
       transferList: [rcChannel.port1, configChannel.port1]
     }
   )

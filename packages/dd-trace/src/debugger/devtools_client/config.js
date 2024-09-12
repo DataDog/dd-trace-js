@@ -1,12 +1,13 @@
 'use strict'
 
-const { workerData: { config: parentConfig, configPort } } = require('node:worker_threads')
+const { workerData: { config: parentConfig, parentThreadId, configPort } } = require('node:worker_threads')
 const { format } = require('node:url')
 const log = require('../../log')
 
 const config = module.exports = {
   runtimeId: parentConfig.tags['runtime-id'],
-  service: parentConfig.service
+  service: parentConfig.service,
+  parentThreadId
 }
 
 updateUrl(parentConfig)

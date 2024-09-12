@@ -5,9 +5,15 @@ const { breakpoints } = require('./state')
 const session = require('./session')
 const send = require('./send')
 const { ackEmitting } = require('./status')
+const { parentThreadId } = require('./config')
 const log = require('../../log')
 
 require('./remote_config')
+
+// There doesn't seem to be an official standard for the content of these fields, so we're just populating them with
+// something that should be useful to a Node.js developer.
+const threadId = parentThreadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${parentThreadId}`
+const threadName = parentThreadId === 0 ? 'MainThread' : 'WorkerThread'
 
 session.on('Debugger.paused', async ({ params }) => {
   const start = process.hrtime.bigint()
@@ -24,10 +30,8 @@ session.on('Debugger.paused', async ({ params }) => {
     name: probes[0].location.file, // name of the class/type/file emitting the snapshot
     method: params.callFrames[0].functionName, // name of the method/function emitting the snapshot
     version: 2, // version of the snapshot format (not currently used or enforced)
-    // TODO: Is it right to use the pid in this case? We don't have access to the thread id
-    thread_id: process.pid, // current thread/process id emitting the snapshot
-    // TODO: Is `process.title` the best value to use here? Or should we omit `thread_name` entirely?
-    thread_name: process.title // name of the current thread emitting the snapshot
+    thread_id: threadId,
+    thread_name: threadName
   }
 
   // TODO: Send multiple probes in one HTTP request as an array
