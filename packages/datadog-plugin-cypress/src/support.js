@@ -63,7 +63,7 @@ beforeEach(function () {
 before(function () {
   cy.task('dd:testSuiteStart', {
     testSuite: Cypress.mocha.getRootSuite().file,
-    testSuiteAbsolutePath: Cypress.spec?.absolute
+    testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute
   }).then((suiteConfig) => {
     if (suiteConfig) {
       isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled
