@@ -218,7 +218,7 @@ describe('span processor', () => {
           return {
             _tags: {
               '_ml_obs.meta.span.kind': 'llm',
-              error: 'true',
+              error: new Error(),
               'error.message': 'error message',
               'error.type': 'error type',
               'error.stack': 'error stack'
@@ -239,6 +239,32 @@ describe('span processor', () => {
       expect(payload.status).to.equal('error')
 
       expect(payload.tags).to.include('error_type:error type')
+    })
+
+    it('uses the error itself if the span does not have specific error fields', () => {
+      const span = {
+        context () {
+          return {
+            _tags: {
+              '_ml_obs.meta.span.kind': 'llm',
+              error: new Error('error message')
+            },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' }
+          }
+        }
+      }
+
+      processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
+
+      const payload = processor._process(span)
+
+      expect(payload.meta['error.message']).to.equal('error message')
+      expect(payload.meta['error.type']).to.equal('Error')
+      expect(payload.meta['error.stack']).to.exist
+      expect(payload.status).to.equal('error')
+
+      expect(payload.tags).to.include('error_type:Error')
     })
 
     it('uses the span name from the tag if provided', () => {
