@@ -110,6 +110,8 @@ versions.forEach((version) => {
               if (testSuiteEvent.content.meta[TEST_STATUS] === 'fail') {
                 assert.exists(testSuiteEvent.content.meta[ERROR_MESSAGE])
               }
+              assert.isTrue(testSuiteEvent.content.meta[TEST_SOURCE_FILE].endsWith('-test.js'))
+              assert.equal(testSuiteEvent.content.metrics[TEST_SOURCE_START], 1)
             })
 
             assert.includeMembers(testEvents.map(test => test.content.resource), [

@@ -167,6 +167,8 @@ describe('mocha CommonJS', function () {
 
         suites.forEach(testSuite => {
           assert.equal(testSuite.meta[TEST_SESSION_NAME], 'my-test-session')
+          assert.isTrue(testSuite.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'))
+          assert.equal(testSuite.metrics[TEST_SOURCE_START], 1)
         })
 
         done()
