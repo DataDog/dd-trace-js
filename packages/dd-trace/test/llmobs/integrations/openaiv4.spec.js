@@ -56,6 +56,7 @@ describe('integrations', () => {
     })
 
     after(() => {
+      sinon.restore()
       return agent.close({ ritmReset: false })
     })
 
@@ -407,27 +408,63 @@ describe('integrations', () => {
         })
 
         if (satisfiesTools(version)) {
-          it.skip('submits a chat completion span with tools stream', async () => {
+          it('submits a chat completion span with tools stream', async () => {
             nock('https://api.openai.com:443')
               .post('/v1/chat/completions')
               .reply(200, function () {
                 return fs.createReadStream(Path.join(
-                  __dirname, baseOpenAITestsPath, 'streamed-responses/chat.completions.tools.txt'
+                  __dirname, baseOpenAITestsPath, 'streamed-responses/chat.completions.tool.and.content.txt'
                 ))
               }, {
                 'Content-Type': 'text/plain',
                 'openai-organization': 'kill-9'
               })
 
-            // const checkSpan = agent.use(traces => {})
+            const checkSpan = agent.use(traces => {
+              const span = traces[0][0]
+              const spanEvent = llmobsWriter.append.getCall(0).args[0]
 
-            // const stream = await openai.chat.completions.create({
-            //   model: 'gpt-3.5-turbo-0301',
-            //   messages: [{ role: 'user', content: 'What is SpongeBob SquarePants\'s origin?' }],
-            //   tools: [{ type: 'function', function: { /* this doesn't matter */ } }],
-            //   tool_choice: 'auto',
-            //   stream: true
-            // })
+              const expected = expectedLLMObsLLMSpanEvent({
+                span,
+                spanKind: 'llm',
+                name: 'openai.createChatCompletion',
+                modelName: 'gpt-3.5-turbo-0301',
+                modelProvider: 'openai',
+                inputMessages: [{ role: 'user', content: 'What function would you call to finish this?' }],
+                outputMessages: [{
+                  role: 'assistant',
+                  content: 'THOUGHT: Hi',
+                  tool_calls: [
+                    {
+                      name: 'finish',
+                      arguments: { answer: '5' },
+                      type: 'function',
+                      tool_id: 'call_Tg0o5wgoNSKF2iggAPmfWwem'
+                    }
+                  ]
+                }],
+                metadata: { tool_choice: 'auto', stream: true },
+                tags: { ml_app: 'test', language: 'javascript' },
+                tokenMetrics: { input_tokens: 9, output_tokens: 5, total_tokens: 14 }
+              })
+
+              expect(spanEvent).to.deepEqualWithMockValues(expected)
+            })
+
+            const stream = await openai.chat.completions.create({
+              model: 'gpt-3.5-turbo-0301',
+              messages: [{ role: 'user', content: 'What function would you call to finish this?' }],
+              tools: [{ type: 'function', function: { /* this doesn't matter */ } }],
+              tool_choice: 'auto',
+              stream: true
+            })
+
+            for await (const part of stream) {
+              expect(part).to.have.property('choices')
+              expect(part.choices[0]).to.have.property('delta')
+            }
+
+            await checkSpan
           })
         }
       }
@@ -516,9 +553,5 @@ describe('integrations', () => {
         await checkSpan
       })
     })
-
-    // withVersions('openai', 'openai', '<4', version => {
-
-    // })
   })
 })
