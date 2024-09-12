@@ -8,7 +8,9 @@ const routeChannel = channel('apm:microgateway-core:request:route')
 const errorChannel = channel('apm:microgateway-core:request:error')
 
 const name = 'microgateway-core'
-const versions = ['>=2.1']
+
+// TODO Remove " <=3.0.0" when "volos-util-apigee" module is fixed
+const versions = ['>=2.1 <=3.0.0']
 const requestResources = new WeakMap()
 
 function wrapConfigProxyFactory (configProxyFactory) {
@@ -40,7 +42,7 @@ function wrapPluginsFactory (pluginsFactory) {
 }
 
 function wrapNext (req, res, next) {
-  return function nextWithTrace (err) {
+  return shimmer.wrapFunction(next, next => function nextWithTrace (err) {
     const requestResource = requestResources.get(req)
 
     requestResource.runInAsyncScope(() => {
@@ -54,7 +56,7 @@ function wrapNext (req, res, next) {
     })
 
     return next.apply(this, arguments)
-  }
+  })
 }
 
 addHook({ name, versions, file: 'lib/config-proxy-middleware.js' }, configProxyFactory => {

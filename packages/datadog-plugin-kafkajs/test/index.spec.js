@@ -145,7 +145,7 @@ describe('Plugin', () => {
           )
         })
 
-        describe('consumer', () => {
+        describe('consumer (eachMessage)', () => {
           let consumer
 
           beforeEach(async () => {
@@ -387,10 +387,24 @@ describe('Plugin', () => {
               expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedProducerHash)
             })
 
-            it('Should set a checkpoint on consume', async () => {
+            it('Should set a checkpoint on consume (eachMessage)', async () => {
               const runArgs = []
               await consumer.run({
                 eachMessage: async () => {
+                  runArgs.push(setDataStreamsContextSpy.lastCall.args[0])
+                }
+              })
+              await sendMessages(kafka, testTopic, messages)
+              await consumer.disconnect()
+              for (const runArg of runArgs) {
+                expect(runArg.hash).to.equal(expectedConsumerHash)
+              }
+            })
+
+            it('Should set a checkpoint on consume (eachBatch)', async () => {
+              const runArgs = []
+              await consumer.run({
+                eachBatch: async () => {
                   runArgs.push(setDataStreamsContextSpy.lastCall.args[0])
                 }
               })

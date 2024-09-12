@@ -29,7 +29,8 @@ const {
   TEST_SUITE,
   MOCHA_IS_PARALLEL,
   TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_DRIVER
+  TEST_BROWSER_DRIVER,
+  TEST_SESSION_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -52,7 +53,8 @@ function getTestSuiteLevelVisibilityTags (testSuiteSpan) {
     [TEST_SUITE_ID]: testSuiteSpanContext.toSpanId(),
     [TEST_SESSION_ID]: testSuiteSpanContext.toTraceId(),
     [TEST_COMMAND]: testSuiteSpanContext._tags[TEST_COMMAND],
-    [TEST_MODULE]: 'mocha'
+    [TEST_MODULE]: 'mocha',
+    [TEST_SESSION_NAME]: testSuiteSpanContext._tags[TEST_SESSION_NAME]
   }
   if (testSuiteSpanContext._parentId) {
     suiteTags[TEST_MODULE_ID] = testSuiteSpanContext._parentId.toString(10)
@@ -123,6 +125,9 @@ class MochaPlugin extends CiPlugin {
       if (isForcedToRun) {
         testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
         this.telemetry.count(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
+      }
+      if (this.testSessionName) {
+        testSuiteMetadata[TEST_SESSION_NAME] = this.testSessionName
       }
 
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {

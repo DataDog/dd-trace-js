@@ -76,7 +76,7 @@ function wrapMethod (method) {
       if (typeof cb === 'function') {
         const outerAsyncResource = new AsyncResource('bound-anonymous-fn')
 
-        arguments[arguments.length - 1] = innerAsyncResource.bind(function (error) {
+        arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => innerAsyncResource.bind(function (error) {
           if (error) {
             requestErrorCh.publish(error)
           }
@@ -84,7 +84,7 @@ function wrapMethod (method) {
           requestFinishCh.publish()
 
           return outerAsyncResource.runInAsyncScope(() => cb.apply(this, arguments))
-        })
+        }))
 
         return method.apply(this, arguments)
       } else {

@@ -21,10 +21,10 @@ function copyProperties (original, wrapped) {
 }
 
 function wrapFunction (original, wrapper) {
-  assertNotClass(original)
+  if (typeof original === 'function') assertNotClass(original)
   // TODO This needs to be re-done so that this and wrapMethod are distinct.
   const target = { func: original }
-  wrapMethod(target, 'func', wrapper)
+  wrapMethod(target, 'func', wrapper, typeof original !== 'function')
   let delegate = target.func
 
   const shim = function shim () {
@@ -35,7 +35,7 @@ function wrapFunction (original, wrapper) {
     delegate = original
   })
 
-  copyProperties(original, shim)
+  if (typeof original === 'function') copyProperties(original, shim)
 
   return shim
 }
@@ -74,14 +74,16 @@ function setSafe (value) {
   safeMode = value
 }
 
-function wrapMethod (target, name, wrapper) {
-  assertMethod(target, name)
-  assertFunction(wrapper)
+function wrapMethod (target, name, wrapper, noAssert) {
+  if (!noAssert) {
+    assertMethod(target, name)
+    assertFunction(wrapper)
+  }
 
   const original = target[name]
   let wrapped
 
-  if (safeMode) {
+  if (safeMode && original) {
     // In this mode, we make a best-effort attempt to handle errors that are thrown
     // by us, rather than wrapped code. With such errors, we log them, and then attempt
     // to return the result as if no wrapping was done at all.
@@ -178,7 +180,7 @@ function wrapMethod (target, name, wrapper) {
     ...descriptor
   }
 
-  copyProperties(original, wrapped)
+  if (typeof original === 'function') copyProperties(original, wrapped)
 
   if (descriptor) {
     unwrappers.set(wrapped, () => Object.defineProperty(target, name, descriptor))

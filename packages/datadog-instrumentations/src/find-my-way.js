@@ -9,11 +9,11 @@ function wrapOn (on) {
   return function onWithTrace (method, path, opts) {
     const index = typeof opts === 'function' ? 2 : 3
     const handler = arguments[index]
-    const wrapper = function (req) {
+    const wrapper = shimmer.wrapFunction(handler, handler => function (req) {
       routeChannel.publish({ req, route: path })
 
       return handler.apply(this, arguments)
-    }
+    })
 
     if (typeof handler === 'function') {
       arguments[index] = wrapper
