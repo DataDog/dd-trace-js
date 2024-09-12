@@ -648,6 +648,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
       testSuiteStartCh.publish({
         testSuite: environment.testSuite,
         testEnvironmentOptions: environment.testEnvironmentOptions,
+        testSourceFile: environment.testSourceFile,
         displayName: environment.displayName,
         frameworkVersion: jestVersion
       })

@@ -129,6 +129,14 @@ class MochaPlugin extends CiPlugin {
       if (this.testSessionName) {
         testSuiteMetadata[TEST_SESSION_NAME] = this.testSessionName
       }
+      if (this.repositoryRoot !== this.sourceRoot && !!this.repositoryRoot) {
+        testSuiteMetadata[TEST_SOURCE_FILE] = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      } else {
+        testSuiteMetadata[TEST_SOURCE_FILE] = testSuite
+      }
+      if (testSuiteMetadata[TEST_SOURCE_FILE]) {
+        testSuiteMetadata[TEST_SOURCE_START] = 1
+      }
 
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
         childOf: this.testModuleSpan,
