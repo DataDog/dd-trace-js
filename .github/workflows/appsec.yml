@@ -214,7 +214,7 @@ jobs:
       matrix:
         version:
           - 18
-          - 22.6
+          - latest
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
