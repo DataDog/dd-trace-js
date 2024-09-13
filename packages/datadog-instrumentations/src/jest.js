@@ -404,7 +404,7 @@ addHook({
 
 addHook({
   name: '@jest/test-sequencer',
-  versions: ['>=24.8.0']
+  versions: ['>=28']
 }, (sequencerPackage, frameworkVersion) => {
   shimmer.wrap(sequencerPackage.default.prototype, 'shard', shard => function () {
     const shardedTests = shard.apply(this, arguments)
