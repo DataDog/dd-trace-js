@@ -235,9 +235,6 @@ versions.forEach(version => {
                 }
               )
 
-              childProcess.stdout.pipe(process.stdout)
-              childProcess.stderr.pipe(process.stderr)
-
               childProcess.on('exit', () => {
                 receiverPromise.then(() => done()).catch(done)
               })
@@ -1194,7 +1191,7 @@ versions.forEach(version => {
         })
       })
 
-      it.only('correctly calculates test code owners when working directory is not repository root', (done) => {
+      it('correctly calculates test code owners when working directory is not repository root', (done) => {
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
