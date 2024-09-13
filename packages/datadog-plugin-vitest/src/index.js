@@ -140,6 +140,11 @@ class VitestPlugin extends CiPlugin {
       testSuiteMetadata[TEST_SOURCE_FILE] = testSuite
       testSuiteMetadata[TEST_SOURCE_START] = 1
 
+      const codeOwners = this.getCodeOwners(testSuiteMetadata)
+      if (codeOwners) {
+        testSuiteMetadata[TEST_CODE_OWNERS] = codeOwners
+      }
+
       const testSuiteSpan = this.tracer.startSpan('vitest.test_suite', {
         childOf: testSessionSpanContext,
         tags: {
