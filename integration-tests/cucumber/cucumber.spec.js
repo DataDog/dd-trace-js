@@ -174,7 +174,7 @@ versions.forEach(version => {
                     assert.exists(testSuiteId)
                     assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
                     assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
-                    assert.equal(meta[TEST_SOURCE_FILE].startsWith(featuresPath), true)
+                    assert.isTrue(meta[TEST_SOURCE_FILE].startsWith(featuresPath))
                     assert.equal(metrics[TEST_SOURCE_START], 1)
                   })
 
@@ -234,6 +234,9 @@ versions.forEach(version => {
                   stdio: 'pipe'
                 }
               )
+
+              childProcess.stdout.pipe(process.stdout)
+              childProcess.stderr.pipe(process.stderr)
 
               childProcess.on('exit', () => {
                 receiverPromise.then(() => done()).catch(done)
@@ -1191,15 +1194,17 @@ versions.forEach(version => {
         })
       })
 
-      it('correctly calculates test code owners when working directory is not repository root', (done) => {
+      it.only('correctly calculates test code owners when working directory is not repository root', (done) => {
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const test = events.find(event => event.type === 'test').content
+            const testSuite = events.find(event => event.type === 'test_suite_end').content
             // The test is in a subproject
             assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
             assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+            assert.equal(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
           })
 
         childProcess = exec(

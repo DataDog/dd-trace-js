@@ -214,6 +214,11 @@ class JestPlugin extends CiPlugin {
         testSuiteMetadata[TEST_SOURCE_START] = 1
       }
 
+      const codeOwners = this.getCodeOwners(testSuiteMetadata)
+      if (codeOwners) {
+        testSuiteMetadata[TEST_CODE_OWNERS] = codeOwners
+      }
+
       this.testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
         childOf: testSessionSpanContext,
         tags: {
