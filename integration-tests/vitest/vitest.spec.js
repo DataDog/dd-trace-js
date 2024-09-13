@@ -19,7 +19,7 @@ const {
   TEST_COMMAND
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
-const versions = ['1.6.0', 'latest']
+const versions = ['1.6.0', '2.0.5']
 
 const linePctMatchRegex = /Lines\s+:\s+([\d.]+)%/
 
