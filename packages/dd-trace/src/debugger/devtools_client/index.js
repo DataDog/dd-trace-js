@@ -14,7 +14,7 @@ require('./remote_config')
 // There doesn't seem to be an official standard for the content of these fields, so we're just populating them with
 // something that should be useful to a Node.js developer.
 const threadId = parentThreadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${parentThreadId}`
-const threadName = parentThreadId === 0 ? 'MainThread' : 'WorkerThread'
+const threadName = parentThreadId === 0 ? 'MainThread' : `WorkerThread:${parentThreadId}`
 
 session.on('Debugger.paused', async ({ params }) => {
   const start = process.hrtime.bigint()
