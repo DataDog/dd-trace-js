@@ -184,7 +184,7 @@ function getCreateCliWrapper (vitestPackage, frameworkVersion) {
 
 addHook({
   name: 'vitest',
-  versions: ['>=1.6.0'],
+  versions: ['>=1.6.0 <2.1.0'],
   file: 'dist/runners.js'
 }, (vitestPackage) => {
   const { VitestTestRunner } = vitestPackage
@@ -270,7 +270,7 @@ addHook({
 
 addHook({
   name: 'vitest',
-  versions: ['>=2.0.5'],
+  versions: ['>=2.0.5 <2.1.0'],
   filePattern: 'dist/chunks/index.*'
 }, (vitestPackage) => {
   if (isReporterPackageNewest(vitestPackage)) {
@@ -289,7 +289,7 @@ addHook({
 
 addHook({
   name: 'vitest',
-  versions: ['>=2.0.5'],
+  versions: ['>=2.0.5 <2.1.0'],
   filePattern: 'dist/chunks/cac.*'
 }, getCreateCliWrapper)
 
@@ -297,7 +297,7 @@ addHook({
 // only relevant for workers
 addHook({
   name: '@vitest/runner',
-  versions: ['>=1.6.0'],
+  versions: ['>=1.6.0 <2.1.0'],
   file: 'dist/index.js'
 }, (vitestPackage, frameworkVersion) => {
   shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPath) {
