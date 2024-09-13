@@ -255,9 +255,11 @@ describe('mocha CommonJS', function () {
         const events = payloads.flatMap(({ payload }) => payload.events)
 
         const test = events.find(event => event.type === 'test').content
+        const testSuite = events.find(event => event.type === 'test_suite_end').content
         // The test is in a subproject
         assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
         assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+        assert.equal(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
       })
 
     childProcess = exec(

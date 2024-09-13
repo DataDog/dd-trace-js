@@ -138,6 +138,11 @@ class MochaPlugin extends CiPlugin {
         testSuiteMetadata[TEST_SOURCE_START] = 1
       }
 
+      const codeOwners = this.getCodeOwners(testSuiteMetadata)
+      if (codeOwners) {
+        testSuiteMetadata[TEST_CODE_OWNERS] = codeOwners
+      }
+
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
         childOf: this.testModuleSpan,
         tags: {
