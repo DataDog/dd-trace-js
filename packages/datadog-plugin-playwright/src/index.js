@@ -85,6 +85,10 @@ class PlaywrightPlugin extends CiPlugin {
         testSuiteMetadata[TEST_SOURCE_FILE] = testSourceFile
         testSuiteMetadata[TEST_SOURCE_START] = 1
       }
+      const codeOwners = this.getCodeOwners(testSuiteMetadata)
+      if (codeOwners) {
+        testSuiteMetadata[TEST_CODE_OWNERS] = codeOwners
+      }
 
       const testSuiteSpan = this.tracer.startSpan('playwright.test_suite', {
         childOf: this.testModuleSpan,
