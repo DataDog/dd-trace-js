@@ -39,9 +39,10 @@ describe('Dynamic Instrumentation', function () {
       cwd,
       env: {
         APP_PORT: appPort,
+        DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: pollInterval,
-        DD_DYNAMIC_INSTRUMENTATION_ENABLED: true
+        DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG, // inherit to make debugging the sandbox easier
+        DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: pollInterval
       }
     })
     axios = Axios.create({
