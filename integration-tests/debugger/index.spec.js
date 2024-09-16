@@ -27,12 +27,7 @@ describe('Dynamic Instrumentation', function () {
   })
 
   beforeEach(async function () {
-    const probeId = randomUUID()
-    rcConfig = {
-      product: 'LIVE_DEBUGGING',
-      id: `logProbe_${probeId}`,
-      config: generateProbeConfig({ id: probeId })
-    }
+    rcConfig = generateRemoteConfig()
     appPort = await getPort()
     agent = await new FakeAgent().start()
     proc = await spawnProc(appFile, {
@@ -385,18 +380,12 @@ describe('Dynamic Instrumentation', function () {
 
   describe('race conditions', () => {
     it('should remove the last breakpoint completely before trying to add a new one', (done) => {
-      const probeId1 = rcConfig.config.id
-      const probeId2 = randomUUID()
-      const rcConfig2 = {
-        product: 'LIVE_DEBUGGING',
-        id: `logProbe_${probeId2}`,
-        config: generateProbeConfig({ id: probeId2 })
-      }
+      const rcConfig2 = generateRemoteConfig()
 
       agent.on('debugger-diagnostics', ({ payload: { debugger: { diagnostics: { status, probeId } } } }) => {
         if (status !== 'INSTALLED') return
 
-        if (probeId === probeId1) {
+        if (probeId === rcConfig.config.id) {
           // First INSTALLED payload: Try to trigger the race condition.
           agent.removeRemoteConfig(rcConfig.id)
           agent.addRemoteConfig(rcConfig2)
@@ -432,6 +421,15 @@ describe('Dynamic Instrumentation', function () {
     })
   })
 })
+
+function generateRemoteConfig (overrides = {}) {
+  overrides.id = overrides.id || randomUUID()
+  return {
+    product: 'LIVE_DEBUGGING',
+    id: `logProbe_${overrides.id}`,
+    config: generateProbeConfig(overrides)
+  }
+}
 
 function generateProbeConfig (overrides) {
   return {
