@@ -19,7 +19,8 @@ const {
   TEST_STATUS,
   TEST_SKIPPED_BY_ITR,
   ITR_CORRELATION_ID,
-  TEST_SOURCE_FILE
+  TEST_SOURCE_FILE,
+  TEST_SUITE
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -202,6 +203,19 @@ module.exports = class CiPlugin extends Plugin {
     }
   }
 
+  getCodeOwners (tags) {
+    const {
+      [TEST_SOURCE_FILE]: testSourceFile,
+      [TEST_SUITE]: testSuite
+    } = tags
+    // We'll try with the test source file if available (it could be different from the test suite)
+    let codeOwners = getCodeOwnersForFilename(testSourceFile, this.codeOwnersEntries)
+    if (!codeOwners) {
+      codeOwners = getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
+    }
+    return codeOwners
+  }
+
   startTestSpan (testName, testSuite, testSuiteSpan, extraTags = {}) {
     const childOf = getTestParentSpan(this.tracer)
 
@@ -221,13 +235,7 @@ module.exports = class CiPlugin extends Plugin {
       testTags[TEST_SESSION_NAME] = this.testSessionName
     }
 
-    const { [TEST_SOURCE_FILE]: testSourceFile } = extraTags
-    // We'll try with the test source file if available (it could be different from the test suite)
-    let codeOwners = getCodeOwnersForFilename(testSourceFile, this.codeOwnersEntries)
-    if (!codeOwners) {
-      codeOwners = getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
-    }
-
+    const codeOwners = this.getCodeOwners(testTags)
     if (codeOwners) {
       testTags[TEST_CODE_OWNERS] = codeOwners
     }

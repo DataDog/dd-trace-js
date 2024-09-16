@@ -110,6 +110,8 @@ versions.forEach((version) => {
               if (testSuiteEvent.content.meta[TEST_STATUS] === 'fail') {
                 assert.exists(testSuiteEvent.content.meta[ERROR_MESSAGE])
               }
+              assert.isTrue(testSuiteEvent.content.meta[TEST_SOURCE_FILE].endsWith('-test.js'))
+              assert.equal(testSuiteEvent.content.metrics[TEST_SOURCE_START], 1)
             })
 
             assert.includeMembers(testEvents.map(test => test.content.resource), [
@@ -674,9 +676,11 @@ versions.forEach((version) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const test = events.find(event => event.type === 'test').content
+          const testSuite = events.find(event => event.type === 'test_suite_end').content
           // The test is in a subproject
           assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
           assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          assert.equal(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
         })
 
       childProcess = exec(
