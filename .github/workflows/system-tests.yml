@@ -35,6 +35,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'DataDog/system-tests'
+          ref: 'conti/fix-php-errors'
       - name: Get Essential Scenarios
         id: parse-yml
         run: yq -o tsv .TRACER_ESSENTIAL_SCENARIOS ./scenario_groups.yml | xargs node -p "x=process.argv;x.shift();x.push('CROSSED_TRACING_LIBRARIES');'scenario='+JSON.stringify(x)" >> $GITHUB_OUTPUT
@@ -58,13 +59,14 @@ jobs:
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
       AWS_ACCESS_KEY_ID: ${{ secrets.IDM_AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.IDM_AWS_SECRET_ACCESS_KEY }}
-      AWS_REGION: ${{ secrets.IDM_AWS_DEFAULT_REGION }}
+      AWS_REGION: us-east-1
 
     steps:
       - name: Checkout system tests
         uses: actions/checkout@v4
         with:
           repository: 'DataDog/system-tests'
+          ref: 'conti/fix-php-errors'
       - name: Checkout dd-trace-js
         uses: actions/checkout@v4
         with:
