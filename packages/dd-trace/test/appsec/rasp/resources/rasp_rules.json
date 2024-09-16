@@ -142,6 +142,9 @@
                 "address": "grpc.server.request.message"
               },
               {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
                 "address": "graphql.server.all_resolvers"
               },
               {

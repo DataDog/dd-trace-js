@@ -31,7 +31,7 @@ describe('RASP - lfi', () => {
     let app, server
 
     before(() => {
-      return agent.load(['http', 'express', 'fs'], { client: false })
+      return agent.load(['http', 'express'], { client: false })
     })
 
     before((done) => {
@@ -158,64 +158,66 @@ describe('RASP - lfi', () => {
     })
   })
 
-  // describe('without express', () => {
-  //   let app, server
+  describe('without express', () => {
+    let app, server
 
-  //   before(() => {
-  //     return agent.load(['http'], { client: false })
-  //   })
+    before(() => {
+      return agent.load(['http'], { client: false })
+    })
 
-  //   before((done) => {
-  //     const http = require('http')
-  //     server = http.createServer((req, res) => {
-  //       if (app) {
-  //         app(req, res)
-  //       } else {
-  //         res.end('end')
-  //       }
-  //     })
+    before((done) => {
+      const http = require('http')
+      server = http.createServer((req, res) => {
+        if (app) {
+          app(req, res)
+        } else {
+          res.end('end')
+        }
+      })
 
-  //     appsec.enable(new Config({
-  //       appsec: {
-  //         enabled: true,
-  //         rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
-  //         rasp: { enabled: true }
-  //       }
-  //     }))
+      appsec.enable(new Config({
+        appsec: {
+          enabled: true,
+          rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
+          rasp: { enabled: true }
+        }
+      }))
 
-  //     server.listen(0, () => {
-  //       const port = server.address().port
-  //       axios = Axios.create({
-  //         baseURL: `http://localhost:${port}`
-  //       })
+      server.listen(0, () => {
+        const port = server.address().port
+        axios = Axios.create({
+          baseURL: `http://localhost:${port}`
+        })
 
-  //       done()
-  //     })
-  //   })
+        done()
+      })
+    })
 
-  //   after(() => {
-  //     appsec.disable()
-  //     server.close()
-  //     return agent.close({ ritmReset: false })
-  //   })
+    after(() => {
+      appsec.disable()
+      server.close()
+      return agent.close({ ritmReset: false })
+    })
 
-  //   it('Should detect threat if path is absolute', async () => {
-  //     app = (req, res) => {
-  //       try {
-  //         require('fs').statSync(req.headers.file)
-  //       } catch (e) {
-  //         if (e.message === 'DatadogRaspAbortError') {
-  //           res.writeHead(418)
-  //         }
-  //       }
-  //       res.end('end')
-  //     }
+    it('Should detect threat but not block', async () => {
+      app = (req, res) => {
+        try {
+          require('fs').statSync(req.headers.file)
+        } catch (e) {
+          if (e.message === 'DatadogRaspAbortError') {
+            res.writeHead(500)
+          } else {
+            res.writeHead(418)
+          }
+        }
+        res.end('end')
+      }
 
-  //     return testBlockingRequest('/', {
-  //       headers: {
-  //         file: '/test.file'
-  //       }
-  //     })
-  //   })
-  // })
+      return testBlockingRequest('/', {
+        headers: {
+          file: '/test.file'
+        }
+      })
+    })
+  })
 })
