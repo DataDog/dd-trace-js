@@ -266,24 +266,45 @@ function createWrapFunction (prefix = '', override = '') {
       const lastIndex = arguments.length - 1
       const cb = typeof arguments[lastIndex] === 'function' && arguments[lastIndex]
       const innerResource = new AsyncResource('bound-anonymous-fn')
-      const message = getMessage(method, getMethodParamsRelationByPrefix(prefix)[operation], arguments, this)
+      const abortController = new AbortController()
+      const params = getMethodParamsRelationByPrefix(prefix)[operation]
+      const message = getMessage(method, params, arguments, this, abortController)
+
+      const finish = innerResource.bind(function (error) {
+        if (error !== null && typeof error === 'object') { // fs.exists receives a boolean
+          errorChannel.publish(error)
+        }
+        finishChannel.publish()
+      })
 
       if (cb) {
         const outerResource = new AsyncResource('bound-anonymous-fn')
 
         arguments[lastIndex] = shimmer.wrapFunction(cb, cb => innerResource.bind(function (e) {
-          if (e !== null && typeof e === 'object') { // fs.exists receives a boolean
-            errorChannel.publish(e)
-          }
-
-          finishChannel.publish()
-
+          finish(e)
           return outerResource.runInAsyncScope(() => cb.apply(this, arguments))
         }))
       }
 
       return innerResource.runInAsyncScope(() => {
         startChannel.publish(message)
+
+        if (abortController.signal.aborted) {
+          const error = abortController.signal.reason || new Error('Aborted')
+          if (name.includes('Sync')) {
+            finish(error)
+            throw error
+          }
+
+          if (cb) {
+            arguments[lastIndex](error)
+            return
+          } else {
+            finish(error)
+            return Promise.reject(error)
+          }
+        }
+
         try {
           const result = original.apply(this, arguments)
           if (cb) return result
@@ -319,7 +340,7 @@ function createWrapFunction (prefix = '', override = '') {
   }
 }
 
-function getMessage (operation, params, args, self) {
+function getMessage (operation, params, args, self, abortController) {
   const metadata = {}
   if (params) {
     for (let i = 0; i < params.length; i++) {
@@ -339,7 +360,7 @@ function getMessage (operation, params, args, self) {
     }
   }
 
-  return { operation, ...metadata }
+  return { operation, ...metadata, abortController }
 }
 
 function massWrap (target, methods, wrapper) {

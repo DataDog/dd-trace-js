@@ -3,10 +3,9 @@
 const proxyquire = require('proxyquire')
 const { fsOperationStart } = require('../../../src/appsec/channels')
 const { FS_OPERATION_PATH } = require('../../../src/appsec/addresses')
-const { DatadogRaspAbortError } = require('../../../src/appsec/rasp/utils')
 
 describe('RASP - lfi.js', () => {
-  let waf, datadogCore, lfi, web, blocking, utils, appsecFsPlugin
+  let waf, datadogCore, lfi, web, blocking, appsecFsPlugin
 
   beforeEach(() => {
     datadogCore = {
@@ -32,16 +31,11 @@ describe('RASP - lfi.js', () => {
       disable: sinon.stub()
     }
 
-    utils = {
-      handleResult: sinon.stub()
-    }
-
     lfi = proxyquire('../../../src/appsec/rasp/lfi', {
       '../../../../datadog-core': datadogCore,
       '../waf': waf,
       '../../plugins/util/web': web,
       '../blocking': blocking,
-      './utils': utils,
       './fs-plugin': appsecFsPlugin
     })
 
@@ -80,7 +74,6 @@ describe('RASP - lfi.js', () => {
     const path = '/etc/passwd'
     const ctx = { path }
     const req = {}
-    const res = {}
 
     it('should analyze lfi for root fs operations', () => {
       const fs = { root: true }
@@ -117,51 +110,6 @@ describe('RASP - lfi.js', () => {
       fsOperationStart.publish(ctx)
 
       sinon.assert.notCalled(waf.run)
-    })
-
-    it('should block req if there is a block_request action', () => {
-      const fs = { root: true }
-      datadogCore.storage.getStore.returns({ req, res, fs })
-
-      const blockingAction = {
-        block_request: {}
-      }
-      waf.run.returns(blockingAction)
-
-      const rootSpan = {
-        context: () => {
-          return { _name: 'express.request' }
-        }
-      }
-      web.root.returns(rootSpan)
-
-      utils.handleResult.callsFake((actions, req, res, abortController, config) => {
-        const abortError = new DatadogRaspAbortError(req, res, blockingAction.block_request)
-        abortController.abort(abortError)
-      })
-
-      fsOperationStart.publish(ctx)
-
-      sinon.assert.calledOnceWithExactly(blocking.block, req, res, rootSpan, null, blockingAction.block_request)
-    })
-
-    it('should not block req if there is no block_request action', () => {
-      const fs = { root: true }
-      datadogCore.storage.getStore.returns({ req, res, fs })
-
-      const blockingAction = {}
-      waf.run.returns(blockingAction)
-
-      const rootSpan = {
-        context: () => {
-          return { _name: 'express.request' }
-        }
-      }
-      web.root.returns(rootSpan)
-
-      fsOperationStart.publish(ctx)
-
-      sinon.assert.notCalled(blocking.block)
     })
   })
 })

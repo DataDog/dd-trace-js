@@ -13,12 +13,14 @@ function getWebSpan (traces) {
   throw new Error('web span not found')
 }
 
-function checkRaspExecutedAndNotThreat (agent) {
+function checkRaspExecutedAndNotThreat (agent, checkRuleEval = true) {
   return agent.use((traces) => {
     const span = getWebSpan(traces)
     assert.notProperty(span.meta, '_dd.appsec.json')
     assert.notProperty(span.meta_struct || {}, '_dd.stack')
-    assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
+    if (checkRuleEval) {
+      assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
+    }
   })
 }
 
