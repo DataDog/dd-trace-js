@@ -10,7 +10,8 @@ const {
   TEST_IS_RETRY,
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_CODE_OWNERS,
-  TEST_SESSION_NAME
+  TEST_SESSION_NAME,
+  TEST_SOURCE_START
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -111,6 +112,7 @@ class VitestPlugin extends CiPlugin {
         this.testSuiteSpan,
         {
           [TEST_SOURCE_FILE]: testSuite,
+          [TEST_SOURCE_START]: 1, // we can't get the proper start line in vitest
           [TEST_STATUS]: 'skip'
         }
       )
@@ -135,6 +137,13 @@ class VitestPlugin extends CiPlugin {
         'vitest'
       )
       testSuiteMetadata[TEST_SESSION_NAME] = process.env.DD_CIVISIBILITY_TEST_SESSION_NAME
+      testSuiteMetadata[TEST_SOURCE_FILE] = testSuite
+      testSuiteMetadata[TEST_SOURCE_START] = 1
+
+      const codeOwners = this.getCodeOwners(testSuiteMetadata)
+      if (codeOwners) {
+        testSuiteMetadata[TEST_CODE_OWNERS] = codeOwners
+      }
 
       const testSuiteSpan = this.tracer.startSpan('vitest.test_suite', {
         childOf: testSessionSpanContext,

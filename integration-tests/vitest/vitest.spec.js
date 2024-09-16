@@ -16,7 +16,9 @@ const {
   TEST_CODE_OWNERS,
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_SESSION_NAME,
-  TEST_COMMAND
+  TEST_COMMAND,
+  TEST_SOURCE_FILE,
+  TEST_SOURCE_START
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const versions = ['1.6.0', 'latest']
@@ -142,6 +144,10 @@ versions.forEach((version) => {
         testSuiteEvents.forEach(testSuite => {
           assert.equal(testSuite.content.meta[TEST_SESSION_NAME], 'my-test-session')
           assert.equal(testSuite.content.meta[TEST_COMMAND], 'vitest run')
+          assert.isTrue(
+            testSuite.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/vitest-tests/test-visibility')
+          )
+          assert.equal(testSuite.content.metrics[TEST_SOURCE_START], 1)
         })
         // TODO: check error messages
       }).then(() => done()).catch(done)
@@ -313,7 +319,9 @@ versions.forEach((version) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const test = events.find(event => event.type === 'test').content
+          const testSuite = events.find(event => event.type === 'test_suite_end').content
           assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          assert.equal(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
         })
 
       childProcess = exec(

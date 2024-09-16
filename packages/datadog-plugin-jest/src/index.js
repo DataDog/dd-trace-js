@@ -160,7 +160,13 @@ class JestPlugin extends CiPlugin {
       })
     })
 
-    this.addSub('ci:jest:test-suite:start', ({ testSuite, testEnvironmentOptions, frameworkVersion, displayName }) => {
+    this.addSub('ci:jest:test-suite:start', ({
+      testSuite,
+      testSourceFile,
+      testEnvironmentOptions,
+      frameworkVersion,
+      displayName
+    }) => {
       const {
         _ddTestSessionId: testSessionId,
         _ddTestCommand: testCommand,
@@ -201,6 +207,16 @@ class JestPlugin extends CiPlugin {
       }
       if (testSessionName) {
         testSuiteMetadata[TEST_SESSION_NAME] = testSessionName
+      }
+      if (testSourceFile) {
+        testSuiteMetadata[TEST_SOURCE_FILE] = testSourceFile
+        // Test suite is the whole test file, so we can use the first line as the start
+        testSuiteMetadata[TEST_SOURCE_START] = 1
+      }
+
+      const codeOwners = this.getCodeOwners(testSuiteMetadata)
+      if (codeOwners) {
+        testSuiteMetadata[TEST_CODE_OWNERS] = codeOwners
       }
 
       this.testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
