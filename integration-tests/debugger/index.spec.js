@@ -14,7 +14,7 @@ const probeLineNo = 9
 const pollInterval = 1
 
 describe('Dynamic Instrumentation', function () {
-  let axios, sandbox, cwd, appPort, appFile, agent, proc, probeConfig
+  let axios, sandbox, cwd, appPort, appFile, agent, proc, rcConfig
 
   before(async function () {
     sandbox = await createSandbox(['fastify'])
@@ -28,7 +28,7 @@ describe('Dynamic Instrumentation', function () {
 
   beforeEach(async function () {
     const probeId = randomUUID()
-    probeConfig = {
+    rcConfig = {
       product: 'LIVE_DEBUGGING',
       id: `logProbe_${probeId}`,
       config: generateProbeConfig({ id: probeId })
@@ -39,9 +39,10 @@ describe('Dynamic Instrumentation', function () {
       cwd,
       env: {
         APP_PORT: appPort,
+        DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: pollInterval,
-        DD_DYNAMIC_INSTRUMENTATION_ENABLED: true
+        DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG, // inherit to make debugging the sandbox easier
+        DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: pollInterval
       }
     })
     axios = Axios.create({
@@ -63,7 +64,7 @@ describe('Dynamic Instrumentation', function () {
   describe('diagnostics messages', function () {
     it('should send expected diagnostics messages if probe is received and triggered', function (done) {
       let receivedAckUpdate = false
-      const probeId = probeConfig.config.id
+      const probeId = rcConfig.config.id
       const expectedPayloads = [{
         ddsource: 'dd_debugger',
         service: 'node',
@@ -79,7 +80,7 @@ describe('Dynamic Instrumentation', function () {
       }]
 
       agent.on('remote-config-ack-update', (id, version, state, error) => {
-        assert.strictEqual(id, probeConfig.id)
+        assert.strictEqual(id, rcConfig.id)
         assert.strictEqual(version, 1)
         assert.strictEqual(state, ACKNOWLEDGED)
         assert.notOk(error) // falsy check since error will be an empty string, but that's an implementation detail
@@ -108,7 +109,7 @@ describe('Dynamic Instrumentation', function () {
         }
       })
 
-      agent.addRemoteConfig(probeConfig)
+      agent.addRemoteConfig(rcConfig)
 
       function endIfDone () {
         if (receivedAckUpdate && expectedPayloads.length === 0) done()
@@ -117,7 +118,7 @@ describe('Dynamic Instrumentation', function () {
 
     it('should send expected diagnostics messages if probe is first received and then updated', function (done) {
       let receivedAckUpdates = 0
-      const probeId = probeConfig.config.id
+      const probeId = rcConfig.config.id
       const expectedPayloads = [{
         ddsource: 'dd_debugger',
         service: 'node',
@@ -137,14 +138,14 @@ describe('Dynamic Instrumentation', function () {
       }]
       const triggers = [
         () => {
-          probeConfig.config.version++
-          agent.updateRemoteConfig(probeConfig.id, probeConfig.config)
+          rcConfig.config.version++
+          agent.updateRemoteConfig(rcConfig.id, rcConfig.config)
         },
         () => {}
       ]
 
       agent.on('remote-config-ack-update', (id, version, state, error) => {
-        assert.strictEqual(id, probeConfig.id)
+        assert.strictEqual(id, rcConfig.id)
         assert.strictEqual(version, ++receivedAckUpdates)
         assert.strictEqual(state, ACKNOWLEDGED)
         assert.notOk(error) // falsy check since error will be an empty string, but that's an implementation detail
@@ -160,7 +161,7 @@ describe('Dynamic Instrumentation', function () {
         endIfDone()
       })
 
-      agent.addRemoteConfig(probeConfig)
+      agent.addRemoteConfig(rcConfig)
 
       function endIfDone () {
         if (receivedAckUpdates === 2 && expectedPayloads.length === 0) done()
@@ -170,7 +171,7 @@ describe('Dynamic Instrumentation', function () {
     it('should send expected diagnostics messages if probe is first received and then deleted', function (done) {
       let receivedAckUpdate = false
       let payloadsProcessed = false
-      const probeId = probeConfig.config.id
+      const probeId = rcConfig.config.id
       const expectedPayloads = [{
         ddsource: 'dd_debugger',
         service: 'node',
@@ -182,7 +183,7 @@ describe('Dynamic Instrumentation', function () {
       }]
 
       agent.on('remote-config-ack-update', (id, version, state, error) => {
-        assert.strictEqual(id, probeConfig.id)
+        assert.strictEqual(id, rcConfig.id)
         assert.strictEqual(version, 1)
         assert.strictEqual(state, ACKNOWLEDGED)
         assert.notOk(error) // falsy check since error will be an empty string, but that's an implementation detail
@@ -197,7 +198,7 @@ describe('Dynamic Instrumentation', function () {
         assertUUID(payload.debugger.diagnostics.runtimeId)
 
         if (payload.debugger.diagnostics.status === 'INSTALLED') {
-          agent.removeRemoteConfig(probeConfig.id)
+          agent.removeRemoteConfig(rcConfig.id)
           // Wait a little to see if we get any follow-up `debugger-diagnostics` messages
           setTimeout(() => {
             payloadsProcessed = true
@@ -206,7 +207,7 @@ describe('Dynamic Instrumentation', function () {
         }
       })
 
-      agent.addRemoteConfig(probeConfig)
+      agent.addRemoteConfig(rcConfig)
 
       function endIfDone () {
         if (receivedAckUpdate && payloadsProcessed) done()
@@ -300,7 +301,7 @@ describe('Dynamic Instrumentation', function () {
           },
           'debugger.snapshot': {
             probe: {
-              id: probeConfig.config.id,
+              id: rcConfig.config.id,
               version: 0,
               location: { file: probeFile, lines: [probeLineNo] }
             },
@@ -318,7 +319,7 @@ describe('Dynamic Instrumentation', function () {
         done()
       })
 
-      agent.addRemoteConfig(probeConfig)
+      agent.addRemoteConfig(rcConfig)
     })
 
     it('should respond with updated message if probe message is updated', function (done) {
@@ -326,9 +327,9 @@ describe('Dynamic Instrumentation', function () {
       const triggers = [
         async () => {
           await axios.get('/foo')
-          probeConfig.config.version++
-          probeConfig.config.template = 'Hello Updated World!'
-          agent.updateRemoteConfig(probeConfig.id, probeConfig.config)
+          rcConfig.config.version++
+          rcConfig.config.template = 'Hello Updated World!'
+          agent.updateRemoteConfig(rcConfig.id, rcConfig.config)
         },
         async () => {
           await axios.get('/foo')
@@ -344,7 +345,7 @@ describe('Dynamic Instrumentation', function () {
         if (expectedMessages.length === 0) done()
       })
 
-      agent.addRemoteConfig(probeConfig)
+      agent.addRemoteConfig(rcConfig)
     })
 
     it('should not trigger if probe is deleted', function (done) {
@@ -365,7 +366,7 @@ describe('Dynamic Instrumentation', function () {
               }
             })
 
-            agent.removeRemoteConfig(probeConfig.id)
+            agent.removeRemoteConfig(rcConfig.id)
           }
         } catch (err) {
           // Nessecary hack: Any errors thrown inside of an async function is invisible to Mocha unless the outer `it`
@@ -378,15 +379,15 @@ describe('Dynamic Instrumentation', function () {
         assert.fail('should not capture anything when the probe is deleted')
       })
 
-      agent.addRemoteConfig(probeConfig)
+      agent.addRemoteConfig(rcConfig)
     })
   })
 
   describe('race conditions', () => {
     it('should remove the last breakpoint completely before trying to add a new one', (done) => {
-      const probeId1 = probeConfig.config.id
+      const probeId1 = rcConfig.config.id
       const probeId2 = randomUUID()
-      const probeConfig2 = {
+      const rcConfig2 = {
         product: 'LIVE_DEBUGGING',
         id: `logProbe_${probeId2}`,
         config: generateProbeConfig({ id: probeId2 })
@@ -397,8 +398,8 @@ describe('Dynamic Instrumentation', function () {
 
         if (probeId === probeId1) {
           // First INSTALLED payload: Try to trigger the race condition.
-          agent.removeRemoteConfig(probeConfig.id)
-          agent.addRemoteConfig(probeConfig2)
+          agent.removeRemoteConfig(rcConfig.id)
+          agent.addRemoteConfig(rcConfig2)
         } else {
           // Second INSTALLED payload: Perform an HTTP request to see if we successfully handled the race condition.
           let finished = false
@@ -427,7 +428,7 @@ describe('Dynamic Instrumentation', function () {
         }
       })
 
-      agent.addRemoteConfig(probeConfig)
+      agent.addRemoteConfig(rcConfig)
     })
   })
 })
