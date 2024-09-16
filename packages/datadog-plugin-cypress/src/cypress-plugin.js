@@ -247,10 +247,21 @@ class CypressPlugin {
     return this.libraryConfigurationPromise
   }
 
-  getTestSuiteSpan (suite) {
+  getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
     const testSuiteSpanMetadata =
-      getTestSuiteCommonTags(this.command, this.frameworkVersion, suite, TEST_FRAMEWORK_NAME)
+      getTestSuiteCommonTags(this.command, this.frameworkVersion, testSuite, TEST_FRAMEWORK_NAME)
+
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
+
+    if (testSuiteAbsolutePath) {
+      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      testSuiteSpanMetadata[TEST_SOURCE_FILE] = testSourceFile
+      testSuiteSpanMetadata[TEST_SOURCE_START] = 1
+      const codeOwners = this.getTestCodeOwners({ testSuite, testSourceFile })
+      if (codeOwners) {
+        testSuiteSpanMetadata[TEST_CODE_OWNERS] = codeOwners
+      }
+    }
 
     return this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
       childOf: this.testModuleSpan,
@@ -482,7 +493,10 @@ class CypressPlugin {
       // dd:testSuiteStart hasn't been triggered for whatever reason
       // We will create the test suite span on the spot if that's the case
       log.warn('There was an error creating the test suite event.')
-      this.testSuiteSpan = this.getTestSuiteSpan(spec.relative)
+      this.testSuiteSpan = this.getTestSuiteSpan({
+        testSuite: spec.relative,
+        testSuiteAbsolutePath: spec.absolute
+      })
     }
 
     // Get tests that didn't go through `dd:afterEach`
@@ -593,7 +607,7 @@ class CypressPlugin {
 
   getTasks () {
     return {
-      'dd:testSuiteStart': (testSuite) => {
+      'dd:testSuiteStart': ({ testSuite, testSuiteAbsolutePath }) => {
         const suitePayload = {
           isEarlyFlakeDetectionEnabled: this.isEarlyFlakeDetectionEnabled,
           knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
@@ -603,7 +617,7 @@ class CypressPlugin {
         if (this.testSuiteSpan) {
           return suitePayload
         }
-        this.testSuiteSpan = this.getTestSuiteSpan(testSuite)
+        this.testSuiteSpan = this.getTestSuiteSpan({ testSuite, testSuiteAbsolutePath })
         return suitePayload
       },
       'dd:beforeEach': (test) => {
