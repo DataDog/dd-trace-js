@@ -467,7 +467,12 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion) {
       isUnskippable = isMarkedAsUnskippable(pickle)
       isForcedToRun = isUnskippable && skippableSuites.includes(testSuitePath)
 
-      testSuiteStartCh.publish({ testSuitePath, isUnskippable, isForcedToRun, itrCorrelationId })
+      testSuiteStartCh.publish({
+        testFileAbsolutePath,
+        isUnskippable,
+        isForcedToRun,
+        itrCorrelationId
+      })
     }
 
     let isNew = false
@@ -593,7 +598,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
       if (!pickleResultByFile[testFileAbsolutePath]) {
         pickleResultByFile[testFileAbsolutePath] = []
         testSuiteStartCh.publish({
-          testSuitePath: getTestSuitePath(testFileAbsolutePath, process.cwd())
+          testFileAbsolutePath
         })
       }
     }

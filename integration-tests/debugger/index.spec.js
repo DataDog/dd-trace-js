@@ -27,12 +27,7 @@ describe('Dynamic Instrumentation', function () {
   })
 
   beforeEach(async function () {
-    const probeId = randomUUID()
-    rcConfig = {
-      product: 'LIVE_DEBUGGING',
-      id: `logProbe_${probeId}`,
-      config: generateProbeConfig({ id: probeId })
-    }
+    rcConfig = generateRemoteConfig()
     appPort = await getPort()
     agent = await new FakeAgent().start()
     proc = await spawnProc(appFile, {
@@ -89,23 +84,20 @@ describe('Dynamic Instrumentation', function () {
         endIfDone()
       })
 
-      agent.on('debugger-diagnostics', async ({ payload }) => {
-        try {
-          const expected = expectedPayloads.shift()
-          assertObjectContains(payload, expected)
-          assertUUID(payload.debugger.diagnostics.runtimeId)
+      agent.on('debugger-diagnostics', ({ payload }) => {
+        const expected = expectedPayloads.shift()
+        assertObjectContains(payload, expected)
+        assertUUID(payload.debugger.diagnostics.runtimeId)
 
-          if (payload.debugger.diagnostics.status === 'INSTALLED') {
-            const response = await axios.get('/foo')
-            assert.strictEqual(response.status, 200)
-            assert.deepStrictEqual(response.data, { hello: 'foo' })
-          }
-
+        if (payload.debugger.diagnostics.status === 'INSTALLED') {
+          axios.get('/foo')
+            .then((response) => {
+              assert.strictEqual(response.status, 200)
+              assert.deepStrictEqual(response.data, { hello: 'foo' })
+            })
+            .catch(done)
+        } else {
           endIfDone()
-        } catch (err) {
-          // Nessecary hack: Any errors thrown inside of an async function is invisible to Mocha unless the outer `it`
-          // callback is also `async` (which we can't do in this case since we rely on the `done` callback).
-          done(err)
         }
       })
 
@@ -385,18 +377,12 @@ describe('Dynamic Instrumentation', function () {
 
   describe('race conditions', () => {
     it('should remove the last breakpoint completely before trying to add a new one', (done) => {
-      const probeId1 = rcConfig.config.id
-      const probeId2 = randomUUID()
-      const rcConfig2 = {
-        product: 'LIVE_DEBUGGING',
-        id: `logProbe_${probeId2}`,
-        config: generateProbeConfig({ id: probeId2 })
-      }
+      const rcConfig2 = generateRemoteConfig()
 
       agent.on('debugger-diagnostics', ({ payload: { debugger: { diagnostics: { status, probeId } } } }) => {
         if (status !== 'INSTALLED') return
 
-        if (probeId === probeId1) {
+        if (probeId === rcConfig.config.id) {
           // First INSTALLED payload: Try to trigger the race condition.
           agent.removeRemoteConfig(rcConfig.id)
           agent.addRemoteConfig(rcConfig2)
@@ -432,6 +418,15 @@ describe('Dynamic Instrumentation', function () {
     })
   })
 })
+
+function generateRemoteConfig (overrides = {}) {
+  overrides.id = overrides.id || randomUUID()
+  return {
+    product: 'LIVE_DEBUGGING',
+    id: `logProbe_${overrides.id}`,
+    config: generateProbeConfig(overrides)
+  }
+}
 
 function generateProbeConfig (overrides) {
   return {
