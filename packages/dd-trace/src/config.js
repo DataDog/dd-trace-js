@@ -239,7 +239,8 @@ class Config {
     options = {
       ...options,
       appsec: options.appsec != null ? options.appsec : options.experimental?.appsec,
-      iast: options.iast != null ? options.iast : options.experimental?.iast
+      iast: options.iast != null ? options.iast : options.experimental?.iast,
+      llmobs: options.llmobs != null ? options.llmobs : options.experimental?.llmobs
     }
 
     // Configure the logger first so it can be used to warn about other configs
@@ -284,6 +285,11 @@ class Config {
       options.appsec = {}
     }
 
+    const DD_LLMOBS_ENABLED = coalesce(
+      process.env.DD_LLMOBS_ENABLED,
+      !!options.llmobs
+    )
+
     const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
       process.env.DD_INSTRUMENTATION_INSTALL_ID,
       null
@@ -319,6 +325,10 @@ class Config {
 
     // TODO: refactor
     this.apiKey = DD_API_KEY
+
+    this.llmobs = {
+      enabled: isTrue(DD_LLMOBS_ENABLED)
+    }
 
     // sent in telemetry event app-started
     this.installSignature = {
@@ -497,6 +507,9 @@ class Config {
     this._setValue(defaults, 'isGitUploadEnabled', false)
     this._setValue(defaults, 'isIntelligentTestRunnerEnabled', false)
     this._setValue(defaults, 'isManualApiEnabled', false)
+    this._setValue(defaults, 'llmobs.agentlessEnabled', false)
+    this._setValue(defaults, 'llmobs.apiKey', undefined)
+    this._setValue(defaults, 'llmobs.mlApp', undefined)
     this._setValue(defaults, 'ciVisibilitySessionName', '')
     this._setValue(defaults, 'logInjection', false)
     this._setValue(defaults, 'lookup', undefined)
@@ -594,6 +607,8 @@ class Config {
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
+      DD_LLMOBS_AGENTLESS_ENABLED,
+      DD_LLMOBS_ML_APP,
       DD_OPENAI_LOGS_ENABLED,
       DD_OPENAI_SPAN_CHAR_LIMIT,
       DD_PROFILING_ENABLED,
@@ -734,6 +749,8 @@ class Config {
     this._setArray(env, 'injectionEnabled', DD_INJECTION_ENABLED)
     this._setBoolean(env, 'isAzureFunction', getIsAzureFunction())
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
+    this._setBoolean(env, 'llmobs.agentlessEnabled', DD_LLMOBS_AGENTLESS_ENABLED)
+    this._setString(env, 'llmobs.mlApp', DD_LLMOBS_ML_APP)
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this._setBoolean(env, 'memcachedCommandEnabled', DD_TRACE_MEMCACHED_COMMAND_ENABLED)
@@ -902,6 +919,9 @@ class Config {
     }
     this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
+    this._setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)
+    this._setString(opts, 'llmobs.apiKey', options.llmobs?.apiKey)
+    this._setString(opts, 'llmobs.mlApp', options.llmobs?.mlApp)
     this._setBoolean(opts, 'logInjection', options.logInjection)
     this._setString(opts, 'lookup', options.lookup)
     this._setBoolean(opts, 'openAiLogsEnabled', options.openAiLogsEnabled)
