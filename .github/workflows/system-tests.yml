@@ -56,6 +56,7 @@ jobs:
       TEST_LIBRARY: nodejs
       WEBLOG_VARIANT: ${{ matrix.weblog-variant }}
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
+      AWS_DEFAULT_REGION: us-east-1
 
     steps:
       - name: Checkout system tests
