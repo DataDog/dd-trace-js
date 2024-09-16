@@ -84,23 +84,20 @@ describe('Dynamic Instrumentation', function () {
         endIfDone()
       })
 
-      agent.on('debugger-diagnostics', async ({ payload }) => {
-        try {
-          const expected = expectedPayloads.shift()
-          assertObjectContains(payload, expected)
-          assertUUID(payload.debugger.diagnostics.runtimeId)
+      agent.on('debugger-diagnostics', ({ payload }) => {
+        const expected = expectedPayloads.shift()
+        assertObjectContains(payload, expected)
+        assertUUID(payload.debugger.diagnostics.runtimeId)
 
-          if (payload.debugger.diagnostics.status === 'INSTALLED') {
-            const response = await axios.get('/foo')
-            assert.strictEqual(response.status, 200)
-            assert.deepStrictEqual(response.data, { hello: 'foo' })
-          }
-
+        if (payload.debugger.diagnostics.status === 'INSTALLED') {
+          axios.get('/foo')
+            .then((response) => {
+              assert.strictEqual(response.status, 200)
+              assert.deepStrictEqual(response.data, { hello: 'foo' })
+            })
+            .catch(done)
+        } else {
           endIfDone()
-        } catch (err) {
-          // Nessecary hack: Any errors thrown inside of an async function is invisible to Mocha unless the outer `it`
-          // callback is also `async` (which we can't do in this case since we rely on the `done` callback).
-          done(err)
         }
       })
 
