@@ -58,7 +58,6 @@ jobs:
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
       AWS_ACCESS_KEY_ID: ${{ secrets.IDM_AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.IDM_AWS_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: ${{ secrets.IDM_AWS_DEFAULT_REGION }}
       AWS_REGION: ${{ secrets.IDM_AWS_DEFAULT_REGION }}
 
     steps:
