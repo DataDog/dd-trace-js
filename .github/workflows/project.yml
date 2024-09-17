@@ -11,9 +11,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
-env:
-  RUST_BACKTRACE: '1'
-
 jobs:
   integration:
     strategy:
