@@ -212,7 +212,7 @@ function onResponseBody ({ req, body }) {
   }, req)
 }
 
-function onPassportVerify ({ credentials, user }) {
+function onPassportVerify ({ credentials, user, abortController }) {
   const store = storage.getStore()
   const rootSpan = store?.req && web.root(store.req)
 
