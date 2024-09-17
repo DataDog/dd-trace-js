@@ -2,7 +2,11 @@
 
 const { assert } = require('chai')
 
-function getWebSpan (traces) {
+function getWebSpan (traces, debug) {
+  if (debug) {
+    console.log(JSON.stringify(traces))
+  }
+
   for (const trace of traces) {
     for (const span of trace) {
       if (span.type === 'web') {
@@ -10,15 +14,12 @@ function getWebSpan (traces) {
       }
     }
   }
-  console.log(JSON.stringify(traces))
-  // throw new Error('web span not found')
+  throw new Error('web span not found')
 }
 
 function checkRaspExecutedAndNotThreat (agent, checkRuleEval = true) {
   return agent.use((traces) => {
-    const span = getWebSpan(traces)
-    if (!span) return
-
+    const span = getWebSpan(traces, true)
     assert.notProperty(span.meta, '_dd.appsec.json')
     assert.notProperty(span.meta_struct || {}, '_dd.stack')
     if (checkRuleEval) {
@@ -30,8 +31,6 @@ function checkRaspExecutedAndNotThreat (agent, checkRuleEval = true) {
 function checkRaspExecutedAndHasThreat (agent, ruleId) {
   return agent.use((traces) => {
     const span = getWebSpan(traces)
-    if (!span) return
-
     assert.property(span.meta, '_dd.appsec.json')
     assert(span.meta['_dd.appsec.json'].includes(ruleId))
     assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
