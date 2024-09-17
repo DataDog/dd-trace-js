@@ -5,14 +5,10 @@ const os = require('os')
 const path = require('path')
 const crypto = require('crypto')
 const semver = require('semver')
+const proxyquire = require('proxyquire')
 const exec = require('./helpers/exec')
+const childProcess = require('child_process')
 const externals = require('../packages/dd-trace/test/plugins/externals')
-const {
-  getVersionList,
-  getInternals,
-  npmView
-} = require('./helpers/versioning')
-const latests = require('../packages/datadog-instrumentations/src/helpers/latests.json')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
@@ -20,6 +16,7 @@ const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require
 // Can remove couchbase after removing support for couchbase <= 3.2.0
 const excludeList = os.arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
+const versionLists = {}
 const deps = {}
 const filter = process.env.hasOwnProperty('PLUGINS') && process.env.PLUGINS.split('|')
 
@@ -49,7 +46,21 @@ async function run () {
 }
 
 async function assertVersions () {
-  const internals = getInternals()
+  const internals = names
+    .map(key => {
+      const instrumentations = []
+      const name = key
+
+      try {
+        loadInstFile(`${name}/server.js`, instrumentations)
+        loadInstFile(`${name}/client.js`, instrumentations)
+      } catch (e) {
+        loadInstFile(`${name}.js`, instrumentations)
+      }
+
+      return instrumentations
+    })
+    .reduce((prev, next) => prev.concat(next), [])
 
   for (const inst of internals) {
     await assertInstrumentation(inst, false)
@@ -134,17 +145,7 @@ async function assertPackage (name, version, dependency, external) {
 }
 
 async function addDependencies (dependencies, name, versionRange) {
-  let versionList = await getVersionList(name)
-  if (!latests.pinned.includes(name)) {
-    const maxVersion = latests.latests[name]
-    versionList = versionList.map(version => {
-      if (version.startsWith('>=') && !version.includes('<')) {
-        return version + ' <=' + maxVersion
-      } else {
-        return version
-      }
-    })
-  }
+  const versionList = await getVersionList(name)
   const version = semver.maxSatisfying(versionList, versionRange)
   const pkgJson = await npmView(`${name}@${version}`)
   for (const dep of deps[name]) {
@@ -155,6 +156,27 @@ async function addDependencies (dependencies, name, versionRange) {
       }
     }
   }
+}
+
+async function getVersionList (name) {
+  if (versionLists[name]) {
+    return versionLists[name]
+  }
+  const list = await npmView(`${name} versions`)
+  versionLists[name] = list
+  return list
+}
+
+function npmView (input) {
+  return new Promise((resolve, reject) => {
+    childProcess.exec(`npm view ${input} --json`, (err, stdout) => {
+      if (err) {
+        reject(err)
+        return
+      }
+      resolve(JSON.parse(stdout.toString('utf8')))
+    })
+  })
 }
 
 function assertIndex (name, version) {
@@ -211,4 +233,19 @@ function sha1 (str) {
   const shasum = crypto.createHash('sha1')
   shasum.update(str)
   return shasum.digest('hex')
+}
+
+function loadInstFile (file, instrumentations) {
+  const instrument = {
+    addHook (instrumentation) {
+      instrumentations.push(instrumentation)
+    }
+  }
+
+  const instPath = path.join(__dirname, `../packages/datadog-instrumentations/src/${file}`)
+
+  proxyquire.noPreserveCache()(instPath, {
+    './helpers/instrument': instrument,
+    '../helpers/instrument': instrument
+  })
 }
