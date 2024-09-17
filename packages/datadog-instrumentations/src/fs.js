@@ -291,15 +291,16 @@ function createWrapFunction (prefix = '', override = '') {
 
         if (abortController.signal.aborted) {
           const error = abortController.signal.reason || new Error('Aborted')
-          if (name.includes('Sync')) {
+
+          if (prefix === 'promises.') {
+            finish(error)
+            return Promise.reject(error)
+          } else if (name.includes('Sync') || !cb) {
             finish(error)
             throw error
           } else if (cb) {
             arguments[lastIndex](error)
             return
-          } else {
-            finish(error)
-            return Promise.reject(error)
           }
         }
 
