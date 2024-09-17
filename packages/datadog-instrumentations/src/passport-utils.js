@@ -32,6 +32,25 @@ function wrapVerify (verify, passReq, type) {
   }
 }
 
+function createWrapStrategy (type) {
+  return function wrapStrategy (Strategy) {
+    return function wrappedStrategy () {
+      if (typeof arguments[0] === 'function') {
+        arguments[0] = wrapVerify(arguments[0], false, type)
+      } else {
+        arguments[1] = wrapVerify(arguments[1], (arguments[0] && arguments[0].passReqToCallback), type)
+      }
+      return Strategy.apply(this, arguments)
+    }
+  }
+}
+
+function createStrategyHook (type) {
+  return function strategyHook (Strategy) {
+    return shimmer.wrapFunction(Strategy, createWrapStrategy(type))
+  }
+}
+
 module.exports = {
-  wrapVerify
+  createStrategyHook
 }
