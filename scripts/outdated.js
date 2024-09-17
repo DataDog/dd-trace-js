@@ -4,6 +4,7 @@ const {
 } = require('./helpers/versioning')
 const path = require('path')
 const fs = require('fs')
+const { execSync } = require('child_process')
 
 const latestsPath = path.join(
   __dirname,
@@ -20,6 +21,12 @@ const internalsNames = Array.from(new Set(getInternals().map(n => n.name)))
 
 // TODO A lot of this can be optimized by using `npm outdated`.
 
+function makeAPR (branchName) {
+  const title = 'Fix: Update Outdated Versions'
+  const body = 'Checking for and updating outdated integration versions'
+  execSync(`gh pr create --title ${title} --body ${body} --base master --head ${branchName} `)
+}
+
 async function fix () {
   const latests = {}
   for (const name of internalsNames) {
@@ -29,6 +36,23 @@ async function fix () {
   }
   latestsJson.latests = latests
   fs.writeFileSync(latestsPath, JSON.stringify(latestsJson, null, 2))
+
+  const result = execSync('git status').toString()
+
+  if (result.includes(latestsPath)) {
+    const branchName = 'fix_outdated_integrations'
+    try {
+      execSync(`git checkout -b ${branchName}`)
+      execSync(`git add ${latestsPath}`)
+      execSync('git commit -m "fix: update integr latests.json"')
+      execSync(`git push origin ${branchName}`)
+
+      makeAPR(branchName)
+    } catch (e) {
+      console.log('ERROR', e)
+      process.exitCode = 1
+    }
+  }
 }
 
 async function check () {
