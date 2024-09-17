@@ -339,7 +339,7 @@ class Config {
     this._applyDefaults()
     this._applyEnvironment()
     this._applyOptions(options)
-    this._applyCalculated(options)
+    this._applyCalculated()
     this._applyRemote({})
     this._merge()
 
@@ -399,7 +399,7 @@ class Config {
     }
 
     // TODO: test
-    this._applyCalculated(options)
+    this._applyCalculated()
     this._merge()
   }
 
@@ -425,10 +425,10 @@ class Config {
     return inAWSLambda || isGCPFunction || isAzureFunction
   }
 
-  _isLLMObsEnabled (options = {}) {
+  _isLLMObsEnabled () {
     return coalesce(
       process.env.DD_LLMOBS_ENABLED,
-      !!options.llmobs
+      !!this._optionsArg.llmobs
     )
   }
 
@@ -1045,7 +1045,7 @@ class Config {
   }
 
   // handles values calculated from a mixture of options and env vars
-  _applyCalculated (options) {
+  _applyCalculated () {
     const calc = setHiddenProperty(this, '_calculated', {})
 
     const {
@@ -1090,7 +1090,7 @@ class Config {
       calc['tracePropagationStyle.extract'] = calc['tracePropagationStyle.extract'] || defaultPropagationStyle
     }
 
-    this._setBoolean(calc, 'llmobs.enabled', this._isLLMObsEnabled(options))
+    this._setBoolean(calc, 'llmobs.enabled', this._isLLMObsEnabled())
   }
 
   _applyRemote (options) {
