@@ -1,9 +1,11 @@
 'use strict'
 
-const log = require('../log')
-const { URL } = require('url')
+// Load binding first to not import other modules if it throws
 const libdatadog = require('@datadog/libdatadog')
 const binding = libdatadog.load('crashtracker')
+
+const log = require('../log')
+const { URL } = require('url')
 const pkg = require('../../../../package.json')
 
 class Crashtracker {
