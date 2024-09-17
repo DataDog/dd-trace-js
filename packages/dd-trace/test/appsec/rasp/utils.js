@@ -3,9 +3,6 @@
 const { assert } = require('chai')
 
 function getWebSpan (traces, debug) {
-  if (debug) {
-    console.log(JSON.stringify(traces))
-  }
   for (const trace of traces) {
     for (const span of trace) {
       if (span.type === 'web') {
@@ -18,13 +15,13 @@ function getWebSpan (traces, debug) {
 
 function checkRaspExecutedAndNotThreat (agent, checkRuleEval = true) {
   return agent.use((traces) => {
-    const span = getWebSpan(traces, true)
+    const span = getWebSpan(traces)
     assert.notProperty(span.meta, '_dd.appsec.json')
     assert.notProperty(span.meta_struct || {}, '_dd.stack')
     if (checkRuleEval) {
       assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
     }
-  }, { timeoutMs: 60000 })
+  })
 }
 
 function checkRaspExecutedAndHasThreat (agent, ruleId) {
@@ -36,7 +33,7 @@ function checkRaspExecutedAndHasThreat (agent, ruleId) {
     assert(span.metrics['_dd.appsec.rasp.duration'] > 0)
     assert(span.metrics['_dd.appsec.rasp.duration_ext'] > 0)
     assert.property(span.meta_struct, '_dd.stack')
-  }, { timeoutMs: 5000 })
+  })
 }
 
 module.exports = {

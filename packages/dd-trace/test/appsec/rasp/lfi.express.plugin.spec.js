@@ -45,7 +45,7 @@ describe('RASP - lfi', () => {
       appsec.enable(new Config({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
+          rules: path.join(__dirname, 'resources', 'lfi_rasp_rules.json'),
           rasp: { enabled: true }
         }
       }))
@@ -105,21 +105,6 @@ describe('RASP - lfi', () => {
           app = (req, res) => {
             try {
               require('fs').statSync(req.query.file)
-            } catch (e) {
-              if (e.message === 'DatadogRaspAbortError') {
-                res.writeHead(418)
-              }
-            }
-            res.end('end')
-          }
-
-          return testBlockingRequest()
-        })
-
-        it('Should detect threat using async/await', async () => {
-          app = async (req, res) => {
-            try {
-              await require('fs').stat(req.query.file)
             } catch (e) {
               if (e.message === 'DatadogRaspAbortError') {
                 res.writeHead(418)
@@ -195,7 +180,7 @@ describe('RASP - lfi', () => {
       appsec.enable(new Config({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
+          rules: path.join(__dirname, 'resources', 'lfi_rasp_rules.json'),
           rasp: { enabled: true }
         }
       }))

@@ -119,9 +119,7 @@ describe('RASP - ssrf', () => {
             axiosToTest = require(`../../../../../versions/axios@${axiosVersion}`).get()
           })
 
-          it('Should not detect threat', async function () {
-            this.timeout(60000)
-
+          it('Should not detect threat', async () => {
             app = (req, res) => {
               axiosToTest.get(`https://${req.query.host}`)
               res.end('end')
