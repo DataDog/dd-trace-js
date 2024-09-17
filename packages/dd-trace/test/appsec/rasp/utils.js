@@ -10,6 +10,7 @@ function getWebSpan (traces) {
       }
     }
   }
+  console.log(JSON.stringify(traces))
   throw new Error('web span not found')
 }
 

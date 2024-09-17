@@ -266,9 +266,9 @@ function createWrapFunction (prefix = '', override = '') {
       const lastIndex = arguments.length - 1
       const cb = typeof arguments[lastIndex] === 'function' && arguments[lastIndex]
       const innerResource = new AsyncResource('bound-anonymous-fn')
-      const abortController = new AbortController()
       const params = getMethodParamsRelationByPrefix(prefix)[operation]
-      const message = getMessage(method, params, arguments, this, abortController)
+      const abortController = new AbortController()
+      const message = { ...getMessage(method, params, arguments, this), abortController }
 
       const finish = innerResource.bind(function (error) {
         if (error !== null && typeof error === 'object') { // fs.exists receives a boolean
@@ -340,7 +340,7 @@ function createWrapFunction (prefix = '', override = '') {
   }
 }
 
-function getMessage (operation, params, args, self, abortController) {
+function getMessage (operation, params, args, self) {
   const metadata = {}
   if (params) {
     for (let i = 0; i < params.length; i++) {
@@ -360,7 +360,7 @@ function getMessage (operation, params, args, self, abortController) {
     }
   }
 
-  return { operation, ...metadata, abortController }
+  return { operation, ...metadata }
 }
 
 function massWrap (target, methods, wrapper) {
