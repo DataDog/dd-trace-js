@@ -99,6 +99,13 @@ const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
 const EFD_STRING = "Retried by Datadog's Early Flake Detection"
 const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
 
+const TEST_LEVEL_EVENT_TYPES = [
+  'test',
+  'test_suite_end',
+  'test_module_end',
+  'test_session_end'
+]
+
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
@@ -173,7 +180,8 @@ module.exports = {
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
   TEST_BROWSER_VERSION,
-  getTestSessionName
+  getTestSessionName,
+  TEST_LEVEL_EVENT_TYPES
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
