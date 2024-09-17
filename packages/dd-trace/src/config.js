@@ -284,11 +284,6 @@ class Config {
       options.appsec = {}
     }
 
-    const DD_LLMOBS_ENABLED = coalesce(
-      process.env.DD_LLMOBS_ENABLED,
-      !!options.llmobs
-    )
-
     const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
       process.env.DD_INSTRUMENTATION_INSTALL_ID,
       null
@@ -325,10 +320,6 @@ class Config {
     // TODO: refactor
     this.apiKey = DD_API_KEY
 
-    this.llmobs = {
-      enabled: isTrue(DD_LLMOBS_ENABLED)
-    }
-
     // sent in telemetry event app-started
     this.installSignature = {
       id: DD_INSTRUMENTATION_INSTALL_ID,
@@ -348,7 +339,7 @@ class Config {
     this._applyDefaults()
     this._applyEnvironment()
     this._applyOptions(options)
-    this._applyCalculated()
+    this._applyCalculated(options)
     this._applyRemote({})
     this._merge()
 
@@ -408,7 +399,7 @@ class Config {
     }
 
     // TODO: test
-    this._applyCalculated()
+    this._applyCalculated(options)
     this._merge()
   }
 
@@ -432,6 +423,13 @@ class Config {
     const isGCPFunction = getIsGCPFunction()
     const isAzureFunction = getIsAzureFunction()
     return inAWSLambda || isGCPFunction || isAzureFunction
+  }
+
+  _isLLMObsEnabled (options = {}) {
+    return coalesce(
+      process.env.DD_LLMOBS_ENABLED,
+      !!options.llmobs
+    )
   }
 
   // for _merge to work, every config value must have a default value
@@ -508,6 +506,7 @@ class Config {
     this._setValue(defaults, 'isManualApiEnabled', false)
     this._setValue(defaults, 'llmobs.agentlessEnabled', false)
     this._setValue(defaults, 'llmobs.apiKey', undefined)
+    this._setBoolean(defaults, 'llmobs.enabled', false)
     this._setValue(defaults, 'llmobs.mlApp', undefined)
     this._setValue(defaults, 'ciVisibilitySessionName', '')
     this._setValue(defaults, 'logInjection', false)
@@ -1046,7 +1045,7 @@ class Config {
   }
 
   // handles values calculated from a mixture of options and env vars
-  _applyCalculated () {
+  _applyCalculated (options) {
     const calc = setHiddenProperty(this, '_calculated', {})
 
     const {
@@ -1090,6 +1089,8 @@ class Config {
       calc['tracePropagationStyle.inject'] = calc['tracePropagationStyle.inject'] || defaultPropagationStyle
       calc['tracePropagationStyle.extract'] = calc['tracePropagationStyle.extract'] || defaultPropagationStyle
     }
+
+    this._setBoolean(calc, 'llmobs.enabled', this._isLLMObsEnabled(options))
   }
 
   _applyRemote (options) {
