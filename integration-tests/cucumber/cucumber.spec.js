@@ -27,6 +27,7 @@ const {
   TEST_ITR_FORCED_RUN,
   TEST_ITR_UNSKIPPABLE,
   TEST_SOURCE_FILE,
+  TEST_SOURCE_START,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_IS_NEW,
   TEST_IS_RETRY,
@@ -34,12 +35,12 @@ const {
   CUCUMBER_IS_PARALLEL,
   TEST_SUITE,
   TEST_CODE_OWNERS,
-  TEST_SESSION_NAME
+  TEST_SESSION_NAME,
+  TEST_LEVEL_EVENT_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const isOldNode = semver.satisfies(process.version, '<=16')
-// TODO: change 10 to `latest` when fix is released
-const versions = ['7.0.0', isOldNode ? '9' : '10']
+const versions = ['7.0.0', isOldNode ? '9' : 'latest']
 
 const moduleType = [
   {
@@ -115,6 +116,13 @@ versions.forEach(version => {
 
               const receiverPromise = receiver
                 .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                  const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+                  metadataDicts.forEach(metadata => {
+                    for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+                      assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+                    }
+                  })
+
                   const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const testSessionEvent = events.find(event => event.type === 'test_session_end')
@@ -131,14 +139,12 @@ versions.forEach(version => {
                     assert.equal(testSessionEventContent.meta[CUCUMBER_IS_PARALLEL], 'true')
                   }
 
-                  assert.equal(testSessionEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
                   assert.exists(testSessionEventContent.test_session_id)
                   assert.exists(testSessionEventContent.meta[TEST_COMMAND])
                   assert.exists(testSessionEventContent.meta[TEST_TOOLCHAIN])
                   assert.equal(testSessionEventContent.resource.startsWith('test_session.'), true)
                   assert.equal(testSessionEventContent.meta[TEST_STATUS], 'fail')
 
-                  assert.equal(testModuleEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
                   assert.exists(testModuleEventContent.test_session_id)
                   assert.exists(testModuleEventContent.test_module_id)
                   assert.exists(testModuleEventContent.meta[TEST_COMMAND])
@@ -162,17 +168,19 @@ versions.forEach(version => {
                   testSuiteEvents.forEach(({
                     content: {
                       meta,
+                      metrics,
                       test_suite_id: testSuiteId,
                       test_module_id: testModuleId,
                       test_session_id: testSessionId
                     }
                   }) => {
-                    assert.equal(meta[TEST_SESSION_NAME], 'my-test-session')
                     assert.exists(meta[TEST_COMMAND])
                     assert.exists(meta[TEST_MODULE])
                     assert.exists(testSuiteId)
                     assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
                     assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+                    assert.isTrue(meta[TEST_SOURCE_FILE].startsWith(featuresPath))
+                    assert.equal(metrics[TEST_SOURCE_START], 1)
                   })
 
                   assert.includeMembers(testEvents.map(test => test.content.resource), [
@@ -198,7 +206,6 @@ versions.forEach(version => {
                       test_session_id: testSessionId
                     }
                   }) => {
-                    assert.equal(meta[TEST_SESSION_NAME], 'my-test-session')
                     assert.exists(meta[TEST_COMMAND])
                     assert.exists(meta[TEST_MODULE])
                     assert.exists(testSuiteId)
@@ -1194,9 +1201,11 @@ versions.forEach(version => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const test = events.find(event => event.type === 'test').content
+            const testSuite = events.find(event => event.type === 'test_suite_end').content
             // The test is in a subproject
             assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
             assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+            assert.equal(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
           })
 
         childProcess = exec(

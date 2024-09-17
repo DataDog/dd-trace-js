@@ -15,8 +15,7 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
-  TELEMETRY_TEST_SESSION,
-  TEST_SESSION_NAME
+  TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -70,6 +69,7 @@ class PlaywrightPlugin extends CiPlugin {
     this.addSub('ci:playwright:test-suite:start', (testSuiteAbsolutePath) => {
       const store = storage.getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
+      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
 
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
@@ -77,8 +77,13 @@ class PlaywrightPlugin extends CiPlugin {
         testSuite,
         'playwright'
       )
-      if (this.testSessionName) {
-        testSuiteMetadata[TEST_SESSION_NAME] = this.testSessionName
+      if (testSourceFile) {
+        testSuiteMetadata[TEST_SOURCE_FILE] = testSourceFile
+        testSuiteMetadata[TEST_SOURCE_START] = 1
+      }
+      const codeOwners = this.getCodeOwners(testSuiteMetadata)
+      if (codeOwners) {
+        testSuiteMetadata[TEST_CODE_OWNERS] = codeOwners
       }
 
       const testSuiteSpan = this.tracer.startSpan('playwright.test_suite', {

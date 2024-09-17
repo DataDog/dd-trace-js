@@ -334,12 +334,32 @@ function useSandbox (...args) {
     return oldSandbox.remove()
   })
 }
+
 function sandboxCwd () {
   return sandbox.folder
 }
 
+function assertObjectContains (actual, expected) {
+  for (const [key, val] of Object.entries(expected)) {
+    if (val !== null && typeof val === 'object') {
+      assert.ok(key in actual)
+      assert.notStrictEqual(actual[key], null)
+      assert.strictEqual(typeof actual[key], 'object')
+      assertObjectContains(actual[key], val)
+    } else {
+      assert.strictEqual(actual[key], expected[key])
+    }
+  }
+}
+
+function assertUUID (actual, msg = 'not a valid UUID') {
+  assert.match(actual, /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/, msg)
+}
+
 module.exports = {
   FakeAgent,
+  assertObjectContains,
+  assertUUID,
   spawnProc,
   runAndCheckWithTelemetry,
   createSandbox,

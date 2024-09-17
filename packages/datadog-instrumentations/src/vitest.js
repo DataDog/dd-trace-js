@@ -270,7 +270,16 @@ addHook({
 
 addHook({
   name: 'vitest',
-  versions: ['>=2.0.5'],
+  versions: ['>=2.1.0'],
+  filePattern: 'dist/chunks/RandomSequencer.*'
+}, (randomSequencerPackage) => {
+  shimmer.wrap(randomSequencerPackage.B.prototype, 'sort', getSortWrapper)
+  return randomSequencerPackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=2.0.5 <2.1.0'],
   filePattern: 'dist/chunks/index.*'
 }, (vitestPackage) => {
   if (isReporterPackageNewest(vitestPackage)) {
