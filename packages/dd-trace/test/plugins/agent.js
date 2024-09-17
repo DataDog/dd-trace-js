@@ -219,6 +219,7 @@ function runCallback (callback, options, handlers) {
         clearTimeout(timeout)
         deferred.reject(e)
       } else {
+        console.error(e)
         error = error || e
       }
     }
