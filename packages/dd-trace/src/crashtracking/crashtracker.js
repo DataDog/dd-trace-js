@@ -1,0 +1,95 @@
+'use strict'
+
+const log = require('../log')
+const { URL } = require('url')
+const libdatadog = require('@datadog/libdatadog')
+const binding = libdatadog.load('crashtracker')
+const pkg = require('../../../../package.json')
+
+class Crashtracker {
+  constructor () {
+    this._started = false
+  }
+
+  configure (config) {
+    if (!this._started) return
+
+    try {
+      binding.updateConfig(this._getConfig(config))
+      binding.updateMetadata(this._getMetadata(config))
+    } catch (e) {
+      log.error(e)
+    }
+  }
+
+  start (config) {
+    if (this._started) return this.configure(config)
+
+    this._started = true
+
+    try {
+      binding.initWithReceiver(
+        this._getConfig(config),
+        this._getReceiverConfig(config),
+        this._getMetadata(config),
+      )
+    } catch (e) {
+      log.error(e)
+    }
+  }
+
+  // TODO: Send only configured values when defaults are fixed.
+  _getConfig (config) {
+    const { hostname = '127.0.0.1', port = 8126 } = config
+    const url = config.url || new URL(`http://${hostname}:${port}`)
+
+    return {
+      additional_files: [],
+      create_alt_stack: false,
+      endpoint: {
+        // TODO: Use the string directly when deserialization is fixed.
+        url: {
+          scheme: url.protocol.slice(0, -1),
+          authority: url.protocol === 'unix'
+            ? Buffer.from(url.pathname).toString('hex')
+            : url.host,
+          path_and_query: ''
+        },
+        timeout_ms: 3000
+      },
+      // TODO: Use `EnabledWithSymbolsInReceiver` instead for Linux when fixed.
+      resolve_frames: 'EnabledWithInprocessSymbols',
+      wait_for_receiver: false
+    }
+  }
+
+  _getMetadata (config) {
+    const tags = Object.keys(config.tags).map(key => `${key}:${config.tags[key]}`)
+
+    return {
+      library_name: pkg.name,
+      library_version: pkg.version,
+      family: 'nodejs',
+      tags: [
+        ...tags,
+        'is_crash:true',
+        'language:javascript',
+        `library_version:${pkg.version}`,
+        'runtime:nodejs',
+        'severity:crash'
+      ]
+    }
+  }
+
+  _getReceiverConfig () {
+    return {
+      args: [],
+      env: [],
+      path_to_receiver_binary: libdatadog.find('crashtracker-receiver', true),
+      stderr_filename: null,
+      stdout_filename: null,
+    }
+  }
+}
+
+module.exports = new Crashtracker()

@@ -211,6 +211,7 @@ describe('Config', () => {
     expect(config).to.have.property('queryStringObfuscation').with.length(626)
     expect(config).to.have.property('clientIpEnabled', false)
     expect(config).to.have.property('clientIpHeader', null)
+    expect(config).to.have.nested.property('crashtracking.enabled', false)
     expect(config).to.have.property('sampleRate', undefined)
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config.tags).to.have.property('service', 'node')
@@ -424,6 +425,7 @@ describe('Config', () => {
     process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = '.*'
     process.env.DD_TRACE_CLIENT_IP_ENABLED = 'true'
     process.env.DD_TRACE_CLIENT_IP_HEADER = 'x-true-client-ip'
+    process.env.DD_CRASHTRACKING_ENABLED = 'true'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
     process.env.DD_ENV = 'test'
@@ -507,6 +509,7 @@ describe('Config', () => {
     expect(config).to.have.property('queryStringObfuscation', '.*')
     expect(config).to.have.property('clientIpEnabled', true)
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
+    expect(config).to.have.nested.property('crashtracking.enabled', true)
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('dynamicInstrumentationEnabled', true)
@@ -604,6 +607,7 @@ describe('Config', () => {
       { name: 'appsec.wafTimeout', value: '42', origin: 'env_var' },
       { name: 'clientIpEnabled', value: true, origin: 'env_var' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'env_var' },
+      { name: 'crashtracking.enabled', value: true, origin: 'env_var' },
       { name: 'dogstatsd.hostname', value: 'dsd-agent', origin: 'env_var' },
       { name: 'dogstatsd.port', value: '5218', origin: 'env_var' },
       { name: 'dynamicInstrumentationEnabled', value: true, origin: 'env_var' },
@@ -703,6 +707,14 @@ describe('Config', () => {
 
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['tracecontext'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['tracecontext'])
+  })
+
+  it('should enable crash tracking for SSI', () => {
+    process.env.DD_INJECTION_ENABLED = 'tracer'
+
+    const config = new Config()
+
+    expect(config).to.have.nested.deep.property('crashtracking.enabled', true)
   })
 
   it('should initialize from the options', () => {
