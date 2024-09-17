@@ -27,6 +27,7 @@ const {
   TEST_ITR_FORCED_RUN,
   TEST_ITR_UNSKIPPABLE,
   TEST_SOURCE_FILE,
+  TEST_SOURCE_START,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_IS_NEW,
   TEST_IS_RETRY,
@@ -39,8 +40,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const isOldNode = semver.satisfies(process.version, '<=16')
-// TODO: change 10 to `latest` when fix is released
-const versions = ['7.0.0', isOldNode ? '9' : '10']
+const versions = ['7.0.0', isOldNode ? '9' : 'latest']
 
 const moduleType = [
   {
@@ -168,6 +168,7 @@ versions.forEach(version => {
                   testSuiteEvents.forEach(({
                     content: {
                       meta,
+                      metrics,
                       test_suite_id: testSuiteId,
                       test_module_id: testModuleId,
                       test_session_id: testSessionId
@@ -178,6 +179,8 @@ versions.forEach(version => {
                     assert.exists(testSuiteId)
                     assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
                     assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+                    assert.isTrue(meta[TEST_SOURCE_FILE].startsWith(featuresPath))
+                    assert.equal(metrics[TEST_SOURCE_START], 1)
                   })
 
                   assert.includeMembers(testEvents.map(test => test.content.resource), [
@@ -1198,9 +1201,11 @@ versions.forEach(version => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const test = events.find(event => event.type === 'test').content
+            const testSuite = events.find(event => event.type === 'test_suite_end').content
             // The test is in a subproject
             assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
             assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+            assert.equal(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
           })
 
         childProcess = exec(

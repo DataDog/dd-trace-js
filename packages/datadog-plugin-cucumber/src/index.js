@@ -116,7 +116,15 @@ class CucumberPlugin extends CiPlugin {
       this.tracer._exporter.flush()
     })
 
-    this.addSub('ci:cucumber:test-suite:start', ({ testSuitePath, isUnskippable, isForcedToRun, itrCorrelationId }) => {
+    this.addSub('ci:cucumber:test-suite:start', ({
+      testFileAbsolutePath,
+      isUnskippable,
+      isForcedToRun,
+      itrCorrelationId
+    }) => {
+      const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
+      const testSourceFile = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)
+
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
         this.frameworkVersion,
@@ -134,6 +142,16 @@ class CucumberPlugin extends CiPlugin {
       if (itrCorrelationId) {
         testSuiteMetadata[ITR_CORRELATION_ID] = itrCorrelationId
       }
+      if (testSourceFile) {
+        testSuiteMetadata[TEST_SOURCE_FILE] = testSourceFile
+        testSuiteMetadata[TEST_SOURCE_START] = 1
+      }
+
+      const codeOwners = this.getCodeOwners(testSuiteMetadata)
+      if (codeOwners) {
+        testSuiteMetadata[TEST_CODE_OWNERS] = codeOwners
+      }
+
       const testSuiteSpan = this.tracer.startSpan('cucumber.test_suite', {
         childOf: this.testModuleSpan,
         tags: {

@@ -6,6 +6,9 @@ const END_TIMESTAMP_LABEL = 'end_timestamp_ns'
 const THREAD_NAME_LABEL = 'thread name'
 const OS_THREAD_ID_LABEL = 'os thread id'
 const THREAD_ID_LABEL = 'thread id'
+const SPAN_ID_LABEL = 'span id'
+const LOCAL_ROOT_SPAN_ID_LABEL = 'local root span id'
+
 const threadNamePrefix = isMainThread ? 'Main' : `Worker #${threadId}`
 const eventLoopThreadName = `${threadNamePrefix} Event Loop`
 
@@ -38,6 +41,8 @@ module.exports = {
   THREAD_NAME_LABEL,
   THREAD_ID_LABEL,
   OS_THREAD_ID_LABEL,
+  SPAN_ID_LABEL,
+  LOCAL_ROOT_SPAN_ID_LABEL,
   threadNamePrefix,
   eventLoopThreadName,
   getNonJSThreadsLabels,
