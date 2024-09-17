@@ -6,7 +6,7 @@ stages:
   - macrobenchmarks
 
 include:
-  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include-wip/baptiste.foy/APMON-1462/support-nightly-release/one-pipeline.yml
+  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include-wip/landerson/enable-lib-injection-tests/one-pipeline.yml
   - local: ".gitlab/benchmarks.yml"
   - local: ".gitlab/macrobenchmarks.yml"
 
