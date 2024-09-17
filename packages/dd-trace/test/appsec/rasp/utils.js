@@ -4,7 +4,7 @@ const { assert } = require('chai')
 
 function getWebSpan (traces, debug) {
   if (debug) {
-    JSON.stringify(traces)
+    console.log(JSON.stringify(traces))
   }
   for (const trace of traces) {
     for (const span of trace) {
