@@ -264,6 +264,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('llmobs.mlApp', undefined)
     expect(config).to.have.nested.property('llmobs.agentlessEnabled', false)
     expect(config).to.have.nested.property('llmobs.apiKey', undefined)
+    expect(config).to.have.nested.property('llmobs.enabled', false)
 
     expect(updateConfig).to.be.calledOnce
 
