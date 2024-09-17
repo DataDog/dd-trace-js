@@ -17,6 +17,7 @@ const {
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_SESSION_NAME,
   TEST_COMMAND,
+  TEST_LEVEL_EVENT_TYPES,
   TEST_SOURCE_FILE,
   TEST_SOURCE_START
 } = require('../../packages/dd-trace/src/plugins/util/test')
@@ -54,6 +55,14 @@ versions.forEach((version) => {
 
     it('can run and report tests', (done) => {
       receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+        const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+        metadataDicts.forEach(metadata => {
+          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+            assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+          }
+        })
+
         const events = payloads.flatMap(({ payload }) => payload.events)
 
         const testSessionEvent = events.find(event => event.type === 'test_session_end')
@@ -61,10 +70,8 @@ versions.forEach((version) => {
         const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
         const testEvents = events.filter(event => event.type === 'test')
 
-        assert.equal(testSessionEvent.content.meta[TEST_SESSION_NAME], 'my-test-session')
         assert.include(testSessionEvent.content.resource, 'test_session.vitest run')
         assert.equal(testSessionEvent.content.meta[TEST_STATUS], 'fail')
-        assert.equal(testModuleEvent.content.meta[TEST_SESSION_NAME], 'my-test-session')
         assert.include(testModuleEvent.content.resource, 'test_module.vitest run')
         assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'fail')
         assert.equal(testSessionEvent.content.meta[TEST_TYPE], 'test')
@@ -137,12 +144,10 @@ versions.forEach((version) => {
         )
 
         testEvents.forEach(test => {
-          assert.equal(test.content.meta[TEST_SESSION_NAME], 'my-test-session')
           assert.equal(test.content.meta[TEST_COMMAND], 'vitest run')
         })
 
         testSuiteEvents.forEach(testSuite => {
-          assert.equal(testSuite.content.meta[TEST_SESSION_NAME], 'my-test-session')
           assert.equal(testSuite.content.meta[TEST_COMMAND], 'vitest run')
           assert.isTrue(
             testSuite.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/vitest-tests/test-visibility')
