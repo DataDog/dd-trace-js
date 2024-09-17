@@ -42,6 +42,7 @@ function analyzeLfi (ctx) {
 }
 
 function getPaths (ctx, fs) {
+  // these properties could have String, Buffer, URL or Integer types
   const pathArguments = [
     ctx.dest,
     ctx.existingPath,
@@ -53,7 +54,9 @@ function getPaths (ctx, fs) {
     ctx.src
   ]
 
-  return pathArguments.filter(path => shouldAnalyze(path, fs))
+  return pathArguments
+    .map(path => path && !Number.isInteger(path) ? path.toString() : undefined)
+    .filter(path => shouldAnalyze(path, fs))
 }
 
 function shouldAnalyze (path, fs) {
