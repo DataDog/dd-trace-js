@@ -42,7 +42,7 @@ function analyzeLfi (ctx) {
 }
 
 function getPaths (ctx, fs) {
-  // these properties could have String, Buffer, URL or Integer types
+  // these properties could have String, Buffer, URL, Integer or FileHandle types
   const pathArguments = [
     ctx.dest,
     ctx.existingPath,
@@ -55,8 +55,17 @@ function getPaths (ctx, fs) {
   ]
 
   return pathArguments
-    .map(path => path && !Number.isInteger(path) ? path.toString() : undefined)
+    .map(path => hasValidType(path) ? path.toString() : undefined)
     .filter(path => shouldAnalyze(path, fs))
+}
+
+function hasValidType (path) {
+  return path && (
+    typeof path === 'string' ||
+    path instanceof String ||
+    path instanceof Buffer ||
+    path instanceof URL
+  )
 }
 
 function shouldAnalyze (path, fs) {

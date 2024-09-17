@@ -2,7 +2,7 @@
 
 const { assert } = require('chai')
 
-function getWebSpan (traces, debug) {
+function getWebSpan (traces) {
   for (const trace of traces) {
     for (const span of trace) {
       if (span.type === 'web') {
