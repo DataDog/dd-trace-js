@@ -2,7 +2,10 @@
 
 const { assert } = require('chai')
 
-function getWebSpan (traces) {
+function getWebSpan (traces, debug) {
+  if (debug) {
+    JSON.stringify(traces)
+  }
   for (const trace of traces) {
     for (const span of trace) {
       if (span.type === 'web') {
@@ -15,13 +18,13 @@ function getWebSpan (traces) {
 
 function checkRaspExecutedAndNotThreat (agent, checkRuleEval = true) {
   return agent.use((traces) => {
-    const span = getWebSpan(traces)
+    const span = getWebSpan(traces, true)
     assert.notProperty(span.meta, '_dd.appsec.json')
     assert.notProperty(span.meta_struct || {}, '_dd.stack')
     if (checkRuleEval) {
       assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
     }
-  }, { timeoutMs: 5000 })
+  }, { timeoutMs: 5000, rejectFirst: false })
 }
 
 function checkRaspExecutedAndHasThreat (agent, ruleId) {
