@@ -5,6 +5,7 @@ const Config = require('./config')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
+const DynamicInstrumentation = require('./debugger')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
@@ -112,6 +113,10 @@ class Tracer extends NoopProxy {
           this._flare.enable(config)
           this._flare.module.send(conf.args)
         })
+
+        if (config.dynamicInstrumentationEnabled) {
+          DynamicInstrumentation.start(config, rc)
+        }
       }
 
       if (config.isGCPFunction || config.isAzureFunction) {
@@ -203,6 +208,7 @@ class Tracer extends NoopProxy {
     if (this._tracingInitialized) {
       this._tracer.configure(config)
       this._pluginManager.configure(config)
+      DynamicInstrumentation.configure(config)
       setStartupLogPluginManager(this._pluginManager)
     }
   }

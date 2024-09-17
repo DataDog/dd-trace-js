@@ -125,10 +125,12 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args
   const addressKey = strings.dedup('address')
   const portKey = strings.dedup('port')
   const nameKey = strings.dedup('operation')
+  const spanIdKey = strings.dedup('span id')
+  const localRootSpanIdKey = strings.dedup('local root span id')
   const eventValue = strings.dedup(eventType)
   const events = []
   for (const sample of profile.sample) {
-    let ts, event, host, address, port, name
+    let ts, event, host, address, port, name, spanId, localRootSpanId
     for (const label of sample.label) {
       switch (label.key) {
         case tsKey: ts = label.num; break
@@ -137,6 +139,8 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args
         case hostKey: host = label.str; break
         case addressKey: address = label.str; break
         case portKey: port = label.num; break
+        case spanIdKey: spanId = label.str; break
+        case localRootSpanIdKey: localRootSpanId = label.str; break
         default: assert.fail(`Unexpected label key ${label.key} ${strings.strings[label.key]} ${encoded}`)
       }
     }
@@ -144,6 +148,13 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args
     assert.isDefined(ts, encoded)
     assert.isTrue(ts <= procEnd, encoded)
     assert.isTrue(ts >= procStart, encoded)
+    if (process.platform !== 'win32') {
+      assert.isDefined(spanId, encoded)
+      assert.isDefined(localRootSpanId, encoded)
+    } else {
+      assert.isUndefined(spanId, encoded)
+      assert.isUndefined(localRootSpanId, encoded)
+    }
     // Gather only DNS events; ignore sporadic GC events
     if (event === eventValue) {
       assert.isDefined(name, encoded)
