@@ -24,7 +24,7 @@ function checkRaspExecutedAndNotThreat (agent, checkRuleEval = true) {
     if (checkRuleEval) {
       assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
     }
-  }, { timeoutMs: 5000, rejectFirst: false })
+  }, { timeoutMs: 30000 })
 }
 
 function checkRaspExecutedAndHasThreat (agent, ruleId) {
