@@ -18,26 +18,29 @@ function wrapVerifiedAndPublish (username, password, verified, type) {
   })
 }
 
-function wrapVerify (verify, passReq) {
-  if (passReq) {
-    return function (req, username, password, verified) {
-      arguments[3] = wrapVerifiedAndPublish(username, password, verified, this.name)
-      return verify.apply(this, arguments)
+function wrapVerify (verify) {
+  return function wrappedVerify (req, username, password, verified) {
+    let index = 3
+
+    if (!this._passReqToCallback) {
+      index = 2
+      username = req
+      password = username
+      verified = password
     }
-  } else {
-    return function (username, password, verified) {
-      arguments[2] = wrapVerifiedAndPublish(username, password, verified, this.name)
-      return verify.apply(this, arguments)
-    }
+
+    arguments[index] = wrapVerifiedAndPublish(username, password, verified, this.name)
+
+    return verify.apply(this, arguments)
   }
 }
 
 function wrapStrategy (Strategy) {
   return function wrappedStrategy () {
     if (typeof arguments[0] === 'function') {
-      arguments[0] = wrapVerify(arguments[0], false)
+      arguments[0] = wrapVerify(arguments[0])
     } else {
-      arguments[1] = wrapVerify(arguments[1], (arguments[0] && arguments[0].passReqToCallback))
+      arguments[1] = wrapVerify(arguments[1])
     }
     return Strategy.apply(this, arguments)
   }
