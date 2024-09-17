@@ -14,7 +14,14 @@ function wrapVerifiedAndPublish (username, password, verified, type) {
   return shimmer.wrapFunction(verified, verified => function (err, user, info) {
     if (err) return // ????
     const credentials = { type, username }
-    passportVerifyChannel.publish({ credentials, user })
+    const abortController = new AbortController()
+
+    passportVerifyChannel.publish({ credentials, user, abortController })
+
+    if (abortController.signal.aborted) {
+      arguments[0] = new Error('Blocked')
+    }
+
     return verified.apply(this, arguments)
   })
 }
