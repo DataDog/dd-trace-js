@@ -84,7 +84,24 @@ describe('RASP - lfi', () => {
           return checkRaspExecutedAndNotThreat(agent, false)
         })
 
-        it('Should detect threat if path is absolute', async () => {
+        it('Should not detect threat using a path not present in the request', async () => {
+          app = (req, res) => {
+            try {
+              require('fs').statSync('/test.file')
+            } catch (e) {
+              if (e.message === 'DatadogRaspAbortError') {
+                res.writeHead(418)
+              }
+            }
+            res.end('end')
+          }
+
+          await axios.get('/')
+
+          return checkRaspExecutedAndNotThreat(agent)
+        })
+
+        it('Should detect threat using a sync method', async () => {
           app = (req, res) => {
             try {
               require('fs').statSync(req.query.file)
@@ -99,7 +116,7 @@ describe('RASP - lfi', () => {
           return testBlockingRequest()
         })
 
-        it('Should detect threat using await', async () => {
+        it('Should detect threat using async/await', async () => {
           app = async (req, res) => {
             try {
               await require('fs').stat(req.query.file)

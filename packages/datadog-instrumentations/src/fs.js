@@ -294,9 +294,7 @@ function createWrapFunction (prefix = '', override = '') {
           if (name.includes('Sync')) {
             finish(error)
             throw error
-          }
-
-          if (cb) {
+          } else if (cb) {
             arguments[lastIndex](error)
             return
           } else {
