@@ -1,5 +1,6 @@
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const log = require('../../dd-trace/src/log')
 
 // test hooks
 const testStartCh = channel('ci:vitest:test:start')
@@ -17,6 +18,7 @@ const testSuiteErrorCh = channel('ci:vitest:test-suite:error')
 const testSessionStartCh = channel('ci:vitest:session:start')
 const testSessionFinishCh = channel('ci:vitest:session:finish')
 const libraryConfigurationCh = channel('ci:vitest:library-configuration')
+const knownTestsCh = channel('ci:vitest:known-tests')
 
 const taskToAsync = new WeakMap()
 
@@ -108,18 +110,40 @@ function getSortWrapper (sort) {
     // will not work. This will be a known limitation.
     let isFlakyTestRetriesEnabled = false
     let flakyTestRetriesCount = 0
+    let isEarlyFlakeDetectionEnabled = false
+    let knownTests = {}
 
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
       if (!err) {
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+        isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
       }
     } catch (e) {
       isFlakyTestRetriesEnabled = false
+      isEarlyFlakeDetectionEnabled = false
     }
+    debugger
     if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
       this.ctx.config.retry = flakyTestRetriesCount
+    }
+    if (isEarlyFlakeDetectionEnabled) {
+      const knownTestsResponse = await getChannelPromise(knownTestsCh)
+      debugger
+      if (!knownTestsResponse.err) {
+        knownTests = knownTestsResponse.knownTests
+      } else {
+        isEarlyFlakeDetectionEnabled = false
+      }
+      // TODO: use this to pass session and module IDs to the worker, instead of polluting process.env
+      // Note: setting this.ctx.config.provide directly does not work because it's cached
+      try {
+        const workspaceProject = this.ctx.getCoreWorkspaceProject()
+        workspaceProject._provided.knownTests = JSON.stringify(knownTests.vitest)
+      } catch (e) {
+        log.error('Could not send known tests to workers so Early Flake Detection will not work.')
+      }
     }
 
     let testCodeCoverageLinesTotal
@@ -182,18 +206,59 @@ function getCreateCliWrapper (vitestPackage, frameworkVersion) {
   return vitestPackage
 }
 
+let taskToStatuses = new WeakMap()
+
 addHook({
   name: 'vitest',
   versions: ['>=1.6.0'],
   file: 'dist/runners.js'
 }, (vitestPackage) => {
   const { VitestTestRunner } = vitestPackage
+
   // test start (only tests that are not marked as skip or todo)
+  shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => async function (task) {
+    const testName = getTestName(task)
+    let isNew = false
+
+    // TODO: do not do if EFD is disabled
+    try {
+      const knownTests = JSON.parse(globalThis.__vitest_worker__?.providedContext?.knownTests)
+      // TODO: does this work for suites whose root is not cwd?
+      const testsForThisTestSuite = knownTests[task.file.name] || []
+      isNew = !testsForThisTestSuite.includes(testName)
+      if (isNew) {
+        task.repeats = 10 // TODO: change by name
+      }
+    } catch (e) {
+      // ignore error
+    }
+
+    return onBeforeRunTask.apply(this, arguments)
+  })
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeTryTask', onBeforeTryTask => async function (task, retryInfo) {
     if (!testStartCh.hasSubscribers) {
       return onBeforeTryTask.apply(this, arguments)
     }
-    const { retry: numAttempt } = retryInfo
+    const testName = getTestName(task)
+    let isNew = false
+
+    // TODO: do not do if EFD is disabled
+    // TODO: do not repeat `isNew` calculation from above
+    try {
+      const knownTests = JSON.parse(globalThis.__vitest_worker__?.providedContext?.knownTests)
+      // TODO: does this work for suites whose root is not cwd?
+      const testsForThisTestSuite = knownTests[task.file.name] || []
+      isNew = !testsForThisTestSuite.includes(testName)
+    } catch (e) {
+      // ignore error
+    }
+    // console.log({
+    //   testName,
+    //   retryInfo
+    // })
+    const { retry: numAttempt, repeats: numRepetition } = retryInfo
+    // it can be repeated
+
     // We finish the previous test here because we know it has failed already
     if (numAttempt > 0) {
       const asyncResource = taskToAsync.get(task)
@@ -204,15 +269,66 @@ addHook({
         })
       }
     }
+    // console.log('numRepetition', numRepetition)
+    if (numRepetition === 0) {
+      taskToStatuses.set(task, [task.result.state])
+    }
+
+    if (numRepetition > 0 && numRepetition < 10) { // it may or may have not failed
+      const statuses = taskToStatuses.get(task)
+      // here we finish the earlier iteration, as long as it's not the _last_ iteration (which will be finished normally)
+      // we need to know what the status was
+      // console.log('task.result.state', {
+      //   state: task.result,
+      //   numRepetition,
+      //   'globalThis.__vitest_worker__': globalThis.__vitest_worker__
+      // })
+      statuses.push(task.result.state)
+      // would this work??
+      const asyncResource = taskToAsync.get(task)
+      if (asyncResource) {
+        if (task.result.state === 'fail') {
+          const testError = task.result?.errors?.[0]
+          asyncResource.runInAsyncScope(() => {
+            testErrorCh.publish({ error: testError })
+          })
+        } else {
+          asyncResource.runInAsyncScope(() => {
+            testPassCh.publish({ task })
+          })
+        }
+        task.result.state = 'pass' // we make it pass so it doesn't fail the test
+      }
+    } else if (numRepetition === 10) {
+      // we modify the status to be the EFD status (if one passes, it's a pass)
+      const statuses = taskToStatuses.get(task)
+      statuses.push(task.result.state)
+      const asyncResource = taskToAsync.get(task)
+      if (task.result.state === 'fail') {
+        const testError = task.result?.errors?.[0]
+        asyncResource.runInAsyncScope(() => {
+          testErrorCh.publish({ error: testError })
+        })
+      } else {
+        asyncResource.runInAsyncScope(() => {
+          testPassCh.publish({ task })
+        })
+      }
+      const hasPass = statuses.includes('pass')
+      if (hasPass) {
+        task.result.state = 'pass'
+      }
+    }
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     taskToAsync.set(task, asyncResource)
 
     asyncResource.runInAsyncScope(() => {
       testStartCh.publish({
-        testName: getTestName(task),
+        testName,
         testSuiteAbsolutePath: task.file.filepath,
-        isRetry: numAttempt > 0
+        isRetry: numAttempt > 0,
+        isNew
       })
     })
     return onBeforeTryTask.apply(this, arguments)
@@ -220,7 +336,7 @@ addHook({
 
   // test finish (only passed tests)
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterTryTask', onAfterTryTask =>
-    async function (task, { retry: retryCount }) {
+    async function (task, { retry: retryCount, repeats: numRepetition }) {
       if (!testFinishTimeCh.hasSubscribers) {
         return onAfterTryTask.apply(this, arguments)
       }
@@ -230,7 +346,9 @@ addHook({
       const asyncResource = taskToAsync.get(task)
 
       if (asyncResource) {
-        // We don't finish here because the test might fail in a later hook
+        // We don't finish here because the test might fail in a later hook (afterEach)
+        // DOES NOT WORK FOR REPEAT
+        // check if repeat
         asyncResource.runInAsyncScope(() => {
           testFinishTimeCh.publish({ status, task })
         })
@@ -328,6 +446,7 @@ addHook({
 
     const testTasks = getTypeTasks(startTestsResponse[0].tasks)
 
+    // console.log('testTasks', testTasks)
     // Only one test task per test, even if there are retries
     testTasks.forEach(task => {
       const testAsyncResource = taskToAsync.get(task)

@@ -13,7 +13,8 @@ const {
   TEST_CODE_OWNERS,
   TEST_LEVEL_EVENT_TYPES,
   TEST_SESSION_NAME,
-  TEST_SOURCE_START
+  TEST_SOURCE_START,
+  TEST_IS_NEW
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -37,7 +38,8 @@ class VitestPlugin extends CiPlugin {
 
     this.taskToFinishTime = new WeakMap()
 
-    this.addSub('ci:vitest:test:start', ({ testName, testSuiteAbsolutePath, isRetry }) => {
+    this.addSub('ci:vitest:test:start', ({ testName, testSuiteAbsolutePath, isRetry, isNew }) => {
+      // console.log('starting', testName)
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const store = storage.getStore()
 
@@ -46,6 +48,9 @@ class VitestPlugin extends CiPlugin {
       }
       if (isRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
+      }
+      if (isNew) {
+        extraTags[TEST_IS_NEW] = 'true'
       }
 
       const span = this.startTestSpan(
@@ -61,6 +66,10 @@ class VitestPlugin extends CiPlugin {
     this.addSub('ci:vitest:test:finish-time', ({ status, task }) => {
       const store = storage.getStore()
       const span = store?.span
+      // console.log('finishing', {
+      //   name: span.context()._tags['test.name'],
+      //   id: span.context().toTraceId()
+      // })
 
       // we store the finish time to finish at a later hook
       // this is because the test might fail at a `afterEach` hook
