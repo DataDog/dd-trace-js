@@ -28,7 +28,11 @@ class SchemaBuilder {
 
   build () {
     this.iterator.iterateOverSchema(this)
-    const noNones = convertToJsonCompatible(this.schema)
+    return this.schema
+  }
+
+  static getSchemaDefinition (schema) {
+    const noNones = convertToJsonCompatible(schema)
     const definition = jsonStringify(noNones)
     const id = fnv64(Buffer.from(definition, 'utf-8')).toString()
     return new Schema(definition, id)
@@ -45,9 +49,9 @@ class SchemaBuilder {
     return true
   }
 
-  static getSchema (schemaName, iterator) {
+  static getSchema (schemaName, iterator, builder) {
     if (!CACHE.has(schemaName)) {
-      CACHE.set(schemaName, new SchemaBuilder(iterator).build())
+      CACHE.set(schemaName, (builder ?? new SchemaBuilder(iterator)).build())
     }
     return CACHE.get(schemaName)
   }

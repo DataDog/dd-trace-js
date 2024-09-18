@@ -802,6 +802,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
 
+  protobufjs:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: protobufjs
+      DD_DATA_STREAMS_ENABLED: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test-and-upstream
+
   q:
     runs-on: ubuntu-latest
     env:

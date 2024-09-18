@@ -77,6 +77,7 @@ module.exports = {
   get pino () { return require('../../../datadog-plugin-pino/src') },
   get 'pino-pretty' () { return require('../../../datadog-plugin-pino/src') },
   get playwright () { return require('../../../datadog-plugin-playwright/src') },
+  get protobufjs () { return require('../../../datadog-plugin-protobufjs/src') },
   get redis () { return require('../../../datadog-plugin-redis/src') },
   get restify () { return require('../../../datadog-plugin-restify/src') },
   get rhea () { return require('../../../datadog-plugin-rhea/src') },
