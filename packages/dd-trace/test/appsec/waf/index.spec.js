@@ -416,7 +416,7 @@ describe('WAF Manager', () => {
             '_dd.appsec.s.req.body': [8],
             '_dd.appsec.fp.http.endpoint': 'http-post-abcdefgh-12345678-abcdefgh',
             '_dd.appsec.fp.http.network': 'net-1-0100000000',
-            '_dd.appsec.fp.http.headers': 'hdr-0110000110-abcdefgh-5-12345678',
+            '_dd.appsec.fp.http.headers': 'hdr-0110000110-abcdefgh-5-12345678'
           }
         }
 

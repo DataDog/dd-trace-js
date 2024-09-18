@@ -382,7 +382,7 @@ describe('reporter', () => {
 
       Reporter.reportFingerprints(derivatives)
 
-      sinon.assert.calledOnceWithExactly(span.addTags,{
+      sinon.assert.calledOnceWithExactly(span.addTags, {
         '_dd.appsec.fp.http.endpoint': 'endpoint_fingerprint',
         '_dd.appsec.fp.http.header': 'header_fingerprint',
         '_dd.appsec.fp.http.network': 'network_fingerprint',

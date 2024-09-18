@@ -258,7 +258,7 @@ function setRateLimit (rateLimit) {
   limiter = new Limiter(rateLimit)
 }
 
-function isFingerprintDerivative(derivative) {
+function isFingerprintDerivative (derivative) {
   return derivative.startsWith('_dd.appsec.fp')
 }
 

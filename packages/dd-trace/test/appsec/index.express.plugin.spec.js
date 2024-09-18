@@ -233,7 +233,7 @@ withVersions('express', 'express', version => {
     })
 
     it('should report http fingerprints', async () => {
-      const res = await axios.post(
+      await axios.post(
         `http://localhost:${port}/?key=testattack`,
         {
           bodyParam: 'bodyValue'
