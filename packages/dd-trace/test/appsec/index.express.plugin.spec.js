@@ -245,6 +245,7 @@ withVersions('express', 'express', version => {
           }
         }
       )
+
       await agent.use((traces) => {
         const span = traces[0][0]
         assert.property(span.meta, '_dd.appsec.fp.http.header')
