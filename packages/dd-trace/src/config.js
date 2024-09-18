@@ -506,7 +506,7 @@ class Config {
     this._setValue(defaults, 'isManualApiEnabled', false)
     this._setValue(defaults, 'llmobs.agentlessEnabled', false)
     this._setValue(defaults, 'llmobs.apiKey', undefined)
-    this._setBoolean(defaults, 'llmobs.enabled', false)
+    this._setValue(defaults, 'llmobs.enabled', false)
     this._setValue(defaults, 'llmobs.mlApp', undefined)
     this._setValue(defaults, 'ciVisibilitySessionName', '')
     this._setValue(defaults, 'logInjection', false)
