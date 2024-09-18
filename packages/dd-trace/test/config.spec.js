@@ -261,6 +261,10 @@ describe('Config', () => {
     expect(config).to.have.nested.property('installSignature.id', null)
     expect(config).to.have.nested.property('installSignature.time', null)
     expect(config).to.have.nested.property('installSignature.type', null)
+    expect(config).to.have.nested.property('llmobs.mlApp', undefined)
+    expect(config).to.have.nested.property('llmobs.agentlessEnabled', false)
+    expect(config).to.have.nested.property('llmobs.apiKey', undefined)
+    expect(config).to.have.nested.property('llmobs.enabled', false)
 
     expect(updateConfig).to.be.calledOnce
 
@@ -323,6 +327,9 @@ describe('Config', () => {
       { name: 'isGitUploadEnabled', value: false, origin: 'default' },
       { name: 'isIntelligentTestRunnerEnabled', value: false, origin: 'default' },
       { name: 'isManualApiEnabled', value: false, origin: 'default' },
+      { name: 'llmobs.agentlessEnabled', value: false, origin: 'default' },
+      { name: 'llmobs.apiKey', value: undefined, origin: 'default' },
+      { name: 'llmobs.mlApp', value: undefined, origin: 'default' },
       { name: 'ciVisibilitySessionName', value: '', origin: 'default' },
       { name: 'logInjection', value: false, origin: 'default' },
       { name: 'lookup', value: undefined, origin: 'default' },
@@ -490,6 +497,8 @@ describe('Config', () => {
     process.env.DD_INSTRUMENTATION_INSTALL_TYPE = 'k8s_single_step'
     process.env.DD_INSTRUMENTATION_INSTALL_TIME = '1703188212'
     process.env.DD_INSTRUMENTATION_CONFIG_ID = 'abcdef123'
+    process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
+    process.env.DD_LLMOBS_ML_APP = 'myMlApp'
 
     // required if we want to check updates to config.debug and config.logLevel which is fetched from logger
     reloadLoggerAndConfig()
@@ -584,6 +593,8 @@ describe('Config', () => {
       type: 'k8s_single_step',
       time: '1703188212'
     })
+    expect(config).to.have.nested.property('llmobs.mlApp', 'myMlApp')
+    expect(config).to.have.nested.property('llmobs.agentlessEnabled', true)
 
     expect(updateConfig).to.be.calledOnce
 
@@ -647,7 +658,9 @@ describe('Config', () => {
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'env_var' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'env_var' },
       { name: 'tracing', value: false, origin: 'env_var' },
-      { name: 'version', value: '1.0.0', origin: 'env_var' }
+      { name: 'version', value: '1.0.0', origin: 'env_var' },
+      { name: 'llmobs.mlApp', value: 'myMlApp', origin: 'env_var' },
+      { name: 'llmobs.agentlessEnabled', value: true, origin: 'env_var' }
     ])
   })
 
@@ -793,7 +806,12 @@ describe('Config', () => {
         pollInterval: 42
       },
       traceId128BitGenerationEnabled: true,
-      traceId128BitLoggingEnabled: true
+      traceId128BitLoggingEnabled: true,
+      llmobs: {
+        mlApp: 'myMlApp',
+        agentlessEnabled: true,
+        apiKey: 'myApiKey'
+      }
     })
 
     expect(config).to.have.property('protocolVersion', '0.5')
@@ -866,6 +884,9 @@ describe('Config', () => {
       a: 'aa',
       b: 'bb'
     })
+    expect(config).to.have.nested.property('llmobs.mlApp', 'myMlApp')
+    expect(config).to.have.nested.property('llmobs.agentlessEnabled', true)
+    expect(config).to.have.nested.property('llmobs.apiKey', 'myApiKey')
 
     expect(updateConfig).to.be.calledOnce
 
@@ -911,7 +932,10 @@ describe('Config', () => {
       { name: 'stats.enabled', value: false, origin: 'calculated' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'code' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'code' },
-      { name: 'version', value: '0.1.0', origin: 'code' }
+      { name: 'version', value: '0.1.0', origin: 'code' },
+      { name: 'llmobs.mlApp', value: 'myMlApp', origin: 'code' },
+      { name: 'llmobs.agentlessEnabled', value: true, origin: 'code' },
+      { name: 'llmobs.apiKey', value: 'myApiKey', origin: 'code' }
     ])
   })
 
@@ -1085,6 +1109,8 @@ describe('Config', () => {
     process.env.DD_IAST_REDACTION_VALUE_PATTERN = 'value_pattern_to_be_overriden_by_options'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
+    process.env.DD_LLMOBS_ML_APP = 'myMlApp'
+    process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
 
     const config = new Config({
       protocolVersion: '0.5',
@@ -1162,7 +1188,11 @@ describe('Config', () => {
         pollInterval: 42
       },
       traceId128BitGenerationEnabled: false,
-      traceId128BitLoggingEnabled: false
+      traceId128BitLoggingEnabled: false,
+      llmobs: {
+        mlApp: 'myOtherMlApp',
+        agentlessEnabled: false
+      }
     })
 
     expect(config).to.have.property('protocolVersion', '0.5')
@@ -1221,6 +1251,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
     expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
+    expect(config).to.have.nested.property('llmobs.mlApp', 'myOtherMlApp')
+    expect(config).to.have.nested.property('llmobs.agentlessEnabled', false)
   })
 
   it('should give priority to non-experimental options', () => {
@@ -1976,6 +2008,61 @@ describe('Config', () => {
       const config = new Config({})
       expect(config).not.to.have.property('commitSHA')
       expect(config).not.to.have.property('repositoryUrl')
+    })
+  })
+
+  context('llmobs config', () => {
+    it('should disable llmobs by default', () => {
+      const config = new Config()
+      expect(config.llmobs.enabled).to.be.false
+
+      // check origin computation
+      expect(updateConfig.getCall(0).args[0]).to.deep.include({
+        name: 'llmobs.enabled', value: false, origin: 'default'
+      })
+    })
+
+    it('should enable llmobs if DD_LLMOBS_ENABLED is set to true', () => {
+      process.env.DD_LLMOBS_ENABLED = 'true'
+      const config = new Config()
+      expect(config.llmobs.enabled).to.be.true
+
+      // check origin computation
+      expect(updateConfig.getCall(0).args[0]).to.deep.include({
+        name: 'llmobs.enabled', value: true, origin: 'env_var'
+      })
+    })
+
+    it('should disable llmobs if DD_LLMOBS_ENABLED is set to false', () => {
+      process.env.DD_LLMOBS_ENABLED = 'false'
+      const config = new Config()
+      expect(config.llmobs.enabled).to.be.false
+
+      // check origin computation
+      expect(updateConfig.getCall(0).args[0]).to.deep.include({
+        name: 'llmobs.enabled', value: false, origin: 'env_var'
+      })
+    })
+
+    it('should enable llmobs with options and DD_LLMOBS_ENABLED is not set', () => {
+      const config = new Config({ llmobs: {} })
+      expect(config.llmobs.enabled).to.be.true
+
+      // check origin computation
+      expect(updateConfig.getCall(0).args[0]).to.deep.include({
+        name: 'llmobs.enabled', value: true, origin: 'code'
+      })
+    })
+
+    it('should have DD_LLMOBS_ENABLED take priority over options', () => {
+      process.env.DD_LLMOBS_ENABLED = 'false'
+      const config = new Config({ llmobs: {} })
+      expect(config.llmobs.enabled).to.be.false
+
+      // check origin computation
+      expect(updateConfig.getCall(0).args[0]).to.deep.include({
+        name: 'llmobs.enabled', value: false, origin: 'env_var'
+      })
     })
   })
 
