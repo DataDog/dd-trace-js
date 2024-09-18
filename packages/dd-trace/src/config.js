@@ -425,13 +425,6 @@ class Config {
     return inAWSLambda || isGCPFunction || isAzureFunction
   }
 
-  _isLLMObsEnabled () {
-    return coalesce(
-      process.env.DD_LLMOBS_ENABLED,
-      !!this._optionsArg.llmobs
-    )
-  }
-
   // for _merge to work, every config value must have a default value
   _applyDefaults () {
     const {
@@ -606,6 +599,7 @@ class Config {
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
       DD_LLMOBS_AGENTLESS_ENABLED,
+      DD_LLMOBS_ENABLED,
       DD_LLMOBS_ML_APP,
       DD_OPENAI_LOGS_ENABLED,
       DD_OPENAI_SPAN_CHAR_LIMIT,
@@ -748,6 +742,7 @@ class Config {
     this._setBoolean(env, 'isAzureFunction', getIsAzureFunction())
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
     this._setBoolean(env, 'llmobs.agentlessEnabled', DD_LLMOBS_AGENTLESS_ENABLED)
+    this._setBoolean(env, 'llmobs.enabled', DD_LLMOBS_ENABLED)
     this._setString(env, 'llmobs.mlApp', DD_LLMOBS_ML_APP)
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
@@ -955,6 +950,15 @@ class Config {
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
     this._setString(opts, 'version', options.version || tags.version)
+
+    // For LLMObs, we want the environment variable to take precedence over the options.
+    // This is reliant on environment config being set before options.
+    // This is to make sure the origins of each value are tracked appropriately for telemetry.
+    // We'll only set `llmobs.enabled` on the opts when it's not set on the environment, and options.llmobs is provided.
+    const llmobsEnabledEnv = this._env['llmobs.enabled']
+    if (llmobsEnabledEnv == null && options.llmobs) {
+      this._setBoolean(opts, 'llmobs.enabled', !!options.llmobs)
+    }
   }
 
   _isCiVisibility () {
@@ -1089,8 +1093,6 @@ class Config {
       calc['tracePropagationStyle.inject'] = calc['tracePropagationStyle.inject'] || defaultPropagationStyle
       calc['tracePropagationStyle.extract'] = calc['tracePropagationStyle.extract'] || defaultPropagationStyle
     }
-
-    this._setBoolean(calc, 'llmobs.enabled', this._isLLMObsEnabled())
   }
 
   _applyRemote (options) {

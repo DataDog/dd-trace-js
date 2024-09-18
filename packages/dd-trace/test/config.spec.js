@@ -2015,29 +2015,54 @@ describe('Config', () => {
     it('should disable llmobs by default', () => {
       const config = new Config()
       expect(config.llmobs.enabled).to.be.false
+
+      // check origin computation
+      expect(updateConfig.getCall(0).args[0]).to.deep.include({
+        name: 'llmobs.enabled', value: false, origin: 'default'
+      })
     })
 
     it('should enable llmobs if DD_LLMOBS_ENABLED is set to true', () => {
       process.env.DD_LLMOBS_ENABLED = 'true'
       const config = new Config()
       expect(config.llmobs.enabled).to.be.true
+
+      // check origin computation
+      expect(updateConfig.getCall(0).args[0]).to.deep.include({
+        name: 'llmobs.enabled', value: true, origin: 'env_var'
+      })
     })
 
     it('should disable llmobs if DD_LLMOBS_ENABLED is set to false', () => {
       process.env.DD_LLMOBS_ENABLED = 'false'
       const config = new Config()
       expect(config.llmobs.enabled).to.be.false
+
+      // check origin computation
+      expect(updateConfig.getCall(0).args[0]).to.deep.include({
+        name: 'llmobs.enabled', value: false, origin: 'env_var'
+      })
     })
 
     it('should enable llmobs with options and DD_LLMOBS_ENABLED is not set', () => {
       const config = new Config({ llmobs: {} })
       expect(config.llmobs.enabled).to.be.true
+
+      // check origin computation
+      expect(updateConfig.getCall(0).args[0]).to.deep.include({
+        name: 'llmobs.enabled', value: true, origin: 'code'
+      })
     })
 
     it('should have DD_LLMOBS_ENABLED take priority over options', () => {
       process.env.DD_LLMOBS_ENABLED = 'false'
-      const config = new Config({ llmobs: { enabled: true } })
+      const config = new Config({ llmobs: {} })
       expect(config.llmobs.enabled).to.be.false
+
+      // check origin computation
+      expect(updateConfig.getCall(0).args[0]).to.deep.include({
+        name: 'llmobs.enabled', value: false, origin: 'env_var'
+      })
     })
   })
 
