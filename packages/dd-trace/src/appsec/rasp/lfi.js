@@ -51,28 +51,37 @@ function getPaths (ctx, fs) {
     ctx.oldPath,
     ctx.path,
     ctx.prefix,
-    ctx.src
+    ctx.src,
+    ctx.target
   ]
 
   return pathArguments
-    .map(path => hasValidType(path) ? path.toString() : undefined)
+    .map(path => pathToStr(path))
     .filter(path => shouldAnalyze(path, fs))
 }
 
-function hasValidType (path) {
-  return path && (
-    typeof path === 'string' ||
-    path instanceof String ||
-    path instanceof Buffer ||
-    path instanceof URL
-  )
+function pathToStr (path) {
+  if (!path) return
+
+  if (typeof path === 'string' ||
+      path instanceof String ||
+      path instanceof Buffer ||
+      path instanceof URL) {
+    return path.toString()
+  }
 }
 
 function shouldAnalyze (path, fs) {
   if (!path) return
 
   const notExcludedRootOp = !fs.opExcluded && fs.root
-  return notExcludedRootOp && (isAbsolute(path) || path.includes('../'))
+  return notExcludedRootOp && (isAbsolute(path) || path.includes('../') || shouldAnalyzeURLFile(path, fs))
+}
+
+function shouldAnalyzeURLFile (path, fs) {
+  if (path.startsWith('file://')) {
+    return shouldAnalyze(path.substring(7), fs)
+  }
 }
 
 module.exports = {
