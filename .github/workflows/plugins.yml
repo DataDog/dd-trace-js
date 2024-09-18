@@ -265,8 +265,6 @@ jobs:
     strategy:
       matrix:
         node-version: [16]
-        // each comma should create a new test such that we test node 16
-        // against 2.6.12 and also node 16 against 3.0.7 & latest of major 3
         range: ['^2.6.12', '^3.0.7', '4.4.1']
         include:
           - node-version: 18
