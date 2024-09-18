@@ -148,6 +148,7 @@ interface Plugins {
   "amqplib": tracer.plugins.amqplib;
   "apollo": tracer.plugins.apollo;
   "aws-sdk": tracer.plugins.aws_sdk;
+  "azure-functions": tracer.plugins.azure_functions;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
   "child_process": tracer.plugins.child_process;
@@ -1236,6 +1237,12 @@ declare namespace tracer {
        */
       [key: string]: boolean | Object | undefined;
     }
+
+    /**
+     * This plugin automatically instruments the
+     * azure.functions module.
+    */
+    interface azure_functions extends Instrumentation {}
 
     /**
      * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
