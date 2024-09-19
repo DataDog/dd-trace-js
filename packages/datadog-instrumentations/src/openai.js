@@ -165,10 +165,12 @@ function addStreamedChunk (content, chunk) {
 
       if (tools) {
         oldChoice.delta.tool_calls = tools.map((newTool, toolIdx) => {
-          const oldTool = oldChoice.delta.tool_calls[toolIdx]
+          const oldTool = oldChoice.delta.tool_calls?.[toolIdx]
 
           if (oldTool) {
             oldTool.function.arguments += newTool.function.arguments
+          } else {
+            return newTool
           }
 
           return oldTool
@@ -247,7 +249,7 @@ function wrapStreamIterator (response, options, n, ctx) {
             return res
           })
           .catch(err => {
-            finish(undefined, err)
+            finish(ctx, undefined, err)
 
             throw err
           })

@@ -219,6 +219,7 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
     expect(config).to.have.property('logLevel', 'debug')
+    expect(config).to.have.property('dynamicInstrumentationEnabled', false)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
@@ -294,6 +295,7 @@ describe('Config', () => {
       { name: 'dogstatsd.hostname', value: '127.0.0.1', origin: 'calculated' },
       { name: 'dogstatsd.port', value: '8125', origin: 'default' },
       { name: 'dsmEnabled', value: false, origin: 'default' },
+      { name: 'dynamicInstrumentationEnabled', value: false, origin: 'default' },
       { name: 'env', value: undefined, origin: 'default' },
       { name: 'experimental.enableGetRumData', value: false, origin: 'default' },
       { name: 'experimental.exporter', value: undefined, origin: 'default' },
@@ -312,12 +314,16 @@ describe('Config', () => {
       { name: 'iast.redactionValuePattern', value: null, origin: 'default' },
       { name: 'iast.requestSampling', value: 30, origin: 'default' },
       { name: 'iast.telemetryVerbosity', value: 'INFORMATION', origin: 'default' },
+      { name: 'injectionEnabled', value: [], origin: 'default' },
       { name: 'isCiVisibility', value: false, origin: 'default' },
       { name: 'isEarlyFlakeDetectionEnabled', value: false, origin: 'default' },
+      { name: 'isFlakyTestRetriesEnabled', value: false, origin: 'default' },
+      { name: 'flakyTestRetriesCount', value: 5, origin: 'default' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
       { name: 'isGitUploadEnabled', value: false, origin: 'default' },
       { name: 'isIntelligentTestRunnerEnabled', value: false, origin: 'default' },
       { name: 'isManualApiEnabled', value: false, origin: 'default' },
+      { name: 'ciVisibilitySessionName', value: '', origin: 'default' },
       { name: 'logInjection', value: false, origin: 'default' },
       { name: 'lookup', value: undefined, origin: 'default' },
       { name: 'openAiLogsEnabled', value: false, origin: 'default' },
@@ -327,9 +333,7 @@ describe('Config', () => {
       { name: 'port', value: '8126', origin: 'default' },
       { name: 'profiling.enabled', value: undefined, origin: 'default' },
       { name: 'profiling.exporters', value: 'agent', origin: 'default' },
-      { name: 'profiling.heuristicsEnabled', value: false, origin: 'default' },
       { name: 'profiling.sourceMap', value: true, origin: 'default' },
-      { name: 'profiling.ssi', value: false, origin: 'default' },
       { name: 'protocolVersion', value: '0.4', origin: 'default' },
       {
         name: 'queryStringObfuscation',
@@ -358,7 +362,7 @@ describe('Config', () => {
       { name: 'telemetry.dependencyCollection', value: true, origin: 'default' },
       { name: 'telemetry.enabled', value: true, origin: 'env_var' },
       { name: 'telemetry.heartbeatInterval', value: 60000, origin: 'default' },
-      { name: 'telemetry.logCollection', value: false, origin: 'default' },
+      { name: 'telemetry.logCollection', value: true, origin: 'default' },
       { name: 'telemetry.metrics', value: true, origin: 'default' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'default' },
       { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' },
@@ -423,6 +427,7 @@ describe('Config', () => {
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
     process.env.DD_ENV = 'test'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
     process.env.DD_TRACE_SAMPLE_RATE = '0.5'
     process.env.DD_TRACE_RATE_LIMIT = '-1'
@@ -504,6 +509,7 @@ describe('Config', () => {
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
+    expect(config).to.have.property('dynamicInstrumentationEnabled', true)
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
@@ -600,6 +606,7 @@ describe('Config', () => {
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'env_var' },
       { name: 'dogstatsd.hostname', value: 'dsd-agent', origin: 'env_var' },
       { name: 'dogstatsd.port', value: '5218', origin: 'env_var' },
+      { name: 'dynamicInstrumentationEnabled', value: true, origin: 'env_var' },
       { name: 'env', value: 'test', origin: 'env_var' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'env_var' },
       { name: 'experimental.exporter', value: 'log', origin: 'env_var' },
@@ -615,12 +622,11 @@ describe('Config', () => {
       { name: 'iast.requestSampling', value: '40', origin: 'env_var' },
       { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'env_var' },
       { name: 'instrumentation_config_id', value: 'abcdef123', origin: 'env_var' },
+      { name: 'injectionEnabled', value: ['profiler'], origin: 'env_var' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
       { name: 'peerServiceMapping', value: process.env.DD_TRACE_PEER_SERVICE_MAPPING, origin: 'env_var' },
       { name: 'port', value: '6218', origin: 'env_var' },
-      { name: 'profiling.enabled', value: true, origin: 'env_var' },
-      { name: 'profiling.heuristicsEnabled', value: true, origin: 'env_var' },
-      { name: 'profiling.ssi', value: true, origin: 'env_var' },
+      { name: 'profiling.enabled', value: 'true', origin: 'env_var' },
       { name: 'protocolVersion', value: '0.5', origin: 'env_var' },
       { name: 'queryStringObfuscation', value: '.*', origin: 'env_var' },
       { name: 'remoteConfig.enabled', value: false, origin: 'env_var' },
@@ -638,7 +644,6 @@ describe('Config', () => {
       { name: 'spanAttributeSchema', value: 'v1', origin: 'env_var' },
       { name: 'spanRemoveIntegrationFromService', value: true, origin: 'env_var' },
       { name: 'telemetry.enabled', value: true, origin: 'env_var' },
-      { name: 'telemetry.logCollection', value: true, origin: 'env_var' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'env_var' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'env_var' },
       { name: 'tracing', value: false, origin: 'env_var' },
@@ -761,6 +766,7 @@ describe('Config', () => {
       },
       experimental: {
         b3: true,
+        dynamicInstrumentationEnabled: true,
         traceparent: true,
         runtimeId: true,
         exporter: 'log',
@@ -798,6 +804,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('version', '0.1.0')
+    expect(config).to.have.property('dynamicInstrumentationEnabled', true)
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.property('logger', logger)
@@ -869,6 +876,7 @@ describe('Config', () => {
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'code' },
       { name: 'dogstatsd.hostname', value: 'agent-dsd', origin: 'code' },
       { name: 'dogstatsd.port', value: '5218', origin: 'code' },
+      { name: 'dynamicInstrumentationEnabled', value: true, origin: 'code' },
       { name: 'env', value: 'test', origin: 'code' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'code' },
       { name: 'experimental.exporter', value: 'log', origin: 'code' },
@@ -901,7 +909,6 @@ describe('Config', () => {
       { name: 'spanComputePeerService', value: true, origin: 'calculated' },
       { name: 'spanRemoveIntegrationFromService', value: true, origin: 'code' },
       { name: 'stats.enabled', value: false, origin: 'calculated' },
-      { name: 'telemetry.logCollection', value: true, origin: 'code' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'code' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'code' },
       { name: 'version', value: '0.1.0', origin: 'code' }
@@ -1040,6 +1047,7 @@ describe('Config', () => {
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
     process.env.DD_ENV = 'test'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
     process.env.DD_API_KEY = '123'
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v0'
     process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
@@ -1113,6 +1121,7 @@ describe('Config', () => {
       },
       experimental: {
         b3: false,
+        dynamicInstrumentationEnabled: false,
         traceparent: false,
         runtimeId: false,
         exporter: 'agent',
@@ -1168,6 +1177,7 @@ describe('Config', () => {
     expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('version', '1.0.0')
+    expect(config).to.have.property('dynamicInstrumentationEnabled', false)
     expect(config).to.have.property('env', 'development')
     expect(config).to.have.property('clientIpEnabled', true)
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
@@ -1451,7 +1461,7 @@ describe('Config', () => {
     expect(config.telemetry).to.not.be.undefined
     expect(config.telemetry.enabled).to.be.true
     expect(config.telemetry.heartbeatInterval).to.eq(60000)
-    expect(config.telemetry.logCollection).to.be.false
+    expect(config.telemetry.logCollection).to.be.true
     expect(config.telemetry.debug).to.be.false
     expect(config.telemetry.metrics).to.be.true
   })
@@ -1489,7 +1499,7 @@ describe('Config', () => {
     process.env.DD_TELEMETRY_METRICS_ENABLED = origTelemetryMetricsEnabledValue
   })
 
-  it('should not set DD_TELEMETRY_LOG_COLLECTION_ENABLED', () => {
+  it('should disable log collection if DD_TELEMETRY_LOG_COLLECTION_ENABLED is false', () => {
     const origLogsValue = process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED
     process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = 'false'
 
@@ -1498,17 +1508,6 @@ describe('Config', () => {
     expect(config.telemetry.logCollection).to.be.false
 
     process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = origLogsValue
-  })
-
-  it('should set DD_TELEMETRY_LOG_COLLECTION_ENABLED if DD_IAST_ENABLED', () => {
-    const origIastEnabledValue = process.env.DD_IAST_ENABLED
-    process.env.DD_IAST_ENABLED = 'true'
-
-    const config = new Config()
-
-    expect(config.telemetry.logCollection).to.be.true
-
-    process.env.DD_IAST_ENABLED = origIastEnabledValue
   })
 
   it('should set DD_TELEMETRY_DEBUG', () => {
@@ -1797,6 +1796,9 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
       delete process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED
       delete process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED
+      delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED
+      delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
+      delete process.env.DD_SESSION_NAME
       delete process.env.JEST_WORKER_ID
       options = {}
     })
@@ -1852,6 +1854,39 @@ describe('Config', () => {
         process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED = 'false'
         const config = new Config(options)
         expect(config).to.have.property('isEarlyFlakeDetectionEnabled', false)
+      })
+      it('should enable flaky test retries by default', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('isFlakyTestRetriesEnabled', true)
+      })
+      it('should disable flaky test retries if isFlakyTestRetriesEnabled is false', () => {
+        process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED = 'false'
+        const config = new Config(options)
+        expect(config).to.have.property('isFlakyTestRetriesEnabled', false)
+      })
+      it('should read DD_CIVISIBILITY_FLAKY_RETRY_COUNT if present', () => {
+        process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '4'
+        const config = new Config(options)
+        expect(config).to.have.property('flakyTestRetriesCount', 4)
+      })
+      it('should default DD_CIVISIBILITY_FLAKY_RETRY_COUNT to 5', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('flakyTestRetriesCount', 5)
+      })
+      it('should round non integer values of DD_CIVISIBILITY_FLAKY_RETRY_COUNT', () => {
+        process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '4.1'
+        const config = new Config(options)
+        expect(config).to.have.property('flakyTestRetriesCount', 4)
+      })
+      it('should set the default to DD_CIVISIBILITY_FLAKY_RETRY_COUNT if it is not a number', () => {
+        process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = 'a'
+        const config = new Config(options)
+        expect(config).to.have.property('flakyTestRetriesCount', 5)
+      })
+      it('should set the session name if DD_SESSION_NAME is set', () => {
+        process.env.DD_SESSION_NAME = 'my-test-session'
+        const config = new Config(options)
+        expect(config).to.have.property('ciVisibilitySessionName', 'my-test-session')
       })
     })
     context('ci visibility mode is not enabled', () => {
@@ -1971,5 +2006,84 @@ describe('Config', () => {
         }
       }
     })).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
+  })
+
+  context('payload tagging', () => {
+    let env
+
+    const staticConfig = require('../src/payload-tagging/config/aws')
+
+    beforeEach(() => {
+      env = process.env
+    })
+
+    afterEach(() => {
+      process.env = env
+    })
+
+    it('defaults', () => {
+      const taggingConfig = new Config().cloudPayloadTagging
+      expect(taggingConfig).to.have.property('requestsEnabled', false)
+      expect(taggingConfig).to.have.property('responsesEnabled', false)
+      expect(taggingConfig).to.have.property('maxDepth', 10)
+    })
+
+    it('enabling requests with no additional filter', () => {
+      process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = 'all'
+      const taggingConfig = new Config().cloudPayloadTagging
+      expect(taggingConfig).to.have.property('requestsEnabled', true)
+      expect(taggingConfig).to.have.property('responsesEnabled', false)
+      expect(taggingConfig).to.have.property('maxDepth', 10)
+      const awsRules = taggingConfig.rules.aws
+      for (const [serviceName, service] of Object.entries(awsRules)) {
+        expect(service.request).to.deep.equal(staticConfig[serviceName].request)
+      }
+    })
+
+    it('enabling requests with an additional filter', () => {
+      process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = '$.foo.bar'
+      const taggingConfig = new Config().cloudPayloadTagging
+      expect(taggingConfig).to.have.property('requestsEnabled', true)
+      expect(taggingConfig).to.have.property('responsesEnabled', false)
+      expect(taggingConfig).to.have.property('maxDepth', 10)
+      const awsRules = taggingConfig.rules.aws
+      for (const [, service] of Object.entries(awsRules)) {
+        expect(service.request).to.include('$.foo.bar')
+      }
+    })
+
+    it('enabling responses with no additional filter', () => {
+      process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = 'all'
+      const taggingConfig = new Config().cloudPayloadTagging
+      expect(taggingConfig).to.have.property('requestsEnabled', false)
+      expect(taggingConfig).to.have.property('responsesEnabled', true)
+      expect(taggingConfig).to.have.property('maxDepth', 10)
+      const awsRules = taggingConfig.rules.aws
+      for (const [serviceName, service] of Object.entries(awsRules)) {
+        expect(service.response).to.deep.equal(staticConfig[serviceName].response)
+      }
+    })
+
+    it('enabling responses with an additional filter', () => {
+      process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = '$.foo.bar'
+      const taggingConfig = new Config().cloudPayloadTagging
+      expect(taggingConfig).to.have.property('requestsEnabled', false)
+      expect(taggingConfig).to.have.property('responsesEnabled', true)
+      expect(taggingConfig).to.have.property('maxDepth', 10)
+      const awsRules = taggingConfig.rules.aws
+      for (const [, service] of Object.entries(awsRules)) {
+        expect(service.response).to.include('$.foo.bar')
+      }
+    })
+
+    it('overriding max depth', () => {
+      process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = 'all'
+      process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = 'all'
+      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = 7
+      const taggingConfig = new Config().cloudPayloadTagging
+      expect(taggingConfig).to.have.property('requestsEnabled', true)
+      expect(taggingConfig).to.have.property('responsesEnabled', true)
+      expect(taggingConfig).to.have.property('maxDepth', 7)
+    })
   })
 })

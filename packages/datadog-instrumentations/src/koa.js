@@ -71,7 +71,7 @@ function wrapStack (layer) {
 
     middleware = original || middleware
 
-    const handler = shimmer.wrap(middleware, wrapMiddleware(middleware, layer))
+    const handler = shimmer.wrapFunction(middleware, middleware => wrapMiddleware(middleware, layer))
 
     originals.set(handler, middleware)
 
@@ -84,7 +84,7 @@ function wrapMiddleware (fn, layer) {
 
   const name = fn.name
 
-  return function (ctx, next) {
+  return shimmer.wrapFunction(fn, fn => function (ctx, next) {
     if (!ctx || !enterChannel.hasSubscribers) return fn.apply(this, arguments)
 
     const req = ctx.req
@@ -122,7 +122,7 @@ function wrapMiddleware (fn, layer) {
     } finally {
       exitChannel.publish({ req })
     }
-  }
+  })
 }
 
 function fulfill (ctx, error) {
@@ -142,11 +142,11 @@ function fulfill (ctx, error) {
 }
 
 function wrapNext (req, next) {
-  return function () {
+  return shimmer.wrapFunction(next, next => function () {
     nextChannel.publish({ req })
 
     return next.apply(this, arguments)
-  }
+  })
 }
 
 addHook({ name: 'koa', versions: ['>=2'] }, Koa => {

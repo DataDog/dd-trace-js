@@ -1,11 +1,6 @@
 'use strict'
 
 const { promisify } = require('util')
-const express = require('express')
-const bodyParser = require('body-parser')
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
-const EventEmitter = require('events')
 const childProcess = require('child_process')
 const { fork, spawn } = childProcess
 const exec = promisify(childProcess.exec)
@@ -13,155 +8,12 @@ const http = require('http')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const rimraf = promisify(require('rimraf'))
-const id = require('../packages/dd-trace/src/id')
-const upload = require('multer')()
 const assert = require('assert')
+const rimraf = promisify(require('rimraf'))
+const FakeAgent = require('./fake-agent')
+const id = require('../../packages/dd-trace/src/id')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
-
-class FakeAgent extends EventEmitter {
-  constructor (port = 0) {
-    super()
-    this.port = port
-  }
-
-  async start () {
-    const app = express()
-    app.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
-    app.use(bodyParser.json({ limit: Infinity, type: 'application/json' }))
-    app.put('/v0.4/traces', (req, res) => {
-      if (req.body.length === 0) return res.status(200).send()
-      res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
-      this.emit('message', {
-        headers: req.headers,
-        payload: msgpack.decode(req.body, { codec })
-      })
-    })
-    app.post('/profiling/v1/input', upload.any(), (req, res) => {
-      res.status(200).send()
-      this.emit('message', {
-        headers: req.headers,
-        payload: req.body,
-        files: req.files
-      })
-    })
-    app.post('/telemetry/proxy/api/v2/apmtelemetry', (req, res) => {
-      res.status(200).send()
-      this.emit('telemetry', {
-        headers: req.headers,
-        payload: req.body
-      })
-    })
-
-    return new Promise((resolve, reject) => {
-      const timeoutObj = setTimeout(() => {
-        reject(new Error('agent timed out starting up'))
-      }, 10000)
-      this.server = http.createServer(app)
-      this.server.on('error', reject)
-      this.server.listen(this.port, () => {
-        this.port = this.server.address().port
-        clearTimeout(timeoutObj)
-        resolve(this)
-      })
-    })
-  }
-
-  stop () {
-    return new Promise((resolve) => {
-      this.server.on('close', resolve)
-      this.server.close()
-    })
-  }
-
-  // **resolveAtFirstSuccess** - specific use case for Next.js (or any other future libraries)
-  // where multiple payloads are generated, and only one is expected to have the proper span (ie next.request),
-  // but it't not guaranteed to be the last one (so, expectedMessageCount would not be helpful).
-  // It can still fail if it takes longer than `timeout` duration or if none pass the assertions (timeout still called)
-  assertMessageReceived (fn, timeout, expectedMessageCount = 1, resolveAtFirstSuccess) {
-    timeout = timeout || 30000
-    let resultResolve
-    let resultReject
-    let msgCount = 0
-    const errors = []
-
-    const timeoutObj = setTimeout(() => {
-      const errorsMsg = errors.length === 0 ? '' : `, additionally:\n${errors.map(e => e.stack).join('\n')}\n===\n`
-      resultReject(new Error(`timeout${errorsMsg}`, { cause: { errors } }))
-    }, timeout)
-
-    const resultPromise = new Promise((resolve, reject) => {
-      resultResolve = () => {
-        clearTimeout(timeoutObj)
-        resolve()
-      }
-      resultReject = (e) => {
-        clearTimeout(timeoutObj)
-        reject(e)
-      }
-    })
-
-    const messageHandler = msg => {
-      try {
-        msgCount += 1
-        fn(msg)
-        if (resolveAtFirstSuccess || msgCount === expectedMessageCount) {
-          resultResolve()
-          this.removeListener('message', messageHandler)
-        }
-      } catch (e) {
-        errors.push(e)
-      }
-    }
-    this.on('message', messageHandler)
-
-    return resultPromise
-  }
-
-  assertTelemetryReceived (fn, timeout, requestType, expectedMessageCount = 1) {
-    timeout = timeout || 30000
-    let resultResolve
-    let resultReject
-    let msgCount = 0
-    const errors = []
-
-    const timeoutObj = setTimeout(() => {
-      const errorsMsg = errors.length === 0 ? '' : `, additionally:\n${errors.map(e => e.stack).join('\n')}\n===\n`
-      resultReject(new Error(`timeout${errorsMsg}`, { cause: { errors } }))
-    }, timeout)
-
-    const resultPromise = new Promise((resolve, reject) => {
-      resultResolve = () => {
-        clearTimeout(timeoutObj)
-        resolve()
-      }
-      resultReject = (e) => {
-        clearTimeout(timeoutObj)
-        reject(e)
-      }
-    })
-
-    const messageHandler = msg => {
-      if (msg.payload.request_type !== requestType) return
-      msgCount += 1
-      try {
-        fn(msg)
-        if (msgCount === expectedMessageCount) {
-          resultResolve()
-        }
-      } catch (e) {
-        errors.push(e)
-      }
-      if (msgCount === expectedMessageCount) {
-        this.removeListener('telemetry', messageHandler)
-      }
-    }
-    this.on('telemetry', messageHandler)
-
-    return resultPromise
-  }
-}
 
 async function runAndCheckOutput (filename, cwd, expectedOut) {
   const proc = spawn('node', [filename], { cwd, stdio: 'pipe' })
@@ -246,7 +98,7 @@ async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelem
       language_version: process.versions.node,
       runtime_name: 'nodejs',
       runtime_version: process.versions.node,
-      tracer_version: require('../package.json').version,
+      tracer_version: require('../../package.json').version,
       pid: Number(pid)
     }
   }
@@ -347,7 +199,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
 function telemetryForwarder (expectedTelemetryPoints) {
   process.env.DD_TELEMETRY_FORWARDER_PATH =
-    path.join(__dirname, 'telemetry-forwarder.sh')
+    path.join(__dirname, '..', 'telemetry-forwarder.sh')
   process.env.FORWARDER_OUT = path.join(__dirname, `forwarder-${Date.now()}.out`)
 
   let retries = 0
@@ -482,12 +334,32 @@ function useSandbox (...args) {
     return oldSandbox.remove()
   })
 }
+
 function sandboxCwd () {
   return sandbox.folder
 }
 
+function assertObjectContains (actual, expected) {
+  for (const [key, val] of Object.entries(expected)) {
+    if (val !== null && typeof val === 'object') {
+      assert.ok(key in actual)
+      assert.notStrictEqual(actual[key], null)
+      assert.strictEqual(typeof actual[key], 'object')
+      assertObjectContains(actual[key], val)
+    } else {
+      assert.strictEqual(actual[key], expected[key])
+    }
+  }
+}
+
+function assertUUID (actual, msg = 'not a valid UUID') {
+  assert.match(actual, /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/, msg)
+}
+
 module.exports = {
   FakeAgent,
+  assertObjectContains,
+  assertUUID,
   spawnProc,
   runAndCheckWithTelemetry,
   createSandbox,

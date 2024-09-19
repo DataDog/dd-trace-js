@@ -27,13 +27,16 @@ const {
   TEST_ITR_FORCED_RUN,
   TEST_ITR_UNSKIPPABLE,
   TEST_SOURCE_FILE,
+  TEST_SOURCE_START,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_NAME,
   CUCUMBER_IS_PARALLEL,
   TEST_SUITE,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  TEST_SESSION_NAME,
+  TEST_LEVEL_EVENT_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const isOldNode = semver.satisfies(process.version, '<=16')
@@ -113,6 +116,13 @@ versions.forEach(version => {
 
               const receiverPromise = receiver
                 .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                  const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+                  metadataDicts.forEach(metadata => {
+                    for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+                      assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+                    }
+                  })
+
                   const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const testSessionEvent = events.find(event => event.type === 'test_session_end')
@@ -158,6 +168,7 @@ versions.forEach(version => {
                   testSuiteEvents.forEach(({
                     content: {
                       meta,
+                      metrics,
                       test_suite_id: testSuiteId,
                       test_module_id: testModuleId,
                       test_session_id: testSessionId
@@ -168,6 +179,8 @@ versions.forEach(version => {
                     assert.exists(testSuiteId)
                     assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
                     assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+                    assert.isTrue(meta[TEST_SOURCE_FILE].startsWith(featuresPath))
+                    assert.equal(metrics[TEST_SOURCE_START], 1)
                   })
 
                   assert.includeMembers(testEvents.map(test => test.content.resource), [
@@ -219,7 +232,8 @@ versions.forEach(version => {
                   cwd,
                   env: {
                     ...envVars,
-                    DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
+                    DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+                    DD_SESSION_NAME: 'my-test-session'
                   },
                   stdio: 'pipe'
                 }
@@ -1085,6 +1099,97 @@ versions.forEach(version => {
                   }).catch(done)
                 })
               })
+
+              it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
+                receiver.setSettings({
+                  itr_enabled: false,
+                  code_coverage: false,
+                  tests_skipping: false,
+                  flaky_test_retries_enabled: true,
+                  early_flake_detection: {
+                    enabled: false
+                  }
+                })
+
+                const eventsPromise = receiver
+                  .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                    const events = payloads.flatMap(({ payload }) => payload.events)
+
+                    const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                    assert.equal(tests.length, 1)
+
+                    const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                    assert.equal(retriedTests.length, 0)
+                  })
+
+                childProcess = exec(
+                  './node_modules/.bin/cucumber-js ci-visibility/features-retry/*.feature',
+                  {
+                    cwd,
+                    env: {
+                      ...envVars,
+                      DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false'
+                    },
+                    stdio: 'pipe'
+                  }
+                )
+
+                childProcess.on('exit', () => {
+                  eventsPromise.then(() => {
+                    done()
+                  }).catch(done)
+                })
+              })
+
+              it('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', (done) => {
+                receiver.setSettings({
+                  itr_enabled: false,
+                  code_coverage: false,
+                  tests_skipping: false,
+                  flaky_test_retries_enabled: true,
+                  early_flake_detection: {
+                    enabled: false
+                  }
+                })
+
+                const eventsPromise = receiver
+                  .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                    const events = payloads.flatMap(({ payload }) => payload.events)
+
+                    const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                    // 2 failures
+                    assert.equal(tests.length, 2)
+
+                    const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+                    assert.equal(failedTests.length, 2)
+                    const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+                    assert.equal(passedTests.length, 0)
+
+                    // All but the first one are retries
+                    const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                    assert.equal(retriedTests.length, 1)
+                  })
+
+                childProcess = exec(
+                  './node_modules/.bin/cucumber-js ci-visibility/features-retry/*.feature',
+                  {
+                    cwd,
+                    env: {
+                      ...envVars,
+                      DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1
+                    },
+                    stdio: 'pipe'
+                  }
+                )
+
+                childProcess.on('exit', () => {
+                  eventsPromise.then(() => {
+                    done()
+                  }).catch(done)
+                })
+              })
             })
           }
         })
@@ -1096,9 +1201,11 @@ versions.forEach(version => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const test = events.find(event => event.type === 'test').content
+            const testSuite = events.find(event => event.type === 'test_suite_end').content
             // The test is in a subproject
             assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
             assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+            assert.equal(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
           })
 
         childProcess = exec(

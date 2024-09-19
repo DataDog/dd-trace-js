@@ -3,7 +3,7 @@
 const fs = require('fs')
 const os = require('os')
 const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
-const URL = require('url').URL
+const { URL } = require('url')
 const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
@@ -18,6 +18,7 @@ const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
 const { getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY } = require('./constants')
+const { appendRules } = require('./payload-tagging/config')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -173,6 +174,21 @@ function validateNamingVersion (versionString) {
   return versionString
 }
 
+/**
+ * Given a string of comma-separated paths, return the array of paths.
+ * If a blank path is provided a null is returned to signal that the feature is disabled.
+ * An empty array means the feature is enabled but that no rules need to be applied.
+ *
+ * @param {string} input
+ * @returns {[string]|null}
+ */
+function splitJSONPathRules (input) {
+  if (!input) return null
+  if (Array.isArray(input)) return input
+  if (input === 'all') return []
+  return input.split(',')
+}
+
 // Shallow clone with property name remapping
 function remapify (input, mappings) {
   if (!input) return
@@ -281,6 +297,26 @@ class Config {
       null
     )
 
+    const DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = splitJSONPathRules(
+      coalesce(
+        process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
+        options.cloudPayloadTagging?.request,
+        ''
+      ))
+
+    const DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = splitJSONPathRules(
+      coalesce(
+        process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
+        options.cloudPayloadTagging?.response,
+        ''
+      ))
+
+    const DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = coalesce(
+      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
+      options.cloudPayloadTagging?.maxDepth,
+      10
+    )
+
     // TODO: refactor
     this.apiKey = DD_API_KEY
 
@@ -289,6 +325,15 @@ class Config {
       id: DD_INSTRUMENTATION_INSTALL_ID,
       time: DD_INSTRUMENTATION_INSTALL_TIME,
       type: DD_INSTRUMENTATION_INSTALL_TYPE
+    }
+
+    this.cloudPayloadTagging = {
+      requestsEnabled: !!DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
+      responsesEnabled: !!DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
+      maxDepth: DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
+      rules: appendRules(
+        DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING, DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING
+      )
     }
 
     this._applyDefaults()
@@ -419,12 +464,14 @@ class Config {
     this._setValue(defaults, 'appsec.wafTimeout', 5e3) // µs
     this._setValue(defaults, 'baggageMaxBytes', 8192)
     this._setValue(defaults, 'baggageMaxItems', 64)
+    this._setValue(defaults, 'ciVisibilitySessionName', '')
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
     this._setValue(defaults, 'dbmPropagationMode', 'disabled')
     this._setValue(defaults, 'dogstatsd.hostname', '127.0.0.1')
     this._setValue(defaults, 'dogstatsd.port', '8125')
     this._setValue(defaults, 'dsmEnabled', false)
+    this._setValue(defaults, 'dynamicInstrumentationEnabled', false)
     this._setValue(defaults, 'env', undefined)
     this._setValue(defaults, 'experimental.enableGetRumData', false)
     this._setValue(defaults, 'experimental.exporter', undefined)
@@ -443,9 +490,12 @@ class Config {
     this._setValue(defaults, 'iast.redactionValuePattern', null)
     this._setValue(defaults, 'iast.requestSampling', 30)
     this._setValue(defaults, 'iast.telemetryVerbosity', 'INFORMATION')
+    this._setValue(defaults, 'injectionEnabled', [])
     this._setValue(defaults, 'isAzureFunction', false)
     this._setValue(defaults, 'isCiVisibility', false)
     this._setValue(defaults, 'isEarlyFlakeDetectionEnabled', false)
+    this._setValue(defaults, 'isFlakyTestRetriesEnabled', false)
+    this._setValue(defaults, 'flakyTestRetriesCount', 5)
     this._setValue(defaults, 'isGCPFunction', false)
     this._setValue(defaults, 'isGitUploadEnabled', false)
     this._setValue(defaults, 'isIntelligentTestRunnerEnabled', false)
@@ -462,8 +512,6 @@ class Config {
     this._setValue(defaults, 'profiling.enabled', undefined)
     this._setValue(defaults, 'profiling.exporters', 'agent')
     this._setValue(defaults, 'profiling.sourceMap', true)
-    this._setValue(defaults, 'profiling.ssi', false)
-    this._setValue(defaults, 'profiling.heuristicsEnabled', false)
     this._setValue(defaults, 'profiling.longLivedThreshold', undefined)
     this._setValue(defaults, 'protocolVersion', '0.4')
     this._setValue(defaults, 'queryStringObfuscation', qsRegex)
@@ -491,7 +539,7 @@ class Config {
     this._setValue(defaults, 'telemetry.dependencyCollection', true)
     this._setValue(defaults, 'telemetry.enabled', true)
     this._setValue(defaults, 'telemetry.heartbeatInterval', 60000)
-    this._setValue(defaults, 'telemetry.logCollection', false)
+    this._setValue(defaults, 'telemetry.logCollection', true)
     this._setValue(defaults, 'telemetry.metrics', true)
     this._setValue(defaults, 'traceId128BitGenerationEnabled', true)
     this._setValue(defaults, 'traceId128BitLoggingEnabled', false)
@@ -530,6 +578,7 @@ class Config {
       DD_DBM_PROPAGATION_MODE,
       DD_DOGSTATSD_HOSTNAME,
       DD_DOGSTATSD_PORT,
+      DD_DYNAMIC_INSTRUMENTATION_ENABLED,
       DD_ENV,
       DD_EXPERIMENTAL_API_SECURITY_ENABLED,
       DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,
@@ -664,6 +713,7 @@ class Config {
     this._setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOSTNAME)
     this._setString(env, 'dogstatsd.port', DD_DOGSTATSD_PORT)
     this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
+    this._setBoolean(env, 'dynamicInstrumentationEnabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
     this._setString(env, 'env', DD_ENV || tags.env)
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     this._setString(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
@@ -689,6 +739,7 @@ class Config {
     }
     this._envUnprocessed['iast.requestSampling'] = DD_IAST_REQUEST_SAMPLING
     this._setString(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
+    this._setArray(env, 'injectionEnabled', DD_INJECTION_ENABLED)
     this._setBoolean(env, 'isAzureFunction', getIsAzureFunction())
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
     this._setBoolean(env, 'legacyBaggageEnabled', DD_TRACE_LEGACY_BAGGAGE_ENABLED)
@@ -705,18 +756,18 @@ class Config {
       this._envUnprocessed.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     }
     this._setString(env, 'port', DD_TRACE_AGENT_PORT)
-    this._setBoolean(env, 'profiling.enabled', coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED))
+    const profilingEnabledEnv = coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED)
+    const profilingEnabled = isTrue(profilingEnabledEnv)
+      ? 'true'
+      : isFalse(profilingEnabledEnv)
+        ? 'false'
+        : profilingEnabledEnv === 'auto' ? 'auto' : undefined
+    this._setString(env, 'profiling.enabled', profilingEnabled)
     this._setString(env, 'profiling.exporters', DD_PROFILING_EXPORTERS)
     this._setBoolean(env, 'profiling.sourceMap', DD_PROFILING_SOURCE_MAP && !isFalse(DD_PROFILING_SOURCE_MAP))
-    if (DD_PROFILING_ENABLED === 'auto' || DD_INJECTION_ENABLED) {
-      this._setBoolean(env, 'profiling.ssi', true)
-      if (DD_PROFILING_ENABLED === 'auto' || DD_INJECTION_ENABLED.split(',').includes('profiler')) {
-        this._setBoolean(env, 'profiling.heuristicsEnabled', true)
-      }
-      if (DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD) {
-        // This is only used in testing to not have to wait 30s
-        this._setValue(env, 'profiling.longLivedThreshold', Number(DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD))
-      }
+    if (DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD) {
+      // This is only used in testing to not have to wait 30s
+      this._setValue(env, 'profiling.longLivedThreshold', Number(DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD))
     }
 
     this._setString(env, 'protocolVersion', DD_TRACE_AGENT_PROTOCOL_VERSION)
@@ -771,12 +822,7 @@ class Config {
     this._setBoolean(env, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
     this._setValue(env, 'telemetry.heartbeatInterval', maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000)))
     this._envUnprocessed['telemetry.heartbeatInterval'] = DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000
-    const hasTelemetryLogsUsingFeatures =
-      env['iast.enabled'] || env['profiling.enabled'] || env['profiling.heuristicsEnabled']
-        ? true
-        : undefined
-    this._setBoolean(env, 'telemetry.logCollection', coalesce(DD_TELEMETRY_LOG_COLLECTION_ENABLED,
-      hasTelemetryLogsUsingFeatures))
+    this._setBoolean(env, 'telemetry.logCollection', DD_TELEMETRY_LOG_COLLECTION_ENABLED)
     this._setBoolean(env, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
     this._setBoolean(env, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     this._setBoolean(env, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
@@ -838,11 +884,11 @@ class Config {
       this._setString(opts, 'dogstatsd.port', options.dogstatsd.port)
     }
     this._setBoolean(opts, 'dsmEnabled', options.dsmEnabled)
+    this._setBoolean(opts, 'dynamicInstrumentationEnabled', options.experimental?.dynamicInstrumentationEnabled)
     this._setString(opts, 'env', options.env || tags.env)
-    this._setBoolean(opts, 'experimental.enableGetRumData',
-      options.experimental && options.experimental.enableGetRumData)
-    this._setString(opts, 'experimental.exporter', options.experimental && options.experimental.exporter)
-    this._setBoolean(opts, 'experimental.runtimeId', options.experimental && options.experimental.runtimeId)
+    this._setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
+    this._setString(opts, 'experimental.exporter', options.experimental?.exporter)
+    this._setBoolean(opts, 'experimental.runtimeId', options.experimental?.runtimeId)
     this._setValue(opts, 'flushInterval', maybeInt(options.flushInterval))
     this._optsUnprocessed.flushInterval = options.flushInterval
     this._setValue(opts, 'flushMinSpans', maybeInt(options.flushMinSpans))
@@ -874,7 +920,10 @@ class Config {
     this._setValue(opts, 'peerServiceMapping', options.peerServiceMapping)
     this._setBoolean(opts, 'plugins', options.plugins)
     this._setString(opts, 'port', options.port)
-    this._setBoolean(opts, 'profiling.enabled', options.profiling)
+    const strProfiling = String(options.profiling)
+    if (['true', 'false', 'auto'].includes(strProfiling)) {
+      this._setString(opts, 'profiling.enabled', strProfiling)
+    }
     this._setString(opts, 'protocolVersion', options.protocolVersion)
     if (options.remoteConfig) {
       this._setValue(opts, 'remoteConfig.pollInterval', maybeFloat(options.remoteConfig.pollInterval))
@@ -897,10 +946,6 @@ class Config {
     this._setBoolean(opts, 'spanRemoveIntegrationFromService', options.spanRemoveIntegrationFromService)
     this._setBoolean(opts, 'startupLogs', options.startupLogs)
     this._setTags(opts, 'tags', tags)
-    const hasTelemetryLogsUsingFeatures =
-      (options.iast && (options.iast === true || options.iast?.enabled === true)) ||
-      (options.profiling && options.profiling === true)
-    this._setBoolean(opts, 'telemetry.logCollection', hasTelemetryLogsUsingFeatures)
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
     this._setString(opts, 'version', options.version || tags.version)
@@ -999,7 +1044,10 @@ class Config {
 
     const {
       DD_CIVISIBILITY_AGENTLESS_URL,
-      DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED
+      DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
+      DD_CIVISIBILITY_FLAKY_RETRY_ENABLED,
+      DD_CIVISIBILITY_FLAKY_RETRY_COUNT,
+      DD_SESSION_NAME
     } = process.env
 
     if (DD_CIVISIBILITY_AGENTLESS_URL) {
@@ -1010,8 +1058,12 @@ class Config {
     if (this._isCiVisibility()) {
       this._setBoolean(calc, 'isEarlyFlakeDetectionEnabled',
         coalesce(DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED, true))
+      this._setBoolean(calc, 'isFlakyTestRetriesEnabled',
+        coalesce(DD_CIVISIBILITY_FLAKY_RETRY_ENABLED, true))
+      this._setValue(calc, 'flakyTestRetriesCount', coalesce(maybeInt(DD_CIVISIBILITY_FLAKY_RETRY_COUNT), 5))
       this._setBoolean(calc, 'isIntelligentTestRunnerEnabled', isTrue(this._isCiVisibilityItrEnabled()))
       this._setBoolean(calc, 'isManualApiEnabled', this._isCiVisibilityManualApiEnabled())
+      this._setString(calc, 'ciVisibilitySessionName', DD_SESSION_NAME)
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())
     this._setBoolean(calc, 'isGitUploadEnabled',
@@ -1155,17 +1207,18 @@ class Config {
     for (const name in this._defaults) {
       for (let i = 0; i < containers.length; i++) {
         const container = containers[i]
-        const origin = origins[i]
-        const unprocessed = unprocessedValues[i]
+        const value = container[name]
 
-        if ((container[name] !== null && container[name] !== undefined) || container === this._defaults) {
-          if (get(this, name) === container[name] && has(this, name)) break
+        if ((value !== null && value !== undefined) || container === this._defaults) {
+          if (get(this, name) === value && has(this, name)) break
 
-          let value = container[name]
           set(this, name, value)
-          value = unprocessed[name] || value
 
-          changes.push({ name, value, origin })
+          changes.push({
+            name,
+            value: unprocessedValues[i][name] || value,
+            origin: origins[i]
+          })
 
           break
         }

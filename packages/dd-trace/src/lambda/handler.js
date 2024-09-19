@@ -93,6 +93,7 @@ exports.datadog = function datadog (lambdaHandler) {
         return res
       })
     }
+    clearTimeout(__lambdaTimeout)
     return result
   }
 }
