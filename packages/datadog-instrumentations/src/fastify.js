@@ -150,7 +150,7 @@ function publishError (error, req) {
   return error
 }
 
-addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
+addHook({ name: 'fastify', versions: ['>=3 <=4.28.1'] }, fastify => {
   const wrapped = shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, true))
 
   wrapped.fastify = wrapped
