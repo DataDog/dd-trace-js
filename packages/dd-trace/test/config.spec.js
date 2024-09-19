@@ -709,12 +709,21 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['tracecontext'])
   })
 
-  it('should enable crash tracking for SSI', () => {
+  it('should enable crash tracking for SSI by default', () => {
     process.env.DD_INJECTION_ENABLED = 'tracer'
 
     const config = new Config()
 
     expect(config).to.have.nested.deep.property('crashtracking.enabled', true)
+  })
+
+  it('should disable crash tracking for SSI when configured', () => {
+    process.env.DD_CRASHTRACKING_ENABLED = 'false'
+    process.env.DD_INJECTION_ENABLED = 'tracer'
+
+    const config = new Config()
+
+    expect(config).to.have.nested.deep.property('crashtracking.enabled', false)
   })
 
   it('should initialize from the options', () => {
