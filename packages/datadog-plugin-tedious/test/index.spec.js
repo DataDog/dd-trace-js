@@ -34,7 +34,7 @@ describe('Plugin', () => {
 
       beforeEach((done) => {
         config = {
-          server: 'localhost',
+          server: '127.0.0.1',
           options: {
             database: 'master',
             trustServerCertificate: true
@@ -151,7 +151,7 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('db.name', 'master')
             expect(traces[0][0].meta).to.have.property('db.user', 'sa')
             expect(traces[0][0].meta).to.have.property('db.type', 'mssql')
-            expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+            expect(traces[0][0].meta).to.have.property('out.host', '127.0.0.1')
             expect(traces[0][0].meta).to.have.property('span.kind', 'client')
             expect(traces[0][0].metrics).to.have.property('network.destination.port', 1433)
           })

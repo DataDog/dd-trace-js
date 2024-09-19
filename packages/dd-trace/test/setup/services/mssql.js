@@ -9,7 +9,7 @@ function waitForMssql () {
 
     operation.attempt(currentAttempt => {
       const connection = new tedious.Connection({
-        server: 'localhost',
+        server: '127.0.0.1',
         options: {
           trustServerCertificate: true
         },
