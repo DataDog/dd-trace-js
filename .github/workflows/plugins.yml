@@ -58,7 +58,7 @@ jobs:
         range: ['5.2.0 - 5.7.0']
         include:
           - node-version: 20
-            range: '>=5.8.0'
+            range: ['5.12.1']
     runs-on: ubuntu-latest
     services:
       aerospike:
@@ -97,6 +97,9 @@ jobs:
       - uses: codecov/codecov-action@v3
 
   amqp10:
+    strategy:
+      matrix:
+        range: ['3.6.0']
     runs-on: ubuntu-latest
     services:
       qpid:
@@ -115,6 +118,9 @@ jobs:
       - uses: ./.github/actions/plugins/test-and-upstream
 
   amqplib:
+    strategy:
+      matrix:
+        range: ['0.10.4' ]
     runs-on: ubuntu-latest
     services:
       rabbitmq:
@@ -129,6 +135,9 @@ jobs:
       - uses: ./.github/actions/plugins/test-and-upstream
 
   apollo:
+    strategy:
+      matrix:
+        range: ['2.9.0']
     runs-on: ubuntu-latest
     env:
       PLUGINS: apollo
@@ -140,6 +149,7 @@ jobs:
     strategy:
       matrix:
         node-version: ['18', 'latest']
+        range: ['2.1691.0']
     runs-on: ubuntu-latest
     services:
       localstack:
@@ -197,6 +207,9 @@ jobs:
       - uses: ./.github/actions/plugins/upstream
 
   bluebird:
+    strategy:
+      matrix:
+        range: ['3.7.2']
     runs-on: ubuntu-latest
     env:
       PLUGINS: bluebird
@@ -205,6 +218,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   bunyan:
+    strategy:
+      matrix:
+        range: ['1.8.15']
     runs-on: ubuntu-latest
     env:
       PLUGINS: bunyan
@@ -213,6 +229,9 @@ jobs:
       - uses: ./.github/actions/plugins/test-and-upstream
 
   cassandra:
+    strategy:
+      matrix:
+        range: ['>=3.0.0 <=4.7.2']
     runs-on: ubuntu-latest
     services:
       cassandra:
@@ -246,10 +265,10 @@ jobs:
     strategy:
       matrix:
         node-version: [16]
-        range: ['^2.6.12', '^3.0.7', '>=4.0.0 <4.2.0']
+        range: ['^2.6.12', '^3.0.7', '4.4.1']
         include:
           - node-version: 18
-            range: '>=4.2.0'
+            range: '4.4.1'
     runs-on: ubuntu-latest
     services:
       couchbase:
@@ -274,6 +293,9 @@ jobs:
       - uses: codecov/codecov-action@v3
 
   connect:
+    strategy:
+      matrix:
+        range: ['3.7.0']
     runs-on: ubuntu-latest
     env:
       PLUGINS: connect
@@ -282,6 +304,9 @@ jobs:
       - uses: ./.github/actions/plugins/test-and-upstream
 
   cucumber:
+    strategy:
+      matrix:
+        range: ['11.0.1']
     runs-on: ubuntu-latest
     env:
       PLUGINS: cucumber
@@ -291,6 +316,9 @@ jobs:
 
   # TODO: fix performance issues and test more Node versions
   cypress:
+    strategy:
+      matrix:
+        range: ['13.14.2']
     runs-on: ubuntu-latest
     env:
       PLUGINS: cypress
@@ -324,6 +352,9 @@ jobs:
       - uses: codecov/codecov-action@v3
 
   elasticsearch:
+    strategy:
+      matrix:
+        range: ['16.7.3']
     runs-on: ubuntu-latest
     services:
       elasticsearch:
@@ -347,6 +378,9 @@ jobs:
       - uses: codecov/codecov-action@v3
 
   express:
+    strategy:
+      matrix:
+        range: ['4.21.0']
     runs-on: ubuntu-latest
     env:
       PLUGINS: express|body-parser|cookie-parser
@@ -355,6 +389,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   fastify:
+    strategy:
+      matrix:
+        range: ['4.28.1']
     runs-on: ubuntu-latest
     env:
       PLUGINS: fastify
@@ -371,6 +408,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   generic-pool:
+    strategy:
+      matrix:
+        range: ['3.9.0']
     runs-on: ubuntu-latest
     env:
       PLUGINS: generic-pool
@@ -379,6 +419,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   google-cloud-pubsub:
+    strategy:
+      matrix:
+        range: ['4.7.2']
     runs-on: ubuntu-latest
     services:
       pubsub:
@@ -393,6 +436,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   graphql:
+    strategy:
+      matrix:
+        range: ['16.9.0']
     runs-on: ubuntu-latest
     env:
       PLUGINS: graphql
@@ -401,6 +447,9 @@ jobs:
       - uses: ./.github/actions/plugins/test-and-upstream
 
   grpc:
+    strategy:
+      matrix:
+        range: ['1.11.2']
     runs-on: ubuntu-latest
     env:
       PLUGINS: grpc
@@ -409,6 +458,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   hapi:
+    strategy:
+      matrix:
+        range: ['18.1.0']
     runs-on: ubuntu-latest
     env:
       PLUGINS: hapi
@@ -457,6 +509,9 @@ jobs:
 
   # TODO: fix performance issues and test more Node versions
   jest:
+    strategy:
+      matrix:
+        range: ['29.7.0']
     runs-on: ubuntu-latest
     env:
       PLUGINS: jest
@@ -471,6 +526,9 @@ jobs:
       - uses: codecov/codecov-action@v3
 
   kafkajs:
+    strategy:
+      matrix:
+        range: ['2.2.4']
     runs-on: ubuntu-latest
     services:
       kafka:
@@ -498,6 +556,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   knex:
+    strategy:
+      matrix:
+        range: ['3.1.0']
     runs-on: ubuntu-latest
     env:
       PLUGINS: knex
@@ -506,6 +567,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   koa:
+    strategy:
+      matrix:
+        range: ['2.15.3']
     runs-on: ubuntu-latest
     env:
       PLUGINS: koa
@@ -514,6 +578,9 @@ jobs:
       - uses: ./.github/actions/plugins/test-and-upstream
 
   limitd-client:
+    strategy:
+      matrix:
+        range: ['2.14.1']
     runs-on: ubuntu-latest
     services:
       limitd:
@@ -532,6 +599,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   memcached:
+    strategy:
+      matrix:
+        range: ['2.2.2']
     runs-on: ubuntu-latest
     services:
       memcached:
@@ -546,6 +616,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   microgateway-core:
+    strategy:
+      matrix:
+        range: ['3.3.4']
     runs-on: ubuntu-latest
     env:
       PLUGINS: microgateway-core
@@ -554,6 +627,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   mocha:
+    strategy:
+      matrix:
+        range: ['10.7.3']
     runs-on: ubuntu-latest
     env:
       PLUGINS: mocha
@@ -562,6 +638,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   moleculer:
+    strategy:
+      matrix:
+        range: ['0.14.34']
     runs-on: ubuntu-latest
     env:
       PLUGINS: moleculer
@@ -570,6 +649,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   mongodb:
+    strategy:
+      matrix:
+        range: ['6.9.0']
     runs-on: ubuntu-latest
     services:
       mongodb:
@@ -585,6 +667,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   mongodb-core:
+    strategy:
+      matrix:
+        range: ['3.2.7']
     runs-on: ubuntu-latest
     services:
       mongodb:
@@ -600,6 +685,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   mongoose:
+    strategy:
+      matrix:
+        range: ['8.6.2']
     runs-on: ubuntu-latest
     services:
       mongodb:
@@ -614,6 +702,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   mysql:
+    strategy:
+      matrix:
+        range: ['2.18.1']
     runs-on: ubuntu-latest
     services:
       mysql:
@@ -656,7 +747,7 @@ jobs:
         version:
           - 18
           - latest
-        range: ['9.5.0', '11.1.4', '13.2.0', '14.2.6']
+        range: ['14.2.6']
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
@@ -672,6 +763,9 @@ jobs:
       - uses: codecov/codecov-action@v3
 
   openai:
+    strategy:
+      matrix:
+        range: ['4.61.1']
     runs-on: ubuntu-latest
     env:
       PLUGINS: openai
@@ -680,6 +774,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   opensearch:
+    strategy:
+      matrix:
+        range: ['2.12.0']
     runs-on: ubuntu-latest
     services:
       opensearch:
@@ -699,6 +796,9 @@ jobs:
   # TODO: Install the Oracle client on the host and test Node >=16.
   # TODO: Figure out why nyc stopped working with EACCESS errors.
   oracledb:
+    strategy:
+      matrix:
+        range: ['6.6.0']
     runs-on: ubuntu-latest
     container: bengl/node-12-with-oracle-client
     services:
@@ -737,6 +837,9 @@ jobs:
       - uses: codecov/codecov-action@v2
 
   paperplane:
+    strategy:
+      matrix:
+        range: ['3.1.2']
     runs-on: ubuntu-latest
     env:
       PLUGINS: paperplane
@@ -753,6 +856,9 @@ jobs:
 
   # TODO: re-enable upstream tests if it ever stops being flaky
   pino:
+    strategy:
+      matrix:
+        range: ['9.4.0']
     runs-on: ubuntu-latest
     env:
       PLUGINS: pino
@@ -771,6 +877,9 @@ jobs:
       - uses: codecov/codecov-action@v3
 
   postgres:
+    strategy:
+      matrix:
+        range: ['8.13.0']
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -788,6 +897,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   promise:
+    strategy:
+      matrix:
+        range: ['8.3.0']
     runs-on: ubuntu-latest
     env:
       PLUGINS: promise
@@ -796,6 +908,9 @@ jobs:
       - uses: ./.github/actions/plugins/test-and-upstream
 
   promise-js:
+    strategy:
+      matrix:
+        range: ['0.0.7']
     runs-on: ubuntu-latest
     env:
       PLUGINS: promise-js
@@ -804,6 +919,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   q:
+    strategy:
+      matrix:
+        range: ['1.5.1']
     runs-on: ubuntu-latest
     env:
       PLUGINS: q
@@ -812,6 +930,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   redis:
+    strategy:
+      matrix:
+        range: ['4.7.0']
     runs-on: ubuntu-latest
     services:
       redis:
@@ -826,6 +947,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   restify:
+    strategy:
+      matrix:
+        range: ['11.1.0']
     runs-on: ubuntu-latest
     env:
       PLUGINS: restify
@@ -852,6 +976,9 @@ jobs:
       - uses: ./.github/actions/plugins/test-and-upstream
 
   router:
+    strategy:
+      matrix:
+        range: ['1.3.8']
     runs-on: ubuntu-latest
     env:
       PLUGINS: router
@@ -860,6 +987,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   sharedb:
+    strategy:
+      matrix:
+        range: ['5.0.4']
     runs-on: ubuntu-latest
     env:
       PLUGINS: sharedb
@@ -875,6 +1005,9 @@ jobs:
       - uses: codecov/codecov-action@v3
 
   tedious:
+    strategy:
+      matrix:
+        range: ['18.6.1']
     runs-on: ubuntu-latest
     services:
       mssql:
@@ -901,6 +1034,9 @@ jobs:
       - uses: codecov/codecov-action@v3
 
   undici:
+    strategy:
+      matrix:
+        range: ['4.16.0', '5.28.4', '6.19.8']
     runs-on: ubuntu-latest
     env:
       PLUGINS: undici
@@ -909,6 +1045,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   when:
+    strategy:
+      matrix:
+        range: ['3.7.8']
     runs-on: ubuntu-latest
     env:
       PLUGINS: when
@@ -917,6 +1056,9 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   winston:
+    strategy:
+      matrix:
+        range: ['3.14.2'] 
     runs-on: ubuntu-latest
     env:
       PLUGINS: winston
