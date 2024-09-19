@@ -91,7 +91,7 @@ class SchemaExtractor {
     if (extractor) {
       // if we already have a defined extractor, this is a nested schema. create a new extractor for the nested
       // schema, ensure it is added to our schema builder's cache, and replace the builders iterator with our
-      // nested schema iterator / extractor. Then add the new schema to our builder's schemas.
+      // nested schema iterator / extractor. Once complete, add the new schema to our builder's schemas.
       const nestedSchemaExtractor = new SchemaExtractor(schema)
       builder.iterator = nestedSchemaExtractor
       const nestedSchema = SchemaBuilder.getSchema(schemaName, nestedSchemaExtractor, builder)

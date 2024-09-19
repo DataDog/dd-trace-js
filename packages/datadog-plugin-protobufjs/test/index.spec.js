@@ -13,6 +13,7 @@ const {
   SCHEMA_TYPE
 } = require('../../dd-trace/src/constants')
 const sinon = require('sinon')
+const { loadMessage } = require('./helpers')
 
 const schemas = JSON.parse(fs.readFileSync(path.join(__dirname, 'schemas/expected_schemas.json'), 'utf8'))
 const MESSAGE_SCHEMA_DEF = schemas.MESSAGE_SCHEMA_DEF
@@ -63,15 +64,10 @@ describe('Plugin', () => {
     })
 
     it('should serialize basic schema correctly', async () => {
-      const root = await protobuf.load('packages/datadog-plugin-protobufjs/test/schemas/other_message.proto')
-      const OtherMessage = root.lookupType('OtherMessage')
-      const message = OtherMessage.create({
-        name: ['Alice'],
-        age: 30
-      })
+      const loadedMessages = await loadMessage(protobuf, 'OtherMessage')
 
       tracer.trace('other_message.serialize', span => {
-        OtherMessage.encode(message).finish()
+        loadedMessages.OtherMessage.type.encode(loadedMessages.OtherMessage.instance).finish()
 
         expect(span._name).to.equal('other_message.serialize')
 
@@ -85,25 +81,10 @@ describe('Plugin', () => {
     })
 
     it('should serialize complex schema correctly', async () => {
-      const messageProto = await protobuf.load('packages/datadog-plugin-protobufjs/test/schemas/message.proto')
-      const otherMessageProto = await protobuf.load(
-        'packages/datadog-plugin-protobufjs/test/schemas/other_message.proto'
-      )
-      const Status = messageProto.lookupEnum('Status')
-      const MyMessage = messageProto.lookupType('MyMessage')
-      const OtherMessage = otherMessageProto.lookupType('OtherMessage')
-      const message = MyMessage.create({
-        id: '123',
-        value: 'example_value',
-        status: Status.values.ACTIVE,
-        otherMessage: [
-          OtherMessage.create({ name: ['Alice'], age: 30 }),
-          OtherMessage.create({ name: ['Bob'], age: 25 })
-        ]
-      })
+      const loadedMessages = await loadMessage(protobuf, 'MyMessage')
 
       tracer.trace('message_pb2.serialize', span => {
-        MyMessage.encode(message).finish()
+        loadedMessages.MyMessage.type.encode(loadedMessages.MyMessage.instance).finish()
 
         expect(span._name).to.equal('message_pb2.serialize')
 
@@ -117,58 +98,10 @@ describe('Plugin', () => {
     })
 
     it('should serialize schema with all types correctly', async () => {
-      const root = await protobuf.load('packages/datadog-plugin-protobufjs/test/schemas/all_types.proto')
-
-      const Status = root.lookupEnum('example.Status')
-      const Scalars = root.lookupType('example.Scalars')
-      const NestedMessage = root.lookupType('example.NestedMessage')
-      const ComplexMessage = root.lookupType('example.ComplexMessage')
-      const MainMessage = root.lookupType('example.MainMessage')
-
-      // Create instances of the messages
-      const scalarsInstance = Scalars.create({
-        int32Field: 42,
-        int64Field: 123456789012345,
-        uint32Field: 123,
-        uint64Field: 123456789012345,
-        sint32Field: -42,
-        sint64Field: -123456789012345,
-        fixed32Field: 42,
-        fixed64Field: 123456789012345,
-        sfixed32Field: -42,
-        sfixed64Field: -123456789012345,
-        floatField: 3.14,
-        doubleField: 2.718281828459,
-        boolField: true,
-        stringField: 'Hello, world!',
-        bytesField: Buffer.from('bytes data')
-      })
-
-      const nestedMessageInstance = NestedMessage.create({
-        id: 'nested_id_123',
-        scalars: scalarsInstance
-      })
-
-      const complexMessageInstance = ComplexMessage.create({
-        repeatedField: ['item1', 'item2', 'item3'],
-        mapField: {
-          key1: scalarsInstance,
-          key2: Scalars.create({
-            int32Field: 24,
-            stringField: 'Another string'
-          })
-        }
-      })
-
-      const mainMessageInstance = MainMessage.create({
-        status: Status.values.ACTIVE,
-        scalars: scalarsInstance,
-        nested: nestedMessageInstance,
-        complex: complexMessageInstance
-      })
+      const loadedMessages = await loadMessage(protobuf, 'MainMessage')
 
       tracer.trace('all_types.serialize', span => {
-        MainMessage.encode(mainMessageInstance).finish()
+        loadedMessages.MainMessage.type.encode(loadedMessages.MainMessage.instance).finish()
 
         expect(span._name).to.equal('all_types.serialize')
 
@@ -182,17 +115,12 @@ describe('Plugin', () => {
     })
 
     it('should deserialize basic schema correctly', async () => {
-      const root = await protobuf.load('packages/datadog-plugin-protobufjs/test/schemas/other_message.proto')
-      const OtherMessage = root.lookupType('OtherMessage')
-      const message = OtherMessage.create({
-        name: ['Alice'],
-        age: 30
-      })
+      const loadedMessages = await loadMessage(protobuf, 'OtherMessage')
 
-      const bytes = OtherMessage.encode(message).finish()
+      const bytes = loadedMessages.OtherMessage.type.encode(loadedMessages.OtherMessage.instance).finish()
 
       tracer.trace('other_message.deserialize', span => {
-        OtherMessage.decode(bytes)
+        loadedMessages.OtherMessage.type.decode(bytes)
 
         expect(span._name).to.equal('other_message.deserialize')
 
@@ -206,27 +134,12 @@ describe('Plugin', () => {
     })
 
     it('should deserialize complex schema correctly', async () => {
-      const messageProto = await protobuf.load('packages/datadog-plugin-protobufjs/test/schemas/message.proto')
-      const otherMessageProto = await protobuf.load(
-        'packages/datadog-plugin-protobufjs/test/schemas/other_message.proto'
-      )
-      const Status = messageProto.lookupEnum('Status')
-      const MyMessage = messageProto.lookupType('MyMessage')
-      const OtherMessage = otherMessageProto.lookupType('OtherMessage')
-      const message = MyMessage.create({
-        id: '123',
-        value: 'example_value',
-        status: Status.values.ACTIVE,
-        otherMessage: [
-          OtherMessage.create({ name: ['Alice'], age: 30 }),
-          OtherMessage.create({ name: ['Bob'], age: 25 })
-        ]
-      })
+      const loadedMessages = await loadMessage(protobuf, 'MyMessage')
 
-      const bytes = MyMessage.encode(message).finish()
+      const bytes = loadedMessages.MyMessage.type.encode(loadedMessages.MyMessage.instance).finish()
 
       tracer.trace('my_message.deserialize', span => {
-        MyMessage.decode(bytes)
+        loadedMessages.MyMessage.type.decode(bytes)
 
         expect(span._name).to.equal('my_message.deserialize')
 
@@ -240,60 +153,12 @@ describe('Plugin', () => {
     })
 
     it('should deserialize all types schema correctly', async () => {
-      const root = await protobuf.load('packages/datadog-plugin-protobufjs/test/schemas/all_types.proto')
+      const loadedMessages = await loadMessage(protobuf, 'MainMessage')
 
-      const Status = root.lookupEnum('example.Status')
-      const Scalars = root.lookupType('example.Scalars')
-      const NestedMessage = root.lookupType('example.NestedMessage')
-      const ComplexMessage = root.lookupType('example.ComplexMessage')
-      const MainMessage = root.lookupType('example.MainMessage')
-
-      // Create instances of the messages
-      const scalarsInstance = Scalars.create({
-        int32Field: 42,
-        int64Field: 123456789012345,
-        uint32Field: 123,
-        uint64Field: 123456789012345,
-        sint32Field: -42,
-        sint64Field: -123456789012345,
-        fixed32Field: 42,
-        fixed64Field: 123456789012345,
-        sfixed32Field: -42,
-        sfixed64Field: -123456789012345,
-        floatField: 3.14,
-        doubleField: 2.718281828459,
-        boolField: true,
-        stringField: 'Hello, world!',
-        bytesField: Buffer.from('bytes data')
-      })
-
-      const nestedMessageInstance = NestedMessage.create({
-        id: 'nested_id_123',
-        scalars: scalarsInstance
-      })
-
-      const complexMessageInstance = ComplexMessage.create({
-        repeatedField: ['item1', 'item2', 'item3'],
-        mapField: {
-          key1: scalarsInstance,
-          key2: Scalars.create({
-            int32Field: 24,
-            stringField: 'Another string'
-          })
-        }
-      })
-
-      const mainMessageInstance = MainMessage.create({
-        status: Status.values.ACTIVE,
-        scalars: scalarsInstance,
-        nested: nestedMessageInstance,
-        complex: complexMessageInstance
-      })
-
-      const bytes = MainMessage.encode(mainMessageInstance).finish()
+      const bytes = loadedMessages.MainMessage.type.encode(loadedMessages.MainMessage.instance).finish()
 
       tracer.trace('all_types.deserialize', span => {
-        MainMessage.decode(bytes)
+        loadedMessages.MainMessage.type.decode(bytes)
 
         expect(span._name).to.equal('all_types.deserialize')
 
