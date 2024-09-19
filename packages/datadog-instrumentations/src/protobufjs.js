@@ -6,36 +6,52 @@ const finishSerializeCh = channel('datadog:protobuf:serialize:finish')
 const startDeserializeCh = channel('datadog:protobuf:deserialize:start')
 const finishDeserializeCh = channel('datadog:protobuf:deserialize:finish')
 
-function wrapSerialization (Class) {
-  shimmer.wrap(Class, 'encode', original => {
-    return function wrappedEncode (...args) {
-      if (!startSerializeCh.hasSubscribers && !finishSerializeCh.hasSubscribers) {
+function wrapSerialization (messageClass) {
+  if (messageClass?.encode) {
+    wrapOperation(messageClass, 'encode', {
+      startChPublish: (obj, args) => startSerializeCh.publish({ message: obj }),
+      finishChPublish: (result) => finishSerializeCh.publish({ buffer: result }),
+      startCh: startSerializeCh,
+      finishCh: finishSerializeCh
+    })
+  }
+}
+
+function wrapDeserialization (messageClass) {
+  if (messageClass?.decode) {
+    wrapOperation(messageClass, 'decode', {
+      startChPublish: (obj, args) => startDeserializeCh.publish({ buffer: args[0] }),
+      finishChPublish: (result) => finishDeserializeCh.publish({ message: result }),
+      startCh: startDeserializeCh,
+      finishCh: finishDeserializeCh
+    })
+  }
+}
+
+function wrapOperation (messageClass, operationName, channels) {
+  shimmer.wrap(messageClass, operationName, original => {
+    return function wrappedMethod (...args) {
+      if (!channels.startCh.hasSubscribers && !channels.finishCh.hasSubscribers) {
         return original.apply(this, args)
       }
 
       const asyncResource = new AsyncResource('bound-anonymous-fn')
 
       asyncResource.runInAsyncScope(() => {
-        startSerializeCh.publish({ message: this })
+        channels.startChPublish(this, args)
       })
 
       try {
-        // when applying the original encode / decode functions, protobuf sets up the classes again
-        // causing our function wrappers to dissappear, we should verify they exist and rewrap if not
-        const wrappedDecode = this.decode
-        const wrappedEncode = this.encode
         const result = original.apply(this, args)
-        ensureMessageIsWrapped(this, wrappedEncode, wrappedDecode)
 
-        if (original) {
-          asyncResource.runInAsyncScope(() => {
-            finishSerializeCh.publish({ message: this })
-          })
-        }
+        asyncResource.runInAsyncScope(() => {
+          channels.finishChPublish(result)
+        })
+
         return result
       } catch (err) {
         asyncResource.runInAsyncScope(() => {
-          finishSerializeCh.publish({ message: this })
+          channels.finishChPublish(args)
         })
         throw err
       }
@@ -43,63 +59,65 @@ function wrapSerialization (Class) {
   })
 }
 
-function ensureMessageIsWrapped (messageClass, wrappedEncode, wrappedDecode) {
-  if (messageClass.encode !== wrappedEncode) {
-    messageClass.encode = wrappedEncode
-  }
-
-  if (messageClass.decode !== wrappedDecode) {
-    messageClass.decode = wrappedDecode
-  }
-}
-
-function wrapDeserialization (Class) {
-  shimmer.wrap(Class, 'decode', original => {
-    return function wrappedDecode (...args) {
-      if (!startDeserializeCh.hasSubscribers && !finishDeserializeCh.hasSubscribers) {
-        return original.apply(this, args)
-      }
-
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-      asyncResource.runInAsyncScope(() => {
-        startDeserializeCh.publish({ buffer: args[0] })
-      })
-
-      try {
-        // when applying the original encode / decode functions, protobuf sets up the classes again
-        // causing our function wrappers to dissappear, we should verify they exist and rewrap if not
-
-        const wrappedDecode = this.decode
-        const wrappedEncode = this.encode
+function wrapSetup (messageClass) {
+  if (messageClass?.setup) {
+    shimmer.wrap(messageClass, 'setup', original => {
+      return function wrappedSetup (...args) {
         const result = original.apply(this, args)
-        ensureMessageIsWrapped(this, wrappedEncode, wrappedDecode)
 
-        asyncResource.runInAsyncScope(() => {
-          finishDeserializeCh.publish({ message: result })
-        })
+        wrapSerialization(messageClass)
+        wrapDeserialization(messageClass)
+
         return result
-      } catch (err) {
-        asyncResource.runInAsyncScope(() => {
-          finishDeserializeCh.publish({ buffer: args[0] })
-        })
-        throw err
       }
-    }
-  })
+    })
+  }
 }
 
 function wrapProtobufClasses (root) {
   if (!root) {
-    // pass
-  } else if (root.decode) {
-    wrapSerialization(root)
-    wrapDeserialization(root)
-  } else if (root.nestedArray) {
+    return
+  }
+
+  if (root.decode) {
+    wrapSetup(root)
+  }
+
+  if (root.nestedArray) {
     for (const subRoot of root.nestedArray) {
       wrapProtobufClasses(subRoot)
     }
   }
+}
+
+function wrapReflection (protobuf) {
+  const reflectionMethods = [
+    {
+      target: protobuf.Root,
+      name: 'fromJSON'
+    },
+    {
+      target: protobuf.Type.prototype,
+      name: 'fromObject'
+    }
+  ]
+
+  reflectionMethods.forEach(method => {
+    shimmer.wrap(method.target, method.name, original => {
+      return function wrappedReflectionMethod (...args) {
+        const result = original.apply(this, args)
+        if (result.nested) {
+          for (const type in result.nested) {
+            wrapSetup(result.nested[type])
+          }
+        }
+        if (result.$type) {
+          wrapSetup(result.$type)
+        }
+        return result
+      }
+    })
+  })
 }
 
 addHook({
@@ -123,6 +141,16 @@ addHook({
       return root
     }
   })
+
+  shimmer.wrap(protobuf, 'Type', Original => {
+    return function wrappedTypeConstructor (...args) {
+      const typeInstance = new Original(...args)
+      wrapSetup(typeInstance)
+      return typeInstance
+    }
+  })
+
+  wrapReflection(protobuf)
 
   return protobuf
 })

@@ -19,7 +19,9 @@ class ProtobufjsPlugin extends Plugin {
   handleSerializeStart ({ message }) {
     const activeSpan = this.tracer.scope().active()
     if (activeSpan) {
-      SchemaExtractor.attachSchemaOnSpan(message, activeSpan, SERIALIZATION, this.tracer._dataStreamsProcessor)
+      SchemaExtractor.attachSchemaOnSpan(
+        message.$type ?? message, activeSpan, SERIALIZATION, this.tracer._dataStreamsProcessor
+      )
     }
   }
 
