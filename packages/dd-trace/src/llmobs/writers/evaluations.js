@@ -1,11 +1,12 @@
 'use strict'
 
+const { AGENTLESS_EVALULATIONS_ENDPOINT } = require('../constants')
 const BaseWriter = require('./base')
 
 class LLMObsEvalMetricsWriter extends BaseWriter {
   constructor (config) {
     super({
-      endpoint: '/api/intake/llm-obs/v1/eval-metric',
+      endpoint: AGENTLESS_EVALULATIONS_ENDPOINT,
       intake: `api.${config.site}`,
       eventType: 'evaluation_metric'
     })
