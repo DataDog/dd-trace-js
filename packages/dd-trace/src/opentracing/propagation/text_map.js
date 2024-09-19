@@ -115,14 +115,19 @@ class TextMapPropagator {
   }
 
   _injectBaggageItems (spanContext, carrier) {
-    spanContext._baggageItems && Object.keys(spanContext._baggageItems).forEach(key => {
-      carrier[baggagePrefix + key] = String(spanContext._baggageItems[key])
-    })
-    if (this._config.baggageInject === false) return
-    if (this._config.baggageInject === true || this._config.baggagePropagation === true) {
-      carrier.baggage = Object.entries(spanContext._baggageItems)
+    if (this._config.legacyBaggageEnabled) {
+      spanContext._baggageItems && Object.keys(spanContext._baggageItems).forEach(key => {
+        carrier[baggagePrefix + key] = String(spanContext._baggageItems[key])
+      })
+    }
+    if (this._hasPropagationStyle('inject', 'baggage')) {
+      if (Object.keys(spanContext._baggageItems).length > this._config.baggageMaxItems) return
+      const baggage = Object.entries(spanContext._baggageItems)
         .map(([key, value]) =>
-          `${this._encodeOtelBaggageKey(String(key).trim())}=${encodeURIComponent(String(value).trim())}`).join(',')
+        `${this._encodeOtelBaggageKey(String(key).trim())}=${encodeURIComponent(String(value).trim())}`).join(',')
+      const buf = Buffer.from(baggage)
+      if (buf.length > this._config.baggageMaxBytes) return
+      carrier.baggage = baggage
     }
   }
 
@@ -554,24 +559,34 @@ class TextMapPropagator {
   }
 
   _extractBaggageItems (carrier, spanContext) {
-    Object.keys(carrier).forEach(key => {
-      const match = key.match(baggageExpr)
+    if (this._config.legacyBaggageEnabled) {
+      Object.keys(carrier).forEach(key => {
+        const match = key.match(baggageExpr)
 
-      if (match) {
-        spanContext._baggageItems[match[1]] = carrier[key]
-      }
-    })
-    // the current code assumes precedence of ot-baggage- over baggage
-    if (this._config.baggageExtract === false) return
-    if (this._config.baggageExtract === true || this._config.baggagePropagation === true) {
-      if (carrier.baggage) {
-        const baggages = carrier.baggage.split(',')
-        for (const keyValue of baggages) {
-          let [key, value] = keyValue.split('=')
-          key = this._decodeOtelBaggageKey(key.trim())
-          value = decodeURIComponent(value.trim())
-          spanContext._baggageItems[key] = spanContext._baggageItems[key] || value
+        if (match) {
+          spanContext._baggageItems[match[1]] = carrier[key]
         }
+      })
+    }
+    // the current code assumes precedence of ot-baggage- over baggage
+    if (this._hasPropagationStyle('extract', 'baggage') && carrier.baggage) {
+      const buf = Buffer.from(carrier.baggage)
+      if (buf.length > this._config.baggageMaxBytes) return
+      const baggages = carrier.baggage.split(',')
+      if (baggages.length > this._config.baggageMaxItems) return
+      for (const keyValue of baggages) {
+        if (!keyValue.includes('=')) {
+          spanContext._baggageItems = {}
+          return
+        }
+        let [key, value] = keyValue.split('=')
+        key = this._decodeOtelBaggageKey(key.trim())
+        value = decodeURIComponent(value.trim())
+        if (!key || !value) {
+          spanContext._baggageItems = {}
+          return
+        }
+        spanContext._baggageItems[key] = spanContext._baggageItems[key] || value
       }
     }
   }

@@ -101,74 +101,27 @@ describe('TextMapPropagator', () => {
       expect(carrier.baggage).to.be.equal('%22%2C%3B%5C%28%29%2F%3A%3C%3D%3E%3F%40%5B%5D%7B%7D=%22%2C%3B%5C')
     })
 
-    it('should not inject baggage when baggage propagation is disabled', () => {
-      process.env.DD_TRACE_BAGGAGE_ENABLED = false
-      config = new Config()
-      propagator = new TextMapPropagator(config)
-
+    it('should not inject baggage when it contains too many key-value pairs', () => {
       const carrier = {}
-      const baggageItems = {
-        number: 1.23,
-        bool: true,
-        array: ['foo', 'bar'],
-        object: {}
+      const baggageItems = {}
+      for (let i = 0; i < config.baggageMaxItems + 1; i++) {
+        baggageItems[`key-${i}`] = i
       }
       const spanContext = createContext({ baggageItems })
 
       propagator.inject(spanContext, carrier)
-
-      expect(carrier['ot-baggage-number']).to.equal('1.23')
-      expect(carrier['ot-baggage-bool']).to.equal('true')
-      expect(carrier['ot-baggage-array']).to.equal('foo,bar')
-      expect(carrier['ot-baggage-object']).to.equal('[object Object]')
       expect(carrier.baggage).to.be.undefined
     })
 
-    it('should not inject baggage when baggage injection is disabled', () => {
-      process.env.DD_TRACE_BAGGAGE_INJECT_ENABLED = false
-      config = new Config()
-      propagator = new TextMapPropagator(config)
-
+    it('should not inject baggage when it contains too many bytes', () => {
       const carrier = {}
       const baggageItems = {
-        number: 1.23,
-        bool: true,
-        array: ['foo', 'bar'],
-        object: {}
+        foo: Buffer.alloc(config.baggageMaxBytes).toString()
       }
       const spanContext = createContext({ baggageItems })
 
       propagator.inject(spanContext, carrier)
-
-      expect(carrier['ot-baggage-number']).to.equal('1.23')
-      expect(carrier['ot-baggage-bool']).to.equal('true')
-      expect(carrier['ot-baggage-array']).to.equal('foo,bar')
-      expect(carrier['ot-baggage-object']).to.equal('[object Object]')
       expect(carrier.baggage).to.be.undefined
-    })
-
-    it('should inject baggage when baggage injection is enabled but propagation is disabled', () => {
-      process.env.DD_TRACE_BAGGAGE_INJECT_ENABLED = true
-      process.env.DD_TRACE_BAGGAGE_ENABLED = false
-      config = new Config()
-      propagator = new TextMapPropagator(config)
-
-      const carrier = {}
-      const baggageItems = {
-        number: 1.23,
-        bool: true,
-        array: ['foo', 'bar'],
-        object: {}
-      }
-      const spanContext = createContext({ baggageItems })
-
-      propagator.inject(spanContext, carrier)
-
-      expect(carrier['ot-baggage-number']).to.equal('1.23')
-      expect(carrier['ot-baggage-bool']).to.equal('true')
-      expect(carrier['ot-baggage-array']).to.equal('foo,bar')
-      expect(carrier['ot-baggage-object']).to.equal('[object Object]')
-      expect(carrier.baggage).to.be.equal('number=1.23,bool=true,array=foo%2Cbar,object=%5Bobject%20Object%5D')
     })
 
     it('should inject an existing sampling priority', () => {
@@ -453,18 +406,64 @@ describe('TextMapPropagator', () => {
       expect(spanContext._baggageItems).to.deep.equal({ '",;\\()/:<=>?@[]{}': '",;\\' })
     })
 
-    it('should not extract otel baggage items when extraction is disabled', () => {
-      process.env.DD_TRACE_BAGGAGE_EXTRACT_ENABLED = false
-      config = new Config()
-      propagator = new TextMapPropagator(config)
+    it('should not extract baggage when it contains too many key-value pairs', () => {
+      let baggage = ''
+      for (let i = 0; i < config.baggageMaxItems; i++) {
+        baggage += `key-${i}=${i},`
+      }
+      baggage += 'dropped=due-to-me'
       const carrier = {
         'x-datadog-trace-id': '123',
         'x-datadog-parent-id': '456',
-        baggage: 'number=1.23,bool=true,array=foo%2Cbar,object=[object%20Object]'
+        baggage
       }
       const spanContext = propagator.extract(carrier)
-
       expect(spanContext._baggageItems).to.deep.equal({})
+    })
+
+    it('should not extract baggage when it contains too many bytes', () => {
+      const baggage = 'foo=' + Buffer.alloc(config.baggageMaxBytes).toString()
+      const carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage
+      }
+      const spanContext = propagator.extract(carrier)
+      expect(spanContext._baggageItems).to.deep.equal({})
+    })
+
+    it('should not extract baggage when the header is malformed', () => {
+      const carrierA = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'no-equal-sign,foo=gets-dropped-because-previous-pair-is-malformed'
+      }
+      const spanContextA = propagator.extract(carrierA)
+      expect(spanContextA._baggageItems).to.deep.equal({})
+
+      const carrierB = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'foo=gets-dropped-because-subsequent-pair-is-malformed,='
+      }
+      const spanContextB = propagator.extract(carrierB)
+      expect(spanContextB._baggageItems).to.deep.equal({})
+
+      const carrierC = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: '=no-key'
+      }
+      const spanContextC = propagator.extract(carrierC)
+      expect(spanContextC._baggageItems).to.deep.equal({})
+
+      const carrierD = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'no-value='
+      }
+      const spanContextD = propagator.extract(carrierD)
+      expect(spanContextD._baggageItems).to.deep.equal({})
     })
 
     it('should convert signed IDs to unsigned', () => {
