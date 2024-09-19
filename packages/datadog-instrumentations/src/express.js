@@ -49,8 +49,7 @@ function wrapResponseRender (render) {
       {
         req: this.req,
         view,
-        options,
-        callback // TODO: callback should be included or excluded in the start-end lifetime?
+        options
       },
       this,
       ...arguments
