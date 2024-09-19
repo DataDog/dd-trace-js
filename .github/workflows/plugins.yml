@@ -941,15 +941,9 @@ jobs:
 
   # TODO: re-enable upstream tests if it ever stops being flaky
   pino:
-<<<<<<< Updated upstream
     strategy:
       matrix:
         range: ['9.4.0']
-=======
-    # strategy:
-      # matrix:
-      #   range: ['9.3.2']
->>>>>>> Stashed changes
     runs-on: ubuntu-latest
     env:
       PLUGINS: pino
