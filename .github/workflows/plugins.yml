@@ -21,8 +21,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: plugins
-        run: echo "matrices=$(cat packages/datadog-instrumentations/src/helpers/matrices.json | tr '\n' ' ')" >> $GITHUB_OUTPUT
-      - run: echo $GITHUB_OUTPUT
+        run: | 
+          content=$(cat packages/datadog-instrumentations/src/helpers/matrices.json | tr '\n' ' ')
+          echo "matrices=$content" >> $GITHUB_OUTPUT
+          echo $content
 
   aerospike-node-16:
     runs-on: ubuntu-latest
