@@ -18,7 +18,7 @@ const noop = {
 
 const crashtracking = proxyquire('../../src/crashtracking', {
   './crashtracker': crashtracker,
-  './noop': noop,
+  './noop': noop
 
 })
 

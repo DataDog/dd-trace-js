@@ -33,7 +33,7 @@ class Crashtracker {
       binding.initWithReceiver(
         this._getConfig(config),
         this._getReceiverConfig(config),
-        this._getMetadata(config),
+        this._getMetadata(config)
       )
     } catch (e) {
       log.error(e)
@@ -89,7 +89,7 @@ class Crashtracker {
       env: [],
       path_to_receiver_binary: libdatadog.find('crashtracker-receiver', true),
       stderr_filename: null,
-      stdout_filename: null,
+      stdout_filename: null
     }
   }
 }
