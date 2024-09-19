@@ -273,7 +273,7 @@ jobs:
     needs: 
       - versions
     strategy:
-      matrix: ${{fromJson(needs.versions.outputs.matrices.couchbase)}}
+      matrix: ${{fromJson(needs.versions.outputs.matrices).couchbase}}
     runs-on: ubuntu-latest
     services:
       couchbase:
