@@ -303,6 +303,7 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   couchbase:
+    needs: versions
     strategy:
       matrix: ${{fromJson(needs.versions.outputs.matrices.couchbase)}}
     runs-on: ubuntu-latest
