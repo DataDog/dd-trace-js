@@ -21,7 +21,7 @@ jobs:
       matrices: ${{steps.plugins.outputs.matrices}}
     steps:
       - uses: actions/checkout@v4
-      - name: plugins
+      - id: plugins
         run: echo "json=$(cat packages/datadog-instrumentations/src/helpers/matrices.json | tr '\n' ' ')" >> $GITHUB_OUTPUT
 
   aerospike-node-16:
