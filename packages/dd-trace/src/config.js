@@ -1003,10 +1003,10 @@ class Config {
   }
 
   _isCiVisibilityManualApiEnabled () {
-    return isTrue(coalesce(
+    return coalesce(
       process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED,
-      false
-    ))
+      true
+    )
   }
 
   _isTraceStatsComputationEnabled () {
@@ -1050,7 +1050,7 @@ class Config {
         coalesce(DD_CIVISIBILITY_FLAKY_RETRY_ENABLED, true))
       this._setValue(calc, 'flakyTestRetriesCount', coalesce(maybeInt(DD_CIVISIBILITY_FLAKY_RETRY_COUNT), 5))
       this._setBoolean(calc, 'isIntelligentTestRunnerEnabled', isTrue(this._isCiVisibilityItrEnabled()))
-      this._setBoolean(calc, 'isManualApiEnabled', this._isCiVisibilityManualApiEnabled())
+      this._setBoolean(calc, 'isManualApiEnabled', !isFalse(this._isCiVisibilityManualApiEnabled()))
       this._setString(calc, 'ciVisibilitySessionName', DD_SESSION_NAME)
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())

@@ -1828,10 +1828,14 @@ describe('Config', () => {
         const config = new Config(options)
         expect(config).to.have.property('isManualApiEnabled', false)
       })
-      it('should enable manual testing API if DD_CIVISIBILITY_MANUAL_API_ENABLED is passed', () => {
-        process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED = 'true'
+      it('should enable manual testing API if DD_CIVISIBILITY_MANUAL_API_ENABLED is not set to false', () => {
         const config = new Config(options)
         expect(config).to.have.property('isManualApiEnabled', true)
+      })
+      it('should disable manual testing API if DD_CIVISIBILITY_MANUAL_API_ENABLED is set to false', () => {
+        process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED = 'false'
+        const config = new Config(options)
+        expect(config).to.have.property('isManualApiEnabled', false)
       })
       it('should disable memcached command tagging by default', () => {
         const config = new Config(options)
