@@ -5,6 +5,7 @@ const {
 const path = require('path')
 const fs = require('fs')
 const { execSync } = require('child_process')
+const yaml = require('js-yaml')
 
 const latestsPath = path.join(
   __dirname,
@@ -14,6 +15,14 @@ const latestsPath = path.join(
   'src',
   'helpers',
   'latests.json'
+)
+
+const yamlPath = path.join(
+  __dirname,
+  '..',
+  '.github',
+  'workflows',
+  'plugins.yml'
 )
 const latestsJson = require(latestsPath)
 const internalsNames = Array.from(new Set(getInternals().map(n => n.name)))
@@ -27,7 +36,17 @@ function makeAPR (branchName) {
   execSync(`gh pr create --title ${title} --body ${body} --base master --head ${branchName} `)
 }
 
+function updatePluginsYaml () {
+  const plugins = yaml.load(fs.readFileSync(yamlPath, 'utf-8'))
+  const jobs = plugins.jobs
+
+  for (const job in jobs) {
+    if (jobs[job]?.strategy?.matrix?.range) { console.log('found range', job, jobs[job]?.strategy?.matrix?.range) }
+  }
+}
+
 async function fix () {
+  updatePluginsYaml()
   const latests = {}
   for (const name of internalsNames) {
     const distTags = await npmView(name + ' dist-tags')
