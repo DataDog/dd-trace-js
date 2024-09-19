@@ -754,7 +754,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
-      PACKAGE_VERSION_RANGE: ['14.2.5']
+      PACKAGE_VERSION_RANGE: ${{matrix.range}}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -865,7 +865,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGINS: pino
-      PACKAGE_VERSION_RANGE: ['2.0.0 <9.3.2']
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
