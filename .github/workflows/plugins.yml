@@ -20,6 +20,7 @@ jobs:
     outputs: 
       matrices: ${{steps.plugins.outputs.matrices}}
     steps:
+      - uses: actions/checkout@v4
       - name: plugins
         run: echo "json=$(cat packages/datadog-instrumentations/src/helpers/matrices.json)" >> $GITHUB_OUTPUT
 
@@ -303,7 +304,8 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   couchbase:
-    needs: versions
+    needs: 
+      - versions
     strategy:
       matrix: ${{fromJson(needs.versions.outputs.matrices.couchbase)}}
     runs-on: ubuntu-latest
