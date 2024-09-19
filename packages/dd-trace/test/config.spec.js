@@ -1824,11 +1824,7 @@ describe('Config', () => {
         const config = new Config(options)
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
       })
-      it('should disable manual testing API by default', () => {
-        const config = new Config(options)
-        expect(config).to.have.property('isManualApiEnabled', false)
-      })
-      it('should enable manual testing API if DD_CIVISIBILITY_MANUAL_API_ENABLED is not set to false', () => {
+      it('should enabled manual testing API by default', () => {
         const config = new Config(options)
         expect(config).to.have.property('isManualApiEnabled', true)
       })
