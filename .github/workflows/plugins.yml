@@ -989,7 +989,7 @@ jobs:
   tedious:
     strategy:
       matrix:
-        range: ['18.6.1']
+        range: ['18.5.0']
     runs-on: ubuntu-latest
     services:
       mssql:
