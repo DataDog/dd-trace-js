@@ -18,7 +18,7 @@ class ProtobufjsPlugin extends Plugin {
 
   handleSerializeStart ({ message }) {
     const activeSpan = this.tracer.scope().active()
-    if (activeSpan) {
+    if (activeSpan && this.config.dsmEnabled) {
       SchemaExtractor.attachSchemaOnSpan(
         message.$type ?? message, activeSpan, SERIALIZATION, this.tracer._dataStreamsProcessor
       )
@@ -27,7 +27,7 @@ class ProtobufjsPlugin extends Plugin {
 
   handleDeserializeFinish ({ message }) {
     const activeSpan = this.tracer.scope().active()
-    if (activeSpan) {
+    if (activeSpan && this.config.dsmEnabled) {
       SchemaExtractor.attachSchemaOnSpan(message.$type, activeSpan, DESERIALIZATION, this.tracer._dataStreamsProcessor)
     }
   }
