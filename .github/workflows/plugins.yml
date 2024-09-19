@@ -15,6 +15,14 @@ concurrency:
 
 
 jobs:
+  versions: 
+    runs-on: ubuntu-latest
+    outputs: 
+      matrices: ${{steps.plugins.outputs.matrices}}
+    steps:
+      - name: plugins
+        run: echo "json=$(cat packages/datadog-instrumentations/src/helpers/matrices.json)" >> $GITHUB_OUTPUT
+
   aerospike-node-16:
     runs-on: ubuntu-latest
     services:
@@ -263,12 +271,7 @@ jobs:
 
   couchbase:
     strategy:
-      matrix:
-        node-version: [16]
-        range: ['^2.6.12', '^3.0.7', '4.4.1']
-        include:
-          - node-version: 18
-            range: '4.4.1'
+      matrix: ${{fromJson(needs.versions.outputs.matrices.couchbase)}}
     runs-on: ubuntu-latest
     services:
       couchbase:
@@ -747,11 +750,11 @@ jobs:
         version:
           - 18
           - latest
-        range: ['14.2.6']
+        range: ['14.2.5']
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
-      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
+      PACKAGE_VERSION_RANGE: ['14.2.5']
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -761,6 +764,7 @@ jobs:
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
+      // reads latest json and 
 
   openai:
     strategy:
@@ -856,12 +860,19 @@ jobs:
 
   # TODO: re-enable upstream tests if it ever stops being flaky
   pino:
+<<<<<<< Updated upstream
     strategy:
       matrix:
         range: ['9.4.0']
+=======
+    # strategy:
+      # matrix:
+      #   range: ['9.3.2']
+>>>>>>> Stashed changes
     runs-on: ubuntu-latest
     env:
       PLUGINS: pino
+      PACKAGE_VERSION_RANGE: ['2.0.0 <9.3.2']
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
