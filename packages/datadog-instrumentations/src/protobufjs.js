@@ -9,7 +9,7 @@ const finishDeserializeCh = channel('datadog:protobuf:deserialize:finish')
 function wrapSerialization (Class) {
   shimmer.wrap(Class, 'encode', original => {
     return function wrappedEncode (...args) {
-      if (!startSerializeCh.hasSubscribers) {
+      if (!startSerializeCh.hasSubscribers && !finishSerializeCh.hasSubscribers) {
         return original.apply(this, args)
       }
 
@@ -56,7 +56,7 @@ function ensureMessageIsWrapped (messageClass, wrappedEncode, wrappedDecode) {
 function wrapDeserialization (Class) {
   shimmer.wrap(Class, 'decode', original => {
     return function wrappedDecode (...args) {
-      if (!startDeserializeCh.hasSubscribers) {
+      if (!startDeserializeCh.hasSubscribers && !finishDeserializeCh.hasSubscribers) {
         return original.apply(this, args)
       }
 
