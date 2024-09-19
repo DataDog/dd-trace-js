@@ -858,7 +858,7 @@ jobs:
   pino:
     strategy:
       matrix:
-        range: ['9.4.0']
+        range: ['9.3.2']
     runs-on: ubuntu-latest
     env:
       PLUGINS: pino
