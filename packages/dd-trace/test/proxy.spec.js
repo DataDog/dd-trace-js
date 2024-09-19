@@ -31,8 +31,6 @@ describe('TracerProxy', () => {
   let dogStatsD
   let noopDogStatsDClient
   let NoopDogStatsDClient
-  let crashtracker
-  let noopCrashtracker
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = false
@@ -130,6 +128,7 @@ describe('TracerProxy', () => {
       profiling: {},
       appsec: {},
       iast: {},
+      crashtracking: {},
       remoteConfig: {
         enabled: true
       },
@@ -179,19 +178,10 @@ describe('TracerProxy', () => {
 
     remoteConfig.enable.returns(rc)
 
-    crashtracker = {
-      start: sinon.spy()
-    }
-
-    noopCrashtracker = {
-      start: sinon.spy()
-    }
-
     NoopProxy = proxyquire('../src/noop/proxy', {
       './tracer': NoopTracer,
       '../appsec/sdk/noop': NoopAppsecSdk,
-      './dogstatsd': NoopDogStatsDClient,
-      './crashtracking': noopCrashtracker
+      './dogstatsd': NoopDogStatsDClient
     })
 
     Proxy = proxyquire('../src/proxy', {
@@ -209,8 +199,7 @@ describe('TracerProxy', () => {
       './appsec/sdk': AppsecSdk,
       './dogstatsd': dogStatsD,
       './noop/dogstatsd': NoopDogStatsDClient,
-      './flare': flare,
-      './crashtracking': crashtracker
+      './flare': flare
     })
 
     proxy = new Proxy()
@@ -329,7 +318,6 @@ describe('TracerProxy', () => {
       it('should support applying remote config', () => {
         const RemoteConfigProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
-          './crashtracking': crashtracker,
           './appsec': appsec,
           './appsec/iast': iast,
           './appsec/remote_config': remoteConfig,
@@ -359,7 +347,6 @@ describe('TracerProxy', () => {
       it('should support applying remote config (only call disable if enabled before)', () => {
         const RemoteConfigProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
-          './crashtracking': crashtracker,
           './config': Config,
           './appsec': appsec,
           './appsec/iast': iast,
@@ -519,7 +506,6 @@ describe('TracerProxy', () => {
 
         const ProfilerImportFailureProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
-          './crashtracking': crashtracker,
           './noop/tracer': NoopTracer,
           './config': Config,
           './runtime_metrics': runtimeMetrics,
@@ -551,7 +537,6 @@ describe('TracerProxy', () => {
         const options = {}
         const DatadogProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
-          './crashtracking': crashtracker,
           './config': Config,
           './appsec': appsec,
           './appsec/iast': iast,
