@@ -31,19 +31,19 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connec
   return Connection
 
   function bindExecute (cmd, execute, asyncResource) {
-    return asyncResource.bind(function executeWithTrace (packet, connection) {
+    return shimmer.wrapFunction(execute, execute => asyncResource.bind(function executeWithTrace (packet, connection) {
       if (this.onResult) {
         this.onResult = asyncResource.bind(this.onResult)
       }
 
       return execute.apply(this, arguments)
-    }, cmd)
+    }, cmd))
   }
 
   function wrapExecute (cmd, execute, asyncResource, config) {
     const callbackResource = new AsyncResource('bound-anonymous-fn')
 
-    return asyncResource.bind(function executeWithTrace (packet, connection) {
+    return shimmer.wrapFunction(execute, execute => asyncResource.bind(function executeWithTrace (packet, connection) {
       const sql = cmd.statement ? cmd.statement.query : cmd.sql
       const payload = { sql, conf: config }
       startCh.publish(payload)
@@ -57,13 +57,13 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connec
       if (this.onResult) {
         const onResult = callbackResource.bind(this.onResult)
 
-        this.onResult = asyncResource.bind(function (error) {
+        this.onResult = shimmer.wrapFunction(onResult, onResult => asyncResource.bind(function (error) {
           if (error) {
             errorCh.publish(error)
           }
           finishCh.publish(undefined)
           onResult.apply(this, arguments)
-        }, 'bound-anonymous-fn', this)
+        }, 'bound-anonymous-fn', this))
       } else {
         this.on('error', asyncResource.bind(error => errorCh.publish(error)))
         this.on('end', asyncResource.bind(() => finishCh.publish(undefined)))
@@ -76,6 +76,6 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connec
       } catch (err) {
         errorCh.publish(err)
       }
-    }, cmd)
+    }, cmd))
   }
 })

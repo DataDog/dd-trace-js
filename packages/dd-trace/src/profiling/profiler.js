@@ -5,7 +5,6 @@ const { Config } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
 const dc = require('dc-polyfill')
-const telemetryLog = dc.channel('datadog:telemetry:log')
 
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
 
@@ -19,13 +18,6 @@ function maybeSourceMap (sourceMap, SourceMapper, debug) {
 function logError (logger, err) {
   if (logger) {
     logger.error(err)
-  }
-  if (telemetryLog.hasSubscribers) {
-    telemetryLog.publish({
-      message: err.message,
-      level: 'ERROR',
-      stack_trace: err.stack
-    })
   }
 }
 
@@ -55,7 +47,6 @@ class Profiler extends EventEmitter {
     if (this._enabled) return true
 
     const config = this._config = new Config(options)
-    if (!config.enabled && !config.heuristicsEnabled) return false
 
     this._logger = config.logger
     this._enabled = true

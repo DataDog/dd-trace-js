@@ -1,6 +1,5 @@
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const { NUM_FAILED_TEST_RETRIES } = require('../../dd-trace/src/plugins/util/test')
 
 // test hooks
 const testStartCh = channel('ci:vitest:test:start')
@@ -108,17 +107,19 @@ function getSortWrapper (sort) {
     // So we will use the sort from BaseSequencer. This means that a custom sequencer
     // will not work. This will be a known limitation.
     let isFlakyTestRetriesEnabled = false
+    let flakyTestRetriesCount = 0
 
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
       if (!err) {
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+        flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
       }
     } catch (e) {
       isFlakyTestRetriesEnabled = false
     }
-    if (isFlakyTestRetriesEnabled && !this.ctx.config.retry) {
-      this.ctx.config.retry = NUM_FAILED_TEST_RETRIES
+    if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
+      this.ctx.config.retry = flakyTestRetriesCount
     }
 
     let testCodeCoverageLinesTotal
@@ -269,7 +270,16 @@ addHook({
 
 addHook({
   name: 'vitest',
-  versions: ['>=2.0.5'],
+  versions: ['>=2.1.0'],
+  filePattern: 'dist/chunks/RandomSequencer.*'
+}, (randomSequencerPackage) => {
+  shimmer.wrap(randomSequencerPackage.B.prototype, 'sort', getSortWrapper)
+  return randomSequencerPackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=2.0.5 <2.1.0'],
   filePattern: 'dist/chunks/index.*'
 }, (vitestPackage) => {
   if (isReporterPackageNewest(vitestPackage)) {

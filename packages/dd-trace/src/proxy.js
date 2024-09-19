@@ -5,6 +5,7 @@ const Config = require('./config')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
+const DynamicInstrumentation = require('./debugger')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
@@ -14,7 +15,6 @@ const dogstatsd = require('./dogstatsd')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const spanleak = require('./spanleak')
 const { SSIHeuristics } = require('./profiling/ssi-heuristics')
-const telemetryLog = require('dc-polyfill').channel('datadog:telemetry:log')
 const appsecStandalone = require('./appsec/standalone')
 
 class LazyModule {
@@ -84,7 +84,7 @@ class Tracer extends NoopProxy {
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
         const rc = remoteConfig.enable(config, this._modules.appsec)
 
-        rc.on('APM_TRACING', (action, conf) => {
+        rc.setProductHandler('APM_TRACING', (action, conf) => {
           if (action === 'unapply') {
             config.configure({}, true)
           } else {
@@ -93,7 +93,7 @@ class Tracer extends NoopProxy {
           this._enableOrDisableTracing(config)
         })
 
-        rc.on('AGENT_CONFIG', (action, conf) => {
+        rc.setProductHandler('AGENT_CONFIG', (action, conf) => {
           if (!conf?.name?.startsWith('flare-log-level.')) return
 
           if (action === 'unapply') {
@@ -104,37 +104,49 @@ class Tracer extends NoopProxy {
           }
         })
 
-        rc.on('AGENT_TASK', (action, conf) => {
+        rc.setProductHandler('AGENT_TASK', (action, conf) => {
           if (action === 'unapply' || !conf) return
           if (conf.task_type !== 'tracer_flare' || !conf.args) return
 
           this._flare.enable(config)
           this._flare.module.send(conf.args)
         })
+
+        if (config.dynamicInstrumentationEnabled) {
+          DynamicInstrumentation.start(config, rc)
+        }
       }
 
       if (config.isGCPFunction || config.isAzureFunction) {
         require('./serverless').maybeStartServerlessMiniAgent(config)
       }
 
-      const ssiHeuristics = new SSIHeuristics(config.profiling)
-      ssiHeuristics.start()
-      if (config.profiling.enabled) {
-        this._profilerStarted = this._startProfiler(config)
-      } else if (config.profiling.ssi) {
-        const mockProfiler = require('./profiling/ssi-telemetry-mock-profiler')
-        mockProfiler.start(config)
+      if (config.profiling.enabled !== 'false') {
+        const ssiHeuristics = new SSIHeuristics(config)
+        ssiHeuristics.start()
+        let mockProfiler = null
+        if (config.profiling.enabled === 'true') {
+          this._profilerStarted = this._startProfiler(config)
+        } else if (ssiHeuristics.emitsTelemetry) {
+          // Start a mock profiler that emits mock profile-submitted events for the telemetry.
+          // It will be stopped if the real profiler is started by the heuristics.
+          mockProfiler = require('./profiling/ssi-telemetry-mock-profiler')
+          mockProfiler.start(config)
+        }
 
-        if (config.profiling.heuristicsEnabled) {
+        if (ssiHeuristics.heuristicsActive) {
           ssiHeuristics.onTriggered(() => {
-            mockProfiler.stop()
+            if (mockProfiler) {
+              mockProfiler.stop()
+            }
             this._startProfiler(config)
-            ssiHeuristics.onTriggered()
+            ssiHeuristics.onTriggered() // deregister this callback
           })
         }
-      }
-      if (!this._profilerStarted) {
-        this._profilerStarted = Promise.resolve(false)
+
+        if (!this._profilerStarted) {
+          this._profilerStarted = Promise.resolve(false)
+        }
       }
 
       if (config.runtimeMetrics) {
@@ -163,13 +175,6 @@ class Tracer extends NoopProxy {
       return require('./profiler').start(config)
     } catch (e) {
       log.error(e)
-      if (telemetryLog.hasSubscribers) {
-        telemetryLog.publish({
-          message: e.message,
-          level: 'ERROR',
-          stack_trace: e.stack
-        })
-      }
     }
   }
 
@@ -196,12 +201,14 @@ class Tracer extends NoopProxy {
     if (this._tracingInitialized) {
       this._tracer.configure(config)
       this._pluginManager.configure(config)
+      DynamicInstrumentation.configure(config)
       setStartupLogPluginManager(this._pluginManager)
     }
   }
 
   profilerStarted () {
     if (!this._profilerStarted) {
+      // injection hardening: this is only ever invoked from tests.
       throw new Error('profilerStarted() must be called after init()')
     }
     return this._profilerStarted

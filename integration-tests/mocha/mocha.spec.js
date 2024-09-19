@@ -32,7 +32,9 @@ const {
   TEST_MODULE,
   MOCHA_IS_PARALLEL,
   TEST_SOURCE_START,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  TEST_SESSION_NAME,
+  TEST_LEVEL_EVENT_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
@@ -132,6 +134,14 @@ describe('mocha CommonJS', function () {
         receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       }
       receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
+        const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+        metadataDicts.forEach(metadata => {
+          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+            assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+          }
+        })
+
         const events = payloads.flatMap(({ payload }) => payload.events)
         const sessionEventContent = events.find(event => event.type === 'test_session_end').content
         const moduleEventContent = events.find(event => event.type === 'test_module_end').content
@@ -153,15 +163,17 @@ describe('mocha CommonJS', function () {
         assert.include(testOutput, expectedStdout)
         assert.include(testOutput, extraStdout)
 
-        // Can read DD_TAGS
         tests.forEach(testEvent => {
+          assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
+          assert.exists(testEvent.metrics[TEST_SOURCE_START])
+          // Can read DD_TAGS
           assert.propertyVal(testEvent.meta, 'test.customtag', 'customvalue')
           assert.propertyVal(testEvent.meta, 'test.customtag2', 'customvalue2')
         })
 
-        tests.forEach(testEvent => {
-          assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
-          assert.exists(testEvent.metrics[TEST_SOURCE_START])
+        suites.forEach(testSuite => {
+          assert.isTrue(testSuite.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'))
+          assert.equal(testSuite.metrics[TEST_SOURCE_START], 1)
         })
 
         done()
@@ -171,7 +183,8 @@ describe('mocha CommonJS', function () {
         cwd,
         env: {
           ...envVars,
-          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
+          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+          DD_SESSION_NAME: 'my-test-session'
         },
         stdio: 'pipe'
       })
@@ -247,9 +260,11 @@ describe('mocha CommonJS', function () {
         const events = payloads.flatMap(({ payload }) => payload.events)
 
         const test = events.find(event => event.type === 'test').content
+        const testSuite = events.find(event => event.type === 'test_suite_end').content
         // The test is in a subproject
         assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
         assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+        assert.equal(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
       })
 
     childProcess = exec(
@@ -307,6 +322,14 @@ describe('mocha CommonJS', function () {
   it('works with parallel mode', (done) => {
     const eventsPromise = receiver
       .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+        metadataDicts.forEach(metadata => {
+          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+            assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+          }
+        })
+
         const events = payloads.flatMap(({ payload }) => payload.events)
         const sessionEventContent = events.find(event => event.type === 'test_session_end').content
         const moduleEventContent = events.find(event => event.type === 'test_module_end').content
@@ -354,7 +377,8 @@ describe('mocha CommonJS', function () {
         ...getCiVisAgentlessConfig(receiver.port),
         RUN_IN_PARALLEL: true,
         DD_TRACE_DEBUG: 1,
-        DD_TRACE_LOG_LEVEL: 'warn'
+        DD_TRACE_LOG_LEVEL: 'warn',
+        DD_SESSION_NAME: 'my-test-session'
       },
       stdio: 'pipe'
     })
@@ -1631,6 +1655,95 @@ describe('mocha CommonJS', function () {
         eventsPromise.then(() => {
           done()
         }).catch(done)
+      })
+    })
+
+    it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.equal(tests.length, 1)
+
+          const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.equal(retries.length, 0)
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-flaky-test-retries/eventually-passing-test.js'
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.equal(tests.length, 2) // one retry
+
+          const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+          assert.equal(failedAttempts.length, 2)
+
+          const retriedFailure = failedAttempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.equal(retriedFailure.length, 1)
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-flaky-test-retries/eventually-passing-test.js'
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => done()).catch(done)
       })
     })
   })

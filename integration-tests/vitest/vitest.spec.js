@@ -14,7 +14,12 @@ const {
   TEST_TYPE,
   TEST_IS_RETRY,
   TEST_CODE_OWNERS,
-  TEST_CODE_COVERAGE_LINES_PCT
+  TEST_CODE_COVERAGE_LINES_PCT,
+  TEST_SESSION_NAME,
+  TEST_COMMAND,
+  TEST_LEVEL_EVENT_TYPES,
+  TEST_SOURCE_FILE,
+  TEST_SOURCE_START
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const versions = ['1.6.0', 'latest']
@@ -50,6 +55,14 @@ versions.forEach((version) => {
 
     it('can run and report tests', (done) => {
       receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+        const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+        metadataDicts.forEach(metadata => {
+          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+            assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+          }
+        })
+
         const events = payloads.flatMap(({ payload }) => payload.events)
 
         const testSessionEvent = events.find(event => event.type === 'test_session_end')
@@ -129,6 +142,18 @@ versions.forEach((version) => {
             'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can programmatic skip'
           ]
         )
+
+        testEvents.forEach(test => {
+          assert.equal(test.content.meta[TEST_COMMAND], 'vitest run')
+        })
+
+        testSuiteEvents.forEach(testSuite => {
+          assert.equal(testSuite.content.meta[TEST_COMMAND], 'vitest run')
+          assert.isTrue(
+            testSuite.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/vitest-tests/test-visibility')
+          )
+          assert.equal(testSuite.content.metrics[TEST_SOURCE_START], 1)
+        })
         // TODO: check error messages
       }).then(() => done()).catch(done)
 
@@ -138,7 +163,8 @@ versions.forEach((version) => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more flags
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
+            DD_SESSION_NAME: 'my-test-session'
           },
           stdio: 'pipe'
         }
@@ -210,6 +236,86 @@ versions.forEach((version) => {
           }
         )
       })
+
+      it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          early_flake_detection: {
+            enabled: false
+          }
+        })
+
+        receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testEvents = events.filter(event => event.type === 'test')
+          assert.equal(testEvents.length, 3)
+          assert.includeMembers(testEvents.map(test => test.content.resource), [
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary'
+          ])
+          assert.equal(testEvents.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length, 0)
+        }).then(() => done()).catch(done)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run', // TODO: change tests we run
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
+              DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more flags
+            },
+            stdio: 'pipe'
+          }
+        )
+      })
+
+      it('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          early_flake_detection: {
+            enabled: false
+          }
+        })
+
+        receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testEvents = events.filter(event => event.type === 'test')
+          assert.equal(testEvents.length, 5)
+          assert.includeMembers(testEvents.map(test => test.content.resource), [
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary'
+          ])
+          assert.equal(testEvents.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length, 2)
+        }).then(() => done()).catch(done)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run', // TODO: change tests we run
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1,
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more flags
+            },
+            stdio: 'pipe'
+          }
+        )
+      })
     })
 
     it('correctly calculates test code owners when working directory is not repository root', (done) => {
@@ -218,7 +324,9 @@ versions.forEach((version) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const test = events.find(event => event.type === 'test').content
+          const testSuite = events.find(event => event.type === 'test_suite_end').content
           assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          assert.equal(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
         })
 
       childProcess = exec(

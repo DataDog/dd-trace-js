@@ -631,7 +631,7 @@ describe('TextMapPropagator', () => {
 
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
-      expect(spanContext._trace.tags).to.have.property('_dd.parent_id', '0000000000000000')
+      expect(spanContext._trace.tags).to.not.have.property('_dd.parent_id')
     })
 
     it('should not extract tracestate from tracecontext when trace IDs don\'t match', () => {

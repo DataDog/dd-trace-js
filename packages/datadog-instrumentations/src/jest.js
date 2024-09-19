@@ -12,8 +12,7 @@ const {
   getTestParametersString,
   addEfdStringToTestName,
   removeEfdStringFromTestName,
-  getIsFaultyEarlyFlakeDetection,
-  NUM_FAILED_TEST_RETRIES
+  getIsFaultyEarlyFlakeDetection
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   getFormattedJestTestParameters,
@@ -132,6 +131,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       this.isEarlyFlakeDetectionEnabled = this.testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled
       this.isFlakyTestRetriesEnabled = this.testEnvironmentOptions._ddIsFlakyTestRetriesEnabled
+      this.flakyTestRetriesCount = this.testEnvironmentOptions._ddFlakyTestRetriesCount
 
       if (this.isEarlyFlakeDetectionEnabled) {
         const hasKnownTests = !!knownTests.jest
@@ -149,7 +149,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (this.isFlakyTestRetriesEnabled) {
         const currentNumRetries = this.global[RETRY_TIMES]
         if (!currentNumRetries) {
-          this.global[RETRY_TIMES] = NUM_FAILED_TEST_RETRIES
+          this.global[RETRY_TIMES] = this.flakyTestRetriesCount
         }
       }
     }
@@ -404,7 +404,7 @@ addHook({
 
 addHook({
   name: '@jest/test-sequencer',
-  versions: ['>=24.8.0']
+  versions: ['>=28']
 }, (sequencerPackage, frameworkVersion) => {
   shimmer.wrap(sequencerPackage.default.prototype, 'shard', shard => function () {
     const shardedTests = shard.apply(this, arguments)
@@ -638,7 +638,7 @@ addHook({
 
 function jestAdapterWrapper (jestAdapter, jestVersion) {
   const adapter = jestAdapter.default ? jestAdapter.default : jestAdapter
-  const newAdapter = shimmer.wrap(adapter, function () {
+  const newAdapter = shimmer.wrapFunction(adapter, adapter => function () {
     const environment = arguments[2]
     if (!environment) {
       return adapter.apply(this, arguments)
@@ -648,6 +648,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
       testSuiteStartCh.publish({
         testSuite: environment.testSuite,
         testEnvironmentOptions: environment.testEnvironmentOptions,
+        testSourceFile: environment.testSourceFile,
         displayName: environment.displayName,
         frameworkVersion: jestVersion
       })
@@ -765,6 +766,7 @@ addHook({
       _ddTestModuleId,
       _ddTestSessionId,
       _ddTestCommand,
+      _ddTestSessionName,
       _ddForcedToRun,
       _ddUnskippable,
       _ddItrCorrelationId,
@@ -773,6 +775,7 @@ addHook({
       _ddEarlyFlakeDetectionNumRetries,
       _ddRepositoryRoot,
       _ddIsFlakyTestRetriesEnabled,
+      _ddFlakyTestRetriesCount,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 

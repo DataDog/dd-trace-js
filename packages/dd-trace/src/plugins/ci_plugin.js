@@ -1,5 +1,6 @@
 const {
   getTestEnvironmentMetadata,
+  getTestSessionName,
   getCodeOwnersFileEntries,
   getTestParentSpan,
   getTestCommonTags,
@@ -13,11 +14,14 @@ const {
   TEST_SESSION_ID,
   TEST_COMMAND,
   TEST_MODULE,
+  TEST_SESSION_NAME,
   getTestSuiteCommonTags,
   TEST_STATUS,
   TEST_SKIPPED_BY_ITR,
   ITR_CORRELATION_ID,
-  TEST_SOURCE_FILE
+  TEST_SOURCE_FILE,
+  TEST_LEVEL_EVENT_TYPES,
+  TEST_SUITE
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -75,6 +79,19 @@ module.exports = class CiPlugin extends Plugin {
       // only for playwright
       this.rootDir = rootDir
 
+      const testSessionName = getTestSessionName(this.config, this.command, this.testEnvironmentMetadata)
+
+      const metadataTags = {}
+      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+        metadataTags[testLevel] = {
+          [TEST_SESSION_NAME]: testSessionName
+        }
+      }
+      // tracer might not be initialized correctly
+      if (this.tracer._exporter.setMetadataTags) {
+        this.tracer._exporter.setMetadataTags(metadataTags)
+      }
+
       this.testSessionSpan = this.tracer.startSpan(`${this.constructor.id}.test_session`, {
         childOf,
         tags: {
@@ -97,6 +114,7 @@ module.exports = class CiPlugin extends Plugin {
       if (this.constructor.id === 'vitest') {
         process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()
         process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()
+        process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command
       }
 
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
@@ -194,6 +212,19 @@ module.exports = class CiPlugin extends Plugin {
     }
   }
 
+  getCodeOwners (tags) {
+    const {
+      [TEST_SOURCE_FILE]: testSourceFile,
+      [TEST_SUITE]: testSuite
+    } = tags
+    // We'll try with the test source file if available (it could be different from the test suite)
+    let codeOwners = getCodeOwnersForFilename(testSourceFile, this.codeOwnersEntries)
+    if (!codeOwners) {
+      codeOwners = getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
+    }
+    return codeOwners
+  }
+
   startTestSpan (testName, testSuite, testSuiteSpan, extraTags = {}) {
     const childOf = getTestParentSpan(this.tracer)
 
@@ -208,13 +239,7 @@ module.exports = class CiPlugin extends Plugin {
       ...extraTags
     }
 
-    const { [TEST_SOURCE_FILE]: testSourceFile } = extraTags
-    // We'll try with the test source file if available (it could be different from the test suite)
-    let codeOwners = getCodeOwnersForFilename(testSourceFile, this.codeOwnersEntries)
-    if (!codeOwners) {
-      codeOwners = getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
-    }
-
+    const codeOwners = this.getCodeOwners(testTags)
     if (codeOwners) {
       testTags[TEST_CODE_OWNERS] = codeOwners
     }
