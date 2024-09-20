@@ -33,7 +33,8 @@ const {
   MOCHA_IS_PARALLEL,
   TEST_SOURCE_START,
   TEST_CODE_OWNERS,
-  TEST_SESSION_NAME
+  TEST_SESSION_NAME,
+  TEST_LEVEL_EVENT_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
@@ -133,6 +134,14 @@ describe('mocha CommonJS', function () {
         receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       }
       receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
+        const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+        metadataDicts.forEach(metadata => {
+          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+            assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+          }
+        })
+
         const events = payloads.flatMap(({ payload }) => payload.events)
         const sessionEventContent = events.find(event => event.type === 'test_session_end').content
         const moduleEventContent = events.find(event => event.type === 'test_module_end').content
@@ -149,15 +158,12 @@ describe('mocha CommonJS', function () {
         )
         assert.equal(suites.length, 2)
         assert.exists(sessionEventContent)
-        assert.equal(sessionEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
         assert.exists(moduleEventContent)
-        assert.equal(moduleEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
 
         assert.include(testOutput, expectedStdout)
         assert.include(testOutput, extraStdout)
 
         tests.forEach(testEvent => {
-          assert.equal(testEvent.meta[TEST_SESSION_NAME], 'my-test-session')
           assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
           assert.exists(testEvent.metrics[TEST_SOURCE_START])
           // Can read DD_TAGS
@@ -166,7 +172,8 @@ describe('mocha CommonJS', function () {
         })
 
         suites.forEach(testSuite => {
-          assert.equal(testSuite.meta[TEST_SESSION_NAME], 'my-test-session')
+          assert.isTrue(testSuite.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'))
+          assert.equal(testSuite.metrics[TEST_SOURCE_START], 1)
         })
 
         done()
@@ -253,9 +260,11 @@ describe('mocha CommonJS', function () {
         const events = payloads.flatMap(({ payload }) => payload.events)
 
         const test = events.find(event => event.type === 'test').content
+        const testSuite = events.find(event => event.type === 'test_suite_end').content
         // The test is in a subproject
         assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
         assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+        assert.equal(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
       })
 
     childProcess = exec(
@@ -313,6 +322,14 @@ describe('mocha CommonJS', function () {
   it('works with parallel mode', (done) => {
     const eventsPromise = receiver
       .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+        metadataDicts.forEach(metadata => {
+          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+            assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+          }
+        })
+
         const events = payloads.flatMap(({ payload }) => payload.events)
         const sessionEventContent = events.find(event => event.type === 'test_session_end').content
         const moduleEventContent = events.find(event => event.type === 'test_module_end').content
@@ -330,7 +347,6 @@ describe('mocha CommonJS', function () {
           test_module_id: testModuleId,
           test_session_id: testSessionId
         }) => {
-          assert.equal(meta[TEST_SESSION_NAME], 'my-test-session')
           assert.exists(meta[TEST_COMMAND])
           assert.exists(meta[TEST_MODULE])
           assert.exists(testSuiteId)
@@ -345,7 +361,6 @@ describe('mocha CommonJS', function () {
           test_module_id: testModuleId,
           test_session_id: testSessionId
         }) => {
-          assert.equal(meta[TEST_SESSION_NAME], 'my-test-session')
           assert.exists(meta[TEST_COMMAND])
           assert.exists(meta[TEST_MODULE])
           assert.exists(testSuiteId)

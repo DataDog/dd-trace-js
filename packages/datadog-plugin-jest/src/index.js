@@ -22,8 +22,7 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   JEST_DISPLAY_NAME,
   TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_DRIVER,
-  TEST_SESSION_NAME
+  TEST_BROWSER_DRIVER
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -150,7 +149,6 @@ class JestPlugin extends CiPlugin {
         config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
         config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
         config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
-        config._ddTestSessionName = this.testSessionName
         config._ddItrCorrelationId = this.itrCorrelationId
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
         config._ddEarlyFlakeDetectionNumRetries = this.libraryConfig?.earlyFlakeDetectionNumRetries ?? 0
@@ -160,11 +158,16 @@ class JestPlugin extends CiPlugin {
       })
     })
 
-    this.addSub('ci:jest:test-suite:start', ({ testSuite, testEnvironmentOptions, frameworkVersion, displayName }) => {
+    this.addSub('ci:jest:test-suite:start', ({
+      testSuite,
+      testSourceFile,
+      testEnvironmentOptions,
+      frameworkVersion,
+      displayName
+    }) => {
       const {
         _ddTestSessionId: testSessionId,
         _ddTestCommand: testCommand,
-        _ddTestSessionName: testSessionName,
         _ddTestModuleId: testModuleId,
         _ddItrCorrelationId: itrCorrelationId,
         _ddForcedToRun,
@@ -199,8 +202,15 @@ class JestPlugin extends CiPlugin {
       if (displayName) {
         testSuiteMetadata[JEST_DISPLAY_NAME] = displayName
       }
-      if (testSessionName) {
-        testSuiteMetadata[TEST_SESSION_NAME] = testSessionName
+      if (testSourceFile) {
+        testSuiteMetadata[TEST_SOURCE_FILE] = testSourceFile
+        // Test suite is the whole test file, so we can use the first line as the start
+        testSuiteMetadata[TEST_SOURCE_START] = 1
+      }
+
+      const codeOwners = this.getCodeOwners(testSuiteMetadata)
+      if (codeOwners) {
+        testSuiteMetadata[TEST_CODE_OWNERS] = codeOwners
       }
 
       this.testSuiteSpan = this.tracer.startSpan('jest.test_suite', {

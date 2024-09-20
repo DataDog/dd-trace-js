@@ -25,8 +25,7 @@ const {
   TEST_MODULE,
   TEST_MODULE_ID,
   TEST_SUITE,
-  CUCUMBER_IS_PARALLEL,
-  TEST_SESSION_NAME
+  CUCUMBER_IS_PARALLEL
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -52,8 +51,7 @@ function getTestSuiteTags (testSuiteSpan) {
     [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
     [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
     [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
-    [TEST_MODULE]: 'cucumber',
-    [TEST_SESSION_NAME]: testSuiteSpan.context()._tags[TEST_SESSION_NAME]
+    [TEST_MODULE]: 'cucumber'
   }
   if (testSuiteSpan.context()._parentId) {
     suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)
@@ -118,7 +116,15 @@ class CucumberPlugin extends CiPlugin {
       this.tracer._exporter.flush()
     })
 
-    this.addSub('ci:cucumber:test-suite:start', ({ testSuitePath, isUnskippable, isForcedToRun, itrCorrelationId }) => {
+    this.addSub('ci:cucumber:test-suite:start', ({
+      testFileAbsolutePath,
+      isUnskippable,
+      isForcedToRun,
+      itrCorrelationId
+    }) => {
+      const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
+      const testSourceFile = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)
+
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
         this.frameworkVersion,
@@ -136,9 +142,16 @@ class CucumberPlugin extends CiPlugin {
       if (itrCorrelationId) {
         testSuiteMetadata[ITR_CORRELATION_ID] = itrCorrelationId
       }
-      if (this.testSessionName) {
-        testSuiteMetadata[TEST_SESSION_NAME] = this.testSessionName
+      if (testSourceFile) {
+        testSuiteMetadata[TEST_SOURCE_FILE] = testSourceFile
+        testSuiteMetadata[TEST_SOURCE_START] = 1
       }
+
+      const codeOwners = this.getCodeOwners(testSuiteMetadata)
+      if (codeOwners) {
+        testSuiteMetadata[TEST_CODE_OWNERS] = codeOwners
+      }
+
       const testSuiteSpan = this.tracer.startSpan('cucumber.test_suite', {
         childOf: this.testModuleSpan,
         tags: {
