@@ -147,7 +147,7 @@ versions.forEach((version) => {
               assert.propertyVal(testEvent.content.meta, 'test.customtag2', 'customvalue2')
               // Adds the browser used
               assert.propertyVal(testEvent.content.meta, TEST_CONFIGURATION_BROWSER_NAME, 'chromium')
-              assert.exists(testEvents.content.metrics[DD_HOST_CPU_COUNT])
+              assert.exists(testEvent.content.metrics[DD_HOST_CPU_COUNT])
             })
 
             stepEvents.forEach(stepEvent => {
