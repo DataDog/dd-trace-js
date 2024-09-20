@@ -497,7 +497,7 @@ class Config {
     this._setValue(defaults, 'isGitUploadEnabled', false)
     this._setValue(defaults, 'isIntelligentTestRunnerEnabled', false)
     this._setValue(defaults, 'isManualApiEnabled', false)
-    this._setValue(defaults, 'ciVisibilitySessionName', '')
+    this._setValue(defaults, 'ciVisibilityTestSessionName', '')
     this._setValue(defaults, 'logInjection', false)
     this._setValue(defaults, 'lookup', undefined)
     this._setValue(defaults, 'memcachedCommandEnabled', false)
@@ -1035,7 +1035,7 @@ class Config {
       DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
       DD_CIVISIBILITY_FLAKY_RETRY_ENABLED,
       DD_CIVISIBILITY_FLAKY_RETRY_COUNT,
-      DD_SESSION_NAME
+      DD_TEST_SESSION_NAME
     } = process.env
 
     if (DD_CIVISIBILITY_AGENTLESS_URL) {
@@ -1051,7 +1051,7 @@ class Config {
       this._setValue(calc, 'flakyTestRetriesCount', coalesce(maybeInt(DD_CIVISIBILITY_FLAKY_RETRY_COUNT), 5))
       this._setBoolean(calc, 'isIntelligentTestRunnerEnabled', isTrue(this._isCiVisibilityItrEnabled()))
       this._setBoolean(calc, 'isManualApiEnabled', !isFalse(this._isCiVisibilityManualApiEnabled()))
-      this._setString(calc, 'ciVisibilitySessionName', DD_SESSION_NAME)
+      this._setString(calc, 'ciVisibilityTestSessionName', DD_TEST_SESSION_NAME)
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())
     this._setBoolean(calc, 'isGitUploadEnabled',

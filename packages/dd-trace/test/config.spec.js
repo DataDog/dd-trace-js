@@ -323,7 +323,7 @@ describe('Config', () => {
       { name: 'isGitUploadEnabled', value: false, origin: 'default' },
       { name: 'isIntelligentTestRunnerEnabled', value: false, origin: 'default' },
       { name: 'isManualApiEnabled', value: false, origin: 'default' },
-      { name: 'ciVisibilitySessionName', value: '', origin: 'default' },
+      { name: 'ciVisibilityTestSessionName', value: '', origin: 'default' },
       { name: 'logInjection', value: false, origin: 'default' },
       { name: 'lookup', value: undefined, origin: 'default' },
       { name: 'openAiLogsEnabled', value: false, origin: 'default' },
@@ -1798,7 +1798,7 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
-      delete process.env.DD_SESSION_NAME
+      delete process.env.DD_TEST_SESSION_NAME
       delete process.env.JEST_WORKER_ID
       options = {}
     })
@@ -1883,10 +1883,10 @@ describe('Config', () => {
         const config = new Config(options)
         expect(config).to.have.property('flakyTestRetriesCount', 5)
       })
-      it('should set the session name if DD_SESSION_NAME is set', () => {
-        process.env.DD_SESSION_NAME = 'my-test-session'
+      it('should set the session name if DD_TEST_SESSION_NAME is set', () => {
+        process.env.DD_TEST_SESSION_NAME = 'my-test-session'
         const config = new Config(options)
-        expect(config).to.have.property('ciVisibilitySessionName', 'my-test-session')
+        expect(config).to.have.property('ciVisibilityTestSessionName', 'my-test-session')
       })
     })
     context('ci visibility mode is not enabled', () => {

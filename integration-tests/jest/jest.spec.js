@@ -184,7 +184,7 @@ describe('jest CommonJS', () => {
         env: {
           ...envVars,
           DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-          DD_SESSION_NAME: 'my-test-session'
+          DD_TEST_SESSION_NAME: 'my-test-session'
         },
         stdio: 'pipe'
       })
@@ -444,7 +444,7 @@ describe('jest CommonJS', () => {
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
           RUN_IN_PARALLEL: true,
-          DD_SESSION_NAME: 'my-test-session'
+          DD_TEST_SESSION_NAME: 'my-test-session'
         },
         stdio: 'pipe'
       })
