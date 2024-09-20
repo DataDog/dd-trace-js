@@ -16,6 +16,7 @@ describe('Headers sourcing', () => {
 
     Object.keys(req.headers).forEach(headerName => {
       const headerValue = req.headers[headerName]
+      console.log('ECHO', headerValue)
       const isHeaderValueTainted = isTainted(iastContext, headerValue)
       expect(isHeaderValueTainted).to.be.true
       const taintedHeaderValueRanges = getRanges(iastContext, headerValue)

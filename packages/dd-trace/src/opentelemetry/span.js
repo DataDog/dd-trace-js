@@ -251,10 +251,12 @@ class Span {
 
   removeBaggageItem (key) {
     delete this._ddSpan._spanContext._baggageItems[key]
+    return this
   }
 
   removeAllBaggageItems () {
     this._ddSpan._spanContext._baggageItems = {}
+    return this
   }
 
   end (timeInput) {
