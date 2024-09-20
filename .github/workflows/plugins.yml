@@ -656,6 +656,7 @@ jobs:
         version:
           - 18
           - latest
+        range: ['9.5.0', '11.1.4', '13.2.0', '14.2.6']
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
@@ -859,7 +860,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mssql:
-        image: mcr.microsoft.com/mssql/server:2017-latest-ubuntu
+        image: mcr.microsoft.com/mssql/server:2019-latest
         env:
           ACCEPT_EULA: 'Y'
           SA_PASSWORD: DD_HUNTER2

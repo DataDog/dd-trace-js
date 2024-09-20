@@ -21,6 +21,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_SOURCE_START
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
 const versions = ['1.6.0', 'latest']
 
@@ -145,6 +146,7 @@ versions.forEach((version) => {
 
         testEvents.forEach(test => {
           assert.equal(test.content.meta[TEST_COMMAND], 'vitest run')
+          assert.exists(test.content.metrics[DD_HOST_CPU_COUNT])
         })
 
         testSuiteEvents.forEach(testSuite => {
@@ -153,6 +155,7 @@ versions.forEach((version) => {
             testSuite.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/vitest-tests/test-visibility')
           )
           assert.equal(testSuite.content.metrics[TEST_SOURCE_START], 1)
+          assert.exists(testSuite.content.metrics[DD_HOST_CPU_COUNT])
         })
         // TODO: check error messages
       }).then(() => done()).catch(done)
@@ -164,7 +167,7 @@ versions.forEach((version) => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
-            DD_SESSION_NAME: 'my-test-session'
+            DD_TEST_SESSION_NAME: 'my-test-session'
           },
           stdio: 'pipe'
         }

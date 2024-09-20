@@ -631,8 +631,8 @@ function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faulty
 }
 
 function getTestSessionName (config, testCommand, envTags) {
-  if (config.ciVisibilitySessionName) {
-    return config.ciVisibilitySessionName
+  if (config.ciVisibilityTestSessionName) {
+    return config.ciVisibilityTestSessionName
   }
   if (envTags[CI_JOB_NAME]) {
     return `${envTags[CI_JOB_NAME]}-${testCommand}`
