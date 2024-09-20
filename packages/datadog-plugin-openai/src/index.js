@@ -276,25 +276,34 @@ class OpenApiPlugin extends TracingPlugin {
     const completionTokens = spanTags['openai.response.usage.completion_tokens']
     const completionTokensEstimated = spanTags['openai.response.usage.completion_tokens_estimated']
 
+    const totalTokens = spanTags['openai.response.usage.total_tokens']
+
     if (!error) {
-      if (promptTokensEstimated) {
-        this.metrics.distribution(
-          'openai.tokens.prompt', promptTokens, [...tags, 'openai.estimated:true'])
-      } else {
-        this.metrics.distribution('openai.tokens.prompt', promptTokens, tags)
-      }
-      if (completionTokensEstimated) {
-        this.metrics.distribution(
-          'openai.tokens.completion', completionTokens, [...tags, 'openai.estimated:true'])
-      } else {
-        this.metrics.distribution('openai.tokens.completion', completionTokens, tags)
+      if (promptTokens != null) {
+        if (promptTokensEstimated) {
+          this.metrics.distribution(
+            'openai.tokens.prompt', promptTokens, [...tags, 'openai.estimated:true'])
+        } else {
+          this.metrics.distribution('openai.tokens.prompt', promptTokens, tags)
+        }
       }
 
-      if (promptTokensEstimated || completionTokensEstimated) {
-        this.metrics.distribution(
-          'openai.tokens.total', promptTokens + completionTokens, [...tags, 'openai.estimated:true'])
-      } else {
-        this.metrics.distribution('openai.tokens.total', promptTokens + completionTokens, tags)
+      if (completionTokens != null) {
+        if (completionTokensEstimated) {
+          this.metrics.distribution(
+            'openai.tokens.completion', completionTokens, [...tags, 'openai.estimated:true'])
+        } else {
+          this.metrics.distribution('openai.tokens.completion', completionTokens, tags)
+        }
+      }
+
+      if (totalTokens != null) {
+        if (promptTokensEstimated || completionTokensEstimated) {
+          this.metrics.distribution(
+            'openai.tokens.total', totalTokens, [...tags, 'openai.estimated:true'])
+        } else {
+          this.metrics.distribution('openai.tokens.total', totalTokens, tags)
+        }
       }
     }
 
@@ -777,9 +786,9 @@ function usageExtraction (tags, body, methodName, openaiStore) {
     if (completionEstimated) tags['openai.response.usage.completion_tokens_estimated'] = true
   }
 
-  if (promptTokens) tags['openai.response.usage.prompt_tokens'] = promptTokens
-  if (completionTokens) tags['openai.response.usage.completion_tokens'] = completionTokens
-  if (totalTokens) tags['openai.response.usage.total_tokens'] = totalTokens
+  if (promptTokens != null) tags['openai.response.usage.prompt_tokens'] = promptTokens
+  if (completionTokens != null) tags['openai.response.usage.completion_tokens'] = completionTokens
+  if (totalTokens != null) tags['openai.response.usage.total_tokens'] = totalTokens
 }
 
 function truncateApiKey (apiKey) {
