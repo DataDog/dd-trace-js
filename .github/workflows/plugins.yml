@@ -860,13 +860,14 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mssql:
-        image: mcr.microsoft.com/mssql/server:2017-CU31-ubuntu-18.04
+        image: mcr.microsoft.com/mssql/server:2017-latest
         env:
           ACCEPT_EULA: 'Y'
           SA_PASSWORD: DD_HUNTER2
           MSSQL_PID: Express
         ports:
           - 1433:1433
+        options: --cap-add=SYS_PTRACE --security-opt apparmor:unconfined
     env:
       PLUGINS: tedious
       SERVICES: mssql
