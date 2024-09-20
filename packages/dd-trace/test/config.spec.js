@@ -362,7 +362,7 @@ describe('Config', () => {
       { name: 'telemetry.dependencyCollection', value: true, origin: 'default' },
       { name: 'telemetry.enabled', value: true, origin: 'env_var' },
       { name: 'telemetry.heartbeatInterval', value: 60000, origin: 'default' },
-      { name: 'telemetry.logCollection', value: true, origin: 'default' },
+      { name: 'telemetry.logCollection', value: false, origin: 'default' },
       { name: 'telemetry.metrics', value: true, origin: 'default' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'default' },
       { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' },
@@ -1461,7 +1461,7 @@ describe('Config', () => {
     expect(config.telemetry).to.not.be.undefined
     expect(config.telemetry.enabled).to.be.true
     expect(config.telemetry.heartbeatInterval).to.eq(60000)
-    expect(config.telemetry.logCollection).to.be.true
+    expect(config.telemetry.logCollection).to.be.false
     expect(config.telemetry.debug).to.be.false
     expect(config.telemetry.metrics).to.be.true
   })
@@ -1499,7 +1499,7 @@ describe('Config', () => {
     process.env.DD_TELEMETRY_METRICS_ENABLED = origTelemetryMetricsEnabledValue
   })
 
-  it('should disable log collection if DD_TELEMETRY_LOG_COLLECTION_ENABLED is false', () => {
+  it('should not set DD_TELEMETRY_LOG_COLLECTION_ENABLED', () => {
     const origLogsValue = process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED
     process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = 'false'
 
@@ -1508,6 +1508,17 @@ describe('Config', () => {
     expect(config.telemetry.logCollection).to.be.false
 
     process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = origLogsValue
+  })
+
+  it('should set DD_TELEMETRY_LOG_COLLECTION_ENABLED if DD_IAST_ENABLED', () => {
+    const origIastEnabledValue = process.env.DD_IAST_ENABLED
+    process.env.DD_IAST_ENABLED = 'true'
+
+    const config = new Config()
+
+    expect(config.telemetry.logCollection).to.be.true
+
+    process.env.DD_IAST_ENABLED = origIastEnabledValue
   })
 
   it('should set DD_TELEMETRY_DEBUG', () => {
