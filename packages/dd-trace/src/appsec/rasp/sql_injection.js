@@ -1,12 +1,23 @@
 'use strict'
 
-const { pgQueryStart, pgPoolQueryStart, wafRunFinished } = require('../channels')
+const {
+  pgQueryStart,
+  pgPoolQueryStart,
+  wafRunFinished,
+  mysql2ConnectionQueryStart,
+  mysql2ConnectionExecuteStart,
+  mysql2PoolQueryStart,
+  mysql2PoolExecuteStart,
+  mysql2PoolNamespaceQueryStart,
+  mysql2PoolNamespaceExecuteStart
+} = require('../channels')
 const { storage } = require('../../../../datadog-core')
 const addresses = require('../addresses')
 const waf = require('../waf')
 const { RULE_TYPES, handleResult } = require('./utils')
 
 const DB_SYSTEM_POSTGRES = 'postgresql'
+const DB_SYSTEM_MYSQL = 'mysql'
 const reqQueryMap = new WeakMap() // WeakMap<Request, Set<querytext>>
 
 let config
@@ -17,18 +28,44 @@ function enable (_config) {
   pgQueryStart.subscribe(analyzePgSqlInjection)
   pgPoolQueryStart.subscribe(analyzePgSqlInjection)
   wafRunFinished.subscribe(clearQuerySet)
+
+  mysql2ConnectionQueryStart.subscribe(analyzeMysql2SqlInjection)
+  mysql2ConnectionExecuteStart.subscribe(analyzeMysql2SqlInjection)
+  mysql2PoolQueryStart.subscribe(analyzeMysql2SqlInjection)
+  mysql2PoolExecuteStart.subscribe(analyzeMysql2SqlInjection)
+  mysql2PoolNamespaceQueryStart.subscribe(analyzeMysql2SqlInjection)
+  mysql2PoolNamespaceExecuteStart.subscribe(analyzeMysql2SqlInjection)
 }
 
 function disable () {
   if (pgQueryStart.hasSubscribers) pgQueryStart.unsubscribe(analyzePgSqlInjection)
   if (pgPoolQueryStart.hasSubscribers) pgPoolQueryStart.unsubscribe(analyzePgSqlInjection)
   if (wafRunFinished.hasSubscribers) wafRunFinished.unsubscribe(clearQuerySet)
+  if (mysql2ConnectionQueryStart.hasSubscribers) mysql2ConnectionQueryStart.unsubscribe(analyzeMysql2SqlInjection)
+  if (mysql2ConnectionExecuteStart.hasSubscribers) mysql2ConnectionExecuteStart.unsubscribe(analyzeMysql2SqlInjection)
+  if (mysql2PoolQueryStart.hasSubscribers) mysql2PoolQueryStart.unsubscribe(analyzeMysql2SqlInjection)
+  if (mysql2PoolExecuteStart.hasSubscribers) mysql2PoolExecuteStart.unsubscribe(analyzeMysql2SqlInjection)
+  if (mysql2PoolNamespaceQueryStart.hasSubscribers) mysql2PoolNamespaceQueryStart.unsubscribe(analyzeMysql2SqlInjection)
+  if (mysql2PoolNamespaceExecuteStart.hasSubscribers) {
+    mysql2PoolNamespaceExecuteStart.unsubscribe(analyzeMysql2SqlInjection)
+  }
+}
+
+function analyzeMysql2SqlInjection (ctx) {
+  const query = ctx.sql
+  if (!query) return
+
+  analyzeSqlInjection(query, DB_SYSTEM_MYSQL, ctx.abortController)
 }
 
 function analyzePgSqlInjection (ctx) {
   const query = ctx.query?.text
   if (!query) return
 
+  analyzeSqlInjection(query, DB_SYSTEM_POSTGRES, ctx.abortController)
+}
+
+function analyzeSqlInjection (query, dbSystem, abortController) {
   const store = storage.getStore()
   if (!store) return
 
@@ -49,12 +86,12 @@ function analyzePgSqlInjection (ctx) {
 
   const persistent = {
     [addresses.DB_STATEMENT]: query,
-    [addresses.DB_SYSTEM]: DB_SYSTEM_POSTGRES
+    [addresses.DB_SYSTEM]: dbSystem
   }
 
   const result = waf.run({ persistent }, req, RULE_TYPES.SQL_INJECTION)
 
-  handleResult(result, req, res, ctx.abortController, config)
+  handleResult(result, req, res, abortController, config)
 }
 
 function hasInputAddress (payload) {

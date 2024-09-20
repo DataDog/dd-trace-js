@@ -6,11 +6,15 @@ const {
   AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const semver = require('semver')
 
-addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connection => {
+addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, (Connection, version) => {
   const startCh = channel('apm:mysql2:query:start')
   const finishCh = channel('apm:mysql2:query:finish')
   const errorCh = channel('apm:mysql2:query:error')
+  const startConnectionQueryCh = channel('datadog:mysql2:connection:query:start')
+  const startConnectionExecuteCh = channel('datadog:mysql2:connection:execute:start')
+  const shouldEmitEndAfterQueryAbort = semver.intersects(version, '>=1.3.3')
 
   shimmer.wrap(Connection.prototype, 'addCommand', addCommand => function (cmd) {
     if (!startCh.hasSubscribers) return addCommand.apply(this, arguments)
@@ -26,6 +30,71 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connec
       : bindExecute(cmd, cmd.execute, asyncResource)
 
     return asyncResource.bind(addCommand, this).apply(this, arguments)
+  })
+
+  shimmer.wrap(Connection.prototype, 'query', query => function (sql, values, cb) {
+    if (!startConnectionQueryCh.hasSubscribers) return query.apply(this, arguments)
+
+    const sqlIsString = typeof sql === 'string'
+
+    const sqlString = sqlIsString ? sql : sql?.sql
+    if (sqlString) {
+      const abortController = new AbortController()
+      startConnectionQueryCh.publish({ sql: sqlString, abortController })
+
+      if (abortController.signal.aborted) {
+        let queryCommand = sql
+        if (sqlIsString) {
+          queryCommand = Connection.createQuery(sqlString, values, cb, this.config)
+        }
+
+        cb = queryCommand.onResult
+
+        process.nextTick(() => {
+          if (cb) {
+            cb(abortController.signal.reason)
+          } else {
+            queryCommand.emit('error', abortController.signal.reason)
+          }
+
+          if (shouldEmitEndAfterQueryAbort) {
+            queryCommand.emit('end')
+          }
+        })
+
+        return queryCommand
+      }
+    }
+
+    return query.apply(this, arguments)
+  })
+
+  shimmer.wrap(Connection.prototype, 'execute', execute => function (sql, values, cb) {
+    if (!startConnectionExecuteCh.hasSubscribers) return execute.apply(this, arguments)
+
+    const sqlString = typeof sql === 'object' ? sql?.sql : sql
+    if (sqlString) {
+      const abortController = new AbortController()
+      startConnectionExecuteCh.publish({ sql, abortController })
+
+      if (abortController.signal.aborted) {
+        const addCommand = this.addCommand
+        this.addCommand = function () {}
+
+        let result
+        try {
+          result = execute.apply(this, arguments)
+        } finally {
+          this.addCommand = addCommand
+        }
+
+        result?.onResult(abortController.signal.reason)
+
+        return result
+      }
+    }
+
+    return execute.apply(this, arguments)
   })
 
   return Connection
@@ -78,4 +147,140 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connec
       }
     }, cmd))
   }
+})
+
+addHook({ name: 'mysql2', file: 'lib/pool.js', versions: ['>=1'] }, (Pool, version) => {
+  const startPoolQueryCh = channel('datadog:mysql2:pool:query:start')
+  const startPoolExecuteCh = channel('datadog:mysql2:pool:execute:start')
+  const shouldEmitEndAfterQueryAbort = semver.intersects(version, '>=1.3.3')
+
+  shimmer.wrap(Pool.prototype, 'query', query => function (sql, values, cb) {
+    if (!startPoolQueryCh.hasSubscribers) return query.apply(this, arguments)
+
+    const sqlString = typeof sql === 'object' ? sql?.sql : sql
+    if (sqlString) {
+      const abortController = new AbortController()
+      startPoolQueryCh.publish({ sql, abortController })
+
+      if (abortController.signal.aborted) {
+        const getConnection = this.getConnection
+        this.getConnection = function () {}
+
+        let queryCommand
+        try {
+          queryCommand = query.apply(this, arguments)
+        } finally {
+          this.getConnection = getConnection
+        }
+
+        process.nextTick(() => {
+          if (queryCommand.onResult) {
+            queryCommand.onResult(abortController.signal.reason)
+          } else {
+            queryCommand.emit('error', abortController.signal.reason)
+          }
+
+          if (shouldEmitEndAfterQueryAbort) {
+            queryCommand.emit('end')
+          }
+        })
+
+        return queryCommand
+      }
+
+      return query.apply(this, arguments)
+    }
+  })
+
+  shimmer.wrap(Pool.prototype, 'execute', execute => function (sql, values, cb) {
+    if (!startPoolExecuteCh.hasSubscribers) return execute.apply(this, arguments)
+
+    const abortController = new AbortController()
+    startPoolExecuteCh.publish({ sql, abortController })
+
+    if (abortController.signal.aborted) {
+      if (typeof values === 'function') {
+        cb = values
+      }
+
+      process.nextTick(() => {
+        cb(abortController.signal.reason)
+      })
+      return
+    }
+
+    return execute.apply(this, arguments)
+  })
+
+  return Pool
+})
+
+// PoolNamespace.prototype.query does not exist in mysql2<2.3.0
+addHook({ name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['>=2.3.0'] }, PoolCluster => {
+  const startPoolNamespaceQueryCh = channel('datadog:mysql2:poolnamespace:query:start')
+  const startPoolNamespaceExecuteCh = channel('datadog:mysql2:poolnamespace:execute:start')
+
+  shimmer.wrap(PoolCluster.prototype, 'of', of => function () {
+    const poolNamespace = of.apply(this, arguments)
+
+    if (startPoolNamespaceQueryCh.hasSubscribers) {
+      shimmer.wrap(poolNamespace, 'query', query => function (sql, values, cb) {
+        if (typeof sql === 'object') sql = sql?.sql
+
+        const abortController = new AbortController()
+        startPoolNamespaceQueryCh.publish({ sql, abortController })
+
+        if (abortController.signal.aborted) {
+          const getConnection = this.getConnection
+          this.getConnection = function () {
+          }
+
+          let queryCommand
+          try {
+            queryCommand = query.apply(this, arguments)
+          } finally {
+            this.getConnection = getConnection
+          }
+
+          process.nextTick(() => {
+            if (queryCommand.onResult) {
+              queryCommand.onResult(abortController.signal.reason)
+            } else {
+              queryCommand.emit('error', abortController.signal.reason)
+            }
+            queryCommand.emit('end')
+          })
+
+          return queryCommand
+        }
+        return query.apply(this, arguments)
+      })
+    }
+
+    if (startPoolNamespaceExecuteCh.hasSubscribers) {
+      shimmer.wrap(poolNamespace, 'execute', execute => function (sql, values, cb) {
+        if (typeof sql === 'object') sql = sql?.sql
+
+        const abortController = new AbortController()
+        startPoolNamespaceExecuteCh.publish({ sql, abortController })
+
+        if (abortController.signal.aborted) {
+          if (typeof values === 'function') {
+            cb = values
+          }
+          process.nextTick(() => {
+            cb(abortController.signal.reason)
+          })
+
+          return
+        }
+
+        return execute.apply(this, arguments)
+      })
+    }
+
+    return poolNamespace
+  })
+
+  return PoolCluster
 })

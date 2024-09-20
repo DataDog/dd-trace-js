@@ -1,6 +1,6 @@
 'use strict'
 
-const { pgQueryStart } = require('../../../src/appsec/channels')
+const { pgQueryStart, mysql2ConnectionQueryStart } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
 const proxyquire = require('proxyquire')
 
@@ -109,6 +109,71 @@ describe('RASP - sql_injection', () => {
       datadogCore.storage.getStore.returns({})
 
       pgQueryStart.publish(ctx)
+
+      sinon.assert.notCalled(waf.run)
+    })
+  })
+
+  describe('analyzeMysql2SqlInjection', () => {
+    it('should analyze sql injection', () => {
+      const ctx = {
+        sql: 'SELECT 1'
+      }
+      const req = {}
+      datadogCore.storage.getStore.returns({ req })
+
+      mysql2ConnectionQueryStart.publish(ctx)
+
+      const persistent = {
+        [addresses.DB_STATEMENT]: 'SELECT 1',
+        [addresses.DB_SYSTEM]: 'mysql'
+      }
+      sinon.assert.calledOnceWithExactly(waf.run, { persistent }, req, 'sql_injection')
+    })
+
+    it('should not analyze sql injection if rasp is disabled', () => {
+      sqli.disable()
+
+      const ctx = {
+        sql: 'SELECT 1'
+      }
+      const req = {}
+      datadogCore.storage.getStore.returns({ req })
+
+      mysql2ConnectionQueryStart.publish(ctx)
+
+      sinon.assert.notCalled(waf.run)
+    })
+
+    it('should not analyze sql injection if no store', () => {
+      const ctx = {
+        sql: 'SELECT 1'
+      }
+      datadogCore.storage.getStore.returns(undefined)
+
+      mysql2ConnectionQueryStart.publish(ctx)
+
+      sinon.assert.notCalled(waf.run)
+    })
+
+    it('should not analyze sql injection if no req', () => {
+      const ctx = {
+        sql: 'SELECT 1'
+      }
+      datadogCore.storage.getStore.returns({})
+
+      mysql2ConnectionQueryStart.publish(ctx)
+
+      sinon.assert.notCalled(waf.run)
+    })
+
+    it('should not analyze sql injection if no query', () => {
+      const ctx = {
+        sql: 'SELECT 1'
+      }
+      datadogCore.storage.getStore.returns({})
+
+      mysql2ConnectionQueryStart.publish(ctx)
 
       sinon.assert.notCalled(waf.run)
     })
