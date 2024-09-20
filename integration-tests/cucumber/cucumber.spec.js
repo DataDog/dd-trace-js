@@ -38,6 +38,7 @@ const {
   TEST_SESSION_NAME,
   TEST_LEVEL_EVENT_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
 const isOldNode = semver.satisfies(process.version, '<=16')
 const versions = ['7.0.0', isOldNode ? '9' : 'latest']
@@ -181,6 +182,7 @@ versions.forEach(version => {
                     assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
                     assert.isTrue(meta[TEST_SOURCE_FILE].startsWith(featuresPath))
                     assert.equal(metrics[TEST_SOURCE_START], 1)
+                    assert.exists(metrics[DD_HOST_CPU_COUNT])
                   })
 
                   assert.includeMembers(testEvents.map(test => test.content.resource), [
@@ -201,6 +203,7 @@ versions.forEach(version => {
                   testEvents.forEach(({
                     content: {
                       meta,
+                      metrics,
                       test_suite_id: testSuiteId,
                       test_module_id: testModuleId,
                       test_session_id: testSessionId
@@ -218,6 +221,7 @@ versions.forEach(version => {
                     if (runMode === 'parallel') {
                       assert.propertyVal(meta, CUCUMBER_IS_PARALLEL, 'true')
                     }
+                    assert.exists(metrics[DD_HOST_CPU_COUNT])
                   })
 
                   stepEvents.forEach(stepEvent => {
