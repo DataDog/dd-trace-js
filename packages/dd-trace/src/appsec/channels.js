@@ -24,11 +24,6 @@ module.exports = {
   setUncaughtExceptionCaptureCallbackStart: dc.channel('datadog:process:setUncaughtExceptionCaptureCallback:start'),
   pgQueryStart: dc.channel('apm:pg:query:start'),
   pgPoolQueryStart: dc.channel('datadog:pg:pool:query:start'),
-  mysql2ConnectionQueryStart: dc.channel('datadog:mysql2:connection:query:start'),
-  mysql2ConnectionExecuteStart: dc.channel('datadog:mysql2:connection:execute:start'),
-  mysql2PoolQueryStart: dc.channel('datadog:mysql2:pool:query:start'),
-  mysql2PoolExecuteStart: dc.channel('datadog:mysql2:pool:execute:start'),
-  mysql2PoolNamespaceQueryStart: dc.channel('datadog:mysql2:poolnamespace:query:start'),
-  mysql2PoolNamespaceExecuteStart: dc.channel('datadog:mysql2:poolnamespace:execute:start'),
+  mysql2OuterQueryStart: dc.channel('datadog:mysql2:outerquery:start'),
   wafRunFinished: dc.channel('datadog:waf:run:finish')
 }

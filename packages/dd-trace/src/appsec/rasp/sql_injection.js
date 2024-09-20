@@ -4,12 +4,7 @@ const {
   pgQueryStart,
   pgPoolQueryStart,
   wafRunFinished,
-  mysql2ConnectionQueryStart,
-  mysql2ConnectionExecuteStart,
-  mysql2PoolQueryStart,
-  mysql2PoolExecuteStart,
-  mysql2PoolNamespaceQueryStart,
-  mysql2PoolNamespaceExecuteStart
+  mysql2OuterQueryStart
 } = require('../channels')
 const { storage } = require('../../../../datadog-core')
 const addresses = require('../addresses')
@@ -29,26 +24,14 @@ function enable (_config) {
   pgPoolQueryStart.subscribe(analyzePgSqlInjection)
   wafRunFinished.subscribe(clearQuerySet)
 
-  mysql2ConnectionQueryStart.subscribe(analyzeMysql2SqlInjection)
-  mysql2ConnectionExecuteStart.subscribe(analyzeMysql2SqlInjection)
-  mysql2PoolQueryStart.subscribe(analyzeMysql2SqlInjection)
-  mysql2PoolExecuteStart.subscribe(analyzeMysql2SqlInjection)
-  mysql2PoolNamespaceQueryStart.subscribe(analyzeMysql2SqlInjection)
-  mysql2PoolNamespaceExecuteStart.subscribe(analyzeMysql2SqlInjection)
+  mysql2OuterQueryStart.subscribe(analyzeMysql2SqlInjection)
 }
 
 function disable () {
   if (pgQueryStart.hasSubscribers) pgQueryStart.unsubscribe(analyzePgSqlInjection)
   if (pgPoolQueryStart.hasSubscribers) pgPoolQueryStart.unsubscribe(analyzePgSqlInjection)
   if (wafRunFinished.hasSubscribers) wafRunFinished.unsubscribe(clearQuerySet)
-  if (mysql2ConnectionQueryStart.hasSubscribers) mysql2ConnectionQueryStart.unsubscribe(analyzeMysql2SqlInjection)
-  if (mysql2ConnectionExecuteStart.hasSubscribers) mysql2ConnectionExecuteStart.unsubscribe(analyzeMysql2SqlInjection)
-  if (mysql2PoolQueryStart.hasSubscribers) mysql2PoolQueryStart.unsubscribe(analyzeMysql2SqlInjection)
-  if (mysql2PoolExecuteStart.hasSubscribers) mysql2PoolExecuteStart.unsubscribe(analyzeMysql2SqlInjection)
-  if (mysql2PoolNamespaceQueryStart.hasSubscribers) mysql2PoolNamespaceQueryStart.unsubscribe(analyzeMysql2SqlInjection)
-  if (mysql2PoolNamespaceExecuteStart.hasSubscribers) {
-    mysql2PoolNamespaceExecuteStart.unsubscribe(analyzeMysql2SqlInjection)
-  }
+  if (mysql2OuterQueryStart.hasSubscribers) mysql2OuterQueryStart.unsubscribe(analyzeMysql2SqlInjection)
 }
 
 function analyzeMysql2SqlInjection (ctx) {
@@ -76,7 +59,7 @@ function analyzeSqlInjection (query, dbSystem, abortController) {
   let executedQueries = reqQueryMap.get(req)
   if (executedQueries?.has(query)) return
 
-  // Do not waste time executing same query twice
+  // Do not waste time checking same query twice
   // This also will prevent double calls in pg.Pool internal queries
   if (!executedQueries) {
     executedQueries = new Set()

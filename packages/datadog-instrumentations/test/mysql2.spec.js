@@ -28,6 +28,7 @@ describe('mysql2 instrumentation', () => {
     let apmQueryStartChannel, apmQueryStart, mysql2Version
 
     before(() => {
+      startCh = channel('datadog:mysql2:outerquery:start')
       return agent.load(['mysql2'])
     })
 
@@ -65,10 +66,6 @@ describe('mysql2 instrumentation', () => {
       })
 
       describe('Connection.prototype.query', () => {
-        beforeEach(() => {
-          startCh = channel('datadog:mysql2:connection:query:start')
-        })
-
         describe('with string as query', () => {
           describe('with callback', () => {
             it('should abort the query on abortController.abort()', (done) => {
@@ -231,10 +228,6 @@ describe('mysql2 instrumentation', () => {
       })
 
       describe('Connection.prototype.execute', () => {
-        beforeEach(() => {
-          startCh = channel('datadog:mysql2:connection:execute:start')
-        })
-
         describe('with the query in options', () => {
           it('should abort the query on abortController.abort()', (done) => {
             startCh.subscribe(abort)
@@ -327,10 +320,6 @@ describe('mysql2 instrumentation', () => {
       })
 
       describe('Pool.prototype.query', () => {
-        beforeEach(() => {
-          startCh = channel('datadog:mysql2:pool:query:start')
-        })
-
         describe('with callback', () => {
           it('should abort the query on abortController.abort()', (done) => {
             startCh.subscribe(abort)
@@ -402,10 +391,6 @@ describe('mysql2 instrumentation', () => {
       })
 
       describe('Pool.prototype.execute', () => {
-        beforeEach(() => {
-          startCh = channel('datadog:mysql2:pool:execute:start')
-        })
-
         describe('with callback', () => {
           it('should abort the query on abortController.abort()', (done) => {
             startCh.subscribe(abort)
@@ -469,10 +454,6 @@ describe('mysql2 instrumentation', () => {
       })
 
       describe('PoolNamespace.prototype.query', () => {
-        beforeEach(() => {
-          startCh = channel('datadog:mysql2:poolnamespace:query:start')
-        })
-
         it('should abort the query on abortController.abort()', (done) => {
           startCh.subscribe(abort)
           const namespace = poolCluster.of()
@@ -510,10 +491,6 @@ describe('mysql2 instrumentation', () => {
       })
 
       describe('PoolNamespace.prototype.execute', () => {
-        beforeEach(() => {
-          startCh = channel('datadog:mysql2:poolnamespace:execute:start')
-        })
-
         it('should abort the query on abortController.abort()', (done) => {
           startCh.subscribe(abort)
 
