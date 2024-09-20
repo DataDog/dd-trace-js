@@ -867,7 +867,7 @@ jobs:
           MSSQL_PID: Express
         ports:
           - 1433:1433
-        options: --cap-add=SYS_PTRACE --cap-add=SYS_ADMIN --security-opt apparmor:unconfined
+        options: --security-opt apparmor:unconfined --cap-add=SYS_ADMIN --cap-add=SYS_RESOURCE --cap-add=SYS_PTRACE --cap-add=NET_ADMIN --cap-add=NET_BROADCAST --cap-add=NET_RAW --cap-add=IPC_LOCK --cap-add=CHOWN
     env:
       PLUGINS: tedious
       SERVICES: mssql
