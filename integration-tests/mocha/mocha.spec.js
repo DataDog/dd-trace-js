@@ -184,7 +184,7 @@ describe('mocha CommonJS', function () {
         env: {
           ...envVars,
           DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-          DD_SESSION_NAME: 'my-test-session'
+          DD_TEST_SESSION_NAME: 'my-test-session'
         },
         stdio: 'pipe'
       })
@@ -378,7 +378,7 @@ describe('mocha CommonJS', function () {
         RUN_IN_PARALLEL: true,
         DD_TRACE_DEBUG: 1,
         DD_TRACE_LOG_LEVEL: 'warn',
-        DD_SESSION_NAME: 'my-test-session'
+        DD_TEST_SESSION_NAME: 'my-test-session'
       },
       stdio: 'pipe'
     })
