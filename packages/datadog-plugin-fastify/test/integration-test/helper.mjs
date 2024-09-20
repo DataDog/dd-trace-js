@@ -4,7 +4,7 @@ export async function createAndStartServer (app) {
   })
 
   try {
-    await app.listen(0)
+    await app.listen({ port: 0 })
     const address = app.server.address()
     const port = address.port
     process.send({ port })
