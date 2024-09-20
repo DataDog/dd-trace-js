@@ -871,10 +871,11 @@ jobs:
       SERVICES: mssql
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '22.8.0'
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/setup
       - uses: ./.github/actions/install
-      - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - if: always()
