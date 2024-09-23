@@ -4,7 +4,7 @@ const { Schema } = require('./schema')
 
 const maxDepth = 10
 const maxProperties = 1000
-const CACHE = new LRUCache({ max: 32 })
+const CACHE = new LRUCache({ max: 256 })
 
 class SchemaBuilder {
   constructor (iterator) {
