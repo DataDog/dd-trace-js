@@ -48,9 +48,6 @@ describe('RASP - lfi.js', () => {
         }
       }
     }
-
-    sinon.spy(incomingHttpRequestStart, 'subscribe')
-    sinon.spy(incomingHttpRequestStart, 'unsubscribe')
   })
 
   afterEach(() => {
@@ -60,12 +57,16 @@ describe('RASP - lfi.js', () => {
 
   describe('enable', () => {
     it('should subscribe to first http req', () => {
+      sinon.spy(incomingHttpRequestStart, 'subscribe')
+
       lfi.enable(config)
 
       sinon.assert.calledOnce(incomingHttpRequestStart.subscribe)
     })
 
     it('should enable AppsecFsPlugin after the first request', () => {
+      sinon.spy(incomingHttpRequestStart, 'unsubscribe')
+
       lfi.enable(config)
 
       incomingHttpRequestStart.publish({})
