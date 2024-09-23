@@ -1,24 +1,9 @@
 {
   "matrices": {
     "couchbase": {
-      "min-version": "2.4.2",
-      "node-version": [
-        16
-      ],
-      "range": [
-        "2.4.2 - 2.6.12",
-        "3.0.0 - 3.2.7",
-        "4.0.0 - 4.4.1"
-      ],
-      "include": [
-        {
-          "node-version": 18
-        },
-        [
-          "4.4.1",
-          "4.4.1"
-        ]
-      ]
+      "node-version": [16],
+      "range": ["2.4.2 - 2.6.12", "3.0.0 - 3.2.7", "4.0.0 - 4.4.1"],
+      "include": [{"node-version": 18}, ["4.4.1 - 4.4.1"]]
     },
     "aerospike": {
       "min-version": "4.0.0",
