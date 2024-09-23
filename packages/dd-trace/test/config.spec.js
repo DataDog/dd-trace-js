@@ -1824,7 +1824,7 @@ describe('Config', () => {
         const config = new Config(options)
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
       })
-      it('should enabled manual testing API by default', () => {
+      it('should enable manual testing API by default', () => {
         const config = new Config(options)
         expect(config).to.have.property('isManualApiEnabled', true)
       })
