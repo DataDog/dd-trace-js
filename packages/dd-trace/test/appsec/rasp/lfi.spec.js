@@ -57,22 +57,22 @@ describe('RASP - lfi.js', () => {
 
   describe('enable', () => {
     it('should subscribe to first http req', () => {
-      sinon.spy(incomingHttpRequestStart, 'subscribe')
+      const subscribe = sinon.stub(incomingHttpRequestStart, 'subscribe')
 
       lfi.enable(config)
 
-      sinon.assert.calledOnce(incomingHttpRequestStart.subscribe)
+      sinon.assert.calledOnce(subscribe)
     })
 
     it('should enable AppsecFsPlugin after the first request', () => {
-      sinon.spy(incomingHttpRequestStart, 'unsubscribe')
+      const unsubscribe = sinon.stub(incomingHttpRequestStart, 'unsubscribe')
 
       lfi.enable(config)
 
       incomingHttpRequestStart.publish({})
 
       sinon.assert.calledOnceWithExactly(appsecFsPlugin.enable, 'rasp')
-      sinon.assert.calledOnce(incomingHttpRequestStart.unsubscribe)
+      sinon.assert.calledOnce(unsubscribe)
     })
   })
 
