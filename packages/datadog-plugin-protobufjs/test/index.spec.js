@@ -14,6 +14,7 @@ const {
 } = require('../../dd-trace/src/constants')
 const sinon = require('sinon')
 const { loadMessage } = require('./helpers')
+const { SchemaBuilder } = require('../../dd-trace/src/datastreams/schemas/schema_builder')
 
 const schemas = JSON.parse(fs.readFileSync(path.join(__dirname, 'schemas/expected_schemas.json'), 'utf8'))
 const MESSAGE_SCHEMA_DEF = schemas.MESSAGE_SCHEMA_DEF
@@ -269,6 +270,61 @@ describe('Plugin', () => {
         expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'deserialization')
         expect(span.context()._tags).to.have.property(SCHEMA_ID, OTHER_MESSAGE_SCHEMA_ID)
         expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+      })
+    })
+
+    describe('during schema sampling', function () {
+      let cacheSetSpy
+      let cacheGetSpy
+
+      beforeEach(() => {
+        const cache = SchemaBuilder.getCache()
+        cache.clear()
+        cacheSetSpy = sinon.spy(cache, 'set')
+        cacheGetSpy = sinon.spy(cache, 'get')
+      })
+
+      afterEach(() => {
+        cacheSetSpy.restore()
+        cacheGetSpy.restore()
+      })
+
+      it('should use the schema cache and not re-extract an already sampled schema', async () => {
+        const loadedMessages = await loadMessage(protobuf, 'MyMessage')
+
+        tracer.trace('message_pb2.serialize', span => {
+          loadedMessages.MyMessage.type.encode(loadedMessages.MyMessage.instance).finish()
+
+          expect(span._name).to.equal('message_pb2.serialize')
+
+          expect(compareJson(MESSAGE_SCHEMA_DEF, span)).to.equal(true)
+          expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'protobuf')
+          expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'MyMessage')
+          expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'serialization')
+          expect(span.context()._tags).to.have.property(SCHEMA_ID, MESSAGE_SCHEMA_ID)
+          expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+
+          // we sampled 1 schema with 1 subschema, so the constructor should've only been called twice
+          expect(cacheSetSpy.callCount).to.equal(2)
+          expect(cacheGetSpy.callCount).to.equal(2)
+        })
+
+        tracer.trace('message_pb2.serialize', span => {
+          loadedMessages.MyMessage.type.encode(loadedMessages.MyMessage.instance).finish()
+
+          expect(span._name).to.equal('message_pb2.serialize')
+
+          expect(compareJson(MESSAGE_SCHEMA_DEF, span)).to.equal(true)
+          expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'protobuf')
+          expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'MyMessage')
+          expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'serialization')
+          expect(span.context()._tags).to.have.property(SCHEMA_ID, MESSAGE_SCHEMA_ID)
+          expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+
+          // ensure schema was sampled and returned via the cache, so no extra cache set calls were needed, only gets
+          expect(cacheSetSpy.callCount).to.equal(2)
+          expect(cacheGetSpy.callCount).to.equal(3)
+        })
       })
     })
   })
