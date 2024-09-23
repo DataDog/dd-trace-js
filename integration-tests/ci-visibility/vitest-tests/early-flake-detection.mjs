@@ -15,4 +15,8 @@ describe('early flake detection', () => {
   test('does not retry if it is not new', () => {
     expect(sum(1, 2)).to.equal(3)
   })
+
+  test.skip('does not retry if the test is skipped', () => {
+    expect(sum(1, 2)).to.equal(3)
+  })
 })
