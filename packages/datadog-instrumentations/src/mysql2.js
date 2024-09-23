@@ -42,9 +42,14 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, (Conne
       startOuterQueryCh.publish({ sql: sqlString, abortController })
 
       if (abortController.signal.aborted) {
-        let queryCommand = sql
-        if (sqlIsString) {
-          queryCommand = Connection.createQuery(sqlString, values, cb, this.config)
+        const addCommand = this.addCommand
+        this.addCommand = function (cmd) { return cmd }
+
+        let queryCommand
+        try {
+          queryCommand = query.apply(this, arguments)
+        } finally {
+          this.addCommand = addCommand
         }
 
         cb = queryCommand.onResult
@@ -78,7 +83,7 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, (Conne
 
       if (abortController.signal.aborted) {
         const addCommand = this.addCommand
-        this.addCommand = function () {}
+        this.addCommand = function (cmd) { return cmd }
 
         let result
         try {
