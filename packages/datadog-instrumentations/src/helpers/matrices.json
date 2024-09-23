@@ -1,9 +1,4 @@
 {
-  "pinned": [
-    "generic-pool",
-    "@playwright/test",
-    "redis"
-  ],
   "matrices": {
     "couchbase": {
       "min-version": "2.4.2",
