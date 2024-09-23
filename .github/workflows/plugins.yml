@@ -110,7 +110,7 @@ jobs:
 
   amqp10:
     strategy:
-      matrix: ${{fromJson(needs.versions.outputs.matrices).amqp10}}
+      matrix: ${{fromJson(needs.versions.outputs.matrices).amqp10.range}}
     runs-on: ubuntu-latest
     services:
       qpid:
