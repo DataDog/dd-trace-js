@@ -9,7 +9,7 @@ const path = require('path')
 const WafContext = require('../../src/appsec/waf/waf_context_wrapper')
 const blockingResponse = JSON.parse(require('../../src/appsec/blocked_templates').json)
 const fs = require('fs')
-const { disable: disableFsPlugin } = require('../../src/appsec/rasp/fs-plugin')
+const { disable: disableLfi } = require('../../src/appsec/rasp/lfi')
 
 describe('HTTP Response Blocking', () => {
   let server
@@ -57,7 +57,7 @@ describe('HTTP Response Blocking', () => {
       }
     }))
 
-    disableFsPlugin('rasp')
+    disableLfi()
   })
 
   beforeEach(() => {

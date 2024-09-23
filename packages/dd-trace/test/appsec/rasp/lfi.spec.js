@@ -1,7 +1,7 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
-const { fsOperationStart } = require('../../../src/appsec/channels')
+const { fsOperationStart, incomingHttpRequestStart } = require('../../../src/appsec/channels')
 const { FS_OPERATION_PATH } = require('../../../src/appsec/addresses')
 
 describe('RASP - lfi.js', () => {
@@ -49,6 +49,9 @@ describe('RASP - lfi.js', () => {
       }
     }
 
+    sinon.spy(incomingHttpRequestStart, 'subscribe')
+    sinon.spy(incomingHttpRequestStart, 'unsubscribe')
+
     lfi.enable(config)
   })
 
@@ -58,8 +61,14 @@ describe('RASP - lfi.js', () => {
   })
 
   describe('enable', () => {
-    it('should enable AppsecFsPlugin', () => {
+    it('should subscribe to first http req', () => {
+      sinon.assert.calledOnce(incomingHttpRequestStart.subscribe)
+    })
+
+    it('should enable AppsecFsPlugin after the first request', () => {
+      incomingHttpRequestStart.publish({})
       sinon.assert.calledOnceWithExactly(appsecFsPlugin.enable, 'rasp')
+      sinon.assert.calledOnce(incomingHttpRequestStart.unsubscribe)
     })
   })
 
@@ -74,6 +83,10 @@ describe('RASP - lfi.js', () => {
     const path = '/etc/passwd'
     const ctx = { path }
     const req = {}
+
+    beforeEach(() => {
+      incomingHttpRequestStart.publish({})
+    })
 
     it('should analyze lfi for root fs operations', () => {
       const fs = { root: true }

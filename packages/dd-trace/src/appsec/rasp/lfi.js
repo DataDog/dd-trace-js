@@ -1,6 +1,6 @@
 'use strict'
 
-const { fsOperationStart } = require('../channels')
+const { fsOperationStart, incomingHttpRequestStart } = require('../channels')
 const { storage } = require('../../../../datadog-core')
 const { enable: enableFsPlugin, disable: disableFsPlugin } = require('./fs-plugin')
 const { FS_OPERATION_PATH } = require('../addresses')
@@ -13,15 +13,22 @@ let config
 function enable (_config) {
   config = _config
 
-  enableFsPlugin('rasp')
-
-  fsOperationStart.subscribe(analyzeLfi)
+  incomingHttpRequestStart.subscribe(onFirstReceivedRequest)
 }
 
 function disable () {
   if (fsOperationStart.hasSubscribers) fsOperationStart.unsubscribe(analyzeLfi)
+  if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(onFirstReceivedRequest)
 
   disableFsPlugin('rasp')
+}
+
+function onFirstReceivedRequest () {
+  incomingHttpRequestStart.unsubscribe(onFirstReceivedRequest)
+
+  enableFsPlugin('rasp')
+
+  fsOperationStart.subscribe(analyzeLfi)
 }
 
 function analyzeLfi (ctx) {
