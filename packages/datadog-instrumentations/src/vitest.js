@@ -21,7 +21,7 @@ const libraryConfigurationCh = channel('ci:vitest:library-configuration')
 const knownTestsCh = channel('ci:vitest:known-tests')
 
 const taskToAsync = new WeakMap()
-
+const taskToStatuses = new WeakMap()
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 function isReporterPackage (vitestPackage) {
@@ -124,14 +124,16 @@ function getSortWrapper (sort) {
       isFlakyTestRetriesEnabled = false
       isEarlyFlakeDetectionEnabled = false
     }
-    debugger
+
     if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
       this.ctx.config.retry = flakyTestRetriesCount
     }
+
     if (isEarlyFlakeDetectionEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
-      debugger
       if (!knownTestsResponse.err) {
+        // TODO: check if there's a big difference between the known tests and the current tests
+        // to disable the feature
         knownTests = knownTestsResponse.knownTests
       } else {
         isEarlyFlakeDetectionEnabled = false
@@ -206,8 +208,6 @@ function getCreateCliWrapper (vitestPackage, frameworkVersion) {
   return vitestPackage
 }
 
-let taskToStatuses = new WeakMap()
-
 addHook({
   name: 'vitest',
   versions: ['>=1.6.0'],
@@ -252,10 +252,6 @@ addHook({
     } catch (e) {
       // ignore error
     }
-    // console.log({
-    //   testName,
-    //   retryInfo
-    // })
     const { retry: numAttempt, repeats: numRepetition } = retryInfo
     // it can be repeated
 
@@ -269,22 +265,16 @@ addHook({
         })
       }
     }
-    // console.log('numRepetition', numRepetition)
     if (numRepetition === 0) {
       taskToStatuses.set(task, [task.result.state])
     }
 
     if (numRepetition > 0 && numRepetition < 10) { // it may or may have not failed
       const statuses = taskToStatuses.get(task)
-      // here we finish the earlier iteration, as long as it's not the _last_ iteration (which will be finished normally)
-      // we need to know what the status was
-      // console.log('task.result.state', {
-      //   state: task.result,
-      //   numRepetition,
-      //   'globalThis.__vitest_worker__': globalThis.__vitest_worker__
-      // })
+      // here we finish the earlier iteration,
+      // as long as it's not the _last_ iteration (which will be finished normally)
+      // TODO: check duration (not to repeat if it's too slow)
       statuses.push(task.result.state)
-      // would this work??
       const asyncResource = taskToAsync.get(task)
       if (asyncResource) {
         if (task.result.state === 'fail') {
@@ -297,7 +287,9 @@ addHook({
             testPassCh.publish({ task })
           })
         }
-        task.result.state = 'pass' // we make it pass so it doesn't fail the test
+        // we make it pass so it doesn't fail the test
+        // TODO: does this work? Add enough tests
+        task.result.state = 'pass'
       }
     } else if (numRepetition === 10) {
       // we modify the status to be the EFD status (if one passes, it's a pass)
@@ -446,7 +438,6 @@ addHook({
 
     const testTasks = getTypeTasks(startTestsResponse[0].tasks)
 
-    // console.log('testTasks', testTasks)
     // Only one test task per test, even if there are retries
     testTasks.forEach(task => {
       const testAsyncResource = taskToAsync.get(task)

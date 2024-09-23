@@ -39,7 +39,6 @@ class VitestPlugin extends CiPlugin {
     this.taskToFinishTime = new WeakMap()
 
     this.addSub('ci:vitest:test:start', ({ testName, testSuiteAbsolutePath, isRetry, isNew }) => {
-      // console.log('starting', testName)
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const store = storage.getStore()
 
@@ -66,10 +65,6 @@ class VitestPlugin extends CiPlugin {
     this.addSub('ci:vitest:test:finish-time', ({ status, task }) => {
       const store = storage.getStore()
       const span = store?.span
-      // console.log('finishing', {
-      //   name: span.context()._tags['test.name'],
-      //   id: span.context().toTraceId()
-      // })
 
       // we store the finish time to finish at a later hook
       // this is because the test might fail at a `afterEach` hook
