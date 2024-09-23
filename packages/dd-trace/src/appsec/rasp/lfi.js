@@ -9,9 +9,14 @@ const { RULE_TYPES, handleResult } = require('./utils')
 const { isAbsolute } = require('path')
 
 let config
+let enabled
 
 function enable (_config) {
   config = _config
+
+  if (enabled) return
+
+  enabled = true
 
   incomingHttpRequestStart.subscribe(onFirstReceivedRequest)
 }
@@ -21,6 +26,8 @@ function disable () {
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(onFirstReceivedRequest)
 
   disableFsPlugin('rasp')
+
+  enabled = false
 }
 
 function onFirstReceivedRequest () {
