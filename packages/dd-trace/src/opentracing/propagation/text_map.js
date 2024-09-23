@@ -127,7 +127,7 @@ class TextMapPropagator {
         `${this._encodeOtelBaggageKey(String(key).trim())}=${encodeURIComponent(String(value).trim())}`).join(',')
       const buf = Buffer.from(baggage)
       if (buf.length > this._config.baggageMaxBytes) return
-      carrier.baggage = baggage
+      if (baggage) carrier.baggage = baggage
     }
   }
 

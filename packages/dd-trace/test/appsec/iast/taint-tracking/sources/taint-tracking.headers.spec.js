@@ -13,12 +13,10 @@ describe('Headers sourcing', () => {
   function app (req) {
     const store = storage.getStore()
     const iastContext = iastContextFunctions.getIastContext(store)
-    console.log('iastContext', iastContext)
 
     Object.keys(req.headers).forEach(headerName => {
       const headerValue = req.headers[headerName]
       const isHeaderValueTainted = isTainted(iastContext, headerValue)
-      console.log('headerValue', headerValue, isHeaderValueTainted)
       expect(isHeaderValueTainted).to.be.true
       const taintedHeaderValueRanges = getRanges(iastContext, headerValue)
       expect(taintedHeaderValueRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_HEADER_VALUE)
