@@ -204,8 +204,6 @@ function withVersions (plugin, modules, range, cb) {
     instrumentations
       .filter(instrumentation => instrumentation.name === moduleName)
       .forEach(instrumentation => {
-        console.log('rabe', process.env.PACKAGE_VERSION_RANGE)
-        console.log('rabe', process.env.PLUGINS)
         const versions = process.env.PACKAGE_VERSION_RANGE
           ? [process.env.PACKAGE_VERSION_RANGE]
           : instrumentation.versions
@@ -223,7 +221,6 @@ function withVersions (plugin, modules, range, cb) {
             testVersions.set(max, { range: version, test: version })
           })
       })
-    console.log('TEST VERSIONS', testVersions)
 
     Array.from(testVersions)
       .filter(v => !range || semver.satisfies(v[0], range))

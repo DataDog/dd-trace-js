@@ -17,16 +17,22 @@ const latestsPath = path.join(
   'latests.json'
 )
 
-const yamlPath = path.join(
+const matricesPath = path.join(
   __dirname,
   '..',
-  '.github',
-  'workflows',
-  'plugins.yml'
+  'packages',
+  'datadog-instrumentations',
+  'src',
+  'helpers',
+  'matrices.json'
 )
+
 const latestsJson = require(latestsPath)
 const internalsNames = Array.from(new Set(getInternals().map(n => n.name)))
   .filter(x => typeof x === 'string' && x !== 'child_process' && !x.startsWith('node:'))
+
+const matricesJson = require(matricesPath)
+const pluginsNames = Object.getOwnPropertyNames(yaml.load(fs.readFileSync(matricesPath, 'utf-8')).matrices)
 
 // TODO A lot of this can be optimized by using `npm outdated`.
 
@@ -36,33 +42,72 @@ function makeAPR (branchName) {
   execSync(`gh pr create --title ${title} --body ${body} --base master --head ${branchName} `)
 }
 
-function updatePluginsYaml () {
-  const plugins = yaml.load(fs.readFileSync(yamlPath, 'utf-8'))
-  const jobs = plugins.jobs
-
-  for (const job in jobs) {
-    if (jobs[job]?.strategy?.matrix?.range) { console.log('found range', job, jobs[job]?.strategy?.matrix?.range) }
+function maxVersion (range) {
+  if (typeof range === 'string') {
+    return range
   }
+  return range.pop()
+}
+
+function minVersion (range) {
+  if (typeof range === 'string') {
+    return range
+  }
+  return range.shift()
+}
+
+function splitting (element) {
+  return +element.split('.')[0]
+}
+
+async function ranges (name, minimum) {
+  const distTags = await npmView(`${name} dist-tags`)
+  const latestVersion = splitting(distTags?.latest)
+
+  const splitMin = splitting(minimum)
+
+  const ranges = []
+  let versionRange
+  let maxRange
+  let minRange
+
+  for (let major = splitMin; major <= latestVersion; major++) {
+    try {
+      versionRange = await npmView(`${name}@${major} version`)
+      maxRange = maxVersion(versionRange)
+      minRange = minVersion(versionRange)
+
+      if (major === splitMin) {
+        ranges.push(`${minimum} - ${maxRange}`)
+      } else if (versionRange !== undefined) {
+        ranges.push(`${minRange} - ${maxRange}`)
+      }
+    } catch (e) {
+      console.log(`No version range found for "${name}" at version ${major}`)
+    }
+  }
+  return ranges
 }
 
 async function fix () {
-  updatePluginsYaml()
-  const latests = {}
-  for (const name of internalsNames) {
-    const distTags = await npmView(name + ' dist-tags')
-    const latest = distTags.latest
-    latests[name] = latest
+  let latests
+
+  for (const name of pluginsNames) {
+    latests = matricesJson.matrices[name]
+    const minVersion = latests['min-version']
+    const versions = await ranges(name, minVersion)
+
+    latests.range = versions
   }
-  latestsJson.latests = latests
-  fs.writeFileSync(latestsPath, JSON.stringify(latestsJson, null, 2))
+  fs.writeFileSync(matricesPath, JSON.stringify(matricesJson, null, 2))
 
   const result = execSync('git status').toString()
 
-  if (result.includes(latestsPath)) {
-    const branchName = 'fix_outdated_integrations'
+  if (result.includes(matricesPath)) {
+    const branchName = 'update_outdated_integrations'
     try {
       execSync(`git checkout -b ${branchName}`)
-      execSync(`git add ${latestsPath}`)
+      execSync(`git add ${matricesPath}`)
       execSync('git commit -m "fix: update integr latests.json"')
       execSync(`git push origin ${branchName}`)
 
