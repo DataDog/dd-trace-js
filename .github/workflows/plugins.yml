@@ -109,7 +109,7 @@ jobs:
 
   amqp10:
     strategy:
-      matrix: ${{fromJson(needs.versions.outputs.matrices).amqp10}}
+      matrix: ${{fromJson(needs.versions.outputs).amqp10}}
     runs-on: ubuntu-latest
     services:
       qpid:
@@ -275,7 +275,7 @@ jobs:
     needs: 
       - versions
     strategy:
-      matrix: ${{fromJson(needs.versions.outputs.matrices).couchbase}}
+      matrix: ${{fromJson(needs.versions.outputs).couchbase}}
     runs-on: ubuntu-latest
     services:
       couchbase:
