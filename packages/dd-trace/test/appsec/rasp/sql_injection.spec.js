@@ -1,6 +1,6 @@
 'use strict'
 
-const { pgQueryStart, mysql2ConnectionQueryStart } = require('../../../src/appsec/channels')
+const { pgQueryStart, mysql2OuterQueryStart } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
 const proxyquire = require('proxyquire')
 
@@ -122,7 +122,7 @@ describe('RASP - sql_injection', () => {
       const req = {}
       datadogCore.storage.getStore.returns({ req })
 
-      mysql2ConnectionQueryStart.publish(ctx)
+      mysql2OuterQueryStart.publish(ctx)
 
       const persistent = {
         [addresses.DB_STATEMENT]: 'SELECT 1',
@@ -140,7 +140,7 @@ describe('RASP - sql_injection', () => {
       const req = {}
       datadogCore.storage.getStore.returns({ req })
 
-      mysql2ConnectionQueryStart.publish(ctx)
+      mysql2OuterQueryStart.publish(ctx)
 
       sinon.assert.notCalled(waf.run)
     })
@@ -151,7 +151,7 @@ describe('RASP - sql_injection', () => {
       }
       datadogCore.storage.getStore.returns(undefined)
 
-      mysql2ConnectionQueryStart.publish(ctx)
+      mysql2OuterQueryStart.publish(ctx)
 
       sinon.assert.notCalled(waf.run)
     })
@@ -162,7 +162,7 @@ describe('RASP - sql_injection', () => {
       }
       datadogCore.storage.getStore.returns({})
 
-      mysql2ConnectionQueryStart.publish(ctx)
+      mysql2OuterQueryStart.publish(ctx)
 
       sinon.assert.notCalled(waf.run)
     })
@@ -173,7 +173,7 @@ describe('RASP - sql_injection', () => {
       }
       datadogCore.storage.getStore.returns({})
 
-      mysql2ConnectionQueryStart.publish(ctx)
+      mysql2OuterQueryStart.publish(ctx)
 
       sinon.assert.notCalled(waf.run)
     })
