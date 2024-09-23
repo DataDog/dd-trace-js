@@ -234,8 +234,7 @@ addHook({ name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['>=2.3.0'] }, 
 
         if (abortController.signal.aborted) {
           const getConnection = this.getConnection
-          this.getConnection = function () {
-          }
+          this.getConnection = function () {}
 
           let queryCommand
           try {
@@ -250,6 +249,7 @@ addHook({ name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['>=2.3.0'] }, 
             } else {
               queryCommand.emit('error', abortController.signal.reason)
             }
+
             queryCommand.emit('end')
           })
 
@@ -270,6 +270,7 @@ addHook({ name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['>=2.3.0'] }, 
           if (typeof values === 'function') {
             cb = values
           }
+
           process.nextTick(() => {
             cb(abortController.signal.reason)
           })
