@@ -22,6 +22,7 @@ const knownTestsCh = channel('ci:vitest:known-tests')
 
 const taskToAsync = new WeakMap()
 const taskToStatuses = new WeakMap()
+const newTasks = new WeakSet()
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 function isReporterPackage (vitestPackage) {
@@ -111,6 +112,7 @@ function getSortWrapper (sort) {
     let isFlakyTestRetriesEnabled = false
     let flakyTestRetriesCount = 0
     let isEarlyFlakeDetectionEnabled = false
+    let earlyFlakeDetectionNumRetries = 0
     let knownTests = {}
 
     try {
@@ -119,6 +121,7 @@ function getSortWrapper (sort) {
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
+        earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
       }
     } catch (e) {
       isFlakyTestRetriesEnabled = false
@@ -142,7 +145,9 @@ function getSortWrapper (sort) {
       // Note: setting this.ctx.config.provide directly does not work because it's cached
       try {
         const workspaceProject = this.ctx.getCoreWorkspaceProject()
-        workspaceProject._provided.knownTests = JSON.stringify(knownTests.vitest)
+        workspaceProject._provided._ddKnownTests = knownTests.vitest
+        workspaceProject._provided._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
+        workspaceProject._provided._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
       } catch (e) {
         log.error('Could not send known tests to workers so Early Flake Detection will not work.')
       }
@@ -215,26 +220,37 @@ addHook({
 }, (vitestPackage) => {
   const { VitestTestRunner } = vitestPackage
 
-  // test start (only tests that are not marked as skip or todo)
+  // `onBeforeRunTask` is run before any repetition or attempt is run
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => async function (task) {
     const testName = getTestName(task)
     let isNew = false
 
-    // TODO: do not do if EFD is disabled
     try {
-      const knownTests = JSON.parse(globalThis.__vitest_worker__?.providedContext?.knownTests)
-      // TODO: does this work for suites whose root is not cwd?
-      const testsForThisTestSuite = knownTests[task.file.name] || []
-      isNew = !testsForThisTestSuite.includes(testName)
-      if (isNew) {
-        task.repeats = 10 // TODO: change by name
+      const {
+        _ddKnownTests: knownTests,
+        _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled,
+        _ddEarlyFlakeDetectionNumRetries: numRepeats
+      } = globalThis.__vitest_worker__.providedContext
+
+      if (isEarlyFlakeDetectionEnabled) {
+        // TODO: does this work for suites whose root is not cwd?
+        const testsForThisTestSuite = knownTests[task.file.name] || []
+        isNew = !testsForThisTestSuite.includes(testName)
+
+        if (isNew) {
+          task.repeats = numRepeats
+          newTasks.add(task)
+        }
       }
     } catch (e) {
-      // ignore error
+      log.error('Vitest workers could not parse known tests, so Early Flake Detection will not work.')
     }
 
     return onBeforeRunTask.apply(this, arguments)
   })
+
+  // test start (only tests that are not marked as skip or todo)
+  // `onBeforeTryTask` is run for every repeition and attempt of the test
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeTryTask', onBeforeTryTask => async function (task, retryInfo) {
     if (!testStartCh.hasSubscribers) {
       return onBeforeTryTask.apply(this, arguments)
@@ -242,15 +258,16 @@ addHook({
     const testName = getTestName(task)
     let isNew = false
 
-    // TODO: do not do if EFD is disabled
-    // TODO: do not repeat `isNew` calculation from above
     try {
-      const knownTests = JSON.parse(globalThis.__vitest_worker__?.providedContext?.knownTests)
-      // TODO: does this work for suites whose root is not cwd?
-      const testsForThisTestSuite = knownTests[task.file.name] || []
-      isNew = !testsForThisTestSuite.includes(testName)
+      const {
+        _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled
+      } = globalThis.__vitest_worker__.providedContext
+
+      if (isEarlyFlakeDetectionEnabled) {
+        isNew = newTasks.has(task)
+      }
     } catch (e) {
-      // ignore error
+      log.error('Vitest workers could not parse known tests, so Early Flake Detection will not work.')
     }
     const { retry: numAttempt, repeats: numRepetition } = retryInfo
     // it can be repeated
@@ -269,6 +286,7 @@ addHook({
       taskToStatuses.set(task, [task.result.state])
     }
 
+    // TODO: only do this if EFD is enabled
     if (numRepetition > 0 && numRepetition < 10) { // it may or may have not failed
       const statuses = taskToStatuses.get(task)
       // here we finish the earlier iteration,
@@ -319,7 +337,7 @@ addHook({
       testStartCh.publish({
         testName,
         testSuiteAbsolutePath: task.file.filepath,
-        isRetry: numAttempt > 0,
+        isRetry: numAttempt > 0 || numRepetition > 0,
         isNew
       })
     })

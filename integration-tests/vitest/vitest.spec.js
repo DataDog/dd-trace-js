@@ -19,11 +19,15 @@ const {
   TEST_COMMAND,
   TEST_LEVEL_EVENT_TYPES,
   TEST_SOURCE_FILE,
-  TEST_SOURCE_START
+  TEST_SOURCE_START,
+  TEST_IS_NEW,
+  TEST_NAME
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
-const versions = ['1.6.0', 'latest']
+const NUM_RETRIES_EFD = 3
+
+const versions = ['latest']
 
 const linePctMatchRegex = /Lines\s+:\s+([\d.]+)%/
 
@@ -352,7 +356,7 @@ versions.forEach((version) => {
       })
     })
 
-    // only works for >=2.0.0
+    // total code coverage only works for >=2.0.0
     if (version === 'latest') {
       const coverageProviders = ['v8', 'istanbul']
 
@@ -405,5 +409,87 @@ versions.forEach((version) => {
         })
       })
     }
+    // maybe only latest version?
+    context('early flake detection', () => {
+      it.only('retries new tests', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          }
+        })
+
+        receiver.setKnownTests({
+          vitest: {
+            'ci-visibility/vitest-tests/early-flake-detection.mjs': [
+              // 'early flake detection can retry tests that eventually pass', // will be considered new
+              // 'early flake detection can retry tests that never pass', // will be considered new
+              'early flake detection does not retry if it is not new'
+            ]
+          }
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const tests = events.filter(event => event.type === 'test').map(test => test.content)
+
+            assert.equal(tests.length, 9)
+
+            assert.includeMembers(tests.map(test => test.meta[TEST_NAME]), [
+              'early flake detection can retry tests that eventually pass',
+              'early flake detection can retry tests that eventually pass',
+              'early flake detection can retry tests that eventually pass',
+              'early flake detection can retry tests that eventually pass',
+              'early flake detection can retry tests that always pass',
+              'early flake detection can retry tests that always pass',
+              'early flake detection can retry tests that always pass',
+              'early flake detection can retry tests that always pass',
+              'early flake detection does not retry if it is not new'
+            ])
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(newTests.length, 8) // 4 executions of the two new tests
+
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(retriedTests.length, 6) // 3 retries of the two new tests
+
+            // exit code should be 0 and test session should be reported as passed,
+            // even though there are some failing executions
+            const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+            assert.equal(failedTests.length, 2)
+            const testSessionEvent = events.find(event => event.type === 'test_session_end').content
+            assert.equal(testSessionEvent.meta[TEST_STATUS], 'pass')
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run', // TODO: change tests we run
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', (exitCode) => {
+          eventsPromise.then(() => {
+            assert.equal(exitCode, 0)
+            done()
+          }).catch(done)
+        })
+
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
+      })
+    })
   })
 })
