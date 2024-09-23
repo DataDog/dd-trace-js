@@ -145,10 +145,8 @@ async function assertPackage (name, version, dependency, external) {
 }
 
 async function addDependencies (dependencies, name, versionRange) {
-  console.log('VERSION RANGE', versionRange)
   const versionList = await getVersionList(name)
   const version = semver.maxSatisfying(versionList, versionRange)
-  // console.log('VERSION', version)
   const pkgJson = await npmView(`${name}@${version}`)
   for (const dep of deps[name]) {
     for (const section of ['devDependencies', 'peerDependencies']) {
@@ -166,7 +164,6 @@ async function getVersionList (name) {
   }
   const list = await npmView(`${name} versions`)
   versionLists[name] = list
-  console.log('LIST', list[309])
   return list
 }
 
