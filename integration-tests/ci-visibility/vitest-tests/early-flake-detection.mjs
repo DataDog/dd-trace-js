@@ -4,11 +4,11 @@ import { sum } from './sum'
 let numAttempt = 0
 
 describe('early flake detection', () => {
-  test('can retry tests that eventually pass', () => {
+  test('can retry tests that eventually pass', { repeats: process.env.SHOULD_REPEAT && 2 }, () => {
     expect(sum(1, 2)).to.equal(numAttempt++ > 1 ? 3 : 4)
   })
 
-  test('can retry tests that always pass', () => {
+  test('can retry tests that always pass', { repeats: process.env.SHOULD_REPEAT && 2 }, () => {
     if (process.env.ALWAYS_FAIL) {
       expect(sum(1, 2)).to.equal(4)
     } else {

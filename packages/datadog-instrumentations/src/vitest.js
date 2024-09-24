@@ -256,6 +256,7 @@ addHook({
             if (isNew) {
               task.repeats = numRepeats
               newTasks.add(task)
+              taskToStatuses.set(task, [])
             }
           }
         })
@@ -275,11 +276,14 @@ addHook({
     }
     const testName = getTestName(task)
     let isNew = false
+    let isEarlyFlakeDetectionEnabled = false
 
     try {
       const {
-        _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled
+        _ddIsEarlyFlakeDetectionEnabled
       } = globalThis.__vitest_worker__.providedContext
+
+      isEarlyFlakeDetectionEnabled = _ddIsEarlyFlakeDetectionEnabled
 
       if (isEarlyFlakeDetectionEnabled) {
         isNew = newTasks.has(task)
@@ -299,20 +303,19 @@ addHook({
         })
       }
     }
-    if (numRepetition === 0) {
-      taskToStatuses.set(task, [task.result.state])
-    }
 
-    // TODO: only do this if EFD is enabled
-    if (numRepetition > 0 && numRepetition < 10) { // it may or may have not failed
-      const statuses = taskToStatuses.get(task)
-      // here we finish the earlier iteration,
+    const lastExecutionStatus = task.result.state
+
+    // These clauses handle task.repeats, whether EFD is enabled or not
+    // The only thing that EFD does is to forcefully pass the test if it has passed at least once
+    if (numRepetition > 0 && numRepetition < task.repeats) { // it may or may have not failed
+      // Here we finish the earlier iteration,
       // as long as it's not the _last_ iteration (which will be finished normally)
-      // TODO: check duration (not to repeat if it's too slow)
-      statuses.push(task.result.state)
+
+      // TODO: check test duration (not to repeat if it's too slow)
       const asyncResource = taskToAsync.get(task)
       if (asyncResource) {
-        if (task.result.state === 'fail') {
+        if (lastExecutionStatus === 'fail') {
           const testError = task.result?.errors?.[0]
           asyncResource.runInAsyncScope(() => {
             testErrorCh.publish({ error: testError })
@@ -322,16 +325,16 @@ addHook({
             testPassCh.publish({ task })
           })
         }
-        // we make it pass so it doesn't fail the test
-        // TODO: does this work? Add enough tests
-        task.result.state = 'pass'
+        if (isEarlyFlakeDetectionEnabled) {
+          const statuses = taskToStatuses.get(task)
+          statuses.push(lastExecutionStatus)
+          // We forcefully report the test as passed, so vitest does not consider it failed
+          task.result.state = 'pass'
+        }
       }
-    } else if (numRepetition === 10) {
-      // we modify the status to be the EFD status (if one passes, it's a pass)
-      const statuses = taskToStatuses.get(task)
-      statuses.push(task.result.state)
+    } else if (numRepetition === task.repeats) {
       const asyncResource = taskToAsync.get(task)
-      if (task.result.state === 'fail') {
+      if (lastExecutionStatus === 'fail') {
         const testError = task.result?.errors?.[0]
         asyncResource.runInAsyncScope(() => {
           testErrorCh.publish({ error: testError })
@@ -341,9 +344,13 @@ addHook({
           testPassCh.publish({ task })
         })
       }
-      const hasPass = statuses.includes('pass')
-      if (hasPass) {
-        task.result.state = 'pass'
+      // If EFD is enabled and there is at least one pass, the test is considered passed
+      if (isEarlyFlakeDetectionEnabled) {
+        const statuses = taskToStatuses.get(task)
+        statuses.push(lastExecutionStatus)
+        if (statuses.includes('pass')) {
+          task.result.state = 'pass'
+        }
       }
     }
 
@@ -363,7 +370,7 @@ addHook({
 
   // test finish (only passed tests)
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterTryTask', onAfterTryTask =>
-    async function (task, { retry: retryCount, repeats: numRepetition }) {
+    async function (task, { retry: retryCount }) {
       if (!testFinishTimeCh.hasSubscribers) {
         return onAfterTryTask.apply(this, arguments)
       }
@@ -374,8 +381,6 @@ addHook({
 
       if (asyncResource) {
         // We don't finish here because the test might fail in a later hook (afterEach)
-        // DOES NOT WORK FOR REPEAT
-        // check if repeat
         asyncResource.runInAsyncScope(() => {
           testFinishTimeCh.publish({ status, task })
         })
