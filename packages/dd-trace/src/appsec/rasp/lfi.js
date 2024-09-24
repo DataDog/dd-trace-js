@@ -31,7 +31,11 @@ function disable () {
 }
 
 function onFirstReceivedRequest () {
-  incomingHttpRequestStart.unsubscribe(onFirstReceivedRequest)
+  process.nextTick(() => {
+    // TODO: review. If unsubscribe is called synchronously other incomingHttpRequestStart listeners like
+    // appsec incomingHttpStartTranslator are not called
+    incomingHttpRequestStart.unsubscribe(onFirstReceivedRequest)
+  })
 
   enableFsPlugin('rasp')
 
