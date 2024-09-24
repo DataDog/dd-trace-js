@@ -2,6 +2,7 @@ import { describe, test, expect } from 'vitest'
 import { sum } from './sum'
 
 let numAttempt = 0
+let numOtherAttempt = 0
 
 describe('early flake detection', () => {
   test('can retry tests that eventually pass', { repeats: process.env.SHOULD_REPEAT && 2 }, () => {
@@ -23,4 +24,10 @@ describe('early flake detection', () => {
   test.skip('does not retry if the test is skipped', () => {
     expect(sum(1, 2)).to.equal(3)
   })
+
+  if (process.env.SHOULD_ADD_EVENTUALLY_FAIL) {
+    test('can retry tests that eventually fail', () => {
+      expect(sum(1, 2)).to.equal(numOtherAttempt++ < 3 ? 3 : 4)
+    })
+  }
 })

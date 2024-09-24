@@ -25,6 +25,7 @@ const isEarlyFlakeDetectionFaultyCh = channel('ci:vitest:is-early-flake-detectio
 const taskToAsync = new WeakMap()
 const taskToStatuses = new WeakMap()
 const newTasks = new WeakSet()
+const switchedStatuses = new WeakSet()
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 function isReporterPackage (vitestPackage) {
@@ -49,6 +50,7 @@ function getChannelPromise (channelToPublishTo) {
 }
 
 function getSessionStatus (state) {
+  console.log('state.getCountOfFailedTests()', state.getCountOfFailedTests())
   if (state.getCountOfFailedTests() > 0) {
     return 'fail'
   }
@@ -268,6 +270,26 @@ addHook({
     return onBeforeRunTask.apply(this, arguments)
   })
 
+  // `onAfterRunTask` is run after all repetitions or attempts are run
+  shimmer.wrap(VitestTestRunner.prototype, 'onAfterRunTask', onAfterRunTask => async function (task) {
+    const {
+      _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled
+    } = globalThis.__vitest_worker__.providedContext
+
+    if (isEarlyFlakeDetectionEnabled && taskToStatuses.has(task)) {
+      const statuses = taskToStatuses.get(task)
+      // If the test has passed at least once, we consider it passed
+      if (statuses.includes('pass')) {
+        if (task.result.state === 'fail') {
+          switchedStatuses.add(task)
+        }
+        task.result.state = 'pass'
+      }
+    }
+
+    return onAfterRunTask.apply(this, arguments)
+  })
+
   // test start (only tests that are not marked as skip or todo)
   // `onBeforeTryTask` is run for every repetition and attempt of the test
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeTryTask', onBeforeTryTask => async function (task, retryInfo) {
@@ -343,14 +365,6 @@ addHook({
         asyncResource.runInAsyncScope(() => {
           testPassCh.publish({ task })
         })
-      }
-      // If EFD is enabled and there is at least one pass, the test is considered passed
-      if (isEarlyFlakeDetectionEnabled) {
-        const statuses = taskToStatuses.get(task)
-        statuses.push(lastExecutionStatus)
-        if (statuses.includes('pass')) {
-          task.result.state = 'pass'
-        }
       }
     }
 
@@ -482,19 +496,21 @@ addHook({
     testTasks.forEach(task => {
       const testAsyncResource = taskToAsync.get(task)
       const { result } = task
+      // We have to trick vitest into thinking that the test has passed
+      // but we want to report it as failed if it did fail
+      const isSwitchedStatus = switchedStatuses.has(task)
 
       if (result) {
         const { state, duration, errors } = result
         if (state === 'skip') { // programmatic skip
           testSkipCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.file.filepath })
-        } else if (state === 'pass') {
+        } else if (state === 'pass' && !isSwitchedStatus) {
           if (testAsyncResource) {
             testAsyncResource.runInAsyncScope(() => {
               testPassCh.publish({ task })
             })
           }
-        } else if (state === 'fail') {
-          // If it's failing, we have no accurate finish time, so we have to use `duration`
+        } else if (state === 'fail' || isSwitchedStatus) {
           let testError
 
           if (errors?.length) {

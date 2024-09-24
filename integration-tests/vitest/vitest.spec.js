@@ -30,7 +30,7 @@ const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/
 
 const NUM_RETRIES_EFD = 3
 
-const versions = ['latest']
+const versions = ['1.6.0', 'latest']
 
 const linePctMatchRegex = /Lines\s+:\s+([\d.]+)%/
 
@@ -413,7 +413,7 @@ versions.forEach((version) => {
       })
     }
     // maybe only latest version?
-    context.only('early flake detection', () => {
+    context('early flake detection', () => {
       it('retries new tests', (done) => {
         receiver.setSettings({
           itr_enabled: false,
@@ -432,6 +432,7 @@ versions.forEach((version) => {
             'ci-visibility/vitest-tests/early-flake-detection.mjs': [
               // 'early flake detection can retry tests that eventually pass', // will be considered new
               // 'early flake detection can retry tests that always pass', // will be considered new
+              // 'early flake detection can retry tests that eventually fail', // will be considered new
               // 'early flake detection does not retry if the test is skipped', // skipped so not retried
               'early flake detection does not retry if it is not new'
             ]
@@ -444,13 +445,17 @@ versions.forEach((version) => {
 
             const tests = events.filter(event => event.type === 'test').map(test => test.content)
 
-            assert.equal(tests.length, 10)
+            assert.equal(tests.length, 14)
 
             assert.includeMembers(tests.map(test => test.meta[TEST_NAME]), [
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that eventually pass',
+              'early flake detection can retry tests that eventually fail',
+              'early flake detection can retry tests that eventually fail',
+              'early flake detection can retry tests that eventually fail',
+              'early flake detection can retry tests that eventually fail',
               'early flake detection can retry tests that always pass',
               'early flake detection can retry tests that always pass',
               'early flake detection can retry tests that always pass',
@@ -459,15 +464,15 @@ versions.forEach((version) => {
               'early flake detection does not retry if the test is skipped'
             ])
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            assert.equal(newTests.length, 8) // 4 executions of the two new tests
+            assert.equal(newTests.length, 12) // 4 executions of the three new tests
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.equal(retriedTests.length, 6) // 3 retries of the two new tests
+            assert.equal(retriedTests.length, 9) // 3 retries of the three new tests
 
             // exit code should be 0 and test session should be reported as passed,
             // even though there are some failing executions
             const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-            assert.equal(failedTests.length, 2)
+            assert.equal(failedTests.length, 3)
             const testSessionEvent = events.find(event => event.type === 'test_session_end').content
             assert.propertyVal(testSessionEvent.meta, TEST_STATUS, 'pass')
             assert.propertyVal(testSessionEvent.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
@@ -480,7 +485,8 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              SHOULD_ADD_EVENTUALLY_FAIL: '1'
             },
             stdio: 'pipe'
           }
@@ -816,9 +822,6 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
-
         childProcess.on('exit', (exitCode) => {
           eventsPromise.then(() => {
             assert.equal(exitCode, 0)
@@ -827,7 +830,7 @@ versions.forEach((version) => {
         })
       })
 
-      it.only('works with repeats config when EFD is disabled', (done) => {
+      it('works with repeats config when EFD is disabled', (done) => {
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: false,
@@ -884,9 +887,6 @@ versions.forEach((version) => {
             stdio: 'pipe'
           }
         )
-
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
 
         childProcess.on('exit', (exitCode) => {
           eventsPromise.then(() => {
