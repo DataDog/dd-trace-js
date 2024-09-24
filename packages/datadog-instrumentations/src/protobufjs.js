@@ -120,6 +120,10 @@ function wrapReflection (protobuf) {
   })
 }
 
+function isPromise (obj) {
+  return !!obj && (typeof obj === 'object' || typeof obj === 'function') && typeof obj.then === 'function'
+}
+
 addHook({
   name: 'protobufjs',
   versions: ['>=6.0.0']
@@ -127,9 +131,14 @@ addHook({
   shimmer.wrap(protobuf.Root.prototype, 'load', original => {
     return function wrappedLoad (...args) {
       const result = original.apply(this, args)
-      result.then(root => {
-        wrapProtobufClasses(root)
-      })
+      if (isPromise(result)) {
+        result.then(root => {
+          wrapProtobufClasses(root)
+        })
+      } else {
+        // If result is not a promise, directly wrap the protobuf classes
+        wrapProtobufClasses(result)
+      }
       return result
     }
   })
