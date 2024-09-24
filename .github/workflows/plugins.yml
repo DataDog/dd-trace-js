@@ -25,7 +25,7 @@ jobs:
           content=$(cat packages/datadog-instrumentations/src/helpers/matrices.json | tr '\n' ' ')
           echo "matrices=$content" >> $GITHUB_OUTPUT
           echo $content
-          echo $outputs
+          echo $matrices
 
   aerospike-node-16:
     runs-on: ubuntu-latest
