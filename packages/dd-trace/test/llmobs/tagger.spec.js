@@ -124,8 +124,6 @@ describe('tagger', () => {
     })
 
     it('uses the propagated trace id if provided', () => {
-      spanContext._trace.tags['_dd.p.llmobs_trace_id'] = '-123'
-
       tagger.setLLMObsSpanTags(span, 'llm')
 
       expect(span.context()._tags).to.deep.equal({

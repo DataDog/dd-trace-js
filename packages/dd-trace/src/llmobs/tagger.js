@@ -21,7 +21,8 @@ const {
   OUTPUT_MESSAGES,
   TAGS,
   NAME,
-  PROPAGATED_PARENT_ID_KEY
+  PROPAGATED_PARENT_ID_KEY,
+  ROOT_PARENT_ID
 } = require('./constants')
 
 class LLMObsTagger {
@@ -51,7 +52,7 @@ class LLMObsTagger {
     const parentId =
       parentLLMObsSpan?.context().toSpanId() ||
       span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ||
-      'undefined'
+      ROOT_PARENT_ID
     span.setTag(PARENT_ID_KEY, parentId)
   }
 

@@ -12,6 +12,7 @@ module.exports = {
   NAME: '_ml_obs.name',
   TRACE_ID: '_ml_obs.trace_id',
   PROPAGATED_TRACE_ID_KEY: '_dd.p.llmobs_trace_id',
+  ROOT_PARENT_ID: 'undefined',
 
   MODEL_NAME: '_ml_obs.meta.model_name',
   MODEL_PROVIDER: '_ml_obs.meta.model_provider',
