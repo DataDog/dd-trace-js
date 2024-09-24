@@ -50,7 +50,6 @@ function getChannelPromise (channelToPublishTo) {
 }
 
 function getSessionStatus (state) {
-  console.log('state.getCountOfFailedTests()', state.getCountOfFailedTests())
   if (state.getCountOfFailedTests() > 0) {
     return 'fail'
   }
@@ -350,7 +349,8 @@ addHook({
         if (isEarlyFlakeDetectionEnabled) {
           const statuses = taskToStatuses.get(task)
           statuses.push(lastExecutionStatus)
-          // We forcefully report the test as passed, so vitest does not consider it failed
+          // If we don't "reset" the result.state to "pass", once a repetition fails,
+          // vitest will always consider the test as failed, so we can't read the actual status
           task.result.state = 'pass'
         }
       }
