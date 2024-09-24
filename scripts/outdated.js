@@ -7,6 +7,8 @@ const fs = require('fs')
 const { execSync } = require('child_process')
 const yaml = require('js-yaml')
 
+const { generateMatrix } = require('./create_matrix')
+
 const latestsPath = path.join(
   __dirname,
   '..',
@@ -27,12 +29,23 @@ const matricesPath = path.join(
   'matrices.json'
 )
 
+const versionsPath = path.join(
+  __dirname,
+  '..',
+  'packages',
+  'datadog-instrumentations',
+  'src',
+  'helpers',
+  'versions.json'
+)
+
 const latestsJson = require(latestsPath)
 const internalsNames = Array.from(new Set(getInternals().map(n => n.name)))
   .filter(x => typeof x === 'string' && x !== 'child_process' && !x.startsWith('node:'))
 
 const matricesJson = require(matricesPath)
-const pluginsNames = Object.getOwnPropertyNames(yaml.load(fs.readFileSync(matricesPath, 'utf-8')).matrices)
+const versionsJson = require(versionsPath)
+const pluginNames = Object.getOwnPropertyNames(yaml.load(fs.readFileSync(matricesPath, 'utf-8')).matrices)
 
 // TODO A lot of this can be optimized by using `npm outdated`.
 
@@ -42,6 +55,10 @@ function makeAPR (branchName) {
   execSync(`gh pr create --title ${title} --body ${body} --base master --head ${branchName} `)
 }
 
+function splitting (element) {
+  return +element.split('.')[0]
+}
+
 function maxVersion (range) {
   if (typeof range === 'string') {
     return range
@@ -49,57 +66,43 @@ function maxVersion (range) {
   return range.pop()
 }
 
-function minVersion (range) {
-  if (typeof range === 'string') {
-    return range
+async function updateRange (name, major) {
+  const versionRange = await npmView(`${name}@${major} version`)
+
+  const maxRange = maxVersion(versionRange)
+
+  return maxRange
+}
+
+async function loopRange (name, range) {
+  for (let ele = 0; ele < range.length; ele++) {
+    const latest = range[ele].split(' - ')
+    const major = splitting(latest[0])
+
+    latest[1] = await updateRange(name, major)
+    range[ele] = `${latest[0]} - ${latest[1]}`
   }
-  return range.shift()
+  fs.writeFileSync(versionsPath, JSON.stringify(versionsJson, null, 2))
 }
 
-function splitting (element) {
-  return +element.split('.')[0]
-}
+async function updatePlugin (name) {
+  const plugin = versionsJson.matrices[name]
 
-async function ranges (name, minimum) {
-  const distTags = await npmView(`${name} dist-tags`)
-  const latestVersion = splitting(distTags?.latest)
-
-  const splitMin = splitting(minimum)
-
-  const ranges = []
-  let versionRange
-  let maxRange
-  let minRange
-
-  for (let major = splitMin; major <= latestVersion; major++) {
-    try {
-      versionRange = await npmView(`${name}@${major} version`)
-      maxRange = maxVersion(versionRange)
-      minRange = minVersion(versionRange)
-
-      if (major === splitMin) {
-        ranges.push(`${minimum} - ${maxRange}`)
-      } else if (versionRange !== undefined) {
-        ranges.push(`${minRange} - ${maxRange}`)
-      }
-    } catch (e) {
-      console.log(`No version range found for "${name}" at version ${major}`)
+  if (plugin['by-node-version'] === true) {
+    for (const versions in plugin['node-versions']) {
+      const pluginRange = plugin['node-versions']
+      loopRange(name, pluginRange[versions])
     }
+  } else {
+    loopRange(name, plugin.range)
   }
-  return ranges
 }
 
 async function fix () {
-  let latests
-
-  for (const name of pluginsNames) {
-    latests = matricesJson.matrices[name]
-    const minVersion = latests['min-version']
-    const versions = await ranges(name, minVersion)
-
-    latests.range = versions
+  for (const name of pluginNames) {
+    await updatePlugin(name)
+    generateMatrix(name)
   }
-  fs.writeFileSync(matricesPath, JSON.stringify(matricesJson, null, 2))
 
   const result = execSync('git status').toString()
 
@@ -133,6 +136,41 @@ async function check () {
       process.exitCode = 1
     }
   }
+}
+
+function minVersion (range) {
+  if (typeof range === 'string') {
+    return range
+  }
+  return range.shift()
+}
+async function ranges (name, minimum) {
+  const distTags = await npmView(`${name} dist-tags`)
+  const latestVersion = splitting(distTags?.latest)
+
+  const splitMin = splitting(minimum)
+
+  const ranges = []
+  let versionRange
+  let maxRange
+  let minRange
+
+  for (let major = splitMin; major <= latestVersion; major++) {
+    try {
+      versionRange = await npmView(`${name}@${major} version`)
+      maxRange = maxVersion(versionRange)
+      minRange = minVersion(versionRange)
+
+      if (major === splitMin) {
+        ranges.push(`${minimum} - ${maxRange}`)
+      } else if (versionRange !== undefined) {
+        ranges.push(`${minRange} - ${maxRange}`)
+      }
+    } catch (e) {
+      console.log(`No version range found for "${name}" at version ${major}`)
+    }
+  }
+  return ranges
 }
 
 if (process.argv.includes('fix')) fix()
