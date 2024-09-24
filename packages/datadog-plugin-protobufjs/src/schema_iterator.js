@@ -148,7 +148,7 @@ class SchemaExtractor {
     }
 
     // if the span is unsampled, do not sample the schema
-    if (tracer._prioritySampler.isSampled(span)) {
+    if (!tracer._prioritySampler.isSampled(span)) {
       return
     }
 
