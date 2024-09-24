@@ -107,9 +107,11 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
 
-  amqp10:
+  amqp10: # TODO: move rhea to its own job
+    needs: 
+      - versions
     strategy:
-      matrix: ${{fromJson(needs.versions.outputs.matrices).amqp10.range}}
+      matrix: ${{fromJson(needs.versions.outputs.matrices).matrices.amqp10}}
     runs-on: ubuntu-latest
     services:
       qpid:
@@ -123,6 +125,7 @@ jobs:
       PLUGINS: amqp10
       SERVICES: qpid
       DD_DATA_STREAMS_ENABLED: true
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test-and-upstream
@@ -130,9 +133,10 @@ jobs:
           echo $strategy.matrix
 
   amqplib:
+    needs: 
+      - versions
     strategy:
-      matrix:
-        range: ['0.10.4' ]
+      matrix: ${{fromJson(needs.versions.outputs.matrices).matrices.amqplib}}
     runs-on: ubuntu-latest
     services:
       rabbitmq:
@@ -142,17 +146,20 @@ jobs:
     env:
       PLUGINS: amqplib
       SERVICES: rabbitmq
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test-and-upstream
 
   apollo:
+    needs: 
+      - versions
     strategy:
-      matrix:
-        range: ['2.9.0']
+      matrix: ${{fromJson(needs.versions.outputs.matrices).matrices.apollo}}
     runs-on: ubuntu-latest
     env:
       PLUGINS: apollo
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test-and-upstream
