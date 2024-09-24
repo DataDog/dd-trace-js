@@ -72,7 +72,10 @@ describe('RASP - lfi.js', () => {
       incomingHttpRequestStart.publish({})
 
       sinon.assert.calledOnceWithExactly(appsecFsPlugin.enable, 'rasp')
-      sinon.assert.calledOnce(unsubscribe)
+
+      process.nextTick(() => {
+        sinon.assert.calledOnce(unsubscribe)
+      })
     })
   })
 
