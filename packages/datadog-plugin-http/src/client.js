@@ -58,7 +58,9 @@ class HttpClientPlugin extends ClientPlugin {
       span._spanContext._trace.record = false
     }
 
-    this.tracer.inject(span, HTTP_HEADERS, options.headers)
+    if (this.config.propagationFilter(uri)) {
+      this.tracer.inject(span, HTTP_HEADERS, options.headers)
+    }
 
     analyticsSampler.sample(span, this.config.measured)
 
