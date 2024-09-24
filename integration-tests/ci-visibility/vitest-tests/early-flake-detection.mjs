@@ -9,7 +9,11 @@ describe('early flake detection', () => {
   })
 
   test('can retry tests that always pass', () => {
-    expect(sum(1, 2)).to.equal(3)
+    if (process.env.ALWAYS_FAIL) {
+      expect(sum(1, 2)).to.equal(4)
+    } else {
+      expect(sum(1, 2)).to.equal(3)
+    }
   })
 
   test('does not retry if it is not new', () => {

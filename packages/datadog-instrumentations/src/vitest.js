@@ -19,6 +19,7 @@ const testSessionStartCh = channel('ci:vitest:session:start')
 const testSessionFinishCh = channel('ci:vitest:session:finish')
 const libraryConfigurationCh = channel('ci:vitest:library-configuration')
 const knownTestsCh = channel('ci:vitest:known-tests')
+const isEarlyFlakeDetectionFaultyCh = channel('ci:vitest:is-early-flake-detection-faulty')
 
 const taskToAsync = new WeakMap()
 const taskToStatuses = new WeakMap()
@@ -113,6 +114,7 @@ function getSortWrapper (sort) {
     let flakyTestRetriesCount = 0
     let isEarlyFlakeDetectionEnabled = false
     let earlyFlakeDetectionNumRetries = 0
+    let isEarlyFlakeDetectionFaulty = false
     let knownTests = {}
 
     try {
@@ -135,21 +137,33 @@ function getSortWrapper (sort) {
     if (isEarlyFlakeDetectionEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
       if (!knownTestsResponse.err) {
-        // TODO: check if there's a big difference between the known tests and the current tests
-        // to disable the feature
         knownTests = knownTestsResponse.knownTests
+        const testFilepaths = await this.ctx.getTestFilepaths()
+
+        isEarlyFlakeDetectionFaultyCh.publish({
+          knownTests: knownTests.vitest || {},
+          testFilepaths,
+          onDone: (isFaulty) => {
+            isEarlyFlakeDetectionFaulty = isFaulty
+          }
+        })
+        if (isEarlyFlakeDetectionFaulty) {
+          isEarlyFlakeDetectionEnabled = false
+          log.warn('Early flake detection is disabled because the number of new tests is too high.')
+        } else {
+          // TODO: use this to pass session and module IDs to the worker, instead of polluting process.env
+          // Note: setting this.ctx.config.provide directly does not work because it's cached
+          try {
+            const workspaceProject = this.ctx.getCoreWorkspaceProject()
+            workspaceProject._provided._ddKnownTests = knownTests.vitest
+            workspaceProject._provided._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
+            workspaceProject._provided._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+          } catch (e) {
+            log.warn('Could not send known tests to workers so Early Flake Detection will not work.')
+          }
+        }
       } else {
         isEarlyFlakeDetectionEnabled = false
-      }
-      // TODO: use this to pass session and module IDs to the worker, instead of polluting process.env
-      // Note: setting this.ctx.config.provide directly does not work because it's cached
-      try {
-        const workspaceProject = this.ctx.getCoreWorkspaceProject()
-        workspaceProject._provided._ddKnownTests = knownTests.vitest
-        workspaceProject._provided._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
-        workspaceProject._provided._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
-      } catch (e) {
-        log.error('Could not send known tests to workers so Early Flake Detection will not work.')
       }
     }
 
@@ -185,6 +199,8 @@ function getSortWrapper (sort) {
           status: getSessionStatus(this.state),
           testCodeCoverageLinesTotal,
           error,
+          isEarlyFlakeDetectionEnabled,
+          isEarlyFlakeDetectionFaulty,
           onFinish
         })
       })
