@@ -129,7 +129,7 @@ class SchemaExtractor {
     this.constructor.extractSchema(this.schema, builder, 0)
   }
 
-  static attachSchemaOnSpan (descriptor, span, operation, dataStreamsProcessor) {
+  static attachSchemaOnSpan (descriptor, span, operation, tracer) {
     if (!descriptor || !span) {
       return
     }
@@ -143,22 +143,22 @@ class SchemaExtractor {
     span.setTag(SCHEMA_NAME, removeLeadingPeriod(descriptor.fullName))
     span.setTag(SCHEMA_OPERATION, operation)
 
-    if (!dataStreamsProcessor.canSampleSchema(operation)) {
+    if (!tracer._dataStreamsProcessor.canSampleSchema(operation)) {
       return
     }
 
-    // const prio = span.context.samplingPriority
-    // if (prio === null || prio <= 0) {
-    //   return
-    // }
+    // if the span is unsampled, do not sample the schema
+    if (tracer._prioritySampler.isSampled(span)) {
+      return
+    }
 
-    const weight = dataStreamsProcessor.trySampleSchema(operation)
+    const weight = tracer._dataStreamsProcessor.trySampleSchema(operation)
     if (weight === 0) {
       return
     }
 
     const schemaData = SchemaBuilder.getSchemaDefinition(
-      this.extractSchemas(descriptor, dataStreamsProcessor)
+      this.extractSchemas(descriptor, tracer._dataStreamsProcessor)
     )
 
     span.setTag(SCHEMA_DEFINITION, schemaData.definition)
