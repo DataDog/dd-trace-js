@@ -41,6 +41,12 @@ class VitestPlugin extends CiPlugin {
 
     this.taskToFinishTime = new WeakMap()
 
+    this.addSub('ci:vitest:test:is-new', ({ knownTests, testSuiteAbsolutePath, testName, onDone }) => {
+      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const testsForThisTestSuite = knownTests[testSuite] || []
+      onDone(!testsForThisTestSuite.includes(testName))
+    })
+
     this.addSub('ci:vitest:is-early-flake-detection-faulty', ({
       knownTests,
       testFilepaths,

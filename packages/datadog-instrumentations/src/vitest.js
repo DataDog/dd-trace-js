@@ -8,6 +8,7 @@ const testFinishTimeCh = channel('ci:vitest:test:finish-time')
 const testPassCh = channel('ci:vitest:test:pass')
 const testErrorCh = channel('ci:vitest:test:error')
 const testSkipCh = channel('ci:vitest:test:skip')
+const isNewTestCh = channel('ci:vitest:test:is-new')
 
 // test suite hooks
 const testSuiteStartCh = channel('ci:vitest:test-suite:start')
@@ -239,8 +240,6 @@ addHook({
   // `onBeforeRunTask` is run before any repetition or attempt is run
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => async function (task) {
     const testName = getTestName(task)
-    let isNew = false
-
     try {
       const {
         _ddKnownTests: knownTests,
@@ -249,14 +248,17 @@ addHook({
       } = globalThis.__vitest_worker__.providedContext
 
       if (isEarlyFlakeDetectionEnabled) {
-        // TODO: does this work for suites whose root is not cwd?
-        const testsForThisTestSuite = knownTests[task.file.name] || []
-        isNew = !testsForThisTestSuite.includes(testName)
-
-        if (isNew) {
-          task.repeats = numRepeats
-          newTasks.add(task)
-        }
+        isNewTestCh.publish({
+          knownTests,
+          testSuiteAbsolutePath: task.file.filepath,
+          testName,
+          onDone: (isNew) => {
+            if (isNew) {
+              task.repeats = numRepeats
+              newTasks.add(task)
+            }
+          }
+        })
       }
     } catch (e) {
       log.error('Vitest workers could not parse known tests, so Early Flake Detection will not work.')
@@ -266,7 +268,7 @@ addHook({
   })
 
   // test start (only tests that are not marked as skip or todo)
-  // `onBeforeTryTask` is run for every repeition and attempt of the test
+  // `onBeforeTryTask` is run for every repetition and attempt of the test
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeTryTask', onBeforeTryTask => async function (task, retryInfo) {
     if (!testStartCh.hasSubscribers) {
       return onBeforeTryTask.apply(this, arguments)
@@ -286,7 +288,6 @@ addHook({
       log.error('Vitest workers could not parse known tests, so Early Flake Detection will not work.')
     }
     const { retry: numAttempt, repeats: numRepetition } = retryInfo
-    // it can be repeated
 
     // We finish the previous test here because we know it has failed already
     if (numAttempt > 0) {

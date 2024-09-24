@@ -23,7 +23,8 @@ const {
   TEST_IS_NEW,
   TEST_NAME,
   TEST_EARLY_FLAKE_ENABLED,
-  TEST_EARLY_FLAKE_ABORT_REASON
+  TEST_EARLY_FLAKE_ABORT_REASON,
+  TEST_SUITE
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
@@ -233,7 +234,7 @@ versions.forEach((version) => {
         }).then(() => done()).catch(done)
 
         childProcess = exec(
-          './node_modules/.bin/vitest run', // TODO: change tests we run
+          './node_modules/.bin/vitest run',
           {
             cwd,
             env: {
@@ -271,7 +272,7 @@ versions.forEach((version) => {
         }).then(() => done()).catch(done)
 
         childProcess = exec(
-          './node_modules/.bin/vitest run', // TODO: change tests we run
+          './node_modules/.bin/vitest run',
           {
             cwd,
             env: {
@@ -312,7 +313,7 @@ versions.forEach((version) => {
         }).then(() => done()).catch(done)
 
         childProcess = exec(
-          './node_modules/.bin/vitest run', // TODO: change tests we run
+          './node_modules/.bin/vitest run',
           {
             cwd,
             env: {
@@ -473,7 +474,7 @@ versions.forEach((version) => {
           })
 
         childProcess = exec(
-          './node_modules/.bin/vitest run', // TODO: change tests we run
+          './node_modules/.bin/vitest run',
           {
             cwd,
             env: {
@@ -553,7 +554,7 @@ versions.forEach((version) => {
           })
 
         childProcess = exec(
-          './node_modules/.bin/vitest run', // TODO: change tests we run
+          './node_modules/.bin/vitest run',
           {
             cwd,
             env: {
@@ -762,6 +763,65 @@ versions.forEach((version) => {
         childProcess.on('exit', (exitCode) => {
           eventsPromise.then(() => {
             assert.equal(exitCode, 1)
+            done()
+          }).catch(done)
+        })
+      })
+
+      it('works when the cwd is not the repository root', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          }
+        })
+
+        receiver.setKnownTests({
+          vitest: {
+            'ci-visibility/subproject/vitest-test.mjs': [
+              'context can report passed test' // no test will be considered new
+            ]
+          }
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const tests = events.filter(event => event.type === 'test').map(test => test.content)
+
+            // no retries
+            assert.equal(tests.length, 1)
+
+            assert.propertyVal(tests[0].meta, TEST_SUITE, 'ci-visibility/subproject/vitest-test.mjs')
+            // it's not considered new
+            assert.notProperty(tests[0].meta, TEST_IS_NEW)
+          })
+
+        childProcess = exec(
+          '../../node_modules/.bin/vitest run',
+          {
+            cwd: `${cwd}/ci-visibility/subproject`,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
+              TEST_DIR: './vitest-test.mjs'
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
+
+        childProcess.on('exit', (exitCode) => {
+          eventsPromise.then(() => {
+            assert.equal(exitCode, 0)
             done()
           }).catch(done)
         })
