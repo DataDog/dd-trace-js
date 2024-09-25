@@ -234,7 +234,8 @@ describe('SpanStatsProcessor', () => {
     port: 8126,
     url: new URL('http://127.0.0.1:8126'),
     env: 'test',
-    tags: { tag: 'some tag' }
+    tags: { tag: 'some tag' },
+    version: '1.0.0'
   }
 
   it('should construct', () => {
@@ -253,6 +254,7 @@ describe('SpanStatsProcessor', () => {
     expect(processor.enabled).to.equal(config.stats.enabled)
     expect(processor.env).to.equal(config.env)
     expect(processor.tags).to.deep.equal(config.tags)
+    expect(processor.version).to.equal(config.version)
   })
 
   it('should construct a disabled instance if appsec standalone is enabled', () => {
@@ -306,7 +308,7 @@ describe('SpanStatsProcessor', () => {
     expect(exporter.export).to.be.calledWith({
       Hostname: hostname(),
       Env: config.env,
-      Version: version,
+      Version: config.version,
       Stats: [{
         Start: 12340000000000,
         Duration: 10000000000,
@@ -325,6 +327,24 @@ describe('SpanStatsProcessor', () => {
           ErrorSummary: errorDistribution.toProto()
         }]
       }],
+      Lang: 'javascript',
+      TracerVersion: pkg.version,
+      RuntimeID: processor.tags['runtime-id'],
+      Sequence: processor.sequence
+    })
+  })
+
+  it('should export on interval with default version', () => {
+    const versionlessConfig = { ...config }
+    delete versionlessConfig.version
+    const processor = new SpanStatsProcessor(versionlessConfig)
+    processor.onInterval()
+
+    expect(exporter.export).to.be.calledWith({
+      Hostname: hostname(),
+      Env: config.env,
+      Version: version,
+      Stats: [],
       Lang: 'javascript',
       TracerVersion: pkg.version,
       RuntimeID: processor.tags['runtime-id'],
