@@ -34,40 +34,39 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, (Conne
   shimmer.wrap(Connection.prototype, 'query', query => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return query.apply(this, arguments)
 
-    const sqlIsString = typeof sql === 'string'
+    if (typeof sql === 'object') sql = sql?.sql
 
-    const sqlString = sqlIsString ? sql : sql?.sql
-    if (sqlString) {
-      const abortController = new AbortController()
-      startOuterQueryCh.publish({ sql: sqlString, abortController })
+    if (!sql) return query.apply(this, arguments)
 
-      if (abortController.signal.aborted) {
-        const addCommand = this.addCommand
-        this.addCommand = function (cmd) { return cmd }
+    const abortController = new AbortController()
+    startOuterQueryCh.publish({ sql, abortController })
 
-        let queryCommand
-        try {
-          queryCommand = query.apply(this, arguments)
-        } finally {
-          this.addCommand = addCommand
+    if (abortController.signal.aborted) {
+      const addCommand = this.addCommand
+      this.addCommand = function (cmd) { return cmd }
+
+      let queryCommand
+      try {
+        queryCommand = query.apply(this, arguments)
+      } finally {
+        this.addCommand = addCommand
+      }
+
+      cb = queryCommand.onResult
+
+      process.nextTick(() => {
+        if (cb) {
+          cb(abortController.signal.reason)
+        } else {
+          queryCommand.emit('error', abortController.signal.reason)
         }
 
-        cb = queryCommand.onResult
+        if (shouldEmitEndAfterQueryAbort) {
+          queryCommand.emit('end')
+        }
+      })
 
-        process.nextTick(() => {
-          if (cb) {
-            cb(abortController.signal.reason)
-          } else {
-            queryCommand.emit('error', abortController.signal.reason)
-          }
-
-          if (shouldEmitEndAfterQueryAbort) {
-            queryCommand.emit('end')
-          }
-        })
-
-        return queryCommand
-      }
+      return queryCommand
     }
 
     return query.apply(this, arguments)
@@ -76,26 +75,27 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, (Conne
   shimmer.wrap(Connection.prototype, 'execute', execute => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return execute.apply(this, arguments)
 
-    const sqlString = typeof sql === 'object' ? sql?.sql : sql
-    if (sqlString) {
-      const abortController = new AbortController()
-      startOuterQueryCh.publish({ sql, abortController })
+    if (typeof sql === 'object') sql = sql?.sql
 
-      if (abortController.signal.aborted) {
-        const addCommand = this.addCommand
-        this.addCommand = function (cmd) { return cmd }
+    if (!sql) return execute.apply(this, arguments)
 
-        let result
-        try {
-          result = execute.apply(this, arguments)
-        } finally {
-          this.addCommand = addCommand
-        }
+    const abortController = new AbortController()
+    startOuterQueryCh.publish({ sql, abortController })
 
-        result?.onResult(abortController.signal.reason)
+    if (abortController.signal.aborted) {
+      const addCommand = this.addCommand
+      this.addCommand = function (cmd) { return cmd }
 
-        return result
+      let result
+      try {
+        result = execute.apply(this, arguments)
+      } finally {
+        this.addCommand = addCommand
       }
+
+      result?.onResult(abortController.signal.reason)
+
+      return result
     }
 
     return execute.apply(this, arguments)
@@ -160,43 +160,44 @@ addHook({ name: 'mysql2', file: 'lib/pool.js', versions: ['>=1'] }, (Pool, versi
   shimmer.wrap(Pool.prototype, 'query', query => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return query.apply(this, arguments)
 
-    const sqlString = typeof sql === 'object' ? sql?.sql : sql
-    if (sqlString) {
-      const abortController = new AbortController()
-      startOuterQueryCh.publish({ sql, abortController })
+    if (typeof sql === 'object') sql = sql?.sql
 
-      if (abortController.signal.aborted) {
-        const getConnection = this.getConnection
-        this.getConnection = function () {}
+    if (!sql) return query.apply(this, arguments)
 
-        let queryCommand
-        try {
-          queryCommand = query.apply(this, arguments)
-        } finally {
-          this.getConnection = getConnection
-        }
+    const abortController = new AbortController()
+    startOuterQueryCh.publish({ sql, abortController })
 
-        process.nextTick(() => {
-          if (queryCommand.onResult) {
-            queryCommand.onResult(abortController.signal.reason)
-          } else {
-            queryCommand.emit('error', abortController.signal.reason)
-          }
+    if (abortController.signal.aborted) {
+      const getConnection = this.getConnection
+      this.getConnection = function () {}
 
-          if (shouldEmitEndAfterQueryAbort) {
-            queryCommand.emit('end')
-          }
-        })
-
-        return queryCommand
+      let queryCommand
+      try {
+        queryCommand = query.apply(this, arguments)
+      } finally {
+        this.getConnection = getConnection
       }
 
-      return query.apply(this, arguments)
+      process.nextTick(() => {
+        if (queryCommand.onResult) {
+          queryCommand.onResult(abortController.signal.reason)
+        } else {
+          queryCommand.emit('error', abortController.signal.reason)
+        }
+
+        if (shouldEmitEndAfterQueryAbort) {
+          queryCommand.emit('end')
+        }
+      })
+
+      return queryCommand
     }
+
+    return query.apply(this, arguments)
   })
 
   shimmer.wrap(Pool.prototype, 'execute', execute => function (sql, values, cb) {
-    if (!startOuterQueryCh.hasSubscribers) return execute.apply(this, arguments)
+    if (!startOuterQueryCh.hasSubscribers || !sql) return execute.apply(this, arguments)
 
     const abortController = new AbortController()
     startOuterQueryCh.publish({ sql, abortController })
@@ -229,6 +230,8 @@ addHook({ name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['>=2.3.0'] }, 
       shimmer.wrap(poolNamespace, 'query', query => function (sql, values, cb) {
         if (typeof sql === 'object') sql = sql?.sql
 
+        if (!sql) return query.apply(this, arguments)
+
         const abortController = new AbortController()
         startOuterQueryCh.publish({ sql, abortController })
 
@@ -255,6 +258,7 @@ addHook({ name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['>=2.3.0'] }, 
 
           return queryCommand
         }
+
         return query.apply(this, arguments)
       })
     }
@@ -262,6 +266,8 @@ addHook({ name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['>=2.3.0'] }, 
     if (startOuterQueryCh.hasSubscribers) {
       shimmer.wrap(poolNamespace, 'execute', execute => function (sql, values, cb) {
         if (typeof sql === 'object') sql = sql?.sql
+
+        if (!sql) return execute.apply(this, arguments)
 
         const abortController = new AbortController()
         startOuterQueryCh.publish({ sql, abortController })
