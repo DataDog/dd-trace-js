@@ -1,60 +1,30 @@
 const shimmer = require('../../datadog-shimmer')
-const { channel, addHook, AsyncResource } = require('./helpers/instrument')
+const { addHook, AsyncResource } = require('./helpers/instrument')
 
-const startSerializeCh = channel('datadog:protobuf:serialize:start')
-const finishSerializeCh = channel('datadog:protobuf:serialize:finish')
-const startDeserializeCh = channel('datadog:protobuf:deserialize:start')
-const finishDeserializeCh = channel('datadog:protobuf:deserialize:finish')
+const tracingChannel = require('dc-polyfill').tracingChannel
+const serializeChannel = tracingChannel('apm:protobufjs:serialize')
+const deserializeChannel = tracingChannel('apm:protobufjs:deserialize')
 
 function wrapSerialization (messageClass) {
   if (messageClass?.encode) {
-    wrapOperation(messageClass, 'encode', {
-      startChPublish: (obj, args) => startSerializeCh.publish({ message: obj }),
-      finishChPublish: (result) => finishSerializeCh.publish({ buffer: result }),
-      startCh: startSerializeCh,
-      finishCh: finishSerializeCh
-    })
+    wrapOperation(messageClass, 'encode', serializeChannel)
   }
 }
 
 function wrapDeserialization (messageClass) {
   if (messageClass?.decode) {
-    wrapOperation(messageClass, 'decode', {
-      startChPublish: (obj, args) => startDeserializeCh.publish({ buffer: args[0] }),
-      finishChPublish: (result) => finishDeserializeCh.publish({ message: result }),
-      startCh: startDeserializeCh,
-      finishCh: finishDeserializeCh
-    })
+    wrapOperation(messageClass, 'decode', deserializeChannel)
   }
 }
 
-function wrapOperation (messageClass, operationName, channels) {
+function wrapOperation (messageClass, operationName, channel) {
   shimmer.wrap(messageClass, operationName, original => {
     return function wrappedMethod (...args) {
-      if (!channels.startCh.hasSubscribers && !channels.finishCh.hasSubscribers) {
-        return original.apply(this, args)
-      }
-
       const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-      asyncResource.runInAsyncScope(() => {
-        channels.startChPublish(this, args)
+      return asyncResource.runInAsyncScope(() => {
+        return channel.traceSync(original, { messageClass, operationName, args }, this, ...args)
       })
-
-      try {
-        const result = original.apply(this, args)
-
-        asyncResource.runInAsyncScope(() => {
-          channels.finishChPublish(result)
-        })
-
-        return result
-      } catch (err) {
-        asyncResource.runInAsyncScope(() => {
-          channels.finishChPublish(args)
-        })
-        throw err
-      }
     }
   })
 }

@@ -129,7 +129,10 @@ class SchemaExtractor {
     this.constructor.extractSchema(this.schema, builder, 0)
   }
 
-  static attachSchemaOnSpan (descriptor, span, operation, tracer) {
+  static attachSchemaOnSpan (args, span, operation, tracer) {
+    const { messageClass } = args
+    const descriptor = messageClass.$type ?? messageClass
+
     if (!descriptor || !span) {
       return
     }

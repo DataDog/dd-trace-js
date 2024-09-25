@@ -1,35 +1,13 @@
-const Plugin = require('../../dd-trace/src/plugins/plugin')
+const SchemaPlugin = require('../../dd-trace/src/plugins/schema')
 const SchemaExtractor = require('./schema_iterator')
 
-const SERIALIZATION = 'serialization'
-const DESERIALIZATION = 'deserialization'
-
-class ProtobufjsPlugin extends Plugin {
+class ProtobufjsPlugin extends SchemaPlugin {
   static get id () {
     return 'protobufjs'
   }
 
-  constructor (...args) {
-    super(...args)
-
-    this.addSub('datadog:protobuf:serialize:start', this.handleSerializeStart.bind(this))
-    this.addSub('datadog:protobuf:deserialize:finish', this.handleDeserializeFinish.bind(this))
-  }
-
-  handleSerializeStart ({ message }) {
-    const activeSpan = this.tracer.scope().active()
-    if (activeSpan && this.config.dsmEnabled) {
-      SchemaExtractor.attachSchemaOnSpan(
-        message.$type ?? message, activeSpan, SERIALIZATION, this.tracer
-      )
-    }
-  }
-
-  handleDeserializeFinish ({ message }) {
-    const activeSpan = this.tracer.scope().active()
-    if (activeSpan && this.config.dsmEnabled) {
-      SchemaExtractor.attachSchemaOnSpan(message.$type, activeSpan, DESERIALIZATION, this.tracer)
-    }
+  static get schemaExtractor () {
+    return SchemaExtractor
   }
 }
 
