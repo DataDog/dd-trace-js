@@ -69,6 +69,14 @@ const itrSkippedSuitesCh = channel('ci:mocha:itr:skipped-suites')
 
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
 
+function getChannelPromise (channelToPublishTo) {
+  return new Promise(resolve => {
+    testSessionAsyncResource.runInAsyncScope(() => {
+      channelToPublishTo.publish({ onDone: resolve })
+    })
+  })
+}
+
 function getFilteredSuites (originalSuites) {
   return originalSuites.reduce((acc, suite) => {
     const testPath = getTestSuitePath(suite.file, process.cwd())
@@ -187,6 +195,7 @@ function getExecutionConfiguration (runner, onFinishRequest) {
   }
 
   const onReceivedKnownTests = ({ err, knownTests: receivedKnownTests }) => {
+    debugger
     if (err) {
       knownTests = []
       isEarlyFlakeDetectionEnabled = false
@@ -285,6 +294,10 @@ addHook({
 // Only used to set `mocha.options.delay` to true in serial mode. When the mocha CLI is used,
 // setting options.delay in Mocha#run is not enough to delay the execution.
 // TODO: modify this hook to grab the data in parallel mode, so that ITR and EFD can work.
+
+// This is probably not good for `getExecutionConfiguration` because by this time the suites are not loaded
+// so they can't be skipped
+// Maybe we can grab them and remove them from the suites array _later_
 addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
@@ -294,15 +307,41 @@ addHook({
     if (!testStartCh.hasSubscribers) {
       return runMocha.apply(this, arguments)
     }
+    // is runMocha called from the mocha CLI?
 
     const mocha = arguments[0]
-    /**
-     * This attaches `run` to the global context, which we'll call after
-     * our configuration and skippable suites requests
-     */
-    if (!mocha.options.parallel) {
+
+    if (mocha.options.parallel) {
+      const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
+      if (!err) {
+        // TODO: do we need duplication of config.isEarlyFlakeDetectionEnabled and isEarlyFlakeDetectionEnabled?
+        isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
+        earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+
+        config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+        config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+        config.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
+        config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+      }
+
+      // These will be passed to the workers with BufferedWorkerPool#run
+      if (config.isEarlyFlakeDetectionEnabled) {
+        const { err, knownTests: receivedKnownTests } = await getChannelPromise(knownTestsCh)
+        if (!err) {
+          knownTests = receivedKnownTests
+        } else {
+          config.isEarlyFlakeDetectionEnabled = false
+          isEarlyFlakeDetectionEnabled = false
+        }
+      }
+    } else { // serial mode
+      /**
+       * This attaches `run` to the global context, which we'll call after
+       * our configuration and skippable suites requests
+       */
       mocha.options.delay = true
     }
+
     return runMocha.apply(this, arguments)
   })
   return run
@@ -319,6 +358,7 @@ addHook({
 
   patched.add(Runner)
 
+  // Is there a equivalent of runTests for parallel mode? -> yes, it's exactly the same
   shimmer.wrap(Runner.prototype, 'runTests', runTests => function (suite, fn) {
     if (isEarlyFlakeDetectionEnabled) {
       // by the time we reach `this.on('test')`, it is too late. We need to add retries here
@@ -472,6 +512,9 @@ addHook({
 
     this.worker.on('message', onMessage)
 
+    // test suites are created in the main process -
+    // we could filter knownTests here and pass them to the worker (only the ones for the suite)
+    // TODO: how to pass the worker this data?
     testSuiteAsyncResource.runInAsyncScope(() => {
       testSuiteStartCh.publish({
         testSuiteAbsolutePath
@@ -529,4 +572,39 @@ addHook({
   })
 
   return ParallelBufferedRunner
+})
+
+addHook({
+  name: 'mocha',
+  versions: ['>=5.2.0'],
+  file: 'lib/nodejs/buffered-worker-pool.js'
+}, (BufferedWorkerPoolPackage) => {
+  shimmer.wrap(BufferedWorkerPoolPackage.BufferedWorkerPool.prototype, 'run',
+    run => function (testSuiteAbsolutePath, workerArgs) {
+      if (!testStartCh.hasSubscribers) {
+        return run.apply(this, arguments)
+      }
+      if (isEarlyFlakeDetectionEnabled) {
+        const testPath = getTestSuitePath(testSuiteAbsolutePath, process.cwd())
+        const mochaKnownTests = knownTests.mocha?.[testPath] || []
+        // we pass the known tests to the workers, in the same format we receive it
+        return run.apply(
+          this,
+          [
+            testSuiteAbsolutePath,
+            {
+              ...workerArgs,
+              _ddKnownTests: {
+                mocha: {
+                  [testPath]: mochaKnownTests
+                }
+              }
+            }
+          ]
+        )
+      }
+      return run.aply(this, arguments)
+    })
+
+  return BufferedWorkerPoolPackage
 })

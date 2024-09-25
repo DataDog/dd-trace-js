@@ -4,6 +4,8 @@ const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
 const {
+  isNewTest,
+  retryTest,
   runnableWrapper,
   getOnTestHandler,
   getOnTestEndHandler,
@@ -15,13 +17,57 @@ require('./common')
 
 const workerFinishCh = channel('ci:mocha:worker:finish')
 
+// to have the same structure as non parallel mode
+let workerKnownTests = {
+  mocha: {}
+}
+let isEarlyFlakeDetectionEnabled = false
+
+addHook({
+  name: 'mocha',
+  versions: ['>=5.2.0'],
+  file: 'lib/mocha.js'
+}, (Mocha) => {
+  shimmer.wrap(Mocha.prototype, 'run', run => function () {
+    // maybe this is the place to retry tests, instead of `runTests` - here we have access to tests already (and opts!)
+    if (this.options._ddKnownTests) {
+      // if there's a list of known tests, it means EFD is enabled
+      isEarlyFlakeDetectionEnabled = true
+      // PICK SOMETHING BETTER HERE INSTEAAD OF READING THIS.FILES
+      workerKnownTests = this.options._ddKnownTests
+      delete this.options._ddKnownTests
+    }
+    return run.apply(this, arguments)
+  })
+
+  return Mocha
+})
+
 // Runner is also hooked in mocha/main.js, but in here we only generate test events.
 addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
   file: 'lib/runner.js'
 }, function (Runner) {
+  // Is there a equivalent of runTests for parallel mode?
+  shimmer.wrap(Runner.prototype, 'runTests', runTests => function (suite, fn) {
+    if (isEarlyFlakeDetectionEnabled) {
+      // by the time we reach `this.on('test')`, it is too late. We need to add retries here
+      suite.tests.forEach(test => {
+        if (!test.isPending() && isNewTest(test, workerKnownTests)) {
+          test._ddIsNew = true
+          // PASS THIS INFO TOO INSTEAD OF HARD CODING 10
+          retryTest(test, 10)
+        }
+      })
+    }
+    return runTests.apply(this, arguments)
+  })
+
   shimmer.wrap(Runner.prototype, 'run', run => function () {
+    if (!workerFinishCh.hasSubscribers) {
+      return run.apply(this, arguments)
+    }
     // We flush when the worker ends with its test file (a mocha instance in a worker runs a single test file)
     this.on('end', () => {
       workerFinishCh.publish()
