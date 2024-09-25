@@ -29,11 +29,9 @@ addHook({
   file: 'lib/mocha.js'
 }, (Mocha) => {
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
-    // maybe this is the place to retry tests, instead of `runTests` - here we have access to tests already (and opts!)
     if (this.options._ddKnownTests) {
       // if there's a list of known tests, it means EFD is enabled
       isEarlyFlakeDetectionEnabled = true
-      // PICK SOMETHING BETTER HERE INSTEAAD OF READING THIS.FILES
       workerKnownTests = this.options._ddKnownTests
       delete this.options._ddKnownTests
     }
@@ -56,7 +54,7 @@ addHook({
       suite.tests.forEach(test => {
         if (!test.isPending() && isNewTest(test, workerKnownTests)) {
           test._ddIsNew = true
-          // PASS THIS INFO TOO INSTEAD OF HARD CODING 10
+          // TODO: do not hardcode 10
           retryTest(test, 10)
         }
       })

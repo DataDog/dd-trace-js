@@ -358,7 +358,7 @@ addHook({
 
   patched.add(Runner)
 
-  // Is there a equivalent of runTests for parallel mode? -> yes, it's exactly the same
+  // TODO: same handler as parallel mode -> reuse
   shimmer.wrap(Runner.prototype, 'runTests', runTests => function (suite, fn) {
     if (isEarlyFlakeDetectionEnabled) {
       // by the time we reach `this.on('test')`, it is too late. We need to add retries here
@@ -512,9 +512,6 @@ addHook({
 
     this.worker.on('message', onMessage)
 
-    // test suites are created in the main process -
-    // we could filter knownTests here and pass them to the worker (only the ones for the suite)
-    // TODO: how to pass the worker this data?
     testSuiteAsyncResource.runInAsyncScope(() => {
       testSuiteStartCh.publish({
         testSuiteAbsolutePath
