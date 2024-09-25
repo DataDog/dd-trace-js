@@ -81,7 +81,6 @@ describe('exporters/agent', function () {
     expect(req.files[0]).to.have.property('size', req.files[0].buffer.length)
 
     const event = JSON.parse(req.files[0].buffer.toString())
-    process._rawDebug(JSON.stringify(event))
     expect(event).to.have.property('attachments')
     expect(event.attachments).to.have.lengthOf(2)
     expect(event.attachments[0]).to.equal('wall.pprof')
