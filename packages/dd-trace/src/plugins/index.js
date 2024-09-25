@@ -22,6 +22,7 @@ module.exports = {
   get aerospike () { return require('../../../datadog-plugin-aerospike/src') },
   get amqp10 () { return require('../../../datadog-plugin-amqp10/src') },
   get amqplib () { return require('../../../datadog-plugin-amqplib/src') },
+  get avsc () { return require('../../../datadog-plugin-avsc/src') },
   get 'aws-sdk' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get bunyan () { return require('../../../datadog-plugin-bunyan/src') },
   get 'cassandra-driver' () { return require('../../../datadog-plugin-cassandra-driver/src') },

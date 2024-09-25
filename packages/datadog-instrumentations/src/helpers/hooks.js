@@ -27,6 +27,7 @@ module.exports = {
   aerospike: () => require('../aerospike'),
   amqp10: () => require('../amqp10'),
   amqplib: () => require('../amqplib'),
+  avsc: () => require('../avsc'),
   'aws-sdk': () => require('../aws-sdk'),
   bluebird: () => require('../bluebird'),
   'body-parser': () => require('../body-parser'),
