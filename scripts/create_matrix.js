@@ -55,18 +55,17 @@ function generateMatrix (name) {
       const range = []
       const plugin = versionsPlugin['node-versions']
       for (const version in plugin) {
-        range.push({ 'node-version': [version], range: plugin[version] })
+        range.push({ 'node-version': version, range: plugin[version] })
       }
 
       for (let ele = 0; ele < range.length; ele++) {
         if (ele === 0) {
-          matrix['node-version'] = range[ele]['node-version']
-          matrix.range = range[ele].range
+          matrix['node-version'] = [range[ele]['node-version']]
+          matrix.range = [range[ele].range]
         } else {
           matrix.include = [range[ele]]
         }
       }
-
       matricesJson.matrices[name] = matrix
     } else {
       matrix = {
@@ -77,7 +76,7 @@ function generateMatrix (name) {
   }
   fs.writeFileSync(matricesPath, JSON.stringify(matricesJson, null, 2))
 }
-
+generateMatrix('couchbase')
 module.exports = {
   generateMatrix
 }
