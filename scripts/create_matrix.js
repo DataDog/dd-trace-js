@@ -63,7 +63,10 @@ function generateMatrix (name) {
           matrix['node-version'] = [range[ele]['node-version']]
           matrix.range = range[ele].range
         } else {
-          matrix.include = [range[ele]]
+          matrix.include = [{
+            'node-version': range[ele]['node-version'],
+            range: range[ele].range[0]
+          }]
         }
       }
       matricesJson.matrices[name] = matrix

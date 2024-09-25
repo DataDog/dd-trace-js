@@ -155,7 +155,7 @@ jobs:
     needs: 
       - versions
     strategy:
-      matrix: ${{fromJson(needs.versions.outputs.matrices).matrices.apollo}}
+      matrix: ${{fromJson(needs.versions.outputs.matrices).matrices.@apollo/gateway}}
     runs-on: ubuntu-latest
     env:
       PLUGINS: apollo
