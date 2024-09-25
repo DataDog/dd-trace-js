@@ -55,13 +55,13 @@ function generateMatrix (name) {
       const range = []
       const plugin = versionsPlugin['node-versions']
       for (const version in plugin) {
-        range.push({ 'node-version': version, range: plugin[version] })
+        range.push({ 'node-version': +version, range: plugin[version] })
       }
 
       for (let ele = 0; ele < range.length; ele++) {
         if (ele === 0) {
           matrix['node-version'] = [range[ele]['node-version']]
-          matrix.range = [range[ele].range]
+          matrix.range = range[ele].range
         } else {
           matrix.include = [range[ele]]
         }
