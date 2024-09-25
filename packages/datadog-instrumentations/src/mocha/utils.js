@@ -24,6 +24,7 @@ const originalFns = new WeakMap()
 const testToStartLine = new WeakMap()
 const testFileToSuiteAr = new Map()
 const wrappedFunctions = new WeakSet()
+const newTests = {}
 
 function isNewTest (test, knownTests) {
   const testSuite = getTestSuitePath(test.file, process.cwd())
@@ -151,7 +152,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
   return RunnablePackage
 }
 
-function getOnTestHandler (isMain, newTests) {
+function getOnTestHandler (isMain) {
   return function (test) {
     const testStartLine = testToStartLine.get(test)
     const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -179,20 +180,20 @@ function getOnTestHandler (isMain, newTests) {
       testStartLine
     }
 
-    if (isMain) {
-      testInfo.isNew = isNew
-      testInfo.isEfdRetry = isEfdRetry
-      // We want to store the result of the new tests
-      if (isNew) {
-        const testFullName = getTestFullName(test)
-        if (newTests[testFullName]) {
-          newTests[testFullName].push(test)
-        } else {
-          newTests[testFullName] = [test]
-        }
-      }
-    } else {
+    if (!isMain) {
       testInfo.isParallel = true
+    }
+
+    testInfo.isNew = isNew
+    testInfo.isEfdRetry = isEfdRetry
+    // We want to store the result of the new tests
+    if (isNew) {
+      const testFullName = getTestFullName(test)
+      if (newTests[testFullName]) {
+        newTests[testFullName].push(test)
+      } else {
+        newTests[testFullName] = [test]
+      }
     }
 
     asyncResource.runInAsyncScope(() => {
@@ -345,5 +346,6 @@ module.exports = {
   getOnHookEndHandler,
   getOnFailHandler,
   getOnPendingHandler,
-  testFileToSuiteAr
+  testFileToSuiteAr,
+  newTests
 }

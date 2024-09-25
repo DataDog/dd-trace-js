@@ -22,6 +22,7 @@ let workerKnownTests = {
   mocha: {}
 }
 let isEarlyFlakeDetectionEnabled = false
+let earlyFlakeDetectionNumRetries = 0
 
 addHook({
   name: 'mocha',
@@ -33,7 +34,9 @@ addHook({
       // if there's a list of known tests, it means EFD is enabled
       isEarlyFlakeDetectionEnabled = true
       workerKnownTests = this.options._ddKnownTests
+      earlyFlakeDetectionNumRetries = this.options._ddEfdNumRetries
       delete this.options._ddKnownTests
+      delete this.options._ddEfdNumRetries
     }
     return run.apply(this, arguments)
   })
@@ -54,8 +57,7 @@ addHook({
       suite.tests.forEach(test => {
         if (!test.isPending() && isNewTest(test, workerKnownTests)) {
           test._ddIsNew = true
-          // TODO: do not hardcode 10
-          retryTest(test, 10)
+          retryTest(test, earlyFlakeDetectionNumRetries)
         }
       })
     }

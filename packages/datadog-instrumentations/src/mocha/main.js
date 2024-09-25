@@ -25,13 +25,15 @@ const {
   getOnHookEndHandler,
   getOnFailHandler,
   getOnPendingHandler,
-  testFileToSuiteAr
+  testFileToSuiteAr,
+  newTests,
+  getTestFullName
 } = require('./utils')
+
 require('./common')
 
 const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 const patched = new WeakSet()
-const newTests = {}
 let suitesToSkip = []
 const unskippableSuites = []
 let isSuitesSkipped = false
@@ -68,6 +70,17 @@ const testSessionFinishCh = channel('ci:mocha:session:finish')
 const itrSkippedSuitesCh = channel('ci:mocha:itr:skipped-suites')
 
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
+
+// Tests from workers do not come with `isFailed` method
+function isTestFailed (test) {
+  if (test.isFailed) {
+    return test.isFailed()
+  }
+  if (test.isPending) {
+    return !test.isPending() && test.state !== 'failed'
+  }
+  return false
+}
 
 function getChannelPromise (channelToPublishTo) {
   return new Promise(resolve => {
@@ -115,7 +128,7 @@ function getOnEndHandler (isParallel) {
       status = 'fail'
     }
 
-    if (!isParallel && isEarlyFlakeDetectionEnabled) {
+    if (isEarlyFlakeDetectionEnabled) {
       /**
        * If Early Flake Detection (EFD) is enabled the logic is as follows:
        * - If all attempts for a test are failing, the test has failed and we will let the test process fail.
@@ -124,7 +137,7 @@ function getOnEndHandler (isParallel) {
        * on flakiness (the test will be considered flaky), but you may choose to unblock the pipeline too.
        */
       for (const tests of Object.values(newTests)) {
-        const failingNewTests = tests.filter(test => test.isFailed())
+        const failingNewTests = tests.filter(test => isTestFailed(test))
         const areAllNewTestsFailing = failingNewTests.length === tests.length
         if (failingNewTests.length && !areAllNewTestsFailing) {
           this.stats.failures -= failingNewTests.length
@@ -195,7 +208,6 @@ function getExecutionConfiguration (runner, onFinishRequest) {
   }
 
   const onReceivedKnownTests = ({ err, knownTests: receivedKnownTests }) => {
-    debugger
     if (err) {
       knownTests = []
       isEarlyFlakeDetectionEnabled = false
@@ -298,6 +310,8 @@ addHook({
 // This is probably not good for `getExecutionConfiguration` because by this time the suites are not loaded
 // so they can't be skipped
 // Maybe we can grab them and remove them from the suites array _later_
+
+// runMocha is not executed in programmatic API: how do we modify mocha.options.delay then?
 addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
@@ -307,10 +321,9 @@ addHook({
     if (!testStartCh.hasSubscribers) {
       return runMocha.apply(this, arguments)
     }
-    // is runMocha called from the mocha CLI?
-
     const mocha = arguments[0]
 
+    // `runMocha` is not called in programmatic API mocha.run()
     if (mocha.options.parallel) {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
       if (!err) {
@@ -571,37 +584,59 @@ addHook({
   return ParallelBufferedRunner
 })
 
+// Only in parallel mode: BufferedWorkerPool#run is used to run a test file in a worker
 addHook({
   name: 'mocha',
-  versions: ['>=5.2.0'],
+  versions: ['>=5.2.0'], // probably other version
   file: 'lib/nodejs/buffered-worker-pool.js'
 }, (BufferedWorkerPoolPackage) => {
-  shimmer.wrap(BufferedWorkerPoolPackage.BufferedWorkerPool.prototype, 'run',
-    run => function (testSuiteAbsolutePath, workerArgs) {
-      if (!testStartCh.hasSubscribers) {
-        return run.apply(this, arguments)
-      }
-      if (isEarlyFlakeDetectionEnabled) {
-        const testPath = getTestSuitePath(testSuiteAbsolutePath, process.cwd())
-        const mochaKnownTests = knownTests.mocha?.[testPath] || []
-        // we pass the known tests to the workers, in the same format we receive it
-        return run.apply(
-          this,
-          [
-            testSuiteAbsolutePath,
-            {
-              ...workerArgs,
-              _ddKnownTests: {
-                mocha: {
-                  [testPath]: mochaKnownTests
-                }
+  const { BufferedWorkerPool } = BufferedWorkerPoolPackage
+
+  shimmer.wrap(BufferedWorkerPool.prototype, 'run', run => async function (testSuiteAbsolutePath, workerArgs) {
+    if (!testStartCh.hasSubscribers) {
+      return run.apply(this, arguments)
+    }
+    if (isEarlyFlakeDetectionEnabled) {
+      const testPath = getTestSuitePath(testSuiteAbsolutePath, process.cwd())
+      const mochaKnownTests = knownTests.mocha?.[testPath] || []
+      // The worker is passed the known tests for the test file it's going to run
+      const testFileResult = await run.apply(
+        this,
+        [
+          testSuiteAbsolutePath,
+          {
+            ...workerArgs,
+            _ddEfdNumRetries: earlyFlakeDetectionNumRetries,
+            _ddKnownTests: {
+              mocha: {
+                [testPath]: mochaKnownTests
               }
             }
-          ]
-        )
+          }
+        ]
+      )
+      // we have the test end events, so we can know what tests were new and how they finished
+      const tests = testFileResult
+        .events
+        .filter(event => event.eventName === 'test end')
+        .map(event => event.data)
+
+      for (const test of tests) {
+        if (isNewTest(test, knownTests)) {
+          const testFullName = getTestFullName(test)
+          const tests = newTests[testFullName]
+
+          if (!tests) {
+            newTests[testFullName] = [test]
+          } else {
+            tests.push(test)
+          }
+        }
       }
-      return run.aply(this, arguments)
-    })
+      return testFileResult
+    }
+    return run.apply(this, arguments)
+  })
 
   return BufferedWorkerPoolPackage
 })
