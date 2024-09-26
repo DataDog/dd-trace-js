@@ -55,10 +55,6 @@ function makeAPR (branchName) {
   execSync(`gh pr create --title ${title} --body ${body} --base master --head ${branchName} `)
 }
 
-function splitting (element) {
-  return +element.split('.')[0]
-}
-
 function maxVersion (range) {
   if (typeof range === 'string') {
     return range
@@ -77,7 +73,7 @@ async function updateRange (name, major) {
 async function loopRange (name, range) {
   for (let ele = 0; ele < range.length; ele++) {
     const latest = range[ele].split(' - ')
-    const major = splitting(latest[0])
+    const major = +latest[0].split('.')[0]
 
     latest[1] = await updateRange(name, major)
     range[ele] = `${latest[0]} - ${latest[1]}`
@@ -171,6 +167,10 @@ async function ranges (name, minimum) {
     }
   }
   return ranges
+}
+
+function splitting (element) {
+  return +element.split('.')[0]
 }
 
 if (process.argv.includes('fix')) fix()
