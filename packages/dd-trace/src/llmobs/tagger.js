@@ -36,6 +36,7 @@ class LLMObsTagger {
     { modelName, modelProvider, sessionId, mlApp, parentLLMObsSpan } = {},
     name
   ) {
+    if (!this._config.llmobs.enabled) return
     if (kind) span.setTag(SPAN_TYPE, 'llm') // only mark it as an llm span if it was a valid kind
     if (name) span.setTag(NAME, name)
 
@@ -198,22 +199,78 @@ class LLMObsTagger {
             return undefined
           }
 
-          const content = message.content || ''
-          const role = message.role
+          const { content = '', role } = message
+          let toolCalls = message.toolCalls
+          const messageObj = { content }
 
           if (typeof content !== 'string') {
             logger.warn('Message content must be a string.')
             return undefined
           }
 
-          if (!role) {
-            return { content }
-          } else if (typeof role !== 'string') {
-            logger.warn('Message role must be a string.')
-            return undefined
+          if (role) {
+            if (typeof role !== 'string') {
+              logger.warn('Message role must be a string.')
+              return undefined
+            }
+            messageObj.role = role
           }
 
-          return { content, role }
+          if (toolCalls) {
+            if (!Array.isArray(toolCalls)) {
+              toolCalls = [toolCalls]
+            }
+
+            const filteredToolCalls = toolCalls.map(toolCall => {
+              if (typeof toolCall !== 'object') {
+                logger.warn('Tool call must be an object.')
+                return undefined
+              }
+
+              const { name, arguments: args, toolId, type } = toolCall
+              const toolCallObj = {}
+
+              if (name) {
+                if (typeof name !== 'string') {
+                  logger.warn('Tool name must be a string.')
+                  return undefined
+                }
+                toolCallObj.name = name
+              }
+
+              if (args) {
+                if (typeof args !== 'object') {
+                  logger.warn('Tool arguments must be an object.')
+                  return undefined
+                }
+                toolCallObj.arguments = args
+              }
+
+              if (toolId) {
+                if (typeof toolId !== 'string') {
+                  logger.warn('Tool ID must be a string.')
+                  return undefined
+                }
+                toolCallObj.toolId = toolId
+              }
+
+              if (type) {
+                if (typeof type !== 'string') {
+                  logger.warn('Tool type must be a string.')
+                  return undefined
+                }
+                toolCallObj.type = type
+              }
+
+              return toolCallObj
+            }).filter(toolCall => !!toolCall)
+
+            if (filteredToolCalls.length) {
+              messageObj.tool_calls = filteredToolCalls
+            }
+          }
+
+          return messageObj
         }).filter(msg => !!msg)
 
         if (messages.length) {

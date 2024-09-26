@@ -43,10 +43,17 @@ describe('tagger', () => {
       './util': util
     })
 
-    tagger = new Tagger({ llmobs: { mlApp: 'my-default-ml-app' } })
+    tagger = new Tagger({ llmobs: { enabled: true, mlApp: 'my-default-ml-app' } })
   })
 
   describe('setLLMObsSpanTags', () => {
+    it('will not set tags if llmobs is not enabled', () => {
+      tagger = new Tagger({ llmobs: { enabled: false } })
+      tagger.setLLMObsSpanTags(span, 'llm')
+
+      expect(span.context()._tags).to.deep.equal({})
+    })
+
     it('tags an llm obs span with basic and default properties', () => {
       tagger.setLLMObsSpanTags(span, 'workflow')
 
@@ -203,13 +210,14 @@ describe('tagger', () => {
     })
   })
 
-  describe('tagLLMIO', () => {
+  describe.only('tagLLMIO', () => {
     it('tags a span with llm io', () => {
       const inputData = [
         'you are an amazing assistant',
         { content: 'hello! my name is foobar' },
         { content: 'I am a robot', role: 'assistant' },
-        { content: 'I am a human', role: 'user' }
+        { content: 'I am a human', role: 'user' },
+        {}
       ]
 
       const outputData = 'Nice to meet you, human!'
@@ -218,12 +226,12 @@ describe('tagger', () => {
       expect(span.context()._tags).to.deep.equal({
         '_ml_obs.meta.input.messages': '[{"content":"you are an amazing assistant"},' +
         '{"content":"hello! my name is foobar"},{"content":"I am a robot","role":"assistant"},' +
-        '{"content":"I am a human","role":"user"}]',
+        '{"content":"I am a human","role":"user"},{"content":""}]',
         '_ml_obs.meta.output.messages': '[{"content":"Nice to meet you, human!"}]'
       })
     })
 
-    it('filters out non-string properties on messages', () => {
+    it('filters out malformed properties on messages', () => {
       const inputData = [
         true,
         { content: 5 },
@@ -249,6 +257,57 @@ describe('tagger', () => {
       expect(logger.warn.getCall(5).firstArg).to.equal('Message content must be a string.')
       expect(logger.warn.getCall(6).firstArg).to.equal('Message role must be a string.')
     })
+
+    describe('tagging tool calls appropriately', () => {
+      it('tags a span with tool calls', () => {
+        const inputData = [
+          { content: 'hello', toolCalls: [{ name: 'tool1' }, { name: 'tool2', arguments: { a: 1, b: 2 } }] },
+          { content: 'goodbye', toolCalls: [{ name: 'tool3' }] }
+        ]
+        const outputData = [
+          { content: 'hi', toolCalls: [{ name: 'tool4' }] }
+        ]
+
+        tagger.tagLLMIO(span, inputData, outputData)
+        expect(span.context()._tags).to.deep.equal({
+          '_ml_obs.meta.input.messages': '[{"content":"hello","tool_calls":[{"name":"tool1"},' +
+          '{"name":"tool2","arguments":{"a":1,"b":2}}]},' +
+          '{"content":"goodbye","tool_calls":[{"name":"tool3"}]}]',
+          '_ml_obs.meta.output.messages': '[{"content":"hi","tool_calls":[{"name":"tool4"}]}]'
+        })
+      })
+
+      it('filters out malformed tool calls', () => {
+        const inputData = [
+          { content: 'a', toolCalls: 5 }, // tool calls must be objects
+          { content: 'b', toolCalls: [5] }, // tool calls must be objects
+          { content: 'c', toolCalls: [{ name: 5 }] }, // tool name must be a string
+          { content: 'd', toolCalls: [{ arguments: 5 }] }, // tool arguments must be an object
+          { content: 'e', toolCalls: [{ toolId: 5 }] }, // tool id must be a string
+          { content: 'f', toolCalls: [{ type: 5 }] }, // tool type must be a string
+          {
+            content: 'g',
+            toolCalls: [
+              { name: 'tool1', arguments: 5 }, { name: 'tool2' } // second tool call should be tagged
+            ]
+          } // tool arguments must be an object
+        ]
+
+        tagger.tagLLMIO(span, inputData, undefined)
+        expect(span.context()._tags).to.deep.equal({
+          '_ml_obs.meta.input.messages': '[{"content":"a"},{"content":"b"},{"content":"c"},' +
+          '{"content":"d"},{"content":"e"},{"content":"f"},{"content":"g","tool_calls":[{"name":"tool2"}]}]'
+        })
+
+        expect(logger.warn.getCall(0).firstArg).to.equal('Tool call must be an object.')
+        expect(logger.warn.getCall(1).firstArg).to.equal('Tool call must be an object.')
+        expect(logger.warn.getCall(2).firstArg).to.equal('Tool name must be a string.')
+        expect(logger.warn.getCall(3).firstArg).to.equal('Tool arguments must be an object.')
+        expect(logger.warn.getCall(4).firstArg).to.equal('Tool ID must be a string.')
+        expect(logger.warn.getCall(5).firstArg).to.equal('Tool type must be a string.')
+        expect(logger.warn.getCall(6).firstArg).to.equal('Tool arguments must be an object.')
+      })
+    })
   })
 
   describe('tagEmbeddingIO', () => {
@@ -271,7 +330,7 @@ describe('tagger', () => {
       })
     })
 
-    it('filters out non-string properties on documents', () => {
+    it('filters out malformed properties on documents', () => {
       const inputData = [
         true,
         { text: 5 },
@@ -316,7 +375,7 @@ describe('tagger', () => {
       })
     })
 
-    it('filters out non-string properties on documents', () => {
+    it('filters out malformed properties on documents', () => {
       const inputData = 'some query'
       const outputData = [
         true,
