@@ -1142,15 +1142,25 @@ class Config {
     if (value == null) {
       return this._setValue(obj, name, null)
     }
-
     if (typeof value === 'string') {
       // Trim the initial value's leading and trailing whitespace
-      value = value.trim().split(',')
+      // Split by commas and trim each item
+      // value = value.trim().split(',').map(item => item.trim())
+      if (name === 'headerTags') {
+        value = value.trim().split(',').map(item => {
+        // Trim each item and remove whitespace around the colon
+          const [key, val] = item.split(':').map(part => part.trim())
+          return `${key}:${val}`
+        })
+      } else {
+        value = value.trim().split(',').map(item => item.trim())
+      }
     }
 
     if (Array.isArray(value)) {
       this._setValue(obj, name, value)
     }
+    console.log(99, obj.headerTags, value)
   }
 
   _setSamplingRule (obj, name, value) {

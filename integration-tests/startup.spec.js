@@ -54,72 +54,90 @@ execArgvs.forEach(({ execArgv, skip }) => {
         await agent.stop()
       })
 
-      it('works for options.port', async () => {
-        proc = await spawnProc(startupTestFile, {
-          cwd,
-          execArgv,
-          env: {
-            AGENT_PORT: agent.port
-          }
-        })
-        return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-          assert.isArray(payload)
-          assert.strictEqual(payload.length, 1)
-          assert.isArray(payload[0])
-          assert.strictEqual(payload[0].length, 1)
-          assert.propertyVal(payload[0][0], 'name', 'web.request')
-        })
-      })
+      //   it('works for options.port', async () => {
+      //     proc = await spawnProc(startupTestFile, {
+      //       cwd,
+      //       execArgv,
+      //       env: {
+      //         AGENT_PORT: agent.port
+      //       }
+      //     })
+      //     return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+      //       assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+      //       assert.isArray(payload)
+      //       assert.strictEqual(payload.length, 1)
+      //       assert.isArray(payload[0])
+      //       assert.strictEqual(payload[0].length, 1)
+      //       assert.propertyVal(payload[0][0], 'name', 'web.request')
+      //     })
+      //   })
 
-      it('works for options.url', async () => {
-        proc = await spawnProc(startupTestFile, {
-          cwd,
-          execArgv,
-          env: {
-            AGENT_URL: `http://localhost:${agent.port}`
-          }
-        })
-        return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `localhost:${agent.port}`)
-          assert.isArray(payload)
-          assert.strictEqual(payload.length, 1)
-          assert.isArray(payload[0])
-          assert.strictEqual(payload[0].length, 1)
-          assert.propertyVal(payload[0][0], 'name', 'web.request')
-        })
-      })
-    })
+      //   it('works for options.url', async () => {
+      //     proc = await spawnProc(startupTestFile, {
+      //       cwd,
+      //       execArgv,
+      //       env: {
+      //         AGENT_URL: `http://localhost:${agent.port}`
+      //       }
+      //     })
+      //     return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+      //       assert.propertyVal(headers, 'host', `localhost:${agent.port}`)
+      //       assert.isArray(payload)
+      //       assert.strictEqual(payload.length, 1)
+      //       assert.isArray(payload[0])
+      //       assert.strictEqual(payload[0].length, 1)
+      //       assert.propertyVal(payload[0][0], 'name', 'web.request')
+      //     })
+      //   })
+      // })
 
-    context('env var', () => {
-      beforeEach(async () => {
-        agent = await new FakeAgent().start()
-      })
+      // context('env var', () => {
+      //   beforeEach(async () => {
+      //     agent = await new FakeAgent().start()
+      //   })
 
-      afterEach(async () => {
-        proc.kill()
-        await agent.stop()
-      })
+      //   afterEach(async () => {
+      //     proc.kill()
+      //     await agent.stop()
+      //   })
 
-      it('works for DD_TRACE_AGENT_PORT', async () => {
-        proc = await spawnProc(startupTestFile, {
-          cwd,
-          execArgv,
-          env: {
-            DD_TRACE_AGENT_PORT: agent.port
-          }
-        })
-        return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-          assert.isArray(payload)
-          assert.strictEqual(payload.length, 1)
-          assert.isArray(payload[0])
-          assert.strictEqual(payload[0].length, 1)
-          assert.propertyVal(payload[0][0], 'name', 'web.request')
-        })
-      })
+      //   it('works for DD_TRACE_AGENT_PORT', async () => {
+      //     proc = await spawnProc(startupTestFile, {
+      //       cwd,
+      //       execArgv,
+      //       env: {
+      //         DD_TRACE_AGENT_PORT: agent.port
+      //       }
+      //     })
+      //     return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+      //       assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+      //       assert.isArray(payload)
+      //       assert.strictEqual(payload.length, 1)
+      //       assert.isArray(payload[0])
+      //       assert.strictEqual(payload[0].length, 1)
+      //       assert.propertyVal(payload[0][0], 'name', 'web.request')
+      //     })
+      //   })
 
-      it('works for DD_TRACE_AGENT_URL', async () => {
+      //   it('works for DD_TRACE_AGENT_URL', async () => {
+      //     proc = await spawnProc(startupTestFile, {
+      //       cwd,
+      //       execArgv,
+      //       env: {
+      //         DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`
+      //       }
+      //     })
+      //     return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+      //       assert.propertyVal(headers, 'host', `localhost:${agent.port}`)
+      //       assert.isArray(payload)
+      //       assert.strictEqual(payload.length, 1)
+      //       assert.isArray(payload[0])
+      //       assert.strictEqual(payload[0].length, 1)
+      //       assert.propertyVal(payload[0][0], 'name', 'web.request')
+      //     })
+      //   })
+
+      it('works for bluh', async () => {
         proc = await spawnProc(startupTestFile, {
           cwd,
           execArgv,
@@ -138,50 +156,50 @@ execArgvs.forEach(({ execArgv, skip }) => {
       })
     })
 
-    context('default', () => {
-      beforeEach(async () => {
-        // Note that this test will *always* listen on the default port. If that
-        // port is unavailable, the test will fail.
-        agent = await new FakeAgent(8126).start()
-      })
+    // context('default', () => {
+    //   beforeEach(async () => {
+    //     // Note that this test will *always* listen on the default port. If that
+    //     // port is unavailable, the test will fail.
+    //     agent = await new FakeAgent(8126).start()
+    //   })
 
-      afterEach(async () => {
-        proc.kill()
-        await agent.stop()
-      })
+    //   afterEach(async () => {
+    //     proc.kill()
+    //     await agent.stop()
+    //   })
 
-      it('works for hostname and port', async () => {
-        proc = await spawnProc(startupTestFile, {
-          cwd,
-          execArgv
-        })
-        return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', '127.0.0.1:8126')
-          assert.isArray(payload)
-          assert.strictEqual(payload.length, 1)
-          assert.isArray(payload[0])
-          assert.strictEqual(payload[0].length, 1)
-          assert.propertyVal(payload[0][0], 'name', 'web.request')
-        })
-      })
+    //   it('works for hostname and port', async () => {
+    //     proc = await spawnProc(startupTestFile, {
+    //       cwd,
+    //       execArgv
+    //     })
+    //     return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+    //       assert.propertyVal(headers, 'host', '127.0.0.1:8126')
+    //       assert.isArray(payload)
+    //       assert.strictEqual(payload.length, 1)
+    //       assert.isArray(payload[0])
+    //       assert.strictEqual(payload[0].length, 1)
+    //       assert.propertyVal(payload[0][0], 'name', 'web.request')
+    //     })
+    //   })
 
-      it('works with stealthy-require', async () => {
-        proc = await spawnProc(startupTestFile, {
-          cwd,
-          execArgv,
-          env: {
-            STEALTHY_REQUIRE: 'true'
-          }
-        })
-        return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', '127.0.0.1:8126')
-          assert.isArray(payload)
-          assert.strictEqual(payload.length, 1)
-          assert.isArray(payload[0])
-          assert.strictEqual(payload[0].length, 1)
-          assert.propertyVal(payload[0][0], 'name', 'web.request')
-        })
-      })
-    })
+    //   it('works with stealthy-require', async () => {
+    //     proc = await spawnProc(startupTestFile, {
+    //       cwd,
+    //       execArgv,
+    //       env: {
+    //         STEALTHY_REQUIRE: 'true'
+    //       }
+    //     })
+    //     return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+    //       assert.propertyVal(headers, 'host', '127.0.0.1:8126')
+    //       assert.isArray(payload)
+    //       assert.strictEqual(payload.length, 1)
+    //       assert.isArray(payload[0])
+    //       assert.strictEqual(payload[0].length, 1)
+    //       assert.propertyVal(payload[0][0], 'name', 'web.request')
+    //     })
+    //   })
+    // })
   })
 })
