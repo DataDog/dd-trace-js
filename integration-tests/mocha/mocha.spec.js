@@ -34,7 +34,8 @@ const {
   TEST_SOURCE_START,
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
-  TEST_LEVEL_EVENT_TYPES
+  TEST_LEVEL_EVENT_TYPES,
+  TEST_EARLY_FLAKE_ABORT_REASON
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -1166,6 +1167,7 @@ describe('mocha CommonJS', function () {
         }).catch(done)
       })
     })
+
     it('handles parameterized tests as a single unit', (done) => {
       // Tests from ci-visibility/test-early-flake-detection/test-parameterized.js will be considered new
       receiver.setKnownTests({
@@ -1243,6 +1245,7 @@ describe('mocha CommonJS', function () {
         }).catch(done)
       })
     })
+
     it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
@@ -1298,6 +1301,7 @@ describe('mocha CommonJS', function () {
         }).catch(done)
       })
     })
+
     it('retries flaky tests', (done) => {
       // Tests from ci-visibility/test/occasionally-failing-test will be considered new
       receiver.setKnownTests({})
@@ -1366,6 +1370,7 @@ describe('mocha CommonJS', function () {
         }).catch(done)
       })
     })
+
     it('does not retry new tests that are skipped', (done) => {
       // Tests from ci-visibility/test/skipped-and-todo-test will be considered new
       receiver.setKnownTests({})
@@ -1420,6 +1425,7 @@ describe('mocha CommonJS', function () {
         }).catch(done)
       })
     })
+
     it('handles spaces in test names', (done) => {
       receiver.setSettings({
         itr_enabled: false,
@@ -1485,6 +1491,7 @@ describe('mocha CommonJS', function () {
         }).catch(done)
       })
     })
+
     it('does not run EFD if the known tests request fails', (done) => {
       receiver.setKnownTestsResponseCode(500)
 
@@ -1537,6 +1544,7 @@ describe('mocha CommonJS', function () {
         eventsPromise.then(() => done()).catch(done)
       })
     })
+
     it('retries flaky tests and sets exit code to 0 as long as one attempt passes', (done) => {
       // Tests from ci-visibility/test/occasionally-failing-test will be considered new
       receiver.setKnownTests({})
@@ -1611,6 +1619,68 @@ describe('mocha CommonJS', function () {
         }).catch(done)
       })
     })
+
+    it('bails out of EFD if the percentage of new tests is too high', (done) => {
+      const NUM_RETRIES_EFD = 5
+
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD
+          },
+          faulty_session_threshold: 0
+        }
+      })
+      // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
+      receiver.setKnownTests({
+        mocha: {
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+          assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+          assert.equal(newTests.length, 0)
+
+          const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.equal(retriedTests.length, 0)
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test/ci-visibility-test.js',
+              './test/ci-visibility-test-2.js'
+            ])
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
     context('parallel mode', () => {
       it('retries new tests', (done) => {
         // Tests from ci-visibility/test/occasionally-failing-test will be considered new
@@ -1741,10 +1811,68 @@ describe('mocha CommonJS', function () {
           }).catch(done)
         })
       })
-    })
-    // TODO: faulty threshold
+      it('bails out of EFD if the percentage of new tests is too high', (done) => {
+        const NUM_RETRIES_EFD = 5
 
-    // TODO: duration threshold
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            },
+            faulty_session_threshold: 0
+          }
+        })
+        // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
+        receiver.setKnownTests({
+          mocha: {
+            'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
+          }
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(newTests.length, 0)
+
+            const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(retriedTests.length, 0)
+          })
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              RUN_IN_PARALLEL: true,
+              TESTS_TO_RUN: JSON.stringify([
+                './test/ci-visibility-test.js',
+                './test/ci-visibility-test-2.js'
+              ])
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+    })
   })
 
   context('flaky test retries', () => {

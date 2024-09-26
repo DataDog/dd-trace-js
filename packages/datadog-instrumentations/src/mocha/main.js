@@ -11,7 +11,8 @@ const {
   fromCoverageMapToCoverage,
   getCoveredFilenamesFromCoverage,
   mergeCoverage,
-  resetCoverage
+  resetCoverage,
+  getIsFaultyEarlyFlakeDetection
 } = require('../../../dd-trace/src/plugins/util/test')
 
 const {
@@ -163,6 +164,7 @@ function getOnEndHandler (isParallel) {
       hasUnskippableSuites: !!unskippableSuites.length,
       error,
       isEarlyFlakeDetectionEnabled: config.isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty: config.isEarlyFlakeDetectionFaulty,
       isParallel
     })
   })
@@ -219,6 +221,7 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
 
     config.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
     config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+    config.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
     // ITR and auto test retries are not supported in parallel mode yet
     config.isSuitesSkippingEnabled = !isParallel && libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = !isParallel && libraryConfig.isFlakyTestRetriesEnabled
@@ -270,6 +273,18 @@ addHook({
     })
 
     getExecutionConfiguration(runner, false, () => {
+      if (config.isEarlyFlakeDetectionEnabled) {
+        const testSuites = this.files.map(file => getTestSuitePath(file, process.cwd()))
+        const isFaulty = getIsFaultyEarlyFlakeDetection(
+          testSuites,
+          config.knownTests.mocha,
+          config.earlyFlakeDetectionFaultyThreshold
+        )
+        if (isFaulty) {
+          config.isEarlyFlakeDetectionEnabled = false
+          config.isEarlyFlakeDetectionFaulty = true
+        }
+      }
       if (getCodeCoverageCh.hasSubscribers) {
         getCodeCoverageCh.publish({
           onDone: (receivedCodeCoverage) => {
@@ -513,7 +528,7 @@ addHook({
   versions: ['>=8.0.0'],
   file: 'lib/nodejs/parallel-buffered-runner.js'
 }, (ParallelBufferedRunner, frameworkVersion) => {
-  shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function () {
+  shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files }) {
     if (!testStartCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
@@ -522,6 +537,18 @@ addHook({
     this.once('end', getOnEndHandler(true))
 
     getExecutionConfiguration(this, true, () => {
+      if (config.isEarlyFlakeDetectionEnabled) {
+        const testSuites = files.map(file => getTestSuitePath(file, process.cwd()))
+        const isFaulty = getIsFaultyEarlyFlakeDetection(
+          testSuites,
+          config.knownTests.mocha,
+          config.earlyFlakeDetectionFaultyThreshold
+        )
+        if (isFaulty) {
+          config.isEarlyFlakeDetectionEnabled = false
+          config.isEarlyFlakeDetectionFaulty = true
+        }
+      }
       run.apply(this, arguments)
     })
 
