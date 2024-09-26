@@ -73,7 +73,7 @@ describe('test-api-manual', () => {
       '--require ./ci-visibility/test-api-manual/test.fake.js ./ci-visibility/test-api-manual/run-fake-test-framework',
       {
         cwd,
-        env: { ...getCiVisAgentlessConfig(receiver.port), DD_CIVISIBILITY_MANUAL_API_ENABLED: '1' },
+        env: getCiVisAgentlessConfig(receiver.port),
         stdio: 'pipe'
       }
     )
@@ -82,7 +82,7 @@ describe('test-api-manual', () => {
     })
   })
 
-  it('does not report test spans if DD_CIVISIBILITY_MANUAL_API_ENABLED is not set', (done) => {
+  it('does not report test spans if DD_CIVISIBILITY_MANUAL_API_ENABLED is set to false', (done) => {
     receiver.assertPayloadReceived(() => {
       const error = new Error('should not report spans')
       done(error)
@@ -93,7 +93,10 @@ describe('test-api-manual', () => {
       '--require ./ci-visibility/test-api-manual/test.fake.js ./ci-visibility/test-api-manual/run-fake-test-framework',
       {
         cwd,
-        env: getCiVisAgentlessConfig(receiver.port),
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_CIVISIBILITY_MANUAL_API_ENABLED: 'false'
+        },
         stdio: 'pipe'
       }
     )

@@ -508,7 +508,7 @@ class Config {
     this._setValue(defaults, 'llmobs.apiKey', undefined)
     this._setBoolean(defaults, 'llmobs.enabled', false)
     this._setValue(defaults, 'llmobs.mlApp', undefined)
-    this._setValue(defaults, 'ciVisibilitySessionName', '')
+    this._setValue(defaults, 'ciVisibilityTestSessionName', '')
     this._setValue(defaults, 'logInjection', false)
     this._setValue(defaults, 'lookup', undefined)
     this._setValue(defaults, 'memcachedCommandEnabled', false)
@@ -547,7 +547,7 @@ class Config {
     this._setValue(defaults, 'telemetry.dependencyCollection', true)
     this._setValue(defaults, 'telemetry.enabled', true)
     this._setValue(defaults, 'telemetry.heartbeatInterval', 60000)
-    this._setValue(defaults, 'telemetry.logCollection', true)
+    this._setValue(defaults, 'telemetry.logCollection', false)
     this._setValue(defaults, 'telemetry.metrics', true)
     this._setValue(defaults, 'traceId128BitGenerationEnabled', true)
     this._setValue(defaults, 'traceId128BitLoggingEnabled', false)
@@ -1021,10 +1021,10 @@ class Config {
   }
 
   _isCiVisibilityManualApiEnabled () {
-    return isTrue(coalesce(
+    return coalesce(
       process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED,
-      false
-    ))
+      true
+    )
   }
 
   _isTraceStatsComputationEnabled () {
@@ -1053,7 +1053,7 @@ class Config {
       DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
       DD_CIVISIBILITY_FLAKY_RETRY_ENABLED,
       DD_CIVISIBILITY_FLAKY_RETRY_COUNT,
-      DD_SESSION_NAME
+      DD_TEST_SESSION_NAME
     } = process.env
 
     if (DD_CIVISIBILITY_AGENTLESS_URL) {
@@ -1068,8 +1068,8 @@ class Config {
         coalesce(DD_CIVISIBILITY_FLAKY_RETRY_ENABLED, true))
       this._setValue(calc, 'flakyTestRetriesCount', coalesce(maybeInt(DD_CIVISIBILITY_FLAKY_RETRY_COUNT), 5))
       this._setBoolean(calc, 'isIntelligentTestRunnerEnabled', isTrue(this._isCiVisibilityItrEnabled()))
-      this._setBoolean(calc, 'isManualApiEnabled', this._isCiVisibilityManualApiEnabled())
-      this._setString(calc, 'ciVisibilitySessionName', DD_SESSION_NAME)
+      this._setBoolean(calc, 'isManualApiEnabled', !isFalse(this._isCiVisibilityManualApiEnabled()))
+      this._setString(calc, 'ciVisibilityTestSessionName', DD_TEST_SESSION_NAME)
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())
     this._setBoolean(calc, 'isGitUploadEnabled',
@@ -1091,6 +1091,12 @@ class Config {
     }
 
     this._setBoolean(calc, 'llmobs.enabled', this._isLLMObsEnabled(options))
+    const iastEnabled = coalesce(this._options['iast.enabled'], this._env['iast.enabled'])
+    const profilingEnabled = coalesce(this._options['profiling.enabled'], this._env['profiling.enabled'])
+    const injectionIncludesProfiler = (this._env.injectionEnabled || []).includes('profiler')
+    if (iastEnabled || ['auto', 'true'].includes(profilingEnabled) || injectionIncludesProfiler) {
+      this._setBoolean(calc, 'telemetry.logCollection', true)
+    }
   }
 
   _applyRemote (options) {

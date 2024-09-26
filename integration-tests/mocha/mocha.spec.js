@@ -36,6 +36,7 @@ const {
   TEST_SESSION_NAME,
   TEST_LEVEL_EVENT_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
 const runTestsWithCoverageCommand = './node_modules/nyc/bin/nyc.js -r=text-summary node ./ci-visibility/run-mocha.js'
@@ -169,11 +170,13 @@ describe('mocha CommonJS', function () {
           // Can read DD_TAGS
           assert.propertyVal(testEvent.meta, 'test.customtag', 'customvalue')
           assert.propertyVal(testEvent.meta, 'test.customtag2', 'customvalue2')
+          assert.exists(testEvent.metrics[DD_HOST_CPU_COUNT])
         })
 
         suites.forEach(testSuite => {
           assert.isTrue(testSuite.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'))
           assert.equal(testSuite.metrics[TEST_SOURCE_START], 1)
+          assert.exists(testSuite.metrics[DD_HOST_CPU_COUNT])
         })
 
         done()
@@ -184,7 +187,7 @@ describe('mocha CommonJS', function () {
         env: {
           ...envVars,
           DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-          DD_SESSION_NAME: 'my-test-session'
+          DD_TEST_SESSION_NAME: 'my-test-session'
         },
         stdio: 'pipe'
       })
@@ -378,7 +381,7 @@ describe('mocha CommonJS', function () {
         RUN_IN_PARALLEL: true,
         DD_TRACE_DEBUG: 1,
         DD_TRACE_LOG_LEVEL: 'warn',
-        DD_SESSION_NAME: 'my-test-session'
+        DD_TEST_SESSION_NAME: 'my-test-session'
       },
       stdio: 'pipe'
     })
