@@ -36,6 +36,7 @@ class LLMObsTagger {
     { modelName, modelProvider, sessionId, mlApp, parentLLMObsSpan } = {},
     name
   ) {
+    if (!this._config.llmobs.enabled) return
     if (kind) span.setTag(SPAN_TYPE, 'llm') // only mark it as an llm span if it was a valid kind
     if (name) span.setTag(NAME, name)
 

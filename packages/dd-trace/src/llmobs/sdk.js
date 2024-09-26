@@ -96,12 +96,12 @@ class LLMObs {
     }
 
     if (!span) {
-      span = this.active()
+      span = this._active()
     }
 
     if ((span && !options) && !(span instanceof Span)) {
       options = span
-      span = this.active()
+      span = this._active()
     }
 
     if (!span) {
@@ -161,7 +161,7 @@ class LLMObs {
       return
     }
 
-    span = span || this.active()
+    span = span || this._active()
 
     if (!span) {
       logger.warn('No span provided and no active LLMObs-generated span found')
@@ -461,7 +461,7 @@ class LLMObs {
   decorate (kind, options) {
     const llmobs = this
     return function (target, ctx) {
-      if (!llmobs.enabled || ctx.kind !== 'method') return target
+      if (ctx.kind !== 'method') return target
 
       // override name if specified on options
       return llmobs.wrap(kind, { name: ctx.name, ...options }, target)
@@ -482,7 +482,7 @@ class LLMObs {
     }
   }
 
-  active () {
+  _active () {
     const store = storage.getStore()
     return store?.llmobsSpan
   }

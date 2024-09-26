@@ -48,6 +48,15 @@ class NoopLLMObs {
 
     return this._tracer.wrap(kind, options, fn)
   }
+
+  decorate (kind, options) {
+    const llmobs = this
+    return function (target) {
+      return llmobs.wrap(kind, options, target)
+    }
+  }
+
+  flush () {}
 }
 
 module.exports = NoopLLMObs
