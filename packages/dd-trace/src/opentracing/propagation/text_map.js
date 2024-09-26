@@ -565,10 +565,7 @@ class TextMapPropagator {
     }
     // the current code assumes precedence of ot-baggage- over baggage
     if (this._hasPropagationStyle('extract', 'baggage') && carrier.baggage) {
-      const buf = Buffer.from(carrier.baggage)
-      if (buf.length > this._config.baggageMaxBytes) return
       const baggages = carrier.baggage.split(',')
-      if (baggages.length > this._config.baggageMaxItems) return
       for (const keyValue of baggages) {
         if (!keyValue.includes('=')) {
           spanContext._baggageItems = {}
