@@ -330,7 +330,7 @@ describe('Config', () => {
       { name: 'llmobs.agentlessEnabled', value: false, origin: 'default' },
       { name: 'llmobs.apiKey', value: undefined, origin: 'default' },
       { name: 'llmobs.mlApp', value: undefined, origin: 'default' },
-      { name: 'ciVisibilitySessionName', value: '', origin: 'default' },
+      { name: 'ciVisibilityTestSessionName', value: '', origin: 'default' },
       { name: 'logInjection', value: false, origin: 'default' },
       { name: 'lookup', value: undefined, origin: 'default' },
       { name: 'openAiLogsEnabled', value: false, origin: 'default' },
@@ -369,7 +369,7 @@ describe('Config', () => {
       { name: 'telemetry.dependencyCollection', value: true, origin: 'default' },
       { name: 'telemetry.enabled', value: true, origin: 'env_var' },
       { name: 'telemetry.heartbeatInterval', value: 60000, origin: 'default' },
-      { name: 'telemetry.logCollection', value: true, origin: 'default' },
+      { name: 'telemetry.logCollection', value: false, origin: 'default' },
       { name: 'telemetry.metrics', value: true, origin: 'default' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'default' },
       { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' },
@@ -1493,7 +1493,7 @@ describe('Config', () => {
     expect(config.telemetry).to.not.be.undefined
     expect(config.telemetry.enabled).to.be.true
     expect(config.telemetry.heartbeatInterval).to.eq(60000)
-    expect(config.telemetry.logCollection).to.be.true
+    expect(config.telemetry.logCollection).to.be.false
     expect(config.telemetry.debug).to.be.false
     expect(config.telemetry.metrics).to.be.true
   })
@@ -1531,7 +1531,7 @@ describe('Config', () => {
     process.env.DD_TELEMETRY_METRICS_ENABLED = origTelemetryMetricsEnabledValue
   })
 
-  it('should disable log collection if DD_TELEMETRY_LOG_COLLECTION_ENABLED is false', () => {
+  it('should not set DD_TELEMETRY_LOG_COLLECTION_ENABLED', () => {
     const origLogsValue = process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED
     process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = 'false'
 
@@ -1540,6 +1540,17 @@ describe('Config', () => {
     expect(config.telemetry.logCollection).to.be.false
 
     process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = origLogsValue
+  })
+
+  it('should set DD_TELEMETRY_LOG_COLLECTION_ENABLED if DD_IAST_ENABLED', () => {
+    const origIastEnabledValue = process.env.DD_IAST_ENABLED
+    process.env.DD_IAST_ENABLED = 'true'
+
+    const config = new Config()
+
+    expect(config.telemetry.logCollection).to.be.true
+
+    process.env.DD_IAST_ENABLED = origIastEnabledValue
   })
 
   it('should set DD_TELEMETRY_DEBUG', () => {
@@ -1830,7 +1841,7 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
-      delete process.env.DD_SESSION_NAME
+      delete process.env.DD_TEST_SESSION_NAME
       delete process.env.JEST_WORKER_ID
       options = {}
     })
@@ -1856,14 +1867,14 @@ describe('Config', () => {
         const config = new Config(options)
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
       })
-      it('should disable manual testing API by default', () => {
-        const config = new Config(options)
-        expect(config).to.have.property('isManualApiEnabled', false)
-      })
-      it('should enable manual testing API if DD_CIVISIBILITY_MANUAL_API_ENABLED is passed', () => {
-        process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED = 'true'
+      it('should enable manual testing API by default', () => {
         const config = new Config(options)
         expect(config).to.have.property('isManualApiEnabled', true)
+      })
+      it('should disable manual testing API if DD_CIVISIBILITY_MANUAL_API_ENABLED is set to false', () => {
+        process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED = 'false'
+        const config = new Config(options)
+        expect(config).to.have.property('isManualApiEnabled', false)
       })
       it('should disable memcached command tagging by default', () => {
         const config = new Config(options)
@@ -1915,10 +1926,10 @@ describe('Config', () => {
         const config = new Config(options)
         expect(config).to.have.property('flakyTestRetriesCount', 5)
       })
-      it('should set the session name if DD_SESSION_NAME is set', () => {
-        process.env.DD_SESSION_NAME = 'my-test-session'
+      it('should set the session name if DD_TEST_SESSION_NAME is set', () => {
+        process.env.DD_TEST_SESSION_NAME = 'my-test-session'
         const config = new Config(options)
-        expect(config).to.have.property('ciVisibilitySessionName', 'my-test-session')
+        expect(config).to.have.property('ciVisibilityTestSessionName', 'my-test-session')
       })
     })
     context('ci visibility mode is not enabled', () => {

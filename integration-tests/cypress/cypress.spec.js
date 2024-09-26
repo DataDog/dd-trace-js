@@ -37,6 +37,7 @@ const {
   TEST_SESSION_NAME,
   TEST_LEVEL_EVENT_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { NODE_MAJOR } = require('../../version')
 
@@ -289,6 +290,7 @@ moduleTypes.forEach(({
             assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
             assert.isTrue(meta[TEST_SOURCE_FILE].startsWith('cypress/e2e/'))
             assert.equal(metrics[TEST_SOURCE_START], 1)
+            assert.exists(metrics[DD_HOST_CPU_COUNT])
           })
 
           assert.includeMembers(testEvents.map(test => test.content.resource), [
@@ -306,6 +308,7 @@ moduleTypes.forEach(({
           testEvents.forEach(({
             content: {
               meta,
+              metrics,
               test_suite_id: testSuiteId,
               test_module_id: testModuleId,
               test_session_id: testSessionId
@@ -320,6 +323,7 @@ moduleTypes.forEach(({
             // Can read DD_TAGS
             assert.propertyVal(meta, 'test.customtag', 'customvalue')
             assert.propertyVal(meta, 'test.customtag2', 'customvalue2')
+            assert.exists(metrics[DD_HOST_CPU_COUNT])
           })
         }, 25000)
 
@@ -336,7 +340,7 @@ moduleTypes.forEach(({
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-            DD_SESSION_NAME: 'my-test-session'
+            DD_TEST_SESSION_NAME: 'my-test-session'
           },
           stdio: 'pipe'
         }
