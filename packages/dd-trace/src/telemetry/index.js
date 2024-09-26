@@ -243,6 +243,7 @@ function start (aConfig, thePluginManager) {
     return
   }
   config = aConfig
+  console.log(44, config)
   pluginManager = thePluginManager
   application = createAppObject(config)
   host = createHostObject()

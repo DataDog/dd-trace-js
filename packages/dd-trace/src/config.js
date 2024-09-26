@@ -3,7 +3,7 @@
 const fs = require('fs')
 const os = require('os')
 const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
-const URL = require('url').URL
+const { URL } = require('url')
 const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
@@ -18,6 +18,7 @@ const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
 const { getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY } = require('./constants')
+const { appendRules } = require('./payload-tagging/config')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -173,6 +174,21 @@ function validateNamingVersion (versionString) {
   return versionString
 }
 
+/**
+ * Given a string of comma-separated paths, return the array of paths.
+ * If a blank path is provided a null is returned to signal that the feature is disabled.
+ * An empty array means the feature is enabled but that no rules need to be applied.
+ *
+ * @param {string} input
+ * @returns {[string]|null}
+ */
+function splitJSONPathRules (input) {
+  if (!input) return null
+  if (Array.isArray(input)) return input
+  if (input === 'all') return []
+  return input.split(',')
+}
+
 // Shallow clone with property name remapping
 function remapify (input, mappings) {
   if (!input) return
@@ -281,6 +297,26 @@ class Config {
       null
     )
 
+    const DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = splitJSONPathRules(
+      coalesce(
+        process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
+        options.cloudPayloadTagging?.request,
+        ''
+      ))
+
+    const DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = splitJSONPathRules(
+      coalesce(
+        process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
+        options.cloudPayloadTagging?.response,
+        ''
+      ))
+
+    const DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = coalesce(
+      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
+      options.cloudPayloadTagging?.maxDepth,
+      10
+    )
+
     // TODO: refactor
     this.apiKey = DD_API_KEY
 
@@ -289,6 +325,15 @@ class Config {
       id: DD_INSTRUMENTATION_INSTALL_ID,
       time: DD_INSTRUMENTATION_INSTALL_TIME,
       type: DD_INSTRUMENTATION_INSTALL_TYPE
+    }
+
+    this.cloudPayloadTagging = {
+      requestsEnabled: !!DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
+      responsesEnabled: !!DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
+      maxDepth: DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
+      rules: appendRules(
+        DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING, DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING
+      )
     }
 
     this._applyDefaults()
@@ -423,6 +468,7 @@ class Config {
     this._setValue(defaults, 'dogstatsd.hostname', '127.0.0.1')
     this._setValue(defaults, 'dogstatsd.port', '8125')
     this._setValue(defaults, 'dsmEnabled', false)
+    this._setValue(defaults, 'dynamicInstrumentationEnabled', false)
     this._setValue(defaults, 'env', undefined)
     this._setValue(defaults, 'experimental.enableGetRumData', false)
     this._setValue(defaults, 'experimental.exporter', undefined)
@@ -451,6 +497,7 @@ class Config {
     this._setValue(defaults, 'isGitUploadEnabled', false)
     this._setValue(defaults, 'isIntelligentTestRunnerEnabled', false)
     this._setValue(defaults, 'isManualApiEnabled', false)
+    this._setValue(defaults, 'ciVisibilityTestSessionName', '')
     this._setValue(defaults, 'logInjection', false)
     this._setValue(defaults, 'lookup', undefined)
     this._setValue(defaults, 'memcachedCommandEnabled', false)
@@ -528,6 +575,7 @@ class Config {
       DD_DBM_PROPAGATION_MODE,
       DD_DOGSTATSD_HOSTNAME,
       DD_DOGSTATSD_PORT,
+      DD_DYNAMIC_INSTRUMENTATION_ENABLED,
       DD_ENV,
       DD_EXPERIMENTAL_API_SECURITY_ENABLED,
       DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,
@@ -657,6 +705,7 @@ class Config {
     this._setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOSTNAME)
     this._setString(env, 'dogstatsd.port', DD_DOGSTATSD_PORT)
     this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
+    this._setBoolean(env, 'dynamicInstrumentationEnabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
     this._setString(env, 'env', DD_ENV || tags.env)
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     this._setString(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
@@ -824,11 +873,11 @@ class Config {
       this._setString(opts, 'dogstatsd.port', options.dogstatsd.port)
     }
     this._setBoolean(opts, 'dsmEnabled', options.dsmEnabled)
+    this._setBoolean(opts, 'dynamicInstrumentationEnabled', options.experimental?.dynamicInstrumentationEnabled)
     this._setString(opts, 'env', options.env || tags.env)
-    this._setBoolean(opts, 'experimental.enableGetRumData',
-      options.experimental && options.experimental.enableGetRumData)
-    this._setString(opts, 'experimental.exporter', options.experimental && options.experimental.exporter)
-    this._setBoolean(opts, 'experimental.runtimeId', options.experimental && options.experimental.runtimeId)
+    this._setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
+    this._setString(opts, 'experimental.exporter', options.experimental?.exporter)
+    this._setBoolean(opts, 'experimental.runtimeId', options.experimental?.runtimeId)
     this._setValue(opts, 'flushInterval', maybeInt(options.flushInterval))
     this._optsUnprocessed.flushInterval = options.flushInterval
     this._setValue(opts, 'flushMinSpans', maybeInt(options.flushMinSpans))
@@ -954,10 +1003,10 @@ class Config {
   }
 
   _isCiVisibilityManualApiEnabled () {
-    return isTrue(coalesce(
+    return coalesce(
       process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED,
-      false
-    ))
+      true
+    )
   }
 
   _isTraceStatsComputationEnabled () {
@@ -985,7 +1034,8 @@ class Config {
       DD_CIVISIBILITY_AGENTLESS_URL,
       DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
       DD_CIVISIBILITY_FLAKY_RETRY_ENABLED,
-      DD_CIVISIBILITY_FLAKY_RETRY_COUNT
+      DD_CIVISIBILITY_FLAKY_RETRY_COUNT,
+      DD_TEST_SESSION_NAME
     } = process.env
 
     if (DD_CIVISIBILITY_AGENTLESS_URL) {
@@ -1000,7 +1050,8 @@ class Config {
         coalesce(DD_CIVISIBILITY_FLAKY_RETRY_ENABLED, true))
       this._setValue(calc, 'flakyTestRetriesCount', coalesce(maybeInt(DD_CIVISIBILITY_FLAKY_RETRY_COUNT), 5))
       this._setBoolean(calc, 'isIntelligentTestRunnerEnabled', isTrue(this._isCiVisibilityItrEnabled()))
-      this._setBoolean(calc, 'isManualApiEnabled', this._isCiVisibilityManualApiEnabled())
+      this._setBoolean(calc, 'isManualApiEnabled', !isFalse(this._isCiVisibilityManualApiEnabled()))
+      this._setString(calc, 'ciVisibilityTestSessionName', DD_TEST_SESSION_NAME)
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())
     this._setBoolean(calc, 'isGitUploadEnabled',

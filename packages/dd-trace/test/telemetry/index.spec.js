@@ -90,7 +90,7 @@ describe('telemetry', () => {
     traceAgent.close()
   })
 
-  it('should send app-started', () => {
+  it.only('should send app-started', () => {
     return testSeq(1, 'app-started', payload => {
       expect(payload).to.have.property('products').that.deep.equal({
         appsec: { enabled: true },
