@@ -1101,7 +1101,7 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              headers: ['host', 'x-foo', 'x-bar:http.bar', 'x-baz:http.baz']
+              headers: ['host', 'x-foo', 'x-bar:http.bar', 'x-baz:http.baz', ' t a g :val']
             }
           }
 
@@ -1112,7 +1112,7 @@ describe('Plugin', () => {
             })
         })
 
-        it('should add tags for the configured headers', done => {
+        it.only('should add tags for the configured headers', done => {
           const app = express()
 
           app.get('/user', (req, res) => {
@@ -1125,7 +1125,7 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const meta = traces[0][0].meta
-
+                console.log(88, meta)
                 expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.host`, `localhost:${port}`)
                 expect(meta).to.have.property('http.baz', 'baz')
                 expect(meta).to.have.property(`${HTTP_RESPONSE_HEADERS}.x-foo`, 'foo')
@@ -1135,7 +1135,7 @@ describe('Plugin', () => {
               .catch(done)
 
             const url = `${protocol}://localhost:${port}/user`
-            const headers = { 'x-baz': 'baz' }
+            const headers = { 'x-baz': 'baz', 't a g': 'val' }
             const req = http.request(url, { headers }, res => {
               res.on('data', () => {})
             })
