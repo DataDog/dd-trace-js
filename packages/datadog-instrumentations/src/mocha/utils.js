@@ -329,6 +329,7 @@ function getOnPendingHandler () {
   }
 }
 
+// Hook to add retries to tests if EFD is enabled
 function getRunTestsWrapper (runTests, config) {
   return function (suite, fn) {
     if (config.isEarlyFlakeDetectionEnabled) {

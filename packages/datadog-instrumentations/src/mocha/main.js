@@ -536,7 +536,7 @@ addHook({
 // In this hook we pass the known tests to the worker and collect the new tests that run
 addHook({
   name: 'mocha',
-  versions: ['>=8.0.0'], // probably other version
+  versions: ['>=8.0.0'],
   file: 'lib/nodejs/buffered-worker-pool.js'
 }, (BufferedWorkerPoolPackage) => {
   const { BufferedWorkerPool } = BufferedWorkerPoolPackage
