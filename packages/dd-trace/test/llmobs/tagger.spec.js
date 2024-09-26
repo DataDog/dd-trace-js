@@ -210,7 +210,7 @@ describe('tagger', () => {
     })
   })
 
-  describe.only('tagLLMIO', () => {
+  describe('tagLLMIO', () => {
     it('tags a span with llm io', () => {
       const inputData = [
         'you are an amazing assistant',
