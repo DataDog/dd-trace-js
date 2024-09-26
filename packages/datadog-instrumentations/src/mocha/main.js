@@ -79,14 +79,6 @@ function isTestFailed (test) {
   return false
 }
 
-function getChannelPromise (channelToPublishTo) {
-  return new Promise(resolve => {
-    testSessionAsyncResource.runInAsyncScope(() => {
-      channelToPublishTo.publish({ onDone: resolve })
-    })
-  })
-}
-
 function getFilteredSuites (originalSuites) {
   return originalSuites.reduce((acc, suite) => {
     const testPath = getTestSuitePath(suite.file, process.cwd())
@@ -177,7 +169,7 @@ function getOnEndHandler (isParallel) {
   })
 }
 
-function getExecutionConfiguration (runner, onFinishRequest) {
+function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
   const mochaRunAsyncResource = new AsyncResource('bound-anonymous-fn')
 
   const onReceivedSkippableSuites = ({ err, skippableSuites, itrCorrelationId: responseItrCorrelationId }) => {
@@ -227,10 +219,11 @@ function getExecutionConfiguration (runner, onFinishRequest) {
     }
 
     config.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-    config.isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
     config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
-    config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
-    config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+    // ITR and auto test retries are not supported in parallel mode yet
+    config.isSuitesSkippingEnabled = !isParallel && libraryConfig.isSuitesSkippingEnabled
+    config.isFlakyTestRetriesEnabled = !isParallel && libraryConfig.isFlakyTestRetriesEnabled
+    config.flakyTestRetriesCount = !isParallel && libraryConfig.flakyTestRetriesCount
 
     if (config.isEarlyFlakeDetectionEnabled) {
       knownTestsCh.publish({
@@ -265,6 +258,7 @@ addHook({
     }
 
     // `options.delay` does not work in parallel mode, so we can't delay the execution this way
+    // This needs to be both here and in `runMocha` hook. Read the comment in `runMocha` hook for more info.
     this.options.delay = true
 
     const runner = run.apply(this, arguments)
@@ -276,7 +270,7 @@ addHook({
       }
     })
 
-    getExecutionConfiguration(runner, () => {
+    getExecutionConfiguration(runner, false, () => {
       if (getCodeCoverageCh.hasSubscribers) {
         getCodeCoverageCh.publish({
           onDone: (receivedCodeCoverage) => {
@@ -294,16 +288,6 @@ addHook({
   return Mocha
 })
 
-/**
- * `runMocha` hook:
- * In serial mode, it's only used to set `mocha.options.delay` to true.
- * In parallel mode, it's used to grab configuration and known tests, because setting `mocha.options.delay`
- * to true does not work when parallel mode is enabled.
- *
- * The reason why we don't always grab configuration here is that
- * `runMocha` is not executed in programmatic API `mocha.run()`.
- * Known limitation: programmatic API and parallel mode will not work with EFD.
- */
 addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
@@ -315,29 +299,15 @@ addHook({
     }
     const mocha = arguments[0]
 
-    if (mocha.options.parallel) {
-      const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
-      if (!err) {
-        config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
-        config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
-        config.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-        config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
-      }
-
-      // These will be passed to the workers with BufferedWorkerPool#run
-      if (config.isEarlyFlakeDetectionEnabled) {
-        const { err, knownTests: receivedKnownTests } = await getChannelPromise(knownTestsCh)
-        if (!err) {
-          knownTests = receivedKnownTests
-        } else {
-          config.isEarlyFlakeDetectionEnabled = false
-        }
-      }
-    } else { // serial mode
-      /**
-       * This attaches `run` to the global context, which we'll call after
-       * our configuration and skippable suites requests
-       */
+    /**
+     * This attaches `run` to the global context, which we'll call after
+     * our configuration and skippable suites requests.
+     * You need this both here and in Mocha#run hook: the programmatic API
+     * does not call `runMocha`, so it needs to be in Mocha#run. When using
+     * the CLI, modifying `options.delay` in Mocha#run is not enough (it's too late),
+     * so it also needs to be here.
+     */
+    if (!mocha.options.parallel) {
       mocha.options.delay = true
     }
 
@@ -553,7 +523,7 @@ addHook({
 // Used to start and finish test session and test module
 addHook({
   name: 'mocha',
-  versions: ['>=5.2.0'],
+  versions: ['>=8.0.0'],
   file: 'lib/nodejs/parallel-buffered-runner.js'
 }, (ParallelBufferedRunner, frameworkVersion) => {
   shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function () {
@@ -564,64 +534,69 @@ addHook({
     this.once('start', getOnStartHandler(true, frameworkVersion))
     this.once('end', getOnEndHandler(true))
 
-    return run.apply(this, arguments)
+    getExecutionConfiguration(this, true, () => {
+      run.apply(this, arguments)
+    })
+
+    return this
   })
 
   return ParallelBufferedRunner
 })
 
 // Only in parallel mode: BufferedWorkerPool#run is used to run a test file in a worker
+// If Early Flake Detection is enabled,
+// In this hook we pass the known tests to the worker and collect the new tests that run
 addHook({
   name: 'mocha',
-  versions: ['>=5.2.0'], // probably other version
+  versions: ['>=8.0.0'], // probably other version
   file: 'lib/nodejs/buffered-worker-pool.js'
 }, (BufferedWorkerPoolPackage) => {
   const { BufferedWorkerPool } = BufferedWorkerPoolPackage
 
   shimmer.wrap(BufferedWorkerPool.prototype, 'run', run => async function (testSuiteAbsolutePath, workerArgs) {
-    if (!testStartCh.hasSubscribers) {
+    if (!testStartCh.hasSubscribers || !config.isEarlyFlakeDetectionEnabled) {
       return run.apply(this, arguments)
     }
-    if (config.isEarlyFlakeDetectionEnabled) {
-      const testPath = getTestSuitePath(testSuiteAbsolutePath, process.cwd())
-      const mochaKnownTests = knownTests.mocha?.[testPath] || []
-      // The worker is passed the known tests for the test file it's going to run
-      const testFileResult = await run.apply(
-        this,
-        [
-          testSuiteAbsolutePath,
-          {
-            ...workerArgs,
-            _ddEfdNumRetries: config.earlyFlakeDetectionNumRetries,
-            _ddKnownTests: {
-              mocha: {
-                [testPath]: mochaKnownTests
-              }
+
+    const testPath = getTestSuitePath(testSuiteAbsolutePath, process.cwd())
+    const testSuiteKnownTests = knownTests.mocha?.[testPath] || []
+
+    // We pass the known tests for the test file to the worker
+    const testFileResult = await run.apply(
+      this,
+      [
+        testSuiteAbsolutePath,
+        {
+          ...workerArgs,
+          _ddEfdNumRetries: config.earlyFlakeDetectionNumRetries,
+          _ddKnownTests: {
+            mocha: {
+              [testPath]: testSuiteKnownTests
             }
           }
-        ]
-      )
-      // we have the test end events, so we can know what tests were new and how they finished
-      const tests = testFileResult
-        .events
-        .filter(event => event.eventName === 'test end')
-        .map(event => event.data)
+        }
+      ]
+    )
+    const tests = testFileResult
+      .events
+      .filter(event => event.eventName === 'test end')
+      .map(event => event.data)
 
-      for (const test of tests) {
-        if (isNewTest(test, knownTests)) {
-          const testFullName = getTestFullName(test)
-          const tests = newTests[testFullName]
+    // `newTests` is filled in the worker process, so we need to use the test results to fill it here too.
+    for (const test of tests) {
+      if (isNewTest(test, knownTests)) {
+        const testFullName = getTestFullName(test)
+        const tests = newTests[testFullName]
 
-          if (!tests) {
-            newTests[testFullName] = [test]
-          } else {
-            tests.push(test)
-          }
+        if (!tests) {
+          newTests[testFullName] = [test]
+        } else {
+          tests.push(test)
         }
       }
-      return testFileResult
     }
-    return run.apply(this, arguments)
+    return testFileResult
   })
 
   return BufferedWorkerPoolPackage
