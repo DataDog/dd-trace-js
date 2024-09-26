@@ -90,8 +90,7 @@ describe('span processor', () => {
               '_ml_obs.meta.output.value': 'output-value',
               '_ml_obs.meta.input.messages': '{"role":"user","content":"hello"}',
               '_ml_obs.meta.output.messages': '{"role":"assistant","content":"world"}',
-              '_ml_obs.llmobs_parent_id': '1234',
-              '_ml_obs.trace_id': '012'
+              '_ml_obs.llmobs_parent_id': '1234'
             },
             toTraceId () { return '123' }, // should not use this
             toSpanId () { return '456' }
@@ -104,7 +103,7 @@ describe('span processor', () => {
       const payload = processor._process(span)
 
       expect(payload).to.deep.equal({
-        trace_id: '012',
+        trace_id: '123',
         span_id: '456',
         parent_id: '1234',
         name: 'test',

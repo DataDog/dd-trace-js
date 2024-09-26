@@ -120,9 +120,6 @@ describe('module', () => {
         return {
           toSpanId () {
             return 'parent-id'
-          },
-          _tags: {
-            '_ml_obs.trace_id': 'trace-id'
           }
         }
       }
@@ -133,7 +130,7 @@ describe('module', () => {
     }
     handleLLMObsParentIdInjection({ carrier })
 
-    expect(carrier['x-datadog-tags']).to.equal(',_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_trace_id=trace-id')
+    expect(carrier['x-datadog-tags']).to.equal(',_dd.p.llmobs_parent_id=parent-id')
   })
 
   it('does not inject LLMObs parent ID when there is no parent LLMObs span', () => {

@@ -4,7 +4,6 @@ const proxyquire = require('proxyquire')
 const { expect } = require('chai')
 const Config = require('../../src/config')
 
-// eslint-disable-no-func-assign
 describe('sdk', () => {
   let LLMObsSDK
   let llmobs
@@ -195,19 +194,20 @@ describe('sdk', () => {
       })
 
       describe('parentage', () => {
-        it('starts a span with a distinct trace id', () => {
-          const span = llmobs.startSpan('workflow')
+        // it('starts a span with a distinct trace id', () => {
+        //   const span = llmobs.startSpan('workflow')
 
-          expect(span.context()._tags['_ml_obs.trace_id']).to.exist.and.to.not.equal(span.context().toTraceId(true))
-        })
+        //   expect(span.context()._tags['_ml_obs.trace_id'])
+        //     .to.exist.and.to.not.equal(span.context().toTraceId(true))
+        // })
 
         it('sets span parentage correctly', () => {
           const span = llmobs.startSpan('workflow')
           const child = llmobs.startSpan('task')
 
           expect(child.context()._tags['_ml_obs.llmobs_parent_id']).to.equal(span.context().toSpanId())
-          expect(child.context()._tags['_ml_obs.trace_id'])
-            .to.equal(span.context()._tags['_ml_obs.trace_id'])
+          // expect(child.context()._tags['_ml_obs.trace_id'])
+          //   .to.equal(span.context()._tags['_ml_obs.trace_id'])
         })
 
         it('maintains llmobs parentage through apm spans', () => {
@@ -319,30 +319,31 @@ describe('sdk', () => {
       })
 
       describe('parentage', () => {
-        it('starts a span with a distinct trace id', () => {
-          llmobs.trace('workflow', { name: 'test' }, span => {
-            expect(span.context()._tags['_ml_obs.trace_id']).to.exist.and.to.not.equal(span.context().toTraceId(true))
-          })
-        })
+        // it('starts a span with a distinct trace id', () => {
+        //   llmobs.trace('workflow', { name: 'test' }, span => {
+        //     expect(span.context()._tags['_ml_obs.trace_id'])
+        //       .to.exist.and.to.not.equal(span.context().toTraceId(true))
+        //   })
+        // })
 
         it('sets span parentage correctly', () => {
           llmobs.trace('workflow', { name: 'test' }, outerLLMSpan => {
             llmobs.trace('task', { name: 'test' }, innerLLMSpan => {
               expect(innerLLMSpan.context()._tags['_ml_obs.llmobs_parent_id'])
                 .to.equal(outerLLMSpan.context().toSpanId())
-              expect(innerLLMSpan.context()._tags['_ml_obs.trace_id'])
-                .to.equal(outerLLMSpan.context()._tags['_ml_obs.trace_id'])
+              // expect(innerLLMSpan.context()._tags['_ml_obs.trace_id'])
+              //   .to.equal(outerLLMSpan.context()._tags['_ml_obs.trace_id'])
             })
           })
         })
 
         it('maintains llmobs parentage separately from apm spans', () => {
           llmobs.trace('workflow', { name: 'outer-llm' }, outerLLMSpan => {
-            expect(llmobs.active()).to.equal(outerLLMSpan)
+            expect(llmobs._active()).to.equal(outerLLMSpan)
             tracer.trace('apmSpan', apmSpan => {
-              expect(llmobs.active()).to.equal(outerLLMSpan)
+              expect(llmobs._active()).to.equal(outerLLMSpan)
               llmobs.trace('workflow', { name: 'inner-llm' }, innerLLMSpan => {
-                expect(llmobs.active()).to.equal(innerLLMSpan)
+                expect(llmobs._active()).to.equal(innerLLMSpan)
 
                 // llmobs span linkage
                 expect(innerLLMSpan.context()._tags['_ml_obs.llmobs_parent_id'])
@@ -356,36 +357,36 @@ describe('sdk', () => {
           })
         })
 
-        it('starts different traces for llmobs spans as child spans of an apm root span', () => {
-          let apmTraceId, traceId1, traceId2
-          tracer.trace('apmRootSpan', apmRootSpan => {
-            apmTraceId = apmRootSpan.context().toTraceId(true)
-            llmobs.trace('workflow', llmobsSpan1 => {
-              traceId1 = llmobsSpan1.context()._tags['_ml_obs.trace_id']
-            })
+        // it('starts different traces for llmobs spans as child spans of an apm root span', () => {
+        //   let apmTraceId, traceId1, traceId2
+        //   tracer.trace('apmRootSpan', apmRootSpan => {
+        //     apmTraceId = apmRootSpan.context().toTraceId(true)
+        //     llmobs.trace('workflow', llmobsSpan1 => {
+        //       traceId1 = llmobsSpan1.context()._tags['_ml_obs.trace_id']
+        //     })
 
-            llmobs.trace('workflow', llmobsSpan2 => {
-              traceId2 = llmobsSpan2.context()._tags['_ml_obs.trace_id']
-            })
-          })
+        //     llmobs.trace('workflow', llmobsSpan2 => {
+        //       traceId2 = llmobsSpan2.context()._tags['_ml_obs.trace_id']
+        //     })
+        //   })
 
-          expect(traceId1).to.not.equal(traceId2)
-          expect(traceId1).to.not.equal(apmTraceId)
-          expect(traceId2).to.not.equal(apmTraceId)
-        })
+        //   expect(traceId1).to.not.equal(traceId2)
+        //   expect(traceId1).to.not.equal(apmTraceId)
+        //   expect(traceId2).to.not.equal(apmTraceId)
+        // })
 
         it('maintains the llmobs parentage when error callbacks are used', () => {
           llmobs.trace('workflow', outer => {
             llmobs.trace('task', (inner, cb) => {
-              expect(llmobs.active()).to.equal(inner)
+              expect(llmobs._active()).to.equal(inner)
               expect(inner.context()._tags['_ml_obs.llmobs_parent_id']).to.equal(outer.context().toSpanId())
               cb() // finish the span
             })
 
-            expect(llmobs.active()).to.equal(outer)
+            expect(llmobs._active()).to.equal(outer)
 
             llmobs.trace('task', (inner) => {
-              expect(llmobs.active()).to.equal(inner)
+              expect(llmobs._active()).to.equal(inner)
               expect(inner.context()._tags['_ml_obs.llmobs_parent_id']).to.equal(outer.context().toSpanId())
             })
           })
@@ -463,29 +464,30 @@ describe('sdk', () => {
       })
 
       describe('parentage', () => {
-        it('starts a span with a distinct trace id', () => {
-          const fn = llmobs.wrap('workflow', { name: 'test' }, () => {
-            const span = llmobs.active()
-            expect(span.context()._tags['_ml_obs.trace_id']).to.exist.and.to.not.equal(span.context().toTraceId(true))
-          })
+        // it('starts a span with a distinct trace id', () => {
+        //   const fn = llmobs.wrap('workflow', { name: 'test' }, () => {
+        //     const span = llmobs._active()
+        //     expect(span.context()._tags['_ml_obs.trace_id'])
+        //       .to.exist.and.to.not.equal(span.context().toTraceId(true))
+        //   })
 
-          fn()
-        })
+        //   fn()
+        // })
 
         it('sets span parentage correctly', () => {
           let outerLLMSpan, innerLLMSpan
 
           function outer () {
-            outerLLMSpan = llmobs.active()
+            outerLLMSpan = llmobs._active()
             innerWrapped()
           }
 
           function inner () {
-            innerLLMSpan = llmobs.active()
+            innerLLMSpan = llmobs._active()
             expect(innerLLMSpan.context()._tags['_ml_obs.llmobs_parent_id'])
               .to.equal(outerLLMSpan.context().toSpanId())
-            expect(innerLLMSpan.context()._tags['_ml_obs.trace_id'])
-              .to.equal(outerLLMSpan.context()._tags['_ml_obs.trace_id'])
+            // expect(innerLLMSpan.context()._tags['_ml_obs.trace_id'])
+            //   .to.equal(outerLLMSpan.context()._tags['_ml_obs.trace_id'])
           }
 
           const outerWrapped = llmobs.wrap('workflow', outer)
@@ -498,22 +500,22 @@ describe('sdk', () => {
           let outerLLMObsSpan, innerLLMObsSpan
 
           function outerLLMObs () {
-            outerLLMObsSpan = llmobs.active()
+            outerLLMObsSpan = llmobs._active()
             expect(outerLLMObsSpan).to.equal(tracer.scope().active())
 
             apmWrapped()
           }
           function apm () {
-            expect(llmobs.active()).to.equal(outerLLMObsSpan)
+            expect(llmobs._active()).to.equal(outerLLMObsSpan)
             innerWrapped()
           }
           function innerLLMObs () {
-            innerLLMObsSpan = llmobs.active()
+            innerLLMObsSpan = llmobs._active()
             expect(innerLLMObsSpan).to.equal(tracer.scope().active())
             expect(innerLLMObsSpan.context()._tags['_ml_obs.llmobs_parent_id'])
               .to.equal(outerLLMObsSpan.context().toSpanId())
-            expect(innerLLMObsSpan.context()._tags['_ml_obs.trace_id'])
-              .to.equal(outerLLMObsSpan.context()._tags['_ml_obs.trace_id'])
+            // expect(innerLLMObsSpan.context()._tags['_ml_obs.trace_id'])
+            //   .to.equal(outerLLMObsSpan.context()._tags['_ml_obs.trace_id'])
           }
 
           const outerWrapped = llmobs.wrap('workflow', outerLLMObs)
@@ -523,35 +525,35 @@ describe('sdk', () => {
           outerWrapped()
         })
 
-        it('starts different traces for llmobs spans as child spans of an apm root span', () => {
-          let traceId1, traceId2, apmTraceId
-          function apm () {
-            apmTraceId = tracer.scope().active().context().toTraceId(true)
-            llmObsWrapped1()
-            llmObsWrapped2()
-          }
-          function llmObs1 () {
-            traceId1 = llmobs.active().context()._tags['_ml_obs.trace_id']
-          }
-          function llmObs2 () {
-            traceId2 = llmobs.active().context()._tags['_ml_obs.trace_id']
-          }
+        // it('starts different traces for llmobs spans as child spans of an apm root span', () => {
+        //   let traceId1, traceId2, apmTraceId
+        //   function apm () {
+        //     apmTraceId = tracer.scope().active().context().toTraceId(true)
+        //     llmObsWrapped1()
+        //     llmObsWrapped2()
+        //   }
+        //   function llmObs1 () {
+        //     traceId1 = llmobs._active().context()._tags['_ml_obs.trace_id']
+        //   }
+        //   function llmObs2 () {
+        //     traceId2 = llmobs._active().context()._tags['_ml_obs.trace_id']
+        //   }
 
-          const apmWrapped = tracer.wrap('workflow', apm)
-          const llmObsWrapped1 = llmobs.wrap('workflow', llmObs1)
-          const llmObsWrapped2 = llmobs.wrap('workflow', llmObs2)
+        //   const apmWrapped = tracer.wrap('workflow', apm)
+        //   const llmObsWrapped1 = llmobs.wrap('workflow', llmObs1)
+        //   const llmObsWrapped2 = llmobs.wrap('workflow', llmObs2)
 
-          apmWrapped()
+        //   apmWrapped()
 
-          expect(traceId1).to.not.equal(traceId2)
-          expect(traceId1).to.not.equal(apmTraceId)
-          expect(traceId2).to.not.equal(apmTraceId)
-        })
+        //   expect(traceId1).to.not.equal(traceId2)
+        //   expect(traceId1).to.not.equal(apmTraceId)
+        //   expect(traceId2).to.not.equal(apmTraceId)
+        // })
 
         it('maintains the llmobs parentage when callbacks are used', () => {
           let outerSpan
           function outer () {
-            outerSpan = llmobs.active()
+            outerSpan = llmobs._active()
             wrappedInner1(() => {})
             expect(outerSpan).to.equal(tracer.scope().active())
             wrappedInner2()
@@ -559,14 +561,14 @@ describe('sdk', () => {
 
           function inner1 (cb) {
             const inner = tracer.scope().active()
-            expect(llmobs.active()).to.equal(inner)
+            expect(llmobs._active()).to.equal(inner)
             expect(inner.context()._tags['_ml_obs.llmobs_parent_id']).to.equal(outerSpan.context().toSpanId())
             cb()
           }
 
           function inner2 () {
             const inner = tracer.scope().active()
-            expect(llmobs.active()).to.equal(inner)
+            expect(llmobs._active()).to.equal(inner)
             expect(inner.context()._tags['_ml_obs.llmobs_parent_id']).to.equal(outerSpan.context().toSpanId())
           }
 
@@ -731,7 +733,7 @@ describe('sdk', () => {
       const span = llmobs.startSpan('llm', { name: 'test' })
       const spanCtx = llmobs.exportSpan(span)
 
-      const traceId = span.context()._tags['_ml_obs.trace_id']
+      const traceId = span.context().toTraceId(true)
       const spanId = span.context().toSpanId()
 
       expect(spanCtx).to.deep.equal({ traceId, spanId })
@@ -741,7 +743,7 @@ describe('sdk', () => {
       llmobs.trace('workflow', { name: 'test' }, span => {
         const spanCtx = llmobs.exportSpan()
 
-        const traceId = span.context()._tags['_ml_obs.trace_id']
+        const traceId = span.context().toTraceId(true)
         const spanId = span.context().toSpanId()
 
         expect(spanCtx).to.deep.equal({ traceId, spanId })
@@ -753,7 +755,7 @@ describe('sdk', () => {
         tracer.trace('apmSpan', () => {
           const spanCtx = llmobs.exportSpan()
 
-          const traceId = llmobsSpan.context()._tags['_ml_obs.trace_id']
+          const traceId = llmobsSpan.context().toTraceId(true)
           const spanId = llmobsSpan.context().toSpanId()
 
           expect(spanCtx).to.deep.equal({ traceId, spanId })
