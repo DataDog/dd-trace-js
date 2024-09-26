@@ -1144,7 +1144,8 @@ class Config {
     }
 
     if (typeof value === 'string') {
-      value = value.split(',')
+      // Trim the initial value's leading and trailing whitespace
+      value = value.trim().split(',')
     }
 
     if (Array.isArray(value)) {
