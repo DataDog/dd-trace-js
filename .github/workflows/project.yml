@@ -42,7 +42,7 @@ jobs:
         with:
           node-version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: node node_modules/.bin/mocha --colors --timeout 30000 -r packages/dd-trace/test/setup/core.js integration-tests/init.spec.js
+      - run: node node_modules/.bin/mocha --colors --timeout 30000 integration-tests/init.spec.js
 
   integration-ci:
     strategy:
