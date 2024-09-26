@@ -68,6 +68,8 @@ class BaseLLMObsWriter {
       timeout: this._timeout
     }
 
+    logger.debug(`Encoded LLMObs payload: ${payload}`)
+
     request(payload, options, (err, resp, code) => {
       if (err) {
         logger.error(
