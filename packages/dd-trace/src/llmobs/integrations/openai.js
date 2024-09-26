@@ -55,12 +55,14 @@ class OpenAIIntegration extends BaseLLMObsIntegration {
       this._tagEmbeddingEnd(span, response, error)
     }
 
-    const tags = span.context()._tags
-    this._tagger.tagMetrics(span, {
-      [INPUT_TOKENS_METRIC_KEY]: tags['openai.response.usage.prompt_tokens'],
-      [OUTPUT_TOKENS_METRIC_KEY]: tags['openai.response.usage.completion_tokens'],
-      [TOTAL_TOKENS_METRIC_KEY]: tags['openai.response.usage.total_tokens']
-    })
+    if (!error) {
+      const tags = span.context()._tags
+      this._tagger.tagMetrics(span, {
+        [INPUT_TOKENS_METRIC_KEY]: tags['openai.response.usage.prompt_tokens'],
+        [OUTPUT_TOKENS_METRIC_KEY]: tags['openai.response.usage.completion_tokens'],
+        [TOTAL_TOKENS_METRIC_KEY]: tags['openai.response.usage.total_tokens']
+      })
+    }
   }
 
   _tagEmbeddingStart (span, inputs) {

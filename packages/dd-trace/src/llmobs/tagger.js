@@ -138,14 +138,14 @@ class LLMObsTagger {
             return undefined
           }
 
-          const { text, name, id, score } = document
+          const { text, name, id, score, ...remaining } = document
 
           if (typeof text !== 'string') {
             logger.warn('Document text must be a string.')
             return undefined
           }
 
-          const documentObj = { text }
+          const documentObj = { text, ...remaining }
 
           if (name) {
             if (typeof name !== 'string') {
@@ -199,8 +199,7 @@ class LLMObsTagger {
             return undefined
           }
 
-          const content = message.content || ''
-          const role = message.role
+          const { content = '', role, ...remaining } = message
 
           if (typeof content !== 'string') {
             logger.warn('Message content must be a string.')
@@ -208,13 +207,13 @@ class LLMObsTagger {
           }
 
           if (!role) {
-            return { content }
+            return { content, ...remaining }
           } else if (typeof role !== 'string') {
             logger.warn('Message role must be a string.')
             return undefined
           }
 
-          return { content, role }
+          return message
         }).filter(msg => !!msg)
 
         if (messages.length) {
