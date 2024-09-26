@@ -93,10 +93,11 @@ class LLMObsTagger {
   }
 
   tagSpanTags (span, tags) {
+    // new tags will be merged with existing tags
     try {
       const currentTags = span.context()._tags[TAGS]
       if (currentTags) {
-        Object.assign(tags, currentTags)
+        Object.assign(tags, JSON.parse(currentTags))
       }
       span.setTag(TAGS, JSON.stringify(tags))
     } catch {
@@ -110,7 +111,6 @@ class LLMObsTagger {
         span.setTag(key, data)
       } else {
         try {
-          // this will help showcase unfinished promises being passed in as values
           span.setTag(key, JSON.stringify(data))
         } catch {
           const type = key === INPUT_VALUE ? 'input' : 'output'
@@ -129,33 +129,49 @@ class LLMObsTagger {
       try {
         const documents = data.map(document => {
           if (typeof document === 'string') {
-            return document
+            return { text: document }
+          }
+
+          if (document == null || typeof document !== 'object') {
+            logger.warn('Documents must be a string, object, or list of objects.')
+            return undefined
           }
 
           const { text, name, id, score } = document
 
-          if (text && typeof text !== 'string') {
-            logger.warn(`Invalid property found in ${document}: text must be a string.`)
+          if (typeof text !== 'string') {
+            logger.warn('Document text must be a string.')
             return undefined
           }
 
-          if (name && typeof name !== 'string') {
-            logger.warn(`Invalid property found in ${document}: name must be a string.`)
-            return undefined
+          const documentObj = { text }
+
+          if (name) {
+            if (typeof name !== 'string') {
+              logger.warn('Document name must be a string.')
+              return undefined
+            }
+            documentObj.name = name
           }
 
-          if (id && typeof id !== 'string') {
-            logger.warn(`Invalid property found in ${document}: id must be a string.`)
-            return undefined
+          if (id) {
+            if (typeof id !== 'string') {
+              logger.warn('Document ID must be a string.')
+              return undefined
+            }
+            documentObj.id = id
           }
 
-          if (score && typeof score !== 'number') {
-            logger.warn(`Invalid property found in ${document}: score must be a number.`)
-            return undefined
+          if (score) {
+            if (typeof score !== 'number') {
+              logger.warn('Document score must be a number.')
+              return undefined
+            }
+            documentObj.score = score
           }
 
-          return document
-        }).filter(doc => !!doc) // filter out bad documents?
+          return documentObj
+        }).filter(doc => !!doc)
 
         span.setTag(key, JSON.stringify(documents))
       } catch {
@@ -174,28 +190,35 @@ class LLMObsTagger {
       try {
         const messages = data.map(message => {
           if (typeof message === 'string') {
-            return message
+            return { content: message }
+          }
+
+          if (message == null || typeof message !== 'object') {
+            logger.warn('Messages must be a string, object, or list of objects')
+            return undefined
           }
 
           const content = message.content || ''
           const role = message.role
 
           if (typeof content !== 'string') {
-            logger.warn(`Invalid property found in ${message}: content must be a string.`)
+            logger.warn('Message content must be a string.')
             return undefined
           }
 
-          message.content = content
-
-          if (role && typeof role !== 'string') {
-            logger.warn(`Invalid property found in ${message}: role must be a string.`)
+          if (!role) {
+            return { content }
+          } else if (typeof role !== 'string') {
+            logger.warn('Message role must be a string.')
             return undefined
           }
 
-          return message
-        }).filter(msg => !!msg) // filter out bad messages?
+          return { content, role }
+        }).filter(msg => !!msg)
 
-        span.setTag(key, JSON.stringify(messages))
+        if (messages.length) {
+          span.setTag(key, JSON.stringify(messages))
+        }
       } catch {
         const type = key === INPUT_MESSAGES ? 'input' : 'output'
         logger.warn(`Failed to parse ${type} messages.`)

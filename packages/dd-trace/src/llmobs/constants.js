@@ -24,7 +24,7 @@ module.exports = {
   OUTPUT_DOCUMENTS: '_ml_obs.meta.output.documents',
   OUTPUT_MESSAGES: '_ml_obs.meta.output.messages',
   OUTPUT_VALUE: '_ml_obs.meta.output.value',
-  
+
   EVP_PROXY_AGENT_BASE_PATH: 'evp_proxy/v2',
   EVP_PROXY_AGENT_ENDPOINT: 'evp_proxy/v2/api/v2/llmobs',
   EVP_SUBDOMAIN_HEADER_NAME: 'X-Datadog-EVP-Subdomain',

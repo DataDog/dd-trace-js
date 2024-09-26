@@ -184,245 +184,180 @@ describe('tagger', () => {
     })
   })
 
+  describe('tagSpanTags', () => {
+    it('sets tags on a span', () => {
+      const tags = { foo: 'bar' }
+      tagger.tagSpanTags(span, tags)
+      expect(span.context()._tags).to.deep.equal({
+        '_ml_obs.tags': '{"foo":"bar"}'
+      })
+    })
+
+    it('merges tags so they do not overwrite', () => {
+      span.context()._tags['_ml_obs.tags'] = '{"a":1}'
+      const tags = { a: 2, b: 1 }
+      tagger.tagSpanTags(span, tags)
+      expect(span.context()._tags).to.deep.equal({
+        '_ml_obs.tags': '{"a":1,"b":1}'
+      })
+    })
+  })
+
   describe('tagLLMIO', () => {
-    beforeEach(() => {
-      sinon.stub(tagger, '_tagMessages')
-    })
-
-    afterEach(() => {
-      tagger._tagMessages.restore()
-    })
-
     it('tags a span with llm io', () => {
-      tagger.tagLLMIO(span, { a: 'foo' }, { b: 'bar' })
-      expect(tagger._tagMessages).to.have.been.calledTwice
-      expect(tagger._tagMessages).to.have.been.calledWith(span, { a: 'foo' }, '_ml_obs.meta.input.messages')
-      expect(tagger._tagMessages).to.have.been.calledWith(span, { b: 'bar' }, '_ml_obs.meta.output.messages')
+      const inputData = [
+        'you are an amazing assistant',
+        { content: 'hello! my name is foobar' },
+        { content: 'I am a robot', role: 'assistant' },
+        { content: 'I am a human', role: 'user' }
+      ]
+
+      const outputData = 'Nice to meet you, human!'
+
+      tagger.tagLLMIO(span, inputData, outputData)
+      expect(span.context()._tags).to.deep.equal({
+        '_ml_obs.meta.input.messages': '[{"content":"you are an amazing assistant"},' +
+        '{"content":"hello! my name is foobar"},{"content":"I am a robot","role":"assistant"},' +
+        '{"content":"I am a human","role":"user"}]',
+        '_ml_obs.meta.output.messages': '[{"content":"Nice to meet you, human!"}]'
+      })
+    })
+
+    it('filters out non-string properties on messages', () => {
+      const inputData = [
+        true,
+        { content: 5 },
+        { content: 'hello', role: 5 },
+        'hi'
+      ]
+      const outputData = [
+        undefined,
+        null,
+        { content: 5 },
+        { content: 'goodbye', role: 5 }
+      ]
+      tagger.tagLLMIO(span, inputData, outputData)
+      expect(span.context()._tags).to.deep.equal({
+        '_ml_obs.meta.input.messages': '[{"content":"hi"}]'
+      })
+
+      expect(logger.warn.getCall(0).firstArg).to.equal('Messages must be a string, object, or list of objects')
+      expect(logger.warn.getCall(1).firstArg).to.equal('Message content must be a string.')
+      expect(logger.warn.getCall(2).firstArg).to.equal('Message role must be a string.')
+      expect(logger.warn.getCall(3).firstArg).to.equal('Messages must be a string, object, or list of objects')
+      expect(logger.warn.getCall(4).firstArg).to.equal('Messages must be a string, object, or list of objects')
+      expect(logger.warn.getCall(5).firstArg).to.equal('Message content must be a string.')
+      expect(logger.warn.getCall(6).firstArg).to.equal('Message role must be a string.')
     })
   })
 
   describe('tagEmbeddingIO', () => {
-    beforeEach(() => {
-      sinon.stub(tagger, '_tagDocuments')
-      sinon.stub(tagger, '_tagText')
-    })
-
-    afterEach(() => {
-      tagger._tagDocuments.restore()
-      tagger._tagText.restore()
-    })
-
     it('tags a span with embedding io', () => {
-      tagger.tagEmbeddingIO(span, { a: 'foo' }, { b: 'bar' })
-      expect(tagger._tagDocuments).to.have.been.calledOnce
-      expect(tagger._tagDocuments).to.have.been.calledWith(span, { a: 'foo' }, '_ml_obs.meta.input.documents')
-      expect(tagger._tagText).to.have.been.calledOnce
-      expect(tagger._tagText).to.have.been.calledWith(span, { b: 'bar' }, '_ml_obs.meta.output.value')
+      const inputData = [
+        'my string document',
+        { text: 'my object document' },
+        { text: 'foo', name: 'bar' },
+        { text: 'baz', id: 'qux' },
+        { text: 'quux', score: 5 },
+        { text: 'foo', name: 'bar', id: 'qux', score: 5 }
+      ]
+      const outputData = 'embedded documents'
+      tagger.tagEmbeddingIO(span, inputData, outputData)
+      expect(span.context()._tags).to.deep.equal({
+        '_ml_obs.meta.input.documents': '[{"text":"my string document"},{"text":"my object document"},' +
+        '{"text":"foo","name":"bar"},{"text":"baz","id":"qux"},{"text":"quux","score":5},' +
+        '{"text":"foo","name":"bar","id":"qux","score":5}]',
+        '_ml_obs.meta.output.value': 'embedded documents'
+      })
+    })
+
+    it('filters out non-string properties on documents', () => {
+      const inputData = [
+        true,
+        { text: 5 },
+        { text: 'foo', name: 5 },
+        'hi',
+        null,
+        undefined
+      ]
+      const outputData = 'output'
+      tagger.tagEmbeddingIO(span, inputData, outputData)
+      expect(span.context()._tags).to.deep.equal({
+        '_ml_obs.meta.input.documents': '[{"text":"hi"}]',
+        '_ml_obs.meta.output.value': 'output'
+      })
+
+      expect(logger.warn.getCall(0).firstArg).to.equal('Documents must be a string, object, or list of objects.')
+      expect(logger.warn.getCall(1).firstArg).to.equal('Document text must be a string.')
+      expect(logger.warn.getCall(2).firstArg).to.equal('Document name must be a string.')
+      expect(logger.warn.getCall(3).firstArg).to.equal('Documents must be a string, object, or list of objects.')
+      expect(logger.warn.getCall(4).firstArg).to.equal('Documents must be a string, object, or list of objects.')
     })
   })
 
   describe('tagRetrievalIO', () => {
-    beforeEach(() => {
-      sinon.stub(tagger, '_tagDocuments')
-      sinon.stub(tagger, '_tagText')
-    })
-
-    afterEach(() => {
-      tagger._tagDocuments.restore()
-      tagger._tagText.restore()
-    })
-
     it('tags a span with retrieval io', () => {
-      tagger.tagRetrievalIO(span, { a: 'foo' }, { b: 'bar' })
-      expect(tagger._tagDocuments).to.have.been.calledOnce
-      expect(tagger._tagDocuments).to.have.been.calledWith(span, { b: 'bar' }, '_ml_obs.meta.output.documents')
-      expect(tagger._tagText).to.have.been.calledOnce
-      expect(tagger._tagText).to.have.been.calledWith(span, { a: 'foo' }, '_ml_obs.meta.input.value')
+      const inputData = 'some query'
+      const outputData = [
+        'result 1',
+        { text: 'result 2' },
+        { text: 'foo', name: 'bar' },
+        { text: 'baz', id: 'qux' },
+        { text: 'quux', score: 5 },
+        { text: 'foo', name: 'bar', id: 'qux', score: 5 }
+      ]
+
+      tagger.tagRetrievalIO(span, inputData, outputData)
+      expect(span.context()._tags).to.deep.equal({
+        '_ml_obs.meta.input.value': 'some query',
+        '_ml_obs.meta.output.documents': '[{"text":"result 1"},{"text":"result 2"},' +
+        '{"text":"foo","name":"bar"},{"text":"baz","id":"qux"},{"text":"quux","score":5},' +
+        '{"text":"foo","name":"bar","id":"qux","score":5}]'
+      })
+    })
+
+    it('filters out non-string properties on documents', () => {
+      const inputData = 'some query'
+      const outputData = [
+        true,
+        { text: 5 },
+        { text: 'foo', name: 5 },
+        'hi',
+        null,
+        undefined
+      ]
+      tagger.tagRetrievalIO(span, inputData, outputData)
+      expect(span.context()._tags).to.deep.equal({
+        '_ml_obs.meta.input.value': 'some query',
+        '_ml_obs.meta.output.documents': '[{"text":"hi"}]'
+      })
+
+      expect(logger.warn.getCall(0).firstArg).to.equal('Documents must be a string, object, or list of objects.')
+      expect(logger.warn.getCall(1).firstArg).to.equal('Document text must be a string.')
+      expect(logger.warn.getCall(2).firstArg).to.equal('Document name must be a string.')
+      expect(logger.warn.getCall(3).firstArg).to.equal('Documents must be a string, object, or list of objects.')
+      expect(logger.warn.getCall(4).firstArg).to.equal('Documents must be a string, object, or list of objects.')
     })
   })
 
   describe('tagTextIO', () => {
-    beforeEach(() => {
-      sinon.stub(tagger, '_tagText')
-    })
-
-    afterEach(() => {
-      tagger._tagText.restore()
-    })
-
     it('tags a span with text io', () => {
-      tagger.tagTextIO(span, { a: 'foo' }, { b: 'bar' })
-      expect(tagger._tagText).to.have.been.calledTwice
-      expect(tagger._tagText).to.have.been.calledWith(span, { a: 'foo' }, '_ml_obs.meta.input.value')
-      expect(tagger._tagText).to.have.been.calledWith(span, { b: 'bar' }, '_ml_obs.meta.output.value')
-    })
-  })
-
-  // maybe confirm this one
-  describe('tagSpanTags', () => {})
-
-  describe('_tagText', () => {
-    it('tags a span with text', () => {
-      tagger._tagText(span, 'my-text', '_ml_obs.meta.input.value')
-
+      const inputData = { some: 'object' }
+      const outputData = 'some text'
+      tagger.tagTextIO(span, inputData, outputData)
       expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.input.value': 'my-text'
-      })
-    })
-
-    it('tags a span with an object', () => {
-      tagger._tagText(span, { a: 1, b: 2 }, '_ml_obs.meta.input.value')
-
-      expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.input.value': '{"a":1,"b":2}'
+        '_ml_obs.meta.input.value': '{"some":"object"}',
+        '_ml_obs.meta.output.value': 'some text'
       })
     })
 
     it('logs when the value is not JSON serializable', () => {
       const data = unserializbleObject()
-      tagger._tagText(span, data, '_ml_obs.meta.input.value')
-      expect(logger.warn).to.have.been.calledOnce
-    })
-  })
-
-  describe('_tagDocuments', () => {
-    it('tags a single document object', () => {
-      const document = { text: 'my-text', name: 'my-name', id: 'my-id', score: 0.5 }
-      tagger._tagDocuments(span, document, '_ml_obs.meta.input.documents')
-
+      tagger.tagTextIO(span, data, 'output')
+      expect(logger.warn).to.have.been.calledOnceWith('Failed to parse input value, must be JSON serializable.')
       expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.input.documents': '[{"text":"my-text","name":"my-name","id":"my-id","score":0.5}]'
+        '_ml_obs.meta.output.value': 'output'
       })
-    })
-
-    it('tags a single document string', () => {
-      const document = 'my-text'
-      tagger._tagDocuments(span, document, '_ml_obs.meta.input.documents')
-
-      expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.input.documents': '["my-text"]'
-      })
-    })
-
-    it('tags a document with a subset of properties', () => {
-      const document = { text: 'my-text', score: 0.5 }
-      tagger._tagDocuments(span, document, '_ml_obs.meta.input.documents')
-
-      expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.input.documents': '[{"text":"my-text","score":0.5}]'
-      })
-    })
-
-    it('tags multiple documents', () => {
-      const documents = [
-        { text: 'my-text', name: 'my-name', id: 'my-id', score: 0.5 },
-        { text: 'my-text2', name: 'my-name2', id: 'my-id2', score: 0.6 }
-      ]
-      tagger._tagDocuments(span, documents, '_ml_obs.meta.input.documents')
-
-      expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.input.documents': '[{"text":"my-text","name":"my-name"' +
-        ',"id":"my-id","score":0.5},{"text":"my-text2","name":"my-name2","id":"my-id2","score":0.6}]'
-      })
-    })
-
-    it('does not include malformed documents', () => {
-      const documents = [
-        { text: 'my-text', name: 'my-name', id: 'my-id', score: 0.5 },
-        { text: 'my-text2', score: 'not-a-number' }
-      ]
-
-      tagger._tagDocuments(span, documents, '_ml_obs.meta.input.documents')
-
-      expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.input.documents': '[{"text":"my-text","name":"my-name","id":"my-id","score":0.5}]'
-      })
-    })
-
-    it('logs when a document is not JSON serializable', () => {
-      const documents = [unserializbleObject()]
-      tagger._tagDocuments(span, documents, '_ml_obs.meta.input.documents')
-      expect(logger.warn).to.have.been.calledOnce
-    })
-  })
-
-  describe('_tagMessages', () => {
-    it('tags a single message object', () => {
-      const message = { content: 'my-content', role: 'my-role' }
-      tagger._tagMessages(span, message, '_ml_obs.meta.input.messages')
-
-      expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.input.messages': '[{"content":"my-content","role":"my-role"}]'
-      })
-    })
-
-    it('tags a single message string', () => {
-      tagger._tagMessages(span, 'my-message', '_ml_obs.meta.input.messages')
-
-      expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.input.messages': '["my-message"]'
-      })
-    })
-
-    it('tags a message with only content', () => {
-      const message = { content: 'my-content' }
-      tagger._tagMessages(span, message, '_ml_obs.meta.input.messages')
-
-      expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.input.messages': '[{"content":"my-content"}]'
-      })
-    })
-
-    it('defaults missing content to empty content', () => {
-      const message = {}
-      tagger._tagMessages(span, message, '_ml_obs.meta.input.messages')
-
-      expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.input.messages': '[{"content":""}]'
-      })
-    })
-
-    it('filters out messages with non-string content', () => {
-      const messages = [
-        { content: 'my-content' },
-        { role: 'my-role', content: 6 }
-      ]
-      tagger._tagMessages(span, messages, '_ml_obs.meta.input.messages')
-
-      expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.input.messages': '[{"content":"my-content"}]'
-      })
-    })
-
-    it('filters out messages with non-string role', () => {
-      const messages = [
-        { content: 'my-content', role: 'my-role' },
-        { content: 'my-content2', role: 6 }
-      ]
-      tagger._tagMessages(span, messages, '_ml_obs.meta.input.messages')
-
-      expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.input.messages': '[{"content":"my-content","role":"my-role"}]'
-      })
-    })
-
-    it('tags multiple messages', () => {
-      const messages = [
-        { content: 'my-content', role: 'my-role' },
-        { content: 'my-content2', role: 'my-role2' }
-      ]
-      tagger._tagMessages(span, messages, '_ml_obs.meta.input.messages')
-
-      expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.input.messages': '[{"content":"my-content","role":"my-role"},' +
-        '{"content":"my-content2","role":"my-role2"}]'
-      })
-    })
-
-    it('logs when a message is not JSON serializable', () => {
-      const messages = [unserializbleObject()]
-      tagger._tagMessages(span, messages, '_ml_obs.meta.input.messages')
-      expect(logger.warn).to.have.been.calledOnce
     })
   })
 })
