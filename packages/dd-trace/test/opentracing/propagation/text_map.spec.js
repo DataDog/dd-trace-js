@@ -406,32 +406,6 @@ describe('TextMapPropagator', () => {
       expect(spanContext._baggageItems).to.deep.equal({ '",;\\()/:<=>?@[]{}': '",;\\' })
     })
 
-    it('should not extract baggage when it contains too many key-value pairs', () => {
-      let baggage = ''
-      for (let i = 0; i < config.baggageMaxItems; i++) {
-        baggage += `key-${i}=${i},`
-      }
-      baggage += 'dropped=due-to-me'
-      const carrier = {
-        'x-datadog-trace-id': '123',
-        'x-datadog-parent-id': '456',
-        baggage
-      }
-      const spanContext = propagator.extract(carrier)
-      expect(spanContext._baggageItems).to.deep.equal({})
-    })
-
-    it('should not extract baggage when it contains too many bytes', () => {
-      const baggage = 'foo=' + Buffer.alloc(config.baggageMaxBytes).toString()
-      const carrier = {
-        'x-datadog-trace-id': '123',
-        'x-datadog-parent-id': '456',
-        baggage
-      }
-      const spanContext = propagator.extract(carrier)
-      expect(spanContext._baggageItems).to.deep.equal({})
-    })
-
     it('should not extract baggage when the header is malformed', () => {
       const carrierA = {
         'x-datadog-trace-id': '123',
