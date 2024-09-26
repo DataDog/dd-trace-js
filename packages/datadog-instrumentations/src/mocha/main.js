@@ -277,7 +277,7 @@ addHook({
         const testSuites = this.files.map(file => getTestSuitePath(file, process.cwd()))
         const isFaulty = getIsFaultyEarlyFlakeDetection(
           testSuites,
-          config.knownTests.mocha,
+          config.knownTests?.mocha || {},
           config.earlyFlakeDetectionFaultyThreshold
         )
         if (isFaulty) {
@@ -541,7 +541,7 @@ addHook({
         const testSuites = files.map(file => getTestSuitePath(file, process.cwd()))
         const isFaulty = getIsFaultyEarlyFlakeDetection(
           testSuites,
-          config.knownTests.mocha,
+          config.knownTests?.mocha || {},
           config.earlyFlakeDetectionFaultyThreshold
         )
         if (isFaulty) {
