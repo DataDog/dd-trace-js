@@ -16,8 +16,7 @@ const {
   TAGS,
   PARENT_ID_KEY,
   SESSION_ID,
-  NAME,
-  TRACE_ID
+  NAME
 } = require('./constants')
 
 const {
@@ -103,10 +102,8 @@ class LLMObsSpanProcessor {
 
     const name = tags[NAME] || span._name
 
-    const traceId = tags[TRACE_ID]
-
     const llmObsSpanEvent = {
-      trace_id: traceId,
+      trace_id: span.context().toTraceId(true),
       span_id: span.context().toSpanId(),
       parent_id: parentId,
       name,

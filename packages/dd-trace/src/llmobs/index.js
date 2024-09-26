@@ -9,7 +9,7 @@ const {
 } = require('./integrations/channels')
 
 const log = require('../log')
-const { PROPAGATED_PARENT_ID_KEY, PROPAGATED_TRACE_ID_KEY, TRACE_ID } = require('./constants')
+const { PROPAGATED_PARENT_ID_KEY } = require('./constants')
 const { storage } = require('../../../datadog-core')
 
 function enable (config) {
@@ -30,16 +30,15 @@ function disable () {
 }
 
 function handleLLMObsParentIdInjection ({ carrier }) {
-  const parent = storage.getStore().llmobsSpan
+  const parent = storage.getStore()?.llmobsSpan
   if (!parent) {
     log.warn('No active span to inject LLMObs info.')
     return
   }
 
   const parentId = parent?.context().toSpanId()
-  const traceId = parent?.context()._tags[TRACE_ID]
 
-  carrier['x-datadog-tags'] += `,${PROPAGATED_PARENT_ID_KEY}=${parentId},${PROPAGATED_TRACE_ID_KEY}=${traceId}`
+  carrier['x-datadog-tags'] += `,${PROPAGATED_PARENT_ID_KEY}=${parentId}`
 }
 
 module.exports = { enable, disable }

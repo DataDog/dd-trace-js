@@ -1,6 +1,6 @@
 'use strict'
 
-const { SPAN_KIND, OUTPUT_VALUE, TRACE_ID } = require('./constants')
+const { SPAN_KIND, OUTPUT_VALUE } = require('./constants')
 
 const {
   validKind,
@@ -175,7 +175,7 @@ class LLMObs {
 
     try {
       return {
-        traceId: span.context()._tags[TRACE_ID],
+        traceId: span.context().toTraceId(true),
         spanId: span.context().toSpanId()
       }
     } catch {
@@ -192,7 +192,7 @@ class LLMObs {
       return
     }
 
-    if (!this._config.llmobs.apiKey || !this._config.apiKey) {
+    if (!this._config.llmobs.apiKey && !this._config.apiKey) {
       logger.warn(
         'DD_API_KEY is required for sending evaluation metrics. Evaluation metric data will not be sent.\n' +
         'Ensure this configuration is set before running your application.'

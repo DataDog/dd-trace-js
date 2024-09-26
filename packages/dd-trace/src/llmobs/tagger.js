@@ -22,19 +22,12 @@ const {
   TAGS,
   NAME,
   PROPAGATED_PARENT_ID_KEY,
-  TRACE_ID,
-  PROPAGATED_TRACE_ID_KEY
+  ROOT_PARENT_ID
 } = require('./constants')
-const { generateTraceId } = require('./util')
 
 class LLMObsTagger {
   constructor (config) {
     this._config = config
-
-    // this can be expanded on by config options later?
-    this._serializers = {
-      Promise: (promise) => promise.toString()
-    }
   }
 
   setLLMObsSpanTags (
@@ -50,19 +43,6 @@ class LLMObsTagger {
     if (modelName) span.setTag(MODEL_NAME, modelName)
     if (modelProvider) span.setTag(MODEL_PROVIDER, modelProvider)
 
-    if (!parentLLMObsSpan) {
-      const maybePropagatedTraceId = span.context()._trace.tags[PROPAGATED_TRACE_ID_KEY]
-      if (maybePropagatedTraceId) {
-        span.setTag(TRACE_ID, maybePropagatedTraceId)
-      } else {
-        // making this 128 bit by default
-        const traceId = generateTraceId()
-        span.setTag(TRACE_ID, traceId)
-      }
-    } else {
-      span.setTag(TRACE_ID, parentLLMObsSpan.context()._tags[TRACE_ID])
-    }
-
     sessionId = sessionId || parentLLMObsSpan?.context()._tags[SESSION_ID]
     if (sessionId) span.setTag(SESSION_ID, sessionId)
 
@@ -72,7 +52,7 @@ class LLMObsTagger {
     const parentId =
       parentLLMObsSpan?.context().toSpanId() ||
       span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ||
-      'undefined'
+      ROOT_PARENT_ID
     span.setTag(PARENT_ID_KEY, parentId)
   }
 
@@ -98,7 +78,7 @@ class LLMObsTagger {
 
   tagMetadata (span, metadata) {
     try {
-      span.setTag(METADATA, this._stringify(metadata))
+      span.setTag(METADATA, JSON.stringify(metadata))
     } catch {
       logger.warn('Failed to parse span metadata. Metadata key-value pairs must be JSON serializable.')
     }
@@ -106,19 +86,20 @@ class LLMObsTagger {
 
   tagMetrics (span, metrics) {
     try {
-      span.setTag(METRICS, this._stringify(metrics))
+      span.setTag(METRICS, JSON.stringify(metrics))
     } catch {
       logger.warn('Failed to parse span metrics. Metrics key-value pairs must be JSON serializable.')
     }
   }
 
   tagSpanTags (span, tags) {
+    // new tags will be merged with existing tags
     try {
       const currentTags = span.context()._tags[TAGS]
       if (currentTags) {
-        Object.assign(tags, currentTags)
+        Object.assign(tags, JSON.parse(currentTags))
       }
-      span.setTag(TAGS, this._stringify(tags))
+      span.setTag(TAGS, JSON.stringify(tags))
     } catch {
       logger.warn('Failed to parse span tags. Tag key-value pairs must be JSON serializable.')
     }
@@ -130,8 +111,7 @@ class LLMObsTagger {
         span.setTag(key, data)
       } else {
         try {
-          // this will help showcase unfinished promises being passed in as values
-          span.setTag(key, this._stringify(data))
+          span.setTag(key, JSON.stringify(data))
         } catch {
           const type = key === INPUT_VALUE ? 'input' : 'output'
           logger.warn(`Failed to parse ${type} value, must be JSON serializable.`)
@@ -149,25 +129,51 @@ class LLMObsTagger {
       try {
         const documents = data.map(document => {
           if (typeof document === 'string') {
-            return document
+            return { text: document }
+          }
+
+          if (document == null || typeof document !== 'object') {
+            logger.warn('Documents must be a string, object, or list of objects.')
+            return undefined
           }
 
           const { text, name, id, score } = document
 
-          if (text && typeof text !== 'string') return undefined
-
-          if (name && typeof name !== 'string') return undefined
-
-          if (id && typeof id !== 'string') return undefined
-
-          if (score && typeof score !== 'number') {
+          if (typeof text !== 'string') {
+            logger.warn('Document text must be a string.')
             return undefined
           }
 
-          return document
-        }).filter(doc => !!doc) // filter out bad documents?
+          const documentObj = { text }
 
-        span.setTag(key, this._stringify(documents))
+          if (name) {
+            if (typeof name !== 'string') {
+              logger.warn('Document name must be a string.')
+              return undefined
+            }
+            documentObj.name = name
+          }
+
+          if (id) {
+            if (typeof id !== 'string') {
+              logger.warn('Document ID must be a string.')
+              return undefined
+            }
+            documentObj.id = id
+          }
+
+          if (score) {
+            if (typeof score !== 'number') {
+              logger.warn('Document score must be a number.')
+              return undefined
+            }
+            documentObj.score = score
+          }
+
+          return documentObj
+        }).filter(doc => !!doc)
+
+        span.setTag(key, JSON.stringify(documents))
       } catch {
         const type = key === INPUT_DOCUMENTS ? 'input' : 'output'
         logger.warn(`Failed to parse ${type} documents.`)
@@ -184,42 +190,40 @@ class LLMObsTagger {
       try {
         const messages = data.map(message => {
           if (typeof message === 'string') {
-            return message
+            return { content: message }
+          }
+
+          if (message == null || typeof message !== 'object') {
+            logger.warn('Messages must be a string, object, or list of objects')
+            return undefined
           }
 
           const content = message.content || ''
           const role = message.role
 
           if (typeof content !== 'string') {
+            logger.warn('Message content must be a string.')
             return undefined
           }
 
-          message.content = content
-
-          if (role && typeof role !== 'string') {
+          if (!role) {
+            return { content }
+          } else if (typeof role !== 'string') {
+            logger.warn('Message role must be a string.')
             return undefined
           }
 
-          return message
-        }).filter(msg => !!msg) // filter out bad messages?
+          return { content, role }
+        }).filter(msg => !!msg)
 
-        span.setTag(key, this._stringify(messages))
+        if (messages.length) {
+          span.setTag(key, JSON.stringify(messages))
+        }
       } catch {
         const type = key === INPUT_MESSAGES ? 'input' : 'output'
         logger.warn(`Failed to parse ${type} messages.`)
       }
     }
-  }
-
-  _stringify (data) {
-    return JSON.stringify(data, (_, value) => {
-      const instance = value?.constructor?.name // some kind of object
-      if (instance && this._serializers[instance]) {
-        return this._serializers[instance](value)
-      }
-
-      return value
-    })
   }
 }
 

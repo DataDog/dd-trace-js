@@ -13,8 +13,6 @@ module.exports = {
   PARENT_ID_KEY: '_ml_obs.llmobs_parent_id',
   TAGS: '_ml_obs.tags',
   NAME: '_ml_obs.name',
-  TRACE_ID: '_ml_obs.trace_id',
-  PROPAGATED_TRACE_ID_KEY: '_dd.p.llmobs_trace_id',
 
   MODEL_NAME: '_ml_obs.meta.model_name',
   MODEL_PROVIDER: '_ml_obs.meta.model_provider',
@@ -40,5 +38,6 @@ module.exports = {
   EVP_EVENT_SIZE_LIMIT: (1 << 20) - 1024, // 999KB (actual limit is 1MB)
 
   DROPPED_IO_COLLECTION_ERROR: 'dropped_io',
-  DROPPED_VALUE_TEXT: "[This value has been dropped because this span's size exceeds the 1MB size limit.]"
+  DROPPED_VALUE_TEXT: "[This value has been dropped because this span's size exceeds the 1MB size limit.]",
+  ROOT_PARENT_ID: 'undefined'
 }
