@@ -835,11 +835,21 @@ jobs:
 
   rhea:
     runs-on: ubuntu-latest
+    services:
+      qpid:
+        image: scholzj/qpid-cpp:1.38.0
+        env:
+          QPIDD_ADMIN_USERNAME: admin
+          QPIDD_ADMIN_PASSWORD: admin
+        ports:
+          - 5673:5672
     env:
       PLUGINS: rhea
+      SERVICES: qpid
+      DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/plugins/test
+      - uses: ./.github/actions/plugins/test-and-upstream
 
   router:
     runs-on: ubuntu-latest
