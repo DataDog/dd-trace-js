@@ -14,6 +14,7 @@ const {
   getNonJSThreadsLabels,
   getThreadLabels
 } = require('./shared')
+const { AsyncLocalStorage } = require('async_hooks')
 
 const beforeCh = dc.channel('dd-trace:storage:before')
 const enterCh = dc.channel('dd-trace:storage:enter')
@@ -108,6 +109,7 @@ class NativeWallProfiler {
 
     this._logger = options.logger
     this._started = false
+    this._asyncContextStorage = new AsyncLocalStorage()
   }
 
   codeHotspotsEnabled () {
@@ -144,14 +146,10 @@ class NativeWallProfiler {
     })
 
     if (this._withContexts) {
-      this._currentContext = {}
-      this._pprof.time.setContext(this._currentContext)
+      this._setNewContext()
 
       if (this._captureSpanData) {
         this._profilerState = this._pprof.time.getState()
-        this._lastSpan = undefined
-        this._lastStartedSpans = undefined
-        this._lastWebTags = undefined
         this._lastSampleCount = 0
 
         beforeCh.subscribe(this._enter)
@@ -169,45 +167,62 @@ class NativeWallProfiler {
     const sampleCount = this._profilerState[kSampleCount]
     if (sampleCount !== this._lastSampleCount) {
       this._lastSampleCount = sampleCount
-      const context = this._currentContext
-      this._currentContext = {}
-      this._pprof.time.setContext(this._currentContext)
+      const context = this._currentContext.ref
+      this._setNewContext()
 
       this._updateContext(context)
     }
 
-    const span = getActiveSpan()
-    if (span) {
-      const context = span.context()
-      this._lastSpan = span
-      const startedSpans = getStartedSpans(context)
-      this._lastStartedSpans = startedSpans
-      if (this._endpointCollectionEnabled) {
-        this._lastWebTags = getWebTags(startedSpans, startedSpans.length, span)
+    let asyncContext = this._asyncContextStorage.getStore()
+    if (!asyncContext) {
+      const span = getActiveSpan()
+      if (span) {
+        const context = span.context()
+        const startedSpans = getStartedSpans(context)
+        let webTags
+        if (this._endpointCollectionEnabled) {
+          webTags = getWebTags(startedSpans, startedSpans.length, span)
+        }
+        asyncContext = {
+          spanContext: context,
+          rootSpanContext: startedSpans[0]?.context(),
+          webTags
+        }
+      } else {
+        asyncContext = {}
       }
-    } else {
-      this._lastStartedSpans = undefined
-      this._lastSpan = undefined
-      this._lastWebTags = undefined
+      this._asyncContextStorage.enterWith(asyncContext)
     }
+    this._currentContext.ref = asyncContext
+  }
+
+  _setNewContext () {
+    this._pprof.time.setContext(
+      this._currentContext = {
+        ref: {}
+      }
+    )
   }
 
   _updateContext (context) {
-    if (!this._lastSpan) {
-      return
-    }
     if (this._codeHotspotsEnabled) {
-      context.spanId = this._lastSpan.context().toSpanId()
-      const rootSpan = this._lastStartedSpans[0]
-      if (rootSpan) {
-        context.rootSpanId = rootSpan.context().toSpanId()
+      // For a long-lived span, we can have the same context object for multiple samples.
+      // We'll want to compute the extra properties the first time the context is used for a sample,
+      // but not for subsequent occasions. We also eagerly release span context reference after we
+      // no longer need them.
+      if (!context.spanId && context.spanContext) {
+        context.spanId = context.spanContext.toSpanId()
+        context.spanContext = undefined
+      }
+      if (!context.rootSpanId && context.rootSpanContext) {
+        context.rootSpanId = context.rootSpanContext.toSpanId()
+        context.rootSpanContext = undefined
       }
     }
-    if (this._lastWebTags) {
-      context.webTags = this._lastWebTags
+    if (context.webTags && !context.endpoint) {
       // endpoint may not be determined yet, but keep it as fallback
       // if tags are not available anymore during serialization
-      context.endpoint = endpointNameFromTags(this._lastWebTags)
+      context.endpoint = endpointNameFromTags(context.webTags)
     }
   }
 
@@ -248,9 +263,6 @@ class NativeWallProfiler {
         enterCh.unsubscribe(this._enter)
         spanFinishCh.unsubscribe(this._spanFinished)
         this._profilerState = undefined
-        this._lastSpan = undefined
-        this._lastStartedSpans = undefined
-        this._lastWebTags = undefined
       }
       this._started = false
     }
@@ -273,7 +285,7 @@ class NativeWallProfiler {
 
     const labels = { ...getThreadLabels() }
 
-    const { context: { spanId, rootSpanId, webTags, endpoint }, timestamp } = context
+    const { context: { ref: { spanId, rootSpanId, webTags, endpoint } }, timestamp } = context
 
     if (this._timelineEnabled) {
       // Incoming timestamps are in microseconds, we emit nanos.
