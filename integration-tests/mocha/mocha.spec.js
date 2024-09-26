@@ -1159,6 +1159,7 @@ describe('mocha CommonJS', function () {
           stdio: 'inherit'
         }
       )
+
       childProcess.on('exit', () => {
         eventsPromise.then(() => {
           done()

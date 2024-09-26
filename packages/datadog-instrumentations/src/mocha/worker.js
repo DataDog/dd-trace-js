@@ -4,25 +4,19 @@ const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
 const {
-  isNewTest,
-  retryTest,
   runnableWrapper,
   getOnTestHandler,
   getOnTestEndHandler,
   getOnHookEndHandler,
   getOnFailHandler,
-  getOnPendingHandler
+  getOnPendingHandler,
+  getRunTestsWrapper
 } = require('./utils')
 require('./common')
 
 const workerFinishCh = channel('ci:mocha:worker:finish')
 
-// to have the same structure as non parallel mode
-let workerKnownTests = {
-  mocha: {}
-}
-let isEarlyFlakeDetectionEnabled = false
-let earlyFlakeDetectionNumRetries = 0
+const config = {}
 
 addHook({
   name: 'mocha',
@@ -31,10 +25,10 @@ addHook({
 }, (Mocha) => {
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     if (this.options._ddKnownTests) {
-      // if there's a list of known tests, it means EFD is enabled
-      isEarlyFlakeDetectionEnabled = true
-      workerKnownTests = this.options._ddKnownTests
-      earlyFlakeDetectionNumRetries = this.options._ddEfdNumRetries
+      // EFD is enabled if there's a list of known tests
+      config.isEarlyFlakeDetectionEnabled = true
+      config.knownTests = this.options._ddKnownTests
+      config.earlyFlakeDetectionNumRetries = this.options._ddEfdNumRetries
       delete this.options._ddKnownTests
       delete this.options._ddEfdNumRetries
     }
@@ -50,19 +44,7 @@ addHook({
   versions: ['>=5.2.0'],
   file: 'lib/runner.js'
 }, function (Runner) {
-  // Is there a equivalent of runTests for parallel mode?
-  shimmer.wrap(Runner.prototype, 'runTests', runTests => function (suite, fn) {
-    if (isEarlyFlakeDetectionEnabled) {
-      // by the time we reach `this.on('test')`, it is too late. We need to add retries here
-      suite.tests.forEach(test => {
-        if (!test.isPending() && isNewTest(test, workerKnownTests)) {
-          test._ddIsNew = true
-          retryTest(test, earlyFlakeDetectionNumRetries)
-        }
-      })
-    }
-    return runTests.apply(this, arguments)
-  })
+  shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
 
   shimmer.wrap(Runner.prototype, 'run', run => function () {
     if (!workerFinishCh.hasSubscribers) {

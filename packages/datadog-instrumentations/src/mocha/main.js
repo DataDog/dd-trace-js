@@ -16,7 +16,6 @@ const {
 
 const {
   isNewTest,
-  retryTest,
   getSuitesByTestFile,
   runnableWrapper,
   getOnTestHandler,
@@ -27,7 +26,8 @@ const {
   getOnPendingHandler,
   testFileToSuiteAr,
   newTests,
-  getTestFullName
+  getTestFullName,
+  getRunTestsWrapper
 } = require('./utils')
 
 require('./common')
@@ -39,7 +39,6 @@ const unskippableSuites = []
 let suitesToSkip = []
 let isSuitesSkipped = false
 let skippedSuites = []
-let knownTests = []
 let itrCorrelationId = ''
 let isForcedToRun = false
 const config = {}
@@ -196,12 +195,12 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
     onFinishRequest()
   }
 
-  const onReceivedKnownTests = ({ err, knownTests: receivedKnownTests }) => {
+  const onReceivedKnownTests = ({ err, knownTests }) => {
     if (err) {
-      knownTests = []
+      config.knownTests = []
       config.isEarlyFlakeDetectionEnabled = false
     } else {
-      knownTests = receivedKnownTests
+      config.knownTests = knownTests
     }
 
     if (config.isSuitesSkippingEnabled) {
@@ -327,19 +326,7 @@ addHook({
 
   patched.add(Runner)
 
-  // TODO: same handler as parallel mode -> reuse
-  shimmer.wrap(Runner.prototype, 'runTests', runTests => function (suite, fn) {
-    if (config.isEarlyFlakeDetectionEnabled) {
-      // by the time we reach `this.on('test')`, it is too late. We need to add retries here
-      suite.tests.forEach(test => {
-        if (!test.isPending() && isNewTest(test, knownTests)) {
-          test._ddIsNew = true
-          retryTest(test, config.earlyFlakeDetectionNumRetries)
-        }
-      })
-    }
-    return runTests.apply(this, arguments)
-  })
+  shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
 
   shimmer.wrap(Runner.prototype, 'run', run => function () {
     if (!testStartCh.hasSubscribers) {
@@ -560,7 +547,7 @@ addHook({
     }
 
     const testPath = getTestSuitePath(testSuiteAbsolutePath, process.cwd())
-    const testSuiteKnownTests = knownTests.mocha?.[testPath] || []
+    const testSuiteKnownTests = config.knownTests.mocha?.[testPath] || []
 
     // We pass the known tests for the test file to the worker
     const testFileResult = await run.apply(
@@ -585,7 +572,7 @@ addHook({
 
     // `newTests` is filled in the worker process, so we need to use the test results to fill it here too.
     for (const test of tests) {
-      if (isNewTest(test, knownTests)) {
+      if (isNewTest(test, config.knownTests)) {
         const testFullName = getTestFullName(test)
         const tests = newTests[testFullName]
 
