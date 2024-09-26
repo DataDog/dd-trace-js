@@ -34,14 +34,11 @@ require('./common')
 
 const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 const patched = new WeakSet()
-let suitesToSkip = []
+
 const unskippableSuites = []
+let suitesToSkip = []
 let isSuitesSkipped = false
 let skippedSuites = []
-let isEarlyFlakeDetectionEnabled = false
-let isSuitesSkippingEnabled = false
-let isFlakyTestRetriesEnabled = false
-let earlyFlakeDetectionNumRetries = 0
 let knownTests = []
 let itrCorrelationId = ''
 let isForcedToRun = false
@@ -128,7 +125,7 @@ function getOnEndHandler (isParallel) {
       status = 'fail'
     }
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (config.isEarlyFlakeDetectionEnabled) {
       /**
        * If Early Flake Detection (EFD) is enabled the logic is as follows:
        * - If all attempts for a test are failing, the test has failed and we will let the test process fail.
@@ -174,7 +171,7 @@ function getOnEndHandler (isParallel) {
       hasForcedToRunSuites: isForcedToRun,
       hasUnskippableSuites: !!unskippableSuites.length,
       error,
-      isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionEnabled: config.isEarlyFlakeDetectionEnabled,
       isParallel
     })
   })
@@ -210,12 +207,12 @@ function getExecutionConfiguration (runner, onFinishRequest) {
   const onReceivedKnownTests = ({ err, knownTests: receivedKnownTests }) => {
     if (err) {
       knownTests = []
-      isEarlyFlakeDetectionEnabled = false
+      config.isEarlyFlakeDetectionEnabled = false
     } else {
       knownTests = receivedKnownTests
     }
 
-    if (isSuitesSkippingEnabled) {
+    if (config.isSuitesSkippingEnabled) {
       skippableSuitesCh.publish({
         onDone: mochaRunAsyncResource.bind(onReceivedSkippableSuites)
       })
@@ -229,22 +226,17 @@ function getExecutionConfiguration (runner, onFinishRequest) {
       return onFinishRequest()
     }
 
-    isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-    isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
-    earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
-    isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
-
-    config.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
-    config.isSuitesSkippingEnabled = isSuitesSkippingEnabled
-    config.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
-    config.isFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
+    config.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
+    config.isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+    config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+    config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (config.isEarlyFlakeDetectionEnabled) {
       knownTestsCh.publish({
         onDone: mochaRunAsyncResource.bind(onReceivedKnownTests)
       })
-    } else if (isSuitesSkippingEnabled) {
+    } else if (config.isSuitesSkippingEnabled) {
       skippableSuitesCh.publish({
         onDone: mochaRunAsyncResource.bind(onReceivedSkippableSuites)
       })
@@ -272,8 +264,7 @@ addHook({
       return run.apply(this, arguments)
     }
 
-    // `options.delay` does not work in parallel mode, so ITR and EFD can't work.
-    // TODO: use `lib/cli/run-helpers.js#runMocha` to get the data in parallel mode.
+    // `options.delay` does not work in parallel mode, so we can't delay the execution this way
     this.options.delay = true
 
     const runner = run.apply(this, arguments)
@@ -303,15 +294,16 @@ addHook({
   return Mocha
 })
 
-// Only used to set `mocha.options.delay` to true in serial mode. When the mocha CLI is used,
-// setting options.delay in Mocha#run is not enough to delay the execution.
-// TODO: modify this hook to grab the data in parallel mode, so that ITR and EFD can work.
-
-// This is probably not good for `getExecutionConfiguration` because by this time the suites are not loaded
-// so they can't be skipped
-// Maybe we can grab them and remove them from the suites array _later_
-
-// runMocha is not executed in programmatic API: how do we modify mocha.options.delay then?
+/**
+ * `runMocha` hook:
+ * In serial mode, it's only used to set `mocha.options.delay` to true.
+ * In parallel mode, it's used to grab configuration and known tests, because setting `mocha.options.delay`
+ * to true does not work when parallel mode is enabled.
+ *
+ * The reason why we don't always grab configuration here is that
+ * `runMocha` is not executed in programmatic API `mocha.run()`.
+ * Known limitation: programmatic API and parallel mode will not work with EFD.
+ */
 addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
@@ -323,14 +315,9 @@ addHook({
     }
     const mocha = arguments[0]
 
-    // `runMocha` is not called in programmatic API mocha.run()
     if (mocha.options.parallel) {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
       if (!err) {
-        // TODO: do we need duplication of config.isEarlyFlakeDetectionEnabled and isEarlyFlakeDetectionEnabled?
-        isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-        earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
-
         config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
         config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
         config.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
@@ -344,7 +331,6 @@ addHook({
           knownTests = receivedKnownTests
         } else {
           config.isEarlyFlakeDetectionEnabled = false
-          isEarlyFlakeDetectionEnabled = false
         }
       }
     } else { // serial mode
@@ -373,12 +359,12 @@ addHook({
 
   // TODO: same handler as parallel mode -> reuse
   shimmer.wrap(Runner.prototype, 'runTests', runTests => function (suite, fn) {
-    if (isEarlyFlakeDetectionEnabled) {
+    if (config.isEarlyFlakeDetectionEnabled) {
       // by the time we reach `this.on('test')`, it is too late. We need to add retries here
       suite.tests.forEach(test => {
         if (!test.isPending() && isNewTest(test, knownTests)) {
           test._ddIsNew = true
-          retryTest(test, earlyFlakeDetectionNumRetries)
+          retryTest(test, config.earlyFlakeDetectionNumRetries)
         }
       })
     }
@@ -596,7 +582,7 @@ addHook({
     if (!testStartCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
-    if (isEarlyFlakeDetectionEnabled) {
+    if (config.isEarlyFlakeDetectionEnabled) {
       const testPath = getTestSuitePath(testSuiteAbsolutePath, process.cwd())
       const mochaKnownTests = knownTests.mocha?.[testPath] || []
       // The worker is passed the known tests for the test file it's going to run
@@ -606,7 +592,7 @@ addHook({
           testSuiteAbsolutePath,
           {
             ...workerArgs,
-            _ddEfdNumRetries: earlyFlakeDetectionNumRetries,
+            _ddEfdNumRetries: config.earlyFlakeDetectionNumRetries,
             _ddKnownTests: {
               mocha: {
                 [testPath]: mochaKnownTests
