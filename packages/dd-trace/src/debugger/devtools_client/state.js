@@ -2,7 +2,7 @@
 
 const session = require('./session')
 
-const scriptIds = []
+const scriptIds = new Map()
 const scriptUrls = new Map()
 
 module.exports = {
@@ -24,12 +24,18 @@ module.exports = {
    * To fix this, specify a more unique file path, e.g `demo-project1/index.js` instead of `index.js`
    *
    * @param {string} path
-   * @returns {[string, string] | undefined}
+   * @returns {[string, string] | null}
    */
   findScriptFromPartialPath (path) {
-    return scriptIds
-      .filter(([url]) => url.endsWith(path))
-      .sort(([a], [b]) => a.length - b.length)[0]
+    let matchUrl = null
+    let matchId = null
+    for (const [url, id] of scriptIds) {
+      if (url.endsWith(path) && (matchUrl === null || url.length < matchUrl.length)) {
+        matchUrl = url
+        matchId = id
+      }
+    }
+    return matchUrl === null ? null : [matchUrl, matchId]
   },
 
   getScriptUrlFromId (id) {
@@ -48,6 +54,6 @@ module.exports = {
 session.on('Debugger.scriptParsed', ({ params }) => {
   scriptUrls.set(params.scriptId, params.url)
   if (params.url.startsWith('file:')) {
-    scriptIds.push([params.url, params.scriptId])
+    scriptIds.set(params.url, params.scriptId)
   }
 })
