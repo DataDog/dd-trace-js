@@ -20,7 +20,7 @@ const config = {}
 
 addHook({
   name: 'mocha',
-  versions: ['>=5.2.0'],
+  versions: ['>=8.0.0'],
   file: 'lib/mocha.js'
 }, (Mocha) => {
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
