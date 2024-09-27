@@ -72,7 +72,7 @@ async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort) {
 }
 
 async function spawnProc (command, args, options = {}) {
-  const proc = spawn(command, args, { ...options, stdio: 'inherit' })
+  const proc = spawn(command, args, { ...options, stdio: 'pipe' })
   await waitOn({
     resources: ['http-get://127.0.0.1:7071'],
     timeout: 5000
