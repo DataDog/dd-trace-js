@@ -577,5 +577,15 @@ describe('format', () => {
 
       expect(trace.metrics).to.have.property('_dd1.sr.eausr', 1)
     })
+
+    it('should skip formatting temporary _ml_obs.* tags', () => {
+      spanContext._tags['_ml_obs.meta.span.kind'] = 'llm'
+      spanContext._tags['_ml_obs.meta.ml_app'] = 'test'
+
+      trace = format(span)
+
+      expect(trace.meta['_ml_obs.meta.span.kind']).to.be.undefined
+      expect(trace.meta['_ml_obs.meta.ml_app']).to.be.undefined
+    })
   })
 })
