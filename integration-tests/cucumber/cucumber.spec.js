@@ -922,9 +922,14 @@ versions.forEach(version => {
                 const testSession = events.find(event => event.type === 'test_session_end').content
                 assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
                 const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
 
                 tests.forEach(test => {
                   assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+                })
+                // All test suites pass, even though there are failed tests
+                testSuites.forEach(testSuite => {
+                  assert.propertyVal(testSuite.meta, TEST_STATUS, 'pass')
                 })
 
                 const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
@@ -1100,7 +1105,7 @@ versions.forEach(version => {
             })
           })
 
-          if (version !== '7.0.0') { // parallel mode only supported on >=9
+          if (version !== '7.0.0') { // EFD in parallel mode only supported from cucumber>=11
             context('parallel mode', () => {
               it('retries new tests', (done) => {
                 const NUM_RETRIES_EFD = 3
@@ -1192,10 +1197,17 @@ versions.forEach(version => {
                     assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
                     assert.propertyVal(testSession.meta, CUCUMBER_IS_PARALLEL, 'true')
                     const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                    const testSuites = events
+                      .filter(event => event.type === 'test_suite_end').map(event => event.content)
 
                     tests.forEach(test => {
                       assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
                       assert.propertyVal(test.meta, CUCUMBER_IS_PARALLEL, 'true')
+                    })
+
+                    // All test suites pass, even though there are failed tests
+                    testSuites.forEach(testSuite => {
+                      assert.propertyVal(testSuite.meta, TEST_STATUS, 'pass')
                     })
 
                     const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')

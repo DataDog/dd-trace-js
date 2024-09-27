@@ -52,6 +52,7 @@ const patched = new WeakSet()
 const lastStatusByPickleId = new Map()
 const numRetriesByPickleId = new Map()
 const numAttemptToAsyncResource = new Map()
+const newTestsByTestFullname = new Map()
 
 let eventDataCollector = null
 let pickleByFile = {}
@@ -480,7 +481,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     const testFileAbsolutePath = pickle.uri
     const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
 
-    if (!isWorker) { // if it's a worker, this is handled in `getWrappedParseWorkerMessage`
+    if (!isWorker) { // If it's a worker, suite events are handled in `getWrappedParseWorkerMessage`
       if (!pickleResultByFile[testFileAbsolutePath]) { // first test in suite
         isUnskippable = isMarkedAsUnskippable(pickle)
         isForcedToRun = isUnskippable && skippableSuites.includes(testSuitePath)
@@ -538,7 +539,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       pickleResultByFile[testFileAbsolutePath].push(testStatus)
     }
 
-    if (!isWorker) {
+    if (!isWorker) { // If it's a worker, suite events are handled in `getWrappedParseWorkerMessage`
       // last test in suite
       if (pickleResultByFile[testFileAbsolutePath].length === pickleByFile[testFileAbsolutePath].length) {
         const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testFileAbsolutePath])
@@ -639,17 +640,39 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
         pickle = testCase.pickle
       }
 
-      // TODO: can we get error message?
       const { status } = getStatusFromResultLatest(worstTestStepResult)
+      let isNew = false
+
+      if (isEarlyFlakeDetectionEnabled) {
+        isNew = isNewTest(pickle.uri, pickle.name)
+      }
 
       const testFileAbsolutePath = pickle.uri
       const finished = pickleResultByFile[testFileAbsolutePath]
-      finished.push(status)
 
-      // TODO: THIS DOES NOT WORK WITH EFD (PARALLEL MODE)
+      if (isNew) {
+        const testFullname = `${pickle.uri}:${pickle.name}`
+        let testStatuses = newTestsByTestFullname.get(testFullname)
+        if (!testStatuses) {
+          testStatuses = [status]
+          newTestsByTestFullname.set(testFullname, testStatuses)
+        } else {
+          testStatuses.push(status)
+        }
+        if (testStatuses.length === earlyFlakeDetectionNumRetries + 1) {
+          const newTestFinalStatus = getTestStatusFromRetries(testStatuses)
+          // we only push to `finished` if the retries have finished
+          finished.push(newTestFinalStatus)
+        }
+      } else {
+        // TODO: can we get error message?
+        const finished = pickleResultByFile[testFileAbsolutePath]
+        finished.push(status)
+      }
+
       if (finished.length === pickleByFile[testFileAbsolutePath].length) {
         testSuiteFinishCh.publish({
-          status: getSuiteStatusFromTestStatuses(finished), // maybe tests themselves can add to this list
+          status: getSuiteStatusFromTestStatuses(finished),
           testSuitePath: getTestSuitePath(testFileAbsolutePath, process.cwd())
         })
       }
@@ -764,9 +787,9 @@ addHook({
   return eventDataCollectorPackage
 })
 
-// Only executed in parallel mode for >=11.
+// Only executed in parallel mode for >=11, in the main process.
 // `getWrappedParseWorkerMessage` generates suite start and finish events
-// main process
+// In `startWorker` we pass early flake detection info to the worker.
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=11.0.0'],
@@ -777,6 +800,7 @@ addHook({
     'parseWorkerMessage',
     parseWorkerMessage => getWrappedParseWorkerMessage(parseWorkerMessage, true)
   )
+  // EFD in parallel mode only supported in >=11.0.0
   shimmer.wrap(adapterPackage.ChildProcessAdapter.prototype, 'startWorker', startWorker => function () {
     if (isEarlyFlakeDetectionEnabled) {
       this.options.worldParameters._ddKnownTests = knownTests
@@ -788,10 +812,9 @@ addHook({
   return adapterPackage
 })
 
-// only tests are created in worker processes, the rest is the main process
-// this is already in worker process
-// in worker process: we receive from worldParameters known tests and earlyFlakeDetectionNumRetries
-// we put them available for the worker process so that they can be used in `getWrappedRunTestCase`
+// Hook executed in the worker process when in parallel mode.
+// In this hook we read the information passed in `worldParameters` and make it available for
+// `getWrappedRunTestCase`.
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=11.0.0'],
