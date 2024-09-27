@@ -226,11 +226,12 @@ addHook({ name: 'mysql2', file: 'lib/pool.js', versions: ['>=1'] }, (Pool, versi
 // PoolNamespace.prototype.query does not exist in mysql2<2.3.0
 addHook({ name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['>=2.3.0'] }, PoolCluster => {
   const startOuterQueryCh = channel('datadog:mysql2:outerquery:start')
+  const wrappedPoolNamespaces = new WeakSet()
 
   shimmer.wrap(PoolCluster.prototype, 'of', of => function () {
     const poolNamespace = of.apply(this, arguments)
 
-    if (startOuterQueryCh.hasSubscribers) {
+    if (startOuterQueryCh.hasSubscribers && !wrappedPoolNamespaces.has(poolNamespace)) {
       shimmer.wrap(poolNamespace, 'query', query => function (sql, values, cb) {
         if (typeof sql === 'object') sql = sql?.sql
 
@@ -265,9 +266,7 @@ addHook({ name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['>=2.3.0'] }, 
 
         return query.apply(this, arguments)
       })
-    }
 
-    if (startOuterQueryCh.hasSubscribers) {
       shimmer.wrap(poolNamespace, 'execute', execute => function (sql, values, cb) {
         if (typeof sql === 'object') sql = sql?.sql
 
@@ -290,6 +289,8 @@ addHook({ name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['>=2.3.0'] }, 
 
         return execute.apply(this, arguments)
       })
+
+      wrappedPoolNamespaces.add(poolNamespace)
     }
 
     return poolNamespace
