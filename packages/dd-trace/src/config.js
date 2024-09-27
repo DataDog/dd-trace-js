@@ -547,7 +547,7 @@ class Config {
     this._setValue(defaults, 'tracePropagationStyle.otelPropagators', false)
     this._setValue(defaults, 'tracing', true)
     this._setValue(defaults, 'url', undefined)
-    this._setValue(defaults, 'version', pkg.version)
+    this._setValue(defaults, 'version', null)
     this._setValue(defaults, 'instrumentation_config_id', undefined)
   }
 
