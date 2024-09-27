@@ -29,6 +29,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_SOURCE_START,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_NAME,
@@ -41,7 +42,7 @@ const {
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
 const isOldNode = semver.satisfies(process.version, '<=16')
-const versions = ['latest']
+const versions = ['7.0.0', isOldNode ? '9' : 'latest']
 
 const moduleType = [
   {
@@ -799,7 +800,7 @@ versions.forEach(version => {
             })
           })
 
-          context.only('early flake detection', () => {
+          context('early flake detection', () => {
             it('retries new tests', (done) => {
               const NUM_RETRIES_EFD = 3
               receiver.setSettings({
@@ -813,7 +814,7 @@ versions.forEach(version => {
                   }
                 }
               })
-              // "cucumber.ci-visibility/features/farewell.feature.Say" whatever will be considered new
+              // cucumber.ci-visibility/features/farewell.feature.Say whatever will be considered new
               receiver.setKnownTests(
                 {
                   cucumber: {
@@ -1059,7 +1060,62 @@ versions.forEach(version => {
               })
             })
 
-            if (version !== '7.0.0') {
+            it('bails out of EFD if the percentage of new tests is too high', (done) => {
+              const NUM_RETRIES_EFD = 3
+              receiver.setSettings({
+                itr_enabled: false,
+                code_coverage: false,
+                tests_skipping: false,
+                early_flake_detection: {
+                  enabled: true,
+                  slow_test_retries: {
+                    '5s': NUM_RETRIES_EFD
+                  },
+                  faulty_session_threshold: 0
+                }
+              })
+              // tests in cucumber.ci-visibility/features/farewell.feature will be considered new
+              receiver.setKnownTests(
+                {
+                  cucumber: {
+                    'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
+                  }
+                }
+              )
+              const eventsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                  const events = payloads.flatMap(({ payload }) => payload.events)
+
+                  const testSession = events.find(event => event.type === 'test_session_end').content
+                  assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+                  assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+
+                  const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                  const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+                  assert.equal(newTests.length, 0)
+
+                  const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                  assert.equal(retriedTests.length, 0)
+                })
+
+              childProcess = exec(
+                runTestsCommand,
+                {
+                  cwd,
+                  env: envVars,
+                  stdio: 'pipe'
+                }
+              )
+
+              childProcess.on('exit', () => {
+                eventsPromise.then(() => {
+                  done()
+                }).catch(done)
+              })
+            })
+
+            if (version !== '7.0.0') { // parallel mode only supported on >=9
               context('parallel mode', () => {
                 it('retries new tests', (done) => {
                   const NUM_RETRIES_EFD = 3
@@ -1176,6 +1232,62 @@ versions.forEach(version => {
 
                   childProcess.on('exit', (exitCode) => {
                     assert.equal(exitCode, 0)
+                    eventsPromise.then(() => {
+                      done()
+                    }).catch(done)
+                  })
+                })
+
+                it('bails out of EFD if the percentage of new tests is too high', (done) => {
+                  const NUM_RETRIES_EFD = 3
+                  receiver.setSettings({
+                    itr_enabled: false,
+                    code_coverage: false,
+                    tests_skipping: false,
+                    early_flake_detection: {
+                      enabled: true,
+                      slow_test_retries: {
+                        '5s': NUM_RETRIES_EFD
+                      },
+                      faulty_session_threshold: 0
+                    }
+                  })
+                  // tests in cucumber.ci-visibility/features/farewell.feature will be considered new
+                  receiver.setKnownTests(
+                    {
+                      cucumber: {
+                        'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
+                      }
+                    }
+                  )
+
+                  const eventsPromise = receiver
+                    .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                      const events = payloads.flatMap(({ payload }) => payload.events)
+
+                      const testSession = events.find(event => event.type === 'test_session_end').content
+                      assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+                      assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+
+                      const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                      const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+                      assert.equal(newTests.length, 0)
+
+                      const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                      assert.equal(retriedTests.length, 0)
+                    })
+
+                  childProcess = exec(
+                    parallelModeCommand,
+                    {
+                      cwd,
+                      env: envVars,
+                      stdio: 'pipe'
+                    }
+                  )
+
+                  childProcess.on('exit', () => {
                     eventsPromise.then(() => {
                       done()
                     }).catch(done)

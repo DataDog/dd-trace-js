@@ -35,7 +35,8 @@ const {
   mergeCoverage,
   fromCoverageMapToCoverage,
   getTestSuitePath,
-  CUCUMBER_WORKER_TRACE_PAYLOAD_CODE
+  CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
+  getIsFaultyEarlyFlakeDetection
 } = require('../../dd-trace/src/plugins/util/test')
 
 const isMarkedAsUnskippable = (pickle) => {
@@ -65,6 +66,8 @@ let isUnskippable = false
 let isSuitesSkippingEnabled = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
+let earlyFlakeDetectionFaultyThreshold = 0
+let isEarlyFlakeDetectionFaulty = false
 let isFlakyTestRetriesEnabled = false
 let numTestRetries = 0
 let knownTests = []
@@ -351,6 +354,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
     isEarlyFlakeDetectionEnabled = configurationResponse.libraryConfig?.isEarlyFlakeDetectionEnabled
     earlyFlakeDetectionNumRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionNumRetries
+    earlyFlakeDetectionFaultyThreshold = configurationResponse.libraryConfig?.earlyFlakeDetectionFaultyThreshold
     isSuitesSkippingEnabled = configurationResponse.libraryConfig?.isSuitesSkippingEnabled
     isFlakyTestRetriesEnabled = configurationResponse.libraryConfig?.isFlakyTestRetriesEnabled
     numTestRetries = configurationResponse.libraryConfig?.flakyTestRetriesCount
@@ -396,6 +400,18 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
 
     pickleByFile = isCoordinator ? getPickleByFileNew(this) : getPickleByFile(this)
+
+    if (isEarlyFlakeDetectionEnabled) {
+      const isFaulty = getIsFaultyEarlyFlakeDetection(
+        Object.keys(pickleByFile),
+        knownTests.cucumber || {},
+        earlyFlakeDetectionFaultyThreshold
+      )
+      if (isFaulty) {
+        isEarlyFlakeDetectionEnabled = false
+        isEarlyFlakeDetectionFaulty = true
+      }
+    }
 
     const processArgv = process.argv.slice(2).join(' ')
     const command = process.env.npm_lifecycle_script || `cucumber-js ${processArgv}`
@@ -443,6 +459,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
         hasUnskippableSuites: isUnskippable,
         hasForcedToRunSuites: isForcedToRun,
         isEarlyFlakeDetectionEnabled,
+        isEarlyFlakeDetectionFaulty,
         isParallel
       })
     })
