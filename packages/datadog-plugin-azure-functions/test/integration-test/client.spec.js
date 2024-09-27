@@ -43,7 +43,7 @@ describe('esm', () => {
 
     it('is instrumented', async () => {
       const envArgs = {
-        PATH: process.env.PATH
+        PATH: `${sandbox.folder}/node_modules/.bin:${process.env.PATH}`
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
