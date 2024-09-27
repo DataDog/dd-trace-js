@@ -560,6 +560,57 @@ describe('Plugin', () => {
         })
       })
 
+      describe('embedding with missing usages', () => {
+        afterEach(() => {
+          nock.cleanAll()
+        })
+
+        it('makes a successful call', async () => {
+          nock('https://api.openai.com:443')
+            .post('/v1/embeddings')
+            .reply(200, {
+              object: 'list',
+              data: [{
+                object: 'embedding',
+                index: 0,
+                embedding: [-0.0034387498, -0.026400521]
+              }],
+              model: 'text-embedding-ada-002-v2',
+              usage: {
+                prompt_tokens: 0
+              }
+            }, [])
+
+          const checkTraces = agent
+            .use(traces => {
+              expect(traces[0][0].metrics).to.have.property('openai.response.usage.prompt_tokens', 0)
+              expect(traces[0][0].metrics).to.not.have.property('openai.response.usage.completion_tokens')
+              expect(traces[0][0].metrics).to.not.have.property('openai.response.usage.total_tokens')
+            })
+
+          const params = {
+            model: 'text-embedding-ada-002',
+            input: '',
+            user: 'hunter2'
+          }
+
+          if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const result = await openai.embeddings.create(params)
+            expect(result.model).to.eql('text-embedding-ada-002-v2')
+          } else {
+            const result = await openai.createEmbedding(params)
+            expect(result.data.model).to.eql('text-embedding-ada-002-v2')
+          }
+
+          await checkTraces
+
+          expect(metricStub).to.have.been.calledWith('openai.request.duration') // timing value not guaranteed
+          expect(metricStub).to.have.been.calledWith('openai.tokens.prompt')
+          expect(metricStub).to.not.have.been.calledWith('openai.tokens.completion')
+          expect(metricStub).to.not.have.been.calledWith('openai.tokens.total')
+        })
+      })
+
       describe('list models', () => {
         let scope
 
