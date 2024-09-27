@@ -468,7 +468,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
   }
 }
 
-function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion, isWorker = false) {
+function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = false, isWorker = false) {
   return async function () {
     let pickle
     if (isNewerCucumberVersion) {
@@ -732,7 +732,7 @@ addHook({
   shimmer.wrap(
     workerPackage.Worker.prototype,
     'runTestCase',
-    runTestCase => getWrappedRunTestCase(runTestCase, true, true)
+    runTestCase => getWrappedRunTestCase(runTestCase, true, !!process.env.CUCUMBER_WORKER_ID)
   )
   return workerPackage
 })
