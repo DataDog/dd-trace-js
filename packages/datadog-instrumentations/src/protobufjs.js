@@ -7,13 +7,13 @@ const deserializeChannel = tracingChannel('apm:protobufjs:deserialize')
 
 function wrapSerialization (messageClass) {
   if (messageClass?.encode) {
-    wrapOperation(messageClass, 'encode', serializeChannel)
+    wrapOperation(messageClass, 'encode', serializeChannel.start)
   }
 }
 
 function wrapDeserialization (messageClass) {
   if (messageClass?.decode) {
-    wrapOperation(messageClass, 'decode', deserializeChannel)
+    wrapOperation(messageClass, 'decode', deserializeChannel.end)
   }
 }
 
