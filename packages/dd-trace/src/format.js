@@ -160,7 +160,9 @@ function extractTags (trace, span) {
           break
         }
       default: // eslint-disable-line no-fallthrough
-        addTag(trace.meta, trace.metrics, tag, tags[tag])
+        if (!tag.startsWith('_ml_obs')) { // don't add ml_obs-related tags
+          addTag(trace.meta, trace.metrics, tag, tags[tag])
+        }
     }
   }
   setSingleSpanIngestionTags(trace, context._spanSampling)

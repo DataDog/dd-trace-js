@@ -6,6 +6,7 @@ const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 
 const { SpanStatsProcessor } = require('./span_stats')
+const LLMObsSpanProcessor = require('./llmobs/span_processor')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -20,6 +21,7 @@ class SpanProcessor {
     this._stats = new SpanStatsProcessor(config)
     this._spanSampler = new SpanSampler(config.sampler)
     this._gitMetadataTagger = new GitMetadataTagger(config)
+    this._llmobs = new LLMObsSpanProcessor(config)
   }
 
   process (span) {
@@ -42,6 +44,7 @@ class SpanProcessor {
 
       for (const span of started) {
         if (span._duration !== undefined) {
+          this._llmobs.process(span)
           const formattedSpan = format(span)
           this._stats.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
