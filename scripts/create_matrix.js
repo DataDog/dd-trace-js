@@ -77,9 +77,10 @@ function generateMatrix (name) {
       matricesJson.matrices[name] = matrix
     }
   }
-  fs.writeFileSync(matricesPath, JSON.stringify(matricesJson, null, 2))
+  return matricesJson.matrices
 }
-generateMatrix('couchbase')
 module.exports = {
   generateMatrix
 }
+
+// content=$(cat packages/datadog-instrumentations/src/helpers/matrices.json | tr '\n' ' ')
