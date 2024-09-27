@@ -13,7 +13,6 @@ const waitOn = require('wait-on')
 
 describe('esm', () => {
   let agent
-  let command
   let proc
   let sandbox
 
@@ -22,7 +21,6 @@ describe('esm', () => {
       this.timeout(50000)
       sandbox = await createSandbox([`@azure/functions@${version}`, 'azure-functions-core-tools@4'], false,
         ['./packages/datadog-plugin-azure-functions/test/integration-test/fixtures/*'])
-      command = `${sandbox.folder}/node_modules/.bin/func`
     })
 
     after(async function () {
@@ -44,7 +42,10 @@ describe('esm', () => {
     })
 
     it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, command, ['start'], agent.port)
+      const envArgs = {
+        PATH: process.env.PATH
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
@@ -58,24 +59,53 @@ describe('esm', () => {
   })
 })
 
-async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort) {
-  const env = {
+async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
+  let env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
-    DD_TRACE_AGENT_PORT: agentPort,
-    PATH: `${process.execPath}:${process.env.PATH}` // Pass node path to child process
+    DD_TRACE_AGENT_PORT: agentPort
   }
-
-  return await spawnProc(command, args, {
+  env = { ...env, ...additionalEnvArgs }
+  return spawnProc(command, args, {
     cwd,
     env
-  })
+  }, stdioHandler)
 }
 
-async function spawnProc (command, args, options = {}) {
+function spawnProc (command, args, options = {}, stdioHandler, stderrHandler) {
   const proc = spawn(command, args, { ...options, stdio: 'pipe' })
-  await waitOn({
-    resources: ['http-get://127.0.0.1:7071'],
-    timeout: 5000
+  return new Promise((resolve, reject) => {
+    waitOn({
+      resources: ['http-get://127.0.0.1:7071'],
+      timeout: 5000
+    }).then(() => {
+      resolve(proc)
+    }).catch(err => {
+      reject(new Error(`Error while waiting for process to start: ${err.message}`))
+    })
+
+    proc
+      .on('error', reject)
+      .on('exit', code => {
+        if (code !== 0) {
+          reject(new Error(`Process exited with status code ${code}.`))
+        }
+        resolve()
+      })
+
+    proc.stdout.on('data', data => {
+      if (stdioHandler) {
+        stdioHandler(data)
+      }
+      // eslint-disable-next-line no-console
+      if (!options.silent) console.log(data.toString())
+    })
+
+    proc.stderr.on('data', data => {
+      if (stderrHandler) {
+        stderrHandler(data)
+      }
+      // eslint-disable-next-line no-console
+      if (!options.silent) console.error(data.toString())
+    })
   })
-  return proc
 }
