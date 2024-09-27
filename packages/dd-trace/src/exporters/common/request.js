@@ -183,7 +183,7 @@ function request (data, options, callback) {
 }
 
 function byteLength (data) {
-  return data.length > 0 ? data.reduce((prev, next) => prev + next.length, 0) : 0
+  return data.length > 0 ? data.reduce((prev, next) => prev + Buffer.byteLength(next, 'utf8'), 0) : 0
 }
 
 Object.defineProperty(request, 'writable', {

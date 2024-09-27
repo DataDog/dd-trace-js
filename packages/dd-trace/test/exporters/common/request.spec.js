@@ -311,6 +311,36 @@ describe('request', function () {
       })
   })
 
+  it('should calculate correct Content-Length header for multi-byte characters', (done) => {
+    const sandbox = sinon.createSandbox()
+    sandbox.spy(http, 'request')
+
+    const body = 'æøå'
+    const charLength = body.length
+    const byteLength = Buffer.byteLength(body, 'utf-8')
+
+    expect(charLength).to.be.below(byteLength)
+
+    nock('http://test:123').post('/').reply(200, 'OK')
+
+    request(
+      body,
+      {
+        host: 'test',
+        port: 123,
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      },
+      (err, res) => {
+        expect(res).to.equal('OK')
+        const { headers } = http.request.getCall(0).args[0]
+        sandbox.restore()
+        expect(headers['Content-Length']).to.equal(byteLength)
+        done(err)
+      }
+    )
+  })
+
   describe('when intercepting http', () => {
     const sandbox = sinon.createSandbox()
 
