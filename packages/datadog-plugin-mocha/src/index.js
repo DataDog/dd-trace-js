@@ -21,6 +21,7 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_SESSION_ID,
   TEST_MODULE_ID,
   TEST_MODULE,
@@ -280,6 +281,7 @@ class MochaPlugin extends CiPlugin {
       hasUnskippableSuites,
       error,
       isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
       isParallel
     }) => {
       if (this.testSessionSpan) {
@@ -313,6 +315,9 @@ class MochaPlugin extends CiPlugin {
 
         if (isEarlyFlakeDetectionEnabled) {
           this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
+        }
+        if (isEarlyFlakeDetectionFaulty) {
+          this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
         }
 
         this.testModuleSpan.finish()

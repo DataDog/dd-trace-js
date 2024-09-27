@@ -266,7 +266,7 @@
   "mocha": [
     {
       "name": "mocha",
-      "versions": [">=5.2.0"]
+      "versions": [">=5.2.0", ">=8.0.0"]
     },
     {
       "name": "mocha-each",
