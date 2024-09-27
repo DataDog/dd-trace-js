@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
       - id: plugins
         run: | 
-          content=$(node scripts/outdated.js fix)
+          content=$(cat packages/datadog-instrumentations/src/helpers/matrices.json | tr '\n' ' ')
           echo "matrices=$content" >> $GITHUB_OUTPUT
           echo $content
 
@@ -107,7 +107,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
 
-  amqp10:
+  amqp10: # TODO: move rhea to its own job
     needs: 
       - versions
     strategy:
