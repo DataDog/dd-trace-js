@@ -49,6 +49,7 @@ dev,eslint-plugin-mocha,MIT,Copyright 2014 Mathias Schreck
 dev,eslint-plugin-n,MIT,Copyright 2015 Toru Nagashima
 dev,eslint-plugin-promise,ISC,jden and other contributors
 dev,express,MIT,Copyright 2009-2014 TJ Holowaychuk 2013-2014 Roman Shtylman 2014-2015 Douglas Christopher Wilson
+dev,find-process,MIT,Copyright (c) 2016 Zoujie
 dev,get-port,MIT,Copyright Sindre Sorhus
 dev,glob,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,graphql,MIT,Copyright 2015 Facebook Inc.
@@ -65,6 +66,7 @@ dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
 dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola
 dev,tap,ISC,Copyright 2011-2022 Isaac Z. Schlueter and Contributors
 dev,tiktoken,MIT,Copyright (c) 2022 OpenAI, Shantanu Jain
+dev,wait-on,MIT,Copyright (c) 2015 Jeff Barczewski
 file,aws-lambda-nodejs-runtime-interface-client,Apache 2.0,Copyright 2019 Amazon.com Inc. or its affiliates. All Rights Reserved.
 file,profile.proto,Apache license 2.0,Copyright 2016 Google Inc.
 file,is-git-url,MIT,Copyright (c) 2017 Jon Schlinkert.
