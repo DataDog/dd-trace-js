@@ -7,7 +7,8 @@ const semver = require('semver')
 
 describe('mysql2 instrumentation', () => {
   withVersions('mysql2', 'mysql2', version => {
-    function abort ({ abortController }) {
+    function abort ({ sql, abortController }) {
+      assert.isString(sql)
       const error = new Error('Test')
       abortController.abort(error)
 
@@ -315,7 +316,7 @@ describe('mysql2 instrumentation', () => {
     describe('lib/pool.js', () => {
       let pool
 
-      beforeEach(() => {
+      before(() => {
         pool = mysql2.createPool(config)
       })
 
@@ -391,36 +392,74 @@ describe('mysql2 instrumentation', () => {
       })
 
       describe('Pool.prototype.execute', () => {
-        describe('with callback', () => {
-          it('should abort the query on abortController.abort()', (done) => {
-            startCh.subscribe(abort)
-            pool.execute('SELECT 1', (err, _) => {
-              assert.propertyVal(err, 'message', 'Test')
+        describe('with object as query', () => {
+          describe('with callback', () => {
+            it('should abort the query on abortController.abort()', (done) => {
+              startCh.subscribe(abort)
+              pool.execute({ sql: 'SELECT 1' }, (err, _) => {
+                assert.propertyVal(err, 'message', 'Test')
 
-              setTimeout(() => {
-                sinon.assert.notCalled(apmQueryStart)
+                setTimeout(() => {
+                  sinon.assert.notCalled(apmQueryStart)
+                  done()
+                }, 100)
+              })
+            })
+
+            it('should work without abortController.abort()', (done) => {
+              startCh.subscribe(noop)
+
+              pool.execute({ sql: 'SELECT 1' }, (err, _) => {
+                assert.isNull(err)
+                sinon.assert.called(apmQueryStart)
+
                 done()
-              }, 100)
+              })
+            })
+
+            it('should work without subscriptions', (done) => {
+              pool.execute({ sql: 'SELECT 1' }, (err, _) => {
+                assert.isNull(err)
+                sinon.assert.called(apmQueryStart)
+
+                done()
+              })
             })
           })
+        })
 
-          it('should work without abortController.abort()', (done) => {
-            startCh.subscribe(noop)
+        describe('with string as query', () => {
+          describe('with callback', () => {
+            it('should abort the query on abortController.abort()', (done) => {
+              startCh.subscribe(abort)
+              pool.execute('SELECT 1', (err, _) => {
+                assert.propertyVal(err, 'message', 'Test')
 
-            pool.execute('SELECT 1', (err, _) => {
-              assert.isNull(err)
-              sinon.assert.called(apmQueryStart)
-
-              done()
+                setTimeout(() => {
+                  sinon.assert.notCalled(apmQueryStart)
+                  done()
+                }, 100)
+              })
             })
-          })
 
-          it('should work without subscriptions', (done) => {
-            pool.execute('SELECT 1', (err, _) => {
-              assert.isNull(err)
-              sinon.assert.called(apmQueryStart)
+            it('should work without abortController.abort()', (done) => {
+              startCh.subscribe(noop)
 
-              done()
+              pool.execute('SELECT 1', (err, _) => {
+                assert.isNull(err)
+                sinon.assert.called(apmQueryStart)
+
+                done()
+              })
+            })
+
+            it('should work without subscriptions', (done) => {
+              pool.execute('SELECT 1', (err, _) => {
+                assert.isNull(err)
+                sinon.assert.called(apmQueryStart)
+
+                done()
+              })
             })
           })
         })

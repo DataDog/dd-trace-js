@@ -197,7 +197,11 @@ addHook({ name: 'mysql2', file: 'lib/pool.js', versions: ['>=1'] }, (Pool, versi
   })
 
   shimmer.wrap(Pool.prototype, 'execute', execute => function (sql, values, cb) {
-    if (!startOuterQueryCh.hasSubscribers || !sql) return execute.apply(this, arguments)
+    if (!startOuterQueryCh.hasSubscribers) return execute.apply(this, arguments)
+
+    if (typeof sql === 'object') sql = sql?.sql
+
+    if (!sql) return execute.apply(this, arguments)
 
     const abortController = new AbortController()
     startOuterQueryCh.publish({ sql, abortController })
