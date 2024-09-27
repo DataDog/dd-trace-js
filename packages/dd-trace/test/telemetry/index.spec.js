@@ -64,6 +64,7 @@ describe('telemetry', () => {
       port: traceAgent.address().port,
       service: 'test service',
       version: '1.2.3-beta4',
+      headerTags: ['foo:bar'],
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c'
@@ -90,7 +91,7 @@ describe('telemetry', () => {
     traceAgent.close()
   })
 
-  it.only('should send app-started', () => {
+  it('should send app-started', () => {
     return testSeq(1, 'app-started', payload => {
       expect(payload).to.have.property('products').that.deep.equal({
         appsec: { enabled: true },
