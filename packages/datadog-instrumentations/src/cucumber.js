@@ -451,7 +451,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
   }
 }
 
-function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion) {
+function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion, isWorker = false) {
   return async function () {
     let pickle
     if (isNewerCucumberVersion) {
@@ -463,16 +463,18 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion) {
     const testFileAbsolutePath = pickle.uri
     const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
 
-    if (!pickleResultByFile[testFileAbsolutePath]) { // first test in suite
-      isUnskippable = isMarkedAsUnskippable(pickle)
-      isForcedToRun = isUnskippable && skippableSuites.includes(testSuitePath)
+    if (!isWorker) { // if it's a worker, this is handled in `getWrappedParseWorkerMessage`
+      if (!pickleResultByFile[testFileAbsolutePath]) { // first test in suite
+        isUnskippable = isMarkedAsUnskippable(pickle)
+        isForcedToRun = isUnskippable && skippableSuites.includes(testSuitePath)
 
-      testSuiteStartCh.publish({
-        testFileAbsolutePath,
-        isUnskippable,
-        isForcedToRun,
-        itrCorrelationId
-      })
+        testSuiteStartCh.publish({
+          testFileAbsolutePath,
+          isUnskippable,
+          isForcedToRun,
+          itrCorrelationId
+        })
+      }
     }
 
     let isNew = false
@@ -519,24 +521,26 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion) {
       pickleResultByFile[testFileAbsolutePath].push(testStatus)
     }
 
-    // last test in suite
-    if (pickleResultByFile[testFileAbsolutePath].length === pickleByFile[testFileAbsolutePath].length) {
-      const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testFileAbsolutePath])
-      if (global.__coverage__) {
-        const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+    if (!isWorker) {
+      // last test in suite
+      if (pickleResultByFile[testFileAbsolutePath].length === pickleByFile[testFileAbsolutePath].length) {
+        const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testFileAbsolutePath])
+        if (global.__coverage__) {
+          const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
 
-        testSuiteCodeCoverageCh.publish({
-          coverageFiles,
-          suiteFile: testFileAbsolutePath,
-          testSuitePath
-        })
-        // We need to reset coverage to get a code coverage per suite
-        // Before that, we preserve the original coverage
-        mergeCoverage(global.__coverage__, originalCoverageMap)
-        resetCoverage(global.__coverage__)
+          testSuiteCodeCoverageCh.publish({
+            coverageFiles,
+            suiteFile: testFileAbsolutePath,
+            testSuitePath
+          })
+          // We need to reset coverage to get a code coverage per suite
+          // Before that, we preserve the original coverage
+          mergeCoverage(global.__coverage__, originalCoverageMap)
+          resetCoverage(global.__coverage__)
+        }
+
+        testSuiteFinishCh.publish({ status: testSuiteStatus, testSuitePath })
       }
-
-      testSuiteFinishCh.publish({ status: testSuiteStatus, testSuitePath })
     }
 
     if (isNewerCucumberVersion && isNew && isEarlyFlakeDetectionEnabled) {
@@ -625,6 +629,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
       const finished = pickleResultByFile[testFileAbsolutePath]
       finished.push(status)
 
+      // TODO: THIS DOES NOT WORK WITH EFD (PARALLEL MODE)
       if (finished.length === pickleByFile[testFileAbsolutePath].length) {
         testSuiteFinishCh.publish({
           status: getSuiteStatusFromTestStatuses(finished), // maybe tests themselves can add to this list
@@ -645,12 +650,11 @@ addHook({
 }, pickleHook)
 
 // Test start / finish for newer versions. The only hook executed in workers when in parallel mode
-
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=7.3.0'],
   file: 'lib/runtime/test_case_runner.js'
-}, testCaseHook)
+}, testCaseHook) // we need to handle EFD for parallel mode here
 
 // From 7.3.0 onwards, runPickle becomes runTestCase. Not executed in parallel mode.
 // `getWrappedStart` generates session start and finish events
@@ -707,9 +711,12 @@ addHook({
   versions: ['>=11.0.0'],
   file: 'lib/runtime/worker.js'
 }, (workerPackage) => {
-  if (!process.env.CUCUMBER_WORKER_ID) {
-    shimmer.wrap(workerPackage.Worker.prototype, 'runTestCase', runTestCase => getWrappedRunTestCase(runTestCase, true))
-  }
+  // maybe now that we can get known tests in the worker process, we can run this normally
+  shimmer.wrap(
+    workerPackage.Worker.prototype,
+    'runTestCase',
+    runTestCase => getWrappedRunTestCase(runTestCase, true, true)
+  )
   return workerPackage
 })
 
@@ -742,6 +749,7 @@ addHook({
 
 // Only executed in parallel mode for >=11.
 // `getWrappedParseWorkerMessage` generates suite start and finish events
+// main process
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=11.0.0'],
@@ -752,5 +760,37 @@ addHook({
     'parseWorkerMessage',
     parseWorkerMessage => getWrappedParseWorkerMessage(parseWorkerMessage, true)
   )
+  shimmer.wrap(adapterPackage.ChildProcessAdapter.prototype, 'startWorker', startWorker => function () {
+    if (isEarlyFlakeDetectionEnabled) {
+      this.options.worldParameters._ddKnownTests = knownTests
+      this.options.worldParameters._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+    }
+
+    return startWorker.apply(this, arguments)
+  })
   return adapterPackage
+})
+
+// only tests are created in worker processes, the rest is the main process
+// this is already in worker process
+// in worker process: we receive from worldParameters known tests and earlyFlakeDetectionNumRetries
+// we put them available for the worker process so that they can be used in `getWrappedRunTestCase`
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=11.0.0'],
+  file: 'lib/runtime/parallel/worker.js'
+}, (workerPackage) => {
+  shimmer.wrap(
+    workerPackage.ChildProcessWorker.prototype,
+    'initialize',
+    initialize => async function () {
+      await initialize.apply(this, arguments)
+      isEarlyFlakeDetectionEnabled = !!this.options.worldParameters._ddKnownTests
+      if (isEarlyFlakeDetectionEnabled) {
+        knownTests = this.options.worldParameters._ddKnownTests
+        earlyFlakeDetectionNumRetries = this.options.worldParameters._ddEarlyFlakeDetectionNumRetries
+      }
+    }
+  )
+  return workerPackage
 })
