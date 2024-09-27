@@ -46,7 +46,7 @@ describe('esm', () => {
     it('is instrumented', async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, command, ['start'], agent.port)
 
-      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httpexample', ({ headers, payload }) => {
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
         assert.strictEqual(payload.length, 1)

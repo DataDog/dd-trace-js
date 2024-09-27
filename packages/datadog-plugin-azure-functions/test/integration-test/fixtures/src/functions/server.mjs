@@ -8,7 +8,7 @@ async function handlerFunction (request, context) {
   }
 }
 
-app.http('httpexample', {
+app.http('httptest', {
   methods: ['GET'],
   authLevel: 'anonymous',
   handler: handlerFunction
