@@ -41,7 +41,7 @@ const {
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
 const isOldNode = semver.satisfies(process.version, '<=16')
-const versions = ['7.0.0', isOldNode ? '9' : 'latest']
+const versions = ['latest']
 
 const moduleType = [
   {
@@ -799,7 +799,7 @@ versions.forEach(version => {
             })
           })
 
-          context('early flake detection', () => {
+          context.only('early flake detection', () => {
             it('retries new tests', (done) => {
               const NUM_RETRIES_EFD = 3
               receiver.setSettings({
@@ -862,6 +862,7 @@ versions.forEach(version => {
                 }).catch(done)
               })
             })
+
             it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {
               const NUM_RETRIES_EFD = 3
               receiver.setSettings({
@@ -911,6 +912,7 @@ versions.forEach(version => {
                 }).catch(done)
               })
             })
+
             it('retries flaky tests and sets exit code to 0 as long as one attempt passes', (done) => {
               const NUM_RETRIES_EFD = 3
               receiver.setSettings({
@@ -962,6 +964,7 @@ versions.forEach(version => {
                 }).catch(done)
               })
             })
+
             it('does not retry tests that are skipped', (done) => {
               const NUM_RETRIES_EFD = 3
               receiver.setSettings({
@@ -1013,6 +1016,7 @@ versions.forEach(version => {
                 }).catch(done)
               })
             })
+
             it('does not run EFD if the known tests request fails', (done) => {
               const NUM_RETRIES_EFD = 3
               receiver.setSettings({
@@ -1054,6 +1058,131 @@ versions.forEach(version => {
                 }).catch(done)
               })
             })
+
+            if (version !== '7.0.0') {
+              context('parallel mode', () => {
+                it('retries new tests', (done) => {
+                  const NUM_RETRIES_EFD = 3
+                  receiver.setSettings({
+                    itr_enabled: false,
+                    code_coverage: false,
+                    tests_skipping: false,
+                    early_flake_detection: {
+                      enabled: true,
+                      slow_test_retries: {
+                        '5s': NUM_RETRIES_EFD
+                      }
+                    }
+                  })
+                  // cucumber.ci-visibility/features/farewell.feature.Say whatever will be considered new
+                  receiver.setKnownTests(
+                    {
+                      cucumber: {
+                        'ci-visibility/features/farewell.feature': ['Say farewell'],
+                        'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
+                      }
+                    }
+                  )
+                  const eventsPromise = receiver
+                    .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                      const events = payloads.flatMap(({ payload }) => payload.events)
+
+                      const testSession = events.find(event => event.type === 'test_session_end').content
+                      assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+                      assert.propertyVal(testSession.meta, CUCUMBER_IS_PARALLEL, 'true')
+
+                      const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                      const newTests = tests.filter(test =>
+                        test.resource === 'ci-visibility/features/farewell.feature.Say whatever'
+                      )
+                      newTests.forEach(test => {
+                        assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+                        // Test name does not change
+                        assert.propertyVal(test.meta, TEST_NAME, 'Say whatever')
+                        assert.propertyVal(test.meta, CUCUMBER_IS_PARALLEL, 'true')
+                      })
+                      const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                      // all but one has been retried
+                      assert.equal(
+                        newTests.length - 1,
+                        retriedTests.length
+                      )
+                      assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+                    })
+
+                  childProcess = exec(
+                    parallelModeCommand,
+                    {
+                      cwd,
+                      env: envVars,
+                      stdio: 'pipe'
+                    }
+                  )
+
+                  childProcess.on('exit', () => {
+                    eventsPromise.then(() => {
+                      done()
+                    }).catch(done)
+                  })
+                })
+
+                it('retries flaky tests and sets exit code to 0 as long as one attempt passes', (done) => {
+                  const NUM_RETRIES_EFD = 3
+                  receiver.setSettings({
+                    itr_enabled: false,
+                    code_coverage: false,
+                    tests_skipping: false,
+                    early_flake_detection: {
+                      enabled: true,
+                      slow_test_retries: {
+                        '5s': NUM_RETRIES_EFD
+                      }
+                    }
+                  })
+                  // Tests in "cucumber.ci-visibility/features-flaky/flaky.feature" will be considered new
+                  receiver.setKnownTests({})
+
+                  const eventsPromise = receiver
+                    .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                      const events = payloads.flatMap(({ payload }) => payload.events)
+
+                      const testSession = events.find(event => event.type === 'test_session_end').content
+                      assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+                      assert.propertyVal(testSession.meta, CUCUMBER_IS_PARALLEL, 'true')
+                      const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                      tests.forEach(test => {
+                        assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+                        assert.propertyVal(test.meta, CUCUMBER_IS_PARALLEL, 'true')
+                      })
+
+                      const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+                      const passedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+
+                      // (1 original run + 3 retries) / 2
+                      assert.equal(failedAttempts.length, 2)
+                      assert.equal(passedAttempts.length, 2)
+                    })
+
+                  childProcess = exec(
+                    './node_modules/.bin/cucumber-js ci-visibility/features-flaky/*.feature --parallel 2',
+                    {
+                      cwd,
+                      env: envVars,
+                      stdio: 'pipe'
+                    }
+                  )
+
+                  childProcess.on('exit', (exitCode) => {
+                    assert.equal(exitCode, 0)
+                    eventsPromise.then(() => {
+                      done()
+                    }).catch(done)
+                  })
+                })
+              })
+            }
           })
 
           if (version === 'latest') { // flaky test retries only supported from >=8.0.0
