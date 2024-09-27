@@ -87,7 +87,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
 
-  amqp10: # TODO: move rhea to its own job
+  amqp10:
     runs-on: ubuntu-latest
     services:
       qpid:
@@ -98,7 +98,7 @@ jobs:
         ports:
           - 5673:5672
     env:
-      PLUGINS: amqp10|rhea
+      PLUGINS: amqp10
       SERVICES: qpid
       DD_DATA_STREAMS_ENABLED: true
     steps:
@@ -827,6 +827,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
+
+  rhea:
+    runs-on: ubuntu-latest
+    services:
+      qpid:
+        image: scholzj/qpid-cpp:1.38.0
+        env:
+          QPIDD_ADMIN_USERNAME: admin
+          QPIDD_ADMIN_PASSWORD: admin
+        ports:
+          - 5673:5672
+    env:
+      PLUGINS: rhea
+      SERVICES: qpid
+      DD_DATA_STREAMS_ENABLED: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test-and-upstream
 
   router:
     runs-on: ubuntu-latest
