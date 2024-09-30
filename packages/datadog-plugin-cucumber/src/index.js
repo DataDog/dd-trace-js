@@ -17,6 +17,7 @@ const {
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_SUITE_ID,
@@ -79,6 +80,7 @@ class CucumberPlugin extends CiPlugin {
       hasUnskippableSuites,
       hasForcedToRunSuites,
       isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
       isParallel
     }) => {
       const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
@@ -98,6 +100,9 @@ class CucumberPlugin extends CiPlugin {
       )
       if (isEarlyFlakeDetectionEnabled) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
+      }
+      if (isEarlyFlakeDetectionFaulty) {
+        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
       }
       if (isParallel) {
         this.testSessionSpan.setTag(CUCUMBER_IS_PARALLEL, 'true')
