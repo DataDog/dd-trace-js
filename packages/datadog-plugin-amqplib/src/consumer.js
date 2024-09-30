@@ -3,7 +3,6 @@
 const { TEXT_MAP } = require('../../../ext/formats')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams/processor')
-const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
 const { getResourceName } = require('./util')
 
 class AmqplibConsumerPlugin extends ConsumerPlugin {

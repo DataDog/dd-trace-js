@@ -2,7 +2,6 @@
 
 const dc = require('dc-polyfill')
 const { getMessageSize } = require('../../dd-trace/src/datastreams/processor')
-const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 
 const afterStartCh = dc.channel('dd-trace:kafkajs:consumer:afterStart')
