@@ -43,7 +43,9 @@ function extractIp (config, req) {
     if (!headers) return
 
     const ip = findFirstIp(headers[config.clientIpHeader])
-    return ip.public || ip.private
+    if (ip && (ip.public || ip.private)) {
+      return ip.public || ip.private
+    }
   }
 
   let firstPrivateIp
