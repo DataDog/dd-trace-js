@@ -2,7 +2,7 @@
 
 const { fsOperationStart, incomingHttpRequestStart } = require('../channels')
 const { storage } = require('../../../../datadog-core')
-const { enable: enableFsPlugin, disable: disableFsPlugin } = require('./fs-plugin')
+const { enable: enableFsPlugin, disable: disableFsPlugin, RASP_PLUGIN_MOD } = require('./fs-plugin')
 const { FS_OPERATION_PATH } = require('../addresses')
 const waf = require('../waf')
 const { RULE_TYPES, handleResult } = require('./utils')
@@ -25,7 +25,7 @@ function disable () {
   if (fsOperationStart.hasSubscribers) fsOperationStart.unsubscribe(analyzeLfi)
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(onFirstReceivedRequest)
 
-  disableFsPlugin('rasp')
+  disableFsPlugin(RASP_PLUGIN_MOD)
 
   enabled = false
 }
@@ -36,7 +36,7 @@ function onFirstReceivedRequest () {
     incomingHttpRequestStart.unsubscribe(onFirstReceivedRequest)
   })
 
-  enableFsPlugin('rasp')
+  enableFsPlugin(RASP_PLUGIN_MOD)
 
   fsOperationStart.subscribe(analyzeLfi)
 }

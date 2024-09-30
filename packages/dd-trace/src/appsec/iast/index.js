@@ -14,7 +14,7 @@ const {
 } = require('./taint-tracking')
 const { IAST_ENABLED_TAG_KEY } = require('./tags')
 const iastTelemetry = require('./telemetry')
-const { enable: enableFsPlugin, disable: disableFsPlugin } = require('../rasp/fs-plugin')
+const { enable: enableFsPlugin, disable: disableFsPlugin, IAST_PLUGIN_MOD } = require('../rasp/fs-plugin')
 
 // TODO Change to `apm:http:server:request:[start|close]` when the subscription
 //  order of the callbacks can be enforce
@@ -28,7 +28,7 @@ function enable (config, _tracer) {
   if (isEnabled) return
 
   iastTelemetry.configure(config, config.iast?.telemetryVerbosity)
-  enableFsPlugin('iast')
+  enableFsPlugin(IAST_PLUGIN_MOD)
   enableAllAnalyzers(config)
   enableTaintTracking(config.iast, iastTelemetry.verbosity)
   requestStart.subscribe(onIncomingHttpRequestStart)
@@ -46,7 +46,7 @@ function disable () {
   isEnabled = false
 
   iastTelemetry.stop()
-  disableFsPlugin('iast')
+  disableFsPlugin(IAST_PLUGIN_MOD)
   disableAllAnalyzers()
   disableTaintTracking()
   overheadController.finishGlobalContext()

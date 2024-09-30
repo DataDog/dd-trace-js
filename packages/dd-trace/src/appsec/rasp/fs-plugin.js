@@ -4,9 +4,12 @@ const Plugin = require('../../plugins/plugin')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 
+const RASP_PLUGIN_MOD = 'rasp'
+const IAST_PLUGIN_MOD = 'iast'
+
 const enabledFor = {
-  rasp: false,
-  iast: false
+  [RASP_PLUGIN_MOD]: false,
+  [IAST_PLUGIN_MOD]: false
 }
 
 let fsPlugin
@@ -89,5 +92,8 @@ module.exports = {
   enable,
   disable,
 
-  AppsecFsPlugin
+  AppsecFsPlugin,
+
+  RASP_PLUGIN_MOD,
+  IAST_PLUGIN_MOD
 }
