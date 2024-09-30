@@ -1,6 +1,6 @@
 'use strict'
 
-const { fsOperationStart } = require('../channels')
+const { fsOperationStart, incomingHttpRequestStart } = require('../channels')
 const { storage } = require('../../../../datadog-core')
 const { enable: enableFsPlugin, disable: disableFsPlugin } = require('./fs-plugin')
 const { FS_OPERATION_PATH } = require('../addresses')
@@ -9,19 +9,36 @@ const { RULE_TYPES, handleResult } = require('./utils')
 const { isAbsolute } = require('path')
 
 let config
+let enabled
 
 function enable (_config) {
   config = _config
 
-  enableFsPlugin('rasp')
+  if (enabled) return
 
-  fsOperationStart.subscribe(analyzeLfi)
+  enabled = true
+
+  incomingHttpRequestStart.subscribe(onFirstReceivedRequest)
 }
 
 function disable () {
   if (fsOperationStart.hasSubscribers) fsOperationStart.unsubscribe(analyzeLfi)
+  if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(onFirstReceivedRequest)
 
   disableFsPlugin('rasp')
+
+  enabled = false
+}
+
+function onFirstReceivedRequest () {
+  // nodejs unsubscribe during publish bug: https://github.com/nodejs/node/pull/55116
+  process.nextTick(() => {
+    incomingHttpRequestStart.unsubscribe(onFirstReceivedRequest)
+  })
+
+  enableFsPlugin('rasp')
+
+  fsOperationStart.subscribe(analyzeLfi)
 }
 
 function analyzeLfi (ctx) {

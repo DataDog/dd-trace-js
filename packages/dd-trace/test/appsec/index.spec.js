@@ -24,6 +24,7 @@ const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
+const { disable: disableLfi } = require('../../src/appsec/rasp/lfi')
 
 const resultActions = {
   block_request: {
@@ -1061,6 +1062,8 @@ describe('IP blocking', function () {
         enabled: true
       }
     }))
+
+    disableLfi()
 
     RuleManager.updateWafFromRC({ toUnapply: [], toApply: [], toModify })
   })

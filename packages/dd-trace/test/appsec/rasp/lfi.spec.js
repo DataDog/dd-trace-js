@@ -1,11 +1,11 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
-const { fsOperationStart } = require('../../../src/appsec/channels')
+const { fsOperationStart, incomingHttpRequestStart } = require('../../../src/appsec/channels')
 const { FS_OPERATION_PATH } = require('../../../src/appsec/addresses')
 
 describe('RASP - lfi.js', () => {
-  let waf, datadogCore, lfi, web, blocking, appsecFsPlugin
+  let waf, datadogCore, lfi, web, blocking, appsecFsPlugin, config
 
   beforeEach(() => {
     datadogCore = {
@@ -39,7 +39,7 @@ describe('RASP - lfi.js', () => {
       './fs-plugin': appsecFsPlugin
     })
 
-    const config = {
+    config = {
       appsec: {
         stackTrace: {
           enabled: true,
@@ -48,8 +48,6 @@ describe('RASP - lfi.js', () => {
         }
       }
     }
-
-    lfi.enable(config)
   })
 
   afterEach(() => {
@@ -58,13 +56,33 @@ describe('RASP - lfi.js', () => {
   })
 
   describe('enable', () => {
-    it('should enable AppsecFsPlugin', () => {
+    it('should subscribe to first http req', () => {
+      const subscribe = sinon.stub(incomingHttpRequestStart, 'subscribe')
+
+      lfi.enable(config)
+
+      sinon.assert.calledOnce(subscribe)
+    })
+
+    it('should enable AppsecFsPlugin after the first request', () => {
+      const unsubscribe = sinon.stub(incomingHttpRequestStart, 'unsubscribe')
+
+      lfi.enable(config)
+
+      incomingHttpRequestStart.publish({})
+
       sinon.assert.calledOnceWithExactly(appsecFsPlugin.enable, 'rasp')
+
+      process.nextTick(() => {
+        sinon.assert.calledOnce(unsubscribe)
+      })
     })
   })
 
   describe('disable', () => {
     it('should disable AppsecFsPlugin', () => {
+      lfi.enable(config)
+
       lfi.disable()
       sinon.assert.calledOnceWithExactly(appsecFsPlugin.disable, 'rasp')
     })
@@ -74,6 +92,12 @@ describe('RASP - lfi.js', () => {
     const path = '/etc/passwd'
     const ctx = { path }
     const req = {}
+
+    beforeEach(() => {
+      lfi.enable(config)
+
+      incomingHttpRequestStart.publish({})
+    })
 
     it('should analyze lfi for root fs operations', () => {
       const fs = { root: true }

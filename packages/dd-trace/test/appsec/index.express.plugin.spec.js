@@ -95,6 +95,9 @@ withVersions('express', 'express', version => {
             rules: path.join(__dirname, 'api_security_rules.json'),
             apiSecurity: {
               enabled: true
+            },
+            rasp: {
+              enabled: false
             }
           }
         })
