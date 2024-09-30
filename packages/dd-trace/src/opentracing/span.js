@@ -216,6 +216,10 @@ class DatadogSpan {
     this._processor.process(this)
   }
 
+  setPriority (samplingPriority, mechanism) {
+    this._prioritySampler?.setPriority(this, samplingPriority, mechanism)
+  }
+
   _sanitizeAttributes (attributes = {}) {
     const sanitizedAttributes = {}
 
