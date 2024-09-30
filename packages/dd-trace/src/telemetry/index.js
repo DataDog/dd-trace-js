@@ -321,7 +321,8 @@ function updateConfig (changes, config) {
     queryStringObfuscation: 'DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP',
     version: 'DD_VERSION',
     env: 'DD_ENV',
-    service: 'DD_SERVICE'
+    service: 'DD_SERVICE',
+    clientIpHeader: 'DD_TRACE_CLIENT_IP_HEADER'
   }
 
   const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
