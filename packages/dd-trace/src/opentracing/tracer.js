@@ -57,7 +57,7 @@ class DatadogTracer {
     }
 
     if (options?.tags?.service) {
-      tags.version = options?.tags?.version ? String(options.tags.version) : undefined
+      options.tags.version = options?.tags?.version ? String(options.tags.version) : undefined
     }
 
     const span = new Span(this, this._processor, this._prioritySampler, {
