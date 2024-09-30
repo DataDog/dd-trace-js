@@ -789,7 +789,7 @@ class Config {
     this._setSamplingRule(env, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
     this._envUnprocessed['sampler.rules'] = DD_TRACE_SAMPLING_RULES
     this._setString(env, 'scope', DD_TRACE_SCOPE)
-    this._setString(env, 'service', tags.service || DD_SERVICE || DD_SERVICE_NAME || OTEL_SERVICE_NAME)
+    this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service || OTEL_SERVICE_NAME)
     console.log('env service', env.service)
     if (DD_SERVICE_MAPPING) {
       this._setValue(env, 'serviceMapping', fromEntries(
