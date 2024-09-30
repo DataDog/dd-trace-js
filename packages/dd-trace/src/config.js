@@ -790,6 +790,7 @@ class Config {
     this._envUnprocessed['sampler.rules'] = DD_TRACE_SAMPLING_RULES
     this._setString(env, 'scope', DD_TRACE_SCOPE)
     this._setString(env, 'service', tags.service || DD_SERVICE || DD_SERVICE_NAME || OTEL_SERVICE_NAME)
+    console.log('env service', env.service)
     if (DD_SERVICE_MAPPING) {
       this._setValue(env, 'serviceMapping', fromEntries(
         process.env.DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
@@ -928,6 +929,7 @@ class Config {
     this._setValue(opts, 'sampler.rateLimit', coalesce(options.rateLimit, ingestion.rateLimit))
     this._setSamplingRule(opts, 'sampler.rules', options.samplingRules)
     this._setString(opts, 'service', options.service || tags.service)
+    console.log('opts service', opts.service)
     this._setValue(opts, 'serviceMapping', options.serviceMapping)
     this._setString(opts, 'site', options.site)
     if (options.spanAttributeSchema) {

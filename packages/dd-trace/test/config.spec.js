@@ -113,7 +113,6 @@ describe('Config', () => {
     reloadLoggerAndConfig()
 
     const config = new Config()
-    console.log(44, config.headerTags, config.tags)
 
     expect(config).to.have.property('debug', false)
     expect(config).to.have.property('service', 'service')
