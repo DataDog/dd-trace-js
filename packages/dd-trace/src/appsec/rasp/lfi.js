@@ -31,9 +31,8 @@ function disable () {
 }
 
 function onFirstReceivedRequest () {
+  // nodejs unsubscribe during publish bug: https://github.com/nodejs/node/pull/55116
   process.nextTick(() => {
-    // TODO: review. If unsubscribe is called synchronously other incomingHttpRequestStart listeners like
-    // appsec incomingHttpStartTranslator are not called
     incomingHttpRequestStart.unsubscribe(onFirstReceivedRequest)
   })
 
