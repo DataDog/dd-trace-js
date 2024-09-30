@@ -116,6 +116,7 @@ class DatadogSpan {
       spanId: spanContext._spanId,
       parentId: spanContext._parentId,
       service: spanContext._tags['service.name'],
+      version: spanContext._tags['service.version'],
       name: spanContext._name,
       resource
     })
