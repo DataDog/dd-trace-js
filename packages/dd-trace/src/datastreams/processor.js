@@ -47,6 +47,26 @@ class StatsPoint {
   }
 }
 
+class Backlog {
+  constructor ({ offset, ...tags }) {
+    this._tags = Object.keys(tags).sort().map(key => `${key}:${tags[key]}`)
+    this._hash = this._tags.join(',')
+    this._offset = offset
+  }
+
+  get hash () { return this._hash }
+
+  get offset () { return this._offset }
+
+  get tags () { return this._tags }
+
+  encode () {
+    return {
+      Tags: this.tags,
+      Value: this.offset
+    }
+  }
+}
 
 class StatsBucket {
   constructor () {
