@@ -11,7 +11,7 @@ const { types } = require('util')
 const { PATHWAY_HASH } = require('../../../../ext/tags')
 const { SchemaBuilder } = require('./schemas/schema_builder')
 const { SchemaSampler } = require('./schemas/schema_sampler')
-const { log } = require('../log')
+const log = require('../log')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
@@ -47,26 +47,6 @@ class StatsPoint {
   }
 }
 
-class Backlog {
-  constructor ({ offset, ...tags }) {
-    this._tags = Object.keys(tags).sort().map(key => `${key}:${tags[key]}`)
-    this._hash = this._tags.join(',')
-    this._offset = offset
-  }
-
-  get hash () { return this._hash }
-
-  get offset () { return this._offset }
-
-  get tags () { return this._tags }
-
-  encode () {
-    return {
-      Tags: this.tags,
-      Value: this.offset
-    }
-  }
-}
 
 class StatsBucket {
   constructor () {
