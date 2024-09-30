@@ -17,7 +17,7 @@ describe('esm', () => {
 
   // skip older versions of fastify due to syntax differences
   withVersions('fastify', 'fastify', '>=3', (version, _, specificVersion) => {
-    if ((NODE_MAJOR <= 18) && semver.satisfies(specificVersion, '>=5')) return
+    if (NODE_MAJOR <= 18 && semver.satisfies(specificVersion, '>=5')) return
 
     before(async function () {
       this.timeout(20000)
