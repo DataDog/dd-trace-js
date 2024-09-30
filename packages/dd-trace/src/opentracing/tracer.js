@@ -53,12 +53,11 @@ class DatadogTracer {
       : getParent(options.references)
 
     const tags = {
-      'service.name': options?.tags?.service ? String(options.tags.service) : this._service,
-      'service.version': this._version
+      'service.name': options?.tags?.service ? String(options.tags.service) : this._service
     }
 
     if (options?.tags?.service) {
-      tags['service.version'] = options?.tags?.version ? String(options.tags.version) : undefined
+      tags.version = options?.tags?.version ? String(options.tags.version) : undefined
     }
 
     const span = new Span(this, this._processor, this._prioritySampler, {
