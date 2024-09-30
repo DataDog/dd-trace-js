@@ -1,5 +1,5 @@
 'use strict'
-
+const semver = require('semver')
 const {
   FakeAgent,
   createSandbox,
@@ -8,6 +8,7 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
+const { NODE_MAJOR } = require('../../../../version')
 
 describe('esm', () => {
   let agent
@@ -15,7 +16,9 @@ describe('esm', () => {
   let sandbox
 
   // skip older versions of fastify due to syntax differences
-  withVersions('fastify', 'fastify', '>=3', version => {
+  withVersions('fastify', 'fastify', '>=3', (version, _, specificVersion) => {
+    if (NODE_MAJOR <= 18 && semver.satisfies(specificVersion, '>=5')) return
+
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'fastify@${version}'`], false,
