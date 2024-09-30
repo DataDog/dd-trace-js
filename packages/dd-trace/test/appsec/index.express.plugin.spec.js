@@ -97,7 +97,7 @@ withVersions('express', 'express', version => {
               enabled: true
             },
             rasp: {
-              enabled: false
+              enabled: false // disable rasp to not trigger lfi
             }
           }
         })
