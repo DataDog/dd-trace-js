@@ -52,10 +52,15 @@ class DatadogTracer {
       ? getContext(options.childOf)
       : getParent(options.references)
 
+    // as per spec, allow the setting of service name through tags
     const tags = {
       'service.name': options?.tags?.service ? String(options.tags.service) : this._service
     }
 
+    // According to the specification, the version can be set through tags.
+    // This is only valid if the service is also set.
+    // If the version is not provided, do not use the version set for the tracer.
+    // Instead, explicitly set the version to undefined.
     if (options?.tags?.service) {
       options.tags.version = options?.tags?.version ? String(options.tags.version) : undefined
     }

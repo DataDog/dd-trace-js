@@ -64,7 +64,6 @@ describe('telemetry', () => {
       port: traceAgent.address().port,
       service: 'test service',
       version: '1.2.3-beta4',
-      headerTags: ['foo:bar'],
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c'

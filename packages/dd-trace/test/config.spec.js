@@ -107,7 +107,6 @@ describe('Config', () => {
     process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'b3,tracecontext'
     process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'b3,tracecontext'
     process.env.OTEL_PROPAGATORS = 'datadog,tracecontext'
-    process.env.DD_TRACE_HEADER_TAGS = ' t a g :val'
 
     // required if we want to check updates to config.debug and config.logLevel which is fetched from logger
     reloadLoggerAndConfig()
