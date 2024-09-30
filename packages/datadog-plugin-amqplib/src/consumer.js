@@ -30,8 +30,7 @@ class AmqplibConsumerPlugin extends ConsumerPlugin {
     })
 
     if (
-      this.config.dsmEnabled && message?.properties?.headers &&
-      DsmPathwayCodec.contextExists(message.properties.headers)
+      this.config.dsmEnabled && message?.properties?.headers
     ) {
       const payloadSize = getAmqpMessageSize({ headers: message.properties.headers, content: message.content })
       const queue = fields.queue ? fields.queue : fields.routingKey

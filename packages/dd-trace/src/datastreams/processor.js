@@ -11,6 +11,7 @@ const { types } = require('util')
 const { PATHWAY_HASH } = require('../../../../ext/tags')
 const { SchemaBuilder } = require('./schemas/schema_builder')
 const { SchemaSampler } = require('./schemas/schema_sampler')
+const { log } = require('../log')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
@@ -272,6 +273,11 @@ class DataStreamsProcessor {
         closestOppositeDirectionHash = parentHash
         closestOppositeDirectionEdgeStart = edgeStartNs
       }
+      log.debug(
+        () => `Setting DSM Checkpoint from extracted parent context with hash: ${parentHash} and edge tags: ${edgeTags}`
+      )
+    } else {
+      log.debug(() => 'Setting DSM Checkpoint with empty parent context.')
     }
     const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash)
     const edgeLatencyNs = nowNs - edgeStartNs

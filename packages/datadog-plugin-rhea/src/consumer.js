@@ -34,8 +34,7 @@ class RheaConsumerPlugin extends ConsumerPlugin {
 
     if (
       this.config.dsmEnabled &&
-      msgObj?.message?.delivery_annotations &&
-      DsmPathwayCodec.contextExists(msgObj.message.delivery_annotations)
+      msgObj?.message?.delivery_annotations
     ) {
       const payloadSize = getAmqpMessageSize(
         { headers: msgObj.message.delivery_annotations, content: msgObj.message.body }

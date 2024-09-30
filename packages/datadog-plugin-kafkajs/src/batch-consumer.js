@@ -9,7 +9,7 @@ class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
   start ({ topic, partition, messages, groupId }) {
     if (!this.config.dsmEnabled) return
     for (const message of messages) {
-      if (!message || !message.headers || !DsmPathwayCodec.contextExists(message.headers)) continue
+      if (!message || !message.headers) continue
       const payloadSize = getMessageSize(message)
       this.tracer.decodeDataStreamsContext(message.headers)
       this.tracer

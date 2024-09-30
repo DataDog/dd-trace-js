@@ -78,7 +78,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
         'kafka.partition': partition
       }
     })
-    if (this.config.dsmEnabled && message?.headers && DsmPathwayCodec.contextExists(message.headers)) {
+    if (this.config.dsmEnabled && message?.headers) {
       const payloadSize = getMessageSize(message)
       this.tracer.decodeDataStreamsContext(message.headers)
       this.tracer
