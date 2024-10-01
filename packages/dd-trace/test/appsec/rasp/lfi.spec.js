@@ -1,8 +1,10 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
+const { assert } = require('chai')
 const { fsOperationStart, incomingHttpRequestStart } = require('../../../src/appsec/channels')
 const { FS_OPERATION_PATH } = require('../../../src/appsec/addresses')
+const { RASP_MODULE } = require('../../../src/appsec/rasp/fs-plugin')
 
 describe('RASP - lfi.js', () => {
   let waf, datadogCore, lfi, web, blocking, appsecFsPlugin, config
@@ -66,12 +68,15 @@ describe('RASP - lfi.js', () => {
 
     it('should enable AppsecFsPlugin after the first request', () => {
       const unsubscribe = sinon.stub(incomingHttpRequestStart, 'unsubscribe')
+      const fsOpSubscribe = sinon.stub(fsOperationStart, 'subscribe')
 
       lfi.enable(config)
 
       incomingHttpRequestStart.publish({})
 
-      sinon.assert.calledOnceWithExactly(appsecFsPlugin.enable, 'rasp')
+      sinon.assert.calledOnceWithExactly(appsecFsPlugin.enable, RASP_MODULE)
+
+      assert(fsOpSubscribe.calledAfter(appsecFsPlugin.enable))
 
       process.nextTick(() => {
         sinon.assert.calledOnce(unsubscribe)
@@ -84,7 +89,7 @@ describe('RASP - lfi.js', () => {
       lfi.enable(config)
 
       lfi.disable()
-      sinon.assert.calledOnceWithExactly(appsecFsPlugin.disable, 'rasp')
+      sinon.assert.calledOnceWithExactly(appsecFsPlugin.disable, RASP_MODULE)
     })
   })
 

@@ -7,6 +7,7 @@ const iastContextFunctions = require('../../../src/appsec/iast/iast-context')
 const overheadController = require('../../../src/appsec/iast/overhead-controller')
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
 const { testInRequest } = require('./utils')
+const { IAST_MODULE } = require('../../../src/appsec/rasp/fs-plugin')
 
 describe('IAST Index', () => {
   beforeEach(() => {
@@ -103,6 +104,7 @@ describe('IAST Index', () => {
     let mockIast
     let mockOverheadController
     let appsecFsPlugin
+    let analyzers
 
     const config = new Config({
       experimental: {
@@ -130,10 +132,14 @@ describe('IAST Index', () => {
         enable: sinon.stub(),
         disable: sinon.stub()
       }
+      analyzers = {
+        enableAllAnalyzers: sinon.stub()
+      }
       mockIast = proxyquire('../../../src/appsec/iast', {
         './vulnerability-reporter': mockVulnerabilityReporter,
         './overhead-controller': mockOverheadController,
-        '../rasp/fs-plugin': appsecFsPlugin
+        '../rasp/fs-plugin': appsecFsPlugin,
+        './analyzers': analyzers
       })
     })
 
@@ -145,7 +151,8 @@ describe('IAST Index', () => {
     describe('enable', () => {
       it('should enable AppsecFsPlugin', () => {
         mockIast.enable(config)
-        expect(appsecFsPlugin.enable).to.have.been.calledOnceWithExactly('iast')
+        expect(appsecFsPlugin.enable).to.have.been.calledOnceWithExactly(IAST_MODULE)
+        expect(analyzers.enableAllAnalyzers).to.have.been.calledAfter(appsecFsPlugin.enable)
       })
     })
 
@@ -153,7 +160,7 @@ describe('IAST Index', () => {
       it('should disable AppsecFsPlugin', () => {
         mockIast.enable(config)
         mockIast.disable()
-        expect(appsecFsPlugin.disable).to.have.been.calledOnceWithExactly('iast')
+        expect(appsecFsPlugin.disable).to.have.been.calledOnceWithExactly(IAST_MODULE)
       })
     })
 
