@@ -77,9 +77,10 @@ function generateMatrix (name) {
       matricesJson.matrices[name] = matrix
     }
   }
-  fs.writeFileSync(matricesPath, JSON.stringify(matricesJson, null, 2))
+  // fs.writeFileSync(matricesPath, JSON.stringify(matricesJson, null, 2))
+  return JSON.stringify(matricesJson, null, 2)
 }
-generateMatrix('couchbase')
+// generateMatrix('couchbase')
 module.exports = {
   generateMatrix
 }

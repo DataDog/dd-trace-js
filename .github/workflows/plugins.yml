@@ -20,9 +20,12 @@ jobs:
       matrices: ${{steps.plugins.outputs.matrices}}
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/install
       - id: plugins
         run: | 
-          content=$(cat packages/datadog-instrumentations/src/helpers/matrices.json | tr '\n' ' ')
+          echo "starting up"
+          content=$(node ./scripts/create_matrix.js)
           echo "matrices=$content" >> $GITHUB_OUTPUT
           echo $content
 
