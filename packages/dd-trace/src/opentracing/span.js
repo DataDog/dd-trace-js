@@ -14,6 +14,7 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const spanleak = require('../spanleak')
+const { USER_KEEP } = require('../../../../ext/priority')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -216,8 +217,8 @@ class DatadogSpan {
     this._processor.process(this)
   }
 
-  setPriority (samplingPriority, mechanism) {
-    this._prioritySampler?.setPriority(this, samplingPriority, mechanism)
+  keep (mechanism) {
+    this._prioritySampler?.setPriority(this, USER_KEEP, mechanism)
   }
 
   _sanitizeAttributes (attributes = {}) {
