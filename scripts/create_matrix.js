@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 
-const { npmView } = require('./helpers/versioning')
 const path = require('path')
 const fs = require('fs')
-const { execSync } = require('child_process')
 const yaml = require('js-yaml')
 
 const matricesPath = path.join(
@@ -34,7 +32,7 @@ const pluginsNames = Object.getOwnPropertyNames(yaml.load(fs.readFileSync(matric
 const versionsJson = require(versionsPath)
 const versionsNames = Object.getOwnPropertyNames(yaml.load(fs.readFileSync(versionsPath, 'utf-8')).matrices)
 
-function generateMatrix (name) {
+function generateMatrix () {
   let versionsPlugin
   let matrix
 
@@ -79,10 +77,14 @@ function generateMatrix (name) {
       matricesJson.matrices[name] = matrix
     }
   }
-  fs.writeFileSync(matricesPath, JSON.stringify(matricesJson, null, 2))
   return matricesJson
 }
 
 module.exports = {
   generateMatrix
+}
+
+if (require.main === module) {
+  // eslint-disable-next-line no-console
+  console.log(JSON.stringify(generateMatrix()))
 }
