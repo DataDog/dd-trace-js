@@ -25,6 +25,7 @@ jobs:
       - id: plugins
         run: | 
           echo "starting up"
+          echo node --version
           content=$(node ./scripts/create_matrix.js)
           echo "matrices=$content" >> $GITHUB_OUTPUT
           echo $content
