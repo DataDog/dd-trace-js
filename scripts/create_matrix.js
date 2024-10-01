@@ -80,7 +80,7 @@ function generateMatrix (name) {
     }
   }
   fs.writeFileSync(matricesPath, JSON.stringify(matricesJson, null, 2))
-  return JSON.stringify(matricesJson, null, 2)
+  return matricesJson
 }
 
 module.exports = {
