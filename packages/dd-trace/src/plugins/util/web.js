@@ -432,7 +432,7 @@ function addRequestTags (context) {
   span.addTags({
     [HTTP_URL]: web.obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
-    [SPAN_KIND]: tags[SPAN_TYPE] === 'serverless' ? null : SERVER,
+    [SPAN_KIND]: SERVER,
     [SPAN_TYPE]: tags[SPAN_TYPE] === 'serverless' ? 'serverless' : WEB,
     [HTTP_USERAGENT]: req.headers['user-agent']
   })
