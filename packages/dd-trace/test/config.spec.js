@@ -215,6 +215,7 @@ describe('Config', () => {
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config.tags).to.have.property('service', 'node')
     expect(config).to.have.property('plugins', true)
+    expect(config).to.have.property('traceEnabled', true)
     expect(config).to.have.property('env', undefined)
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
