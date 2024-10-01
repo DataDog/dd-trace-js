@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 const { npmView } = require('./helpers/versioning')
 const path = require('path')
 const fs = require('fs')
@@ -77,10 +79,10 @@ function generateMatrix (name) {
       matricesJson.matrices[name] = matrix
     }
   }
-  // fs.writeFileSync(matricesPath, JSON.stringify(matricesJson, null, 2))
+  fs.writeFileSync(matricesPath, JSON.stringify(matricesJson, null, 2))
   return JSON.stringify(matricesJson, null, 2)
 }
-// generateMatrix('couchbase')
+
 module.exports = {
   generateMatrix
 }
