@@ -1,3 +1,4 @@
+const { readFileSync } = require('fs')
 const {
   GIT_BRANCH,
   GIT_COMMIT_SHA,
@@ -6,6 +7,9 @@ const {
   GIT_COMMIT_AUTHOR_NAME,
   GIT_COMMIT_MESSAGE,
   GIT_COMMIT_AUTHOR_DATE,
+  GIT_COMMIT_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH,
   GIT_REPOSITORY_URL,
   CI_PIPELINE_ID,
   CI_PIPELINE_NAME,
@@ -75,6 +79,13 @@ function resolveTilde (filePath) {
     return filePath.replace('~', process.env.HOME)
   }
   return filePath
+}
+
+function getGitHubEventPayload () {
+  if (!process.env.GITHUB_EVENT_PATH) {
+    return
+  }
+  return JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'))
 }
 
 module.exports = {
@@ -241,7 +252,8 @@ module.exports = {
         GITHUB_REPOSITORY,
         GITHUB_SERVER_URL,
         GITHUB_RUN_ATTEMPT,
-        GITHUB_JOB
+        GITHUB_JOB,
+        GITHUB_BASE_REF
       } = env
 
       const repositoryURL = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git`
@@ -276,6 +288,16 @@ module.exports = {
           GITHUB_RUN_ID,
           GITHUB_RUN_ATTEMPT
         })
+      }
+      if (GITHUB_BASE_REF) { // `pull_request` or `pull_request_target` event
+        try {
+          const eventContent = getGitHubEventPayload()
+          tags[GIT_PULL_REQUEST_BASE_BRANCH_SHA] = eventContent.pull_request.base.sha
+          tags[GIT_PULL_REQUEST_BASE_BRANCH] = GITHUB_BASE_REF
+          tags[GIT_COMMIT_HEAD_SHA] = eventContent.pull_request.head.sha
+        } catch (e) {
+          // ignore malformed event content
+        }
       }
     }
 
