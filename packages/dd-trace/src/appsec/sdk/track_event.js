@@ -79,7 +79,7 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode) {
   standalone.sample(rootSpan)
 
   if (['users.login.success', 'users.login.failure'].includes(eventName)) {
-    waf.run({ persistent: { [`server.business_logic.${eventName}`]: null }})
+    waf.run({ persistent: { [`server.business_logic.${eventName}`]: null } })
   }
 }
 

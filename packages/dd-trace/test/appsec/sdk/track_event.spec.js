@@ -121,7 +121,10 @@ describe('track_event', () => {
         const user = { id: 'user_id' }
 
         trackUserLoginSuccessEvent(tracer, user)
-        sinon.assert.calledOnceWithExactly(waf.run, { persistent: { 'server.business_logic.users.login.success': null }})
+        sinon.assert.calledOnceWithExactly(
+          waf.run,
+          { persistent: { 'server.business_logic.users.login.success': null } }
+        )
       })
     })
 
@@ -202,7 +205,10 @@ describe('track_event', () => {
 
       it('should call waf run with login failure address', () => {
         trackUserLoginFailureEvent(tracer, 'user_id')
-        sinon.assert.calledOnceWithExactly(waf.run, { persistent: { 'server.business_logic.users.login.failure': null }})
+        sinon.assert.calledOnceWithExactly(
+          waf.run,
+          { persistent: { 'server.business_logic.users.login.failure': null } }
+        )
       })
     })
 

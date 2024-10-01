@@ -22,7 +22,7 @@ withVersions('passport-local', 'passport-local', version => {
     let port, server, axios
 
     before(() => {
-      return agent.load(['express', 'http'], {client: false})
+      return agent.load(['express', 'http'], { client: false })
     })
 
     before(() => {
@@ -52,9 +52,9 @@ withVersions('passport-local', 'passport-local', version => {
             done(null, false)
           }
         }
-      ));
+      ))
 
-      app.post('/login', passport.authenticate('local', {session:false}), function (req, res) {
+      app.post('/login', passport.authenticate('local', { session: false }), function (req, res) {
         res.end()
       })
 
@@ -69,7 +69,7 @@ withVersions('passport-local', 'passport-local', version => {
 
     after(() => {
       server.close()
-      return agent.close({ritmReset: false})
+      return agent.close({ ritmReset: false })
     })
 
     after(() => {

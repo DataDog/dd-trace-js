@@ -22,7 +22,7 @@ withVersions('passport-http', 'passport-http', version => {
     let port, server, axios
 
     before(() => {
-      return agent.load(['express', 'http'], {client: false})
+      return agent.load(['express', 'http'], { client: false })
     })
 
     before(() => {
@@ -52,9 +52,9 @@ withVersions('passport-http', 'passport-http', version => {
             done(null, false)
           }
         }
-      ));
+      ))
 
-      app.post('/login', passport.authenticate('basic', { session:false }), function (req, res) {
+      app.post('/login', passport.authenticate('basic', { session: false }), function (req, res) {
         res.end()
       })
 
@@ -69,7 +69,7 @@ withVersions('passport-http', 'passport-http', version => {
 
     after(() => {
       server.close()
-      return agent.close({ritmReset: false})
+      return agent.close({ ritmReset: false })
     })
 
     after(() => {

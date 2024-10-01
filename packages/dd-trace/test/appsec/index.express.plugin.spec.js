@@ -1,7 +1,6 @@
 'use strict'
 
 const axios = require('axios')
-const { assert } = require('chai')
 const path = require('path')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
