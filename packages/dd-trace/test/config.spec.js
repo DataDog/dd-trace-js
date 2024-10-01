@@ -347,7 +347,7 @@ describe('Config', () => {
       { name: 'reportHostname', value: false, origin: 'default' },
       { name: 'runtimeMetrics', value: false, origin: 'default' },
       { name: 'sampleRate', value: undefined, origin: 'default' },
-      { name: 'sampler.rateLimit', value: undefined, origin: 'default' },
+      { name: 'sampler.rateLimit', value: 100, origin: 'default' },
       { name: 'sampler.rules', value: [], origin: 'default' },
       { name: 'scope', value: undefined, origin: 'default' },
       { name: 'service', value: 'node', origin: 'default' },
@@ -368,7 +368,7 @@ describe('Config', () => {
       { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' },
       { name: 'tracing', value: true, origin: 'default' },
       { name: 'url', value: undefined, origin: 'default' },
-      { name: 'version', value: '', origin: 'default' }
+      { name: 'version', value: undefined, origin: 'default' }
     ])
   })
 
@@ -398,15 +398,6 @@ describe('Config', () => {
 
     expect(config).to.have.property('service', 'test')
     expect(config.tags).to.have.property('service', 'test')
-  })
-
-  it('should initialize from the default version', () => {
-    pkg.version = '1.2.3'
-
-    const config = new Config()
-
-    expect(config).to.have.property('version', '1.2.3')
-    expect(config.tags).to.have.property('version', '1.2.3')
   })
 
   it('should initialize from environment variables', () => {
@@ -658,7 +649,7 @@ describe('Config', () => {
 
     expect(config).to.have.property('service', 'node')
     expect(config).to.have.property('env', undefined)
-    expect(config).to.have.property('version', '')
+    expect(config).to.have.property('version', undefined)
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
@@ -1606,7 +1597,7 @@ describe('Config', () => {
     }, true)
     expect(config).to.have.deep.nested.property('sampler', {
       spanSamplingRules: [],
-      rateLimit: undefined,
+      rateLimit: 100,
       rules: [
         {
           resource: '*',
