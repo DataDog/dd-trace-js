@@ -5,6 +5,7 @@ const { getRootSpan } = require('./utils')
 const { MANUAL_KEEP } = require('../../../../../ext/tags')
 const { setUserTags } = require('./set_user')
 const standalone = require('../standalone')
+const waf = require('../waf')
 
 function trackUserLoginSuccessEvent (tracer, user, metadata) {
   // TODO: better user check here and in _setUser() ?
@@ -76,6 +77,10 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode) {
   rootSpan.addTags(tags)
 
   standalone.sample(rootSpan)
+
+  if (['users.login.success', 'users.login.failure'].includes(eventName)) {
+    waf.run({ persistent: { [`server.business_logic.${eventName}`]: null }})
+  }
 }
 
 module.exports = {
