@@ -27,8 +27,12 @@
 =======
     "test:debugger": "tap packages/dd-trace/test/debugger/**/*.spec.js",
     "test:debugger:ci": "npm run test:debugger -- --coverage --nyc-arg=--include=\"packages/dd-trace/src/debugger/**/*.js\"",
+<<<<<<< HEAD
     "test:trace:core": "tap packages/dd-trace/test/config.spec.js",
 >>>>>>> 6c526b92e (get tests passing)
+=======
+    "test:trace:core": "tap packages/dd-trace/test/*.spec.js \"packages/dd-trace/test/{ci-visibility,datastreams,encode,exporters,opentelemetry,opentracing,plugins,service-naming,telemetry}/**/*.spec.js\"",
+>>>>>>> 20f4f2b9f (push)
     "test:trace:core:ci": "npm run test:trace:core -- --coverage --nyc-arg=--include=\"packages/dd-trace/src/**/*.js\"",
     "test:instrumentations": "mocha -r 'packages/dd-trace/test/setup/mocha.js' 'packages/datadog-instrumentations/test/**/*.spec.js'",
     "test:instrumentations:ci": "nyc --no-clean --include 'packages/datadog-instrumentations/src/**/*.js' -- npm run test:instrumentations",
