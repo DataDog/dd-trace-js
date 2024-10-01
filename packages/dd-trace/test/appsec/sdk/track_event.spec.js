@@ -4,6 +4,7 @@ const proxyquire = require('proxyquire')
 const agent = require('../../plugins/agent')
 const axios = require('axios')
 const tracer = require('../../../../../index')
+const { LOGIN_SUCCESS, LOGIN_FAILURE } = require('../../../src/appsec/addresses')
 
 describe('track_event', () => {
   describe('Internal API', () => {
@@ -123,7 +124,7 @@ describe('track_event', () => {
         trackUserLoginSuccessEvent(tracer, user)
         sinon.assert.calledOnceWithExactly(
           waf.run,
-          { persistent: { 'server.business_logic.users.login.success': null } }
+          { persistent: { [LOGIN_SUCCESS]: null } }
         )
       })
     })
@@ -207,7 +208,7 @@ describe('track_event', () => {
         trackUserLoginFailureEvent(tracer, 'user_id')
         sinon.assert.calledOnceWithExactly(
           waf.run,
-          { persistent: { 'server.business_logic.users.login.failure': null } }
+          { persistent: { [LOGIN_FAILURE]: null } }
         )
       })
     })
