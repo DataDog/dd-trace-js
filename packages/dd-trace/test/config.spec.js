@@ -349,6 +349,7 @@ describe('Config', () => {
       { name: 'runtimeMetrics', value: false, origin: 'default' },
       { name: 'sampleRate', value: undefined, origin: 'default' },
       { name: 'sampler.rateLimit', value: 100, origin: 'default' },
+      { name: 'traceEnabled', value: true, origin: 'default' },
       { name: 'sampler.rules', value: [], origin: 'default' },
       { name: 'scope', value: undefined, origin: 'default' },
       { name: 'service', value: 'node', origin: 'default' },
@@ -482,6 +483,7 @@ describe('Config', () => {
     process.env.DD_INSTRUMENTATION_INSTALL_TYPE = 'k8s_single_step'
     process.env.DD_INSTRUMENTATION_INSTALL_TIME = '1703188212'
     process.env.DD_INSTRUMENTATION_CONFIG_ID = 'abcdef123'
+    process.env.DD_TRACE_ENABLED = 'true'
 
     // required if we want to check updates to config.debug and config.logLevel which is fetched from logger
     reloadLoggerAndConfig()
@@ -504,6 +506,7 @@ describe('Config', () => {
     expect(config).to.have.property('dynamicInstrumentationEnabled', true)
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
+    expect(config).to.have.property('traceEnabled', true)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanAttributeSchema', 'v1')

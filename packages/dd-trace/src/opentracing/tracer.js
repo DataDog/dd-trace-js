@@ -57,12 +57,11 @@ class DatadogTracer {
       'service.name': options?.tags?.service ? String(options.tags.service) : this._service
     }
 
-    // According to the specification, the version can be set through tags.
-    // This is only valid if the service is also set.
-    // If the version is not provided, do not use the version set for the tracer.
-    // Instead, explicitly set the version to undefined.
-    if (options?.tags?.service) {
-      options.tags.version = options?.tags?.version ? String(options.tags.version) : undefined
+    // edge case handling, if a user manually sets a service name different from the tracer's service name
+    // then we need to ensure that the version is set to undefined
+    // in every other scenario version should be set to the tracer's version
+    if (options?.tags?.service && options?.tags?.service !== this._service) {
+      options.tags.version = undefined
     }
 
     const span = new Span(this, this._processor, this._prioritySampler, {
