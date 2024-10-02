@@ -1,12 +1,12 @@
 'use strict'
 
-require('../../setup/tap')
+require('../../setup/mocha')
 
 const ddsource = 'dd_debugger'
 const service = 'my-service'
 const runtimeId = 'my-runtime-id'
 
-describe('diagnostic message http request caching', () => {
+describe('diagnostic message http request caching', function () {
   let statusproxy, request
 
   const acks = [
@@ -16,7 +16,7 @@ describe('diagnostic message http request caching', () => {
     ['ackError', 'ERROR', new Error('boom')]
   ]
 
-  beforeEach(() => {
+  beforeEach(function () {
     request = sinon.spy()
     request['@noCallThru'] = true
 
@@ -27,10 +27,10 @@ describe('diagnostic message http request caching', () => {
   })
 
   for (const [ackFnName, status, err] of acks) {
-    describe(ackFnName, () => {
+    describe(ackFnName, function () {
       let ackFn, exception
 
-      beforeEach(() => {
+      beforeEach(function () {
         if (err) {
           ackFn = statusproxy[ackFnName].bind(null, err)
           // Use `JSON.stringify` to remove any fields that are `undefined`
@@ -45,7 +45,7 @@ describe('diagnostic message http request caching', () => {
         }
       })
 
-      it('should only call once if no change', () => {
+      it('should only call once if no change', function () {
         ackFn({ id: 'foo', version: 0 })
         expect(request).to.have.been.calledOnce
         assertRequestData(request, { probeId: 'foo', version: 0, status, exception })
@@ -54,7 +54,7 @@ describe('diagnostic message http request caching', () => {
         expect(request).to.have.been.calledOnce
       })
 
-      it('should call again if version changes', () => {
+      it('should call again if version changes', function () {
         ackFn({ id: 'foo', version: 0 })
         expect(request).to.have.been.calledOnce
         assertRequestData(request, { probeId: 'foo', version: 0, status, exception })
@@ -64,7 +64,7 @@ describe('diagnostic message http request caching', () => {
         assertRequestData(request, { probeId: 'foo', version: 1, status, exception })
       })
 
-      it('should call again if probeId changes', () => {
+      it('should call again if probeId changes', function () {
         ackFn({ id: 'foo', version: 0 })
         expect(request).to.have.been.calledOnce
         assertRequestData(request, { probeId: 'foo', version: 0, status, exception })
