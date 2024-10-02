@@ -1,7 +1,7 @@
 'use strict'
 
 const { workerData: { rcPort } } = require('node:worker_threads')
-const { getScript, probes, breakpoints } = require('./state')
+const { findScriptFromPartialPath, probes, breakpoints } = require('./state')
 const session = require('./session')
 const { ackReceived, ackInstalled, ackError } = require('./status')
 const log = require('../../log')
@@ -120,7 +120,7 @@ async function addBreakpoint (probe) {
   // TODO: Inbetween `await session.post('Debugger.enable')` and here, the scripts are parsed and cached.
   // Maybe there's a race condition here or maybe we're guraenteed that `await session.post('Debugger.enable')` will
   // not continue untill all scripts have been parsed?
-  const script = getScript(file)
+  const script = findScriptFromPartialPath(file)
   if (!script) throw new Error(`No loaded script found for ${file} (probe: ${probe.id}, version: ${probe.version})`)
   const [path, scriptId] = script
 
