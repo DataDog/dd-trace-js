@@ -26,7 +26,8 @@
     "musl": [{
       "arch": "arm",
       "supported": true,
-      "description": "Any alpine (no native addons)"
+      "description": "From alpine 3.13",
+      "min": "1.2"
     },{
       "arch": "arm64",
       "supported": true,
@@ -40,7 +41,8 @@
     },{
       "arch": "x86",
       "supported": true,
-      "description": "Any alpine (no native addons)"
+      "description": "From alpine 3.13",
+      "min": "1.2"
     }]
   },
   "deny": [
