@@ -2,44 +2,14 @@ name: Release (latest)
 
 on:
   push:
-    branches:
-      - v5.x
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
-    environment: npm
-    permissions:
-      id-token: write
-      contents: write
-    env:
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-    outputs:
-      pkgjson: ${{ steps.pkg.outputs.json }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
-        with:
-          registry-url: 'https://registry.npmjs.org'
-      - run: npm publish --provenance
-      - id: pkg
-        run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
-      - run: |
-          git tag v${{ fromJson(steps.pkg.outputs.json).version }}
-          git push origin v${{ fromJson(steps.pkg.outputs.json).version }}
-
   docs:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: write
-    needs: ['publish']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
@@ -65,4 +35,4 @@ jobs:
           git config user.email github-actions@github.com
           git add -A
           git commit -m ${{ fromJson(steps.pkg.outputs.json).version }}
-          git push
+          git push --dry-run
