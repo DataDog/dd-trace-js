@@ -114,7 +114,7 @@ async function addBreakpoint (probe) {
   const line = Number(probe.where.lines[0]) // Tracer doesn't support multiple-line breakpoints
 
   // Optimize for sending data to /debugger/v1/input endpoint
-  probe.location = { file, lines: [line] }
+  probe.location = { file, lines: [String(line)] }
   delete probe.where
 
   // TODO: Inbetween `await session.post('Debugger.enable')` and here, the scripts are parsed and cached.
