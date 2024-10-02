@@ -290,10 +290,10 @@ module.exports = {
         })
       }
       if (GITHUB_BASE_REF) { // `pull_request` or `pull_request_target` event
+        tags[GIT_PULL_REQUEST_BASE_BRANCH] = GITHUB_BASE_REF
         try {
           const eventContent = getGitHubEventPayload()
           tags[GIT_PULL_REQUEST_BASE_BRANCH_SHA] = eventContent.pull_request.base.sha
-          tags[GIT_PULL_REQUEST_BASE_BRANCH] = GITHUB_BASE_REF
           tags[GIT_COMMIT_HEAD_SHA] = eventContent.pull_request.head.sha
         } catch (e) {
           // ignore malformed event content
