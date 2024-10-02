@@ -1,6 +1,7 @@
 {
   "matrices": {
     "couchbase": {
+      "name": "couchbase",
       "min-version": "2.4.2",
       "by-node-version": true,
       "node-versions": {
@@ -8,10 +9,13 @@
           "2.4.2 - 2.6.12",
           "3.0.0 - 3.2.7",
           "3.0.7 - 3.2.7",
-          "4.0.0 - 4.4.2"
+          "4.0.0 - 4.4.2" 
         ],
         "18": [
           "4.4.1 - 4.4.2"
+        ],
+        "strict": [
+
         ]
       }
     },
