@@ -295,7 +295,7 @@ describe('Dynamic Instrumentation', function () {
             probe: {
               id: rcConfig.config.id,
               version: 0,
-              location: { file: probeFile, lines: [probeLineNo] }
+              location: { file: probeFile, lines: [String(probeLineNo)] }
             },
             language: 'javascript'
           }
