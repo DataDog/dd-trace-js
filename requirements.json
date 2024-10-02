@@ -24,15 +24,23 @@
       "min": "2.19"
     }],
     "musl": [{
-      "arch": "x64",
+      "arch": "arm",
       "supported": true,
-      "description": "From alpine 3.13",
-      "min": "1.2"
+      "description": "Any alpine (no native addons)"
     },{
       "arch": "arm64",
       "supported": true,
       "description": "From alpine 3.13",
       "min": "1.2"
+    },{
+      "arch": "x64",
+      "supported": true,
+      "description": "From alpine 3.13",
+      "min": "1.2"
+    },{
+      "arch": "x86",
+      "supported": true,
+      "description": "Any alpine (no native addons)"
     }]
   },
   "deny": [
