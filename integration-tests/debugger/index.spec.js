@@ -308,6 +308,22 @@ describe('Dynamic Instrumentation', function () {
         assert.isTrue(payload['debugger.snapshot'].timestamp > Date.now() - 1000 * 60)
         assert.isTrue(payload['debugger.snapshot'].timestamp <= Date.now())
 
+        assert.isArray(payload['debugger.snapshot'].stack)
+        assert.isAbove(payload['debugger.snapshot'].stack.length, 0)
+        for (const frame of payload['debugger.snapshot'].stack) {
+          assert.isObject(frame)
+          assert.hasAllKeys(frame, ['fileName', 'function', 'lineNumber', 'columnNumber'])
+          assert.isString(frame.fileName)
+          assert.isString(frame.function)
+          assert.isAbove(frame.lineNumber, 0)
+          assert.isAbove(frame.columnNumber, 0)
+        }
+        const topFrame = payload['debugger.snapshot'].stack[0]
+        assert.match(topFrame.fileName, new RegExp(`${appFile}$`)) // path seems to be prefeixed with `/private` on Mac
+        assert.strictEqual(topFrame.function, 'handler')
+        assert.strictEqual(topFrame.lineNumber, probeLineNo)
+        assert.strictEqual(topFrame.columnNumber, 3)
+
         done()
       })
 

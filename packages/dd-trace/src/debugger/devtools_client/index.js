@@ -4,6 +4,7 @@ const { randomUUID } = require('crypto')
 const { breakpoints } = require('./state')
 const session = require('./session')
 const send = require('./send')
+const { getScriptUrlFromId } = require('./state')
 const { ackEmitting } = require('./status')
 const { parentThreadId } = require('./config')
 const log = require('../../log')
@@ -35,6 +36,17 @@ session.on('Debugger.paused', async ({ params }) => {
     thread_name: threadName
   }
 
+  const stack = params.callFrames.map((frame) => {
+    let fileName = getScriptUrlFromId(frame.location.scriptId)
+    if (fileName.startsWith('file://')) fileName = fileName.substr(7) // TODO: This might not be required
+    return {
+      fileName,
+      function: frame.functionName,
+      lineNumber: frame.location.lineNumber + 1, // Beware! lineNumber is zero-indexed
+      columnNumber: frame.location.columnNumber + 1 // Beware! columnNumber is zero-indexed
+    }
+  })
+
   // TODO: Send multiple probes in one HTTP request as an array
   for (const probe of probes) {
     const snapshot = {
@@ -45,6 +57,7 @@ session.on('Debugger.paused', async ({ params }) => {
         version: probe.version,
         location: probe.location
       },
+      stack,
       language: 'javascript'
     }
 
