@@ -12,6 +12,18 @@ const options = {
   flushInterval: isJestWorker ? 0 : 5000
 }
 
+console.log('Initializing Test Visibility:')
+console.log('Process.argv:', process.argv)
+
+const allowListedProcessEnv = Object.keys(process.env).reduce((acc, key) => {
+  if (key.toLowerCase().startsWith('npm') || key.toLowerCase().startsWith('node_')) {
+    acc[key] = process.env[key]
+  }
+  return acc
+}, {})
+
+console.log('process.env. allowlisted', allowListedProcessEnv)
+
 let shouldInit = true
 
 const isAgentlessEnabled = isTrue(process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED)
