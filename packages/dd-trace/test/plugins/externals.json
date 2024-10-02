@@ -266,7 +266,7 @@
   "mocha": [
     {
       "name": "mocha",
-      "versions": [">=5.2.0"]
+      "versions": [">=5.2.0", ">=8.0.0"]
     },
     {
       "name": "mocha-each",
@@ -364,6 +364,12 @@
     {
       "name": "redis",
       "versions": ["^4"]
+    }
+  ],
+  "rhea": [
+    {
+      "name": "amqp10",
+      "versions": ["^3"]
     }
   ],
   "sequelize": [
