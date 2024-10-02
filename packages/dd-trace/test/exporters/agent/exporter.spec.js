@@ -15,13 +15,11 @@ describe('Exporter', () => {
   let writer
   let prioritySampler
   let span
-  let llmobs
 
   beforeEach(() => {
     url = 'www.example.com'
     flushInterval = 1000
     span = {}
-    llmobs = {}
     writer = {
       append: sinon.spy(),
       flush: sinon.spy(),
@@ -37,7 +35,7 @@ describe('Exporter', () => {
 
   it('should pass computed stats header through to writer', () => {
     const stats = { enabled: true }
-    exporter = new Exporter({ url, flushInterval, stats, llmobs }, prioritySampler)
+    exporter = new Exporter({ url, flushInterval, stats }, prioritySampler)
     expect(Writer).to.have.been.calledWithMatch({
       headers: {
         'Datadog-Client-Computed-Stats': 'yes'
@@ -48,7 +46,7 @@ describe('Exporter', () => {
   it('should pass computed stats header through to writer if standalone appsec is enabled', () => {
     const stats = { enabled: false }
     const appsec = { standalone: { enabled: true } }
-    exporter = new Exporter({ url, flushInterval, stats, appsec, llmobs }, prioritySampler)
+    exporter = new Exporter({ url, flushInterval, stats, appsec }, prioritySampler)
 
     expect(Writer).to.have.been.calledWithMatch({
       headers: {
@@ -59,7 +57,7 @@ describe('Exporter', () => {
 
   it('should support IPv6', () => {
     const stats = { enabled: true }
-    exporter = new Exporter({ hostname: '::1', flushInterval, stats, llmobs }, prioritySampler)
+    exporter = new Exporter({ hostname: '::1', flushInterval, stats }, prioritySampler)
     expect(Writer).to.have.been.calledWithMatch({
       url: new URL('http://[::1]')
     })
@@ -67,11 +65,11 @@ describe('Exporter', () => {
 
   describe('when interval is set to a positive number', () => {
     beforeEach(() => {
-      exporter = new Exporter({ url, flushInterval, llmobs }, prioritySampler)
+      exporter = new Exporter({ url, flushInterval }, prioritySampler)
     })
 
     it('should not flush if export has not been called', (done) => {
-      exporter = new Exporter({ url, flushInterval, llmobs }, prioritySampler)
+      exporter = new Exporter({ url, flushInterval }, prioritySampler)
       setTimeout(() => {
         expect(writer.flush).not.to.have.been.called
         done()
@@ -79,7 +77,7 @@ describe('Exporter', () => {
     })
 
     it('should flush after the configured interval if a payload has been exported', (done) => {
-      exporter = new Exporter({ url, flushInterval, llmobs }, prioritySampler)
+      exporter = new Exporter({ url, flushInterval }, prioritySampler)
       exporter.export([{}])
       setTimeout(() => {
         expect(writer.flush).to.have.been.called
@@ -103,7 +101,7 @@ describe('Exporter', () => {
 
   describe('when interval is set to 0', () => {
     beforeEach(() => {
-      exporter = new Exporter({ url, flushInterval: 0, llmobs })
+      exporter = new Exporter({ url, flushInterval: 0 })
     })
 
     it('should flush right away when interval is set to 0', () => {
@@ -114,7 +112,7 @@ describe('Exporter', () => {
 
   describe('setUrl', () => {
     beforeEach(() => {
-      exporter = new Exporter({ url, llmobs })
+      exporter = new Exporter({ url })
     })
 
     it('should set the URL on self and writer', () => {
