@@ -299,19 +299,25 @@ describe('Child process plugin', () => {
 
       afterEach(() => agent.close({ ritmReset: false }))
       const parentSpanList = [true, false]
-      parentSpanList.forEach(parentSpan => {
-        describe(`${parentSpan ? 'with' : 'without'} parent span`, () => {
+      parentSpanList.forEach(hasParentSpan => {
+        let parentSpan
+
+        describe(`${hasParentSpan ? 'with' : 'without'} parent span`, () => {
           const methods = [
             ...execAsyncMethods.map(methodName => ({ methodName, async: true })),
             ...execSyncMethods.map(methodName => ({ methodName, async: false }))
           ]
-          if (parentSpan) {
-            beforeEach((done) => {
-              const parentSpan = tracer.startSpan('parent')
+
+          beforeEach((done) => {
+            if (hasParentSpan) {
+              parentSpan = tracer.startSpan('parent')
               parentSpan.finish()
               tracer.scope().activate(parentSpan, done)
-            })
-          }
+            } else {
+              storage.enterWith({})
+              done()
+            }
+          })
 
           methods.forEach(({ methodName, async }) => {
             describe(methodName, () => {
@@ -334,6 +340,30 @@ describe('Child process plugin', () => {
                   res.on('close', noop)
                 }
               })
+
+              it('should maintain previous span after the execution', (done) => {
+                const res = childProcess[methodName]('ls')
+                const span = storage.getStore()?.span
+                expect(span).to.be.equals(parentSpan)
+                if (async) {
+                  res.on('close', () => {
+                    expect(span).to.be.equals(parentSpan)
+                    done()
+                  })
+                } else {
+                  done()
+                }
+              })
+
+              if (async) {
+                it('should maintain previous span in the callback', (done) => {
+                  childProcess[methodName]('ls', () => {
+                    const span = storage.getStore()?.span
+                    expect(span).to.be.equals(parentSpan)
+                    done()
+                  })
+                })
+              }
 
               it('command should be scrubbed', (done) => {
                 const expected = {
