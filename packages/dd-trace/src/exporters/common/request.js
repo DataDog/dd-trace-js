@@ -6,9 +6,9 @@
 const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
-const { urlToHttpOptions } = require('url')
 const zlib = require('zlib')
 
+const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
 const { storage } = require('../../../../datadog-core')
