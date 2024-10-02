@@ -9,6 +9,7 @@ describe('span processor', () => {
   let AgentlessWriter
   let AgentProxyWriter
   let writer
+  let log
 
   beforeEach(() => {
     writer = {
@@ -16,11 +17,15 @@ describe('span processor', () => {
     }
     AgentlessWriter = sinon.stub().returns(writer)
     AgentProxyWriter = sinon.stub().returns(writer)
+    log = {
+      warn: sinon.stub()
+    }
 
     LLMObsSpanProcessor = proxyquire('../../src/llmobs/span_processor', {
       './writers/spans/agentless': AgentlessWriter,
       './writers/spans/agentProxy': AgentProxyWriter,
-      '../../../../package.json': { version: 'x.y.z' }
+      '../../../../package.json': { version: 'x.y.z' },
+      '../log': log
     })
   })
 
@@ -60,17 +65,6 @@ describe('span processor', () => {
       expect(processor._writer.append).to.not.have.been.called
     })
 
-    // it('should append to the writer if the span is an llm obs span', () => {
-    //   processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
-    //   processor._process = sinon.stub()
-    //   span = { context: () => ({ _tags: { 'span.type': 'llm' } }) }
-
-    //   processor.process(span)
-
-    //   expect(processor._process).to.have.been.calledOnce
-    //   expect(processor._writer.append).to.have.been.calledOnce
-    // })
-
     it('should format the span event for the writer', () => {
       span = {
         _name: 'test',
@@ -83,12 +77,12 @@ describe('span processor', () => {
               '_ml_obs.meta.span.kind': 'llm',
               '_ml_obs.meta.model_name': 'myModel',
               '_ml_obs.meta.model_provider': 'myProvider',
-              '_ml_obs.meta.metadata': JSON.stringify({ foo: 'bar' }),
+              '_ml_obs.meta.metadata': { foo: 'bar' },
               '_ml_obs.meta.ml_app': 'myApp',
               '_ml_obs.meta.input.value': 'input-value',
               '_ml_obs.meta.output.value': 'output-value',
-              '_ml_obs.meta.input.messages': '{"role":"user","content":"hello"}',
-              '_ml_obs.meta.output.messages': '{"role":"assistant","content":"world"}',
+              '_ml_obs.meta.input.messages': [{ role: 'user', content: 'hello' }],
+              '_ml_obs.meta.output.messages': [{ role: 'assistant', content: 'world' }],
               '_ml_obs.llmobs_parent_id': '1234'
             },
             toTraceId () { return '123' }, // should not use this
@@ -126,11 +120,11 @@ describe('span processor', () => {
           model_provider: 'myprovider', // should be lowercase
           input: {
             value: 'input-value',
-            messages: { role: 'user', content: 'hello' }
+            messages: [{ role: 'user', content: 'hello' }]
           },
           output: {
             value: 'output-value',
-            messages: { role: 'assistant', content: 'world' }
+            messages: [{ role: 'assistant', content: 'world' }]
           },
           metadata: { foo: 'bar' }
         },
@@ -139,6 +133,43 @@ describe('span processor', () => {
           trace_id: '123',
           span_id: '456'
         }
+      })
+
+      expect(writer.append).to.have.been.calledOnce
+    })
+
+    it('removes problematic fields from the metadata', () => {
+      // problematic fields are circular references or bigints
+      const metadata = {
+        bigint: BigInt(1),
+        deep: {
+          foo: 'bar'
+        },
+        bar: 'baz'
+      }
+      metadata.circular = metadata
+      metadata.deep.circular = metadata.deep
+      span = {
+        context () {
+          return {
+            _tags: {
+              'span.type': 'llm',
+              '_ml_obs.meta.span.kind': 'llm',
+              '_ml_obs.meta.metadata': metadata
+            },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' }
+          }
+        }
+      }
+
+      processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
+      processor.process(span)
+      const payload = writer.append.getCall(0).firstArg
+
+      expect(payload.meta.metadata).to.deep.equal({
+        bar: 'baz',
+        deep: { foo: 'bar' }
       })
     })
 
@@ -149,7 +180,7 @@ describe('span processor', () => {
             _tags: {
               'span.type': 'llm',
               '_ml_obs.meta.span.kind': 'retrieval',
-              '_ml_obs.meta.output.documents': '[{"text":"hello","name":"myDoc","id":"1","score":0.6}]'
+              '_ml_obs.meta.output.documents': [{ text: 'hello', name: 'myDoc', id: '1', score: 0.6 }]
             },
             toTraceId () { return '123' },
             toSpanId () { return '456' }
@@ -177,7 +208,7 @@ describe('span processor', () => {
             _tags: {
               'span.type': 'llm',
               '_ml_obs.meta.span.kind': 'embedding',
-              '_ml_obs.meta.input.documents': '[{"text":"hello","name":"myDoc","id":"1","score":0.6}]'
+              '_ml_obs.meta.input.documents': [{ text: 'hello', name: 'myDoc', id: '1', score: 0.6 }]
             },
             toTraceId () { return '123' },
             toSpanId () { return '456' }
@@ -335,7 +366,7 @@ describe('span processor', () => {
             _tags: {
               'span.type': 'llm',
               '_ml_obs.meta.span.kind': 'llm',
-              '_ml_obs.tags': '{"hostnam":"localhost","foo":"bar","source":"mySource"}'
+              '_ml_obs.tags': { hostname: 'localhost', foo: 'bar', source: 'mySource' }
             },
             toTraceId () { return '123' },
             toSpanId () { return '456' }
@@ -350,7 +381,7 @@ describe('span processor', () => {
 
       expect(payload.tags).to.include('foo:bar')
       expect(payload.tags).to.include('source:mySource')
-      expect(payload.tags).to.not.include('hostname:localhost')
+      expect(payload.tags).to.include('hostname:localhost')
     })
   })
 })

@@ -124,22 +124,4 @@ describe('Exporter', () => {
       expect(writer.setUrl).to.have.been.calledWith(url)
     })
   })
-
-  describe('with llmobs agentless enabled', () => {
-    beforeEach(() => {
-      exporter = new Exporter({
-        url,
-        llmobs: {
-          enabled: true,
-          agentlessEnabled: true
-        }
-      })
-    })
-
-    it('does not write the span', () => {
-      exporter.export([span])
-
-      expect(writer.append).to.not.have.been.called
-    })
-  })
 })

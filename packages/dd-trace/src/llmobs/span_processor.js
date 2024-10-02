@@ -30,6 +30,7 @@ const AgentProxyWriter = require('./writers/spans/agentProxy')
 const { isLLMSpan } = require('./util')
 
 const tracerVersion = require('../../../../package.json').version
+const logger = require('../log')
 
 class LLMObsSpanProcessor {
   constructor (config) {
@@ -45,12 +46,22 @@ class LLMObsSpanProcessor {
   process (span) {
     if (!this._config.llmobs.enabled) return
     if (!isLLMSpan(span)) return
-    const payload = this._process(span)
+    const formattedEvent = this.format(span)
 
-    this._writer.append(payload)
+    try {
+      this._writer.append(formattedEvent)
+    } catch (e) {
+      // this should be a rare case
+      // we protect against unserializable properties in the format function, and in
+      // safeguards in the tagger
+      logger.warn(`
+        Failed to append span to LLM Observability writer, likely due to an unserializable property.
+        Span won't be sent to LLM Observability: ${e.message}
+      `)
+    }
   }
 
-  _process (span) {
+  format (span) {
     const tags = span.context()._tags
     const spanKind = tags[SPAN_KIND]
 
@@ -63,25 +74,25 @@ class LLMObsSpanProcessor {
       meta.model_provider = (tags[MODEL_PROVIDER] || 'custom').toLowerCase()
     }
     if (tags[METADATA]) {
-      meta.metadata = JSON.parse(tags[METADATA])
+      this._addObject(tags[METADATA], meta.metadata = {})
     }
     if (spanKind === 'llm' && tags[INPUT_MESSAGES]) {
-      input.messages = JSON.parse(tags[INPUT_MESSAGES])
+      input.messages = tags[INPUT_MESSAGES]
     }
     if (tags[INPUT_VALUE]) {
       input.value = tags[INPUT_VALUE]
     }
     if (spanKind === 'llm' && tags[OUTPUT_MESSAGES]) {
-      output.messages = JSON.parse(tags[OUTPUT_MESSAGES])
+      output.messages = tags[OUTPUT_MESSAGES]
     }
     if (spanKind === 'embedding' && tags[INPUT_DOCUMENTS]) {
-      input.documents = JSON.parse(tags[INPUT_DOCUMENTS])
+      input.documents = tags[INPUT_DOCUMENTS]
     }
     if (tags[OUTPUT_VALUE]) {
       output.value = tags[OUTPUT_VALUE]
     }
     if (spanKind === 'retrieval' && tags[OUTPUT_DOCUMENTS]) {
-      output.documents = JSON.parse(tags[OUTPUT_DOCUMENTS])
+      output.documents = tags[OUTPUT_DOCUMENTS]
     }
 
     const error = tags.error
@@ -94,7 +105,7 @@ class LLMObsSpanProcessor {
     if (input) meta.input = input
     if (output) meta.output = output
 
-    const metrics = JSON.parse(tags[METRICS] || '{}')
+    const metrics = tags[METRICS] || {}
 
     const mlApp = tags[ML_APP]
     const sessionId = tags[SESSION_ID]
@@ -124,6 +135,37 @@ class LLMObsSpanProcessor {
     return llmObsSpanEvent
   }
 
+  // For now, this only applies to metadata, as we let users annotate this field with any object
+  // However, we want to protect against circular references or BigInts (unserializable)
+  // This function can be reused for other fields if needed
+  // Messages, Documents, and Metrics are safeguarded in `llmobs/tagger.js`
+  _addObject (obj, carrier) {
+    const seenObjects = new WeakSet()
+    seenObjects.add(obj) // capture root object
+
+    const isCircular = value => {
+      if (typeof value !== 'object') return false
+      if (seenObjects.has(value)) return true
+      seenObjects.add(value)
+      return false
+    }
+
+    const add = (obj, carrier) => {
+      for (const key in obj) {
+        const value = obj[key]
+        if (!Object.prototype.hasOwnProperty.call(obj, key)) continue
+        if (typeof value === 'bigint' || isCircular(value)) continue
+        if (typeof value === 'object') {
+          add(value, carrier[key] = {})
+        } else {
+          carrier[key] = value
+        }
+      }
+    }
+
+    add(obj, carrier)
+  }
+
   _processTags (span, mlApp, sessionId, error) {
     let tags = {
       version: this._config.version,
@@ -138,7 +180,7 @@ class LLMObsSpanProcessor {
     const errType = span.context()._tags[ERROR_TYPE] || error?.name
     if (errType) tags.error_type = errType
     if (sessionId) tags.session_id = sessionId
-    const existingTags = JSON.parse(span.context()._tags[TAGS] || '{}')
+    const existingTags = span.context()._tags[TAGS] || {}
     if (existingTags) tags = { ...tags, ...existingTags }
     return Object.entries(tags).map(([key, value]) => `${key}:${value ?? ''}`)
   }

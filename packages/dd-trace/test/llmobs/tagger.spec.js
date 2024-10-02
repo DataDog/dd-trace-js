@@ -165,14 +165,8 @@ describe('tagger', () => {
     it('tags a span with metadata', () => {
       tagger.tagMetadata(span, { a: 'foo', b: 'bar' })
       expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.metadata': '{"a":"foo","b":"bar"}'
+        '_ml_obs.meta.metadata': { a: 'foo', b: 'bar' }
       })
-    })
-
-    it('logs when metadata is not JSON serializable', () => {
-      const metadata = unserializbleObject()
-      tagger.tagMetadata(span, metadata)
-      expect(logger.warn).to.have.been.calledOnce
     })
   })
 
@@ -180,14 +174,23 @@ describe('tagger', () => {
     it('tags a span with metrics', () => {
       tagger.tagMetadata(span, { a: 1, b: 2 })
       expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.metadata': '{"a":1,"b":2}'
+        '_ml_obs.meta.metadata': { a: 1, b: 2 }
       })
     })
 
-    it('logs when metrics is not JSON serializable', () => {
-      const metadata = unserializbleObject()
-      tagger.tagMetadata(span, metadata)
-      expect(logger.warn).to.have.been.calledOnce
+    it('removes non-number entries', () => {
+      const metrics = {
+        a: 1,
+        b: 'foo',
+        c: { depth: 1 },
+        d: undefined
+      }
+      tagger.tagMetrics(span, metrics)
+      expect(span.context()._tags).to.deep.equal({
+        '_ml_obs.metrics': { a: 1 }
+      })
+
+      expect(logger.warn).to.have.been.calledThrice
     })
   })
 
@@ -196,16 +199,16 @@ describe('tagger', () => {
       const tags = { foo: 'bar' }
       tagger.tagSpanTags(span, tags)
       expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.tags': '{"foo":"bar"}'
+        '_ml_obs.tags': { foo: 'bar' }
       })
     })
 
     it('merges tags so they do not overwrite', () => {
-      span.context()._tags['_ml_obs.tags'] = '{"a":1}'
+      span.context()._tags['_ml_obs.tags'] = { a: 1 }
       const tags = { a: 2, b: 1 }
       tagger.tagSpanTags(span, tags)
       expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.tags': '{"a":1,"b":1}'
+        '_ml_obs.tags': { a: 1, b: 1 }
       })
     })
   })
@@ -224,10 +227,14 @@ describe('tagger', () => {
 
       tagger.tagLLMIO(span, inputData, outputData)
       expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.input.messages': '[{"content":"you are an amazing assistant"},' +
-        '{"content":"hello! my name is foobar"},{"content":"I am a robot","role":"assistant"},' +
-        '{"content":"I am a human","role":"user"},{"content":""}]',
-        '_ml_obs.meta.output.messages': '[{"content":"Nice to meet you, human!"}]'
+        '_ml_obs.meta.input.messages': [
+          { content: 'you are an amazing assistant' },
+          { content: 'hello! my name is foobar' },
+          { content: 'I am a robot', role: 'assistant' },
+          { content: 'I am a human', role: 'user' },
+          { content: '' }
+        ],
+        '_ml_obs.meta.output.messages': [{ content: 'Nice to meet you, human!' }]
       })
     })
 
@@ -246,7 +253,7 @@ describe('tagger', () => {
       ]
       tagger.tagLLMIO(span, inputData, outputData)
       expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.input.messages': '[{"content":"hi"}]'
+        '_ml_obs.meta.input.messages': [{ content: 'hi' }]
       })
 
       expect(logger.warn.getCall(0).firstArg).to.equal('Messages must be a string, object, or list of objects')
@@ -270,10 +277,15 @@ describe('tagger', () => {
 
         tagger.tagLLMIO(span, inputData, outputData)
         expect(span.context()._tags).to.deep.equal({
-          '_ml_obs.meta.input.messages': '[{"content":"hello","tool_calls":[{"name":"tool1"},' +
-          '{"name":"tool2","arguments":{"a":1,"b":2}}]},' +
-          '{"content":"goodbye","tool_calls":[{"name":"tool3"}]}]',
-          '_ml_obs.meta.output.messages': '[{"content":"hi","tool_calls":[{"name":"tool4"}]}]'
+          '_ml_obs.meta.input.messages': [
+            {
+              content: 'hello',
+              tool_calls: [{ name: 'tool1' }, { name: 'tool2', arguments: { a: 1, b: 2 } }]
+            }, {
+              content: 'goodbye',
+              tool_calls: [{ name: 'tool3' }]
+            }],
+          '_ml_obs.meta.output.messages': [{ content: 'hi', tool_calls: [{ name: 'tool4' }] }]
         })
       })
 
@@ -295,8 +307,14 @@ describe('tagger', () => {
 
         tagger.tagLLMIO(span, inputData, undefined)
         expect(span.context()._tags).to.deep.equal({
-          '_ml_obs.meta.input.messages': '[{"content":"a"},{"content":"b"},{"content":"c"},' +
-          '{"content":"d"},{"content":"e"},{"content":"f"},{"content":"g","tool_calls":[{"name":"tool2"}]}]'
+          '_ml_obs.meta.input.messages': [
+            { content: 'a' },
+            { content: 'b' },
+            { content: 'c' },
+            { content: 'd' },
+            { content: 'e' },
+            { content: 'f' },
+            { content: 'g', tool_calls: [{ name: 'tool2' }] }]
         })
 
         expect(logger.warn.getCall(0).firstArg).to.equal('Tool call must be an object.')
@@ -323,9 +341,13 @@ describe('tagger', () => {
       const outputData = 'embedded documents'
       tagger.tagEmbeddingIO(span, inputData, outputData)
       expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.input.documents': '[{"text":"my string document"},{"text":"my object document"},' +
-        '{"text":"foo","name":"bar"},{"text":"baz","id":"qux"},{"text":"quux","score":5},' +
-        '{"text":"foo","name":"bar","id":"qux","score":5}]',
+        '_ml_obs.meta.input.documents': [
+          { text: 'my string document' },
+          { text: 'my object document' },
+          { text: 'foo', name: 'bar' },
+          { text: 'baz', id: 'qux' },
+          { text: 'quux', score: 5 },
+          { text: 'foo', name: 'bar', id: 'qux', score: 5 }],
         '_ml_obs.meta.output.value': 'embedded documents'
       })
     })
@@ -342,7 +364,7 @@ describe('tagger', () => {
       const outputData = 'output'
       tagger.tagEmbeddingIO(span, inputData, outputData)
       expect(span.context()._tags).to.deep.equal({
-        '_ml_obs.meta.input.documents': '[{"text":"hi"}]',
+        '_ml_obs.meta.input.documents': [{ text: 'hi' }],
         '_ml_obs.meta.output.value': 'output'
       })
 
@@ -369,9 +391,13 @@ describe('tagger', () => {
       tagger.tagRetrievalIO(span, inputData, outputData)
       expect(span.context()._tags).to.deep.equal({
         '_ml_obs.meta.input.value': 'some query',
-        '_ml_obs.meta.output.documents': '[{"text":"result 1"},{"text":"result 2"},' +
-        '{"text":"foo","name":"bar"},{"text":"baz","id":"qux"},{"text":"quux","score":5},' +
-        '{"text":"foo","name":"bar","id":"qux","score":5}]'
+        '_ml_obs.meta.output.documents': [
+          { text: 'result 1' },
+          { text: 'result 2' },
+          { text: 'foo', name: 'bar' },
+          { text: 'baz', id: 'qux' },
+          { text: 'quux', score: 5 },
+          { text: 'foo', name: 'bar', id: 'qux', score: 5 }]
       })
     })
 
@@ -388,7 +414,7 @@ describe('tagger', () => {
       tagger.tagRetrievalIO(span, inputData, outputData)
       expect(span.context()._tags).to.deep.equal({
         '_ml_obs.meta.input.value': 'some query',
-        '_ml_obs.meta.output.documents': '[{"text":"hi"}]'
+        '_ml_obs.meta.output.documents': [{ text: 'hi' }]
       })
 
       expect(logger.warn.getCall(0).firstArg).to.equal('Documents must be a string, object, or list of objects.')

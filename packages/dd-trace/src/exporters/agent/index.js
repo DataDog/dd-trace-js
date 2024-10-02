@@ -42,12 +42,6 @@ class AgentExporter {
   }
 
   export (spans) {
-    const { llmobs } = this._config
-    if (llmobs.enabled && llmobs.agentlessEnabled) {
-      log.debug('LLMObs agentless mode enabled. Not sending APM spans to the agent.')
-      return
-    }
-
     this._writer.append(spans)
 
     const { flushInterval } = this._config

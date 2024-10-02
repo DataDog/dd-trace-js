@@ -78,32 +78,29 @@ class LLMObsTagger {
   }
 
   tagMetadata (span, metadata) {
-    try {
-      span.setTag(METADATA, JSON.stringify(metadata))
-    } catch {
-      logger.warn('Failed to parse span metadata. Metadata key-value pairs must be JSON serializable.')
-    }
+    span.setTag(METADATA, metadata)
   }
 
   tagMetrics (span, metrics) {
-    try {
-      span.setTag(METRICS, JSON.stringify(metrics))
-    } catch {
-      logger.warn('Failed to parse span metrics. Metrics key-value pairs must be JSON serializable.')
+    const filterdMetrics = {}
+    for (const [key, value] of Object.entries(metrics)) {
+      if (typeof value === 'number') {
+        filterdMetrics[key] = value
+      } else {
+        logger.warn(`Metric ${key} must be a number, instead got ${value}`)
+      }
     }
+
+    span.setTag(METRICS, filterdMetrics)
   }
 
   tagSpanTags (span, tags) {
     // new tags will be merged with existing tags
-    try {
-      const currentTags = span.context()._tags[TAGS]
-      if (currentTags) {
-        Object.assign(tags, JSON.parse(currentTags))
-      }
-      span.setTag(TAGS, JSON.stringify(tags))
-    } catch {
-      logger.warn('Failed to parse span tags. Tag key-value pairs must be JSON serializable.')
+    const currentTags = span.context()._tags[TAGS]
+    if (currentTags) {
+      Object.assign(tags, currentTags)
     }
+    span.setTag(TAGS, tags)
   }
 
   _tagText (span, data, key) {
@@ -127,58 +124,53 @@ class LLMObsTagger {
         data = [data]
       }
 
-      try {
-        const documents = data.map(document => {
-          if (typeof document === 'string') {
-            return { text: document }
-          }
+      const documents = data.map(document => {
+        if (typeof document === 'string') {
+          return { text: document }
+        }
 
-          if (document == null || typeof document !== 'object') {
-            logger.warn('Documents must be a string, object, or list of objects.')
+        if (document == null || typeof document !== 'object') {
+          logger.warn('Documents must be a string, object, or list of objects.')
+          return undefined
+        }
+
+        const { text, name, id, score } = document
+
+        if (typeof text !== 'string') {
+          logger.warn('Document text must be a string.')
+          return undefined
+        }
+
+        const documentObj = { text }
+
+        if (name) {
+          if (typeof name !== 'string') {
+            logger.warn('Document name must be a string.')
             return undefined
           }
+          documentObj.name = name
+        }
 
-          const { text, name, id, score } = document
-
-          if (typeof text !== 'string') {
-            logger.warn('Document text must be a string.')
+        if (id) {
+          if (typeof id !== 'string') {
+            logger.warn('Document ID must be a string.')
             return undefined
           }
+          documentObj.id = id
+        }
 
-          const documentObj = { text }
-
-          if (name) {
-            if (typeof name !== 'string') {
-              logger.warn('Document name must be a string.')
-              return undefined
-            }
-            documentObj.name = name
+        if (score) {
+          if (typeof score !== 'number') {
+            logger.warn('Document score must be a number.')
+            return undefined
           }
+          documentObj.score = score
+        }
 
-          if (id) {
-            if (typeof id !== 'string') {
-              logger.warn('Document ID must be a string.')
-              return undefined
-            }
-            documentObj.id = id
-          }
+        return documentObj
+      }).filter(doc => !!doc)
 
-          if (score) {
-            if (typeof score !== 'number') {
-              logger.warn('Document score must be a number.')
-              return undefined
-            }
-            documentObj.score = score
-          }
-
-          return documentObj
-        }).filter(doc => !!doc)
-
-        span.setTag(key, JSON.stringify(documents))
-      } catch {
-        const type = key === INPUT_DOCUMENTS ? 'input' : 'output'
-        logger.warn(`Failed to parse ${type} documents.`)
-      }
+      span.setTag(key, documents)
     }
   }
 
@@ -188,97 +180,92 @@ class LLMObsTagger {
         data = [data]
       }
 
-      try {
-        const messages = data.map(message => {
-          if (typeof message === 'string') {
-            return { content: message }
-          }
+      const messages = data.map(message => {
+        if (typeof message === 'string') {
+          return { content: message }
+        }
 
-          if (message == null || typeof message !== 'object') {
-            logger.warn('Messages must be a string, object, or list of objects')
+        if (message == null || typeof message !== 'object') {
+          logger.warn('Messages must be a string, object, or list of objects')
+          return undefined
+        }
+
+        const { content = '', role } = message
+        let toolCalls = message.toolCalls
+        const messageObj = { content }
+
+        if (typeof content !== 'string') {
+          logger.warn('Message content must be a string.')
+          return undefined
+        }
+
+        if (role) {
+          if (typeof role !== 'string') {
+            logger.warn('Message role must be a string.')
             return undefined
           }
+          messageObj.role = role
+        }
 
-          const { content = '', role } = message
-          let toolCalls = message.toolCalls
-          const messageObj = { content }
-
-          if (typeof content !== 'string') {
-            logger.warn('Message content must be a string.')
-            return undefined
+        if (toolCalls) {
+          if (!Array.isArray(toolCalls)) {
+            toolCalls = [toolCalls]
           }
 
-          if (role) {
-            if (typeof role !== 'string') {
-              logger.warn('Message role must be a string.')
+          const filteredToolCalls = toolCalls.map(toolCall => {
+            if (typeof toolCall !== 'object') {
+              logger.warn('Tool call must be an object.')
               return undefined
             }
-            messageObj.role = role
-          }
 
-          if (toolCalls) {
-            if (!Array.isArray(toolCalls)) {
-              toolCalls = [toolCalls]
-            }
+            const { name, arguments: args, toolId, type } = toolCall
+            const toolCallObj = {}
 
-            const filteredToolCalls = toolCalls.map(toolCall => {
-              if (typeof toolCall !== 'object') {
-                logger.warn('Tool call must be an object.')
+            if (name) {
+              if (typeof name !== 'string') {
+                logger.warn('Tool name must be a string.')
                 return undefined
               }
-
-              const { name, arguments: args, toolId, type } = toolCall
-              const toolCallObj = {}
-
-              if (name) {
-                if (typeof name !== 'string') {
-                  logger.warn('Tool name must be a string.')
-                  return undefined
-                }
-                toolCallObj.name = name
-              }
-
-              if (args) {
-                if (typeof args !== 'object') {
-                  logger.warn('Tool arguments must be an object.')
-                  return undefined
-                }
-                toolCallObj.arguments = args
-              }
-
-              if (toolId) {
-                if (typeof toolId !== 'string') {
-                  logger.warn('Tool ID must be a string.')
-                  return undefined
-                }
-                toolCallObj.toolId = toolId
-              }
-
-              if (type) {
-                if (typeof type !== 'string') {
-                  logger.warn('Tool type must be a string.')
-                  return undefined
-                }
-                toolCallObj.type = type
-              }
-
-              return toolCallObj
-            }).filter(toolCall => !!toolCall)
-
-            if (filteredToolCalls.length) {
-              messageObj.tool_calls = filteredToolCalls
+              toolCallObj.name = name
             }
+
+            if (args) {
+              if (typeof args !== 'object') {
+                logger.warn('Tool arguments must be an object.')
+                return undefined
+              }
+              toolCallObj.arguments = args
+            }
+
+            if (toolId) {
+              if (typeof toolId !== 'string') {
+                logger.warn('Tool ID must be a string.')
+                return undefined
+              }
+              toolCallObj.toolId = toolId
+            }
+
+            if (type) {
+              if (typeof type !== 'string') {
+                logger.warn('Tool type must be a string.')
+                return undefined
+              }
+              toolCallObj.type = type
+            }
+
+            return toolCallObj
+          }).filter(toolCall => !!toolCall)
+
+          if (filteredToolCalls.length) {
+            messageObj.tool_calls = filteredToolCalls
           }
-
-          return messageObj
-        }).filter(msg => !!msg)
-
-        if (messages.length) {
-          span.setTag(key, JSON.stringify(messages))
         }
-      } catch {
-        const type = key === INPUT_MESSAGES ? 'input' : 'output'
-        logger.warn(`Failed to parse ${type} messages.`)
+
+        return messageObj
+      }).filter(msg => !!msg)
+
+      if (messages.length) {
+        span.setTag(key, messages)
       }
     }
   }
