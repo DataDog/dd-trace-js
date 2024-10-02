@@ -113,7 +113,7 @@ class Kinesis extends BaseAwsSdkPlugin {
       const parsedAttributes = JSON.parse(Buffer.from(record.Data).toString())
 
       if (
-        parsedAttributes?._datadog && streamName && DsmPathwayCodec.contextExists(parsedAttributes._datadog)
+        parsedAttributes?._datadog && streamName
       ) {
         const payloadSize = getSizeOrZero(record.Data)
         this.tracer.decodeDataStreamsContext(parsedAttributes._datadog)
