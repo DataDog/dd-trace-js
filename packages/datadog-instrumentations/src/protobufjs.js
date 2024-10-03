@@ -1,32 +1,50 @@
 const shimmer = require('../../datadog-shimmer')
 const { addHook, AsyncResource } = require('./helpers/instrument')
 
-const tracingChannel = require('dc-polyfill').tracingChannel
-const serializeChannel = tracingChannel('apm:protobufjs:serialize')
-const deserializeChannel = tracingChannel('apm:protobufjs:deserialize')
+const dc = require('dc-polyfill')
+const serializeChannel = dc.channel('apm:protobufjs:serialize:start')
+const deserializeChannel = dc.channel('apm:protobufjs:deserialize:end')
 
 function wrapSerialization (messageClass) {
   if (messageClass?.encode) {
-    wrapOperation(messageClass, 'encode', serializeChannel.start)
+    shimmer.wrap(messageClass, 'encode', original => {
+      return function wrappedMethod (...args) {
+        if (!serializeChannel.hasSubscribers) {
+          return original.apply(this, args)
+        }
+
+        const asyncResource = new AsyncResource('bound-anonymous-fn')
+
+        asyncResource.runInAsyncScope(() => {
+          serializeChannel.publish({ messageClass: this })
+        })
+
+        return original.apply(this, args)
+      }
+    })
   }
 }
 
 function wrapDeserialization (messageClass) {
   if (messageClass?.decode) {
-    wrapOperation(messageClass, 'decode', deserializeChannel.end)
+    shimmer.wrap(messageClass, 'decode', original => {
+      return function wrappedMethod (...args) {
+        if (!deserializeChannel.hasSubscribers) {
+          return original.apply(this, args)
+        }
+
+        const asyncResource = new AsyncResource('bound-anonymous-fn')
+
+        const result = original.apply(this, args)
+
+        asyncResource.runInAsyncScope(() => {
+          deserializeChannel.publish({ messageClass: result })
+        })
+
+        return result
+      }
+    })
   }
-}
-
-function wrapOperation (messageClass, operationName, channel) {
-  shimmer.wrap(messageClass, operationName, original => {
-    return function wrappedMethod (...args) {
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-      return asyncResource.runInAsyncScope(() => {
-        return channel.traceSync(original, { messageClass, operationName, args }, this, ...args)
-      })
-    }
-  })
 }
 
 function wrapSetup (messageClass) {
