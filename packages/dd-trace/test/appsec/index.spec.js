@@ -46,6 +46,7 @@ describe('AppSec Index', function () {
   let graphql
   let apiSecuritySampler
   let rasp
+  let sampler
 
   const RULES = { rules: [{ a: 1 }] }
 
@@ -78,6 +79,10 @@ describe('AppSec Index', function () {
       root: sinon.stub()
     }
 
+    sampler = sinon.stub().returns({
+      isSampled: sinon.stub()
+    })
+
     blocking = {
       setTemplates: sinon.stub()
     }
@@ -103,7 +108,8 @@ describe('AppSec Index', function () {
     }
 
     apiSecuritySampler = proxyquire('../../src/appsec/api_security_sampler', {
-      '../plugins/util/web': web
+      '../plugins/util/web': web,
+      '../priority_sampler': sampler
     })
     sinon.spy(apiSecuritySampler, 'sampleRequest')
 
@@ -549,9 +555,12 @@ describe('AppSec Index', function () {
         statusCode: 201
       }
 
-      const rootSpan = { context: () => ({ _sampling: { priority: 2 } }) }
+      const span = {
+        context: sinon.stub().returns({})
+      }
 
-      web.root.returns(rootSpan)
+      web.root.returns(span)
+      sampler().isSampled.returns(true)
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
