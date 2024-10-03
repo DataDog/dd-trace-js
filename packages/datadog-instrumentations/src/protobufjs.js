@@ -93,7 +93,7 @@ function isPromise (obj) {
 
 addHook({
   name: 'protobufjs',
-  versions: ['>=6.0.0']
+  versions: ['>=6.8.0']
 }, protobuf => {
   shimmer.wrap(protobuf.Root.prototype, 'load', original => function () {
     const result = original.apply(this, arguments)
