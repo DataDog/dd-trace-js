@@ -1,11 +1,14 @@
 'use strict'
 
+const { hostname: getHostname } = require('os')
+
 const config = require('./config')
 const request = require('../../exporters/common/request')
 
 module.exports = send
 
 const ddsource = 'dd_debugger'
+const hostname = getHostname()
 const service = config.service
 
 function send (message, logger, snapshot, cb) {
@@ -18,6 +21,7 @@ function send (message, logger, snapshot, cb) {
 
   const payload = {
     ddsource,
+    hostname,
     service,
     message,
     logger,

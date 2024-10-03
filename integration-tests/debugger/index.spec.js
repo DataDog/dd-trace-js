@@ -2,6 +2,8 @@
 
 const path = require('path')
 const { randomUUID } = require('crypto')
+const os = require('os')
+
 const getPort = require('get-port')
 const Axios = require('axios')
 const { assert } = require('chai')
@@ -283,6 +285,7 @@ describe('Dynamic Instrumentation', function () {
       agent.on('debugger-input', ({ payload }) => {
         const expected = {
           ddsource: 'dd_debugger',
+          hostname: os.hostname(),
           service: 'node',
           message: 'Hello World!',
           logger: {
