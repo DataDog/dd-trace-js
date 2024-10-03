@@ -1,61 +1,51 @@
 'use strict'
 
-const log = require('../log')
+const ApiSecuritySamplerCache = require('./api_security_sampler_cache')
+const web = require('../plugins/util/web')
+const { USER_KEEP, AUTO_KEEP } = require('../../../../ext/priority')
 
 let enabled
-let requestSampling
-
-const sampledRequests = new WeakSet()
+let sampledRequests
 
 function configure ({ apiSecurity }) {
   enabled = apiSecurity.enabled
-  setRequestSampling(apiSecurity.requestSampling)
+  sampledRequests = new ApiSecuritySamplerCache(apiSecurity.sampleDelay)
 }
 
 function disable () {
   enabled = false
+  sampledRequests?.clear()
 }
 
-function setRequestSampling (sampling) {
-  requestSampling = parseRequestSampling(sampling)
-}
+function sampleRequest (req, res) {
+  if (!enabled) return false
 
-function parseRequestSampling (requestSampling) {
-  let parsed = parseFloat(requestSampling)
+  const rootSpan = web.root(req)
+  if (!rootSpan) return false
 
-  if (isNaN(parsed)) {
-    log.warn(`Incorrect API Security request sampling value: ${requestSampling}`)
+  const priority = getSpanPriority(rootSpan)
 
-    parsed = 0
-  } else {
-    parsed = Math.min(1, Math.max(0, parsed))
-  }
-
-  return parsed
-}
-
-function sampleRequest (req) {
-  if (!enabled || !requestSampling) {
+  if (priority !== AUTO_KEEP && priority !== USER_KEEP) {
     return false
   }
 
-  const shouldSample = Math.random() <= requestSampling
+  const key = sampledRequests.computeKey(req, res)
+  const isSampled = sampledRequests.isSampled(key)
 
-  if (shouldSample) {
-    sampledRequests.add(req)
-  }
+  if (isSampled) return false
 
-  return shouldSample
+  sampledRequests.set(key)
+
+  return true
 }
 
-function isSampled (req) {
-  return sampledRequests.has(req)
+function getSpanPriority (span) {
+  const spanContext = span.context?.()
+  return spanContext._sampling?.priority // default ??
 }
 
 module.exports = {
   configure,
   disable,
-  setRequestSampling,
-  sampleRequest,
-  isSampled
+  sampleRequest
 }

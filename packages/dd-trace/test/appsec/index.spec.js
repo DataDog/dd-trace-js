@@ -69,7 +69,7 @@ describe('AppSec Index', function () {
         },
         apiSecurity: {
           enabled: false,
-          requestSampling: 0
+          sampleDelay: 10
         },
         rasp: {
           enabled: true
@@ -105,9 +105,10 @@ describe('AppSec Index', function () {
       disable: sinon.stub()
     }
 
-    apiSecuritySampler = require('../../src/appsec/api_security_sampler')
+    apiSecuritySampler = proxyquire('../../src/appsec/api_security_sampler', {
+      '../plugins/util/web': web
+    })
     sinon.spy(apiSecuritySampler, 'sampleRequest')
-    sinon.spy(apiSecuritySampler, 'isSampled')
 
     rasp = {
       enable: sinon.stub(),
@@ -474,45 +475,10 @@ describe('AppSec Index', function () {
       web.root.returns(rootSpan)
     })
 
-    it('should not trigger schema extraction with sampling disabled', () => {
-      config.appsec.apiSecurity = {
-        enabled: true,
-        requestSampling: 0
-      }
-
-      AppSec.enable(config)
-
-      const req = {
-        url: '/path',
-        headers: {
-          'user-agent': 'Arachni',
-          host: 'localhost',
-          cookie: 'a=1;b=2'
-        },
-        method: 'POST',
-        socket: {
-          remoteAddress: '127.0.0.1',
-          remotePort: 8080
-        }
-      }
-      const res = {}
-
-      AppSec.incomingHttpStartTranslator({ req, res })
-
-      expect(waf.run).to.have.been.calledOnceWithExactly({
-        persistent: {
-          'server.request.uri.raw': '/path',
-          'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
-          'server.request.method': 'POST',
-          'http.client_ip': '127.0.0.1'
-        }
-      }, req)
-    })
-
     it('should not trigger schema extraction with feature disabled', () => {
       config.appsec.apiSecurity = {
         enabled: false,
-        requestSampling: 1
+        sampleDelay: 1
       }
 
       AppSec.enable(config)
@@ -528,18 +494,34 @@ describe('AppSec Index', function () {
         socket: {
           remoteAddress: '127.0.0.1',
           remotePort: 8080
+        },
+        body: {
+          a: '1'
+        },
+        query: {
+          b: '2'
+        },
+        route: {
+          path: '/path/:c'
         }
       }
-      const res = {}
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-lenght': 42
+        }),
+        statusCode: 201
+      }
 
-      AppSec.incomingHttpStartTranslator({ req, res })
+      web.patch(req)
+
+      sinon.stub(Reporter, 'finishRequest')
+      AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
         persistent: {
-          'server.request.uri.raw': '/path',
-          'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
-          'server.request.method': 'POST',
-          'http.client_ip': '127.0.0.1'
+          'server.request.body': { a: '1' },
+          'server.request.query': { b: '2' }
         }
       }, req)
     })
@@ -547,7 +529,7 @@ describe('AppSec Index', function () {
     it('should trigger schema extraction with sampling enabled', () => {
       config.appsec.apiSecurity = {
         enabled: true,
-        requestSampling: 1
+        sampleDelay: 1
       }
 
       AppSec.enable(config)
@@ -556,25 +538,34 @@ describe('AppSec Index', function () {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          host: 'localhost',
-          cookie: 'a=1;b=2'
+          host: 'localhost'
         },
         method: 'POST',
         socket: {
           remoteAddress: '127.0.0.1',
           remotePort: 8080
+        },
+        body: {
+          a: '1'
         }
       }
-      const res = {}
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-lenght': 42
+        }),
+        statusCode: 201
+      }
 
-      AppSec.incomingHttpStartTranslator({ req, res })
+      const rootSpan = { context: () => ({ _sampling: { priority: 2 } }) }
+
+      web.root.returns(rootSpan)
+
+      AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
         persistent: {
-          'server.request.uri.raw': '/path',
-          'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
-          'server.request.method': 'POST',
-          'http.client_ip': '127.0.0.1',
+          'server.request.body': { a: '1' },
           'waf.context.processor': { 'extract-schema': true }
         }
       }, req)
@@ -584,7 +575,7 @@ describe('AppSec Index', function () {
       beforeEach(() => {
         config.appsec.apiSecurity = {
           enabled: true,
-          requestSampling: 1
+          sampleDelay: 1
         }
         AppSec.enable(config)
       })
@@ -597,28 +588,15 @@ describe('AppSec Index', function () {
         responseBody.publish({ req: {}, body: 'string' })
         responseBody.publish({ req: {}, body: null })
 
-        expect(apiSecuritySampler.isSampled).to.not.been.called
         expect(waf.run).to.not.been.called
       })
 
-      it('should not call to the waf if it is not a sampled request', () => {
-        apiSecuritySampler.isSampled = apiSecuritySampler.isSampled.instantiateFake(() => false)
-        const req = {}
-
-        responseBody.publish({ req, body: {} })
-
-        expect(apiSecuritySampler.isSampled).to.have.been.calledOnceWith(req)
-        expect(waf.run).to.not.been.called
-      })
-
-      it('should call to the waf if it is a sampled request', () => {
-        apiSecuritySampler.isSampled = apiSecuritySampler.isSampled.instantiateFake(() => true)
+      it('should call to the waf if body is an object', () => {
         const req = {}
         const body = {}
 
         responseBody.publish({ req, body })
 
-        expect(apiSecuritySampler.isSampled).to.have.been.calledOnceWith(req)
         expect(waf.run).to.been.calledOnceWith({
           persistent: {
             [addresses.HTTP_INCOMING_RESPONSE_BODY]: body
