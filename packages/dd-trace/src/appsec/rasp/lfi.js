@@ -10,6 +10,7 @@ const { isAbsolute } = require('path')
 
 let config
 let enabled
+let analyzeSubscribed
 
 function enable (_config) {
   config = _config
@@ -28,6 +29,7 @@ function disable () {
   disableFsPlugin(RASP_MODULE)
 
   enabled = false
+  analyzeSubscribed = false
 }
 
 function onFirstReceivedRequest () {
@@ -38,7 +40,10 @@ function onFirstReceivedRequest () {
 
   enableFsPlugin(RASP_MODULE)
 
-  fsOperationStart.subscribe(analyzeLfi)
+  if (!analyzeSubscribed) {
+    fsOperationStart.subscribe(analyzeLfi)
+    analyzeSubscribed = true
+  }
 }
 
 function analyzeLfi (ctx) {
