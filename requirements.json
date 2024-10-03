@@ -26,23 +26,19 @@
     "musl": [{
       "arch": "arm",
       "supported": true,
-      "description": "From alpine 3.13",
-      "min": "1.2"
+      "description": "From alpine 3.13"
     },{
       "arch": "arm64",
       "supported": true,
-      "description": "From alpine 3.13",
-      "min": "1.2"
+      "description": "From alpine 3.13"
     },{
       "arch": "x64",
       "supported": true,
-      "description": "From alpine 3.13",
-      "min": "1.2"
+      "description": "From alpine 3.13"
     },{
       "arch": "x86",
       "supported": true,
-      "description": "From alpine 3.13",
-      "min": "1.2"
+      "description": "From alpine 3.13"
     }]
   },
   "deny": [
