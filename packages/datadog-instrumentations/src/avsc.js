@@ -1,22 +1,24 @@
 const shimmer = require('../../datadog-shimmer')
 const { addHook, AsyncResource } = require('./helpers/instrument')
-const tracingChannel = require('dc-polyfill').tracingChannel
 
-const serializeCh = tracingChannel('apm:avsc:serialize')
-const deserializeCh = tracingChannel('apm:avsc:deserialize')
+const dc = require('dc-polyfill')
+const serializeChannel = dc.channel('apm:avsc:serialize')
+const deserializeChannel = dc.channel('apm:avsc:deserialize')
 
 function wrapSerialization (Type) {
   shimmer.wrap(Type.prototype, 'toBuffer', original => {
     return function wrappedToBuffer (...args) {
-      if (!serializeCh.start.hasSubscribers && !serializeCh.end.hasSubscribers) {
+      if (!serializeChannel.hasSubscribers) {
         return original.apply(this, args)
       }
 
       const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-      return asyncResource.runInAsyncScope(() => {
-        return serializeCh.traceSync(() => original.apply(this, args), { type: this })
+      asyncResource.runInAsyncScope(() => {
+        serializeChannel.publish({ messageClass: this })
       })
+
+      return original.apply(this, args)
     }
   })
 }
@@ -24,15 +26,19 @@ function wrapSerialization (Type) {
 function wrapDeserialization (Type) {
   shimmer.wrap(Type.prototype, 'fromBuffer', original => {
     return function wrappedFromBuffer (...args) {
-      if (!deserializeCh.start.hasSubscribers && !deserializeCh.end.hasSubscribers) {
+      if (!deserializeChannel.hasSubscribers) {
         return original.apply(this, args)
       }
 
       const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-      return asyncResource.runInAsyncScope(() => {
-        return deserializeCh.traceSync(() => original.apply(this, args), { type: this })
+      const result = original.apply(this, args)
+
+      asyncResource.runInAsyncScope(() => {
+        deserializeChannel.publish({ messageClass: result })
       })
+
+      return result
     }
   })
 }

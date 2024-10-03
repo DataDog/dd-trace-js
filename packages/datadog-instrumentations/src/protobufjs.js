@@ -8,7 +8,7 @@ const deserializeChannel = dc.channel('apm:protobufjs:deserialize:end')
 function wrapSerialization (messageClass) {
   if (messageClass?.encode) {
     shimmer.wrap(messageClass, 'encode', original => {
-      return function wrappedMethod (...args) {
+      return function wrappedEncode (...args) {
         if (!serializeChannel.hasSubscribers) {
           return original.apply(this, args)
         }
@@ -28,7 +28,7 @@ function wrapSerialization (messageClass) {
 function wrapDeserialization (messageClass) {
   if (messageClass?.decode) {
     shimmer.wrap(messageClass, 'decode', original => {
-      return function wrappedMethod (...args) {
+      return function wrappedDecode (...args) {
         if (!deserializeChannel.hasSubscribers) {
           return original.apply(this, args)
         }
