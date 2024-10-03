@@ -532,12 +532,101 @@ const otelSpanId: string = spanContext.spanId
 const otelTraceFlags: number = spanContext.traceFlags
 const otelTraceState: opentelemetry.TraceState = spanContext.traceState!
 
-const { llmobs } = tracer
-// 
-const span = llmobs.startSpan('llm')
-tracer.trace('something', (span) => {
-  
+// -- LLM Observability --
+tracer.init({
+  llmobs: {
+    apiKey: 'dd-api-key',
+    mlApp: 'mlApp',
+    agentlessEnabled: true
+  }
 })
-llmobs.trace('llm', (span) => {
-  
+const llmobs = tracer.llmobs
+const enabled = llmobs.enabled
+
+// manually enable
+llmobs.enable({
+  apiKey: 'dd-api-key',
+  mlApp: 'mlApp',
+  agentlessEnabled: true
 })
+
+// manually disable
+llmobs.disable()
+
+// start span in current context
+const baseOptions = { name: 'mySpan', sessionId: '123', mlApp: 'mlApp' }
+const modelOptions = { ...baseOptions, modelName: 'myModel', modelProvider: 'myProvider'}
+llmobs.startSpan('llm')
+llmobs.startSpan('llm', modelOptions)
+llmobs.startSpan('embedding')
+llmobs.startSpan('embedding', modelOptions)
+llmobs.startSpan('agent')
+llmobs.startSpan('agent', baseOptions)
+llmobs.startSpan('retrieval')
+llmobs.startSpan('retrieval', baseOptions)
+llmobs.startSpan('task')
+llmobs.startSpan('task', baseOptions)
+llmobs.startSpan('tool')
+llmobs.startSpan('tool', baseOptions)
+llmobs.startSpan('workflow')
+llmobs.startSpan('workflow', baseOptions)
+
+// trace block of code
+llmobs.trace('llm', () => {})
+llmobs.trace('llm', { name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, () => {})
+llmobs.trace('llm', (span, cb) => {
+  span.setTag('foo', 'bar')
+  cb(new Error('boom'))
+})
+
+// wrap a function
+llmobs.wrap('llm', function myLLM () {})()
+llmobs.wrap('llm', { name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myLLM () {})()
+
+// decorate a function
+class MyClass {
+  @llmobs.decorate('llm')
+  myLLM () {}
+
+  @llmobs.decorate('llm', { name: 'myOtherLLM', modelName: 'myModel', modelProvider: 'myProvider' })
+  myOtherLLM () {}
+}
+
+const cls = new MyClass()
+cls.myLLM()
+cls.myOtherLLM()
+
+// export a span
+llmobs.exportSpan()
+const llmobsSpanCtx = llmobs.exportSpan(span)
+llmobsSpanCtx.traceId;
+llmobsSpanCtx.spanId;
+
+// annotate a span
+llmobs.annotate({
+  inputData: 'input',
+  outputData: 'output',
+  metadata: {},
+  metrics: {},
+  tags: {}
+})
+llmobs.annotate(span, {
+  inputData: 'input',
+  outputData: 'output',
+  metadata: {},
+  metrics: {},
+  tags: {}
+})
+
+// submit evaluation
+llmobs.submitEvaluation(llmobsSpanCtx, {
+  label: 'my-eval-metric',
+  metricType: 'categorical',
+  value: 'good',
+  mlApp: 'myApp',
+  tags: {},
+  timestampMs: Date.now()
+})
+
+// flush
+llmobs.flush()

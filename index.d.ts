@@ -2213,8 +2213,8 @@ declare namespace tracer {
        * @param options Options for the span.
        * @returns The newly created span.
        */
-      startSpan(kind: 'llm' | 'embedding', options?: llmobs.LLMObsModelOptions): tracer.Span
-      startSpan(kind: 'workflow' | 'agent' | 'retrieval' | 'task' | 'tool', options?: llmobs.LLMObsBaseSpanOptions): tracer.Span
+      startSpan(kind: llmobs.modelSpanKind, options?: llmobs.LLMObsModelOptions): tracer.Span
+      startSpan(kind: llmobs.baseSpanKind, options?: llmobs.LLMObsBaseSpanOptions): tracer.Span
       // startSpan(kind: llmobs.spanKind): tracer.Span
       // startSpan(kind: llmobs.spanKind, options: llmobs.LLMObsSpanOptions): tracer.Span
       
@@ -2236,9 +2236,12 @@ declare namespace tracer {
        * @param fn The function to instrument.
        * @returns The return value of the function.
        */
-      trace<T> (kind: llmobs.spanKind, fn: (span?: tracer.Span, done?: (error?: Error) => void) => T): T
-      trace<T> (kind: llmobs.modelSpanKind, options: llmobs.LLMObsModelOptions, fn: (span?: tracer.Span, done?: (error?: Error) => void) => T): T
-      trace<T> (kind: llmobs.baseSpanKind, options: llmobs.LLMObsBaseSpanOptions, fn: (span?: tracer.Span, done?: (error?: Error) => void) => T): T
+      // trace<T> (name: string, fn: (span: tracer.Span) => T): T;
+      // trace<T> (name: string, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T;
+      // trace<T> (name: string, options: tracer.TraceOptions & tracer.SpanOptions, fn: (span?: tracer.Span, done?: (error?: Error) => void) => T): T;
+      trace<T> (kind: llmobs.spanKind, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T
+      trace<T> (kind: llmobs.modelSpanKind, options: llmobs.LLMObsModelOptions, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T
+      trace<T> (kind: llmobs.baseSpanKind, options: llmobs.LLMObsBaseSpanOptions, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T
 
       /**
        * Wrap a function to automatically create a span activated on its
@@ -2290,8 +2293,8 @@ declare namespace tracer {
        * @param span The span to annotate (defaults to the current LLM Observability span if not provided)
        * @param options An object containing the parameters, inputs, outputs, tags, and metrics to set on the span.
        */
-      annotate(options: llmobs.ConditionalAnnotationOptions<tracer.Span>): void
-      annotate(span: tracer.Span, options: llmobs.ConditionalAnnotationOptions<tracer.Span>): void
+      annotate(options: llmobs.AnnotationOptions): void
+      annotate(span: tracer.Span, options: llmobs.AnnotationOptions): void
 
       /**
        * Submits a custom evalutation metric for a given span ID and trace ID.
@@ -2411,64 +2414,6 @@ declare namespace tracer {
        */
       tags?: { [key: string]: any }
     }
-
-    interface BaseAnnotationOptions {
-      /**
-       * A single input string, object, or a list of objects based on the span kind:
-       * 1. LLM spans: accepts a string, or an object of the form {content: "...", role: "..."}, or a list of objects with the same signature.
-       * 2. Embedding spans: accepts a string, list of strings, or an object of the form {text: "...", ...}, or a list of objects with the same signature.
-       * 3. Other: any JSON serializable type
-       */
-      inputData?: string | { [key: string]: any },
-
-      /**
-       * A single output string, object, or a list of objects based on the span kind:
-       * 1. LLM spans: accepts sa string, or an object of the form {content: "...", role: "..."}, or a list of objects with the same signature.
-       * 2. Retrieval spans: An object containing any of the key value pairs {name: str, id: str, text: str, source: number} or a list of dictionaries with the same signature.
-       * 3. Other: any JSON serializable type
-       */
-      outputData?: string | { [key: string]: any },
-
-      /**
-       * Object of JSON serializable key-value metadata pairs relevant to the input/output operation described by the LLM Observability span.
-       */
-      metadata?: { [key: string]: any },
-
-      /**
-       * Object of JSON seraliazable key-value metrics (number) pairs, such as `{prompt,completion,total}_tokens`
-       */
-      metrics?: { [key: string]: number },
-
-      /**
-       * Object of JSON serializable key-value tag pairs to set or update on the LLM Observability span regarding the span's context.
-       */
-      tags?: { [key: string]: any }
-    }
-
-    interface LLMAnnotationOptions extends BaseAnnotationOptions {
-      inputData: BaseAnnotationOptions['inputData'] | Message | Message[],
-      outputData: BaseAnnotationOptions['outputData'] | Message | Message[],
-    }
-
-    interface EmbeddingAnnotationOptions extends BaseAnnotationOptions {
-      inputData: BaseAnnotationOptions['inputData'] | Document | Document[],
-    }
-
-    interface RetrievalAnnotationOptions extends BaseAnnotationOptions {
-      outputData: BaseAnnotationOptions['outputData'] | Document | Document[],
-    }
-
-    type SpecificLLMObsAnnotationOptions = {
-      'llm': LLMAnnotationOptions,
-      'embedding': EmbeddingAnnotationOptions,
-      'retrieval': RetrievalAnnotationOptions
-    }
-
-    // @ts-ignore
-    type ConditionalAnnotationOptions<T extends Span> = T['context']['_tags']['span.type'] extends keyof SpecificLLMObsAnnotationOptions
-      // @ts-ignore
-      ? SpecificLLMObsAnnotationOptions[T['context']['_tags']['span.type']]
-      : BaseAnnotationOptions
 
     /**
      * An object containing the span ID and trace ID of interest
