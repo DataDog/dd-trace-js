@@ -1,11 +1,12 @@
 'use strict'
 
 const ApiSecuritySamplerCache = require('./api_security_sampler_cache')
+const PrioritySampler = require('../priority_sampler')
 const web = require('../plugins/util/web')
-const { USER_KEEP, AUTO_KEEP } = require('../../../../ext/priority')
 
 let enabled
 let sampledRequests
+const prioritySampler = new PrioritySampler()
 
 function configure ({ apiSecurity }) {
   enabled = apiSecurity.enabled
@@ -23,25 +24,20 @@ function sampleRequest (req, res) {
   const rootSpan = web.root(req)
   if (!rootSpan) return false
 
-  const priority = getSpanPriority(rootSpan)
+  const isSampled = prioritySampler.isSampled(rootSpan)
 
-  if (priority !== AUTO_KEEP && priority !== USER_KEEP) {
+  if (!isSampled) {
     return false
   }
 
   const key = sampledRequests.computeKey(req, res)
-  const isSampled = sampledRequests.isSampled(key)
+  const alreadySampled = sampledRequests.isSampled(key)
 
-  if (isSampled) return false
+  if (alreadySampled) return false
 
   sampledRequests.set(key)
 
   return true
-}
-
-function getSpanPriority (span) {
-  const spanContext = span.context?.()
-  return spanContext._sampling?.priority // default ??
 }
 
 module.exports = {
