@@ -2307,6 +2307,11 @@ declare namespace tracer {
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
        */
       flush(): void
+
+      /**
+       * The current active LLMObs span. Undefined if there is no active LLMObs span.
+       */
+      active(): tracer.Span | undefined
     }
 
     interface EvaluationOptions {

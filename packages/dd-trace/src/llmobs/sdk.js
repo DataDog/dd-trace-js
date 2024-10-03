@@ -96,12 +96,12 @@ class LLMObs {
     }
 
     if (!span) {
-      span = this._active()
+      span = this.active()
     }
 
     if ((span && !options) && !(span instanceof Span)) {
       options = span
-      span = this._active()
+      span = this.active()
     }
 
     if (!span) {
@@ -161,7 +161,7 @@ class LLMObs {
       return
     }
 
-    span = span || this._active()
+    span = span || this.active()
 
     if (!span) {
       logger.warn('No span provided and no active LLMObs-generated span found')
@@ -258,16 +258,23 @@ class LLMObs {
       }
     }
 
-    this._evaluationWriter.append({
-      span_id: spanId,
-      trace_id: traceId,
-      label,
-      metric_type: metricType,
-      ml_app: mlApp,
-      [`${metricType}_value`]: value,
-      timestamp_ms: timestampMs,
-      tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`)
-    })
+    try {
+      this._evaluationWriter.append({
+        span_id: spanId,
+        trace_id: traceId,
+        label,
+        metric_type: metricType,
+        ml_app: mlApp,
+        [`${metricType}_value`]: value,
+        timestamp_ms: timestampMs,
+        tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`)
+      })
+    } catch (e) {
+      logger.warn(`
+        Failed to append evaluation metric to LLM Observability writer, likely due to an unserializable property.
+        Span won't be sent to LLM Observability: ${e.message}
+      `)
+    }
   }
 
   startSpan (kind, options = {}) {
@@ -482,7 +489,7 @@ class LLMObs {
     }
   }
 
-  _active () {
+  active () {
     const store = storage.getStore()
     return store?.llmobsSpan
   }

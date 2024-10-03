@@ -630,3 +630,5 @@ llmobs.submitEvaluation(llmobsSpanCtx, {
 
 // flush
 llmobs.flush()
+
+const llmobsSpan: Span | undefined = llmobs.active()
