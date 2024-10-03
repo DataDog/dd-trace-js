@@ -14,11 +14,14 @@ const {
 } = require('../../dd-trace/src/constants')
 const sinon = require('sinon')
 const { loadMessage } = require('./helpers')
-// const { SchemaBuilder } = require('../../dd-trace/src/datastreams/schemas/schema_builder')
 
-const schemas = JSON.parse(fs.readFileSync(path.join(__dirname, 'schemas/expected_schemas.json'), 'utf8'))
-const BASIC_USER_SCHEMA_DEF = schemas.User
-const ADVANCED_USER_SCHEMA_DEF = schemas.AdvancedUser
+
+const BASIC_USER_SCHEMA_DEF = JSON.parse(
+  fs.readFileSync(path.join(__dirname, 'schemas/expected_user_schema.json'), 'utf8')
+)
+const ADVANCED_USER_SCHEMA_DEF = JSON.parse(
+  fs.readFileSync(path.join(__dirname, 'schemas/expected_advanced_user_schema.json'), 'utf8')
+)
 
 const BASIC_USER_SCHEMA_ID = '1605040621379664412'
 const ADVANCED_USER_SCHEMA_ID = '919692610494986520'
