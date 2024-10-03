@@ -30,6 +30,7 @@ function send (message, logger, snapshot, cb) {
     ddsource,
     service,
     message,
+    foo: 'bar',
     logger,
     'debugger.snapshot': snapshot
   }
