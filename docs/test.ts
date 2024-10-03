@@ -531,3 +531,13 @@ const otelTraceId: string = spanContext.traceId
 const otelSpanId: string = spanContext.spanId
 const otelTraceFlags: number = spanContext.traceFlags
 const otelTraceState: opentelemetry.TraceState = spanContext.traceState!
+
+const { llmobs } = tracer
+// 
+const span = llmobs.startSpan('llm')
+tracer.trace('something', (span) => {
+  
+})
+llmobs.trace('llm', (span) => {
+  
+})

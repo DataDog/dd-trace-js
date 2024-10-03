@@ -137,6 +137,11 @@ interface Tracer extends opentracing.Tracer {
   TracerProvider: tracer.opentelemetry.TracerProvider;
 
   dogstatsd: tracer.DogStatsD;
+
+  /**
+   * LLM Observability SDK
+   */
+  llmobs: tracer.llmobs.LLMObs;
 }
 
 // left out of the namespace, so it
@@ -532,6 +537,11 @@ declare namespace tracer {
           enabled?: boolean
         }
       }
+
+      /**
+       * Configuration enabling LLM Observability. Enablement is superceded by the DD_LLMOBS_ENABLED environment variable.
+       */
+      llmobs?: llmobs.LLMObsEnableOptions
     };
 
     /**
@@ -749,6 +759,11 @@ declare namespace tracer {
        */
       maxDepth?: number
     }
+    
+    /**
+     * Configuration enabling LLM Observability. Enablement is superceded by the DD_LLMOBS_ENABLED environment variable.
+     */
+    llmobs?: llmobs.LLMObsEnableOptions
   }
 
   /**
@@ -2171,6 +2186,365 @@ declare namespace tracer {
      * Specifies the verbosity of the sent telemetry. Default 'INFORMATION'
      */
     telemetryVerbosity?: string
+  }
+
+  export namespace llmobs {
+    export interface LLMObs {
+
+      /**
+       * Whether or not LLM Observability is enabled.
+       */
+      enabled: boolean,
+
+      /**
+       * Enable LLM Observability tracing.
+       */
+      enable(options: LLMObsEnableOptions): void,
+
+      /**
+       * Disable LLM Observability tracing.
+       */
+      disable(): void,
+
+      /**
+       * Starts a span activated in the scope of the current active span.
+       * This span must be manually finished.
+       * @param kind The kind of span to start.
+       * @param options Options for the span.
+       * @returns The newly created span.
+       */
+      startSpan(kind: 'llm' | 'embedding', options?: llmobs.LLMObsModelOptions): tracer.Span
+      startSpan(kind: 'workflow' | 'agent' | 'retrieval' | 'task' | 'tool', options?: llmobs.LLMObsBaseSpanOptions): tracer.Span
+      // startSpan(kind: llmobs.spanKind): tracer.Span
+      // startSpan(kind: llmobs.spanKind, options: llmobs.LLMObsSpanOptions): tracer.Span
+      
+      /**
+       * Instruments a function by automatically creating a span activated on its
+       * scope.
+       *
+       * The span will automatically be finished when one of these conditions is
+       * met:
+       *
+       * * The function returns a promise, in which case the span will finish when
+       * the promise is resolved or rejected.
+       * * The function takes a callback as its second parameter, in which case the
+       * span will finish when that callback is called.
+       * * The function doesn't accept a callback and doesn't return a promise, in
+       * which case the span will finish at the end of the function execution.
+       * @param kind The kind of span to start.
+       * @param options Optional LLM Observability span options.
+       * @param fn The function to instrument.
+       * @returns The return value of the function.
+       */
+      trace<T> (kind: llmobs.spanKind, fn: (span?: tracer.Span, done?: (error?: Error) => void) => T): T
+      trace<T> (kind: llmobs.modelSpanKind, options: llmobs.LLMObsModelOptions, fn: (span?: tracer.Span, done?: (error?: Error) => void) => T): T
+      trace<T> (kind: llmobs.baseSpanKind, options: llmobs.LLMObsBaseSpanOptions, fn: (span?: tracer.Span, done?: (error?: Error) => void) => T): T
+
+      /**
+       * Wrap a function to automatically create a span activated on its
+       * scope when it's called.
+       *
+       * The span will automatically be finished when one of these conditions is
+       * met:
+       *
+       * * The function returns a promise, in which case the span will finish when
+       * the promise is resolved or rejected.
+       * * The function takes a callback as its last parameter, in which case the
+       * span will finish when that callback is called.
+       * * The function doesn't accept a callback and doesn't return a promise, in
+       * which case the span will finish at the end of the function execution.
+       * @param kind The kind of span to start.
+       * @param options Optional LLM Observability span options.
+       * @param fn The function to instrument.
+       * @returns A new function that wraps the provided function with span creation.
+       */
+      wrap<T = (...args: any[]) => any> (kind: llmobs.spanKind, fn: T): T
+      wrap<T = (...args: any[]) => any> (kind: llmobs.modelSpanKind, options: llmobs.LLMObsModelOptions, fn: T): T
+      wrap<T = (...args: any[]) => any> (kind: llmobs.baseSpanKind, options: llmobs.LLMObsBaseSpanOptions, fn: T): T
+
+      /**
+       * Decorate a function in a javascript runtime that supports function decorators.
+       * Note that this is **not** supported in the Node.js runtime, but is in TypeScript.
+       * 
+       * In TypeScript, this decorator is only supported in contexts where general TypeScript
+       * function decorators are supported.
+       * 
+       * @param kind The kind of span to start.
+       * @param options Optional LLM Observability span options.
+       */
+      decorate (kind: llmobs.modelSpanKind, options?: llmobs.LLMObsModelOptions): any
+      decorate (kind: llmobs.baseSpanKind, options?: llmobs.LLMObsBaseSpanOptions): any
+
+      /**
+       * Returns a representation of a span to export its span and trace IDs.
+       * If no span is provided, the current LLMObs-type span will be used.
+       * @param span Optional span to export.
+       * @returns An object containing the span and trace IDs.
+       */
+      exportSpan(span?: tracer.Span): llmobs.ExportedLLMObsSpan
+
+
+      /**
+       * Sets parameters, inputs, outputs, tags, and metrics as provided for a given LLM Observability span.
+       * Note that with the exception of tags, this method will override any existing values for the provided fields.
+       * @param span The span to annotate (defaults to the current LLM Observability span if not provided)
+       * @param options An object containing the parameters, inputs, outputs, tags, and metrics to set on the span.
+       */
+      annotate(options: llmobs.ConditionalAnnotationOptions<tracer.Span>): void
+      annotate(span: tracer.Span, options: llmobs.ConditionalAnnotationOptions<tracer.Span>): void
+
+      /**
+       * Submits a custom evalutation metric for a given span ID and trace ID.
+       * @param spanContext The span context of the span to submit the evaluation metric for.
+       * @param options An object containing the label, metric type, value, and tags of the evaluation metric.
+       */
+      submitEvaluation(spanContext: llmobs.ExportedLLMObsSpan, options: llmobs.EvaluationOptions): void
+
+      /**
+       * Flushes any remaining spans and evaluation metrics to LLM Observability.
+       */
+      flush(): void
+    }
+
+    interface EvaluationOptions {
+      /**
+       * The name of the evalutation metric
+       */
+      label: string,
+
+      /**
+       * The type of evaluation metric, one of 'categorical' or 'score'
+       */
+      metricType: 'categorical' | 'score',
+
+      /**
+       * The value of the evaluation metric.
+       * Must be string for 'categorical' metrics and number for 'score' metrics.
+       */
+      value: string | number,
+
+      /**
+       * An object of string key-value pairs to tag the evaluation metric with.
+       */
+      tags?: { [key: string]: any },
+
+      /**
+       * The name of the ML application
+       */
+      mlApp?: string,
+
+      /**
+       * The timestamp in milliseconds when the evaluation metric result was generated.
+       */
+      timestampMs?: number
+    }
+
+    interface Document {
+      /**
+       * Document text
+       */
+      text?: string,
+
+      /**
+       * Document name
+       */
+      name?: string,
+
+      /**
+       * Document ID
+       */
+      id?: string,
+
+      /**
+       * Score of the document retrieval as a source of ground truth
+       */
+      score?: number
+    }
+
+    /**
+     * Represents a single LLM chat model message
+     */
+    interface Message {
+      /**
+       * Content of the message.
+       */
+      content: string,
+
+      /**
+       * Role of the message (ie system, user, ai)
+       */
+      role?: string
+    }
+
+    /**
+     * 
+     */
+    interface AnnotationOptions {
+      /**
+       * A single input string, object, or a list of objects based on the span kind:
+       * 1. LLM spans: accepts a string, or an object of the form {content: "...", role: "..."}, or a list of objects with the same signature.
+       * 2. Embedding spans: accepts a string, list of strings, or an object of the form {text: "...", ...}, or a list of objects with the same signature.
+       * 3. Other: any JSON serializable type
+       */
+      inputData?: string | Message | Message[] | Document | Document[] | { [key: string]: any },
+
+      /**
+       * A single output string, object, or a list of objects based on the span kind:
+       * 1. LLM spans: accepts sa string, or an object of the form {content: "...", role: "..."}, or a list of objects with the same signature.
+       * 2. Retrieval spans: An object containing any of the key value pairs {name: str, id: str, text: str, source: number} or a list of dictionaries with the same signature.
+       * 3. Other: any JSON serializable type
+       */
+      outputData?: string | Message | Message[] | Document | Document[] | { [key: string]: any },
+
+      /**
+       * Object of JSON serializable key-value metadata pairs relevant to the input/output operation described by the LLM Observability span.
+       */
+      metadata?: { [key: string]: any },
+
+      /**
+       * Object of JSON seraliazable key-value metrics (number) pairs, such as `{prompt,completion,total}_tokens`
+       */
+      metrics?: { [key: string]: number },
+
+      /**
+       * Object of JSON serializable key-value tag pairs to set or update on the LLM Observability span regarding the span's context.
+       */
+      tags?: { [key: string]: any }
+    }
+
+    interface BaseAnnotationOptions {
+      /**
+       * A single input string, object, or a list of objects based on the span kind:
+       * 1. LLM spans: accepts a string, or an object of the form {content: "...", role: "..."}, or a list of objects with the same signature.
+       * 2. Embedding spans: accepts a string, list of strings, or an object of the form {text: "...", ...}, or a list of objects with the same signature.
+       * 3. Other: any JSON serializable type
+       */
+      inputData?: string | { [key: string]: any },
+
+      /**
+       * A single output string, object, or a list of objects based on the span kind:
+       * 1. LLM spans: accepts sa string, or an object of the form {content: "...", role: "..."}, or a list of objects with the same signature.
+       * 2. Retrieval spans: An object containing any of the key value pairs {name: str, id: str, text: str, source: number} or a list of dictionaries with the same signature.
+       * 3. Other: any JSON serializable type
+       */
+      outputData?: string | { [key: string]: any },
+
+      /**
+       * Object of JSON serializable key-value metadata pairs relevant to the input/output operation described by the LLM Observability span.
+       */
+      metadata?: { [key: string]: any },
+
+      /**
+       * Object of JSON seraliazable key-value metrics (number) pairs, such as `{prompt,completion,total}_tokens`
+       */
+      metrics?: { [key: string]: number },
+
+      /**
+       * Object of JSON serializable key-value tag pairs to set or update on the LLM Observability span regarding the span's context.
+       */
+      tags?: { [key: string]: any }
+    }
+
+    interface LLMAnnotationOptions extends BaseAnnotationOptions {
+      inputData: BaseAnnotationOptions['inputData'] | Message | Message[],
+      outputData: BaseAnnotationOptions['outputData'] | Message | Message[],
+    }
+
+    interface EmbeddingAnnotationOptions extends BaseAnnotationOptions {
+      inputData: BaseAnnotationOptions['inputData'] | Document | Document[],
+    }
+
+    interface RetrievalAnnotationOptions extends BaseAnnotationOptions {
+      outputData: BaseAnnotationOptions['outputData'] | Document | Document[],
+    }
+
+    type SpecificLLMObsAnnotationOptions = {
+      'llm': LLMAnnotationOptions,
+      'embedding': EmbeddingAnnotationOptions,
+      'retrieval': RetrievalAnnotationOptions
+    }
+
+    // @ts-ignore
+    type ConditionalAnnotationOptions<T extends Span> = T['context']['_tags']['span.type'] extends keyof SpecificLLMObsAnnotationOptions
+      // @ts-ignore
+      ? SpecificLLMObsAnnotationOptions[T['context']['_tags']['span.type']]
+      : BaseAnnotationOptions
+
+    /**
+     * An object containing the span ID and trace ID of interest
+     */
+    interface ExportedLLMObsSpan {
+      /**
+       * Trace ID associated with the span of interest
+       */
+      traceId: string,
+
+      /**
+       * Span ID associated with the span of interest
+       */
+      spanId: string,
+    }
+
+    interface LLMObsBaseSpanOptions extends SpanOptions {
+      /**
+       * The name of the traced operation. As a default, the LLM Observability span kind will be used.
+       */
+      name?: string,
+  
+      /**
+       * The ID of the underlying user session. Required for tracking sessions.
+       */
+      sessionId?: string,
+
+      /**
+       * The name of the ML application that the agent is orchestrating. 
+       * If not provided, the default value will be set to mlApp provided during initalization, or `DD_LLMOBS_ML_APP`.
+       */
+      mlApp?: string,
+    }
+  
+    interface LLMObsModelOptions extends LLMObsBaseSpanOptions{
+      /**
+       * The name of the invoked LLM or embedding model. Only used on `llm` and `embedding` spans.
+       */
+      modelName?: string,
+
+      /**
+       * The name of the invoked LLM or embedding model provider. Only used on `llm` and `embedding` spans.
+       * If not provided for LLM or embedding spans, a default value of 'custom' will be set.
+       */
+      modelProvider?: string,
+    }
+
+    /**
+     * Options for enabling LLM Observability tracing.
+     */
+    interface LLMObsEnableOptions {
+      /**
+       * The name of your ML application.
+       */
+      mlApp?: string,
+
+      /**
+       * Set to `true` to disbale sending data that requires a Datadog Agent.
+       */
+      agentlessEnabled?: boolean,
+
+      /**
+       * The Datadog API key associated with the site you are using.
+       * It is recommended to set this as an environment variable.
+       */
+      apiKey?: string,
+    }
+
+    /** @hidden */
+    type modelSpanKind = 'llm' | 'embedding' 
+
+    /** @hidden */
+    type baseSpanKind = 'workflow' | 'agent' | 'task' | 'tool' | 'retrieval'
+
+    /** @hidden */
+    type spanKind = modelSpanKind | baseSpanKind
   }
 }
 
