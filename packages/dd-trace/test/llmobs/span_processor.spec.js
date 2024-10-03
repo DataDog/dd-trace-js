@@ -169,7 +169,9 @@ describe('span processor', () => {
 
       expect(payload.meta.metadata).to.deep.equal({
         bar: 'baz',
-        deep: { foo: 'bar' }
+        bigint: 'Unserializable value',
+        circular: 'Unserializable value',
+        deep: { foo: 'bar', circular: 'Unserializable value' }
       })
     })
 

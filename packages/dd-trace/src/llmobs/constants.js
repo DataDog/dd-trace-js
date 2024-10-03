@@ -36,5 +36,6 @@ module.exports = {
   EVP_EVENT_SIZE_LIMIT: (1 << 20) - 1024, // 999KB (actual limit is 1MB)
 
   DROPPED_IO_COLLECTION_ERROR: 'dropped_io',
-  DROPPED_VALUE_TEXT: "[This value has been dropped because this span's size exceeds the 1MB size limit.]"
+  DROPPED_VALUE_TEXT: "[This value has been dropped because this span's size exceeds the 1MB size limit.]",
+  UNSERIALIZABLE_VALUE_TEXT: 'Unserializable value'
 }

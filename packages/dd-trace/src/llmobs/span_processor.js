@@ -16,7 +16,8 @@ const {
   TAGS,
   PARENT_ID_KEY,
   SESSION_ID,
-  NAME
+  NAME,
+  UNSERIALIZABLE_VALUE_TEXT
 } = require('./constants')
 
 const {
@@ -154,7 +155,12 @@ class LLMObsSpanProcessor {
       for (const key in obj) {
         const value = obj[key]
         if (!Object.prototype.hasOwnProperty.call(obj, key)) continue
-        if (typeof value === 'bigint' || isCircular(value)) continue
+        if (typeof value === 'bigint' || isCircular(value)) {
+          // mark as unserializable instead of dropping
+          logger.warn(`Unserializable property found in metadata: ${key}`)
+          carrier[key] = UNSERIALIZABLE_VALUE_TEXT
+          continue
+        }
         if (typeof value === 'object') {
           add(value, carrier[key] = {})
         } else {
