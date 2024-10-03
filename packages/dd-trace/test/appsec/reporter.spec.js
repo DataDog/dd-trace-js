@@ -248,6 +248,7 @@ describe('reporter', () => {
       expect(Reporter.reportAttack('', params)).to.not.be.false
       expect(addTags.getCall(4).firstArg).to.have.property('appsec.event').that.equals('true')
       expect(addTags.getCall(4).firstArg).to.not.have.property('manual.keep')
+      // TODO delete this comment
 
       setTimeout(() => {
         expect(Reporter.reportAttack('', params)).to.not.be.false
