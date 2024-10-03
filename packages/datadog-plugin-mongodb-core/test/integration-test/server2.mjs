@@ -15,7 +15,7 @@ const connectPromise = new Promise((resolve, reject) => {
 await server.connect()
 await connectPromise
 
-server.insert(`test.your_collection_name`, [{ a: 1 }], {}, (err) => {
+server.insert('test.your_collection_name', [{ a: 1 }], {}, (err) => {
   if (err) {
     return
   }

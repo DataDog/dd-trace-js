@@ -109,6 +109,8 @@
     "tlhunter-sorted-set": "^0.1.0"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.1.0",
+    "@eslint/js": "^9.11.1",
     "@types/node": "^16.18.103",
     "autocannon": "^4.5.2",
     "aws-sdk": "^2.1446.0",
@@ -130,6 +132,7 @@
     "express": "^4.18.2",
     "get-port": "^3.2.0",
     "glob": "^7.1.6",
+    "globals": "^15.10.0",
     "graphql": "0.13.2",
     "jszip": "^3.5.0",
     "knex": "^2.4.2",
