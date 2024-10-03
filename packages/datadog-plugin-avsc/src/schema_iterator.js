@@ -129,8 +129,8 @@ class SchemaExtractor {
   }
 
   static attachSchemaOnSpan (args, span, operation, tracer) {
-    const { type } = args
-    const descriptor = type
+    const { messageClass } = args
+    const descriptor = messageClass?.constructor?.type ?? messageClass
 
     if (!descriptor || !span) {
       return

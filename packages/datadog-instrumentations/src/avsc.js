@@ -1,45 +1,28 @@
 const shimmer = require('../../datadog-shimmer')
-const { addHook, AsyncResource } = require('./helpers/instrument')
+const { addHook } = require('./helpers/instrument')
 
 const dc = require('dc-polyfill')
-const serializeChannel = dc.channel('apm:avsc:serialize')
-const deserializeChannel = dc.channel('apm:avsc:deserialize')
+const serializeChannel = dc.channel('apm:avsc:serialize-start')
+const deserializeChannel = dc.channel('apm:avsc:deserialize-end')
 
 function wrapSerialization (Type) {
-  shimmer.wrap(Type.prototype, 'toBuffer', original => {
-    return function wrappedToBuffer (...args) {
-      if (!serializeChannel.hasSubscribers) {
-        return original.apply(this, args)
-      }
-
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-      asyncResource.runInAsyncScope(() => {
-        serializeChannel.publish({ messageClass: this })
-      })
-
-      return original.apply(this, args)
+  shimmer.wrap(Type.prototype, 'toBuffer', original => function () {
+    if (!serializeChannel.hasSubscribers) {
+      return original.apply(this, arguments)
     }
+    serializeChannel.publish({ messageClass: this })
+    return original.apply(this, arguments)
   })
 }
 
 function wrapDeserialization (Type) {
-  shimmer.wrap(Type.prototype, 'fromBuffer', original => {
-    return function wrappedFromBuffer (...args) {
-      if (!deserializeChannel.hasSubscribers) {
-        return original.apply(this, args)
-      }
-
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-      const result = original.apply(this, args)
-
-      asyncResource.runInAsyncScope(() => {
-        deserializeChannel.publish({ messageClass: result })
-      })
-
-      return result
+  shimmer.wrap(Type.prototype, 'fromBuffer', original => function () {
+    if (!deserializeChannel.hasSubscribers) {
+      return original.apply(this, arguments)
     }
+    const result = original.apply(this, arguments)
+    deserializeChannel.publish({ messageClass: result })
+    return result
   })
 }
 
