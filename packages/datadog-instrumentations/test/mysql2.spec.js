@@ -74,7 +74,7 @@ describe('mysql2 instrumentation', () => {
           describe('with callback', () => {
             it('should abort the query on abortController.abort()', (done) => {
               startCh.subscribe(abort)
-              const query = connection.query(sql, (err, _) => {
+              const query = connection.query(sql, (err) => {
                 assert.propertyVal(err, 'message', 'Test')
                 sinon.assert.notCalled(apmQueryStart)
 
@@ -86,7 +86,7 @@ describe('mysql2 instrumentation', () => {
 
             it('should work without abortController.abort()', (done) => {
               startCh.subscribe(noop)
-              connection.query(sql, (err, _) => {
+              connection.query(sql, (err) => {
                 assert.isNull(err)
                 sinon.assert.called(apmQueryStart)
 
@@ -95,7 +95,7 @@ describe('mysql2 instrumentation', () => {
             })
 
             it('should work without subscriptions', (done) => {
-              connection.query(sql, (err, _) => {
+              connection.query(sql, (err) => {
                 assert.isNull(err)
                 sinon.assert.called(apmQueryStart)
 
@@ -149,7 +149,7 @@ describe('mysql2 instrumentation', () => {
           describe('with callback', () => {
             it('should abort the query on abortController.abort()', (done) => {
               startCh.subscribe(abort)
-              const query = mysql2.Connection.createQuery(sql, (err, _) => {
+              const query = mysql2.Connection.createQuery(sql, (err) => {
                 assert.propertyVal(err, 'message', 'Test')
                 sinon.assert.notCalled(apmQueryStart)
 
@@ -163,7 +163,7 @@ describe('mysql2 instrumentation', () => {
             it('should work without abortController.abort()', (done) => {
               startCh.subscribe(noop)
 
-              const query = mysql2.Connection.createQuery(sql, (err, _) => {
+              const query = mysql2.Connection.createQuery(sql, (err) => {
                 assert.isNull(err)
                 sinon.assert.called(apmQueryStart)
 
@@ -174,7 +174,7 @@ describe('mysql2 instrumentation', () => {
             })
 
             it('should work without subscriptions', (done) => {
-              const query = mysql2.Connection.createQuery(sql, (err, _) => {
+              const query = mysql2.Connection.createQuery(sql, (err) => {
                 assert.isNull(err)
                 sinon.assert.called(apmQueryStart)
 
@@ -237,7 +237,7 @@ describe('mysql2 instrumentation', () => {
             startCh.subscribe(abort)
 
             const options = { sql }
-            const commandExecute = connection.execute(options, (err, _) => {
+            const commandExecute = connection.execute(options, (err) => {
               assert.propertyVal(err, 'message', 'Test')
               sinon.assert.notCalled(apmQueryStart)
 
@@ -252,7 +252,7 @@ describe('mysql2 instrumentation', () => {
 
             const options = { sql }
 
-            connection.execute(options, (err, _) => {
+            connection.execute(options, (err) => {
               assert.isNull(err)
               sinon.assert.called(apmQueryStart)
 
@@ -263,7 +263,7 @@ describe('mysql2 instrumentation', () => {
           it('should work without subscriptions', (done) => {
             const options = { sql }
 
-            connection.execute(options, (err, _) => {
+            connection.execute(options, (err) => {
               assert.isNull(err)
               sinon.assert.called(apmQueryStart)
 
@@ -276,7 +276,7 @@ describe('mysql2 instrumentation', () => {
           it('should abort the query on abortController.abort()', (done) => {
             startCh.subscribe(abort)
 
-            connection.execute(sql, (err, _) => {
+            connection.execute(sql, (err) => {
               assert.propertyVal(err, 'message', 'Test')
               sinon.assert.notCalled(apmQueryStart)
               done()
@@ -286,7 +286,7 @@ describe('mysql2 instrumentation', () => {
           it('should work without abortController.abort()', (done) => {
             startCh.subscribe(noop)
 
-            connection.execute(sql, (err, _) => {
+            connection.execute(sql, (err) => {
               assert.isNull(err)
               sinon.assert.called(apmQueryStart)
 
@@ -297,7 +297,7 @@ describe('mysql2 instrumentation', () => {
           it('should work without subscriptions', (done) => {
             const options = { sql }
 
-            connection.execute(options, (err, _) => {
+            connection.execute(options, (err) => {
               assert.isNull(err)
               sinon.assert.called(apmQueryStart)
 
@@ -320,7 +320,7 @@ describe('mysql2 instrumentation', () => {
           describe('with callback', () => {
             it('should abort the query on abortController.abort()', (done) => {
               startCh.subscribe(abort)
-              const query = pool.query({ sql }, (err, _) => {
+              const query = pool.query({ sql }, (err) => {
                 assert.propertyVal(err, 'message', 'Test')
                 sinon.assert.notCalled(apmQueryStart)
 
@@ -333,7 +333,7 @@ describe('mysql2 instrumentation', () => {
             it('should work without abortController.abort()', (done) => {
               startCh.subscribe(noop)
 
-              pool.query({ sql }, (err, _) => {
+              pool.query({ sql }, (err) => {
                 assert.isNull(err)
                 sinon.assert.called(apmQueryStart)
 
@@ -342,7 +342,7 @@ describe('mysql2 instrumentation', () => {
             })
 
             it('should work without subscriptions', (done) => {
-              pool.query({ sql }, (err, _) => {
+              pool.query({ sql }, (err) => {
                 assert.isNull(err)
                 sinon.assert.called(apmQueryStart)
 
@@ -377,7 +377,7 @@ describe('mysql2 instrumentation', () => {
             })
 
             it('should work without subscriptions', (done) => {
-              pool.query({ sql }, (err, _) => {
+              pool.query({ sql }, (err) => {
                 assert.isNull(err)
                 sinon.assert.called(apmQueryStart)
 
@@ -391,7 +391,7 @@ describe('mysql2 instrumentation', () => {
           describe('with callback', () => {
             it('should abort the query on abortController.abort()', (done) => {
               startCh.subscribe(abort)
-              const query = pool.query(sql, (err, _) => {
+              const query = pool.query(sql, (err) => {
                 assert.propertyVal(err, 'message', 'Test')
                 sinon.assert.notCalled(apmQueryStart)
 
@@ -404,7 +404,7 @@ describe('mysql2 instrumentation', () => {
             it('should work without abortController.abort()', (done) => {
               startCh.subscribe(noop)
 
-              pool.query(sql, (err, _) => {
+              pool.query(sql, (err) => {
                 assert.isNull(err)
                 sinon.assert.called(apmQueryStart)
 
@@ -413,7 +413,7 @@ describe('mysql2 instrumentation', () => {
             })
 
             it('should work without subscriptions', (done) => {
-              pool.query(sql, (err, _) => {
+              pool.query(sql, (err) => {
                 assert.isNull(err)
                 sinon.assert.called(apmQueryStart)
 
@@ -448,7 +448,7 @@ describe('mysql2 instrumentation', () => {
             })
 
             it('should work without subscriptions', (done) => {
-              pool.query(sql, (err, _) => {
+              pool.query(sql, (err) => {
                 assert.isNull(err)
                 sinon.assert.called(apmQueryStart)
 
@@ -464,7 +464,7 @@ describe('mysql2 instrumentation', () => {
           describe('with callback', () => {
             it('should abort the query on abortController.abort()', (done) => {
               startCh.subscribe(abort)
-              pool.execute({ sql }, (err, _) => {
+              pool.execute({ sql }, (err) => {
                 assert.propertyVal(err, 'message', 'Test')
 
                 setTimeout(() => {
@@ -477,7 +477,7 @@ describe('mysql2 instrumentation', () => {
             it('should work without abortController.abort()', (done) => {
               startCh.subscribe(noop)
 
-              pool.execute({ sql }, (err, _) => {
+              pool.execute({ sql }, (err) => {
                 assert.isNull(err)
                 sinon.assert.called(apmQueryStart)
 
@@ -486,7 +486,7 @@ describe('mysql2 instrumentation', () => {
             })
 
             it('should work without subscriptions', (done) => {
-              pool.execute({ sql }, (err, _) => {
+              pool.execute({ sql }, (err) => {
                 assert.isNull(err)
                 sinon.assert.called(apmQueryStart)
 
@@ -500,7 +500,7 @@ describe('mysql2 instrumentation', () => {
           describe('with callback', () => {
             it('should abort the query on abortController.abort()', (done) => {
               startCh.subscribe(abort)
-              pool.execute(sql, (err, _) => {
+              pool.execute(sql, (err) => {
                 assert.propertyVal(err, 'message', 'Test')
 
                 setTimeout(() => {
@@ -513,7 +513,7 @@ describe('mysql2 instrumentation', () => {
             it('should work without abortController.abort()', (done) => {
               startCh.subscribe(noop)
 
-              pool.execute(sql, (err, _) => {
+              pool.execute(sql, (err) => {
                 assert.isNull(err)
                 sinon.assert.called(apmQueryStart)
 
@@ -522,7 +522,7 @@ describe('mysql2 instrumentation', () => {
             })
 
             it('should work without subscriptions', (done) => {
-              pool.execute(sql, (err, _) => {
+              pool.execute(sql, (err) => {
                 assert.isNull(err)
                 sinon.assert.called(apmQueryStart)
 
@@ -565,7 +565,7 @@ describe('mysql2 instrumentation', () => {
           it('should abort the query on abortController.abort()', (done) => {
             startCh.subscribe(abort)
             const namespace = poolCluster.of()
-            namespace.query(sql, (err, _) => {
+            namespace.query(sql, (err) => {
               assert.propertyVal(err, 'message', 'Test')
 
               setTimeout(() => {
@@ -579,7 +579,7 @@ describe('mysql2 instrumentation', () => {
             startCh.subscribe(noop)
 
             const namespace = poolCluster.of()
-            namespace.query(sql, (err, _) => {
+            namespace.query(sql, (err) => {
               assert.isNull(err)
               sinon.assert.called(apmQueryStart)
 
@@ -589,7 +589,7 @@ describe('mysql2 instrumentation', () => {
 
           it('should work without subscriptions', (done) => {
             const namespace = poolCluster.of()
-            namespace.query(sql, (err, _) => {
+            namespace.query(sql, (err) => {
               assert.isNull(err)
               sinon.assert.called(apmQueryStart)
 
@@ -602,7 +602,7 @@ describe('mysql2 instrumentation', () => {
           it('should abort the query on abortController.abort()', (done) => {
             startCh.subscribe(abort)
             const namespace = poolCluster.of()
-            namespace.query({ sql }, (err, _) => {
+            namespace.query({ sql }, (err) => {
               assert.propertyVal(err, 'message', 'Test')
 
               setTimeout(() => {
@@ -616,7 +616,7 @@ describe('mysql2 instrumentation', () => {
             startCh.subscribe(noop)
 
             const namespace = poolCluster.of()
-            namespace.query({ sql }, (err, _) => {
+            namespace.query({ sql }, (err) => {
               assert.isNull(err)
               sinon.assert.called(apmQueryStart)
 
@@ -626,7 +626,7 @@ describe('mysql2 instrumentation', () => {
 
           it('should work without subscriptions', (done) => {
             const namespace = poolCluster.of()
-            namespace.query({ sql }, (err, _) => {
+            namespace.query({ sql }, (err) => {
               assert.isNull(err)
               sinon.assert.called(apmQueryStart)
 
@@ -642,7 +642,7 @@ describe('mysql2 instrumentation', () => {
             startCh.subscribe(abort)
 
             const namespace = poolCluster.of()
-            namespace.execute(sql, (err, _) => {
+            namespace.execute(sql, (err) => {
               assert.propertyVal(err, 'message', 'Test')
 
               setTimeout(() => {
@@ -656,7 +656,7 @@ describe('mysql2 instrumentation', () => {
             startCh.subscribe(noop)
 
             const namespace = poolCluster.of()
-            namespace.execute(sql, (err, _) => {
+            namespace.execute(sql, (err) => {
               assert.isNull(err)
               sinon.assert.called(apmQueryStart)
 
@@ -666,7 +666,7 @@ describe('mysql2 instrumentation', () => {
 
           it('should work without subscriptions', (done) => {
             const namespace = poolCluster.of()
-            namespace.execute(sql, (err, _) => {
+            namespace.execute(sql, (err) => {
               assert.isNull(err)
               sinon.assert.called(apmQueryStart)
 
@@ -680,7 +680,7 @@ describe('mysql2 instrumentation', () => {
             startCh.subscribe(abort)
 
             const namespace = poolCluster.of()
-            namespace.execute({ sql }, (err, _) => {
+            namespace.execute({ sql }, (err) => {
               assert.propertyVal(err, 'message', 'Test')
 
               setTimeout(() => {
@@ -694,7 +694,7 @@ describe('mysql2 instrumentation', () => {
             startCh.subscribe(noop)
 
             const namespace = poolCluster.of()
-            namespace.execute({ sql }, (err, _) => {
+            namespace.execute({ sql }, (err) => {
               assert.isNull(err)
               sinon.assert.called(apmQueryStart)
 
@@ -704,7 +704,7 @@ describe('mysql2 instrumentation', () => {
 
           it('should work without subscriptions', (done) => {
             const namespace = poolCluster.of()
-            namespace.execute({ sql }, (err, _) => {
+            namespace.execute({ sql }, (err) => {
               assert.isNull(err)
               sinon.assert.called(apmQueryStart)
 
