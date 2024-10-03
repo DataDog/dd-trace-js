@@ -13,11 +13,11 @@ function encodeUnicode (str) {
   }).join('')
 }
 
-function isLLMSpan (span) {
+function isLLMObsSpan (span) {
   return ['llm', 'openai'].includes(span?.context()._tags[SPAN_TYPE])
 }
 
 module.exports = {
   encodeUnicode,
-  isLLMSpan
+  isLLMObsSpan
 }

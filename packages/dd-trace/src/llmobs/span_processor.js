@@ -28,7 +28,7 @@ const {
 
 const AgentlessWriter = require('./writers/spans/agentless')
 const AgentProxyWriter = require('./writers/spans/agentProxy')
-const { isLLMSpan } = require('./util')
+const { isLLMObsSpan } = require('./util')
 
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
@@ -46,7 +46,7 @@ class LLMObsSpanProcessor {
 
   process (span) {
     if (!this._config.llmobs.enabled) return
-    if (!isLLMSpan(span)) return
+    if (!isLLMObsSpan(span)) return
     const formattedEvent = this.format(span)
 
     try {
