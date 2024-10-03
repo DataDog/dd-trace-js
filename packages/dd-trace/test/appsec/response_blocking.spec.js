@@ -52,7 +52,10 @@ describe('HTTP Response Blocking', () => {
     appsec.enable(new Config({
       appsec: {
         enabled: true,
-        rules: path.join(__dirname, 'response_blocking_rules.json')
+        rules: path.join(__dirname, 'response_blocking_rules.json'),
+        apiSecurity: {
+          enabled: false
+        }
       }
     }))
   })

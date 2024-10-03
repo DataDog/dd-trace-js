@@ -4,7 +4,6 @@ const Activation = require('../activation')
 
 const RemoteConfigManager = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
-const apiSecuritySampler = require('../api_security_sampler')
 
 let rc
 
@@ -24,18 +23,12 @@ function enable (config, appsec) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
     }
 
-    if (config.appsec.apiSecurity?.enabled) {
-      rc.updateCapabilities(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
-    }
-
     rc.setProductHandler('ASM_FEATURES', (action, rcConfig) => {
       if (!rcConfig) return
 
       if (activation === Activation.ONECLICK) {
         enableOrDisableAppsec(action, rcConfig, config, appsec)
       }
-
-      apiSecuritySampler.setRequestSampling(rcConfig.api_security?.request_sample_rate)
     })
   }
 
