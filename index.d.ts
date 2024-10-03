@@ -190,6 +190,7 @@ interface Plugins {
   "playwright": tracer.plugins.playwright;
   "pg": tracer.plugins.pg;
   "pino": tracer.plugins.pino;
+  "protobufjs": tracer.plugins.protobufjs;
   "redis": tracer.plugins.redis;
   "restify": tracer.plugins.restify;
   "rhea": tracer.plugins.rhea;
@@ -1731,6 +1732,12 @@ declare namespace tracer {
      * on the tracer.
      */
     interface pino extends Integration {}
+  
+    /**
+     * This plugin automatically patches the [protobufjs](https://protobufjs.github.io/protobuf.js/)
+     * to collect protobuf message schemas when Datastreams Monitoring is enabled.
+     */
+    interface protobufjs extends Integration {}
 
     /**
      * This plugin automatically instruments the
