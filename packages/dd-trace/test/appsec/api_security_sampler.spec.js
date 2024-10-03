@@ -1,71 +1,75 @@
 'use strict'
 
-const apiSecuritySampler = require('../../src/appsec/api_security_sampler')
+const proxyquire = require('proxyquire')
 
-describe('Api Security Sampler', () => {
-  let config
+describe('API Security Sampler', () => {
+  let apiSecuritySampler, webStub, clock
 
   beforeEach(() => {
-    config = {
-      apiSecurity: {
-        enabled: true,
-        requestSampling: 1
-      }
-    }
+    webStub = { root: sinon.stub() }
+    clock = sinon.useFakeTimers(Date.now())
 
-    sinon.stub(Math, 'random').returns(0.3)
+    apiSecuritySampler = proxyquire('../../src/appsec/api_security_sampler', {
+      '../plugins/util/web': webStub
+    })
   })
 
-  afterEach(sinon.restore)
+  afterEach(() => {
+    clock.restore()
+  })
 
   describe('sampleRequest', () => {
-    it('should sample request if enabled and sampling 1', () => {
-      apiSecuritySampler.configure(config)
-
-      expect(apiSecuritySampler.sampleRequest({})).to.true
+    beforeEach(() => {
+      apiSecuritySampler.configure({ apiSecurity: { enabled: true, sampleDelay: 30 } })
     })
 
-    it('should not sample request if enabled and sampling 0', () => {
-      config.apiSecurity.requestSampling = 0
-      apiSecuritySampler.configure(config)
-
-      expect(apiSecuritySampler.sampleRequest({})).to.false
+    it('should return false if not enabled', () => {
+      apiSecuritySampler.disable()
+      expect(apiSecuritySampler.sampleRequest({}, {})).to.be.false
     })
 
-    it('should sample request if enabled and sampling greater than random', () => {
-      config.apiSecurity.requestSampling = 0.5
-
-      apiSecuritySampler.configure(config)
-
-      expect(apiSecuritySampler.sampleRequest({})).to.true
+    it('should return false if no root span', () => {
+      webStub.root.returns(null)
+      expect(apiSecuritySampler.sampleRequest({}, {})).to.be.false
     })
 
-    it('should not sample request if enabled and sampling less than random', () => {
-      config.apiSecurity.requestSampling = 0.1
-
-      apiSecuritySampler.configure(config)
-
-      expect(apiSecuritySampler.sampleRequest()).to.false
+    it('should return true and put request in cache if priority is AUTO_KEEP', () => {
+      const rootSpan = { context: () => ({ _sampling: { priority: 2 } }) }
+      webStub.root.returns(rootSpan)
+      const req = { url: '/test', method: 'GET' }
+      const res = { statusCode: 200 }
+      expect(apiSecuritySampler.sampleRequest(req, res)).to.be.true
     })
 
-    it('should not sample request if incorrect config value', () => {
-      config.apiSecurity.requestSampling = NaN
-
-      apiSecuritySampler.configure(config)
-
-      expect(apiSecuritySampler.sampleRequest()).to.false
+    it('should return true and put request in cache if priority is USER_KEEP', () => {
+      const rootSpan = { context: () => ({ _sampling: { priority: 1 } }) }
+      webStub.root.returns(rootSpan)
+      const req = { url: '/test', method: 'GET' }
+      const res = { statusCode: 200 }
+      expect(apiSecuritySampler.sampleRequest(req, res)).to.be.true
     })
 
-    it('should sample request according to the config', () => {
-      config.apiSecurity.requestSampling = 1
+    it('should return false if priority is neither AUTO_KEEP nor USER_KEEP', () => {
+      const rootSpan = { context: () => ({ _sampling: { priority: 0 } }) }
+      webStub.root.returns(rootSpan)
+      expect(apiSecuritySampler.sampleRequest({}, {})).to.be.false
+    })
+  })
 
-      apiSecuritySampler.configure(config)
+  describe('disable', () => {
+    it('should set enabled to false and clear the cache', () => {
+      const req = { url: '/test', method: 'GET' }
+      const res = { statusCode: 200 }
 
-      expect(apiSecuritySampler.sampleRequest({})).to.true
+      const rootSpan = { context: () => ({ _sampling: { priority: 2 } }) }
+      webStub.root.returns(rootSpan)
 
-      apiSecuritySampler.setRequestSampling(0)
+      apiSecuritySampler.configure({ apiSecurity: { enabled: true, sampleDelay: 30 } })
+      expect(apiSecuritySampler.sampleRequest(req, res)).to.be.true
 
-      expect(apiSecuritySampler.sampleRequest()).to.false
+      apiSecuritySampler.disable()
+
+      expect(apiSecuritySampler.sampleRequest({}, {})).to.be.false
     })
   })
 })
