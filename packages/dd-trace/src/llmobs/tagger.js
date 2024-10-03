@@ -87,7 +87,7 @@ class LLMObsTagger {
       if (typeof value === 'number') {
         filterdMetrics[key] = value
       } else {
-        logger.warn(`Metric "${key}" must be a number, instead got ${value}`)
+        logger.warn(`Value for metric '${key}' must be a number, instead got ${value}`)
       }
     }
 
