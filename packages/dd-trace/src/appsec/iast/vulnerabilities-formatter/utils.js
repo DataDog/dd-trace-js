@@ -7,7 +7,7 @@ const STRINGIFY_RANGE_KEY = 'DD_' + crypto.randomBytes(20).toString('hex')
 const STRINGIFY_SENSITIVE_KEY = STRINGIFY_RANGE_KEY + 'SENSITIVE'
 const STRINGIFY_SENSITIVE_NOT_STRING_KEY = STRINGIFY_SENSITIVE_KEY + 'NOTSTRING'
 
-// eslint-disable-next-line max-len
+// eslint-disable-next-line @stylistic/js/max-len
 const KEYS_REGEX_WITH_SENSITIVE_RANGES = new RegExp(`(?:"(${STRINGIFY_RANGE_KEY}_\\d+_))|(?:"(${STRINGIFY_SENSITIVE_KEY}_\\d+_(\\d+)_))|("${STRINGIFY_SENSITIVE_NOT_STRING_KEY}_\\d+_([\\s0-9.a-zA-Z]*)")`, 'gm')
 const KEYS_REGEX_WITHOUT_SENSITIVE_RANGES = new RegExp(`"(${STRINGIFY_RANGE_KEY}_\\d+_)`, 'gm')
 

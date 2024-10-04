@@ -1,5 +1,6 @@
 import mocha from 'eslint-plugin-mocha'
 import n from 'eslint-plugin-n'
+import stylistic from '@stylistic/eslint-plugin-js'
 import globals from 'globals'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -32,20 +33,13 @@ export default [
   }, ...compat.extends('eslint:recommended', 'standard', 'plugin:mocha/recommended'), {
     plugins: {
       mocha,
-      n
+      n,
+      '@stylistic/js': stylistic
     },
 
     languageOptions: {
       globals: {
-        ...globals.node,
-        ...globals.mocha,
-        sinon: false,
-        expect: false,
-        proxyquire: false,
-        withVersions: false,
-        withPeerService: false,
-        withNamingSchema: false,
-        withExports: false
+        ...globals.node
       },
 
       ecmaVersion: 2022
@@ -58,24 +52,24 @@ export default [
     },
 
     rules: {
-      'max-len': [2, 120, 2],
-      'no-var': 2,
-      'no-console': 2,
-      'prefer-const': 2,
-      'object-curly-spacing': [2, 'always'],
-      'import/no-extraneous-dependencies': 2,
-      'standard/no-callback-literal': 0,
-      'no-prototype-builtins': 0,
-      'n/no-restricted-require': [2, ['diagnostics_channel']],
-      'n/no-callback-literal': 0,
+      '@stylistic/js/max-len': ['error', { code: 120, tabWidth: 2 }],
+      'no-var': 'error',
+      'no-console': 'error',
+      'prefer-const': 'error',
+      'object-curly-spacing': ['error', 'always'],
+      'import/no-extraneous-dependencies': 'error',
+      'standard/no-callback-literal': 'off',
+      'no-prototype-builtins': 'off',
+      'n/no-restricted-require': ['error', ['diagnostics_channel']],
+      'n/no-callback-literal': 'off',
 
       'object-curly-newline': ['error', {
         multiline: true,
         consistent: true
       }],
 
-      'import/no-absolute-path': 0,
-      'no-unused-expressions': 0
+      'import/no-absolute-path': 'off',
+      'no-unused-expressions': 'off'
     }
   },
   {
@@ -99,17 +93,17 @@ export default [
       }
     },
     rules: {
-      'mocha/no-mocha-arrows': 0,
-      'mocha/no-setup-in-describe': 0,
-      'mocha/no-sibling-hooks': 0,
-      'mocha/no-top-level-hooks': 0,
-      'mocha/max-top-level-suites': 0,
-      'mocha/no-identical-title': 0,
-      'mocha/no-global-tests': 0,
-      'mocha/no-exports': 0,
-      'mocha/no-skipped-tests': 0,
-      'n/handle-callback-err': 0,
-      'no-loss-of-precision': 0
+      'mocha/no-mocha-arrows': 'off',
+      'mocha/no-setup-in-describe': 'off',
+      'mocha/no-sibling-hooks': 'off',
+      'mocha/no-top-level-hooks': 'off',
+      'mocha/max-top-level-suites': 'off',
+      'mocha/no-identical-title': 'off',
+      'mocha/no-global-tests': 'off',
+      'mocha/no-exports': 'off',
+      'mocha/no-skipped-tests': 'off',
+      'n/handle-callback-err': 'off',
+      'no-loss-of-precision': 'off'
     }
   },
   {
@@ -120,7 +114,7 @@ export default [
       'packages/*/test/integration-test/**/*.mjs'
     ],
     rules: {
-      'import/no-extraneous-dependencies': 0
+      'import/no-extraneous-dependencies': 'off'
     }
   }
 ]

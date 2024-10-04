@@ -111,6 +111,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.1.0",
     "@eslint/js": "^9.11.1",
+    "@stylistic/eslint-plugin-js": "^2.8.0",
     "@types/node": "^16.18.103",
     "autocannon": "^4.5.2",
     "aws-sdk": "^2.1446.0",
