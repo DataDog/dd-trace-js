@@ -76,6 +76,43 @@ function getWebTags (startedSpans, i, span) {
   return memoize(null)
 }
 
+let channelsActivated = false
+function ensureChannelsActivated () {
+  if (channelsActivated) return
+
+  const { AsyncLocalStorage, createHook } = require('async_hooks')
+  const shimmer = require('../../../../datadog-shimmer')
+
+  createHook({ before: () => beforeCh.publish() }).enable()
+
+  shimmer.wrap(AsyncLocalStorage.prototype, 'enterWith', function (original) {
+    return function (...args) {
+      const retVal = original.apply(this, args)
+      enterCh.publish()
+      return retVal
+    }
+  })
+
+  // TODO this will change in the future. It won't be experimental forever.
+  const needsWrappedCb =
+    !process.execArgv.includes('--experimental-async-context-frame')
+  shimmer.wrap(AsyncLocalStorage.prototype, 'run', function (original) {
+    return function (store, callback, ...args) {
+      const wrappedCb = needsWrappedCb
+        ? shimmer.wrapFunction(callback, cb => function (...args) {
+          enterCh.publish()
+          return cb.apply(this, args)
+        })
+        : callback
+      const retVal = original.call(this, store, wrappedCb, ...args)
+      enterCh.publish()
+      return retVal
+    }
+  })
+
+  channelsActivated = true
+}
+
 class NativeWallProfiler {
   constructor (options = {}) {
     this.type = 'wall'
@@ -120,6 +157,8 @@ class NativeWallProfiler {
 
   start ({ mapper } = {}) {
     if (this._started) return
+
+    ensureChannelsActivated()
 
     this._mapper = mapper
     this._pprof = require('@datadog/pprof')
