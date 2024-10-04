@@ -281,6 +281,7 @@ const openSearchOptions: plugins.opensearch = {
 
 tracer.use('amqp10');
 tracer.use('amqplib');
+tracer.use('avsc');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
 tracer.use('bunyan');

@@ -1,4 +1,4 @@
-const PROTOBUF = 'protobuf'
+const AVRO = 'avro'
 const {
   SCHEMA_DEFINITION,
   SCHEMA_ID,
@@ -17,78 +17,80 @@ class SchemaExtractor {
     this.schema = schema
   }
 
-  static getTypeAndFormat (type) {
-    const typeFormatMapping = {
-      int32: ['integer', 'int32'],
-      int64: ['integer', 'int64'],
-      uint32: ['integer', 'uint32'],
-      uint64: ['integer', 'uint64'],
-      sint32: ['integer', 'sint32'],
-      sint64: ['integer', 'sint64'],
-      fixed32: ['integer', 'fixed32'],
-      fixed64: ['integer', 'fixed64'],
-      sfixed32: ['integer', 'sfixed32'],
-      sfixed64: ['integer', 'sfixed64'],
-      float: ['number', 'float'],
-      double: ['number', 'double'],
-      bool: ['boolean', null],
-      string: ['string', null],
-      bytes: ['string', 'byte'],
-      Enum: ['enum', null],
-      Type: ['type', null],
-      map: ['map', null],
-      repeated: ['array', null]
+  static getType (type) {
+    const typeMapping = {
+      string: 'string',
+      int: 'integer',
+      long: 'integer',
+      float: 'number',
+      double: 'number',
+      boolean: 'boolean',
+      bytes: 'string',
+      record: 'object',
+      enum: 'string',
+      array: 'array',
+      map: 'object',
+      fixed: 'string'
     }
-
-    return typeFormatMapping[type] || ['string', null]
+    const typeName = type.typeName ?? type.name ?? type
+    return typeName === 'null' ? typeName : typeMapping[typeName] || 'string'
   }
 
   static extractProperty (field, schemaName, fieldName, builder, depth) {
     let array = false
+    let type
+    let format
+    let enumValues
     let description
     let ref
-    let enumValues
 
-    const resolvedType = field.resolvedType ? field.resolvedType.constructor.name : field.type
+    const fieldType = field.type?.types ?? field.type?.typeName ?? field.type
 
-    const isRepeatedField = field.rule === 'repeated'
-
-    let typeFormat = this.getTypeAndFormat(isRepeatedField ? 'repeated' : resolvedType)
-    let type = typeFormat[0]
-    let format = typeFormat[1]
-
-    if (type === 'array') {
+    if (Array.isArray(fieldType)) {
+      // Union Type
+      type = 'union[' + fieldType.map(t => SchemaExtractor.getType(t.type || t)).join(',') + ']'
+    } else if (fieldType === 'array') {
+      // Array Type
       array = true
-      typeFormat = this.getTypeAndFormat(resolvedType)
-      type = typeFormat[0]
-      format = typeFormat[1]
-    }
-
-    if (type === 'type') {
-      format = null
-      ref = `#/components/schemas/${removeLeadingPeriod(field.resolvedType.fullName)}`
-      // keep a reference to the original builder iterator since when we recurse this reference will get reset to
-      // deeper schemas
-      const originalSchemaExtractor = builder.iterator
-      if (!this.extractSchema(field.resolvedType, builder, depth, this)) {
+      const nestedType = field.type.itemsType.typeName
+      type = SchemaExtractor.getType(nestedType)
+    } else if (fieldType === 'record') {
+      // Nested Record Type
+      type = 'object'
+      ref = `#/components/schemas/${field.type.name}`
+      if (!SchemaExtractor.extractSchema(field.type, builder, depth + 1, this)) {
         return false
       }
-      type = 'object'
-      builder.iterator = originalSchemaExtractor
-    } else if (type === 'enum') {
+    } else if (fieldType === 'enum') {
       enumValues = []
       let i = 0
-      while (field.resolvedType.valuesById[i]) {
-        enumValues.push(field.resolvedType.valuesById[i])
+      type = 'string'
+      while (field.type.symbols[i]) {
+        enumValues.push(field.type.symbols[i])
         i += 1
       }
+    } else {
+      // Primitive type
+      type = SchemaExtractor.getType(fieldType.type || fieldType)
+      if (fieldType === 'bytes') {
+        format = 'byte'
+      } else if (fieldType === 'int') {
+        format = 'int32'
+      } else if (fieldType === 'long') {
+        format = 'int64'
+      } else if (fieldType === 'float') {
+        format = 'float'
+      } else if (fieldType === 'double') {
+        format = 'double'
+      }
     }
+
     return builder.addProperty(schemaName, fieldName, array, type, description, ref, format, enumValues)
   }
 
   static extractSchema (schema, builder, depth, extractor) {
     depth += 1
-    const schemaName = removeLeadingPeriod(schema.resolvedType ? schema.resolvedType.fullName : schema.fullName)
+    const schemaName = schema.name
     if (extractor) {
       // if we already have a defined extractor, this is a nested schema. create a new extractor for the nested
       // schema, ensure it is added to our schema builder's cache, and replace the builders iterator with our
@@ -106,20 +108,17 @@ class SchemaExtractor {
       if (!builder.shouldExtractSchema(schemaName, depth)) {
         return false
       }
-      for (const field of schema.fieldsArray) {
+      for (const field of schema.fields) {
         if (!this.extractProperty(field, schemaName, field.name, builder, depth)) {
           log.warn(`DSM: Unable to extract field with name: ${field.name} from Avro schema with name: ${schemaName}`)
         }
       }
-      return true
     }
+    return true
   }
 
   static extractSchemas (descriptor, dataStreamsProcessor) {
-    const schemaName = removeLeadingPeriod(
-      descriptor.resolvedType ? descriptor.resolvedType.fullName : descriptor.fullName
-    )
-    return dataStreamsProcessor.getSchema(schemaName, new SchemaExtractor(descriptor))
+    return dataStreamsProcessor.getSchema(descriptor.name, new SchemaExtractor(descriptor))
   }
 
   iterateOverSchema (builder) {
@@ -128,7 +127,7 @@ class SchemaExtractor {
 
   static attachSchemaOnSpan (args, span, operation, tracer) {
     const { messageClass } = args
-    const descriptor = messageClass.$type ?? messageClass
+    const descriptor = messageClass?.constructor?.type ?? messageClass
 
     if (!descriptor || !span) {
       return
@@ -139,8 +138,8 @@ class SchemaExtractor {
       return
     }
 
-    span.setTag(SCHEMA_TYPE, PROTOBUF)
-    span.setTag(SCHEMA_NAME, removeLeadingPeriod(descriptor.fullName))
+    span.setTag(SCHEMA_TYPE, AVRO)
+    span.setTag(SCHEMA_NAME, descriptor.name)
     span.setTag(SCHEMA_OPERATION, operation)
 
     if (!tracer._dataStreamsProcessor.canSampleSchema(operation)) {
@@ -165,16 +164,6 @@ class SchemaExtractor {
     span.setTag(SCHEMA_WEIGHT, weight)
     span.setTag(SCHEMA_ID, schemaData.id)
   }
-}
-
-function removeLeadingPeriod (str) {
-  // Check if the first character is a period
-  if (str.charAt(0) === '.') {
-    // Remove the first character
-    return str.slice(1)
-  }
-  // Return the original string if the first character is not a period
-  return str
 }
 
 module.exports = SchemaExtractor

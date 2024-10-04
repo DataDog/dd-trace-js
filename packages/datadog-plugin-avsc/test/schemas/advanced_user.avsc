@@ -1,0 +1,74 @@
+{
+    "namespace": "example.avro",
+    "type": "record",
+    "name": "AdvancedUser",
+    "fields": [
+        {
+            "name": "email",
+            "type": [
+                "null",
+                "string"
+            ],
+            "default": null
+        },
+        {
+            "name": "preferences",
+            "type": {
+                "type": "map",
+                "values": "string"
+            }
+        },
+        {
+            "name": "tags",
+            "type": {
+                "type": "array",
+                "items": "string"
+            }
+        },
+        {
+            "name": "status",
+            "type": {
+                "type": "enum",
+                "name": "Status",
+                "symbols": [
+                    "ACTIVE",
+                    "INACTIVE",
+                    "BANNED"
+                ]
+            }
+        },
+        {
+            "name": "profile_picture",
+            "type": "bytes"
+        },
+        {
+            "name": "metadata",
+            "type": {
+                "type": "fixed",
+                "name": "Metadata",
+                "size": 16
+            }
+        },
+        {
+            "name": "address",
+            "type": {
+                "type": "record",
+                "name": "Address",
+                "fields": [
+                    {
+                        "name": "street",
+                        "type": "string"
+                    },
+                    {
+                        "name": "city",
+                        "type": "string"
+                    },
+                    {
+                        "name": "zipcode",
+                        "type": "string"
+                    }
+                ]
+            }
+        }
+    ]
+}
