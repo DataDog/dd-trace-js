@@ -1,6 +1,5 @@
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getMessageSize } = require('../../dd-trace/src/datastreams/processor')
-const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
 
 class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'kafkajs' }
@@ -9,7 +8,7 @@ class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
   start ({ topic, partition, messages, groupId }) {
     if (!this.config.dsmEnabled) return
     for (const message of messages) {
-      if (!message || !message.headers || !DsmPathwayCodec.contextExists(message.headers)) continue
+      if (!message || !message.headers) continue
       const payloadSize = getMessageSize(message)
       this.tracer.decodeDataStreamsContext(message.headers)
       this.tracer

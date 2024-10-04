@@ -2,8 +2,12 @@
   "extends": [
     "../../../.eslintrc.json"
   ],
+  "parserOptions": {
+    "ecmaVersion": 2022
+  },
   "env": {
-    "mocha": true
+    "mocha": true,
+    "es2022": true
   },
   "globals": {
     "expect": true,
