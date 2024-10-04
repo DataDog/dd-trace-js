@@ -253,7 +253,7 @@ describe('reporter', () => {
         expect(Reporter.reportAttack('', params)).to.not.be.false
         expect(addTags.getCall(5).firstArg).to.have.property('manual.keep').that.equals('true')
         done()
-      }, 1e3)
+      }, 1020)
     })
 
     it('should not overwrite origin tag', () => {
