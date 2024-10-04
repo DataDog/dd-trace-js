@@ -14,6 +14,7 @@ echo "writing redirects..."
 declare -a plugins=(
   "amqp10"
   "amqplib"
+  "avsc"
   "aws_sdk"
   "bluebird"
   "couchbase"

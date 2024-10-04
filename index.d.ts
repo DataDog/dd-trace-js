@@ -147,6 +147,7 @@ interface Plugins {
   "amqp10": tracer.plugins.amqp10;
   "amqplib": tracer.plugins.amqplib;
   "apollo": tracer.plugins.apollo;
+  "avsc": tracer.plugins.avsc;
   "aws-sdk": tracer.plugins.aws_sdk;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
@@ -1191,6 +1192,12 @@ declare namespace tracer {
        */
       signature?: boolean;
     }
+
+    /**
+     * This plugin automatically patches the [avsc](https://github.com/mtth/avsc) module
+     * to collect avro message schemas when Datastreams Monitoring is enabled.
+     */
+    interface avsc extends Integration {}
 
     /**
      * This plugin automatically instruments the
