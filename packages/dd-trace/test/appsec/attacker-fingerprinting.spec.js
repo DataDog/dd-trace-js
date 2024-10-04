@@ -53,14 +53,14 @@ describe('Attacker fingerprinting', () => {
         }, { metakey: 'metaValue' })
         res.end()
       }
+
       agent.use(traces => {
         assert.property(traces[0][0].meta, '_dd.appsec.fp.http.header')
         assert.equal(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000010-6431a3e6-3-98425651')
         assert.property(traces[0][0].meta, '_dd.appsec.fp.http.network')
         assert.equal(traces[0][0].meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
-      })
-        .then(done)
-        .catch(done)
+      }).then(done).catch(done)
+
       axios.get(`http://localhost:${port}/`)
     })
 
@@ -69,14 +69,14 @@ describe('Attacker fingerprinting', () => {
         tracer.appsec.trackUserLoginFailureEvent('test_user_id', true, { metakey: 'metaValue' })
         res.end()
       }
+
       agent.use(traces => {
         assert.property(traces[0][0].meta, '_dd.appsec.fp.http.header')
         assert.equal(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000010-6431a3e6-3-98425651')
         assert.property(traces[0][0].meta, '_dd.appsec.fp.http.network')
         assert.equal(traces[0][0].meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
-      })
-        .then(done)
-        .catch(done)
+      }).then(done).catch(done)
+
       axios.get(`http://localhost:${port}/`)
     })
   })
