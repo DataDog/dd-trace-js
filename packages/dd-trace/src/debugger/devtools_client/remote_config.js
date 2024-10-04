@@ -92,7 +92,7 @@ async function processMsg (action, probe) {
         await addBreakpoint(probe)
         break
       case 'modify':
-        // TODO: Can we modify in place?
+        // TODO: Modify existing probe instead of removing it (DEBUG-2817)
         await removeBreakpoint(probe)
         await addBreakpoint(probe)
         break
