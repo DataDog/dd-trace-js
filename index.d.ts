@@ -1232,7 +1232,7 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
-     * azure.functions module.
+     * @azure/functions module.
     */
     interface azure_functions extends Instrumentation {}
 
