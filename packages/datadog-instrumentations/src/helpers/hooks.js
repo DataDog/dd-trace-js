@@ -100,6 +100,7 @@ module.exports = {
   playwright: () => require('../playwright'),
   'promise-js': () => require('../promise-js'),
   promise: () => require('../promise'),
+  protobufjs: () => require('../protobufjs'),
   q: () => require('../q'),
   qs: () => require('../qs'),
   redis: () => require('../redis'),

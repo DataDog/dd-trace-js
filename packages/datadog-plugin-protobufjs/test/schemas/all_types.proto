@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package example;
+
+// Enum definition
+enum Status {
+    UNKNOWN = 0;
+    ACTIVE = 1;
+    INACTIVE = 2;
+}
+
+// Message with various number types and other scalar types
+message Scalars {
+    int32 int32Field = 1;
+    int64 int64Field = 2;
+    uint32 uint32Field = 3;
+    uint64 uint64Field = 4;
+    sint32 sint32Field = 5;
+    sint64 sint64Field = 6;
+    fixed32 fixed32Field = 7;
+    fixed64 fixed64Field = 8;
+    sfixed32 sfixed32Field = 9;
+    sfixed64 sfixed64Field = 10;
+    float floatField = 11;
+    double doubleField = 12;
+    bool boolField = 13;
+    string stringField = 14;
+    bytes bytesField = 15;
+}
+
+// Nested message definition
+message NestedMessage {
+    string id = 1;
+    Scalars scalars = 2;
+}
+
+// Message demonstrating the use of repeated fields and maps
+message ComplexMessage {
+    repeated string repeatedField = 1;
+    map<string, Scalars> mapField = 2;
+}
+
+// Main message that uses all the above elements
+message MainMessage {
+    Status status = 1;
+    Scalars scalars = 2;
+    NestedMessage nested = 3;
+    ComplexMessage complex = 4;
+}
