@@ -55,6 +55,7 @@ declare -a plugins=(
   "pg"
   "promise"
   "promise_js"
+  "protobufjs"
   "q"
   "redis"
   "restify"

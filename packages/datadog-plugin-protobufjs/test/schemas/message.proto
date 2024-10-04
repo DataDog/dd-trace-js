@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+import "other_message.proto";
+
+enum Status {
+  UNKNOWN = 0;
+  ACTIVE = 1;
+  INACTIVE = 2;
+  DELETED = 3;
+}
+
+message MyMessage {
+  string id = 1;
+  string value = 2;
+  repeated OtherMessage otherMessage = 3;
+  Status status = 4;
+}
