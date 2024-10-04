@@ -1,5 +1,6 @@
 'use strict'
 
+const { hostname: getHostname } = require('os')
 const { stringify } = require('querystring')
 
 const config = require('./config')
@@ -9,6 +10,7 @@ const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../../plugins/util/tags'
 module.exports = send
 
 const ddsource = 'dd_debugger'
+const hostname = getHostname()
 const service = config.service
 
 const ddtags = [
@@ -28,6 +30,7 @@ function send (message, logger, snapshot, cb) {
 
   const payload = {
     ddsource,
+    hostname,
     service,
     message,
     logger,
