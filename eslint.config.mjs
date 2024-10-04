@@ -56,14 +56,14 @@ export default [
       'no-var': 'error',
       'no-console': 'error',
       'prefer-const': 'error',
-      'object-curly-spacing': ['error', 'always'],
+      '@stylistic/js/object-curly-spacing': ['error', 'always'],
       'import/no-extraneous-dependencies': 'error',
       'standard/no-callback-literal': 'off',
       'no-prototype-builtins': 'off',
       'n/no-restricted-require': ['error', ['diagnostics_channel']],
       'n/no-callback-literal': 'off',
 
-      'object-curly-newline': ['error', {
+      '@stylistic/js/object-curly-newline': ['error', {
         multiline: true,
         consistent: true
       }],
