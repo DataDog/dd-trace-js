@@ -82,6 +82,23 @@ describe('Plugin', () => {
           })
         })
 
+        it('should load using a callback instead of promise', async () => {
+          const loadedMessages = loadMessage(protobuf, 'OtherMessage', () => {
+            tracer.trace('other_message.serialize', span => {
+              loadedMessages.OtherMessage.type.encode(loadedMessages.OtherMessage.instance).finish()
+
+              expect(span._name).to.equal('other_message.serialize')
+
+              expect(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span)).to.equal(true)
+              expect(span.context()._tags).to.have.property(SCHEMA_TYPE, 'protobuf')
+              expect(span.context()._tags).to.have.property(SCHEMA_NAME, 'OtherMessage')
+              expect(span.context()._tags).to.have.property(SCHEMA_OPERATION, 'serialization')
+              expect(span.context()._tags).to.have.property(SCHEMA_ID, OTHER_MESSAGE_SCHEMA_ID)
+              expect(span.context()._tags).to.have.property(SCHEMA_WEIGHT, 1)
+            })
+          })
+        })
+
         it('should serialize complex schema correctly', async () => {
           const loadedMessages = await loadMessage(protobuf, 'MyMessage')
 

@@ -98,16 +98,16 @@ addHook({
   shimmer.wrap(protobuf.Root.prototype, 'load', original => function () {
     const result = original.apply(this, arguments)
     if (isPromise(result)) {
-      result.then(root => {
+      return result.then(root => {
         wrapProtobufClasses(root)
+        return root
       })
     } else {
       // If result is not a promise, directly wrap the protobuf classes
       wrapProtobufClasses(result)
+      return result
     }
-    return result
-  }
-  )
+  })
 
   shimmer.wrap(protobuf.Root.prototype, 'loadSync', original => function () {
     const root = original.apply(this, arguments)
