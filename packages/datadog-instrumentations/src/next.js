@@ -49,7 +49,6 @@ function wrapHandleApiRequestWithMatch (handleApiRequest) {
       const page = (match !== null && typeof match === 'object' && typeof match.definition === 'object')
         ? match.definition.pathname
         : undefined
-
       pageLoadChannel.publish({ page })
 
       return handleApiRequest.apply(this, arguments)
@@ -140,8 +139,14 @@ function instrument (req, res, error, handler) {
       // promise should only reject when propagateError is true:
       // https://github.com/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L547
       return promise.then(
-        result => finish(ctx, result),
-        err => finish(ctx, null, err)
+        result => {
+          finish(ctx, result)
+        }
+        ,
+        err => {
+          console.log('we call error MAYBE', err.message)
+          finish(ctx, null, err)
+        }
       )
     } catch (e) {
       // this will probably never happen as the handler caller is an async function:
@@ -188,7 +193,7 @@ function finish (ctx, result, err) {
 // however, it is not provided as a class function or exported property
 addHook({
   name: 'next',
-  versions: ['>=13.3.0 <14.2.7'],
+  versions: ['>=13.3.0 14.2.7'],
   file: 'dist/server/web/spec-extension/adapters/next-request.js'
 }, NextRequestAdapter => {
   shimmer.wrap(NextRequestAdapter.NextRequestAdapter, 'fromNodeNextRequest', fromNodeNextRequest => {
@@ -203,9 +208,11 @@ addHook({
 
 addHook({
   name: 'next',
-  versions: ['>=11.1 <14.2.7'],
+  versions: ['14.2.7'],
   file: 'dist/server/serve-static.js'
-}, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
+}, serveStatic => {
+  shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic)
+})
 
 addHook({
   name: 'next',
@@ -213,7 +220,7 @@ addHook({
   file: 'dist/next-server/server/serve-static.js'
 }, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
 
-addHook({ name: 'next', versions: ['>=11.1 <14.2.7'], file: 'dist/server/next-server.js' }, nextServer => {
+addHook({ name: 'next', versions: ['14.2.7'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
 
   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
@@ -225,14 +232,14 @@ addHook({ name: 'next', versions: ['>=11.1 <14.2.7'], file: 'dist/server/next-se
   shimmer.wrap(Server.prototype, 'renderErrorToResponse', wrapRenderErrorToResponse)
 
   shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
-
   return nextServer
 })
 
 // `handleApiRequest` changes parameters/implementation at 13.2.0
-addHook({ name: 'next', versions: ['>=13.2 <14.2.7'], file: 'dist/server/next-server.js' }, nextServer => {
+addHook({ name: 'next', versions: ['14.2.7'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
+
   return nextServer
 })
 
@@ -264,7 +271,7 @@ addHook({
 
 addHook({
   name: 'next',
-  versions: ['>=13 <14.2.7'],
+  versions: ['14.2.7'],
   file: 'dist/server/web/spec-extension/request.js'
 }, request => {
   const nextUrlDescriptor = Object.getOwnPropertyDescriptor(request.NextRequest.prototype, 'nextUrl')

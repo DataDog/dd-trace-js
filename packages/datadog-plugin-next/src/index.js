@@ -56,8 +56,8 @@ class NextPlugin extends ServerPlugin {
     const store = storage.getStore()
 
     if (!store) return
-
     const span = store.span
+
     const error = span.context()._tags.error
     const requestError = req.error || nextRequest.error
 
@@ -66,6 +66,7 @@ class NextPlugin extends ServerPlugin {
       span.setTag('error', requestError)
       web.addError(req, requestError)
     } else if (error) {
+      console.log('if error', error)
       // general error handling
       span.setTag('error', error)
       web.addError(req, requestError || error)
