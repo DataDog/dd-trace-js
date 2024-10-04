@@ -6,7 +6,7 @@ stages:
   - macrobenchmarks
 
 include:
-  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include/one-pipeline.yml
+  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include-wip/landerson/all-onboarding-tests/one-pipeline.yml
   - local: ".gitlab/benchmarks.yml"
   - local: ".gitlab/macrobenchmarks.yml"
 
@@ -14,12 +14,29 @@ variables:
   # dd-trace-js has some exceptions to the default names
   AGENT_REPO_PRODUCT_NAME: auto_inject-node
   SYSTEM_TESTS_LIBRARY: nodejs
+  ONBOARDING_PROFILING_SUPPORTED: "true"
 
 onboarding_tests_installer:
   parallel:
     matrix:
       - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs,test-app-nodejs-container]
-        SCENARIO: [ INSTALLER_AUTO_INJECTION, SIMPLE_AUTO_INJECTION_PROFILING ]
+
+onboarding_tests_installer_full:
+  parallel:
+    matrix:
+      - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs,test-app-nodejs-container,test-app-nodejs-alpine-libgcc]
+
+onboarding_tests_container_install_script:
+  extends: .onboarding_tests_installer_base
+  parallel:
+    matrix:
+      - ONBOARDING_FILTER_WEBLOG: [ test-app-nodejs-container,test-app-nodejs-alpine-libgcc ]
+
+onboarding_tests_not_supported:
+  extends: .onboarding_tests_installer_base
+  parallel:
+    matrix:
+      - ONBOARDING_FILTER_WEBLOG: [ test-app-nodejs-16, test-app-nodejs-alpine ]
 
 onboarding_tests_k8s_injection:
   variables:
