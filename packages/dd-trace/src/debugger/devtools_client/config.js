@@ -7,6 +7,8 @@ const log = require('../../log')
 const config = module.exports = {
   runtimeId: parentConfig.tags['runtime-id'],
   service: parentConfig.service,
+  commitSHA: parentConfig.commitSHA,
+  repositoryUrl: parentConfig.repositoryUrl,
   parentThreadId
 }
 
