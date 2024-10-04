@@ -7,6 +7,7 @@ const {
   SCHEMA_WEIGHT,
   SCHEMA_TYPE
 } = require('../../dd-trace/src/constants')
+const log = require('../../dd-trace/src/log')
 const {
   SchemaBuilder
 } = require('../../dd-trace/src/datastreams/schemas/schema_builder')
@@ -107,17 +108,13 @@ class SchemaExtractor {
       if (!builder.shouldExtractSchema(schemaName, depth)) {
         return false
       }
-      try {
-        for (const field of schema.fields) {
-          if (!this.extractProperty(field, schemaName, field.name, builder, depth)) {
-            return false
-          }
+      for (const field of schema.fields) {
+        if (!this.extractProperty(field, schemaName, field.name, builder, depth)) {
+          log.warn(`DSM: Unable to extract field with name: ${field.name} from Avro schema with name: ${schemaName}`)
         }
-      } catch (error) {
-        return false
       }
-      return true
     }
+    return true
   }
 
   static extractSchemas (descriptor, dataStreamsProcessor) {
