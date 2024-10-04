@@ -30,6 +30,7 @@ class LLMObsTagger {
     this._config = config
   }
 
+  // TODO: instead of passing in the span here, can we pass in a namespaced object?
   setLLMObsSpanTags (
     span,
     kind,
@@ -57,6 +58,7 @@ class LLMObsTagger {
     span.setTag(PARENT_ID_KEY, parentId)
   }
 
+  // TODO: similarly for the following `tag` methods, can we pass in a namespaced object instead of the span?
   tagLLMIO (span, inputData, outputData) {
     this._tagMessages(span, inputData, INPUT_MESSAGES)
     this._tagMessages(span, outputData, OUTPUT_MESSAGES)

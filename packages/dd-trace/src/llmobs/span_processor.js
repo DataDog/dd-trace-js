@@ -44,6 +44,8 @@ class LLMObsSpanProcessor {
     }
   }
 
+  // TODO: can we correlate the span + trace IDs with a namespaced object to
+  // access LLMObs properties associated with the span?
   process (span) {
     if (!this._config.llmobs.enabled) return
     if (!isLLMObsSpan(span)) return
@@ -62,6 +64,8 @@ class LLMObsSpanProcessor {
     }
   }
 
+  // TODO: pass in span plus correlated LLMObs object from namespaced storage
+  // Then, the only thing we need the span for are error tags and start/duration
   format (span) {
     const tags = span.context()._tags
     const spanKind = tags[SPAN_KIND]
