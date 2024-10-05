@@ -1,0 +1,67 @@
+name: Prepare prerelease branch
+
+inputs:
+  base-branch:
+    description: 'The base branch to create the prerelease branch from'
+    required: true
+  github-token:
+    description: 'Github token to use in branch-diff'
+    required: true
+
+runs:
+  using: composite
+
+  steps:
+    - name: Configure node
+      uses: actions/setup-node@v3
+
+    - name: Checkout master
+      shell: bash
+      run: |
+        git fetch
+        git checkout master
+        git pull
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        yarn
+
+    - name: Install branch-diff
+      shell: bash
+      run: |
+        npm i -g @bengl/branch-diff
+
+    - name: Configure branch-diff
+      shell: bash
+      run: |
+        mkdir -p ~/.config/changelog-maker
+        echo "{\"token\":\"${{inputs.github-token}}\",\"user\":\"${{github.actor}}\"}" > ~/.config/changelog-maker/config.json
+
+    - name: Copy scripts
+      shell: bash
+      run: |
+        cp -r scripts _scripts
+
+    - name: Set up Git
+      shell: bash
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Checkout proposal branch
+      shell: bash
+      run: |
+        git fetch
+        git checkout ${{ inputs.base-branch}}-proposal || (git checkout ${{ inputs.base-branch}} && git checkout -b ${{ inputs.base-branch}}-proposal)
+
+    - name: Commit branch diffs
+      id: commit_branch_diffs
+      shell: bash
+      run: |
+        node _scripts/prepare-release-proposal.js commit-branch-diffs ${{ inputs.base-branch }}-proposal
+
+    - name: Push prerelease branch
+      shell: bash
+      run: |
+        git push origin ${{ inputs.base-branch}}-proposal
