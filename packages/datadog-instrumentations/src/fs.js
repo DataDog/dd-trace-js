@@ -192,7 +192,7 @@ function wrapCreateStream (original) {
     const message = getMessage(name, ['path', 'options'], arguments)
 
     return innerResource.runInAsyncScope(() => {
-      startChannel.publish(message)
+      startChannel.publish({ ...message, caller: getCallerModule(this) })
 
       try {
         const stream = original.apply(this, arguments)
@@ -239,7 +239,7 @@ function createWatchWrapFunction (override = '') {
       const message = getMessage(method, watchMethods[operation], arguments, this)
       const innerResource = new AsyncResource('bound-anonymous-fn')
       return innerResource.runInAsyncScope(() => {
-        startChannel.publish(message)
+        startChannel.publish({ ...message, caller: getCallerModule(this) })
         try {
           const result = original.apply(this, arguments)
           finishChannel.publish()
@@ -283,7 +283,7 @@ function createWrapFunction (prefix = '', override = '') {
       }
 
       return innerResource.runInAsyncScope(() => {
-        startChannel.publish(message)
+        startChannel.publish({ ...message, caller: getCallerModule(this) })
         try {
           const result = original.apply(this, arguments)
           if (cb) return result
@@ -354,4 +354,8 @@ function wrap (target, method, wrapper) {
   } catch (e) {
     // skip unavailable method
   }
+}
+
+function getCallerModule (self) {
+  return self?.__getCallerModule ? self.__getCallerModule() : undefined
 }
