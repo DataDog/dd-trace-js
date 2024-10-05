@@ -10,6 +10,23 @@ const regexUsername = new RegExp(UUID_PATTERN, 'i')
 const SDK_USER_EVENT_PATTERN = '^_dd\\.appsec\\.events\\.users\\.[\\W\\w+]+\\.sdk$'
 const regexSdkEvent = new RegExp(SDK_USER_EVENT_PATTERN, 'i')
 
+let collectionMode
+
+function setCollectionMode (mode) {
+  switch (mode) {
+    case 'ident':
+    case 'identification':
+      collectionMode = 'ident'
+      break
+    case 'anon':
+    case 'anonymization':
+      collectionMode = 'anon'
+      break
+    default:
+      collectionMode = null // disabled
+  }
+}
+
 function isSdkCalled (tags) {
   let called = false
 
@@ -106,5 +123,6 @@ function passportTrackEvent (credentials, passportUser, rootSpan, mode) {
 }
 
 module.exports = {
-  passportTrackEvent
+  passportTrackEvent,
+  setCollectionMode
 }
