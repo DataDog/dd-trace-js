@@ -533,11 +533,15 @@ const otelTraceFlags: number = spanContext.traceFlags
 const otelTraceState: opentelemetry.TraceState = spanContext.traceState!
 
 // -- LLM Observability --
+const llmobsEnableOptions = {
+  apiKey: 'dd-api-key',
+  mlApp: 'mlApp',
+  agentlessEnabled: true
+}
 tracer.init({
-  llmobs: {
-    apiKey: 'dd-api-key',
-    mlApp: 'mlApp',
-    agentlessEnabled: true
+  llmobs: llmobsEnableOptions,
+  experimental: {
+    llmobs: llmobsEnableOptions
   }
 })
 const llmobs = tracer.llmobs
@@ -554,22 +558,20 @@ llmobs.enable({
 llmobs.disable()
 
 // start span in current context
-const baseOptions = { name: 'mySpan', sessionId: '123', mlApp: 'mlApp' }
-const modelOptions = { ...baseOptions, modelName: 'myModel', modelProvider: 'myProvider'}
 llmobs.startSpan('llm')
-llmobs.startSpan('llm', modelOptions)
+llmobs.startSpan('llm', {  name: 'mySpan', sessionId: '123', mlApp: 'mlApp' , modelName: 'myModel', modelProvider: 'myProvider'})
 llmobs.startSpan('embedding')
-llmobs.startSpan('embedding', modelOptions)
+llmobs.startSpan('embedding', {  name: 'mySpan', sessionId: '123', mlApp: 'mlApp' , modelName: 'myModel', modelProvider: 'myProvider'})
 llmobs.startSpan('agent')
-llmobs.startSpan('agent', baseOptions)
+llmobs.startSpan('agent', { name: 'mySpan', sessionId: '123', mlApp: 'mlApp' })
 llmobs.startSpan('retrieval')
-llmobs.startSpan('retrieval', baseOptions)
+llmobs.startSpan('retrieval', { name: 'mySpan', sessionId: '123', mlApp: 'mlApp' })
 llmobs.startSpan('task')
-llmobs.startSpan('task', baseOptions)
+llmobs.startSpan('task', { name: 'mySpan', sessionId: '123', mlApp: 'mlApp' })
 llmobs.startSpan('tool')
-llmobs.startSpan('tool', baseOptions)
+llmobs.startSpan('tool', { name: 'mySpan', sessionId: '123', mlApp: 'mlApp' })
 llmobs.startSpan('workflow')
-llmobs.startSpan('workflow', baseOptions)
+llmobs.startSpan('workflow', { name: 'mySpan', sessionId: '123', mlApp: 'mlApp' })
 
 // trace block of code
 llmobs.trace('llm', () => {})
