@@ -9,7 +9,6 @@ const {
 const { spawn } = require('child_process')
 const { assert } = require('chai')
 const findProcess = require('find-process')
-const waitOn = require('wait-on')
 
 describe('esm', () => {
   let agent
@@ -74,15 +73,6 @@ async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, st
 function spawnProc (command, args, options = {}, stdioHandler, stderrHandler) {
   const proc = spawn(command, args, { ...options, stdio: 'pipe' })
   return new Promise((resolve, reject) => {
-    waitOn({
-      resources: ['http-get://127.0.0.1:7071'],
-      timeout: 5000
-    }).then(() => {
-      resolve(proc)
-    }).catch(err => {
-      reject(new Error(`Error while waiting for process to start: ${err.message}`))
-    })
-
     proc
       .on('error', reject)
       .on('exit', code => {
@@ -98,6 +88,10 @@ function spawnProc (command, args, options = {}, stdioHandler, stderrHandler) {
       }
       // eslint-disable-next-line no-console
       if (!options.silent) console.log(data.toString())
+
+      if (data.toString().includes('http://localhost:7071/api/httptest')) {
+        resolve()
+      }
     })
 
     proc.stderr.on('data', data => {
