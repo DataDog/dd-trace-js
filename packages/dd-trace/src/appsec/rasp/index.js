@@ -1,8 +1,8 @@
 'use strict'
 
 const web = require('../../plugins/util/web')
-const { setUncaughtExceptionCaptureCallbackStart } = require('../channels')
-const { block } = require('../blocking')
+const { setUncaughtExceptionCaptureCallbackStart, expressMiddlewareError } = require('../channels')
+const { block, isBlocked } = require('../blocking')
 const ssrf = require('./ssrf')
 const sqli = require('./sql_injection')
 const lfi = require('./lfi')
@@ -31,17 +31,13 @@ function findDatadogRaspAbortError (err, deep = 10) {
     return err
   }
 
-  if (err.cause && deep > 0) {
+  if (err?.cause && deep > 0) {
     return findDatadogRaspAbortError(err.cause, deep - 1)
   }
 }
 
-function handleUncaughtExceptionMonitor (err) {
-  const abortError = findDatadogRaspAbortError(err)
-  if (!abortError) return
-
-  const { req, res, blockingAction } = abortError
-  block(req, res, web.root(req), null, blockingAction)
+function handleUncaughtExceptionMonitor (error) {
+  if (!blockOnDatadogRaspAbortError({ error })) return
 
   if (!process.hasUncaughtExceptionCaptureCallback()) {
     const cleanUp = removeAllListeners(process, 'uncaughtException')
@@ -83,12 +79,25 @@ function handleUncaughtExceptionMonitor (err) {
   }
 }
 
+function blockOnDatadogRaspAbortError ({ error }) {
+  const abortError = findDatadogRaspAbortError(error)
+  if (!abortError) return false
+
+  const { req, res, blockingAction } = abortError
+  if (!isBlocked(res)) {
+    block(req, res, web.root(req), null, blockingAction)
+  }
+
+  return true
+}
+
 function enable (config) {
   ssrf.enable(config)
   sqli.enable(config)
   lfi.enable(config)
 
   process.on('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
+  expressMiddlewareError.subscribe(blockOnDatadogRaspAbortError)
 }
 
 function disable () {
@@ -97,10 +106,12 @@ function disable () {
   lfi.disable()
 
   process.off('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
+  if (expressMiddlewareError.hasSubscribers) expressMiddlewareError.unsubscribe(blockOnDatadogRaspAbortError)
 }
 
 module.exports = {
   enable,
   disable,
-  handleUncaughtExceptionMonitor // exported only for testing purpose
+  handleUncaughtExceptionMonitor, // exported only for testing purpose
+  blockOnDatadogRaspAbortError // exported only for testing purpose
 }

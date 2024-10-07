@@ -82,12 +82,28 @@ describe('RASP - lfi', () => {
         }
       }
 
+      function getAppSync (fn, args, options) {
+        return (req, res) => {
+          try {
+            const result = fn(args)
+            options.onfinish?.(result)
+          } catch (e) {
+            if (e.message === 'DatadogRaspAbortError') {
+              res.writeHead(418)
+            }
+          }
+          res.end('end')
+        }
+      }
+
       function runFsMethodTest (description, options, fn, ...args) {
         const { vulnerableIndex = 0, ruleEvalCount } = options
 
         describe(description, () => {
+          const getAppFn = options.getAppFn ?? getApp
+
           it('should block param from the request', async () => {
-            app = getApp(fn, args, options)
+            app = getAppFn(fn, args, options)
 
             const file = args[vulnerableIndex]
             return testBlockingRequest(`/?file=${file}`, undefined, ruleEvalCount)
@@ -97,7 +113,7 @@ describe('RASP - lfi', () => {
           })
 
           it('should not block if param not found in the request', async () => {
-            app = getApp(fn, args, options)
+            app = getAppFn(fn, args, options)
 
             await axios.get('/?file=/test.file')
 
@@ -113,14 +129,8 @@ describe('RASP - lfi', () => {
           desc += ` with vulnerable index ${vulnerableIndex}`
         }
         describe(desc, () => {
-          runFsMethodTest(`test fs.${methodName}Sync method`, options, (args) => {
-            return new Promise((resolve, reject) => {
-              try {
-                resolve(require('fs')[`${methodName}Sync`](...args))
-              } catch (e) {
-                reject(e)
-              }
-            })
+          runFsMethodTest(`test fs.${methodName}Sync method`, { ...options, getAppFn: getAppSync }, (args) => {
+            return require('fs')[`${methodName}Sync`](...args)
           }, ...args)
 
           runFsMethodTest(`test fs.${methodName} method`, options, (args) => {
