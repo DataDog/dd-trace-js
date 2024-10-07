@@ -1,13 +1,11 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
-const { expressMiddlewareError } = require('../../../src/appsec/channels')
-const rasp = require('../../../src/appsec/rasp')
 const { handleUncaughtExceptionMonitor } = require('../../../src/appsec/rasp')
 const { DatadogRaspAbortError } = require('../../../src/appsec/rasp/utils')
 
 describe('RASP', () => {
-  let onErrorSub, onErrorUnsub, block
+  let rasp, subscribe, unsubscribe, block, blocked
 
   beforeEach(() => {
     const config = {
@@ -20,8 +18,24 @@ describe('RASP', () => {
       }
     }
 
-    onErrorSub = sinon.spy(expressMiddlewareError, 'subscribe')
-    onErrorUnsub = sinon.spy(expressMiddlewareError, 'unsubscribe')
+    subscribe = sinon.stub()
+    unsubscribe = sinon.stub()
+
+    block = sinon.stub()
+
+    rasp = proxyquire('../../../src/appsec/rasp', {
+      '../blocking': {
+        block,
+        isBlocked: sinon.stub().callsFake(() => blocked)
+      },
+      '../channels': {
+        expressMiddlewareError: {
+          subscribe,
+          unsubscribe,
+          hasSubscribers: true
+        }
+      }
+    })
 
     rasp.enable(config)
   })
@@ -42,31 +56,23 @@ describe('RASP', () => {
 
   describe('enable/disable', () => {
     it('should subscribe to apm:express:middleware:error', () => {
-      sinon.assert.calledOnce(onErrorSub)
+      sinon.assert.calledOnce(subscribe)
     })
 
     it('should unsubscribe to apm:express:middleware:error', () => {
       rasp.disable()
 
-      sinon.assert.calledOnce(onErrorUnsub)
+      sinon.assert.calledOnce(unsubscribe)
     })
   })
 
   describe('blockOnDatadogRaspAbortError', () => {
-    let rasp, req, res, blockingAction, blocked
+    let req, res, blockingAction
 
     beforeEach(() => {
       req = {}
       res = {}
-      blockingAction = 'block'
-      block = sinon.stub()
-
-      rasp = proxyquire('../../../src/appsec/rasp', {
-        '../blocking': {
-          block,
-          isBlocked: sinon.stub().callsFake(() => blocked)
-        }
-      })
+      blockingAction = {}
     })
 
     afterEach(() => {
