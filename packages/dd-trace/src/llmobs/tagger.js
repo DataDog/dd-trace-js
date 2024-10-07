@@ -40,7 +40,7 @@ class LLMObsTagger {
     return tagMap
   }
 
-  // TODO: instead of passing in the span here, can we pass in a namespaced object?
+  // TODO: we're using a weakmap registry of LLMObs spans for now, how can this be used in the core API?
   setLLMObsSpanTags (
     span,
     kind,
@@ -68,7 +68,8 @@ class LLMObsTagger {
     setTag(span, PARENT_ID_KEY, parentId)
   }
 
-  // TODO: similarly for the following `tag` methods, can we pass in a namespaced object instead of the span?
+  // TODO: similarly for the following `tag` methods,
+  // how can we transition from a span weakmap to core API functionality
   tagLLMIO (span, inputData, outputData) {
     this._tagMessages(span, inputData, INPUT_MESSAGES)
     this._tagMessages(span, outputData, OUTPUT_MESSAGES)

@@ -44,8 +44,7 @@ class LLMObsSpanProcessor {
     }
   }
 
-  // TODO: can we correlate the span + trace IDs with a namespaced object to
-  // access LLMObs properties associated with the span?
+  // TODO: instead of relying on the tagger's weakmap registry, can we use some namespaced storage correlation?
   process ({ span }) {
     if (!this._config.llmobs.enabled) return
     // if the span is not in our private tagger map, it is not an llmobs span
@@ -65,8 +64,6 @@ class LLMObsSpanProcessor {
     }
   }
 
-  // TODO: pass in span plus correlated LLMObs object from namespaced storage
-  // Then, the only thing we need the span for are error tags and start/duration
   format (span) {
     const spanTags = span.context()._tags
     const mlObsTags = LLMObsTagger.tagMap.get(span)
