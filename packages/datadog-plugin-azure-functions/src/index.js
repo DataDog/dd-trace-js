@@ -49,7 +49,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
 
   asyncEnd (ctx) {
     const { httpRequest, result = {} } = ctx
-    const path = extractPath(httpRequest.url)
+    const path = (new URL(httpRequest.url)).pathname
     const req = {
       method: httpRequest.method,
       headers: Object.fromEntries(httpRequest.headers.entries()),
@@ -68,12 +68,6 @@ class AzureFunctionsPlugin extends TracingPlugin {
   configure (config) {
     return super.configure(web.normalizeConfig(config))
   }
-}
-
-function extractPath (url) {
-  const regex = /https?:\/\/[^/]+(\/.*$)/
-  const match = url.match(regex)
-  return match ? match[1] : ''
 }
 
 function mapTriggerTag (methodName) {
