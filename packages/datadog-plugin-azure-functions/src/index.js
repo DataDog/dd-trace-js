@@ -2,6 +2,7 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { storage } = require('../../datadog-core')
+const serverless = require('../../dd-trace/src/plugins/util/serverless')
 const web = require('../../dd-trace/src/plugins/util/web')
 
 const triggerMap = {
@@ -56,14 +57,12 @@ class AzureFunctionsPlugin extends TracingPlugin {
     }
 
     const context = web.patch(req)
-    context.span = ctx.currentStore.span
     context.config = this.config
     context.paths = [path]
+    context.res = result
+    context.span = ctx.currentStore.span
 
-    // Use status for status code if available. Otherwise if no status is provided assume an internal server error
-    context.res = { statusCode: result.hasOwnProperty('status') ? result.status : 500 }
-
-    web.finishSpan(context)
+    serverless.finishSpan(context)
   }
 
   configure (config) {
