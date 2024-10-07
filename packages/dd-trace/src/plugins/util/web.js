@@ -427,13 +427,11 @@ function addRequestTags (context) {
   const { req, span, config } = context
   const url = extractURL(req)
 
-  const tags = span.context()._tags
-
   span.addTags({
     [HTTP_URL]: web.obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
-    [SPAN_TYPE]: tags[SPAN_TYPE] === 'serverless' ? 'serverless' : WEB,
+    [SPAN_TYPE]: WEB,
     [HTTP_USERAGENT]: req.headers['user-agent']
   })
 
