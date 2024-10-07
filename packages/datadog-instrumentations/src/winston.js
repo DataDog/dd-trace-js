@@ -8,8 +8,9 @@ const shimmer = require('../../datadog-shimmer')
 
 const patched = new WeakSet()
 
-const configureCh = channel('ci:winston:configure')
-const addTransport = channel('ci:winston:add-transport')
+// Test Visibility log submission channels
+const configureCh = channel('ci:log-submission:winston:configure')
+const addTransport = channel('ci:log-submission:winston:add-transport')
 
 addHook({ name: 'winston', file: 'lib/winston/transports/index.js', versions: ['>=3'] }, transportsPackage => {
   if (configureCh.hasSubscribers) {
@@ -34,7 +35,7 @@ addHook({ name: 'winston', file: 'lib/winston/logger.js', versions: ['>=3'] }, L
 
   shimmer.wrap(Logger.prototype, 'configure', configure => function () {
     const configureResponse = configure.apply(this, arguments)
-    // we add it _after_ the original configure, because configure resets any transport
+    // After the original `configure`, because it resets transports
     if (addTransport.hasSubscribers) {
       addTransport.publish(this)
     }
