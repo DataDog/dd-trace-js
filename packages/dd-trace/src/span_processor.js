@@ -49,7 +49,7 @@ class SpanProcessor {
           this._stats.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
 
-          spanProcessCh.publish({ span, formattedSpan })
+          spanProcessCh.publish({ span })
         } else {
           active.push(span)
         }
