@@ -49,7 +49,7 @@ describe('RASP - lfi - integration - sync', () => {
     await agent.stop()
   })
 
-  it('should block using pg.Client and unhandled promise', async () => {
+  it('should block a sync endpoint getting the error from apm:express:middleware:error', async () => {
     try {
       await axios.get('/lfi/sync?file=/etc/passwd')
     } catch (e) {
