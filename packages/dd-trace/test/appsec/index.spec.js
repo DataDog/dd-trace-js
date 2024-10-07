@@ -533,7 +533,9 @@ describe('AppSec Index', function () {
       AppSec.enable(config)
 
       const req = {
-        url: '/path',
+        route: {
+          path: '/path'
+        },
         headers: {
           'user-agent': 'Arachni',
           host: 'localhost'

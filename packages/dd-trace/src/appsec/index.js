@@ -132,7 +132,7 @@ function incomingHttpEndTranslator ({ req, res }) {
     persistent[addresses.HTTP_INCOMING_QUERY] = req.query
   }
 
-  if (apiSecuritySampler.sampleRequest(req, res)) {
+  if (req.route && typeof req.route.path === 'string' && apiSecuritySampler.sampleRequest(req, res)) {
     persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
 
