@@ -53,7 +53,7 @@ function isSampled (req, res) {
 }
 
 function computeKey (req, res) {
-  const route = req.url
+  const route = req.route.path
   const method = req.method.toLowerCase()
   const statusCode = res.statusCode
   const str = route + statusCode + method

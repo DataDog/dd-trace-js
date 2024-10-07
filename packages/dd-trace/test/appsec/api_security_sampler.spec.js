@@ -4,7 +4,7 @@ const { performance } = require('node:perf_hooks')
 const proxyquire = require('proxyquire')
 
 describe('API Security Sampler', () => {
-  const req = { url: '/test', method: 'GET' }
+  const req = { route: { path: '/test' }, method: 'GET' }
   const res = { statusCode: 200 }
   let apiSecuritySampler, performanceNowStub, webStub, sampler, span
 
@@ -77,11 +77,10 @@ describe('API Security Sampler', () => {
   it('should remove oldest entry when max size is exceeded', () => {
     const method = req.method
     for (let i = 0; i < 4097; i++) {
-      expect(apiSecuritySampler.sampleRequest({ method, url: `/test${i}` }, res)).to.be.true
+      expect(apiSecuritySampler.sampleRequest({ method, route: { path: `/test${i}` } }, res)).to.be.true
     }
-
-    expect(apiSecuritySampler.isSampled({ method, url: '/test0' }, res)).to.be.false
-    expect(apiSecuritySampler.isSampled({ method, url: '/test4096' }, res)).to.be.true
+    expect(apiSecuritySampler.isSampled({ method, route: { path: '/test0' } }, res)).to.be.false
+    expect(apiSecuritySampler.isSampled({ method, route: { path: '/test4096' } }, res)).to.be.true
   })
 
   it('should set enabled to false and clear the cache', () => {
@@ -90,5 +89,35 @@ describe('API Security Sampler', () => {
     apiSecuritySampler.disable()
 
     expect(apiSecuritySampler.sampleRequest(req, res)).to.be.false
+  })
+
+  it('should create different keys for different URLs', () => {
+    const req1 = { route: { path: '/test1' }, method: 'GET' }
+    const req2 = { route: { path: '/test2' }, method: 'GET' }
+
+    expect(apiSecuritySampler.sampleRequest(req1, res)).to.be.true
+    expect(apiSecuritySampler.sampleRequest(req2, res)).to.be.true
+    expect(apiSecuritySampler.isSampled(req1, res)).to.be.true
+    expect(apiSecuritySampler.isSampled(req2, res)).to.be.true
+  })
+
+  it('should create different keys for different methods', () => {
+    const getReq = { route: { path: '/test1' }, method: 'GET' }
+    const postReq = { route: { path: '/test1' }, method: 'POST' }
+
+    expect(apiSecuritySampler.sampleRequest(getReq, res)).to.be.true
+    expect(apiSecuritySampler.sampleRequest(postReq, res)).to.be.true
+    expect(apiSecuritySampler.isSampled(getReq, res)).to.be.true
+    expect(apiSecuritySampler.isSampled(postReq, res)).to.be.true
+  })
+
+  it('should create different keys for different status codes', () => {
+    const res200 = { statusCode: 200 }
+    const res404 = { statusCode: 404 }
+
+    expect(apiSecuritySampler.sampleRequest(req, res200)).to.be.true
+    expect(apiSecuritySampler.sampleRequest(req, res404)).to.be.true
+    expect(apiSecuritySampler.isSampled(req, res200)).to.be.true
+    expect(apiSecuritySampler.isSampled(req, res404)).to.be.true
   })
 })
