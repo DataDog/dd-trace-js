@@ -318,6 +318,20 @@ describe('tagger', () => {
         expect(logger.warn.getCall(5).firstArg).to.equal('Tool type must be a string.')
         expect(logger.warn.getCall(6).firstArg).to.equal('Tool arguments must be an object.')
       })
+
+      it('logs multiple errors if there are multiple errors for a message and filters it out', () => {
+        const messages = [
+          { content: 'a', toolCalls: [5, { name: 5, type: 7 }], role: 7 }
+        ]
+
+        tagger.tagLLMIO(span, messages, undefined)
+        expect(Tagger.tagMap.get(span)).to.deep.equal(undefined)
+
+        expect(logger.warn.getCall(0).firstArg).to.equal('Message role must be a string.')
+        expect(logger.warn.getCall(1).firstArg).to.equal('Tool call must be an object.')
+        expect(logger.warn.getCall(2).firstArg).to.equal('Tool name must be a string.')
+        expect(logger.warn.getCall(3).firstArg).to.equal('Tool type must be a string.')
+      })
     })
   })
 
@@ -366,6 +380,20 @@ describe('tagger', () => {
       expect(logger.warn.getCall(2).firstArg).to.equal('Document name must be a string.')
       expect(logger.warn.getCall(3).firstArg).to.equal('Documents must be a string, object, or list of objects.')
       expect(logger.warn.getCall(4).firstArg).to.equal('Documents must be a string, object, or list of objects.')
+    })
+
+    it('logs multiple errors if there are multiple errors for a document and filters it out', () => {
+      const documents = [
+        { text: 'a', name: 5, id: 7, score: 9 }
+      ]
+
+      tagger.tagEmbeddingIO(span, documents, 'output')
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
+        '_ml_obs.meta.output.value': 'output'
+      })
+
+      expect(logger.warn.getCall(0).firstArg).to.equal('Document name must be a string.')
+      expect(logger.warn.getCall(1).firstArg).to.equal('Document ID must be a string.')
     })
   })
 

@@ -142,33 +142,32 @@ class LLMObsTagger {
           return { text: document }
         }
 
+        let validDocument = true
+
         if (document == null || typeof document !== 'object') {
           logger.warn('Documents must be a string, object, or list of objects.')
-          return undefined
+          return undefined // returning here as we need document to be an object
         }
 
         const { text, name, id, score } = document
 
         if (typeof text !== 'string') {
           logger.warn('Document text must be a string.')
-          return undefined
+          validDocument = false
         }
 
         const documentObj = { text }
 
-        const validName = this._tagConditionalString(name, 'Document name', documentObj, 'name')
-        if (!validName) return undefined
+        validDocument = this._tagConditionalString(name, 'Document name', documentObj, 'name') && validDocument
+        validDocument = this._tagConditionalString(id, 'Document ID', documentObj, 'id') && validDocument
+        validDocument = this._tagConditionalNumber(score, 'Document score', documentObj, 'score') && validDocument
 
-        const validId = this._tagConditionalString(id, 'Document ID', documentObj, 'id')
-        if (!validId) return undefined
-
-        const validScore = this._tagConditionalNumber(score, 'Document score', documentObj, 'score')
-        if (!validScore) return undefined
-
-        return documentObj
+        return validDocument ? documentObj : undefined
       }).filter(doc => !!doc)
 
-      setTag(span, key, documents)
+      if (documents.length) {
+        setTag(span, key, documents)
+      }
     }
   }
 
@@ -185,8 +184,10 @@ class LLMObsTagger {
 
         if (message == null || typeof message !== 'object') {
           logger.warn('Messages must be a string, object, or list of objects')
-          return undefined
+          return undefined // returning here as we need message to be an object
         }
+
+        let validMessage = true
 
         const { content = '', role } = message
         let toolCalls = message.toolCalls
@@ -194,11 +195,10 @@ class LLMObsTagger {
 
         if (typeof content !== 'string') {
           logger.warn('Message content must be a string.')
-          return undefined
+          validMessage = false
         }
 
-        const validRole = this._tagConditionalString(role, 'Message role', messageObj, 'role')
-        if (!validRole) return undefined
+        validMessage = this._tagConditionalString(role, 'Message role', messageObj, 'role') && validMessage
 
         if (toolCalls) {
           if (!Array.isArray(toolCalls)) {
@@ -208,25 +208,20 @@ class LLMObsTagger {
           const filteredToolCalls = toolCalls.map(toolCall => {
             if (typeof toolCall !== 'object') {
               logger.warn('Tool call must be an object.')
-              return undefined
+              return undefined // returning here as we need tool call to be an object
             }
+
+            let validTool = true
 
             const { name, arguments: args, toolId, type } = toolCall
             const toolCallObj = {}
 
-            const validName = this._tagConditionalString(name, 'Tool name', toolCallObj, 'name')
-            if (!validName) return undefined
+            validTool = this._tagConditionalString(name, 'Tool name', toolCallObj, 'name') && validTool
+            validTool = this._tagConditionalObject(args, 'Tool arguments', toolCallObj, 'arguments') && validTool
+            validTool = this._tagConditionalString(toolId, 'Tool ID', toolCallObj, 'tool_id') && validTool
+            validTool = this._tagConditionalString(type, 'Tool type', toolCallObj, 'type') && validTool
 
-            const validArgs = this._tagConditionalObject(args, 'Tool arguments', toolCallObj, 'arguments')
-            if (!validArgs) return undefined
-
-            const validToolId = this._tagConditionalString(toolId, 'Tool ID', toolCallObj, 'tool_id')
-            if (!validToolId) return undefined
-
-            const validType = this._tagConditionalString(type, 'Tool type', toolCallObj, 'type')
-            if (!validType) return undefined
-
-            return toolCallObj
+            return validTool ? toolCallObj : undefined
           }).filter(toolCall => !!toolCall)
 
           if (filteredToolCalls.length) {
@@ -234,7 +229,7 @@ class LLMObsTagger {
           }
         }
 
-        return messageObj
+        return validMessage ? messageObj : undefined
       }).filter(msg => !!msg)
 
       if (messages.length) {
@@ -245,7 +240,7 @@ class LLMObsTagger {
 
   _tagConditionalString (data, type, carrier, key) {
     // returning true here means we won't drop the whole object (message/document)
-    // if the field isn't there
+    // if the field isn't there. we check for mandatory fields separately
     if (!data) return true
     if (typeof data !== 'string') {
       logger.warn(`${type} must be a string.`)
