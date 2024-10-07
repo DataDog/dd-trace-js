@@ -2,9 +2,6 @@
 
 const logger = require('../log')
 const {
-  SPAN_TYPE
-} = require('../../../../ext/tags')
-const {
   MODEL_NAME,
   MODEL_PROVIDER,
   SESSION_ID,
@@ -51,7 +48,7 @@ class LLMObsTagger {
     name
   ) {
     if (!this._config.llmobs.enabled) return
-    if (kind) setTag(span, SPAN_TYPE, 'llm') // only mark it as an llm span if it was a valid kind
+    if (!kind) return // do not register it in the map if it doesn't have an llmobs span kind
     if (name) setTag(span, NAME, name)
 
     setTag(span, SPAN_KIND, kind)
@@ -222,7 +219,7 @@ class LLMObsTagger {
             const validArgs = this._tagConditionalObject(args, 'Tool arguments', toolCallObj, 'arguments')
             if (!validArgs) return undefined
 
-            const validToolId = this._tagConditionalString(toolId, 'Tool ID', toolCallObj, 'toolId')
+            const validToolId = this._tagConditionalString(toolId, 'Tool ID', toolCallObj, 'tool_id')
             if (!validToolId) return undefined
 
             const validType = this._tagConditionalString(type, 'Tool type', toolCallObj, 'type')

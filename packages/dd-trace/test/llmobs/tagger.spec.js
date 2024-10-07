@@ -58,7 +58,6 @@ describe('tagger', () => {
       tagger.setLLMObsSpanTags(span, 'workflow')
 
       expect(Tagger.tagMap.get(span)).to.deep.equal({
-        'span.type': 'llm',
         '_ml_obs.meta.span.kind': 'workflow',
         '_ml_obs.meta.ml_app': 'my-default-ml-app',
         '_ml_obs.llmobs_parent_id': 'undefined' // no parent id provided
@@ -74,7 +73,6 @@ describe('tagger', () => {
       })
 
       expect(Tagger.tagMap.get(span)).to.deep.equal({
-        'span.type': 'llm',
         '_ml_obs.meta.span.kind': 'llm',
         '_ml_obs.meta.model_name': 'my-model',
         '_ml_obs.meta.model_provider': 'my-provider',
@@ -88,7 +86,6 @@ describe('tagger', () => {
       tagger.setLLMObsSpanTags(span, 'llm', {}, 'my-span-name')
 
       expect(Tagger.tagMap.get(span)).to.deep.equal({
-        'span.type': 'llm',
         '_ml_obs.meta.span.kind': 'llm',
         '_ml_obs.meta.ml_app': 'my-default-ml-app',
         '_ml_obs.llmobs_parent_id': 'undefined',
@@ -100,7 +97,6 @@ describe('tagger', () => {
       tagger.setLLMObsSpanTags(span, 'llm')
 
       expect(Tagger.tagMap.get(span)).to.deep.equal({
-        'span.type': 'llm',
         '_ml_obs.meta.span.kind': 'llm',
         '_ml_obs.meta.ml_app': 'my-default-ml-app',
         '_ml_obs.llmobs_parent_id': 'undefined'
@@ -122,7 +118,6 @@ describe('tagger', () => {
       tagger.setLLMObsSpanTags(span, 'llm', { parentLLMObsSpan: parentSpan })
 
       expect(Tagger.tagMap.get(span)).to.deep.equal({
-        'span.type': 'llm',
         '_ml_obs.meta.span.kind': 'llm',
         '_ml_obs.meta.ml_app': 'my-ml-app',
         '_ml_obs.session_id': 'my-session',
@@ -134,7 +129,6 @@ describe('tagger', () => {
       tagger.setLLMObsSpanTags(span, 'llm')
 
       expect(Tagger.tagMap.get(span)).to.deep.equal({
-        'span.type': 'llm',
         '_ml_obs.meta.span.kind': 'llm',
         '_ml_obs.meta.ml_app': 'my-default-ml-app',
         '_ml_obs.llmobs_parent_id': 'undefined'
@@ -147,7 +141,6 @@ describe('tagger', () => {
       tagger.setLLMObsSpanTags(span, 'llm')
 
       expect(Tagger.tagMap.get(span)).to.deep.equal({
-        'span.type': 'llm',
         '_ml_obs.meta.span.kind': 'llm',
         '_ml_obs.meta.ml_app': 'my-default-ml-app',
         '_ml_obs.llmobs_parent_id': '-567'
@@ -157,7 +150,7 @@ describe('tagger', () => {
     it('does not set span type if the LLMObs span kind is falsy', () => {
       tagger.setLLMObsSpanTags(span, false)
 
-      expect(Tagger.tagMap.get(span)['span.type']).to.be.undefined
+      expect(Tagger.tagMap.get(span)).to.be.undefined
     })
   })
 
