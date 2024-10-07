@@ -245,7 +245,8 @@ describe('Tracer', () => {
       expect(span.addTags).to.have.been.calledWith(fields.tags)
     })
 
-    it('If a user sets spans service name differs from the tracers, ensure the spans version is undefined.', () => {
+    it('If span is granted a service name that differs from the global service name' +
+      'ensure spans `version` tag is undefined.', () => {
       config.tags = {
         foo: 'tracer',
         bar: 'tracer'
