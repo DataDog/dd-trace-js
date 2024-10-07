@@ -76,6 +76,44 @@ function getWebTags (startedSpans, i, span) {
   return memoize(null)
 }
 
+let channelsActivated = false
+function ensureChannelsActivated () {
+  if (channelsActivated) return
+
+  const { AsyncLocalStorage, createHook } = require('async_hooks')
+  const shimmer = require('../../../../datadog-shimmer')
+
+  createHook({ before: () => beforeCh.publish() }).enable()
+
+  let inRun = false
+  shimmer.wrap(AsyncLocalStorage.prototype, 'enterWith', function (original) {
+    return function (...args) {
+      const retVal = original.apply(this, args)
+      if (!inRun) enterCh.publish()
+      return retVal
+    }
+  })
+
+  shimmer.wrap(AsyncLocalStorage.prototype, 'run', function (original) {
+    return function (store, callback, ...args) {
+      const wrappedCb = shimmer.wrapFunction(callback, cb => function (...args) {
+        inRun = false
+        enterCh.publish()
+        const retVal = cb.apply(this, args)
+        inRun = true
+        return retVal
+      })
+      inRun = true
+      const retVal = original.call(this, store, wrappedCb, ...args)
+      enterCh.publish()
+      inRun = false
+      return retVal
+    }
+  })
+
+  channelsActivated = true
+}
+
 class NativeWallProfiler {
   constructor (options = {}) {
     this.type = 'wall'
@@ -120,6 +158,8 @@ class NativeWallProfiler {
 
   start ({ mapper } = {}) {
     if (this._started) return
+
+    ensureChannelsActivated()
 
     this._mapper = mapper
     this._pprof = require('@datadog/pprof')
