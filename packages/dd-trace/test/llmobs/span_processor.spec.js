@@ -58,7 +58,7 @@ describe('span processor', () => {
     it('should do nothing if llmobs is not enabled', () => {
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: false } })
 
-      expect(() => processor.process(span)).not.to.throw()
+      expect(() => processor.process({ span })).not.to.throw()
     })
 
     it('should do nothing if the span is not an llm obs span', () => {
@@ -96,7 +96,7 @@ describe('span processor', () => {
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
-      processor.process(span)
+      processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload).to.deep.equal({
@@ -168,7 +168,7 @@ describe('span processor', () => {
       })
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
-      processor.process(span)
+      processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload.meta.metadata).to.deep.equal({
@@ -197,7 +197,7 @@ describe('span processor', () => {
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
-      processor.process(span)
+      processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload.meta.output.documents).to.deep.equal([{
@@ -226,7 +226,7 @@ describe('span processor', () => {
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
-      processor.process(span)
+      processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload.meta.input.documents).to.deep.equal([{
@@ -255,7 +255,7 @@ describe('span processor', () => {
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
-      processor.process(span)
+      processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload.meta.model_provider).to.equal('custom')
@@ -283,7 +283,7 @@ describe('span processor', () => {
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
-      processor.process(span)
+      processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload.meta['error.message']).to.equal('error message')
@@ -313,7 +313,7 @@ describe('span processor', () => {
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
-      processor.process(span)
+      processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload.meta['error.message']).to.equal('error message')
@@ -343,7 +343,7 @@ describe('span processor', () => {
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
-      processor.process(span)
+      processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload.name).to.equal('mySpan')
@@ -367,7 +367,7 @@ describe('span processor', () => {
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
-      processor.process(span)
+      processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload.session_id).to.equal('1234')
@@ -392,7 +392,7 @@ describe('span processor', () => {
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
-      processor.process(span)
+      processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload.tags).to.include('foo:bar')
