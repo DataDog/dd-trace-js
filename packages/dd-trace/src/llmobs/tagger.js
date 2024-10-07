@@ -25,9 +25,22 @@ const {
   ROOT_PARENT_ID
 } = require('./constants')
 
+// maps spans to tag annotations
+const tagMap = new WeakMap()
+
+function setTag (span, key, value) {
+  const tagsCarrier = tagMap.get(span) || {}
+  Object.assign(tagsCarrier, { [key]: value })
+  if (!tagMap.has(span)) tagMap.set(span, tagsCarrier)
+}
+
 class LLMObsTagger {
   constructor (config) {
     this._config = config
+  }
+
+  static get tagMap () {
+    return tagMap
   }
 
   // TODO: instead of passing in the span here, can we pass in a namespaced object?
@@ -38,24 +51,24 @@ class LLMObsTagger {
     name
   ) {
     if (!this._config.llmobs.enabled) return
-    if (kind) span.setTag(SPAN_TYPE, 'llm') // only mark it as an llm span if it was a valid kind
-    if (name) span.setTag(NAME, name)
+    if (kind) setTag(span, SPAN_TYPE, 'llm') // only mark it as an llm span if it was a valid kind
+    if (name) setTag(span, NAME, name)
 
-    span.setTag(SPAN_KIND, kind)
-    if (modelName) span.setTag(MODEL_NAME, modelName)
-    if (modelProvider) span.setTag(MODEL_PROVIDER, modelProvider)
+    setTag(span, SPAN_KIND, kind)
+    if (modelName) setTag(span, MODEL_NAME, modelName)
+    if (modelProvider) setTag(span, MODEL_PROVIDER, modelProvider)
 
     sessionId = sessionId || parentLLMObsSpan?.context()._tags[SESSION_ID]
-    if (sessionId) span.setTag(SESSION_ID, sessionId)
+    if (sessionId) setTag(span, SESSION_ID, sessionId)
 
     if (!mlApp) mlApp = parentLLMObsSpan?.context()._tags[ML_APP] || this._config.llmobs.mlApp
-    span.setTag(ML_APP, mlApp)
+    setTag(span, ML_APP, mlApp)
 
     const parentId =
       parentLLMObsSpan?.context().toSpanId() ||
       span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ||
       ROOT_PARENT_ID
-    span.setTag(PARENT_ID_KEY, parentId)
+    setTag(span, PARENT_ID_KEY, parentId)
   }
 
   // TODO: similarly for the following `tag` methods, can we pass in a namespaced object instead of the span?
@@ -80,7 +93,7 @@ class LLMObsTagger {
   }
 
   tagMetadata (span, metadata) {
-    span.setTag(METADATA, metadata)
+    setTag(span, METADATA, metadata)
   }
 
   tagMetrics (span, metrics) {
@@ -93,25 +106,25 @@ class LLMObsTagger {
       }
     }
 
-    span.setTag(METRICS, filterdMetrics)
+    setTag(span, METRICS, filterdMetrics)
   }
 
   tagSpanTags (span, tags) {
     // new tags will be merged with existing tags
-    const currentTags = span.context()._tags[TAGS]
+    const currentTags = tagMap.get(span)?.[TAGS]
     if (currentTags) {
       Object.assign(tags, currentTags)
     }
-    span.setTag(TAGS, tags)
+    setTag(span, TAGS, tags)
   }
 
   _tagText (span, data, key) {
     if (data) {
       if (typeof data === 'string') {
-        span.setTag(key, data)
+        setTag(span, key, data)
       } else {
         try {
-          span.setTag(key, JSON.stringify(data))
+          setTag(span, key, JSON.stringify(data))
         } catch {
           const type = key === INPUT_VALUE ? 'input' : 'output'
           logger.warn(`Failed to parse ${type} value, must be JSON serializable.`)
@@ -157,7 +170,7 @@ class LLMObsTagger {
         return documentObj
       }).filter(doc => !!doc)
 
-      span.setTag(key, documents)
+      setTag(span, key, documents)
     }
   }
 
@@ -227,13 +240,13 @@ class LLMObsTagger {
       }).filter(msg => !!msg)
 
       if (messages.length) {
-        span.setTag(key, messages)
+        setTag(span, key, messages)
       }
     }
   }
 
   _tagConditionalString (data, type, carrier, key) {
-    // returning true here means we won't dropt the whole object (message/document)
+    // returning true here means we won't drop the whole object (message/document)
     // if the field isn't there
     if (!data) return true
     if (typeof data !== 'string') {

@@ -26,9 +26,9 @@ const {
   ERROR_STACK
 } = require('../constants')
 
+const LLMObsTagger = require('./tagger')
 const AgentlessWriter = require('./writers/spans/agentless')
 const AgentProxyWriter = require('./writers/spans/agentProxy')
-const { isLLMObsSpan } = require('./util')
 
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
@@ -48,7 +48,8 @@ class LLMObsSpanProcessor {
   // access LLMObs properties associated with the span?
   process (span) {
     if (!this._config.llmobs.enabled) return
-    if (!isLLMObsSpan(span)) return
+    // if the span is not in our private tagger map, it is not an llmobs span
+    if (!LLMObsTagger.tagMap.has(span)) return
     const formattedEvent = this.format(span)
 
     try {
@@ -67,56 +68,58 @@ class LLMObsSpanProcessor {
   // TODO: pass in span plus correlated LLMObs object from namespaced storage
   // Then, the only thing we need the span for are error tags and start/duration
   format (span) {
-    const tags = span.context()._tags
-    const spanKind = tags[SPAN_KIND]
+    const spanTags = span.context()._tags
+    const mlObsTags = LLMObsTagger.tagMap.get(span)
+
+    const spanKind = mlObsTags[SPAN_KIND]
 
     const meta = { 'span.kind': spanKind, input: {}, output: {} }
     const input = {}
     const output = {}
 
-    if (['llm', 'embedding'].includes(spanKind) && tags[MODEL_NAME]) {
-      meta.model_name = tags[MODEL_NAME]
-      meta.model_provider = (tags[MODEL_PROVIDER] || 'custom').toLowerCase()
+    if (['llm', 'embedding'].includes(spanKind) && mlObsTags[MODEL_NAME]) {
+      meta.model_name = mlObsTags[MODEL_NAME]
+      meta.model_provider = (mlObsTags[MODEL_PROVIDER] || 'custom').toLowerCase()
     }
-    if (tags[METADATA]) {
-      this._addObject(tags[METADATA], meta.metadata = {})
+    if (mlObsTags[METADATA]) {
+      this._addObject(mlObsTags[METADATA], meta.metadata = {})
     }
-    if (spanKind === 'llm' && tags[INPUT_MESSAGES]) {
-      input.messages = tags[INPUT_MESSAGES]
+    if (spanKind === 'llm' && mlObsTags[INPUT_MESSAGES]) {
+      input.messages = mlObsTags[INPUT_MESSAGES]
     }
-    if (tags[INPUT_VALUE]) {
-      input.value = tags[INPUT_VALUE]
+    if (mlObsTags[INPUT_VALUE]) {
+      input.value = mlObsTags[INPUT_VALUE]
     }
-    if (spanKind === 'llm' && tags[OUTPUT_MESSAGES]) {
-      output.messages = tags[OUTPUT_MESSAGES]
+    if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
+      output.messages = mlObsTags[OUTPUT_MESSAGES]
     }
-    if (spanKind === 'embedding' && tags[INPUT_DOCUMENTS]) {
-      input.documents = tags[INPUT_DOCUMENTS]
+    if (spanKind === 'embedding' && mlObsTags[INPUT_DOCUMENTS]) {
+      input.documents = mlObsTags[INPUT_DOCUMENTS]
     }
-    if (tags[OUTPUT_VALUE]) {
-      output.value = tags[OUTPUT_VALUE]
+    if (mlObsTags[OUTPUT_VALUE]) {
+      output.value = mlObsTags[OUTPUT_VALUE]
     }
-    if (spanKind === 'retrieval' && tags[OUTPUT_DOCUMENTS]) {
-      output.documents = tags[OUTPUT_DOCUMENTS]
+    if (spanKind === 'retrieval' && mlObsTags[OUTPUT_DOCUMENTS]) {
+      output.documents = mlObsTags[OUTPUT_DOCUMENTS]
     }
 
-    const error = tags.error
+    const error = spanTags.error
     if (error) {
-      meta[ERROR_MESSAGE] = tags[ERROR_MESSAGE] || error.message || error.code
-      meta[ERROR_TYPE] = tags[ERROR_TYPE] || error.name
-      meta[ERROR_STACK] = tags[ERROR_STACK] || error.stack
+      meta[ERROR_MESSAGE] = spanTags[ERROR_MESSAGE] || error.message || error.code
+      meta[ERROR_TYPE] = spanTags[ERROR_TYPE] || error.name
+      meta[ERROR_STACK] = spanTags[ERROR_STACK] || error.stack
     }
 
     if (input) meta.input = input
     if (output) meta.output = output
 
-    const metrics = tags[METRICS] || {}
+    const metrics = mlObsTags[METRICS] || {}
 
-    const mlApp = tags[ML_APP]
-    const sessionId = tags[SESSION_ID]
-    const parentId = tags[PARENT_ID_KEY]
+    const mlApp = mlObsTags[ML_APP]
+    const sessionId = mlObsTags[SESSION_ID]
+    const parentId = mlObsTags[PARENT_ID_KEY]
 
-    const name = tags[NAME] || span._name
+    const name = mlObsTags[NAME] || span._name
 
     const llmObsSpanEvent = {
       trace_id: span.context().toTraceId(true),
@@ -126,7 +129,7 @@ class LLMObsSpanProcessor {
       tags: this._processTags(span, mlApp, sessionId, error),
       start_ns: Math.round(span._startTime * 1e6),
       duration: Math.round(span._duration * 1e6),
-      status: tags.error ? 'error' : 'ok',
+      status: spanTags.error ? 'error' : 'ok',
       meta,
       metrics,
       _dd: {
@@ -190,7 +193,7 @@ class LLMObsSpanProcessor {
     const errType = span.context()._tags[ERROR_TYPE] || error?.name
     if (errType) tags.error_type = errType
     if (sessionId) tags.session_id = sessionId
-    const existingTags = span.context()._tags[TAGS] || {}
+    const existingTags = LLMObsTagger.tagMap.get(span)?.[TAGS] || {}
     if (existingTags) tags = { ...tags, ...existingTags }
     return Object.entries(tags).map(([key, value]) => `${key}:${value ?? ''}`)
   }

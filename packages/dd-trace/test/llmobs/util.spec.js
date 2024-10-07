@@ -1,9 +1,7 @@
 'use strict'
 
-const { SPAN_TYPE } = require('../../../../ext/tags')
 const {
-  encodeUnicode,
-  isLLMObsSpan
+  encodeUnicode
 } = require('../../src/llmobs/util')
 
 describe('util', () => {
@@ -15,28 +13,5 @@ describe('util', () => {
     it('should encode only unicode characters in a string', () => {
       expect(encodeUnicode('test 😀')).to.equal('test \\ud83d\\ude00')
     })
-  })
-
-  describe('isLLMSpan', () => {
-    it('should return false for an undefined span', () => {
-      expect(isLLMObsSpan(undefined)).to.equal(false)
-    })
-
-    it('should return false for a span without a SPAN_KIND tag', () => {
-      const span = { context: () => ({ _tags: {} }) }
-      expect(isLLMObsSpan(span)).to.equal(false)
-    })
-
-    it('should return false for a span with an invalid span type', () => {
-      const span = { context: () => ({ _tags: { [SPAN_TYPE]: 'invalid' } }) }
-      expect(isLLMObsSpan(span)).to.equal(false)
-    })
-
-    for (const spanType of ['llm', 'openai']) {
-      it(`should return true for a span with a valid span type: ${spanType}`, () => {
-        const span = { context: () => ({ _tags: { [SPAN_TYPE]: spanType } }) }
-        expect(isLLMObsSpan(span)).to.equal(true)
-      })
-    }
   })
 })

@@ -51,13 +51,13 @@ describe('tagger', () => {
       tagger = new Tagger({ llmobs: { enabled: false } })
       tagger.setLLMObsSpanTags(span, 'llm')
 
-      expect(span.context()._tags).to.deep.equal({})
+      expect(Tagger.tagMap.get(span)).to.deep.equal(undefined)
     })
 
     it('tags an llm obs span with basic and default properties', () => {
       tagger.setLLMObsSpanTags(span, 'workflow')
 
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         'span.type': 'llm',
         '_ml_obs.meta.span.kind': 'workflow',
         '_ml_obs.meta.ml_app': 'my-default-ml-app',
@@ -73,7 +73,7 @@ describe('tagger', () => {
         mlApp: 'my-app'
       })
 
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         'span.type': 'llm',
         '_ml_obs.meta.span.kind': 'llm',
         '_ml_obs.meta.model_name': 'my-model',
@@ -87,7 +87,7 @@ describe('tagger', () => {
     it('uses the name if provided', () => {
       tagger.setLLMObsSpanTags(span, 'llm', {}, 'my-span-name')
 
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         'span.type': 'llm',
         '_ml_obs.meta.span.kind': 'llm',
         '_ml_obs.meta.ml_app': 'my-default-ml-app',
@@ -99,7 +99,7 @@ describe('tagger', () => {
     it('defaults parent id to undefined', () => {
       tagger.setLLMObsSpanTags(span, 'llm')
 
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         'span.type': 'llm',
         '_ml_obs.meta.span.kind': 'llm',
         '_ml_obs.meta.ml_app': 'my-default-ml-app',
@@ -121,7 +121,7 @@ describe('tagger', () => {
       }
       tagger.setLLMObsSpanTags(span, 'llm', { parentLLMObsSpan: parentSpan })
 
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         'span.type': 'llm',
         '_ml_obs.meta.span.kind': 'llm',
         '_ml_obs.meta.ml_app': 'my-ml-app',
@@ -133,7 +133,7 @@ describe('tagger', () => {
     it('uses the propagated trace id if provided', () => {
       tagger.setLLMObsSpanTags(span, 'llm')
 
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         'span.type': 'llm',
         '_ml_obs.meta.span.kind': 'llm',
         '_ml_obs.meta.ml_app': 'my-default-ml-app',
@@ -146,7 +146,7 @@ describe('tagger', () => {
 
       tagger.setLLMObsSpanTags(span, 'llm')
 
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         'span.type': 'llm',
         '_ml_obs.meta.span.kind': 'llm',
         '_ml_obs.meta.ml_app': 'my-default-ml-app',
@@ -157,14 +157,14 @@ describe('tagger', () => {
     it('does not set span type if the LLMObs span kind is falsy', () => {
       tagger.setLLMObsSpanTags(span, false)
 
-      expect(span.context()._tags['span.type']).to.be.undefined
+      expect(Tagger.tagMap.get(span)['span.type']).to.be.undefined
     })
   })
 
   describe('tagMetadata', () => {
     it('tags a span with metadata', () => {
       tagger.tagMetadata(span, { a: 'foo', b: 'bar' })
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         '_ml_obs.meta.metadata': { a: 'foo', b: 'bar' }
       })
     })
@@ -173,7 +173,7 @@ describe('tagger', () => {
   describe('tagMetrics', () => {
     it('tags a span with metrics', () => {
       tagger.tagMetadata(span, { a: 1, b: 2 })
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         '_ml_obs.meta.metadata': { a: 1, b: 2 }
       })
     })
@@ -186,7 +186,7 @@ describe('tagger', () => {
         d: undefined
       }
       tagger.tagMetrics(span, metrics)
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         '_ml_obs.metrics': { a: 1 }
       })
 
@@ -198,16 +198,16 @@ describe('tagger', () => {
     it('sets tags on a span', () => {
       const tags = { foo: 'bar' }
       tagger.tagSpanTags(span, tags)
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         '_ml_obs.tags': { foo: 'bar' }
       })
     })
 
     it('merges tags so they do not overwrite', () => {
-      span.context()._tags['_ml_obs.tags'] = { a: 1 }
+      Tagger.tagMap.set(span, { '_ml_obs.tags': { a: 1 } })
       const tags = { a: 2, b: 1 }
       tagger.tagSpanTags(span, tags)
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         '_ml_obs.tags': { a: 1, b: 1 }
       })
     })
@@ -226,7 +226,7 @@ describe('tagger', () => {
       const outputData = 'Nice to meet you, human!'
 
       tagger.tagLLMIO(span, inputData, outputData)
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         '_ml_obs.meta.input.messages': [
           { content: 'you are an amazing assistant' },
           { content: 'hello! my name is foobar' },
@@ -252,7 +252,7 @@ describe('tagger', () => {
         { content: 'goodbye', role: 5 }
       ]
       tagger.tagLLMIO(span, inputData, outputData)
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         '_ml_obs.meta.input.messages': [{ content: 'hi' }]
       })
 
@@ -276,7 +276,7 @@ describe('tagger', () => {
         ]
 
         tagger.tagLLMIO(span, inputData, outputData)
-        expect(span.context()._tags).to.deep.equal({
+        expect(Tagger.tagMap.get(span)).to.deep.equal({
           '_ml_obs.meta.input.messages': [
             {
               content: 'hello',
@@ -306,7 +306,7 @@ describe('tagger', () => {
         ]
 
         tagger.tagLLMIO(span, inputData, undefined)
-        expect(span.context()._tags).to.deep.equal({
+        expect(Tagger.tagMap.get(span)).to.deep.equal({
           '_ml_obs.meta.input.messages': [
             { content: 'a' },
             { content: 'b' },
@@ -340,7 +340,7 @@ describe('tagger', () => {
       ]
       const outputData = 'embedded documents'
       tagger.tagEmbeddingIO(span, inputData, outputData)
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         '_ml_obs.meta.input.documents': [
           { text: 'my string document' },
           { text: 'my object document' },
@@ -363,7 +363,7 @@ describe('tagger', () => {
       ]
       const outputData = 'output'
       tagger.tagEmbeddingIO(span, inputData, outputData)
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         '_ml_obs.meta.input.documents': [{ text: 'hi' }],
         '_ml_obs.meta.output.value': 'output'
       })
@@ -389,7 +389,7 @@ describe('tagger', () => {
       ]
 
       tagger.tagRetrievalIO(span, inputData, outputData)
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         '_ml_obs.meta.input.value': 'some query',
         '_ml_obs.meta.output.documents': [
           { text: 'result 1' },
@@ -412,7 +412,7 @@ describe('tagger', () => {
         undefined
       ]
       tagger.tagRetrievalIO(span, inputData, outputData)
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         '_ml_obs.meta.input.value': 'some query',
         '_ml_obs.meta.output.documents': [{ text: 'hi' }]
       })
@@ -430,7 +430,7 @@ describe('tagger', () => {
       const inputData = { some: 'object' }
       const outputData = 'some text'
       tagger.tagTextIO(span, inputData, outputData)
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         '_ml_obs.meta.input.value': '{"some":"object"}',
         '_ml_obs.meta.output.value': 'some text'
       })
@@ -440,7 +440,7 @@ describe('tagger', () => {
       const data = unserializbleObject()
       tagger.tagTextIO(span, data, 'output')
       expect(logger.warn).to.have.been.calledOnceWith('Failed to parse input value, must be JSON serializable.')
-      expect(span.context()._tags).to.deep.equal({
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
         '_ml_obs.meta.output.value': 'output'
       })
     })

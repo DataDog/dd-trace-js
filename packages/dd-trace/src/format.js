@@ -30,8 +30,6 @@ const map = {
   'resource.name': 'resource'
 }
 
-const llmObsTagPrefix = '_ml_obs'
-
 function format (span) {
   const formatted = formatSpan(span)
 
@@ -162,9 +160,7 @@ function extractTags (trace, span) {
           break
         }
       default: // eslint-disable-line no-fallthrough
-        if (!tag.startsWith(llmObsTagPrefix)) { // don't add ml_obs-related tags
-          addTag(trace.meta, trace.metrics, tag, tags[tag])
-        }
+        addTag(trace.meta, trace.metrics, tag, tags[tag])
     }
   }
   setSingleSpanIngestionTags(trace, context._spanSampling)

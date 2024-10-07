@@ -3,6 +3,9 @@
 const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 
+// we will use this to populate the span-tags map
+const LLMObsTagger = require('../../src/llmobs/tagger')
+
 describe('span processor', () => {
   let LLMObsSpanProcessor
   let processor
@@ -72,24 +75,24 @@ describe('span processor', () => {
         _duration: 1, // this is in ms, will be converted to ns
         context () {
           return {
-            _tags: {
-              'span.type': 'llm',
-              '_ml_obs.meta.span.kind': 'llm',
-              '_ml_obs.meta.model_name': 'myModel',
-              '_ml_obs.meta.model_provider': 'myProvider',
-              '_ml_obs.meta.metadata': { foo: 'bar' },
-              '_ml_obs.meta.ml_app': 'myApp',
-              '_ml_obs.meta.input.value': 'input-value',
-              '_ml_obs.meta.output.value': 'output-value',
-              '_ml_obs.meta.input.messages': [{ role: 'user', content: 'hello' }],
-              '_ml_obs.meta.output.messages': [{ role: 'assistant', content: 'world' }],
-              '_ml_obs.llmobs_parent_id': '1234'
-            },
+            _tags: {},
             toTraceId () { return '123' }, // should not use this
             toSpanId () { return '456' }
           }
         }
       }
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.meta.model_name': 'myModel',
+        '_ml_obs.meta.model_provider': 'myProvider',
+        '_ml_obs.meta.metadata': { foo: 'bar' },
+        '_ml_obs.meta.ml_app': 'myApp',
+        '_ml_obs.meta.input.value': 'input-value',
+        '_ml_obs.meta.output.value': 'output-value',
+        '_ml_obs.meta.input.messages': [{ role: 'user', content: 'hello' }],
+        '_ml_obs.meta.output.messages': [{ role: 'assistant', content: 'world' }],
+        '_ml_obs.llmobs_parent_id': '1234'
+      })
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
@@ -152,16 +155,17 @@ describe('span processor', () => {
       span = {
         context () {
           return {
-            _tags: {
-              'span.type': 'llm',
-              '_ml_obs.meta.span.kind': 'llm',
-              '_ml_obs.meta.metadata': metadata
-            },
+            _tags: {},
             toTraceId () { return '123' },
             toSpanId () { return '456' }
           }
         }
       }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.meta.metadata': metadata
+      })
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
       processor.process(span)
@@ -179,16 +183,17 @@ describe('span processor', () => {
       span = {
         context () {
           return {
-            _tags: {
-              'span.type': 'llm',
-              '_ml_obs.meta.span.kind': 'retrieval',
-              '_ml_obs.meta.output.documents': [{ text: 'hello', name: 'myDoc', id: '1', score: 0.6 }]
-            },
+            _tags: {},
             toTraceId () { return '123' },
             toSpanId () { return '456' }
           }
         }
       }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'retrieval',
+        '_ml_obs.meta.output.documents': [{ text: 'hello', name: 'myDoc', id: '1', score: 0.6 }]
+      })
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
@@ -207,16 +212,17 @@ describe('span processor', () => {
       span = {
         context () {
           return {
-            _tags: {
-              'span.type': 'llm',
-              '_ml_obs.meta.span.kind': 'embedding',
-              '_ml_obs.meta.input.documents': [{ text: 'hello', name: 'myDoc', id: '1', score: 0.6 }]
-            },
+            _tags: {},
             toTraceId () { return '123' },
             toSpanId () { return '456' }
           }
         }
       }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'embedding',
+        '_ml_obs.meta.input.documents': [{ text: 'hello', name: 'myDoc', id: '1', score: 0.6 }]
+      })
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
@@ -235,16 +241,17 @@ describe('span processor', () => {
       span = {
         context () {
           return {
-            _tags: {
-              'span.type': 'llm',
-              '_ml_obs.meta.span.kind': 'llm',
-              '_ml_obs.meta.model_name': 'myModel'
-            },
+            _tags: {},
             toTraceId () { return '123' },
             toSpanId () { return '456' }
           }
         }
       }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.meta.model_name': 'myModel'
+      })
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
@@ -259,8 +266,6 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {
-              'span.type': 'llm',
-              '_ml_obs.meta.span.kind': 'llm',
               error: new Error(),
               'error.message': 'error message',
               'error.type': 'error type',
@@ -271,6 +276,10 @@ describe('span processor', () => {
           }
         }
       }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm'
+      })
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
@@ -290,8 +299,6 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {
-              'span.type': 'llm',
-              '_ml_obs.meta.span.kind': 'llm',
               error: new Error('error message')
             },
             toTraceId () { return '123' },
@@ -299,6 +306,10 @@ describe('span processor', () => {
           }
         }
       }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm'
+      })
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
@@ -318,16 +329,17 @@ describe('span processor', () => {
         _name: 'test',
         context () {
           return {
-            _tags: {
-              'span.type': 'llm',
-              '_ml_obs.meta.span.kind': 'llm',
-              '_ml_obs.name': 'mySpan'
-            },
+            _tags: {},
             toTraceId () { return '123' },
             toSpanId () { return '456' }
           }
         }
       }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.name': 'mySpan'
+      })
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
@@ -341,16 +353,17 @@ describe('span processor', () => {
       span = {
         context () {
           return {
-            _tags: {
-              'span.type': 'llm',
-              '_ml_obs.meta.span.kind': 'llm',
-              '_ml_obs.session_id': '1234'
-            },
+            _tags: {},
             toTraceId () { return '123' },
             toSpanId () { return '456' }
           }
         }
       }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.session_id': '1234'
+      })
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
@@ -365,16 +378,17 @@ describe('span processor', () => {
       span = {
         context () {
           return {
-            _tags: {
-              'span.type': 'llm',
-              '_ml_obs.meta.span.kind': 'llm',
-              '_ml_obs.tags': { hostname: 'localhost', foo: 'bar', source: 'mySource' }
-            },
+            _tags: {},
             toTraceId () { return '123' },
             toSpanId () { return '456' }
           }
         }
       }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.tags': { hostname: 'localhost', foo: 'bar', source: 'mySource' }
+      })
 
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 

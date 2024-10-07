@@ -1,7 +1,5 @@
 'use strict'
 
-const { SPAN_TYPE } = require('../../../../ext/tags')
-
 function encodeUnicode (str) {
   if (!str) return str
   return str.split('').map(char => {
@@ -13,11 +11,6 @@ function encodeUnicode (str) {
   }).join('')
 }
 
-function isLLMObsSpan (span) {
-  return ['llm', 'openai'].includes(span?.context()._tags[SPAN_TYPE])
-}
-
 module.exports = {
-  encodeUnicode,
-  isLLMObsSpan
+  encodeUnicode
 }
