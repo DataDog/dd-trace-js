@@ -850,7 +850,8 @@ addHook({
 }, jestConfigSyncWrapper)
 
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = [
-  'selenium-webdriver'
+  'selenium-webdriver',
+  'winston'
 ]
 
 function shouldBypassJestRequireEngine (moduleName) {

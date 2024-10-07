@@ -3,9 +3,10 @@ const Plugin = require('../../plugins/plugin')
 function getWinstonLogSubmissionParameters (config) {
   const { site, service } = config
   return {
-    host: `http-intake.logs.${site}`,
+    host: process.env.DD_CIVISIBILITY_AGENTLESS_LOGS_HOST || `http-intake.logs.${site}`,
+    port: process.env.DD_CIVISIBILITY_AGENTLESS_LOGS_PORT,
     path: `/api/v2/logs?dd-api-key=${process.env.DD_API_KEY}&ddsource=winston&service=${service}`,
-    ssl: true
+    ssl: !process.env.DD_CIVISIBILITY_AGENTLESS_LOGS_HOST
   }
 }
 
