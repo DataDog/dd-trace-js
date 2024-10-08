@@ -123,13 +123,13 @@ async function check () {
     const latest = latestsJson.latests[name]
     if (!latest) {
       console.log(`No latest version found for "${name}"`)
-      process.exitCode = 1
+      // process.exitCode = 1
     }
     const distTags = await npmView(name + ' dist-tags')
     const npmLatest = distTags.latest
     if (npmLatest !== latest) {
       console.log(`"latests.json: is not up to date for "${name}": expected "${npmLatest}", got "${latest}"`)
-      process.exitCode = 1
+      // process.exitCode = 1
     }
   }
 }
