@@ -46,7 +46,6 @@ describe('AppSec Index', function () {
   let graphql
   let apiSecuritySampler
   let rasp
-  let sampler
 
   const RULES = { rules: [{ a: 1 }] }
 
@@ -76,12 +75,12 @@ describe('AppSec Index', function () {
     }
 
     web = {
-      root: sinon.stub()
+      root: sinon.stub(),
+      getContext: sinon.stub(),
+      _prioritySampler: {
+        isSampled: sinon.stub()
+      }
     }
-
-    sampler = sinon.stub().returns({
-      isSampled: sinon.stub()
-    })
 
     blocking = {
       setTemplates: sinon.stub()
@@ -108,8 +107,7 @@ describe('AppSec Index', function () {
     }
 
     apiSecuritySampler = proxyquire('../../src/appsec/api_security_sampler', {
-      '../plugins/util/web': web,
-      '../priority_sampler': sampler
+      '../plugins/util/web': web
     })
     sinon.spy(apiSecuritySampler, 'sampleRequest')
 
@@ -471,6 +469,7 @@ describe('AppSec Index', function () {
       }
 
       web.root.returns(rootSpan)
+      web.getContext.returns({ paths: ['path'] })
     })
 
     it('should not trigger schema extraction with feature disabled', () => {
@@ -558,11 +557,15 @@ describe('AppSec Index', function () {
       }
 
       const span = {
-        context: sinon.stub().returns({})
+        context: sinon.stub().returns({
+          _sampling: {
+            priority: 1
+          }
+        })
       }
 
       web.root.returns(span)
-      sampler().isSampled.returns(true)
+      web._prioritySampler.isSampled.returns(true)
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
@@ -580,6 +583,7 @@ describe('AppSec Index', function () {
           enabled: true,
           sampleDelay: 1
         }
+
         AppSec.enable(config)
       })
 
@@ -591,15 +595,30 @@ describe('AppSec Index', function () {
         responseBody.publish({ req: {}, body: 'string' })
         responseBody.publish({ req: {}, body: null })
 
+        expect(apiSecuritySampler.sampleRequest).to.not.been.called
         expect(waf.run).to.not.been.called
       })
 
-      it('should call to the waf if body is an object', () => {
+      it('should not call to the waf if it is not a sampled request', () => {
+        apiSecuritySampler.sampleRequest = apiSecuritySampler.sampleRequest.instantiateFake(() => false)
         const req = {}
+        const res = {}
+
+        responseBody.publish({ req, res, body: {} })
+
+        expect(apiSecuritySampler.sampleRequest).to.have.been.calledOnceWith(req, res)
+        expect(waf.run).to.not.been.called
+      })
+
+      it('should call to the waf if it is a sampled request', () => {
+        apiSecuritySampler.sampleRequest = apiSecuritySampler.sampleRequest.instantiateFake(() => true)
+        const req = {}
+        const res = {}
         const body = {}
 
-        responseBody.publish({ req, body })
+        responseBody.publish({ req, res, body })
 
+        expect(apiSecuritySampler.sampleRequest).to.have.been.calledOnceWith(req, res)
         expect(waf.run).to.been.calledOnceWith({
           persistent: {
             [addresses.HTTP_INCOMING_RESPONSE_BODY]: body

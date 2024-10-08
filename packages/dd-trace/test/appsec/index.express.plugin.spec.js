@@ -41,7 +41,7 @@ withVersions('express', 'express', version => {
       })
 
       app.post('/json', (req, res) => {
-        res.jsonp({ jsonResKey: 'jsonResValue' })
+        res.json({ jsonResKey: 'jsonResValue' })
       })
 
       server = app.listen(port, () => {
