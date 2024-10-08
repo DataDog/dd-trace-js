@@ -23,10 +23,6 @@ const versionsPath = path.join(
 
 const matricesJson = require(matricesPath)
 
-const pluginsNames = Object.getOwnPropertyNames(yaml.load(fs.readFileSync(matricesPath, 'utf-8')).matrices)
-
-// console.log('json', pluginsNames)
-
 const versionsJson = require(versionsPath)
 const versionsNames = Object.getOwnPropertyNames(yaml.load(fs.readFileSync(versionsPath, 'utf-8')).matrices)
 

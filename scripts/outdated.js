@@ -7,7 +7,7 @@ const fs = require('fs')
 const { execSync } = require('child_process')
 const yaml = require('js-yaml')
 
-const { generateMatrix } = require('./create_matrix')
+// const { generateMatrix } = require('./create_matrix')
 
 const latestsPath = path.join(
   __dirname,
@@ -97,17 +97,17 @@ async function updatePlugin (name) {
 async function fix () {
   for (const name of pluginNames) {
     await updatePlugin(name)
-    generateMatrix(name)
+    // generateMatrix(name)
   }
 
   const result = execSync('git status').toString()
 
-  if (result.includes(matricesPath)) {
+  if (result.includes(versionsPath)) {
     const branchName = 'update_outdated_integrations'
     try {
       execSync(`git checkout -b ${branchName}`)
-      execSync(`git add ${matricesPath}`)
-      execSync('git commit -m "fix: update integr latests.json"')
+      execSync(`git add ${versionsPath}`)
+      execSync('git commit -m "fix: update integr versions.json"')
       execSync(`git push origin ${branchName}`)
 
       makeAPR(branchName)
