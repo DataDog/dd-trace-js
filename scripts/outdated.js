@@ -110,9 +110,9 @@ function updateLatests(latestsPath) {
 }
 
 async function fix () {
-  console.log("Checking if there is a PR to make")
+  updateLatests(latestsPath)
+  console.log("Generating matrix..")
   for (const name of pluginNames) {
-    updateLatests(latestsPath)
     await updatePlugin(name)
     generateMatrix(name)
   }
