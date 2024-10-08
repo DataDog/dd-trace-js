@@ -20,7 +20,7 @@ const enterCh = dc.channel('dd-trace:storage:enter')
 const spanFinishCh = dc.channel('dd-trace:span:finish')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 
-const MemoizedWebTags = Symbol('NativeWallProfiler.MemoizedWebTags')
+const ProfilingContext = Symbol('NativeWallProfiler.ProfilingContext')
 
 let kSampleCount
 
@@ -42,38 +42,6 @@ function endpointNameFromTags (tags) {
     tags[HTTP_METHOD],
     tags[HTTP_ROUTE]
   ].filter(v => v).join(' ')
-}
-
-function getWebTags (startedSpans, i, span) {
-  // Are web tags for this span already memoized?
-  const memoizedWebTags = span[MemoizedWebTags]
-  if (memoizedWebTags !== undefined) {
-    return memoizedWebTags
-  }
-  // No, we'll have to memoize a new value
-  function memoize (tags) {
-    span[MemoizedWebTags] = tags
-    return tags
-  }
-  // Is this span itself a web span?
-  const context = span.context()
-  const tags = context._tags
-  if (isWebServerSpan(tags)) {
-    return memoize(tags)
-  }
-  // It isn't. Get parent's web tags (memoize them too recursively.)
-  // There might be several webspans, for example with next.js, http plugin creates the first span
-  // and then next.js plugin creates a child span, and this child span has the correct endpoint
-  // information. That's why we always use the tags of the closest ancestor web span.
-  const parentId = context._parentId
-  while (--i >= 0) {
-    const ispan = startedSpans[i]
-    if (ispan.context()._spanId === parentId) {
-      return memoize(getWebTags(startedSpans, i, ispan))
-    }
-  }
-  // Local root span with no web span
-  return memoize(null)
 }
 
 let channelsActivated = false
@@ -184,14 +152,10 @@ class NativeWallProfiler {
     })
 
     if (this._withContexts) {
-      this._currentContext = {}
-      this._pprof.time.setContext(this._currentContext)
+      this._setNewContext()
 
       if (this._captureSpanData) {
         this._profilerState = this._pprof.time.getState()
-        this._lastSpan = undefined
-        this._lastStartedSpans = undefined
-        this._lastWebTags = undefined
         this._lastSampleCount = 0
 
         beforeCh.subscribe(this._enter)
@@ -209,51 +173,78 @@ class NativeWallProfiler {
     const sampleCount = this._profilerState[kSampleCount]
     if (sampleCount !== this._lastSampleCount) {
       this._lastSampleCount = sampleCount
-      const context = this._currentContext
-      this._currentContext = {}
-      this._pprof.time.setContext(this._currentContext)
+      const context = this._currentContext.ref
+      this._setNewContext()
 
       this._updateContext(context)
     }
 
     const span = getActiveSpan()
-    if (span) {
+    this._currentContext.ref = span ? this._getProfilingContext(span) : {}
+  }
+
+  _getProfilingContext (span) {
+    let profilingContext = span[ProfilingContext]
+    if (profilingContext === undefined) {
       const context = span.context()
-      this._lastSpan = span
       const startedSpans = getStartedSpans(context)
-      this._lastStartedSpans = startedSpans
-      if (this._endpointCollectionEnabled) {
-        this._lastWebTags = getWebTags(startedSpans, startedSpans.length, span)
+
+      let spanId
+      let rootSpanId
+      if (this._codeHotspotsEnabled) {
+        spanId = context._spanId
+        rootSpanId = startedSpans.length ? startedSpans[0].context()._spanId : context._spanId
       }
-    } else {
-      this._lastStartedSpans = undefined
-      this._lastSpan = undefined
-      this._lastWebTags = undefined
+
+      let webTags
+      if (this._endpointCollectionEnabled) {
+        const tags = context._tags
+        if (isWebServerSpan(tags)) {
+          webTags = tags
+        } else {
+          // Get parent's context's web tags
+          const parentId = context._parentId
+          for (let i = startedSpans.length; --i >= 0;) {
+            const ispan = startedSpans[i]
+            if (ispan.context()._spanId === parentId) {
+              webTags = this._getProfilingContext(ispan).webTags
+              break
+            }
+          }
+        }
+      }
+
+      profilingContext = { spanId, rootSpanId, webTags }
+      span[ProfilingContext] = profilingContext
     }
+    return profilingContext
+  }
+
+  _setNewContext () {
+    this._pprof.time.setContext(
+      this._currentContext = {
+        ref: {}
+      }
+    )
   }
 
   _updateContext (context) {
-    if (!this._lastSpan) {
-      return
+    if (typeof context.spanId === 'object') {
+      context.spanId = context.spanId.toString(10)
     }
-    if (this._codeHotspotsEnabled) {
-      context.spanId = this._lastSpan.context().toSpanId()
-      const rootSpan = this._lastStartedSpans[0]
-      if (rootSpan) {
-        context.rootSpanId = rootSpan.context().toSpanId()
-      }
+    if (typeof context.rootSpanId === 'object') {
+      context.rootSpanId = context.rootSpanId.toString(10)
     }
-    if (this._lastWebTags) {
-      context.webTags = this._lastWebTags
+    if (context.webTags !== undefined && context.endpoint === undefined) {
       // endpoint may not be determined yet, but keep it as fallback
       // if tags are not available anymore during serialization
-      context.endpoint = endpointNameFromTags(this._lastWebTags)
+      context.endpoint = endpointNameFromTags(context.webTags)
     }
   }
 
   _spanFinished (span) {
-    if (span[MemoizedWebTags]) {
-      span[MemoizedWebTags] = undefined
+    if (span[ProfilingContext] !== undefined) {
+      span[ProfilingContext] = undefined
     }
   }
 
@@ -288,9 +279,6 @@ class NativeWallProfiler {
         enterCh.unsubscribe(this._enter)
         spanFinishCh.unsubscribe(this._spanFinished)
         this._profilerState = undefined
-        this._lastSpan = undefined
-        this._lastStartedSpans = undefined
-        this._lastWebTags = undefined
       }
       this._started = false
     }
@@ -313,20 +301,20 @@ class NativeWallProfiler {
 
     const labels = { ...getThreadLabels() }
 
-    const { context: { spanId, rootSpanId, webTags, endpoint }, timestamp } = context
+    const { context: { ref: { spanId, rootSpanId, webTags, endpoint } }, timestamp } = context
 
     if (this._timelineEnabled) {
       // Incoming timestamps are in microseconds, we emit nanos.
       labels[END_TIMESTAMP_LABEL] = timestamp * 1000n
     }
 
-    if (spanId) {
+    if (spanId !== undefined) {
       labels[SPAN_ID_LABEL] = spanId
     }
-    if (rootSpanId) {
+    if (rootSpanId !== undefined) {
       labels[LOCAL_ROOT_SPAN_ID_LABEL] = rootSpanId
     }
-    if (webTags && Object.keys(webTags).length !== 0) {
+    if (webTags !== undefined && Object.keys(webTags).length !== 0) {
       labels['trace endpoint'] = endpointNameFromTags(webTags)
     } else if (endpoint) {
       // fallback to endpoint computed when sample was taken
