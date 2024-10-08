@@ -112,6 +112,7 @@ describe('AppSec Index', function () {
       '../priority_sampler': sampler
     })
     sinon.spy(apiSecuritySampler, 'sampleRequest')
+    sinon.spy(apiSecuritySampler, 'isSampled')
 
     rasp = {
       enable: sinon.stub(),
@@ -588,18 +589,33 @@ describe('AppSec Index', function () {
       })
 
       it('should not do anything if body is not an object', () => {
-        responseBody.publish({ req: {}, body: 'string' })
-        responseBody.publish({ req: {}, body: null })
+        responseBody.publish({ req: {}, res: {}, body: 'string' })
+        responseBody.publish({ req: {}, res: {}, body: null })
 
+        expect(apiSecuritySampler.isSampled).to.not.been.called
         expect(waf.run).to.not.been.called
       })
 
-      it('should call to the waf if body is an object', () => {
+      it('should not call to the waf if it is not a sampled request', () => {
+        apiSecuritySampler.isSampled = apiSecuritySampler.isSampled.instantiateFake(() => false)
         const req = {}
+        const res = {}
+
+        responseBody.publish({ req, res, body: {} })
+
+        expect(apiSecuritySampler.isSampled).to.have.been.calledOnceWith(req)
+        expect(waf.run).to.not.been.called
+      })
+
+      it('should call to the waf if it is a sampled request', () => {
+        apiSecuritySampler.isSampled = apiSecuritySampler.isSampled.instantiateFake(() => true)
+        const req = {}
+        const res = {}
         const body = {}
 
-        responseBody.publish({ req, body })
+        responseBody.publish({ req, res, body })
 
+        expect(apiSecuritySampler.isSampled).to.have.been.calledOnceWith(req, res)
         expect(waf.run).to.been.calledOnceWith({
           persistent: {
             [addresses.HTTP_INCOMING_RESPONSE_BODY]: body

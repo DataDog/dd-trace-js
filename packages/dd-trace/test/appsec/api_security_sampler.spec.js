@@ -2,6 +2,7 @@
 
 const { performance } = require('node:perf_hooks')
 const proxyquire = require('proxyquire')
+const { USER_KEEP, AUTO_KEEP, AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
 
 describe('API Security Sampler', () => {
   const req = { route: { path: '/test' }, method: 'GET' }
@@ -25,7 +26,9 @@ describe('API Security Sampler', () => {
     apiSecuritySampler.configure({ apiSecurity: { enabled: true } })
 
     span = {
-      context: sinon.stub().returns({})
+      context: sinon.stub().returns({
+        _sampling: { priority: AUTO_KEEP }
+      })
     }
 
     webStub.root.returns(span)
@@ -49,8 +52,35 @@ describe('API Security Sampler', () => {
     expect(apiSecuritySampler.sampleRequest({}, {})).to.be.false
   })
 
-  it('should return true and put request in cache if priority is AUTO_KEEP or USER_KEEP', () => {
+  it('should return false for AUTO_REJECT priority', () => {
+    span.context.returns({ _sampling: { priority: AUTO_REJECT } })
+    expect(apiSecuritySampler.sampleRequest(req, res)).to.be.false
+  })
+
+  it('should return false for USER_REJECT priority', () => {
+    span.context.returns({ _sampling: { priority: USER_REJECT } })
+    expect(apiSecuritySampler.sampleRequest(req, res)).to.be.false
+  })
+
+  it('should sample for AUTO_KEEP priority without checking prioritySampler', () => {
+    span.context.returns({ _sampling: { priority: AUTO_KEEP } })
+    sampler().isSampled.returns(false)
     expect(apiSecuritySampler.sampleRequest(req, res)).to.be.true
+  })
+
+  it('should sample for USER_KEEP priority without checking prioritySampler', () => {
+    span.context.returns({ _sampling: { priority: USER_KEEP } })
+    sampler().isSampled.returns(false)
+    expect(apiSecuritySampler.sampleRequest(req, res)).to.be.true
+  })
+
+  it('should use prioritySampler for undefined priority', () => {
+    span.context.returns({ _sampling: { priority: undefined } })
+    sampler().isSampled.returns(true)
+    expect(apiSecuritySampler.sampleRequest(req, res)).to.be.true
+
+    sampler().isSampled.returns(false)
+    expect(apiSecuritySampler.sampleRequest(req, res)).to.be.false
   })
 
   it('should not sample before 30 seconds', () => {
@@ -67,11 +97,6 @@ describe('API Security Sampler', () => {
     performanceNowStub.returns(performance.now() + 35000)
 
     expect(apiSecuritySampler.sampleRequest(req, res)).to.be.true
-  })
-
-  it('should return false if priority is neither AUTO_KEEP nor USER_KEEP', () => {
-    sampler().isSampled.returns(false)
-    expect(apiSecuritySampler.sampleRequest({}, {})).to.be.false
   })
 
   it('should remove oldest entry when max size is exceeded', () => {
@@ -119,5 +144,39 @@ describe('API Security Sampler', () => {
     expect(apiSecuritySampler.sampleRequest(req, res404)).to.be.true
     expect(apiSecuritySampler.isSampled(req, res200)).to.be.true
     expect(apiSecuritySampler.isSampled(req, res404)).to.be.true
+  })
+
+  it('should use route.path when available', () => {
+    const reqWithRoute = {
+      route: { path: '/users/:id' },
+      url: '/users/123',
+      method: 'GET'
+    }
+
+    apiSecuritySampler.sampleRequest(reqWithRoute, res)
+    expect(apiSecuritySampler.isSampled(reqWithRoute, res)).to.be.true
+
+    const reqWithDifferentUrl = {
+      route: { path: '/users/:id' },
+      url: '/users/456',
+      method: 'GET'
+    }
+    expect(apiSecuritySampler.isSampled(reqWithDifferentUrl, res)).to.be.true
+  })
+
+  it('should fall back to url when route.path is not available', () => {
+    const reqWithUrl = {
+      url: '/users/123',
+      method: 'GET'
+    }
+
+    apiSecuritySampler.sampleRequest(reqWithUrl, res)
+    expect(apiSecuritySampler.isSampled(reqWithUrl, res)).to.be.true
+
+    const reqWithDifferentUrl = {
+      url: '/users/456',
+      method: 'GET'
+    }
+    expect(apiSecuritySampler.isSampled(reqWithDifferentUrl, res)).to.be.false
   })
 })

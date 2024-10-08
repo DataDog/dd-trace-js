@@ -5,6 +5,7 @@ const LRUCache = require('lru-cache')
 const PrioritySampler = require('../priority_sampler')
 const web = require('../plugins/util/web')
 const log = require('../log')
+const { USER_KEEP, AUTO_KEEP, AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
 
 const MAX_SIZE = 4096
 const DEFAULT_DELAY = 30 // 30s
@@ -31,12 +32,26 @@ function sampleRequest (req, res) {
   const rootSpan = web.root(req)
   if (!rootSpan) return false
 
+  const priority = getSpanPriority(rootSpan)
+
+  if (priority === AUTO_REJECT || priority === USER_REJECT) {
+    return false
+  }
+
+  if (priority === AUTO_KEEP || priority === USER_KEEP) {
+    return sample(req, res)
+  }
+
   const isSampled = prioritySampler.isSampled(rootSpan)
 
   if (!isSampled) {
     return false
   }
 
+  return sample(req, res)
+}
+
+function sample (req, res) {
   const key = computeKey(req, res)
   const alreadySampled = sampledRequests.has(key)
 
@@ -53,7 +68,7 @@ function isSampled (req, res) {
 }
 
 function computeKey (req, res) {
-  const route = req.route.path
+  const route = req.route?.path || req.url
   const method = req.method.toLowerCase()
   const statusCode = res.statusCode
   const str = route + statusCode + method
@@ -67,6 +82,11 @@ function parseSampleDelay (delay) {
     log.warn('Invalid delay value. Delay must be a positive number.')
     return DEFAULT_DELAY
   }
+}
+
+function getSpanPriority (span) {
+  const spanContext = span.context?.()
+  return spanContext._sampling?.priority
 }
 
 module.exports = {
