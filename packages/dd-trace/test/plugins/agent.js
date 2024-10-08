@@ -210,10 +210,10 @@ function runCallback (callback, options, handlers) {
 
   function handler () {
     try {
-      callback.apply(null, arguments)
+      const result = callback.apply(null, arguments)
       handlers.delete(handlerPayload)
       clearTimeout(timeout)
-      deferred.resolve()
+      deferred.resolve(result)
     } catch (e) {
       if (options && options.rejectFirst) {
         clearTimeout(timeout)
