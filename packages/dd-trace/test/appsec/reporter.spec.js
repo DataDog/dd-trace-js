@@ -343,35 +343,6 @@ describe('reporter', () => {
       Reporter.reportDerivatives(derivatives)
 
       const schemaEncoded = zlib.gzipSync(JSON.stringify(schemaValue)).toString('base64')
-      expect(span.addTags).to.be.calledOnce
-      expect(span.addTags).to.be.calledWithMatch({
-        '_dd.appsec.s.req.headers': schemaEncoded,
-        '_dd.appsec.s.req.query': schemaEncoded,
-        '_dd.appsec.s.req.params': schemaEncoded,
-        '_dd.appsec.s.req.cookies': schemaEncoded,
-        '_dd.appsec.s.req.body': schemaEncoded,
-        'custom.processor.output': schemaEncoded
-      })
-    })
-
-    it('should call addTags', () => {
-      const schemaValue = [{ key: [8] }]
-      const derivatives = {
-        '_dd.appsec.fp.http.endpoint': 'endpoint_fingerprint',
-        '_dd.appsec.fp.http.header': 'header_fingerprint',
-        '_dd.appsec.fp.http.network': 'network_fingerprint',
-        '_dd.appsec.fp.session': 'session_fingerprint',
-        '_dd.appsec.s.req.headers': schemaValue,
-        '_dd.appsec.s.req.query': schemaValue,
-        '_dd.appsec.s.req.params': schemaValue,
-        '_dd.appsec.s.req.cookies': schemaValue,
-        '_dd.appsec.s.req.body': schemaValue,
-        'custom.processor.output': schemaValue
-      }
-
-      Reporter.reportDerivatives(derivatives)
-
-      const schemaEncoded = zlib.gzipSync(JSON.stringify(schemaValue)).toString('base64')
       expect(span.addTags).to.be.calledOnceWithExactly({
         '_dd.appsec.fp.http.endpoint': 'endpoint_fingerprint',
         '_dd.appsec.fp.http.header': 'header_fingerprint',
