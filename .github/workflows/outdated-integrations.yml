@@ -14,8 +14,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
+
       - run: yarn install
+
       - run: yarn outdated-integrations
+      
       - run: git diff
       # - name: Create Pull Request
       #   id: pr
