@@ -102,9 +102,11 @@ async function fix () {
   }
 
   const result = execSync('git status').toString()
+  console.log(result)
 
   if (result.includes(matricesPath)) {
     const branchName = 'update_outdated_integrations'
+    console.log(branchName)
     try {
       execSync(`git checkout -b ${branchName}`)
       execSync(`git add ${matricesPath}`)
