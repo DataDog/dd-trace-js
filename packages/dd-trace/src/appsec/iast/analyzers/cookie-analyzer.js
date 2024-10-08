@@ -11,7 +11,9 @@ class CookieAnalyzer extends Analyzer {
     this.propertyToBeSafe = propertyToBeSafe.toLowerCase()
   }
 
-  onConfigure () {
+  onConfigure (config) {
+    this.cookieFilterRegExp = new RegExp(config.iast.cookieFilterPattern)
+
     this.addSub(
       { channelName: 'datadog:iast:set-cookie', moduleName: 'http' },
       (cookieInfo) => this.analyze(cookieInfo)
@@ -28,6 +30,10 @@ class CookieAnalyzer extends Analyzer {
   }
 
   _createHashSource (type, evidence, location) {
+    if (typeof evidence.value === 'string' && evidence.value.match(this.cookieFilterRegExp)) {
+      return 'FILTERED_' + this._type
+    }
+
     return `${type}:${evidence.value}`
   }
 

@@ -1739,7 +1739,6 @@ declare namespace tracer {
      * on the tracer.
      */
     interface pino extends Integration {}
-  
     /**
      * This plugin automatically patches the [protobufjs](https://protobufjs.github.io/protobuf.js/)
      * to collect protobuf message schemas when Datastreams Monitoring is enabled.
@@ -2159,6 +2158,12 @@ declare namespace tracer {
      * @default 2
      */
     maxContextOperations?: number,
+
+    /**
+     * Defines the pattern to ignore cookie names in the vulnerability hash calculation
+     * @default ".{32,}"
+     */
+    cookieFilterPattern?: boolean,
 
     /**
      * Whether to enable vulnerability deduplication

@@ -18,6 +18,7 @@ describe('no HttpOnly cookie analyzer', () => {
     maxConcurrentRequests: 1,
     maxContextOperations: 1
   }
+
   prepareTestServerForIast('no HttpOnly cookie analyzer',
     (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
       testThatRequestHasVulnerability((req, res) => {
@@ -46,6 +47,12 @@ describe('no HttpOnly cookie analyzer', () => {
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('set-cookie', ['key=value; HttpOnly', 'key2=value2; Secure'])
       }, NO_HTTPONLY_COOKIE, 1)
+
+      testThatRequestHasVulnerability((req, res) => {
+        const cookieNamePrefix = (new Array(50)).join('0')
+        res.setHeader('set-cookie', [cookieNamePrefix + 'key1=value', cookieNamePrefix + 'key2=value2'])
+      }, NO_HTTPONLY_COOKIE, 1, undefined, undefined,
+      'Should be detected as the same NO_HTTPONLY_COOKIE vulnerability when the cookie name is long')
 
       testThatRequestHasNoVulnerability((req, res) => {
         res.setHeader('set-cookie', 'key=value; HttpOnly')

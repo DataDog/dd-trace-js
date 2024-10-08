@@ -43,6 +43,12 @@ describe('insecure cookie analyzer', () => {
         res.setHeader('set-cookie', ['key=value; HttpOnly', 'key2=value2; Secure'])
       }, INSECURE_COOKIE, 1)
 
+      testThatRequestHasVulnerability((req, res) => {
+        const cookieNamePrefix = (new Array(50)).join('0')
+        res.setHeader('set-cookie', [cookieNamePrefix + 'key1=value', cookieNamePrefix + 'key2=value2'])
+      }, INSECURE_COOKIE, 1, undefined, undefined,
+      'Should be detected as the same INSECURE_COOKIE vulnerability when the cookie name is long')
+
       testThatRequestHasNoVulnerability((req, res) => {
         res.setHeader('set-cookie', 'key=value; Secure')
       }, INSECURE_COOKIE)

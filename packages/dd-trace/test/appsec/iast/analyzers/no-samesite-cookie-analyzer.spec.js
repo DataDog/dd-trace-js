@@ -59,6 +59,12 @@ describe('no SameSite cookie analyzer', () => {
         res.setHeader('set-cookie', 'key=value; SameSite=strict')
       }, NO_SAMESITE_COOKIE)
 
+      testThatRequestHasVulnerability((req, res) => {
+        const cookieNamePrefix = (new Array(50)).join('0')
+        res.setHeader('set-cookie', [cookieNamePrefix + 'key1=value', cookieNamePrefix + 'key2=value2'])
+      }, NO_SAMESITE_COOKIE, 1, undefined, undefined,
+      'Should be detected as the same NO_SAMESITE_COOKIE vulnerability when the cookie name is long')
+
       testThatRequestHasNoVulnerability((req, res) => {
         res.setHeader('set-cookie', 'key=')
       }, NO_SAMESITE_COOKIE)
