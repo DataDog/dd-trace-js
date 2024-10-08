@@ -256,3 +256,17 @@ jobs:
       - run: yarn test:integration:appsec
       - uses: ./.github/actions/node/latest
       - run: yarn test:integration:appsec
+
+  passport:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: passport-local|passport-http
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/node/setup
+      - uses: ./.github/actions/install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:appsec:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:appsec:plugins:ci
+      - uses: codecov/codecov-action@v3

@@ -341,6 +341,10 @@
      {
        "name": "express",
        "versions": [">=4.16.2"]
+     },
+     {
+       "name": "body-parser",
+       "versions": ["1.20.1"]
      }
   ],
   "pg": [
