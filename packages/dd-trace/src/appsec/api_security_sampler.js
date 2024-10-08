@@ -22,6 +22,7 @@ function disable () {
 
 function sampleRequest (req, res, force = false) {
   if (!enabled) return false
+  if (isSampled(req, res)) return false
 
   const key = computeKey(req, res)
   if (!key || isSampled(key)) return false
