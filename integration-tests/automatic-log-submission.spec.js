@@ -71,10 +71,13 @@ describe('test visibility automatic log submission', () => {
 
         const logsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
+            payloads.forEach(({ headers }) => {
+              assert.equal(headers['dd-api-key'], '1')
+            })
             const logMessages = payloads.flatMap(({ logMessage }) => logMessage)
             const [url] = payloads.flatMap(({ url }) => url)
 
-            assert.equal(url, '/api/v2/logs?dd-api-key=1&ddsource=winston&service=my-service')
+            assert.equal(url, '/api/v2/logs?ddsource=winston&service=my-service')
             assert.equal(logMessages.length, 2)
 
             logMessages.forEach(({ dd, level }) => {

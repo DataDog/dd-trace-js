@@ -6,8 +6,11 @@ function getWinstonLogSubmissionParameters (config) {
 
   const defaultParameters = {
     host: `http-intake.logs.${site}`,
-    path: `/api/v2/logs?dd-api-key=${process.env.DD_API_KEY}&ddsource=winston&service=${service}`,
-    ssl: true
+    path: `/api/v2/logs?ddsource=winston&service=${service}`,
+    ssl: true,
+    headers: {
+      'DD-API-KEY': process.env.DD_API_KEY
+    }
   }
 
   if (!process.env.DD_AGENTLESS_LOG_SUBMISSION_URL) {
@@ -20,7 +23,8 @@ function getWinstonLogSubmissionParameters (config) {
       host: url.hostname,
       port: url.port,
       ssl: url.protocol === 'https:',
-      path: defaultParameters.path
+      path: defaultParameters.path,
+      headers: defaultParameters.headers
     }
   } catch (e) {
     log.error('Could not parse DD_AGENTLESS_LOG_SUBMISSION_URL')
