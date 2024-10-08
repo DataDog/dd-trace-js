@@ -25,5 +25,7 @@ module.exports = {
   pgQueryStart: dc.channel('apm:pg:query:start'),
   pgPoolQueryStart: dc.channel('datadog:pg:pool:query:start'),
   mysql2OuterQueryStart: dc.channel('datadog:mysql2:outerquery:start'),
-  wafRunFinished: dc.channel('datadog:waf:run:finish')
+  wafRunFinished: dc.channel('datadog:waf:run:finish'),
+  fsOperationStart: dc.channel('apm:fs:operation:start'),
+  expressMiddlewareError: dc.channel('apm:express:middleware:error')
 }
