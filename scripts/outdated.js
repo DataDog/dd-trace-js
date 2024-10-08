@@ -40,8 +40,8 @@ const versionsPath = path.join(
 )
 
 const latestsJson = require(latestsPath)
-const internalsNames = Array.from(new Set(getInternals().map(n => n.name)))
-  .filter(x => typeof x === 'string' && x !== 'child_process' && !x.startsWith('node:'))
+const internalsNames = Array.from(new Set(getInternals().map(n => n.name))).filter(x => typeof x === 'string' && x !== 'child_process' && !x.startsWith('node:'))
+const testNames = ["aerospike", "cassandra-driver", 'couchbase', 'cypress', '@elastic/transport', '@elastic/elasticsearch', 'elasticsearch']
 
 const matricesJson = require(matricesPath)
 const versionsJson = require(versionsPath)
@@ -119,7 +119,7 @@ async function fix () {
 }
 
 async function check () {
-  for (const name of internalsNames) {
+  for (const name of testNames) {
     const latest = latestsJson.latests[name]
     if (!latest) {
       console.log(`No latest version found for "${name}"`)
