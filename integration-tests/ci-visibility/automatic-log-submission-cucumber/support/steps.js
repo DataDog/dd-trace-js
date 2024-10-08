@@ -1,18 +1,12 @@
 const { expect } = require('chai')
-const { createLogger, format, transports } = require('winston')
 const { When, Then } = require('@cucumber/cucumber')
 
-const logger = createLogger({
-  level: 'info',
-  exitOnError: false,
-  format: format.json(),
-  transports: [
-    new transports.Console()
-  ]
-})
+const logger = require('./logger')
+const sum = require('./sum')
 
 Then('I should have made a log', async function () {
   expect(true).to.equal(true)
+  expect(sum(1, 2)).to.equal(3)
 })
 
 When('we run a test', async function () {

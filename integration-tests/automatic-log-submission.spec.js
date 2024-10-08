@@ -67,20 +67,43 @@ describe('test visibility automatic log submission', () => {
   testFrameworks.forEach(({ name, command }) => {
     context(`with ${name}`, () => {
       it('can automatically submit logs', (done) => {
-        const receiverPromise = receiver
+        let logIds, testIds
+
+        const logsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
             const logMessages = payloads.flatMap(({ logMessage }) => logMessage)
             const [url] = payloads.flatMap(({ url }) => url)
 
             assert.equal(url, '/api/v2/logs?dd-api-key=1&ddsource=winston&service=my-service')
-            assert.equal(logMessages.length, 1)
-            const [{ dd, level, message }] = logMessages
+            assert.equal(logMessages.length, 2)
 
-            assert.equal(level, 'info')
-            assert.equal(message, 'Hello simple log!')
-            assert.equal(dd.service, 'my-service')
-            assert.hasAllKeys(dd, ['trace_id', 'span_id', 'service'])
-          }).catch(done)
+            logMessages.forEach(({ dd, level }) => {
+              assert.equal(level, 'info')
+              assert.equal(dd.service, 'my-service')
+              assert.hasAllKeys(dd, ['trace_id', 'span_id', 'service'])
+            })
+
+            assert.includeMembers(logMessages.map(({ message }) => message), [
+              'Hello simple log!',
+              'sum function being called'
+            ])
+
+            logIds = {
+              logSpanId: logMessages[0].dd.span_id,
+              logTraceId: logMessages[0].dd.trace_id
+            }
+          })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testEventContent = events.find(event => event.type === 'test').content
+
+            testIds = {
+              testSpanId: testEventContent.span_id.toString(),
+              testTraceId: testEventContent.trace_id.toString()
+            }
+          })
 
         childProcess = exec(command,
           {
@@ -96,11 +119,21 @@ describe('test visibility automatic log submission', () => {
           }
         )
         childProcess.on('exit', () => {
-          receiverPromise.then(() => {
+          Promise.all([logsPromise, eventsPromise]).then(() => {
+            const { logSpanId, logTraceId } = logIds
+            const { testSpanId, testTraceId } = testIds
             assert.include(testOutput, 'Hello simple log!')
-            assert.include(testOutput, 'span_id')
+            assert.include(testOutput, 'sum function being called')
+            // cucumber has `cucumber.step`, and that's the active span, not the test.
+            // logs are queried by trace id, so it should be OK
+            if (name !== 'cucumber') {
+              assert.include(testOutput, `"span_id":"${testSpanId}"`)
+              assert.equal(logSpanId, testSpanId)
+            }
+            assert.include(testOutput, `"trace_id":"${testTraceId}"`)
+            assert.equal(logTraceId, testTraceId)
             done()
-          })
+          }).catch(done)
         })
 
         childProcess.stdout.on('data', (chunk) => {
