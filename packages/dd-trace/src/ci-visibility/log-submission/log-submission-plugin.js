@@ -1,12 +1,30 @@
 const Plugin = require('../../plugins/plugin')
+const log = require('../../log')
 
 function getWinstonLogSubmissionParameters (config) {
   const { site, service } = config
-  return {
-    host: process.env.DD_CIVISIBILITY_AGENTLESS_LOGS_HOST || `http-intake.logs.${site}`,
-    port: process.env.DD_CIVISIBILITY_AGENTLESS_LOGS_PORT,
+
+  const defaultParameters = {
+    host: `http-intake.logs.${site}`,
     path: `/api/v2/logs?dd-api-key=${process.env.DD_API_KEY}&ddsource=winston&service=${service}`,
-    ssl: !process.env.DD_CIVISIBILITY_AGENTLESS_LOGS_HOST
+    ssl: true
+  }
+
+  if (!process.env.DD_AGENTLESS_LOG_SUBMISSION_URL) {
+    return defaultParameters
+  }
+
+  try {
+    const url = new URL(process.env.DD_AGENTLESS_LOG_SUBMISSION_URL)
+    return {
+      host: url.hostname,
+      port: url.port,
+      ssl: url.protocol === 'https:',
+      path: defaultParameters.path
+    }
+  } catch (e) {
+    log.error('Could not parse DD_AGENTLESS_LOG_SUBMISSION_URL')
+    return defaultParameters
   }
 }
 

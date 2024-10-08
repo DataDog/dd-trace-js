@@ -88,9 +88,8 @@ describe('test visibility automatic log submission', () => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
-              DD_CIVISIBILITY_AGENTLESS_LOGS_HOST: 'localhost',
-              DD_CIVISIBILITY_AGENTLESS_LOGS_PORT: receiver.port,
-              DD_API_KEY: '1', // TODO: check that if this is not set, this does not happen
+              DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
+              DD_API_KEY: '1',
               DD_SERVICE: 'my-service'
             },
             stdio: 'pipe'
@@ -118,8 +117,7 @@ describe('test visibility automatic log submission', () => {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              DD_CIVISIBILITY_AGENTLESS_LOGS_HOST: 'localhost',
-              DD_CIVISIBILITY_AGENTLESS_LOGS_PORT: receiver.port,
+              DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
               DD_SERVICE: 'my-service'
             },
             stdio: 'pipe'
@@ -146,8 +144,7 @@ describe('test visibility automatic log submission', () => {
             env: {
               ...getCiVisEvpProxyConfig(receiver.port),
               DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
-              DD_CIVISIBILITY_AGENTLESS_LOGS_HOST: 'localhost',
-              DD_CIVISIBILITY_AGENTLESS_LOGS_PORT: receiver.port,
+              DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
               DD_SERVICE: 'my-service',
               DD_TRACE_DEBUG: '1',
               DD_TRACE_LOG_LEVEL: 'warn',
