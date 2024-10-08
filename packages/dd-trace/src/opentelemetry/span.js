@@ -142,7 +142,7 @@ class Span {
       context: spanContext._ddContext,
       startTime,
       hostname: _tracer._hostname,
-      integrationName: 'otel',
+      integrationName: parentTracer?._isOtelLibrary ? 'otel.library' : 'otel',
       tags: {
         [SERVICE_NAME]: _tracer._service,
         [RESOURCE_NAME]: spanName
