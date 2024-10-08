@@ -661,10 +661,9 @@ declare namespace tracer {
        */
       apiSecurity?: {
         /** Whether to enable Api Security.
-         * @default false
+         * @default true
          */
         enabled?: boolean,
-
       },
       /**
        * Configuration for RASP

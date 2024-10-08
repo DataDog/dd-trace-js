@@ -103,7 +103,7 @@ describe('Standalone ASM', () => {
         assert.notProperty(meta, 'manual.keep')
         assert.notProperty(meta, '_dd.p.appsec')
 
-        assert.propertyVal(metrics, '_sampling_priority_v1', 1)
+        assert.propertyVal(metrics, '_sampling_priority_v1', 0)
         assert.propertyVal(metrics, '_dd.apm.enabled', 0)
 
         assertDrop(payload[2][0])

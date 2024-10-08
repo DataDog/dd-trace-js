@@ -166,7 +166,7 @@ function incomingHttpEndTranslator ({ req, res }) {
     persistent[addresses.HTTP_INCOMING_QUERY] = req.query
   }
 
-  if (req.route && typeof req.route.path === 'string' && apiSecuritySampler.sampleRequest(req, res)) {
+  if (apiSecuritySampler.sampleRequest(req, res, true)) {
     persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
 
@@ -226,8 +226,9 @@ function onRequestProcessParams ({ req, res, abortController, params }) {
   handleResults(results, req, res, rootSpan, abortController)
 }
 
-function onResponseBody ({ req, body }) {
+function onResponseBody ({ req, res, body }) {
   if (!body || typeof body !== 'object') return
+  if (!apiSecuritySampler.sampleRequest(req, res)) return
 
   // we don't support blocking at this point, so no results needed
   waf.run({
