@@ -8,6 +8,8 @@ const { execSync } = require('child_process')
 const yaml = require('js-yaml')
 
 const { generateMatrix } = require('./create_matrix')
+const outdated_integrations = {};
+
 
 const latestsPath = path.join(
   __dirname,
@@ -93,9 +95,24 @@ async function updatePlugin (name) {
   }
 }
 
+function updateLatests(latestsPath) {
+  try {
+    const existingLatests = JSON.parse(fs.readFileSync(latestsPath, 'utf-8'));
+
+    Object.assign(existingLatests.latests, outdated_integrations);
+
+    // Write the updated data back to latests.json
+    fs.writeFileSync(latestsPath, JSON.stringify(existingLatests, null, 2));
+    console.log('latests updated successfully.');
+  } catch (error) {
+    console.error('Error updating latests.json:', error);
+  }
+}
+
 async function fix () {
   console.log("Checking if there is a PR to make")
   for (const name of pluginNames) {
+    updateLatests(latestsPath)
     await updatePlugin(name)
     generateMatrix(name)
   }
@@ -122,7 +139,6 @@ async function fix () {
 // }
 
 async function check () {
-  const outdated_integrations = {};
   for (const name of internalsNames) {
     const latest = latestsJson.latests[name]
     if (!latest) {
@@ -133,9 +149,10 @@ async function check () {
     const npmLatest = distTags.latest
     if (npmLatest !== latest) {
       console.log(`"latests.json: is not up to date for "${name}": expected "${npmLatest}", got "${latest}"`)
-      outdated_integrations[name] = npmLatest
       // process.exitCode = 1
     }
+    outdated_integrations[name] = npmLatest
+
   }
   console.log("Outdated:")
   console.log(outdated_integrations)
