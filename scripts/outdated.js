@@ -95,6 +95,7 @@ async function updatePlugin (name) {
 }
 
 async function fix () {
+  console.log("Checking if there is a PR to make")
   for (const name of pluginNames) {
     await updatePlugin(name)
     generateMatrix(name)
@@ -173,10 +174,12 @@ function splitting (element) {
   return +element.split('.')[0]
 }
 
-if (process.argv.includes('fix')) // TODO: fix this parsing
-{  fix();
-}else {
-  check();
-  fix();
-}
+check();
+fix();
+// if (process.argv.includes('fix')) // TODO: fix this parsing
+// {  fix();
+// }else {
+//   check();
+//   fix();
+// }
 
