@@ -100,7 +100,7 @@ class LLMObsSpanProcessor {
       output.documents = mlObsTags[OUTPUT_DOCUMENTS]
     }
 
-    const error = spanTags.error
+    const error = spanTags.error || spanTags[ERROR_TYPE]
     if (error) {
       meta[ERROR_MESSAGE] = spanTags[ERROR_MESSAGE] || error.message || error.code
       meta[ERROR_TYPE] = spanTags[ERROR_TYPE] || error.name
@@ -126,7 +126,7 @@ class LLMObsSpanProcessor {
       tags: this._processTags(span, mlApp, sessionId, error),
       start_ns: Math.round(span._startTime * 1e6),
       duration: Math.round(span._duration * 1e6),
-      status: spanTags.error ? 'error' : 'ok',
+      status: error ? 'error' : 'ok',
       meta,
       metrics,
       _dd: {

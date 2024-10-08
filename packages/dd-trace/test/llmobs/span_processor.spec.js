@@ -266,7 +266,6 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {
-              error: new Error(),
               'error.message': 'error message',
               'error.type': 'error type',
               'error.stack': 'error stack'
