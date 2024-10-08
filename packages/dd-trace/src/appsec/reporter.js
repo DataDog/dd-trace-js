@@ -153,7 +153,7 @@ function reportAttack (attackData) {
   rootSpan.addTags(newTags)
 }
 
-function reportSchemas (derivatives) {
+function reportDerivatives (derivatives) {
   if (!derivatives) return
 
   const req = storage.getStore()?.req
@@ -162,26 +162,11 @@ function reportSchemas (derivatives) {
   if (!rootSpan) return
 
   const tags = {}
-  for (const [tag, value] of Object.entries(derivatives)) {
-    if (isFingerprintDerivative(tag)) continue
-    const gzippedValue = zlib.gzipSync(JSON.stringify(value))
-    tags[tag] = gzippedValue.toString('base64')
-  }
-
-  rootSpan.addTags(tags)
-}
-
-function reportFingerprints (derivatives) {
-  if (!derivatives) return
-
-  const req = storage.getStore()?.req
-  const rootSpan = web.root(req)
-
-  if (!rootSpan) return
-
-  const tags = {}
-  for (const [tag, value] of Object.entries(derivatives)) {
-    if (!isFingerprintDerivative(tag)) continue
+  for (let [tag, value] of Object.entries(derivatives)) {
+    if (!isFingerprintDerivative(tag)) {
+      const gzippedValue = zlib.gzipSync(JSON.stringify(value))
+      value = gzippedValue.toString('base64')
+    }
     tags[tag] = value
   }
 
@@ -270,8 +255,7 @@ module.exports = {
   reportMetrics,
   reportAttack,
   reportWafUpdate: incrementWafUpdatesMetric,
-  reportSchemas,
-  reportFingerprints,
+  reportDerivatives,
   finishRequest,
   setRateLimit,
   mapHeaderAndTags

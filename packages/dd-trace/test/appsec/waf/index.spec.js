@@ -48,8 +48,7 @@ describe('WAF Manager', () => {
     sinon.stub(Reporter, 'reportMetrics')
     sinon.stub(Reporter, 'reportAttack')
     sinon.stub(Reporter, 'reportWafUpdate')
-    sinon.stub(Reporter, 'reportSchemas')
-    sinon.stub(Reporter, 'reportFingerprints')
+    sinon.stub(Reporter, 'reportDerivatives')
 
     webContext = {}
     sinon.stub(web, 'getContext').returns(webContext)
@@ -405,7 +404,7 @@ describe('WAF Manager', () => {
         ddwafContext.run.returns(result)
 
         wafContextWrapper.run(params)
-        expect(Reporter.reportSchemas).to.be.calledOnceWithExactly(result.derivatives)
+        expect(Reporter.reportDerivatives).to.be.calledOnceWithExactly(result.derivatives)
       })
 
       it('should report fingerprints when ddwafContext returns fingerprints in results derivatives', () => {
@@ -427,7 +426,7 @@ describe('WAF Manager', () => {
             'server.request.body': 'foo'
           }
         })
-        sinon.assert.calledOnceWithExactly(Reporter.reportFingerprints, result.derivatives)
+        sinon.assert.calledOnceWithExactly(Reporter.reportDerivatives, result.derivatives)
       })
     })
   })
