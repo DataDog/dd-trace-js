@@ -153,6 +153,10 @@ function reportAttack (attackData) {
   rootSpan.addTags(newTags)
 }
 
+function isFingerprintDerivative (derivative) {
+  return derivative.startsWith('_dd.appsec.fp')
+}
+
 function reportDerivatives (derivatives) {
   if (!derivatives) return
 
@@ -241,10 +245,6 @@ function shouldCollectEventHeaders (tags = {}) {
 
 function setRateLimit (rateLimit) {
   limiter = new Limiter(rateLimit)
-}
-
-function isFingerprintDerivative (derivative) {
-  return derivative.startsWith('_dd.appsec.fp')
 }
 
 module.exports = {
