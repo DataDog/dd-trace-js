@@ -173,5 +173,8 @@ function splitting (element) {
   return +element.split('.')[0]
 }
 
-if (process.argv.includes('fix')) fix()
-else check()
+if (process.argv.includes('fix')) // TODO: fix this parsing
+  fix()
+else 
+  check() 
+  fix()
