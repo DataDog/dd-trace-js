@@ -4,6 +4,7 @@ const proxyquire = require('proxyquire')
 const agent = require('../../plugins/agent')
 const axios = require('axios')
 const tracer = require('../../../../../index')
+const { LOGIN_SUCCESS, LOGIN_FAILURE } = require('../../../src/appsec/addresses')
 
 describe('track_event', () => {
   describe('Internal API', () => {
@@ -14,6 +15,7 @@ describe('track_event', () => {
     let setUserTags
     let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent, trackEvent
     let sample
+    let waf
 
     beforeEach(() => {
       log = {
@@ -30,6 +32,10 @@ describe('track_event', () => {
 
       sample = sinon.stub()
 
+      waf = {
+        run: sinon.spy()
+      }
+
       const trackEvents = proxyquire('../../../src/appsec/sdk/track_event', {
         '../../log': log,
         './utils': {
@@ -40,13 +46,18 @@ describe('track_event', () => {
         },
         '../standalone': {
           sample
-        }
+        },
+        '../waf': waf
       })
 
       trackUserLoginSuccessEvent = trackEvents.trackUserLoginSuccessEvent
       trackUserLoginFailureEvent = trackEvents.trackUserLoginFailureEvent
       trackCustomEvent = trackEvents.trackCustomEvent
       trackEvent = trackEvents.trackEvent
+    })
+
+    afterEach(() => {
+      sinon.restore()
     })
 
     describe('trackUserLoginSuccessEvent', () => {
@@ -105,6 +116,16 @@ describe('track_event', () => {
           'manual.keep': 'true',
           '_dd.appsec.events.users.login.success.sdk': 'true'
         })
+      })
+
+      it('should call waf run with login success address', () => {
+        const user = { id: 'user_id' }
+
+        trackUserLoginSuccessEvent(tracer, user)
+        sinon.assert.calledOnceWithExactly(
+          waf.run,
+          { persistent: { [LOGIN_SUCCESS]: null } }
+        )
       })
     })
 
@@ -181,6 +202,14 @@ describe('track_event', () => {
           'appsec.events.users.login.failure.usr.id': 'user_id',
           'appsec.events.users.login.failure.usr.exists': 'true'
         })
+      })
+
+      it('should call waf run with login failure address', () => {
+        trackUserLoginFailureEvent(tracer, 'user_id')
+        sinon.assert.calledOnceWithExactly(
+          waf.run,
+          { persistent: { [LOGIN_FAILURE]: null } }
+        )
       })
     })
 
