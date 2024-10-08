@@ -1,9 +1,12 @@
 name: Outdated Integrations
 
 on:
-  schedule:
-    # Yes, this runs a _lot_. We don't want to be out of date for very long.
-    - cron: '37 12,16,22 * * *'
+  # schedule:
+  #   # Yes, this runs a _lot_. We don't want to be out of date for very long.
+  #   - cron: '37 12,16,22 * * *'
+  push:
+    branches:
+      - 'quinna/test-outdated-integrations' # for testing
 
 jobs:
   outdated-integrations:
