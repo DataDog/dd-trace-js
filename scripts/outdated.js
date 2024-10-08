@@ -98,8 +98,8 @@ async function updatePlugin (name) {
 function updateLatests(latestsPath) {
   try {
     const existingLatests = JSON.parse(fs.readFileSync(latestsPath, 'utf-8'));
-
-    Object.assign(existingLatests.latests, outdated_integrations);
+    console.log(existingLatests["latests"])
+    Object.assign(existingLatests["latests"], outdated_integrations);
 
     // Write the updated data back to latests.json
     fs.writeFileSync(latestsPath, JSON.stringify(existingLatests, null, 2));
@@ -116,7 +116,6 @@ async function fix () {
     await updatePlugin(name)
     generateMatrix(name)
   }
-
   const result = execSync('git status').toString()
   console.log(result)
 }
