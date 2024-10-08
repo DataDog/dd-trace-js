@@ -2381,7 +2381,37 @@ declare namespace tracer {
       /**
        * Role of the message (ie system, user, ai)
        */
-      role?: string
+      role?: string,
+
+      /**
+       * Tool calls of the message
+       */
+      toolCalls?: ToolCall[],
+    }
+
+    /**
+     * Represents a single tool call for an LLM chat model message
+     */
+    interface ToolCall {
+      /**
+       * Name of the tool
+       */
+      name?: string,
+
+      /**
+       * Arguments passed to the tool
+       */
+      arguments?: { [key: string]: any },
+
+      /**
+       * The tool ID
+       */
+      toolId?: string,
+
+      /**
+       * The tool type
+       */
+      type?: string
     }
 
     /**

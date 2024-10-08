@@ -5,7 +5,6 @@ const { SPAN_KIND, OUTPUT_VALUE } = require('./constants')
 const {
   validKind,
   getName,
-  isLLMSpan,
   getFunctionArguments
 } = require('./util')
 const { storage } = require('../../../datadog-core')
@@ -13,22 +12,28 @@ const { isTrue } = require('../util')
 
 const Span = require('../opentracing/span')
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
-const LLMObsSpanTagger = require('./tagger')
+const LLMObsTagger = require('./tagger')
 
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const AgentlessWriter = require('./writers/spans/agentless')
 const AgentProxyWriter = require('./writers/spans/agentProxy')
+const LLMObsSpanProcessor = require('./span_processor')
+
+const { channel } = require('dc-polyfill')
+const spanProccessCh = channel('dd-trace:span:process')
 
 class LLMObs {
   constructor (tracer, llmobsModule, config) {
     this._config = config
     this._tracer = tracer
     this._llmobsModule = llmobsModule
-    this._tagger = new LLMObsSpanTagger(config)
+    this._tagger = new LLMObsTagger(config)
+    this._processor = new LLMObsSpanProcessor(config)
 
     if (this.enabled) {
       this._evaluationWriter = new LLMObsEvalMetricsWriter(config)
+      spanProccessCh.subscribe(this._processor.process.bind(this._processor))
     }
   }
 
@@ -66,7 +71,8 @@ class LLMObs {
     this._evaluationWriter = new LLMObsEvalMetricsWriter(this._config)
 
     const SpanWriter = this._config.llmobs.agentlessEnabled ? AgentlessWriter : AgentProxyWriter
-    this._tracer._processor._llmobs._writer = new SpanWriter(this._config)
+    this._processor._writer = new SpanWriter(this._config)
+    spanProccessCh.subscribe(this._processor.process)
   }
 
   disable () {
@@ -80,11 +86,13 @@ class LLMObs {
     this._config.llmobs.enabled = false
     this._llmobsModule.disable()
 
+    spanProccessCh.unsubscribe(this._processor.process)
+
     this._evaluationWriter.destroy()
-    this._tracer._processor._llmobs._writer.destroy()
+    this._processor._writer.destroy()
 
     this._evaluationWriter = null
-    this._tracer._processor._llmobs._writer = null
+    this._processor._writer = null
   }
 
   annotate (span, options) {
@@ -113,7 +121,7 @@ class LLMObs {
       return
     }
 
-    if (!isLLMSpan(span)) {
+    if (!LLMObsTagger.tagMap.has(span)) {
       logger.warn('Span must be an LLMObs-generated span')
       return
     }
@@ -122,7 +130,7 @@ class LLMObs {
       return
     }
 
-    const spanKind = span.context()._tags[SPAN_KIND]
+    const spanKind = LLMObsTagger.tagMap.get(span)[SPAN_KIND]
     if (!spanKind) {
       logger.warn('LLMObs span must have a span kind specified')
       return
@@ -168,7 +176,7 @@ class LLMObs {
       return
     }
 
-    if (!isLLMSpan(span)) {
+    if (!LLMObsTagger.tagMap.has(span)) {
       logger.warn('Span must be an LLMObs-generated span')
       return
     }
@@ -258,23 +266,16 @@ class LLMObs {
       }
     }
 
-    try {
-      this._evaluationWriter.append({
-        span_id: spanId,
-        trace_id: traceId,
-        label,
-        metric_type: metricType,
-        ml_app: mlApp,
-        [`${metricType}_value`]: value,
-        timestamp_ms: timestampMs,
-        tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`)
-      })
-    } catch (e) {
-      logger.warn(`
-        Failed to append evaluation metric to LLM Observability writer, likely due to an unserializable property.
-        Span won't be sent to LLM Observability: ${e.message}
-      `)
-    }
+    this._evaluationWriter.append({
+      span_id: spanId,
+      trace_id: traceId,
+      label,
+      metric_type: metricType,
+      ml_app: mlApp,
+      [`${metricType}_value`]: value,
+      timestamp_ms: timestampMs,
+      tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`)
+    })
   }
 
   startSpan (kind, options = {}) {
@@ -299,18 +300,7 @@ class LLMObs {
       childOf: this._tracer.scope().active()
     })
 
-    const oldStore = storage.getStore()
-    const parentLLMObsSpan = oldStore?.llmobsSpan
-
-    this._tagger.setLLMObsSpanTags(span, valid && kind, {
-      ...llmobsOptions,
-      parentLLMObsSpan
-    })
-    const newStore = span ? span._store : oldStore
-
-    storage.enterWith({ ...newStore, span, llmobsSpan: span }) // preserve context
-
-    return new Proxy(span, {
+    const spanProxy = new Proxy(span, {
       get (target, key) {
         if (key === 'finish') {
           return function () {
@@ -322,6 +312,19 @@ class LLMObs {
         return target[key]
       }
     })
+
+    const oldStore = storage.getStore()
+    const parentLLMObsSpan = oldStore?.llmobsSpan
+
+    this._tagger.setLLMObsSpanTags(spanProxy, valid && kind, {
+      ...llmobsOptions,
+      parentLLMObsSpan
+    })
+    const newStore = spanProxy ? spanProxy._store : oldStore
+
+    storage.enterWith({ ...newStore, span, llmobsSpan: spanProxy }) // preserve context
+
+    return spanProxy
   }
 
   trace (kind, options, fn) {
@@ -439,7 +442,7 @@ class LLMObs {
 
         if (result && typeof result.then === 'function') {
           return result.then(value => {
-            if (value && kind !== 'retrieval' && !span.context()._tags[OUTPUT_VALUE]) {
+            if (value && kind !== 'retrieval' && !LLMObsTagger.tagMap.get(span)[OUTPUT_VALUE]) {
               llmobs.annotate(span, { outputData: value })
             }
             storage.enterWith(oldStore)
@@ -450,7 +453,7 @@ class LLMObs {
           })
         }
 
-        if (result && kind !== 'retrieval' && !span.context()._tags[OUTPUT_VALUE]) {
+        if (result && kind !== 'retrieval' && !LLMObsTagger.tagMap.get(span)[OUTPUT_VALUE]) {
           llmobs.annotate(span, { outputData: result })
           storage.enterWith(oldStore)
         }
@@ -482,7 +485,7 @@ class LLMObs {
     }
 
     try {
-      this._tracer._processor._llmobs._writer.flush()
+      this._processor._writer.flush()
       this._evaluationWriter.flush()
     } catch {
       logger.warn('Failed to flush LLMObs spans and evaluation metrics')
