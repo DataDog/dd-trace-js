@@ -16,3 +16,16 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn outdated-integrations
+      - run: git diff
+      - name: Create Pull Request
+        id: pr
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: "update_outdated_integrations"
+          commit-message: "fix: update latests.json"
+          delete-branch: true
+          base: master
+          title: "chore: update latests.json"
+          labels: changelog/no-changelog
+          body: 

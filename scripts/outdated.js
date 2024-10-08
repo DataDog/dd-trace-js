@@ -103,19 +103,6 @@ async function fix () {
 
   const result = execSync('git status').toString()
   console.log(result)
-  const branchName = 'update_outdated_integrations'
-
-// TODO: add conditional 
-try {
-  execSync(`git checkout -b ${branchName}`)
-  execSync(`git add ${matricesPath}`)
-  execSync('git commit -m "fix: update latests.json"')
-  execSync(`git push origin ${branchName}`)
-  makeAPR(branchName)
-} catch (e) {
-  console.log('ERROR', e)
-  process.exitCode = 1
-}
 }
 
 //   if (result.includes(matricesPath)) {
