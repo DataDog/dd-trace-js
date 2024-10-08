@@ -174,7 +174,9 @@ function splitting (element) {
 }
 
 if (process.argv.includes('fix')) // TODO: fix this parsing
-  fix()
-else 
-  check() 
-  fix()
+{  fix();
+}else {
+  check();
+  fix();
+}
+
