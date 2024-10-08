@@ -8,9 +8,11 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { spawn } = require('child_process')
 const { assert } = require('chai')
+const findProcess = require('find-process')
 
 describe('esm', () => {
   let agent
+  let proc
   let sandbox
 
   withVersions('azure-functions', '@azure/functions', version => {
@@ -30,15 +32,19 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
+      const azureFuncProc = await findProcess('name', 'func', true)
+      const azureFuncProcPid = azureFuncProc[0]?.pid ?? null
+      azureFuncProcPid !== null && process.kill(azureFuncProcPid, 'SIGKILL')
+
+      proc && proc.kill()
       await agent.stop()
-      process.kill(0, 'SIGINT')
     })
 
     it('is instrumented', async () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/.bin:${process.env.PATH}`
       }
-      await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
@@ -84,7 +90,7 @@ function spawnProc (command, args, options = {}, stdioHandler, stderrHandler) {
       if (!options.silent) console.log(data.toString())
 
       if (data.toString().includes('http://localhost:7071/api/httptest')) {
-        resolve(proc)
+        resolve()
       }
     })
 
