@@ -132,9 +132,13 @@ async function check () {
     const npmLatest = distTags.latest
     if (npmLatest !== latest) {
       console.log(`"latests.json: is not up to date for "${name}": expected "${npmLatest}", got "${latest}"`)
+      outdated_integrations[name] = npmLatest
       // process.exitCode = 1
     }
   }
+  console.log("Outdated:")
+  console.log(outdated_integrations)
+  // TODO: write this to latests
 }
 
 function minVersion (range) {
@@ -176,12 +180,12 @@ function splitting (element) {
   return +element.split('.')[0]
 }
 
+const outdated_integrations = {};
 check();
 fix();
 // if (process.argv.includes('fix')) // TODO: fix this parsing
 // {  fix();
 // }else {
 //   check();
-//   fix();
 // }
 
