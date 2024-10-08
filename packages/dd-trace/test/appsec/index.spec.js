@@ -1058,7 +1058,10 @@ describe('IP blocking', function () {
   beforeEach(() => {
     appsec.enable(new Config({
       appsec: {
-        enabled: true
+        enabled: true,
+        rasp: {
+          enabled: false // disable rasp to not trigger lfi
+        }
       }
     }))
 

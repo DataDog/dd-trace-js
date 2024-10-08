@@ -19,5 +19,6 @@ module.exports = {
   APM_TRACING_ENABLED: 1n << 19n,
   ASM_RASP_SQLI: 1n << 21n,
   ASM_RASP_SSRF: 1n << 23n,
+  ASM_RASP_LFI: 1n << 24n,
   APM_TRACING_SAMPLE_RULES: 1n << 29n
 }

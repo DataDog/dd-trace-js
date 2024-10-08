@@ -23,6 +23,8 @@ module.exports = {
   WAF_CONTEXT_PROCESSOR: 'waf.context.processor',
 
   HTTP_OUTGOING_URL: 'server.io.net.url',
+  FS_OPERATION_PATH: 'server.io.fs.file',
+
   DB_STATEMENT: 'server.db.statement',
   DB_SYSTEM: 'server.db.system'
 }

@@ -79,6 +79,7 @@ function enableWafUpdate (appsecConfig) {
     if (appsecConfig.rasp?.enabled) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, true)
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SSRF, true)
+      rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_LFI, true)
     }
 
     // TODO: delete noop handlers and kPreUpdate and replace with batched handlers
@@ -106,6 +107,7 @@ function disableWafUpdate () {
 
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SSRF, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_LFI, false)
 
     rc.removeProductHandler('ASM_DATA')
     rc.removeProductHandler('ASM_DD')
