@@ -122,6 +122,7 @@ async function fix () {
 // }
 
 async function check () {
+  const outdated_integrations = {};
   for (const name of internalsNames) {
     const latest = latestsJson.latests[name]
     if (!latest) {
@@ -180,7 +181,6 @@ function splitting (element) {
   return +element.split('.')[0]
 }
 
-const outdated_integrations = {};
 check();
 fix();
 // if (process.argv.includes('fix')) // TODO: fix this parsing
