@@ -2,13 +2,10 @@
 
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
-const { entryTag } = require('../../dd-trace/src/code_origin')
 
 const errorChannel = channel('apm:fastify:middleware:error')
 const handleChannel = channel('apm:fastify:request:handle')
-const codeOriginEnabledChannel = channel('datadog:code-origin-enabled')
-
-const kCodeOriginForSpansTagsSym = Symbol('kCodeOriginForSpansTagsSym')
+const codeOriginForSpansChannel = channel('datadog:code-origin-for-spans')
 
 const parsingResources = new WeakMap()
 
@@ -31,8 +28,8 @@ function wrapFastify (fastify, hasParsingEvents) {
       app.addHook('preHandler', preValidation)
     }
 
-    // Hack to check if the Code Origin for Spans feature is enabled
-    if (codeOriginEnabledChannel.hasSubscribers) {
+    // No need to add the onRoute hook unless Code Origin for Spans is enabled
+    if (codeOriginForSpansChannel.hasSubscribers) {
       app.addHook('onRoute', onRoute)
     }
 
@@ -95,9 +92,9 @@ function onRequest (request, reply, done) {
 
   const req = getReq(request)
   const res = getRes(reply)
-  const tags = getCodeOriginForSpansTags(request)
+  const routeConfig = getRouteConfig(request)
 
-  handleChannel.publish({ req, res, tags })
+  handleChannel.publish({ req, res, routeConfig })
 
   return done()
 }
@@ -152,8 +149,8 @@ function getRes (reply) {
   return reply && (reply.raw || reply.res || reply)
 }
 
-function getCodeOriginForSpansTags (request) {
-  return request?.routeOptions?.config?.[kCodeOriginForSpansTagsSym]
+function getRouteConfig (request) {
+  return request?.routeOptions?.config
 }
 
 function publishError (error, req) {
@@ -165,8 +162,10 @@ function publishError (error, req) {
 }
 
 function onRoute (routeOptions) {
-  if (!routeOptions.config) routeOptions.config = {}
-  routeOptions.config[kCodeOriginForSpansTagsSym] = entryTag(onRoute)
+  codeOriginForSpansChannel.publish({
+    routeOptions,
+    topOfStackFunc: onRoute
+  })
 }
 
 addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
