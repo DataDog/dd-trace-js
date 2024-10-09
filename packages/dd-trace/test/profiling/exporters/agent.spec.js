@@ -120,7 +120,8 @@ describe('exporters/agent', function () {
     expect(event.info.profiler.ssi).to.have.property('mechanism', 'none')
     expect(event.info.profiler).to.have.property('version', version)
     expect(event.info).to.have.property('runtime')
-    expect(Object.keys(event.info.runtime)).to.have.length(2)
+    expect(Object.keys(event.info.runtime)).to.have.length(3)
+    expect(event.info.runtime).to.have.property('available_processors')
     expect(event.info.runtime).to.have.property('engine', 'nodejs')
     expect(event.info.runtime).to.have.property('version', process.version.substring(1))
 
