@@ -8,7 +8,6 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { spawn } = require('child_process')
 const { assert } = require('chai')
-const findProcess = require('find-process')
 
 describe('esm', () => {
   let agent
@@ -32,17 +31,13 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      const azureFuncProc = await findProcess('name', 'func', true)
-      const azureFuncProcPid = azureFuncProc[0]?.pid ?? null
-      azureFuncProcPid !== null && process.kill(azureFuncProcPid, 'SIGKILL')
-
-      proc && proc.kill()
+      proc && proc.kill('SIGINT')
       await agent.stop()
     })
 
     it('is instrumented', async () => {
       const envArgs = {
-        PATH: `${sandbox.folder}/node_modules/.bin:${process.env.PATH}`
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -90,7 +85,7 @@ function spawnProc (command, args, options = {}, stdioHandler, stderrHandler) {
       if (!options.silent) console.log(data.toString())
 
       if (data.toString().includes('http://localhost:7071/api/httptest')) {
-        resolve()
+        resolve(proc)
       }
     })
 
