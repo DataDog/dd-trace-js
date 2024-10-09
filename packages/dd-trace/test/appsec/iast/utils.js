@@ -112,9 +112,7 @@ function beforeEachIastTest (iastConfig) {
   beforeEach(() => {
     vulnerabilityReporter.clearCache()
     iast.enable(new Config({
-      experimental: {
-        iast: iastConfig
-      }
+      iast: iastConfig
     }))
   })
 }
@@ -249,8 +247,8 @@ function prepareTestServerForIast (description, tests, iastConfig) {
       return agent.close({ ritmReset: false })
     })
 
-    function testThatRequestHasVulnerability (fn, vulnerability, occurrences, cb, makeRequest) {
-      it(`should have ${vulnerability} vulnerability`, function (done) {
+    function testThatRequestHasVulnerability (fn, vulnerability, occurrences, cb, makeRequest, description) {
+      it(description || `should have ${vulnerability} vulnerability`, function (done) {
         this.timeout(5000)
         app = fn
         checkVulnerabilityInRequest(vulnerability, occurrences, cb, makeRequest, config, done)
