@@ -28,6 +28,7 @@ const {
 const AgentlessWriter = require('./writers/spans/agentless')
 const AgentProxyWriter = require('./writers/spans/agentProxy')
 const { isLLMSpan } = require('./util')
+const log = require('../log')
 
 const tracerVersion = require('../../../../package.json').version
 
@@ -43,14 +44,22 @@ class LLMObsSpanProcessor {
   }
 
   process (span) {
-    if (!this._config.llmobs.enabled) return
-    if (!isLLMSpan(span)) return
+    log.debug('Processing span for LLM Observability')
+    if (!this._config.llmobs.enabled) {
+      log.debug('Cannot process a span for LLM Observability as it is not enabled')
+      return
+    }
+    if (!isLLMSpan(span)) {
+      log.debug('Cannot process a span for LLM Observability as it is not an LLM Obs span')
+      return
+    }
     const payload = this._process(span)
 
     this._writer.append(payload)
   }
 
   _process (span) {
+    log.debug('Processing LLM Obs span')
     const tags = span.context()._tags
     const spanKind = tags[SPAN_KIND]
 
@@ -116,6 +125,8 @@ class LLMObsSpanProcessor {
     }
 
     if (sessionId) llmObsSpanEvent.session_id = sessionId
+
+    log.debug('Generated LLMObs span event', llmObsSpanEvent)
 
     return llmObsSpanEvent
   }

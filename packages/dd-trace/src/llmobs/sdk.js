@@ -42,6 +42,8 @@ class LLMObs {
       return
     }
 
+    logger.debug('Enabling LLMObs')
+
     const { mlApp, agentlessEnabled, apiKey } = options
 
     const { DD_LLMOBS_ENABLED } = process.env
@@ -88,6 +90,7 @@ class LLMObs {
   }
 
   annotate (span, options) {
+    logger.debug('llmobs.annotate called')
     if (!this.enabled) {
       logger.warn(
         'Annotate called while LLMObs is disabled. Not annotating span.'
@@ -156,6 +159,7 @@ class LLMObs {
   }
 
   exportSpan (span) {
+    logger.debug('llmobs.exportSpan called')
     if (!this.enabled) {
       logger.warn('Span exported while LLMObs is disabled. Span will not be exported.')
       return
@@ -185,6 +189,7 @@ class LLMObs {
   }
 
   submitEvaluation (llmobsSpanContext, options = {}) {
+    logger.debug('llmobs.submitEvaluation called')
     if (!this.enabled) {
       logger.warn(
         'LLMObs.submitEvaluation() called when LLMObs is not enabled. Evaluation metric data will not be sent.'
@@ -271,6 +276,7 @@ class LLMObs {
   }
 
   startSpan (kind, options = {}) {
+    logger.debug('llmobs.startSpan called')
     if (!this.enabled) {
       logger.warn('Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.')
     }
@@ -318,6 +324,7 @@ class LLMObs {
   }
 
   trace (kind, options, fn) {
+    logger.debug('llmobs.trace called')
     if (typeof options === 'function') {
       fn = options
       options = {}
@@ -341,6 +348,7 @@ class LLMObs {
 
     if (fn.length > 1) {
       return this._tracer.trace(name, spanOptions, (span, cb) => {
+        logger.debug(`trace function "${name}" from llmobs.trace invoked`)
         const oldStore = storage.getStore()
         const parentLLMObsSpan = oldStore?.llmobsSpan
         storage.enterWith({ ...oldStore, llmobsSpan: span })
@@ -360,6 +368,7 @@ class LLMObs {
     }
 
     return this._tracer.trace(name, spanOptions, span => {
+      logger.debug(`trace function "${name}" from llmobs.trace invoked`)
       const oldStore = storage.getStore()
       const parentLLMObsSpan = oldStore?.llmobsSpan
       storage.enterWith({ ...oldStore, llmobsSpan: span })
@@ -392,6 +401,7 @@ class LLMObs {
   }
 
   wrap (kind, options, fn) {
+    logger.debug('llmobs.wrap called')
     if (typeof options === 'function') {
       fn = options
       options = {}
@@ -407,6 +417,7 @@ class LLMObs {
     const llmobs = this
 
     function wrapped () {
+      logger.debug(`wrapped function "${name}" from llmobs.wrap invoked`)
       if (!llmobs.enabled) {
         logger.warn('Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.')
       }
@@ -460,8 +471,12 @@ class LLMObs {
 
   decorate (kind, options) {
     const llmobs = this
+    logger.debug('llmobs.decorate called')
     return function (target, ctx) {
-      if (ctx.kind !== 'method') return target
+      if (ctx.kind !== 'method') {
+        logger.debug('llmobs.decorate called on a non-method. No action taken.')
+        return target
+      }
 
       // override name if specified on options
       return llmobs.wrap(kind, { name: ctx.name, ...options }, target)

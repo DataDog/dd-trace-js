@@ -42,6 +42,7 @@ class BaseLLMObsWriter {
   }
 
   append (event, byteLength) {
+    logger.debug(`Appending event to ${this.constructor.name}`)
     if (this._buffer.length >= this._bufferLimit) {
       logger.warn(`${this.constructor.name} event buffer full (limit is ${this._bufferLimit}), dropping event`)
       return
@@ -53,6 +54,7 @@ class BaseLLMObsWriter {
 
   flush () {
     if (this._buffer.length === 0) {
+      logger.debug(`No events to flush from ${this.constructor.name}`)
       return
     }
 

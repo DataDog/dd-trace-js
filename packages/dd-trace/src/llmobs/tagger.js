@@ -36,8 +36,16 @@ class LLMObsTagger {
     { modelName, modelProvider, sessionId, mlApp, parentLLMObsSpan } = {},
     name
   ) {
-    if (!this._config.llmobs.enabled) return
-    if (kind) span.setTag(SPAN_TYPE, 'llm') // only mark it as an llm span if it was a valid kind
+    logger.debug(`Setting LLM Observability span tags for span ${span._name}`)
+    if (!this._config.llmobs.enabled) {
+      logger.debug(`Cannot set LLM Observability span tags for span ${span._name} as it is not enabled`)
+      return
+    }
+    if (kind) {
+      span.setTag(SPAN_TYPE, 'llm') // only mark it as an llm span if it was a valid kind
+    } else {
+      logger.debug(`Cannot set LLM Observability span tags without a valid span kind for span ${span._name}`)
+    }
     if (name) span.setTag(NAME, name)
 
     span.setTag(SPAN_KIND, kind)
@@ -55,29 +63,36 @@ class LLMObsTagger {
       span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ||
       ROOT_PARENT_ID
     span.setTag(PARENT_ID_KEY, parentId)
+
+    logger.debug(`LLM Observability span tags set for span ${span._name}`)
   }
 
   tagLLMIO (span, inputData, outputData) {
+    logger.debug(`Tagging LLM IO for span ${span._name}`)
     this._tagMessages(span, inputData, INPUT_MESSAGES)
     this._tagMessages(span, outputData, OUTPUT_MESSAGES)
   }
 
   tagEmbeddingIO (span, inputData, outputData) {
+    logger.debug(`Tagging Embedding IO for span ${span._name}`)
     this._tagDocuments(span, inputData, INPUT_DOCUMENTS)
     this._tagText(span, outputData, OUTPUT_VALUE)
   }
 
   tagRetrievalIO (span, inputData, outputData) {
+    logger.debug(`Tagging Retrieval IO for span ${span._name}`)
     this._tagText(span, inputData, INPUT_VALUE)
     this._tagDocuments(span, outputData, OUTPUT_DOCUMENTS)
   }
 
   tagTextIO (span, inputData, outputData) {
+    logger.debug(`Tagging Text IO for span ${span._name}`)
     this._tagText(span, inputData, INPUT_VALUE)
     this._tagText(span, outputData, OUTPUT_VALUE)
   }
 
   tagMetadata (span, metadata) {
+    logger.debug(`Tagging metadata for span ${span._name}`)
     try {
       span.setTag(METADATA, JSON.stringify(metadata))
     } catch {
@@ -86,6 +101,7 @@ class LLMObsTagger {
   }
 
   tagMetrics (span, metrics) {
+    logger.debug(`Tagging metrics for span ${span._name}`)
     try {
       span.setTag(METRICS, JSON.stringify(metrics))
     } catch {
@@ -94,6 +110,7 @@ class LLMObsTagger {
   }
 
   tagSpanTags (span, tags) {
+    logger.debug(`Tagging span tags for span ${span._name}`)
     // new tags will be merged with existing tags
     try {
       const currentTags = span.context()._tags[TAGS]

@@ -18,6 +18,7 @@ class LLMObsSpanWriter extends BaseWriter {
   }
 
   append (event) {
+    logger.debug('Appending event to LLM Observability span writer')
     const eventSizeBytes = Buffer.from(JSON.stringify(event)).byteLength
     if (eventSizeBytes > EVP_EVENT_SIZE_LIMIT) {
       logger.warn(`Dropping event input/output because its size (${eventSizeBytes}) exceeds the 1MB event size limit`)
