@@ -132,7 +132,7 @@ function incomingHttpEndTranslator ({ req, res }) {
     persistent[addresses.HTTP_INCOMING_QUERY] = req.query
   }
 
-  if (apiSecuritySampler.sampleRequest(req, res)) {
+  if (apiSecuritySampler.sampleRequest(req, res, true)) {
     persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
 
@@ -202,7 +202,7 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
 
 function onResponseBody ({ req, res, body }) {
   if (!body || typeof body !== 'object') return
-  if (!apiSecuritySampler.isSampled(req, res)) return
+  if (!apiSecuritySampler.sampleRequest(req, res)) return
 
   // we don't support blocking at this point, so no results needed
   waf.run({
