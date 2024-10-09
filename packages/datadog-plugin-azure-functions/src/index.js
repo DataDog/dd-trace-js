@@ -59,7 +59,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
     const context = web.patch(req)
     context.config = this.config
     context.paths = [path]
-    context.res = { statusCode: result.status }
+    context.res = result
     context.span = ctx.currentStore.span
 
     serverless.finishSpan(context)
