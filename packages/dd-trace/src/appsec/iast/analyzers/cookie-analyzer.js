@@ -2,6 +2,7 @@
 
 const Analyzer = require('./vulnerability-analyzer')
 const { getNodeModulesPaths } = require('../path-line')
+const iastLog = require('../iast-log')
 
 const EXCLUDED_PATHS = getNodeModulesPaths('express/lib/response.js')
 
@@ -15,6 +16,7 @@ class CookieAnalyzer extends Analyzer {
     try {
       this.cookieFilterRegExp = new RegExp(config.iast.cookieFilterPattern)
     } catch {
+      iastLog.error('Invalid regex in cookieFilterPattern')
       this.cookieFilterRegExp = /.{32,}/
     }
 

@@ -56,7 +56,7 @@ describe('no HttpOnly cookie analyzer', () => {
       }, NO_HTTPONLY_COOKIE, 1)
 
       testThatRequestHasVulnerability((req, res) => {
-        const cookieNamePrefix = (new Array(50)).join('0')
+        const cookieNamePrefix = '0'.repeat(32)
         res.setHeader('set-cookie', [cookieNamePrefix + 'key1=value', cookieNamePrefix + 'key2=value2'])
       }, NO_HTTPONLY_COOKIE, 1, undefined, undefined,
       'Should be detected as the same NO_HTTPONLY_COOKIE vulnerability when the cookie name is long')
