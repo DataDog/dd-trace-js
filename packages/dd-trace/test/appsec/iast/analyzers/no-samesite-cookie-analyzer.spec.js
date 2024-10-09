@@ -3,11 +3,18 @@
 const { prepareTestServerForIast } = require('../utils')
 const Analyzer = require('../../../../src/appsec/iast/analyzers/vulnerability-analyzer')
 const { NO_SAMESITE_COOKIE } = require('../../../../src/appsec/iast/vulnerabilities')
+const CookieAnalyzer = require('../../../../src/appsec/iast/analyzers/cookie-analyzer')
+const noSamesiteCookieAnalyzer = require('../../../../src/appsec/iast/analyzers/no-samesite-cookie-analyzer')
+
 const analyzer = new Analyzer()
 
 describe('no SameSite cookie analyzer', () => {
   it('Expected vulnerability identifier', () => {
     expect(NO_SAMESITE_COOKIE).to.be.equals('NO_SAMESITE_COOKIE')
+  })
+
+  it('NoSamesiteCookieAnalyzer extends CookieAnalyzer', () => {
+    expect(CookieAnalyzer.isPrototypeOf(noSamesiteCookieAnalyzer.constructor)).to.be.true
   })
 
   // In these test, even when we are having multiple vulnerabilities, all the vulnerabilities

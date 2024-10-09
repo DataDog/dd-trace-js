@@ -2163,7 +2163,7 @@ declare namespace tracer {
      * Defines the pattern to ignore cookie names in the vulnerability hash calculation
      * @default ".{32,}"
      */
-    cookieFilterPattern?: boolean,
+    cookieFilterPattern?: string,
 
     /**
      * Whether to enable vulnerability deduplication

@@ -3,11 +3,18 @@
 const { prepareTestServerForIast } = require('../utils')
 const Analyzer = require('../../../../src/appsec/iast/analyzers/vulnerability-analyzer')
 const { NO_HTTPONLY_COOKIE } = require('../../../../src/appsec/iast/vulnerabilities')
+const CookieAnalyzer = require('../../../../src/appsec/iast/analyzers/cookie-analyzer')
+const noHttponlyCookieAnalyzer = require('../../../../src/appsec/iast/analyzers/no-httponly-cookie-analyzer')
+
 const analyzer = new Analyzer()
 
 describe('no HttpOnly cookie analyzer', () => {
   it('Expected vulnerability identifier', () => {
     expect(NO_HTTPONLY_COOKIE).to.be.equals('NO_HTTPONLY_COOKIE')
+  })
+
+  it('NoHttponlyCookieAnalyzer extends CookieAnalyzer', () => {
+    expect(CookieAnalyzer.isPrototypeOf(noHttponlyCookieAnalyzer.constructor)).to.be.true
   })
 
   // In these test, even when we are having multiple vulnerabilities, all the vulnerabilities

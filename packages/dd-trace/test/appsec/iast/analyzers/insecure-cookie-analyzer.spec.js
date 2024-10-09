@@ -3,12 +3,20 @@
 const { prepareTestServerForIast } = require('../utils')
 const Analyzer = require('../../../../src/appsec/iast/analyzers/vulnerability-analyzer')
 const { INSECURE_COOKIE } = require('../../../../src/appsec/iast/vulnerabilities')
+const insecureCookieAnalyzer = require('../../../../src/appsec/iast/analyzers/insecure-cookie-analyzer')
+const CookieAnalyzer = require('../../../../src/appsec/iast/analyzers/cookie-analyzer')
+
 const analyzer = new Analyzer()
 
 describe('insecure cookie analyzer', () => {
   it('Expected vulnerability identifier', () => {
     expect(INSECURE_COOKIE).to.be.equals('INSECURE_COOKIE')
   })
+
+  it('InsecureCookieAnalyzer extends CookieAnalyzer', () => {
+    expect(CookieAnalyzer.isPrototypeOf(insecureCookieAnalyzer.constructor)).to.be.true
+  })
+
   // In these test, even when we are having multiple vulnerabilities, all the vulnerabilities
   // are in the same cookies method, and it is expected to detect both even when the max operations is 1
   const iastConfig = {
@@ -44,7 +52,7 @@ describe('insecure cookie analyzer', () => {
       }, INSECURE_COOKIE, 1)
 
       testThatRequestHasVulnerability((req, res) => {
-        const cookieNamePrefix = (new Array(50)).join('0')
+        const cookieNamePrefix = '0'.repeat(50)
         res.setHeader('set-cookie', [cookieNamePrefix + 'key1=value', cookieNamePrefix + 'key2=value2'])
       }, INSECURE_COOKIE, 1, undefined, undefined,
       'Should be detected as the same INSECURE_COOKIE vulnerability when the cookie name is long')

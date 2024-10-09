@@ -12,7 +12,11 @@ class CookieAnalyzer extends Analyzer {
   }
 
   onConfigure (config) {
-    this.cookieFilterRegExp = new RegExp(config.iast.cookieFilterPattern)
+    try {
+      this.cookieFilterRegExp = new RegExp(config.iast.cookieFilterPattern)
+    } catch {
+      this.cookieFilterRegExp = /.{32,}/
+    }
 
     this.addSub(
       { channelName: 'datadog:iast:set-cookie', moduleName: 'http' },

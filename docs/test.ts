@@ -128,6 +128,7 @@ tracer.init({
   },
   iast: {
     enabled: true,
+    cookieFilterPattern: '.*',
     requestSampling: 50,
     maxConcurrentRequests: 4,
     maxContextOperations: 30,
@@ -143,6 +144,7 @@ tracer.init({
   experimental: {
     iast: {
       enabled: true,
+      cookieFilterPattern: '.*',
       requestSampling: 50,
       maxConcurrentRequests: 4,
       maxContextOperations: 30,
