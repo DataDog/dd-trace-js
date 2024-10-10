@@ -47,6 +47,27 @@ const {
 const id = require('../../dd-trace/src/id')
 const log = require('../../dd-trace/src/log')
 
+// TODO: separate in util
+function getFileAndLineNumberFromError (error) {
+  // Split the stack trace into individual lines
+  const stackLines = error.stack.split('\n')
+
+  // The top frame is usually the second line
+  const topFrame = stackLines[1]
+
+  // Regular expression to match the file path, line number, and column number
+  const regex = /\s*at\s+(?:.*\()?(.+):(\d+):(\d+)\)?/
+  const match = topFrame.match(regex)
+
+  if (match) {
+    const filePath = match[1]
+    const lineNumber = match[2]
+    const columnNumber = match[3]
+
+    return [filePath, lineNumber, columnNumber]
+  }
+}
+
 function getTestSuiteLevelVisibilityTags (testSuiteSpan) {
   const testSuiteSpanContext = testSuiteSpan.context()
   const suiteTags = {
@@ -243,6 +264,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, err }) => {
+      // retrying test because it failed, so we're going to activate DI
       const store = storage.getStore()
       const span = store?.span
       if (span) {
@@ -252,6 +274,11 @@ class MochaPlugin extends CiPlugin {
         }
         if (err) {
           span.setTag('error', err)
+
+          const [filePath, lineNumber] = getFileAndLineNumberFromError(err)
+          this.di.activateDebugger({ file: filePath, line: lineNumber }).then(({ probe, state }) => {
+            console.log('returned value', { probe, state })
+          })
         }
 
         const spanTags = span.context()._tags

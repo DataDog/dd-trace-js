@@ -35,9 +35,13 @@ const {
 const { CI_PROVIDER_NAME, GIT_REPOSITORY_URL, GIT_COMMIT_SHA, GIT_BRANCH, CI_WORKSPACE_PATH } = require('./util/tags')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 
+const getTvDynamicInstrumentation = require('../ci-visibility/dynamic-instrumentation')
+
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
     super(...args)
+
+    this.di = getTvDynamicInstrumentation()
 
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
 

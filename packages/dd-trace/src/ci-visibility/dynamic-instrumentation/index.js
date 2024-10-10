@@ -1,7 +1,9 @@
 const { join } = require('path')
 const { Worker } = require('worker_threads')
 const { randomUUID } = require('crypto')
+// const dc = require('dc-polyfill')
 
+// const activateDIChannel = dc.channel('ci:dynamic-instrumentation:activate')
 /**
  * TODOS:
  * - console.log -> log
@@ -15,8 +17,22 @@ class TestVisDynamicInstrumentation {
     this.config = config // do I need config?
   }
 
+  // returns a promise that's resolved when the breakpoint is hit
+  activateDebugger ({ file, line }) {
+    return new Promise(resolve => {
+      const id = randomUUID()
+      // console.log('Asking worker to add breakpoint', { id, file, line })
+      messages.set(id, resolve)
+      this.worker.postMessage({ probe: { id, file, line } })
+    })
+  }
+
   start () {
     if (this.worker) return
+
+    // activateDIChannel.subscribe(({ response, file, line }) => {
+    //   response.promise = this._activateDebugger({ file, line })
+    // })
 
     const { NODE_OPTIONS, ...env } = process.env
 
@@ -33,23 +49,23 @@ class TestVisDynamicInstrumentation {
     // allow the parent to exit even if the worker is still running
     this.worker.unref()
 
-    // TODO: do not use global for this
-    global._activateDebugger = ({ file, line }) => {
-      return new Promise(resolve => {
-        const id = randomUUID()
-        messages.set(id, resolve)
-        console.log('asking worker to add breakpoint', { id, file, line })
-        this.worker.postMessage({ probe: { id, file, line } })
-      })
-    }
-
     this.worker.on('message', ({ id, probe, state }) => {
-      console.log('response from worker', { id, probe, state })
+      // console.log('response from worker', { id, probe, state })
       const resolve = messages.get(id)
-      resolve({ probe, state })
-      messages.delete(id)
+      if (resolve) {
+        resolve({ probe, state })
+        messages.delete(id)
+      }
     }).unref()
   }
 }
 
-module.exports = TestVisDynamicInstrumentation
+let testVisDynamicInstrumentation = null
+
+module.exports = (config) => {
+  if (!testVisDynamicInstrumentation) {
+    testVisDynamicInstrumentation = new TestVisDynamicInstrumentation(config)
+  }
+
+  return testVisDynamicInstrumentation
+}
