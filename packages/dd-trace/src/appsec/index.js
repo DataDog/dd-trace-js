@@ -104,10 +104,6 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     persistent[addresses.HTTP_CLIENT_IP] = clientIp
   }
 
-  if (apiSecuritySampler.sampleRequest(req)) {
-    persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
-  }
-
   const actions = waf.run({ persistent }, req)
 
   handleResults(actions, req, res, rootSpan, abortController)
@@ -134,6 +130,10 @@ function incomingHttpEndTranslator ({ req, res }) {
 
   if (req.query !== null && typeof req.query === 'object') {
     persistent[addresses.HTTP_INCOMING_QUERY] = req.query
+  }
+
+  if (apiSecuritySampler.sampleRequest(req, res, true)) {
+    persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
 
   if (Object.keys(persistent).length) {
@@ -200,9 +200,9 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
   handleResults(results, req, res, rootSpan, abortController)
 }
 
-function onResponseBody ({ req, body }) {
+function onResponseBody ({ req, res, body }) {
   if (!body || typeof body !== 'object') return
-  if (!apiSecuritySampler.isSampled(req)) return
+  if (!apiSecuritySampler.sampleRequest(req, res)) return
 
   // we don't support blocking at this point, so no results needed
   waf.run({
