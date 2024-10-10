@@ -215,6 +215,7 @@ describe('Config', () => {
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config.tags).to.have.property('service', 'node')
     expect(config).to.have.property('plugins', true)
+    expect(config).to.have.property('traceEnabled', true)
     expect(config).to.have.property('env', undefined)
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
@@ -348,7 +349,8 @@ describe('Config', () => {
       { name: 'reportHostname', value: false, origin: 'default' },
       { name: 'runtimeMetrics', value: false, origin: 'default' },
       { name: 'sampleRate', value: undefined, origin: 'default' },
-      { name: 'sampler.rateLimit', value: undefined, origin: 'default' },
+      { name: 'sampler.rateLimit', value: 100, origin: 'default' },
+      { name: 'traceEnabled', value: true, origin: 'default' },
       { name: 'sampler.rules', value: [], origin: 'default' },
       { name: 'scope', value: undefined, origin: 'default' },
       { name: 'service', value: 'node', origin: 'default' },
@@ -369,7 +371,7 @@ describe('Config', () => {
       { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' },
       { name: 'tracing', value: true, origin: 'default' },
       { name: 'url', value: undefined, origin: 'default' },
-      { name: 'version', value: '', origin: 'default' }
+      { name: 'version', value: undefined, origin: 'default' }
     ])
   })
 
@@ -399,15 +401,6 @@ describe('Config', () => {
 
     expect(config).to.have.property('service', 'test')
     expect(config.tags).to.have.property('service', 'test')
-  })
-
-  it('should initialize from the default version', () => {
-    pkg.version = '1.2.3'
-
-    const config = new Config()
-
-    expect(config).to.have.property('version', '1.2.3')
-    expect(config.tags).to.have.property('version', '1.2.3')
   })
 
   it('should initialize from environment variables', () => {
@@ -492,6 +485,7 @@ describe('Config', () => {
     process.env.DD_INSTRUMENTATION_INSTALL_TYPE = 'k8s_single_step'
     process.env.DD_INSTRUMENTATION_INSTALL_TIME = '1703188212'
     process.env.DD_INSTRUMENTATION_CONFIG_ID = 'abcdef123'
+    process.env.DD_TRACE_ENABLED = 'true'
 
     // required if we want to check updates to config.debug and config.logLevel which is fetched from logger
     reloadLoggerAndConfig()
@@ -514,6 +508,7 @@ describe('Config', () => {
     expect(config).to.have.property('dynamicInstrumentationEnabled', true)
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
+    expect(config).to.have.property('traceEnabled', true)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanAttributeSchema', 'v1')
@@ -662,7 +657,7 @@ describe('Config', () => {
 
     expect(config).to.have.property('service', 'node')
     expect(config).to.have.property('env', undefined)
-    expect(config).to.have.property('version', '')
+    expect(config).to.have.property('version', undefined)
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
@@ -1619,7 +1614,7 @@ describe('Config', () => {
     }, true)
     expect(config).to.have.deep.nested.property('sampler', {
       spanSamplingRules: [],
-      rateLimit: undefined,
+      rateLimit: 100,
       rules: [
         {
           resource: '*',
