@@ -5,7 +5,7 @@ const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 
 const errorChannel = channel('apm:fastify:middleware:error')
 const handleChannel = channel('apm:fastify:request:handle')
-const codeOriginForSpansChannel = channel('datadog:code-origin-for-spans')
+const routeAddedChannel = channel('apm:fastify:route:added')
 
 const parsingResources = new WeakMap()
 
@@ -17,6 +17,7 @@ function wrapFastify (fastify, hasParsingEvents) {
 
     if (!app || typeof app.addHook !== 'function') return app
 
+    app.addHook('onRoute', onRoute)
     app.addHook('onRequest', onRequest)
     app.addHook('preHandler', preHandler)
 
@@ -26,11 +27,6 @@ function wrapFastify (fastify, hasParsingEvents) {
     } else {
       app.addHook('onRequest', preParsing)
       app.addHook('preHandler', preValidation)
-    }
-
-    // No need to add the onRoute hook unless Code Origin for Spans is enabled
-    if (codeOriginForSpansChannel.hasSubscribers) {
-      app.addHook('onRoute', onRoute)
     }
 
     app.addHook = wrapAddHook(app.addHook)
@@ -162,10 +158,7 @@ function publishError (error, req) {
 }
 
 function onRoute (routeOptions) {
-  codeOriginForSpansChannel.publish({
-    routeOptions,
-    topOfStackFunc: onRoute
-  })
+  routeAddedChannel.publish({ routeOptions, onRoute })
 }
 
 addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
