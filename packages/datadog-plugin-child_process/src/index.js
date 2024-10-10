@@ -58,7 +58,7 @@ class ChildProcessPlugin extends TracingPlugin {
       resource: (shell === true) ? 'sh' : cmdFields[0],
       type: 'system',
       meta
-    })
+    }, false)
   }
 
   end ({ result, error }) {
