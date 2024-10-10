@@ -125,3 +125,4 @@ packages/dd-trace/test/appsec/next/*/package.json
 packages/dd-trace/test/appsec/next/*/node_modules
 packages/dd-trace/test/appsec/next/*/yarn.lock
 !packages/dd-trace/**/telemetry/logs
+packages/datadog-plugin-azure-functions/test/integration-test/fixtures/node_modules
