@@ -1,7 +1,7 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.13.0"
+    "rules_version": "1.13.1"
   },
   "rules": [
     {
@@ -6239,7 +6239,6 @@
     {
       "id": "rasp-930-100",
       "name": "Local file inclusion exploit",
-      "enabled": false,
       "tags": {
         "type": "lfi",
         "category": "vulnerability_trigger",
@@ -6287,8 +6286,7 @@
     },
     {
       "id": "rasp-932-100",
-      "name": "Shell injection exploit",
-      "enabled": false,
+      "name": "Command injection exploit",
       "tags": {
         "type": "command_injection",
         "category": "vulnerability_trigger",
