@@ -472,14 +472,52 @@ class LLMObs {
   decorate (kind, options) {
     const llmobs = this
     logger.debug('llmobs.decorate called')
-    return function (target, ctx) {
-      if (ctx.kind !== 'method') {
-        logger.debug('llmobs.decorate called on a non-method. No action taken.')
+    return function (target, ctxOrPropertyKey, descriptor) {
+      if (!ctxOrPropertyKey) {
+        logger.debug('llmobs.decorate called with no context or property key. No action taken.')
         return target
       }
+      if (typeof ctxOrPropertyKey === 'string') {
+        const propertyKey = ctxOrPropertyKey
+        if (descriptor) {
+          if (typeof descriptor.value !== 'function') {
+            logger.debug(
+              `llmobs.decorate called on a non-function property (got "${typeof descriptor.value}",
+              expected "function"). No action taken.`
+            )
+            return descriptor
+          }
+          descriptor.value = llmobs.wrap(kind, { name: propertyKey, ...options }, descriptor.value)
 
-      // override name if specified on options
-      return llmobs.wrap(kind, { name: ctx.name, ...options }, target)
+          return descriptor
+        } else {
+          if (typeof target[propertyKey] !== 'function') {
+            logger.debug(
+              `llmobs.decorate called on a non-function property (got "${typeof target[propertyKey]}",
+              expected "function"). No action taken.`
+            )
+            return target
+          }
+
+          Object.defineProperty(target, propertyKey, {
+            ...Object.getOwnPropertyDescriptor(target, propertyKey),
+            value: llmobs.wrap(kind, { name: propertyKey, ...options }, target[propertyKey])
+          })
+
+          return target
+        }
+      } else {
+        const ctx = ctxOrPropertyKey
+        if (ctx.kind !== 'method') {
+          logger.debug(
+            `llmobs.decorate called on a non-method (got "${ctx.kind}", expected "function"). No action taken.`
+          )
+          return target
+        }
+
+        // override name if specified on options
+        return llmobs.wrap(kind, { name: ctx.name, ...options }, target)
+      }
     }
   }
 
