@@ -24,7 +24,7 @@ describe('SchemaBuilder', () => {
     const shouldExtractAddress = builder.shouldExtractSchema('address', 1)
     const shouldExtractPerson2 = builder.shouldExtractSchema('person', 0)
     const shouldExtractTooDeep = builder.shouldExtractSchema('city', 11)
-    const schema = builder.build()
+    const schema = SchemaBuilder.getSchemaDefinition(builder.build())
 
     const expectedSchema = {
       components: {

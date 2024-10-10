@@ -12,6 +12,7 @@ const csiMethods = [
   { src: 'substring' },
   { src: 'toLowerCase', dst: 'stringCase' },
   { src: 'toUpperCase', dst: 'stringCase' },
+  { src: 'tplOperator', operator: true },
   { src: 'trim' },
   { src: 'trimEnd' },
   { src: 'trimStart', dst: 'trim' },

@@ -128,6 +128,7 @@ tracer.init({
   },
   iast: {
     enabled: true,
+    cookieFilterPattern: '.*',
     requestSampling: 50,
     maxConcurrentRequests: 4,
     maxContextOperations: 30,
@@ -143,6 +144,7 @@ tracer.init({
   experimental: {
     iast: {
       enabled: true,
+      cookieFilterPattern: '.*',
       requestSampling: 50,
       maxConcurrentRequests: 4,
       maxContextOperations: 30,
@@ -281,6 +283,7 @@ const openSearchOptions: plugins.opensearch = {
 
 tracer.use('amqp10');
 tracer.use('amqplib');
+tracer.use('avsc');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
 tracer.use('azure-functions');
@@ -363,6 +366,7 @@ tracer.use('playwright');
 tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });
 tracer.use('pino');
+tracer.use('protobufjs');
 tracer.use('redis');
 tracer.use('redis', redisOptions);
 tracer.use('restify');

@@ -24,5 +24,8 @@ module.exports = {
   setUncaughtExceptionCaptureCallbackStart: dc.channel('datadog:process:setUncaughtExceptionCaptureCallback:start'),
   pgQueryStart: dc.channel('apm:pg:query:start'),
   pgPoolQueryStart: dc.channel('datadog:pg:pool:query:start'),
-  wafRunFinished: dc.channel('datadog:waf:run:finish')
+  mysql2OuterQueryStart: dc.channel('datadog:mysql2:outerquery:start'),
+  wafRunFinished: dc.channel('datadog:waf:run:finish'),
+  fsOperationStart: dc.channel('apm:fs:operation:start'),
+  expressMiddlewareError: dc.channel('apm:express:middleware:error')
 }

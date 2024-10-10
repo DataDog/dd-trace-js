@@ -29,7 +29,14 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
 
   onConfigure () {
     this.addSub('apm:fs:operation:start', (obj) => {
-      if (ignoredOperations.includes(obj.operation)) return
+      const store = storage.getStore()
+      const outOfReqOrChild = !store?.fs?.root
+
+      // we could filter out all the nested fs.operations based on store.fs.root
+      // but if we spect a store in the context to be present we are going to exclude
+      // all out_of_the_request fs.operations
+      // AppsecFsPlugin must be enabled
+      if (ignoredOperations.includes(obj.operation) || outOfReqOrChild) return
 
       const pathArguments = []
       if (obj.dest) {

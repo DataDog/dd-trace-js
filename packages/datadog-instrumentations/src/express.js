@@ -3,6 +3,7 @@
 const { createWrapRouterMethod } = require('./router')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
+const tracingChannel = require('dc-polyfill').tracingChannel
 
 const handleChannel = channel('apm:express:request:handle')
 
@@ -35,6 +36,27 @@ function wrapResponseJson (json) {
   }
 }
 
+const responseRenderChannel = tracingChannel('datadog:express:response:render')
+
+function wrapResponseRender (render) {
+  return function wrappedRender (view, options, callback) {
+    if (!responseRenderChannel.start.hasSubscribers) {
+      return render.apply(this, arguments)
+    }
+
+    return responseRenderChannel.traceSync(
+      render,
+      {
+        req: this.req,
+        view,
+        options
+      },
+      this,
+      ...arguments
+    )
+  }
+}
+
 addHook({ name: 'express', versions: ['>=4'] }, express => {
   shimmer.wrap(express.application, 'handle', wrapHandle)
   shimmer.wrap(express.Router, 'use', wrapRouterMethod)
@@ -42,6 +64,7 @@ addHook({ name: 'express', versions: ['>=4'] }, express => {
 
   shimmer.wrap(express.response, 'json', wrapResponseJson)
   shimmer.wrap(express.response, 'jsonp', wrapResponseJson)
+  shimmer.wrap(express.response, 'render', wrapResponseRender)
 
   return express
 })

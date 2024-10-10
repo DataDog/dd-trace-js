@@ -253,7 +253,7 @@ describe('reporter', () => {
         expect(Reporter.reportAttack('', params)).to.not.be.false
         expect(addTags.getCall(5).firstArg).to.have.property('manual.keep').that.equals('true')
         done()
-      }, 1e3)
+      }, 1020)
     })
 
     it('should not overwrite origin tag', () => {
@@ -314,20 +314,24 @@ describe('reporter', () => {
     })
   })
 
-  describe('reportSchemas', () => {
+  describe('reportDerivatives', () => {
     it('should not call addTags if parameter is undefined', () => {
-      Reporter.reportSchemas(undefined)
+      Reporter.reportDerivatives(undefined)
       expect(span.addTags).not.to.be.called
     })
 
     it('should call addTags with an empty array', () => {
-      Reporter.reportSchemas([])
+      Reporter.reportDerivatives([])
       expect(span.addTags).to.be.calledOnceWithExactly({})
     })
 
     it('should call addTags', () => {
       const schemaValue = [{ key: [8] }]
       const derivatives = {
+        '_dd.appsec.fp.http.endpoint': 'endpoint_fingerprint',
+        '_dd.appsec.fp.http.header': 'header_fingerprint',
+        '_dd.appsec.fp.http.network': 'network_fingerprint',
+        '_dd.appsec.fp.session': 'session_fingerprint',
         '_dd.appsec.s.req.headers': schemaValue,
         '_dd.appsec.s.req.query': schemaValue,
         '_dd.appsec.s.req.params': schemaValue,
@@ -336,10 +340,14 @@ describe('reporter', () => {
         'custom.processor.output': schemaValue
       }
 
-      Reporter.reportSchemas(derivatives)
+      Reporter.reportDerivatives(derivatives)
 
       const schemaEncoded = zlib.gzipSync(JSON.stringify(schemaValue)).toString('base64')
       expect(span.addTags).to.be.calledOnceWithExactly({
+        '_dd.appsec.fp.http.endpoint': 'endpoint_fingerprint',
+        '_dd.appsec.fp.http.header': 'header_fingerprint',
+        '_dd.appsec.fp.http.network': 'network_fingerprint',
+        '_dd.appsec.fp.session': 'session_fingerprint',
         '_dd.appsec.s.req.headers': schemaEncoded,
         '_dd.appsec.s.req.query': schemaEncoded,
         '_dd.appsec.s.req.params': schemaEncoded,

@@ -6,10 +6,9 @@
 const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
-// eslint-disable-next-line n/no-deprecated-api
-const { parse: urlParse } = require('url')
 const zlib = require('zlib')
 
+const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
 const { storage } = require('../../../../datadog-core')
@@ -20,39 +19,14 @@ const containerId = docker.id()
 
 let activeRequests = 0
 
-// TODO: Replace with `url.urlToHttpOptions` when supported by all versions
-function urlToOptions (url) {
-  const agent = url.agent || http.globalAgent
-  const options = {
-    protocol: url.protocol || agent.protocol,
-    hostname: typeof url.hostname === 'string' && url.hostname.startsWith('[')
-      ? url.hostname.slice(1, -1)
-      : url.hostname ||
-      url.host ||
-      'localhost',
-    hash: url.hash,
-    search: url.search,
-    pathname: url.pathname,
-    path: `${url.pathname || ''}${url.search || ''}`,
-    href: url.href
-  }
-  if (url.port !== '') {
-    options.port = Number(url.port)
-  }
-  if (url.username || url.password) {
-    options.auth = `${url.username}:${url.password}`
-  }
-  return options
-}
+function parseUrl (urlObjOrString) {
+  if (typeof urlObjOrString === 'object') return urlToHttpOptions(urlObjOrString)
 
-function fromUrlString (urlString) {
-  const url = typeof urlToHttpOptions === 'function'
-    ? urlToOptions(new URL(urlString))
-    : urlParse(urlString)
+  const url = urlToHttpOptions(new URL(urlObjOrString))
 
-  // Add the 'hostname' back if we're using named pipes
-  if (url.protocol === 'unix:' && url.host === '.') {
-    const udsPath = urlString.replace(/^unix:/, '')
+  // Special handling if we're using named pipes on Windows
+  if (url.protocol === 'unix:' && url.hostname === '.') {
+    const udsPath = urlObjOrString.slice(5)
     url.path = udsPath
     url.pathname = udsPath
   }
@@ -66,7 +40,7 @@ function request (data, options, callback) {
   }
 
   if (options.url) {
-    const url = typeof options.url === 'object' ? urlToOptions(options.url) : fromUrlString(options.url)
+    const url = parseUrl(options.url)
     if (url.protocol === 'unix:') {
       options.socketPath = url.pathname
     } else {
