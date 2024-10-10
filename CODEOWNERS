@@ -4,6 +4,7 @@
 /packages/dd-trace/test/appsec/ @DataDog/asm-js
 
 /integration-tests/debugger/ @DataDog/dd-trace-js @DataDog/debugger
+/packages/datadog-plugin-code-origin/ @DataDog/dd-trace-js @DataDog/debugger
 /packages/dd-trace/src/debugger/ @DataDog/dd-trace-js @DataDog/debugger
 /packages/dd-trace/test/debugger/ @DataDog/dd-trace-js @DataDog/debugger
 
