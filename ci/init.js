@@ -12,7 +12,23 @@ const options = {
   flushInterval: isJestWorker ? 0 : 5000
 }
 
+const isNpm = () => {
+  // console.log('process.argv:', process.argv)
+  return process.argv[1].includes('bin/npm')
+}
+
+const isMochaInspect = () => {
+  return process.argv[1].includes('.bin/mocha') &&
+    (process.argv.includes('--inspect') || process.argv.includes('--inspect-brk'))
+}
+
 let shouldInit = true
+
+if (isNpm() || isMochaInspect()) {
+  shouldInit = false
+} else {
+  console.log('init')
+}
 
 const isAgentlessEnabled = isTrue(process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED)
 

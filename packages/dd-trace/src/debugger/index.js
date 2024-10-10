@@ -1,7 +1,7 @@
 'use strict'
-
+const { randomUUID } = require('crypto')
 const { join } = require('path')
-const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
+const { Worker, MessageChannel, threadId: parentThreadId, isMainThread } = require('worker_threads')
 const log = require('../log')
 
 let worker = null
@@ -17,23 +17,25 @@ module.exports = {
 function start (config, rc) {
   if (worker !== null) return
 
-  log.debug('Starting Dynamic Instrumentation client...')
+  log.warn('Starting Dynamic Instrumentation client...')
 
   const rcAckCallbacks = new Map()
   const rcChannel = new MessageChannel()
   configChannel = new MessageChannel()
 
-  rc.setProductHandler('LIVE_DEBUGGING', (action, conf, id, ack) => {
-    const ackId = `${id}-${conf.version}`
-    rcAckCallbacks.set(ackId, ack)
-    rcChannel.port2.postMessage({ action, conf, ackId })
-  })
+  // rc.setProductHandler('LIVE_DEBUGGING', (action, conf, id, ack) => {
+  //   const ackId = `${id}-${conf.version}`
+  //   rcAckCallbacks.set(ackId, ack)
+  //   rcChannel.port2.postMessage({ action, conf, ackId })
+  // })
 
+  // these on 'message' should also be unref
   rcChannel.port2.on('message', ({ ackId, error }) => {
-    rcAckCallbacks.get(ackId)(error)
-    rcAckCallbacks.delete(ackId)
-  })
-  rcChannel.port2.on('messageerror', (err) => log.error(err))
+    // rcAckCallbacks.get(ackId)(error)
+    // rcAckCallbacks.delete(ackId)
+  }).unref()
+
+  rcChannel.port2.on('messageerror', (err) => log.warn(err)).unref()
 
   worker = new Worker(
     join(__dirname, 'devtools_client', 'index.js'),
@@ -53,24 +55,57 @@ function start (config, rc) {
   worker.unref()
 
   worker.on('online', () => {
-    log.debug(`Dynamic Instrumentation worker thread started successfully (thread id: ${worker.threadId})`)
+    log.warn(`Dynamic Instrumentation worker thread started successfully (thread id: ${worker.threadId})`)
+    global._shouldAddMessagePromise.then(() => {
+      debugger
+      rcChannel.port2.postMessage({
+        action: 'apply',
+        conf: {
+          id: randomUUID(),
+          tags: [],
+          version: 0,
+          captureSnapshot: true,
+          language: 'javascript',
+          type: 'LOG_PROBE',
+          where: {
+            sourceFile: 'sum.js',
+            lines: ['8']
+          },
+          capture: { maxReferenceDepth: 3 }
+        }
+      })
+    })
+    // global._unapplyProbe = () => {
+    //   rcChannel.port2.postMessage({
+    //     action: 'unapply',
+    //     conf: {
+    //       id: '1',
+    //       type: 'LOG_PROBE',
+    //       where: {
+    //         sourceFile: 'sum.js',
+    //         lines: ['4']
+    //       }
+    //     }
+    //   })
+    // }
   })
 
-  worker.on('error', (err) => log.error(err))
-  worker.on('messageerror', (err) => log.error(err))
+  worker.on('error', (err) => log.warn(err))
+  worker.on('messageerror', (err) => log.warn(err))
 
   worker.on('exit', (code) => {
+    console.log('exit', code)
     const error = new Error(`Dynamic Instrumentation worker thread exited unexpectedly with code ${code}`)
 
-    log.error(error)
+    log.warn(error)
 
     // Be nice, clean up now that the worker thread encounted an issue and we can't continue
-    rc.removeProductHandler('LIVE_DEBUGGING')
+    // rc.removeProductHandler('LIVE_DEBUGGING')
     worker.removeAllListeners()
     configChannel = null
     for (const ackId of rcAckCallbacks.keys()) {
-      rcAckCallbacks.get(ackId)(error)
-      rcAckCallbacks.delete(ackId)
+      // rcAckCallbacks.get(ackId)(error)
+      // rcAckCallbacks.delete(ackId)
     }
   })
 }

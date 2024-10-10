@@ -19,6 +19,7 @@ const threadId = parentThreadId === 0 ? `pid:${process.pid}` : `pid:${process.pi
 const threadName = parentThreadId === 0 ? 'MainThread' : `WorkerThread:${parentThreadId}`
 
 session.on('Debugger.paused', async ({ params }) => {
+  // console.log('params Debugger.paused', params)
   const start = process.hrtime.bigint()
   const timestamp = Date.now()
 
@@ -35,6 +36,8 @@ session.on('Debugger.paused', async ({ params }) => {
     return probe
   })
 
+  // console.log('probes', probes)
+
   let processLocalState
   if (captureSnapshotForProbe !== null) {
     try {
@@ -49,12 +52,14 @@ session.on('Debugger.paused', async ({ params }) => {
       ackError(err, captureSnapshotForProbe) // TODO: Ok to continue after sending ackError?
     }
   }
-
   await session.post('Debugger.resume')
+
+
   const diff = process.hrtime.bigint() - start // TODO: Recored as telemetry (DEBUG-2858)
 
   log.debug(`Finished processing breakpoints - main thread paused for: ${Number(diff) / 1000000} ms`)
 
+  console.log('probes', probes[0].location)
   const logger = {
     // We can safely use `location.file` from the first probe in the array, since all probes hit by `hitBreakpoints`
     // must exist in the same file since the debugger can only pause the main thread in one location.
@@ -98,6 +103,10 @@ session.on('Debugger.paused', async ({ params }) => {
         }
       }
     }
+
+    Object.values(snapshot.captures.lines).forEach((snap) => {
+      console.log('snapshot', snap)
+    })
 
     // TODO: Process template (DEBUG-2628)
     send(probe.template, logger, snapshot, (err) => {

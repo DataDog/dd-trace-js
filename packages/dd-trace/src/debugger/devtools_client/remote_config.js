@@ -36,6 +36,9 @@ let sessionStarted = false
 //   evaluateAt: 'EXIT' // only used for method probes
 // }
 rcPort.on('message', async ({ action, conf: probe, ackId }) => {
+  // console.log('message on the port!', { probe, action, ackId })
+
+  // return
   try {
     await processMsg(action, probe)
     rcPort.postMessage({ ackId })
@@ -57,7 +60,7 @@ async function stop () {
 }
 
 async function processMsg (action, probe) {
-  log.debug(`Received request to ${action} ${probe.type} probe (id: ${probe.id}, version: ${probe.version})`)
+  log.warn(`Received request to ${action} ${probe.type} probe (id: ${probe.id}, version: ${probe.version})`)
 
   if (action !== 'unapply') ackReceived(probe)
 
@@ -110,6 +113,12 @@ async function processMsg (action, probe) {
 async function addBreakpoint (probe) {
   if (!sessionStarted) await start()
 
+  // session.post('Debugger.setPauseOnExceptions', { state: 'all' }, (err) => {
+  //   if (err) {
+  //     console.error('Error setting pause on exceptions:', err)
+  //   }
+  // })
+
   const file = probe.where.sourceFile
   const line = Number(probe.where.lines[0]) // Tracer doesn't support multiple-line breakpoints
 
@@ -124,7 +133,7 @@ async function addBreakpoint (probe) {
   if (!script) throw new Error(`No loaded script found for ${file} (probe: ${probe.id}, version: ${probe.version})`)
   const [path, scriptId] = script
 
-  log.debug(`Adding breakpoint at ${path}:${line} (probe: ${probe.id}, version: ${probe.version})`)
+  log.warn(`Adding breakpoint at ${path}:${line} (probe: ${probe.id}, version: ${probe.version})`)
 
   const { breakpointId } = await session.post('Debugger.setBreakpoint', {
     location: {
@@ -133,6 +142,8 @@ async function addBreakpoint (probe) {
     }
   })
 
+  // log.warn('ADDED BREAKPOINT!')
+
   probes.set(probe.id, breakpointId)
   breakpoints.set(breakpointId, probe)
 
@@ -140,6 +151,7 @@ async function addBreakpoint (probe) {
 }
 
 async function removeBreakpoint ({ id }) {
+  // console.log('removing break point', { id })
   if (!sessionStarted) {
     // We should not get in this state, but abort if we do, so the code doesn't fail unexpected
     throw Error(`Cannot remove probe ${id}: Debugger not started`)
@@ -149,9 +161,12 @@ async function removeBreakpoint ({ id }) {
   }
 
   const breakpointId = probes.get(id)
+  // console.log({ breakpointId })
   await session.post('Debugger.removeBreakpoint', { breakpointId })
   probes.delete(id)
   breakpoints.delete(breakpointId)
+
+  // console.log({ 'breakpoints.size': breakpoints.size})
 
   if (breakpoints.size === 0) await stop()
 }

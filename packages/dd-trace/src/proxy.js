@@ -6,6 +6,7 @@ const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
 const DynamicInstrumentation = require('./debugger')
+const TVDynamic = require('./ci-visibility/dynamic-instrumentation')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
@@ -115,6 +116,16 @@ class Tracer extends NoopProxy {
         if (config.dynamicInstrumentationEnabled) {
           DynamicInstrumentation.start(config, rc)
         }
+      }
+
+      debugger
+      // if (config.isCiVisibility) {
+      //   DynamicInstrumentation.start(config)
+      // }
+
+      if (config.isCiVisibility) {
+        const testVisDynamicInstrumentation = new TVDynamic(config)
+        testVisDynamicInstrumentation.start()
       }
 
       if (config.isGCPFunction || config.isAzureFunction) {
