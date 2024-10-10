@@ -19,18 +19,18 @@ variables:
 onboarding_tests_installer:
   parallel:
     matrix:
-      - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs,test-app-nodejs-container]
+      - ONBOARDING_FILTER_WEBLOG: [ test-app-nodejs,test-app-nodejs-container ]
 
 onboarding_tests_installer_full:
   parallel:
     matrix:
-      - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs,test-app-nodejs-container,test-app-nodejs-alpine-libgcc]
+      - ONBOARDING_FILTER_WEBLOG: [ test-app-nodejs, test-app-nodejs-container, test-app-nodejs-alpine ]
 
 onboarding_tests_container_install_script:
   extends: .onboarding_tests_installer_base
   parallel:
     matrix:
-      - ONBOARDING_FILTER_WEBLOG: [ test-app-nodejs-container,test-app-nodejs-alpine-libgcc ]
+      - ONBOARDING_FILTER_WEBLOG: [ test-app-nodejs-container, test-app-nodejs-alpine ]
 
 onboarding_tests_not_supported:
   extends: .onboarding_tests_installer_base
