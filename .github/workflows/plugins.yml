@@ -205,6 +205,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/upstream
 
+  azure-functions:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: azure-functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
+
   bluebird:
     runs-on: ubuntu-latest
     env:
