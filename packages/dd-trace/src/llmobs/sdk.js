@@ -31,9 +31,11 @@ class LLMObs {
     this._tagger = new LLMObsTagger(config)
     this._processor = new LLMObsSpanProcessor(config)
 
+    this._handleSpanProcess = data => this._processor.process(data)
+
     if (this.enabled) {
       this._evaluationWriter = new LLMObsEvalMetricsWriter(config)
-      spanProccessCh.subscribe(this._processor.process.bind(this._processor))
+      spanProccessCh.subscribe(this._handleSpanProcess)
     }
   }
 
@@ -57,13 +59,13 @@ class LLMObs {
       apiKey
     }
 
-    const enabled = !DD_LLMOBS_ENABLED || isTrue(DD_LLMOBS_ENABLED)
+    const enabled = DD_LLMOBS_ENABLED == null || isTrue(DD_LLMOBS_ENABLED)
     if (!enabled) {
       logger.debug('LLMObs.enable() called when DD_LLMOBS_ENABLED is false. No action taken.')
       return
     }
 
-    this._config.llmobs.enabled = !DD_LLMOBS_ENABLED || isTrue(DD_LLMOBS_ENABLED)
+    this._config.llmobs.enabled = true
     this._config.configure({ ...this._config, llmobs: llmobsConfig })
     this._llmobsModule.enable(this._config)
 
@@ -72,7 +74,7 @@ class LLMObs {
 
     const SpanWriter = this._config.llmobs.agentlessEnabled ? AgentlessWriter : AgentProxyWriter
     this._processor._writer = new SpanWriter(this._config)
-    spanProccessCh.subscribe(this._processor.process)
+    spanProccessCh.subscribe(this._handleSpanProcess)
   }
 
   disable () {
@@ -86,7 +88,7 @@ class LLMObs {
     this._config.llmobs.enabled = false
     this._llmobsModule.disable()
 
-    spanProccessCh.unsubscribe(this._processor.process)
+    spanProccessCh.unsubscribe(this._handleSpanProcess)
 
     this._evaluationWriter.destroy()
     this._processor._writer.destroy()
@@ -300,31 +302,30 @@ class LLMObs {
       childOf: this._tracer.scope().active()
     })
 
-    const spanProxy = new Proxy(span, {
-      get (target, key) {
-        if (key === 'finish') {
-          return function () {
-            storage.enterWith(oldStore) // restore context
-            return span.finish.apply(span, arguments)
-          }
-        }
-
-        return target[key]
-      }
-    })
+    // we need the span to finish in the same context it was started
+    const originalFinish = span.finish
+    span.finish = function () {
+      span.finish = originalFinish
+      storage.enterWith(oldStore) // restore context
+      return originalFinish.apply(span, arguments)
+    }
 
     const oldStore = storage.getStore()
     const parentLLMObsSpan = oldStore?.llmobsSpan
 
-    this._tagger.setLLMObsSpanTags(spanProxy, valid && kind, {
+    this._tagger.setLLMObsSpanTags(span, valid && kind, {
       ...llmobsOptions,
       parentLLMObsSpan
     })
-    const newStore = spanProxy ? spanProxy._store : oldStore
+    const newStore = span ? span._store : oldStore
 
-    storage.enterWith({ ...newStore, span, llmobsSpan: spanProxy }) // preserve context
+    if (this.enabled) {
+      storage.enterWith({ ...newStore, span, llmobsSpan: span }) // preserve context
+    } else {
+      storage.enterWith({ ...newStore, span }) // preserve context without LLMObs
+    }
 
-    return spanProxy
+    return span
   }
 
   trace (kind, options, fn) {
@@ -353,7 +354,7 @@ class LLMObs {
       return this._tracer.trace(name, spanOptions, (span, cb) => {
         const oldStore = storage.getStore()
         const parentLLMObsSpan = oldStore?.llmobsSpan
-        storage.enterWith({ ...oldStore, llmobsSpan: span })
+        if (this.enabled) storage.enterWith({ ...oldStore, llmobsSpan: span })
 
         this._tagger.setLLMObsSpanTags(span, valid && kind, {
           ...llmobsOptions,
@@ -372,7 +373,7 @@ class LLMObs {
     return this._tracer.trace(name, spanOptions, span => {
       const oldStore = storage.getStore()
       const parentLLMObsSpan = oldStore?.llmobsSpan
-      storage.enterWith({ ...oldStore, llmobsSpan: span })
+      if (this.enabled) storage.enterWith({ ...oldStore, llmobsSpan: span })
 
       this._tagger.setLLMObsSpanTags(span, valid && kind, {
         ...llmobsOptions,
@@ -429,7 +430,7 @@ class LLMObs {
       const span = llmobs._tracer.scope().active()
       const oldStore = storage.getStore()
       const parentLLMObsSpan = oldStore?.llmobsSpan
-      storage.enterWith({ ...oldStore, llmobsSpan: span })
+      if (llmobs.enabled) storage.enterWith({ ...oldStore, llmobsSpan: span })
 
       llmobs._tagger.setLLMObsSpanTags(span, valid && kind, {
         ...llmobsOptions,
@@ -442,7 +443,7 @@ class LLMObs {
 
         if (result && typeof result.then === 'function') {
           return result.then(value => {
-            if (value && kind !== 'retrieval' && !LLMObsTagger.tagMap.get(span)[OUTPUT_VALUE]) {
+            if (value && kind !== 'retrieval' && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
               llmobs.annotate(span, { outputData: value })
             }
             storage.enterWith(oldStore)
@@ -453,7 +454,7 @@ class LLMObs {
           })
         }
 
-        if (result && kind !== 'retrieval' && !LLMObsTagger.tagMap.get(span)[OUTPUT_VALUE]) {
+        if (result && kind !== 'retrieval' && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
           llmobs.annotate(span, { outputData: result })
           storage.enterWith(oldStore)
         }
@@ -470,17 +471,39 @@ class LLMObs {
 
   decorate (kind, options) {
     const llmobs = this
-    return function (target, ctx) {
-      if (ctx.kind !== 'method') return target
+    logger.debug('llmobs.decorate called')
+    return function (target, ctxOrPropertyKey, descriptor) {
+      if (!ctxOrPropertyKey) return target
+      if (typeof ctxOrPropertyKey === 'string') {
+        const propertyKey = ctxOrPropertyKey
+        if (descriptor) {
+          if (typeof descriptor.value !== 'function') return descriptor
 
-      // override name if specified on options
-      return llmobs.wrap(kind, { name: ctx.name, ...options }, target)
+          descriptor.value = llmobs.wrap(kind, { name: propertyKey, ...options }, descriptor.value)
+
+          return descriptor
+        } else {
+          if (typeof target[propertyKey] !== 'function') return target
+
+          Object.defineProperty(target, propertyKey, {
+            ...Object.getOwnPropertyDescriptor(target, propertyKey),
+            value: llmobs.wrap(kind, { name: propertyKey, ...options }, target[propertyKey])
+          })
+
+          return target
+        }
+      } else {
+        const ctx = ctxOrPropertyKey
+        if (ctx.kind !== 'method') return target
+
+        return llmobs.wrap(kind, { name: ctx.name, ...options }, target)
+      }
     }
   }
 
   flush () {
     if (!this.enabled) {
-      logger.warn('Flushing when LLMObs is disabled. no spans or evaluation metrics will be sent')
+      logger.warn('Flushing when LLMObs is disabled. No spans or evaluation metrics will be sent')
       return
     }
 
