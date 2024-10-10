@@ -50,7 +50,10 @@ class LLMObsSpanProcessor {
       return
     }
     if (!isLLMSpan(span)) {
-      log.debug('Cannot process a span for LLM Observability as it is not an LLM Obs span')
+      log.debug(`
+        Cannot process a span for LLM Observability as it is not an LLM Obs span.
+        Span name: ${span._name}
+      `)
       return
     }
     const payload = this._process(span)

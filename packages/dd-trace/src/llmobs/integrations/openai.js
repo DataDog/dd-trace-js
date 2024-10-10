@@ -9,6 +9,7 @@ const {
   OUTPUT_TOKENS_METRIC_KEY,
   TOTAL_TOKENS_METRIC_KEY
 } = require('../constants')
+const log = require('../../log')
 
 class OpenAIIntegration extends BaseLLMObsIntegration {
   get name () {
@@ -16,6 +17,7 @@ class OpenAIIntegration extends BaseLLMObsIntegration {
   }
 
   setSpanStartTags (span, parent, resource, inputs) {
+    log.debug('Setting span start tags for OpenAI integration')
     const methodName = this._gateResource(this._normalizeOpenAIResourceName(resource))
     if (!methodName) return // we will not trace all openai methods for llmobs
 
@@ -42,6 +44,7 @@ class OpenAIIntegration extends BaseLLMObsIntegration {
 
   // this should not care about if the response was streamed or not
   setSpanEndTags (span, resource, response, error) {
+    log.debug('Setting span end tags for OpenAI integration')
     const methodName = this._gateResource(this._normalizeOpenAIResourceName(resource))
     if (!methodName) return // we will not trace all openai methods for llmobs
 

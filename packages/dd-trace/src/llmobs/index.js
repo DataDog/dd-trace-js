@@ -13,6 +13,7 @@ const { PROPAGATED_PARENT_ID_KEY } = require('./constants')
 const { storage } = require('../../../datadog-core')
 
 function enable (config) {
+  log.debug('Enabling LLM Observability')
   registerPlugins(config)
   llmobsSpanStartCh.subscribe(handleSpanStart)
   llmobsSpanEndCh.subscribe(handleSpanEnd)
@@ -22,6 +23,7 @@ function enable (config) {
 }
 
 function disable () {
+  log.debug('Disabling LLM Observability')
   if (llmobsSpanStartCh.hasSubscribers) llmobsSpanStartCh.unsubscribe(handleSpanStart)
   if (llmobsSpanEndCh.hasSubscribers) llmobsSpanEndCh.unsubscribe(handleSpanEnd)
   if (llmobsSpanErrorCh.hasSubscribers) llmobsSpanErrorCh.unsubscribe(handleSpanError)
