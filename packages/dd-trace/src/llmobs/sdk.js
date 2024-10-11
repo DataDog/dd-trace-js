@@ -484,7 +484,7 @@ class LLMObs {
 
           return descriptor
         } else {
-          if (typeof target[propertyKey] !== 'function') return target
+          if (typeof target[propertyKey] !== 'function') return target[propertyKey]
 
           const original = target[propertyKey]
           Object.defineProperty(target, propertyKey, {
