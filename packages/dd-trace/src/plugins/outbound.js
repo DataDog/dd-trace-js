@@ -7,6 +7,7 @@ const {
   PEER_SERVICE_REMAP_KEY
 } = require('../constants')
 const TracingPlugin = require('./tracing')
+const { exitTag } = require('../../../datadog-code-origin')
 
 const COMMON_PEER_SVC_SOURCE_TAGS = [
   'net.peer.name',
@@ -23,6 +24,14 @@ class OutboundPlugin extends TracingPlugin {
     this.addTraceSub('connect', message => {
       this.connect(message)
     })
+  }
+
+  startSpan (...args) {
+    const span = super.startSpan(...args)
+    if (this._tracerConfig.codeOriginForSpans.enabled) {
+      span.addTags(exitTag(this.startSpan))
+    }
+    return span
   }
 
   getPeerService (tags) {
