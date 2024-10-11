@@ -81,7 +81,7 @@ withVersions('express', 'express', version => {
         assert.equal(res.data, 'DONE')
       })
 
-      it('should block the request when attack is detected', async () => {
+      it('should block the request when attack is detected in both parameters', async () => {
         try {
           await axios.get(`http://localhost:${port}/multiple-path-params/testattack/testattack`)
 
@@ -92,7 +92,7 @@ withVersions('express', 'express', version => {
         }
       })
 
-      it('should block the request when attack is detected', async () => {
+      it('should block the request when attack is detected in the first parameter', async () => {
         try {
           await axios.get(`http://localhost:${port}/multiple-path-params/testattack/safe_param`)
 
@@ -103,7 +103,7 @@ withVersions('express', 'express', version => {
         }
       })
 
-      it('should block the request when attack is detected', async () => {
+      it('should block the request when attack is detected in the second parameter', async () => {
         try {
           await axios.get(`http://localhost:${port}/multiple-path-params/safe_param/testattack`)
 
@@ -122,7 +122,7 @@ withVersions('express', 'express', version => {
         assert.equal(res.data, 'DONE')
       })
 
-      it('should block the request when attack is detected', async () => {
+      it('should block the request when attack is detected in the nested paremeter', async () => {
         try {
           await axios.get(`http://localhost:${port}/nested/safe_param/testattack`)
 
@@ -133,7 +133,7 @@ withVersions('express', 'express', version => {
         }
       })
 
-      it('should block the request when attack is detected', async () => {
+      it('should block the request when attack is detected in the parent paremeter', async () => {
         try {
           await axios.get(`http://localhost:${port}/nested/testattack/safe_param`)
 
@@ -144,7 +144,7 @@ withVersions('express', 'express', version => {
         }
       })
 
-      it('should block the request when attack is detected', async () => {
+      it('should block the request when attack is detected both parameters', async () => {
         try {
           await axios.get(`http://localhost:${port}/nested/testattack/testattack`)
 
