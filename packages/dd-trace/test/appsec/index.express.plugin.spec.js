@@ -223,8 +223,9 @@ withVersions('express', 'express', version => {
     it('should not block the request without an attack', async () => {
       const res = await axios.get(`http://localhost:${port}/?key=value`)
 
-      sinon.assert.calledOnce(requestBody)
+      assert.equal(res.status, 200)
       assert.equal(res.data, 'DONE')
+      sinon.assert.calledOnce(requestBody)
     })
 
     it('should block the request when attack is detected', async () => {
@@ -313,13 +314,13 @@ withVersions('express', 'express', version => {
 
         await agent.use((traces) => {
           const span = traces[0][0]
-          expect(span.meta).to.haveOwnProperty('_dd.appsec.s.req.body')
-          expect(span.meta).not.to.haveOwnProperty('_dd.appsec.s.res.body')
-          expect(span.meta['_dd.appsec.s.req.body']).to.be.equal(expectedRequestBodySchema)
+          assert.property(span.meta, '_dd.appsec.s.req.body')
+          assert.notProperty(span.meta, '_dd.appsec.s.res.body')
+          assert.equal(span.meta['_dd.appsec.s.req.body'], expectedRequestBodySchema)
         })
 
-        expect(res.status).to.be.equal(200)
-        expect(res.data).to.be.equal('DONE')
+        assert.equal(res.status, 200)
+        assert.equal(res.data, 'DONE')
       })
 
       it('should get the response body schema with res.send method with object', async () => {
@@ -328,11 +329,11 @@ withVersions('express', 'express', version => {
 
         await agent.use((traces) => {
           const span = traces[0][0]
-          expect(span.meta['_dd.appsec.s.res.body']).to.be.equal(expectedResponseBodySchema)
+          assert.equal(span.meta['_dd.appsec.s.res.body'], expectedResponseBodySchema)
         })
 
-        expect(res.status).to.be.equal(200)
-        expect(res.data).to.be.deep.equal({ sendResKey: 'sendResValue' })
+        assert.equal(res.status, 200)
+        assert.deepEqual(res.data, { sendResKey: 'sendResValue' })
       })
 
       it('should get the response body schema with res.json method', async () => {
@@ -341,11 +342,11 @@ withVersions('express', 'express', version => {
 
         await agent.use((traces) => {
           const span = traces[0][0]
-          expect(span.meta['_dd.appsec.s.res.body']).to.be.equal(expectedResponseBodySchema)
+          assert.equal(span.meta['_dd.appsec.s.res.body'], expectedResponseBodySchema)
         })
 
-        expect(res.status).to.be.equal(200)
-        expect(res.data).to.be.deep.equal({ jsonResKey: 'jsonResValue' })
+        assert.equal(res.status, 200)
+        assert.deepEqual(res.data, { jsonResKey: 'jsonResValue' })
       })
 
       it('should get the response body schema with res.jsonp method', async () => {
@@ -354,11 +355,11 @@ withVersions('express', 'express', version => {
 
         await agent.use((traces) => {
           const span = traces[0][0]
-          expect(span.meta['_dd.appsec.s.res.body']).to.be.equal(expectedResponseBodySchema)
+          assert.equal(span.meta['_dd.appsec.s.res.body'], expectedResponseBodySchema)
         })
 
-        expect(res.status).to.be.equal(200)
-        expect(res.data).to.be.deep.equal({ jsonpResKey: 'jsonpResValue' })
+        assert.equal(res.status, 200)
+        assert.deepEqual(res.data, { jsonpResKey: 'jsonpResValue' })
       })
     })
 
@@ -370,12 +371,12 @@ withVersions('express', 'express', version => {
 
       await agent.use((traces) => {
         const span = traces[0][0]
-        expect(span.meta).not.to.haveOwnProperty('_dd.appsec.s.req.body')
-        expect(span.meta).not.to.haveOwnProperty('_dd.appsec.s.res.body')
+        assert.notProperty(span.meta, '_dd.appsec.s.req.body')
+        assert.notProperty(span.meta, '_dd.appsec.s.res.body')
       })
 
-      expect(res.status).to.be.equal(200)
-      expect(res.data).to.be.equal('DONE')
+      assert.equal(res.status, 200)
+      assert.equal(res.data, 'DONE')
     })
   })
 })
