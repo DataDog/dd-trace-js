@@ -96,7 +96,8 @@ module.exports.setup = function (build) {
 
       let pathToPackageJson
       try {
-        pathToPackageJson = require.resolve(`${extracted.pkg}/package.json`, { paths: [args.resolveDir] })
+        pathToPackageJson = require.resolve(extracted.pkg, { paths: [args.resolveDir] })
+        pathToPackageJson = extractPackageAndModulePath(pathToPackageJson).pkgJson
       } catch (err) {
         if (err.code === 'MODULE_NOT_FOUND') {
           if (!internal) {
@@ -111,7 +112,7 @@ module.exports.setup = function (build) {
         }
       }
 
-      const packageJson = require(pathToPackageJson)
+      const packageJson = JSON.parse(fs.readFileSync(pathToPackageJson).toString())
 
       if (DEBUG) console.log(`RESOLVE: ${args.path}@${packageJson.version}`)
 
