@@ -9,11 +9,238 @@ const { json } = require('../../src/appsec/blocked_templates')
 const zlib = require('zlib')
 
 withVersions('express', 'express', version => {
+  describe('Suspicious request blocking - path parameters', () => {
+    let port, server, paramCallbackSpy
+
+    before(() => {
+      return agent.load(['express', 'http'], {client: false})
+    })
+
+    before((done) => {
+      const express = require('../../../../versions/express').get()
+
+      const app = express()
+
+      app.get('/multiple-path-params/:parameter1/:parameter2', (req, res) => {
+        res.send('DONE')
+      })
+
+      const nestedRouter = express.Router({ mergeParams: true })
+      nestedRouter.get('/:nestedDuplicatedParameter', (req, res) => {
+        res.send('DONE')
+      })
+
+      app.use('/nested/:nestedDuplicatedParameter', nestedRouter)
+
+      app.get('/callback-path-param/:callbackedParameter', (req, res) => {
+        res.send('DONE')
+      })
+
+      const paramCallback = (req, res, next) => {
+        next()
+      }
+
+      paramCallbackSpy = sinon.spy(paramCallback)
+
+      app.param(() => {
+        return paramCallbackSpy
+      })
+
+      app.param('callbackedParameter')
+
+      server = app.listen(port, () => {
+        port = server.address().port
+        done()
+      })
+    })
+
+    after(() => {
+      server.close()
+      return agent.close({ritmReset: false})
+    })
+
+    beforeEach(async () => {
+      appsec.enable(new Config({
+        appsec: {
+          enabled: true,
+          rules: path.join(__dirname, 'express-rules.json')
+        }
+      }))
+    })
+
+    afterEach(() => {
+      appsec.disable()
+      sinon.reset()
+    })
+
+    describe('route with multiple path parameters', () => {
+      it('should not block the request when attack is not detected', async () => {
+        const res = await axios.get(`http://localhost:${port}/multiple-path-params/safe_param/safe_param`)
+        expect(res.data).to.be.equal('DONE')
+      })
+
+      it('should block the request when attack is detected', async () => {
+        try {
+          await axios.get(`http://localhost:${port}/multiple-path-params/testattack/testattack`)
+
+          return Promise.reject(new Error('Request should not return 200'))
+        } catch (e) {
+          expect(e.response.status).to.be.equals(403)
+          expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+        }
+      })
+
+      it('should block the request when attack is detected', async () => {
+        try {
+          await axios.get(`http://localhost:${port}/multiple-path-params/testattack/safe_param`)
+
+          return Promise.reject(new Error('Request should not return 200'))
+        } catch (e) {
+          expect(e.response.status).to.be.equals(403)
+          expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+        }
+      })
+
+      it('should block the request when attack is detected', async () => {
+        try {
+          await axios.get(`http://localhost:${port}/multiple-path-params/safe_param/testattack`)
+
+          return Promise.reject(new Error('Request should not return 200'))
+        } catch (e) {
+          expect(e.response.status).to.be.equals(403)
+          expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+        }
+      })
+    })
+
+    describe('nested routers', () => {
+      it('should not block the request when attack is not detected', async () => {
+        const res = await axios.get(`http://localhost:${port}/nested/safe_param/safe_param`)
+        expect(res.data).to.be.equal('DONE')
+      })
+
+      it('should block the request when attack is detected', async () => {
+        try {
+          await axios.get(`http://localhost:${port}/nested/safe_param/testattack`)
+
+          return Promise.reject(new Error('Request should not return 200'))
+        } catch (e) {
+          expect(e.response.status).to.be.equals(403)
+          expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+        }
+      })
+
+      it('should block the request when attack is detected', async () => {
+        try {
+          await axios.get(`http://localhost:${port}/nested/testattack/safe_param`)
+
+          return Promise.reject(new Error('Request should not return 200'))
+        } catch (e) {
+          expect(e.response.status).to.be.equals(403)
+          expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+        }
+      })
+
+      it('should block the request when attack is detected', async () => {
+        try {
+          await axios.get(`http://localhost:${port}/nested/testattack/testattack`)
+
+          return Promise.reject(new Error('Request should not return 200'))
+        } catch (e) {
+          expect(e.response.status).to.be.equals(403)
+          expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+        }
+      })
+    })
+
+    describe('path parameter callback', () => {
+      it('should not block the request when attack is not detected', async () => {
+        const res = await axios.get(`http://localhost:${port}/callback-path-param/safe_param`)
+        expect(res.data).to.be.equal('DONE')
+        expect(paramCallbackSpy).to.be.calledOnce
+      })
+
+      it('should block the request when attack is detected', async () => {
+        try {
+          await axios.get(`http://localhost:${port}/callback-path-param/testattack`)
+
+          return Promise.reject(new Error('Request should not return 200'))
+        } catch (e) {
+          expect(e.response.status).to.be.equals(403)
+          expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+          expect(paramCallbackSpy).to.not.be.called
+        }
+      })
+    })
+  })
+
   describe('Suspicious request blocking - query', () => {
     let port, server, requestBody
 
     before(() => {
-      return agent.load(['express', 'http'], { client: false })
+      return agent.load(['express', 'http'], {client: false})
+    })
+
+    before((done) => {
+      const express = require('../../../../versions/express').get()
+
+      const app = express()
+
+      app.get('/', (req, res) => {
+        requestBody()
+        res.end('DONE')
+      })
+
+      server = app.listen(port, () => {
+        port = server.address().port
+        done()
+      })
+    })
+
+    after(() => {
+      server.close()
+      return agent.close({ritmReset: false})
+    })
+
+    beforeEach(async () => {
+      requestBody = sinon.stub()
+      appsec.enable(new Config({
+        appsec: {
+          enabled: true,
+          rules: path.join(__dirname, 'express-rules.json')
+        }
+      }))
+    })
+
+    afterEach(() => {
+      appsec.disable()
+    })
+
+    it('should not block the request without an attack', async () => {
+      const res = await axios.get(`http://localhost:${port}/?key=value`)
+
+      expect(requestBody).to.be.calledOnce
+      expect(res.data).to.be.equal('DONE')
+    })
+
+    it('should block the request when attack is detected', async () => {
+      try {
+        await axios.get(`http://localhost:${port}/?key=testattack`)
+
+        return Promise.reject(new Error('Request should not return 200'))
+      } catch (e) {
+        expect(e.response.status).to.be.equals(403)
+        expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+        expect(requestBody).not.to.be.called
+      }
+    })
+  })
+
+  describe('Api Security', () => {
+    let config, port, server
+
+    before(() => {
+      return agent.load(['express', 'http'], {client: false})
     })
 
     before((done) => {
@@ -22,11 +249,6 @@ withVersions('express', 'express', version => {
 
       const app = express()
       app.use(bodyParser.json())
-
-      app.get('/', (req, res) => {
-        requestBody()
-        res.end('DONE')
-      })
 
       app.post('/', (req, res) => {
         res.send('DONE')
@@ -52,138 +274,104 @@ withVersions('express', 'express', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close({ritmReset: false})
     })
 
-    describe('Blocking', () => {
-      beforeEach(async () => {
-        requestBody = sinon.stub()
-        appsec.enable(new Config({ appsec: { enabled: true, rules: path.join(__dirname, 'express-rules.json') } }))
-      })
-
-      afterEach(() => {
-        appsec.disable()
-      })
-
-      it('should not block the request without an attack', async () => {
-        const res = await axios.get(`http://localhost:${port}/?key=value`)
-
-        expect(requestBody).to.be.calledOnce
-        expect(res.data).to.be.equal('DONE')
-      })
-
-      it('should block the request when attack is detected', async () => {
-        try {
-          await axios.get(`http://localhost:${port}/?key=testattack`)
-
-          return Promise.reject(new Error('Request should not return 200'))
-        } catch (e) {
-          expect(e.response.status).to.be.equals(403)
-          expect(e.response.data).to.be.deep.equal(JSON.parse(json))
-          expect(requestBody).not.to.be.called
-        }
-      })
-    })
-
-    describe('Api Security', () => {
-      let config
-
-      beforeEach(() => {
-        config = new Config({
-          appsec: {
-            enabled: true,
-            rules: path.join(__dirname, 'api_security_rules.json'),
-            apiSecurity: {
-              enabled: true
-            }
+    beforeEach(() => {
+      config = new Config({
+        appsec: {
+          enabled: true,
+          rules: path.join(__dirname, 'api_security_rules.json'),
+          apiSecurity: {
+            enabled: true
           }
-        })
-      })
-
-      afterEach(() => {
-        appsec.disable()
-      })
-
-      describe('with requestSampling 1.0', () => {
-        beforeEach(() => {
-          config.appsec.apiSecurity.requestSampling = 1.0
-          appsec.enable(config)
-        })
-
-        function formatSchema (body) {
-          return zlib.gzipSync(JSON.stringify(body)).toString('base64')
         }
+      })
+    })
 
-        it('should get the request body schema', async () => {
-          const expectedRequestBodySchema = formatSchema([{ key: [8] }])
-          const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
+    afterEach(() => {
+      appsec.disable()
+    })
 
-          await agent.use((traces) => {
-            const span = traces[0][0]
-            expect(span.meta).to.haveOwnProperty('_dd.appsec.s.req.body')
-            expect(span.meta).not.to.haveOwnProperty('_dd.appsec.s.res.body')
-            expect(span.meta['_dd.appsec.s.req.body']).to.be.equal(expectedRequestBodySchema)
-          })
-
-          expect(res.status).to.be.equal(200)
-          expect(res.data).to.be.equal('DONE')
-        })
-
-        it('should get the response body schema with res.send method with object', async () => {
-          const expectedResponseBodySchema = formatSchema([{ sendResKey: [8] }])
-          const res = await axios.post(`http://localhost:${port}/sendjson`, { key: 'value' })
-
-          await agent.use((traces) => {
-            const span = traces[0][0]
-            expect(span.meta['_dd.appsec.s.res.body']).to.be.equal(expectedResponseBodySchema)
-          })
-
-          expect(res.status).to.be.equal(200)
-          expect(res.data).to.be.deep.equal({ sendResKey: 'sendResValue' })
-        })
-
-        it('should get the response body schema with res.json method', async () => {
-          const expectedResponseBodySchema = formatSchema([{ jsonResKey: [8] }])
-          const res = await axios.post(`http://localhost:${port}/json`, { key: 'value' })
-
-          await agent.use((traces) => {
-            const span = traces[0][0]
-            expect(span.meta['_dd.appsec.s.res.body']).to.be.equal(expectedResponseBodySchema)
-          })
-
-          expect(res.status).to.be.equal(200)
-          expect(res.data).to.be.deep.equal({ jsonResKey: 'jsonResValue' })
-        })
-
-        it('should get the response body schema with res.jsonp method', async () => {
-          const expectedResponseBodySchema = formatSchema([{ jsonpResKey: [8] }])
-          const res = await axios.post(`http://localhost:${port}/jsonp`, { key: 'value' })
-
-          await agent.use((traces) => {
-            const span = traces[0][0]
-            expect(span.meta['_dd.appsec.s.res.body']).to.be.equal(expectedResponseBodySchema)
-          })
-
-          expect(res.status).to.be.equal(200)
-          expect(res.data).to.be.deep.equal({ jsonpResKey: 'jsonpResValue' })
-        })
+    describe('with requestSampling 1.0', () => {
+      beforeEach(() => {
+        config.appsec.apiSecurity.requestSampling = 1.0
+        appsec.enable(config)
       })
 
-      it('should not get the schema', async () => {
-        config.appsec.apiSecurity.requestSampling = 0
-        appsec.enable(config)
+      function formatSchema (body) {
+        return zlib.gzipSync(JSON.stringify(body)).toString('base64')
+      }
 
+      it('should get the request body schema', async () => {
+        const expectedRequestBodySchema = formatSchema([{ key: [8] }])
         const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
         await agent.use((traces) => {
           const span = traces[0][0]
-          expect(span.meta).not.to.haveOwnProperty('_dd.appsec.s.req.body')
+          expect(span.meta).to.haveOwnProperty('_dd.appsec.s.req.body')
           expect(span.meta).not.to.haveOwnProperty('_dd.appsec.s.res.body')
+          expect(span.meta['_dd.appsec.s.req.body']).to.be.equal(expectedRequestBodySchema)
         })
 
         expect(res.status).to.be.equal(200)
         expect(res.data).to.be.equal('DONE')
       })
+
+      it('should get the response body schema with res.send method with object', async () => {
+        const expectedResponseBodySchema = formatSchema([{ sendResKey: [8] }])
+        const res = await axios.post(`http://localhost:${port}/sendjson`, { key: 'value' })
+
+        await agent.use((traces) => {
+          const span = traces[0][0]
+          expect(span.meta['_dd.appsec.s.res.body']).to.be.equal(expectedResponseBodySchema)
+        })
+
+        expect(res.status).to.be.equal(200)
+        expect(res.data).to.be.deep.equal({ sendResKey: 'sendResValue' })
+      })
+
+      it('should get the response body schema with res.json method', async () => {
+        const expectedResponseBodySchema = formatSchema([{ jsonResKey: [8] }])
+        const res = await axios.post(`http://localhost:${port}/json`, { key: 'value' })
+
+        await agent.use((traces) => {
+          const span = traces[0][0]
+          expect(span.meta['_dd.appsec.s.res.body']).to.be.equal(expectedResponseBodySchema)
+        })
+
+        expect(res.status).to.be.equal(200)
+        expect(res.data).to.be.deep.equal({ jsonResKey: 'jsonResValue' })
+      })
+
+      it('should get the response body schema with res.jsonp method', async () => {
+        const expectedResponseBodySchema = formatSchema([{ jsonpResKey: [8] }])
+        const res = await axios.post(`http://localhost:${port}/jsonp`, { key: 'value' })
+
+        await agent.use((traces) => {
+          const span = traces[0][0]
+          expect(span.meta['_dd.appsec.s.res.body']).to.be.equal(expectedResponseBodySchema)
+        })
+
+        expect(res.status).to.be.equal(200)
+        expect(res.data).to.be.deep.equal({ jsonpResKey: 'jsonpResValue' })
+      })
+    })
+
+    it('should not get the schema', async () => {
+      config.appsec.apiSecurity.requestSampling = 0
+      appsec.enable(config)
+
+      const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
+
+      await agent.use((traces) => {
+        const span = traces[0][0]
+        expect(span.meta).not.to.haveOwnProperty('_dd.appsec.s.req.body')
+        expect(span.meta).not.to.haveOwnProperty('_dd.appsec.s.res.body')
+      })
+
+      expect(res.status).to.be.equal(200)
+      expect(res.data).to.be.equal('DONE')
     })
   })
 })

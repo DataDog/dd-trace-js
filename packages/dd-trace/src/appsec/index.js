@@ -6,6 +6,7 @@ const remoteConfig = require('./remote_config')
 const {
   bodyParser,
   cookieParser,
+  expressProcessParams,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   passportVerify,
@@ -64,6 +65,7 @@ function enable (_config) {
     responseBody.subscribe(onResponseBody)
     responseWriteHead.subscribe(onResponseWriteHead)
     responseSetHeader.subscribe(onResponseSetHeader)
+    expressProcessParams.subscribe(onRequestProcessParams)
 
     if (_config.appsec.eventTracking.enabled) {
       passportVerify.subscribe(onPassportVerify)
@@ -120,11 +122,6 @@ function incomingHttpEndTranslator ({ req, res }) {
   // TODO: no need to analyze it if it was already done by the body-parser hook
   if (req.body !== undefined && req.body !== null) {
     persistent[addresses.HTTP_INCOMING_BODY] = req.body
-  }
-
-  // TODO: temporary express instrumentation, will use express plugin later
-  if (req.params !== null && typeof req.params === 'object') {
-    persistent[addresses.HTTP_INCOMING_PARAMS] = req.params
   }
 
   // we need to keep this to support other cookie parsers
@@ -262,6 +259,21 @@ function onResponseSetHeader ({ res, abortController }) {
   }
 }
 
+function onRequestProcessParams ({ req, res, abortController, params }) {
+  const rootSpan = web.root(req)
+  if (!rootSpan) return
+
+  if (!params || typeof params !== 'object' || !Object.keys(params).length) return
+
+  const results = waf.run({
+    persistent: {
+      [addresses.HTTP_INCOMING_PARAMS]: params
+    }
+  }, req)
+
+  handleResults(results, req, res, rootSpan, abortController)
+}
+
 function handleResults (actions, req, res, rootSpan, abortController) {
   if (!actions || !req || !res || !rootSpan || !abortController) return
 
@@ -297,6 +309,7 @@ function disable () {
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
   if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
   if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseSetHeader)
+  if (expressProcessParams.hasSubscribers) expressProcessParams.unsubscribe(onRequestProcessParams)
 }
 
 module.exports = {

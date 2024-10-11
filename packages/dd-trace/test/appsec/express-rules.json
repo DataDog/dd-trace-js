@@ -28,6 +28,31 @@
         ],
         "transformers": ["lowercase"],
         "on_match": ["block"]
+      },
+      {
+        "id": "test-rule-id-2",
+        "name": "test-rule-name-2",
+        "tags": {
+          "type": "security_scanner",
+          "category": "attack_attempt"
+        },
+        "conditions": [
+          {
+            "parameters": {
+              "inputs": [
+                {
+                  "address": "server.request.path_params"
+                }
+              ],
+              "list": [
+                "testattack"
+              ]
+            },
+            "operator": "phrase_match"
+          }
+        ],
+        "transformers": ["lowercase"],
+        "on_match": ["block"]
       }
     ]
 }
