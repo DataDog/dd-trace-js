@@ -31,17 +31,14 @@ loadChannel.subscribe(({ name }) => {
 // Globals
 maybeEnable(require('../../datadog-plugin-fetch/src'))
 
-// Feature plugins
-maybeEnable(require('../../datadog-plugin-code-origin/src'))
-
 function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
   if (!pluginClasses[Plugin.id]) {
-    const id = Plugin.id.toUpperCase().replace(/[^a-z0-9_]/ig, '_')
-    const disabled = isFalse(process.env[`DD_TRACE_${id}_ENABLED`]) || isFalse(process.env[`DD_${id}_ENABLED`])
+    const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
+    const enabled = process.env[envName.replace(/[^a-z0-9_]/ig, '_')]
 
     // TODO: remove the need to load the plugin class in order to disable the plugin
-    if (disabled || disabledPlugins.has(Plugin.id)) {
+    if (isFalse(enabled) || disabledPlugins.has(Plugin.id)) {
       log.debug(`Plugin "${Plugin.id}" was disabled via configuration option.`)
 
       pluginClasses[Plugin.id] = null

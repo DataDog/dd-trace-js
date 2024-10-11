@@ -1,6 +1,6 @@
 'use strict'
 
-const { getUserLandFrames } = require('../../dd-trace/src/plugins/util/stacktrace')
+const { getUserLandFrames } = require('../../../dd-trace/src/plugins/util/stacktrace')
 
 const limit = Number(process.env._DD_CODE_ORIGIN_MAX_USER_FRAMES) || 8
 

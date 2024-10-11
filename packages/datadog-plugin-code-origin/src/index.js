@@ -1,16 +1,22 @@
 'use strict'
 
-const fastify = require('./fastify')
-const RouterPlugin = require('../../datadog-plugin-router/src')
+const Plugin = require('../../dd-trace/src/plugins/plugin')
 
-class CodeOriginForSpansPlugin extends RouterPlugin {
+class CodeOriginForSpansPlugin extends Plugin {
   static get id () {
     return 'code-origin-for-spans'
   }
 
   constructor (...args) {
     super(...args)
-    fastify(this)
+
+    if (this._tracerConfig.codeOriginForSpansEnabled) {
+      this.instrument()
+    }
+  }
+
+  instrument () {
+    throw new Error('Not implemented')
   }
 }
 
