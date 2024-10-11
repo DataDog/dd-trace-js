@@ -20,7 +20,7 @@ function disable () {
 function handleLLMObsParentIdInjection ({ carrier }) {
   const parent = storage.getStore()?.llmobsSpan
   if (!parent) {
-    log.warn('No active span to inject LLMObs info.')
+    log.debug('No active span to inject LLMObs info.')
     return
   }
 

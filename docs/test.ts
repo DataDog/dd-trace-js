@@ -558,39 +558,32 @@ llmobs.enable({
 llmobs.disable()
 
 // start span in current context
-llmobs.startSpan('llm')
-llmobs.startSpan('llm', {  name: 'mySpan', sessionId: '123', mlApp: 'mlApp' , modelName: 'myModel', modelProvider: 'myProvider'})
-llmobs.startSpan('embedding')
-llmobs.startSpan('embedding', {  name: 'mySpan', sessionId: '123', mlApp: 'mlApp' , modelName: 'myModel', modelProvider: 'myProvider'})
-llmobs.startSpan('agent')
-llmobs.startSpan('agent', { name: 'mySpan', sessionId: '123', mlApp: 'mlApp' })
-llmobs.startSpan('retrieval')
-llmobs.startSpan('retrieval', { name: 'mySpan', sessionId: '123', mlApp: 'mlApp' })
-llmobs.startSpan('task')
-llmobs.startSpan('task', { name: 'mySpan', sessionId: '123', mlApp: 'mlApp' })
-llmobs.startSpan('tool')
-llmobs.startSpan('tool', { name: 'mySpan', sessionId: '123', mlApp: 'mlApp' })
-llmobs.startSpan('workflow')
-llmobs.startSpan('workflow', { name: 'mySpan', sessionId: '123', mlApp: 'mlApp' })
+llmobs.startSpan({ kind: 'llm' })
+llmobs.startSpan({ kind: 'embedding'})
+llmobs.startSpan({ kind: 'agent'})
+llmobs.startSpan({ kind: 'retrieval'})
+llmobs.startSpan({ kind: 'task'})
+llmobs.startSpan({ kind: 'tool'})
+llmobs.startSpan({ kind: 'workflow'})
 
 // trace block of code
-llmobs.trace('llm', () => {})
-llmobs.trace('llm', { name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, () => {})
-llmobs.trace('llm', (span, cb) => {
+llmobs.trace(() => {}, { kind: 'llm' })
+llmobs.trace(() => {}, { kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' })
+llmobs.trace((span, cb) => {
   span.setTag('foo', 'bar')
   cb(new Error('boom'))
-})
+}, { kind: 'llm' })
 
 // wrap a function
-llmobs.wrap('llm', function myLLM () {})()
-llmobs.wrap('llm', { name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myLLM () {})()
+llmobs.wrap(function myLLM () {}, { kind: 'llm' })()
+llmobs.wrap(function myFunction () {}, { kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' })()
 
 // decorate a function
 class MyClass {
-  @llmobs.decorate('llm')
+  @llmobs.decorate({ kind: 'llm' })
   myLLM () {}
 
-  @llmobs.decorate('llm', { name: 'myOtherLLM', modelName: 'myModel', modelProvider: 'myProvider' })
+  @llmobs.decorate({ kind: 'llm', name: 'myOtherLLM', modelName: 'myModel', modelProvider: 'myProvider' })
   myOtherLLM () {}
 }
 

@@ -173,6 +173,11 @@ class LLMObs {
 
     span = span || this.active()
 
+    if (!(span instanceof Span)) {
+      logger.warn('Span must be a valid Span object.')
+      return
+    }
+
     if (!span) {
       logger.warn('No span provided and no active LLMObs-generated span found')
       return
@@ -190,7 +195,7 @@ class LLMObs {
       }
     } catch {
       logger.warn('Faild to export span. Span must be a valid Span object.')
-      return undefined // invalid span kind
+      return undefined
     }
   }
 
@@ -280,11 +285,12 @@ class LLMObs {
     })
   }
 
-  startSpan (kind, options = {}) {
+  startSpan (options = {}) {
     if (!this.enabled) {
       logger.warn('Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.')
     }
 
+    const kind = options.kind
     const valid = validKind(kind)
     if (!valid) {
       logger.warn(`Invalid span kind specified: ${kind}. Span will not be sent to LLM Observability.`)
@@ -306,7 +312,7 @@ class LLMObs {
     const originalFinish = span.finish
     span.finish = function () {
       span.finish = originalFinish
-      storage.enterWith(oldStore) // restore context
+      storage.enterWith(oldStore)
       return originalFinish.apply(span, arguments)
     }
 
@@ -320,24 +326,20 @@ class LLMObs {
     const newStore = span ? span._store : oldStore
 
     if (this.enabled) {
-      storage.enterWith({ ...newStore, span, llmobsSpan: span }) // preserve context
+      storage.enterWith({ ...newStore, span, llmobsSpan: span })
     } else {
-      storage.enterWith({ ...newStore, span }) // preserve context without LLMObs
+      storage.enterWith({ ...newStore, span })
     }
 
     return span
   }
 
-  trace (kind, options, fn) {
-    if (typeof options === 'function') {
-      fn = options
-      options = {}
-    }
-
+  trace (fn, options = {}) {
     if (!this.enabled) {
       logger.warn('Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.')
     }
 
+    const kind = options.kind
     const valid = validKind(kind)
     if (!valid) {
       logger.warn(`Invalid span kind specified: ${kind}. Span will not be sent to LLM Observability.`)
@@ -362,8 +364,6 @@ class LLMObs {
         })
 
         return fn(span, err => {
-          // is this needed? with the use of `activate` internally, it should restore
-          // the context from what it was before the `enterWith` above...
           storage.enterWith(oldStore)
           cb(err)
         })
@@ -402,12 +402,8 @@ class LLMObs {
     })
   }
 
-  wrap (kind, options, fn) {
-    if (typeof options === 'function') {
-      fn = options
-      options = {}
-    }
-
+  wrap (fn, options = {}) {
+    const kind = options.kind
     const name = getName(kind, options, fn)
 
     const {
@@ -466,37 +462,38 @@ class LLMObs {
       }
     }
 
-    return this._tracer.wrap(name, spanOptions, wrapped) // try and have it call `startSpan` for this class
+    return this._tracer.wrap(name, spanOptions, wrapped)
   }
 
-  decorate (kind, options) {
+  decorate (options = {}) {
     const llmobs = this
-    logger.debug('llmobs.decorate called')
     return function (target, ctxOrPropertyKey, descriptor) {
       if (!ctxOrPropertyKey) return target
-      if (typeof ctxOrPropertyKey === 'string') {
+      if (typeof ctxOrPropertyKey === 'object') {
+        const ctx = ctxOrPropertyKey
+        if (ctx.kind !== 'method') return target
+
+        return llmobs.wrap(target, { name: ctx.name, ...options })
+      } else {
         const propertyKey = ctxOrPropertyKey
         if (descriptor) {
           if (typeof descriptor.value !== 'function') return descriptor
 
-          descriptor.value = llmobs.wrap(kind, { name: propertyKey, ...options }, descriptor.value)
+          const original = descriptor.value
+          descriptor.value = llmobs.wrap(original, { name: propertyKey, ...options })
 
           return descriptor
         } else {
           if (typeof target[propertyKey] !== 'function') return target
 
+          const original = target[propertyKey]
           Object.defineProperty(target, propertyKey, {
             ...Object.getOwnPropertyDescriptor(target, propertyKey),
-            value: llmobs.wrap(kind, { name: propertyKey, ...options }, target[propertyKey])
+            value: llmobs.wrap(original, { name: propertyKey, ...options })
           })
 
           return target
         }
-      } else {
-        const ctx = ctxOrPropertyKey
-        if (ctx.kind !== 'method') return target
-
-        return llmobs.wrap(kind, { name: ctx.name, ...options }, target)
       }
     }
   }

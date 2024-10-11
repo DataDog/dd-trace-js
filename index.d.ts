@@ -2209,14 +2209,10 @@ declare namespace tracer {
       /**
        * Starts a span activated in the scope of the current active span.
        * This span must be manually finished.
-       * @param kind The kind of span to start.
        * @param options Options for the span.
        * @returns The newly created span.
        */
-      startSpan(kind: llmobs.modelSpanKind, options?: llmobs.LLMObsModelOptions): tracer.Span
-      startSpan(kind: llmobs.baseSpanKind, options?: llmobs.LLMObsBaseSpanOptions): tracer.Span
-      // startSpan(kind: llmobs.spanKind): tracer.Span
-      // startSpan(kind: llmobs.spanKind, options: llmobs.LLMObsSpanOptions): tracer.Span
+      startSpan(options: llmobs.LLMObsSpanOptions): tracer.Span
       
       /**
        * Instruments a function by automatically creating a span activated on its
@@ -2231,17 +2227,11 @@ declare namespace tracer {
        * span will finish when that callback is called.
        * * The function doesn't accept a callback and doesn't return a promise, in
        * which case the span will finish at the end of the function execution.
-       * @param kind The kind of span to start.
-       * @param options Optional LLM Observability span options.
        * @param fn The function to instrument.
+       * @param options Optional LLM Observability span options.
        * @returns The return value of the function.
        */
-      // trace<T> (name: string, fn: (span: tracer.Span) => T): T;
-      // trace<T> (name: string, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T;
-      // trace<T> (name: string, options: tracer.TraceOptions & tracer.SpanOptions, fn: (span?: tracer.Span, done?: (error?: Error) => void) => T): T;
-      trace<T> (kind: llmobs.spanKind, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T
-      trace<T> (kind: llmobs.modelSpanKind, options: llmobs.LLMObsModelOptions, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T
-      trace<T> (kind: llmobs.baseSpanKind, options: llmobs.LLMObsBaseSpanOptions, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T
+      trace<T> (fn: (span: tracer.Span, done: (error?: Error) => void) => T, options: LLMObsSpanOptions): T
 
       /**
        * Wrap a function to automatically create a span activated on its
@@ -2256,14 +2246,11 @@ declare namespace tracer {
        * span will finish when that callback is called.
        * * The function doesn't accept a callback and doesn't return a promise, in
        * which case the span will finish at the end of the function execution.
-       * @param kind The kind of span to start.
-       * @param options Optional LLM Observability span options.
        * @param fn The function to instrument.
+       * @param options Optional LLM Observability span options.
        * @returns A new function that wraps the provided function with span creation.
        */
-      wrap<T = (...args: any[]) => any> (kind: llmobs.spanKind, fn: T): T
-      wrap<T = (...args: any[]) => any> (kind: llmobs.modelSpanKind, options: llmobs.LLMObsModelOptions, fn: T): T
-      wrap<T = (...args: any[]) => any> (kind: llmobs.baseSpanKind, options: llmobs.LLMObsBaseSpanOptions, fn: T): T
+      wrap<T = (...args: any[]) => any> (fn: T, options: LLMObsSpanOptions): T
 
       /**
        * Decorate a function in a javascript runtime that supports function decorators.
@@ -2272,11 +2259,9 @@ declare namespace tracer {
        * In TypeScript, this decorator is only supported in contexts where general TypeScript
        * function decorators are supported.
        * 
-       * @param kind The kind of span to start.
        * @param options Optional LLM Observability span options.
        */
-      decorate (kind: llmobs.modelSpanKind, options?: llmobs.LLMObsModelOptions): any
-      decorate (kind: llmobs.baseSpanKind, options?: llmobs.LLMObsBaseSpanOptions): any
+      decorate (options: llmobs.LLMObsSpanOptions): any
 
       /**
        * Returns a representation of a span to export its span and trace IDs.
@@ -2465,7 +2450,12 @@ declare namespace tracer {
       spanId: string,
     }
 
-    interface LLMObsBaseSpanOptions extends SpanOptions {
+    interface LLMObsSpanOptions extends SpanOptions {
+      /**
+       * LLM Observability span kind. One of `agent`, `workflow`, `task`, `tool`, `retrieval`, `embedding`, or `llm`.
+       */
+      kind: llmobs.spanKind,
+
       /**
        * The name of the traced operation. As a default, the LLM Observability span kind will be used.
        */
@@ -2481,9 +2471,7 @@ declare namespace tracer {
        * If not provided, the default value will be set to mlApp provided during initalization, or `DD_LLMOBS_ML_APP`.
        */
       mlApp?: string,
-    }
-  
-    interface LLMObsModelOptions extends LLMObsBaseSpanOptions{
+
       /**
        * The name of the invoked LLM or embedding model. Only used on `llm` and `embedding` spans.
        */
@@ -2518,13 +2506,7 @@ declare namespace tracer {
     }
 
     /** @hidden */
-    type modelSpanKind = 'llm' | 'embedding' 
-
-    /** @hidden */
-    type baseSpanKind = 'workflow' | 'agent' | 'task' | 'tool' | 'retrieval'
-
-    /** @hidden */
-    type spanKind = modelSpanKind | baseSpanKind
+    type spanKind = 'agent' | 'workflow' | 'task' | 'tool' | 'retrieval' | 'embedding' | 'llm'
   }
 }
 
