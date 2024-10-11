@@ -1,6 +1,7 @@
 'use strict'
 
 const axios = require('axios')
+const { assert } = require('chai')
 const path = require('path')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
@@ -76,7 +77,8 @@ withVersions('express', 'express', version => {
     describe('route with multiple path parameters', () => {
       it('should not block the request when attack is not detected', async () => {
         const res = await axios.get(`http://localhost:${port}/multiple-path-params/safe_param/safe_param`)
-        expect(res.data).to.be.equal('DONE')
+        assert.equal(res.status, 200)
+        assert.equal(res.data, 'DONE')
       })
 
       it('should block the request when attack is detected', async () => {
@@ -85,8 +87,8 @@ withVersions('express', 'express', version => {
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
-          expect(e.response.status).to.be.equals(403)
-          expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+          assert.equal(e.response.status, 403)
+          assert.deepEqual(e.response.data, JSON.parse(json))
         }
       })
 
@@ -96,8 +98,8 @@ withVersions('express', 'express', version => {
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
-          expect(e.response.status).to.be.equals(403)
-          expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+          assert.equal(e.response.status, 403)
+          assert.deepEqual(e.response.data, JSON.parse(json))
         }
       })
 
@@ -107,8 +109,8 @@ withVersions('express', 'express', version => {
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
-          expect(e.response.status).to.be.equals(403)
-          expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+          assert.equal(e.response.status, 403)
+          assert.deepEqual(e.response.data, JSON.parse(json))
         }
       })
     })
@@ -116,7 +118,8 @@ withVersions('express', 'express', version => {
     describe('nested routers', () => {
       it('should not block the request when attack is not detected', async () => {
         const res = await axios.get(`http://localhost:${port}/nested/safe_param/safe_param`)
-        expect(res.data).to.be.equal('DONE')
+        assert.equal(res.status, 200)
+        assert.equal(res.data, 'DONE')
       })
 
       it('should block the request when attack is detected', async () => {
@@ -125,8 +128,8 @@ withVersions('express', 'express', version => {
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
-          expect(e.response.status).to.be.equals(403)
-          expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+          assert.equal(e.response.status, 403)
+          assert.deepEqual(e.response.data, JSON.parse(json))
         }
       })
 
@@ -136,8 +139,8 @@ withVersions('express', 'express', version => {
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
-          expect(e.response.status).to.be.equals(403)
-          expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+          assert.equal(e.response.status, 403)
+          assert.deepEqual(e.response.data, JSON.parse(json))
         }
       })
 
@@ -147,8 +150,8 @@ withVersions('express', 'express', version => {
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
-          expect(e.response.status).to.be.equals(403)
-          expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+          assert.equal(e.response.status, 403)
+          assert.deepEqual(e.response.data, JSON.parse(json))
         }
       })
     })
@@ -156,8 +159,9 @@ withVersions('express', 'express', version => {
     describe('path parameter callback', () => {
       it('should not block the request when attack is not detected', async () => {
         const res = await axios.get(`http://localhost:${port}/callback-path-param/safe_param`)
-        expect(res.data).to.be.equal('DONE')
-        expect(paramCallbackSpy).to.be.calledOnce
+        assert.equal(res.status, 200)
+        assert.equal(res.data, 'DONE')
+        sinon.assert.calledOnce(paramCallbackSpy)
       })
 
       it('should block the request when attack is detected', async () => {
@@ -166,9 +170,9 @@ withVersions('express', 'express', version => {
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
-          expect(e.response.status).to.be.equals(403)
-          expect(e.response.data).to.be.deep.equal(JSON.parse(json))
-          expect(paramCallbackSpy).to.not.be.called
+          assert.equal(e.response.status, 403)
+          assert.deepEqual(e.response.data, JSON.parse(json))
+          sinon.assert.notCalled(paramCallbackSpy)
         }
       })
     })
@@ -219,8 +223,8 @@ withVersions('express', 'express', version => {
     it('should not block the request without an attack', async () => {
       const res = await axios.get(`http://localhost:${port}/?key=value`)
 
-      expect(requestBody).to.be.calledOnce
-      expect(res.data).to.be.equal('DONE')
+      sinon.assert.calledOnce(requestBody)
+      assert.equal(res.data, 'DONE')
     })
 
     it('should block the request when attack is detected', async () => {
@@ -229,9 +233,9 @@ withVersions('express', 'express', version => {
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
-        expect(e.response.status).to.be.equals(403)
-        expect(e.response.data).to.be.deep.equal(JSON.parse(json))
-        expect(requestBody).not.to.be.called
+        assert.equal(e.response.status, 403)
+        assert.deepEqual(e.response.data, JSON.parse(json))
+        sinon.assert.notCalled(requestBody)
       }
     })
   })
