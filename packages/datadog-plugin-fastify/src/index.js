@@ -1,15 +1,15 @@
 'use strict'
 
-const FastifyInstrumentationPlugin = require('./instrumentation')
-const FastifyCodeOriginForSpansPlugin = require('../../datadog-plugin-code-origin/src/fastify')
+const FastifyTracingPlugin = require('./tracing')
+const FastifyCodeOriginForSpansPlugin = require('./code_origin')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 
 class FastifyPlugin extends CompositePlugin {
   static get id () { return 'fastify' }
   static get plugins () {
     return {
-      instrumentation: FastifyInstrumentationPlugin,
-      codeOrigin: FastifyCodeOriginForSpansPlugin
+      tracing: FastifyTracingPlugin,
+      codeOriginForSpans: FastifyCodeOriginForSpansPlugin
     }
   }
 }

@@ -543,14 +543,14 @@ describe('Plugin', () => {
           }
         })
 
-        describe('with tracer config codeOriginForSpansEnabled', () => {
+        describe('with tracer config codeOriginForSpans.enabled: true', () => {
           if (semver.satisfies(specificVersion, '<4')) return // TODO: Why doesn't it work on older versions?
 
           before(() => {
             return agent.load(
               ['fastify', 'find-my-way', 'http'],
               [{}, {}, { client: false }],
-              { codeOriginForSpansEnabled: true }
+              { codeOriginForSpans: { enabled: true } }
             )
           })
 
