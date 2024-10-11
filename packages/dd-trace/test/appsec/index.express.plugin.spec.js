@@ -13,7 +13,7 @@ withVersions('express', 'express', version => {
     let port, server, paramCallbackSpy
 
     before(() => {
-      return agent.load(['express', 'http'], {client: false})
+      return agent.load(['express', 'http'], { client: false })
     })
 
     before((done) => {
@@ -56,7 +56,7 @@ withVersions('express', 'express', version => {
 
     after(() => {
       server.close()
-      return agent.close({ritmReset: false})
+      return agent.close({ ritmReset: false })
     })
 
     beforeEach(async () => {
@@ -178,7 +178,7 @@ withVersions('express', 'express', version => {
     let port, server, requestBody
 
     before(() => {
-      return agent.load(['express', 'http'], {client: false})
+      return agent.load(['express', 'http'], { client: false })
     })
 
     before((done) => {
@@ -199,7 +199,7 @@ withVersions('express', 'express', version => {
 
     after(() => {
       server.close()
-      return agent.close({ritmReset: false})
+      return agent.close({ ritmReset: false })
     })
 
     beforeEach(async () => {
@@ -240,7 +240,7 @@ withVersions('express', 'express', version => {
     let config, port, server
 
     before(() => {
-      return agent.load(['express', 'http'], {client: false})
+      return agent.load(['express', 'http'], { client: false })
     })
 
     before((done) => {
@@ -274,7 +274,7 @@ withVersions('express', 'express', version => {
 
     after(() => {
       server.close()
-      return agent.close({ritmReset: false})
+      return agent.close({ ritmReset: false })
     })
 
     beforeEach(() => {
