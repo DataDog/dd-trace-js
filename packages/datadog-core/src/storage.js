@@ -12,6 +12,7 @@ const storage = function (namespace) {
   return storages[namespace]
 }
 
+storage.disable = legacyStorage.disable.bind(legacyStorage)
 storage.enterWith = legacyStorage.enterWith.bind(legacyStorage)
 storage.exit = legacyStorage.exit.bind(legacyStorage)
 storage.getStore = legacyStorage.getStore.bind(legacyStorage)
