@@ -33,7 +33,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false, wipe: true })
+            return agent.close({ ritmReset: false })
           })
 
           beforeEach(() => {
@@ -555,7 +555,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false, wipe: true })
+            return agent.close({ ritmReset: false })
           })
 
           beforeEach(() => {
