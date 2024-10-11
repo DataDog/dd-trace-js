@@ -82,7 +82,7 @@ function getUserLandFrames (constructorOpt, limit = Infinity) {
     frames.push({
       file: filename,
       line: callsite.getLineNumber(),
-      // TODO: Add support for column
+      column: callsite.getColumnNumber(),
       method: method ?? undefined, // force to undefined if null so JSON.stringify will omit it
       type: type ?? undefined // force to undefined if null so JSON.stringify will omit it
     })

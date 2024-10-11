@@ -26,6 +26,7 @@ function tag (type, topOfStackFunc) {
     const frame = frames[i]
     tags[`_dd.code_origin.frames.${i}.file`] = frame.file
     tags[`_dd.code_origin.frames.${i}.line`] = String(frame.line)
+    tags[`_dd.code_origin.frames.${i}.column`] = String(frame.column)
     if (frame.method) {
       tags[`_dd.code_origin.frames.${i}.method`] = frame.method
     }

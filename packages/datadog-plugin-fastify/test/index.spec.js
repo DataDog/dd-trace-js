@@ -593,11 +593,13 @@ describe('Plugin', () => {
 
                   expect(tags).to.have.property('_dd.code_origin.frames.0.file', __filename)
                   expect(tags).to.have.property('_dd.code_origin.frames.0.line', routeRegisterLine)
+                  expect(tags).to.have.property('_dd.code_origin.frames.0.column').to.match(/^\d+$/)
                   expect(tags).to.have.property('_dd.code_origin.frames.0.method', 'wrapperFunction')
                   expect(tags).to.not.have.property('_dd.code_origin.frames.0.type')
 
                   expect(tags).to.have.property('_dd.code_origin.frames.1.file', __filename)
                   expect(tags).to.have.property('_dd.code_origin.frames.1.line', callWrapperLine)
+                  expect(tags).to.have.property('_dd.code_origin.frames.1.column').to.match(/^\d+$/)
                   expect(tags).to.not.have.property('_dd.code_origin.frames.1.method')
                   expect(tags).to.have.property('_dd.code_origin.frames.1.type', 'Context')
 
@@ -635,6 +637,7 @@ describe('Plugin', () => {
 
                   expect(tags).to.have.property('_dd.code_origin.frames.0.file', __filename)
                   expect(tags).to.have.property('_dd.code_origin.frames.0.line', routeRegisterLine)
+                  expect(tags).to.have.property('_dd.code_origin.frames.0.column').to.match(/^\d+$/)
                   expect(tags).to.have.property('_dd.code_origin.frames.0.method', 'v1Handler')
                   expect(tags).to.not.have.property('_dd.code_origin.frames.0.type')
 
@@ -671,6 +674,7 @@ describe('Plugin', () => {
 
                   expect(tags).to.have.property('_dd.code_origin.frames.0.file', __filename)
                   expect(tags).to.have.property('_dd.code_origin.frames.0.line', routeRegisterLine)
+                  expect(tags).to.have.property('_dd.code_origin.frames.0.column').to.match(/^\d+$/)
                   expect(tags).to.have.property('_dd.code_origin.frames.0.method', 'testCase')
                   expect(tags).to.have.property('_dd.code_origin.frames.0.type', 'Context')
 
@@ -710,6 +714,7 @@ describe('Plugin', () => {
 
                   expect(tags).to.have.property('_dd.code_origin.frames.0.file', __filename)
                   expect(tags).to.have.property('_dd.code_origin.frames.0.line', middlewareRegisterLine)
+                  expect(tags).to.have.property('_dd.code_origin.frames.0.column').to.match(/^\d+$/)
                   expect(tags).to.have.property('_dd.code_origin.frames.0.method', 'testCase')
                   expect(tags).to.have.property('_dd.code_origin.frames.0.type', 'Context')
 
