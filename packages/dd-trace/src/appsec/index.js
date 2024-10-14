@@ -31,6 +31,8 @@ const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
 const rasp = require('./rasp')
 
+const responseAnalyzedSet = new WeakSet()
+
 let isEnabled = false
 let config
 
@@ -79,6 +81,41 @@ function enable (_config) {
 
     disable()
   }
+}
+
+function onRequestBodyParsed ({ req, res, body, abortController }) {
+  if (body === undefined || body === null) return
+
+  if (!req) {
+    const store = storage.getStore()
+    req = store?.req
+  }
+
+  const rootSpan = web.root(req)
+  if (!rootSpan) return
+
+  const results = waf.run({
+    persistent: {
+      [addresses.HTTP_INCOMING_BODY]: body
+    }
+  }, req)
+
+  handleResults(results, req, res, rootSpan, abortController)
+}
+
+function onRequestCookieParser ({ req, res, abortController, cookies }) {
+  if (!cookies || typeof cookies !== 'object') return
+
+  const rootSpan = web.root(req)
+  if (!rootSpan) return
+
+  const results = waf.run({
+    persistent: {
+      [addresses.HTTP_INCOMING_COOKIES]: cookies
+    }
+  }, req)
+
+  handleResults(results, req, res, rootSpan, abortController)
 }
 
 function incomingHttpStartTranslator ({ req, res, abortController }) {
@@ -142,24 +179,16 @@ function incomingHttpEndTranslator ({ req, res }) {
   Reporter.finishRequest(req, res)
 }
 
-function onRequestBodyParsed ({ req, res, body, abortController }) {
-  if (body === undefined || body === null) return
+function onPassportVerify ({ credentials, user }) {
+  const store = storage.getStore()
+  const rootSpan = store?.req && web.root(store.req)
 
-  if (!req) {
-    const store = storage.getStore()
-    req = store?.req
+  if (!rootSpan) {
+    log.warn('No rootSpan found in onPassportVerify')
+    return
   }
 
-  const rootSpan = web.root(req)
-  if (!rootSpan) return
-
-  const results = waf.run({
-    persistent: {
-      [addresses.HTTP_INCOMING_BODY]: body
-    }
-  }, req)
-
-  handleResults(results, req, res, rootSpan, abortController)
+  passportTrackEvent(credentials, user, rootSpan, config.appsec.eventTracking.mode)
 }
 
 function onRequestQueryParsed ({ req, res, query, abortController }) {
@@ -182,15 +211,15 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
   handleResults(results, req, res, rootSpan, abortController)
 }
 
-function onRequestCookieParser ({ req, res, abortController, cookies }) {
-  if (!cookies || typeof cookies !== 'object') return
-
+function onRequestProcessParams ({ req, res, abortController, params }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
+  if (!params || typeof params !== 'object' || !Object.keys(params).length) return
+
   const results = waf.run({
     persistent: {
-      [addresses.HTTP_INCOMING_COOKIES]: cookies
+      [addresses.HTTP_INCOMING_PARAMS]: params
     }
   }, req)
 
@@ -208,20 +237,6 @@ function onResponseBody ({ req, body }) {
     }
   }, req)
 }
-
-function onPassportVerify ({ credentials, user }) {
-  const store = storage.getStore()
-  const rootSpan = store?.req && web.root(store.req)
-
-  if (!rootSpan) {
-    log.warn('No rootSpan found in onPassportVerify')
-    return
-  }
-
-  passportTrackEvent(credentials, user, rootSpan, config.appsec.eventTracking.mode)
-}
-
-const responseAnalyzedSet = new WeakSet()
 
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
   // avoid "write after end" error
@@ -257,21 +272,6 @@ function onResponseSetHeader ({ res, abortController }) {
   if (isBlocked(res)) {
     abortController?.abort()
   }
-}
-
-function onRequestProcessParams ({ req, res, abortController, params }) {
-  const rootSpan = web.root(req)
-  if (!rootSpan) return
-
-  if (!params || typeof params !== 'object' || !Object.keys(params).length) return
-
-  const results = waf.run({
-    persistent: {
-      [addresses.HTTP_INCOMING_PARAMS]: params
-    }
-  }, req)
-
-  handleResults(results, req, res, rootSpan, abortController)
 }
 
 function handleResults (actions, req, res, rootSpan, abortController) {
