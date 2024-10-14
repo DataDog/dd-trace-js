@@ -16,6 +16,8 @@ describe('Plugin', () => {
 
   describe('fastify', () => {
     withVersions('fastify', 'fastify', (version, _, specificVersion) => {
+      if (NODE_MAJOR <= 18 && semver.satisfies(specificVersion, '>=5')) return
+
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
@@ -26,8 +28,6 @@ describe('Plugin', () => {
 
       withExports('fastify', version, ['default', 'fastify'], '>=3', getExport => {
         describe('without configuration', () => {
-          if (NODE_MAJOR <= 18 && semver.satisfies(specificVersion, '>=5')) return
-
           before(() => {
             return agent.load(['fastify', 'find-my-way', 'http'], [{}, {}, { client: false }])
           })
