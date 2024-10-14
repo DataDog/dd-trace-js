@@ -77,6 +77,7 @@ withVersions('express', 'express', version => {
     describe('route with multiple path parameters', () => {
       it('should not block the request when attack is not detected', async () => {
         const res = await axios.get(`http://localhost:${port}/multiple-path-params/safe_param/safe_param`)
+
         assert.equal(res.status, 200)
         assert.equal(res.data, 'DONE')
       })
@@ -118,6 +119,7 @@ withVersions('express', 'express', version => {
     describe('nested routers', () => {
       it('should not block the request when attack is not detected', async () => {
         const res = await axios.get(`http://localhost:${port}/nested/safe_param/safe_param`)
+
         assert.equal(res.status, 200)
         assert.equal(res.data, 'DONE')
       })
@@ -310,6 +312,7 @@ withVersions('express', 'express', version => {
 
       it('should get the request body schema', async () => {
         const expectedRequestBodySchema = formatSchema([{ key: [8] }])
+
         const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
         await agent.use((traces) => {
