@@ -1,13 +1,13 @@
 const { join } = require('path')
 const { Worker } = require('worker_threads')
 const { randomUUID } = require('crypto')
-// const dc = require('dc-polyfill')
 
-// const activateDIChannel = dc.channel('ci:dynamic-instrumentation:activate')
 /**
  * TODOS:
  * - console.log -> log
  */
+
+global.__snapshotId = randomUUID()
 
 const messages = new Map()
 
@@ -21,18 +21,13 @@ class TestVisDynamicInstrumentation {
   activateDebugger ({ file, line }) {
     return new Promise(resolve => {
       const id = randomUUID()
-      // console.log('Asking worker to add breakpoint', { id, file, line })
       messages.set(id, resolve)
-      this.worker.postMessage({ probe: { id, file, line } })
+      this.worker.postMessage({ snapshotId: global.__snapshotId, probe: { id, file, line } })
     })
   }
 
   start () {
     if (this.worker) return
-
-    // activateDIChannel.subscribe(({ response, file, line }) => {
-    //   response.promise = this._activateDebugger({ file, line })
-    // })
 
     const { NODE_OPTIONS, ...env } = process.env
 
@@ -49,11 +44,10 @@ class TestVisDynamicInstrumentation {
     // allow the parent to exit even if the worker is still running
     this.worker.unref()
 
-    this.worker.on('message', ({ id, probe, state }) => {
-      // console.log('response from worker', { id, probe, state })
+    this.worker.on('message', ({ id, probe, state, stack, snapshot }) => {
       const resolve = messages.get(id)
       if (resolve) {
-        resolve({ probe, state })
+        resolve({ probe, state, stack, snapshot })
         messages.delete(id)
       }
     }).unref()

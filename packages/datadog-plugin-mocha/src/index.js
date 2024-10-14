@@ -203,6 +203,9 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:start', (testInfo) => {
+      global._getResult = new Promise(resolve => {
+        global._getDd = resolve
+      })
       const store = storage.getStore()
       const span = this.startTestSpan(testInfo)
 
@@ -258,6 +261,12 @@ class MochaPlugin extends CiPlugin {
           span.setTag(TEST_STATUS, 'skip')
         } else {
           span.setTag(TEST_STATUS, 'fail')
+          span.setTag('error.debug_info_captured', 'true')
+
+          span.setTag('_dd.di.error.0.file', 'sum.js') // TODO: look at error stack
+          span.setTag('_dd.di.error.0.line', '4') // TODO: look at error stack
+          span.setTag('_dd.di.error.0.snapshot_id', global.__snapshotId)
+
           span.setTag('error', err)
         }
       }
@@ -274,10 +283,9 @@ class MochaPlugin extends CiPlugin {
         }
         if (err) {
           span.setTag('error', err)
-
           const [filePath, lineNumber] = getFileAndLineNumberFromError(err)
-          this.di.activateDebugger({ file: filePath, line: lineNumber }).then(({ probe, state }) => {
-            console.log('returned value', { probe, state })
+          this.di.activateDebugger({ file: filePath, line: lineNumber }).then(({ probe, snapshot }) => {
+            global._getDd({ probe, snapshot })
           })
         }
 

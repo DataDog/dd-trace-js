@@ -6,7 +6,7 @@ function getWinstonLogSubmissionParameters (config) {
 
   const defaultParameters = {
     host: `http-intake.logs.${site}`,
-    path: `/api/v2/logs?ddsource=winston&service=${service}`,
+    path: `/api/v2/logs?ddsource=dd_debugger&service=${service}`,
     ssl: true,
     headers: {
       'DD-API-KEY': process.env.DD_API_KEY
