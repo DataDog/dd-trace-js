@@ -156,6 +156,10 @@ class Profiler extends EventEmitter {
         profiles.push({ profiler, profile })
       }
 
+      if (restart) {
+        this._capture(this._timeoutInterval, endDate)
+      }
+
       // encode and export asynchronously
       for (const { profiler, profile } of profiles) {
         try {
@@ -171,10 +175,6 @@ class Profiler extends EventEmitter {
           // encode and submit the other profile types.
           this._logError(err)
         }
-      }
-
-      if (restart) {
-        this._capture(this._timeoutInterval, endDate)
       }
 
       if (Object.keys(encodedProfiles).length > 0) {
