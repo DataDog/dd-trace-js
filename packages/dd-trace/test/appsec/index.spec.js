@@ -11,6 +11,8 @@ const {
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   queryParser,
+  nextBodyParsed,
+  nextQueryParsed,
   passportVerify,
   responseBody,
   responseWriteHead,
@@ -168,6 +170,8 @@ describe('AppSec Index', function () {
       expect(bodyParser.hasSubscribers).to.be.false
       expect(cookieParser.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
+      expect(nextBodyParsed.hasSubscribers).to.be.false
+      expect(nextQueryParsed.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
       expect(responseWriteHead.hasSubscribers).to.be.false
       expect(responseSetHeader.hasSubscribers).to.be.false
@@ -177,6 +181,8 @@ describe('AppSec Index', function () {
       expect(bodyParser.hasSubscribers).to.be.true
       expect(cookieParser.hasSubscribers).to.be.true
       expect(queryParser.hasSubscribers).to.be.true
+      expect(nextBodyParsed.hasSubscribers).to.be.true
+      expect(nextQueryParsed.hasSubscribers).to.be.true
       expect(passportVerify.hasSubscribers).to.be.true
       expect(responseWriteHead.hasSubscribers).to.be.true
       expect(responseSetHeader.hasSubscribers).to.be.true
@@ -255,6 +261,8 @@ describe('AppSec Index', function () {
       expect(bodyParser.hasSubscribers).to.be.false
       expect(cookieParser.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
+      expect(nextBodyParsed.hasSubscribers).to.be.false
+      expect(nextQueryParsed.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
       expect(responseWriteHead.hasSubscribers).to.be.false
       expect(responseSetHeader.hasSubscribers).to.be.false
