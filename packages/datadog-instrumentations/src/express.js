@@ -103,8 +103,8 @@ addHook({
 
 const processParamsStartCh = channel('datadog:express:process_params:start')
 const wrapProcessParamsMethod = (requestPositionInArguments) => {
-  return (original) => {
-    return function () {
+  return function wrapProcessParams (original) {
+    return function wrappedProcessParams () {
       if (processParamsStartCh.hasSubscribers) {
         const req = arguments[requestPositionInArguments]
         const abortController = new AbortController()
