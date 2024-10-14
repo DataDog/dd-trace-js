@@ -6,13 +6,13 @@ const remoteConfig = require('./remote_config')
 const {
   bodyParser,
   cookieParser,
-  expressProcessParams,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   passportVerify,
   queryParser,
   nextBodyParsed,
   nextQueryParsed,
+  expressProcessParams,
   responseBody,
   responseWriteHead,
   responseSetHeader
@@ -55,17 +55,17 @@ function enable (_config) {
 
     apiSecuritySampler.configure(_config.appsec)
 
+    bodyParser.subscribe(onRequestBodyParsed)
+    cookieParser.subscribe(onRequestCookieParser)
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
-    bodyParser.subscribe(onRequestBodyParsed)
+    queryParser.subscribe(onRequestQueryParsed)
     nextBodyParsed.subscribe(onRequestBodyParsed)
     nextQueryParsed.subscribe(onRequestQueryParsed)
-    queryParser.subscribe(onRequestQueryParsed)
-    cookieParser.subscribe(onRequestCookieParser)
+    expressProcessParams.subscribe(onRequestProcessParams)
     responseBody.subscribe(onResponseBody)
     responseWriteHead.subscribe(onResponseWriteHead)
     responseSetHeader.subscribe(onResponseSetHeader)
-    expressProcessParams.subscribe(onRequestProcessParams)
 
     if (_config.appsec.eventTracking.enabled) {
       passportVerify.subscribe(onPassportVerify)
@@ -299,17 +299,17 @@ function disable () {
 
   // Channel#unsubscribe() is undefined for non active channels
   if (bodyParser.hasSubscribers) bodyParser.unsubscribe(onRequestBodyParsed)
+  if (cookieParser.hasSubscribers) cookieParser.unsubscribe(onRequestCookieParser)
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
+  if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
   if (queryParser.hasSubscribers) queryParser.unsubscribe(onRequestQueryParsed)
   if (nextBodyParsed.hasSubscribers) nextBodyParsed.unsubscribe(onRequestBodyParsed)
   if (nextQueryParsed.hasSubscribers) nextQueryParsed.unsubscribe(onRequestQueryParsed)
-  if (cookieParser.hasSubscribers) cookieParser.unsubscribe(onRequestCookieParser)
+  if (expressProcessParams.hasSubscribers) expressProcessParams.unsubscribe(onRequestProcessParams)
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
-  if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
   if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
   if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseSetHeader)
-  if (expressProcessParams.hasSubscribers) expressProcessParams.unsubscribe(onRequestProcessParams)
 }
 
 module.exports = {
