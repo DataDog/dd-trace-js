@@ -146,6 +146,10 @@ class Profiler extends EventEmitter {
     const encodedProfiles = {}
 
     try {
+      if (Object.keys(this._config.profilers).length === 0) {
+        throw new Error('No profile types configured.')
+      }
+
       // collect profiles synchronously so that profilers can be safely stopped asynchronously
       for (const profiler of this._config.profilers) {
         const profile = profiler.profile(restart, startDate, endDate)
