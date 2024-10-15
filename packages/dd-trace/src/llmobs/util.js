@@ -1,6 +1,5 @@
 'use strict'
 
-const { SPAN_TYPE } = require('../../../../ext/tags')
 const { SPAN_KINDS } = require('./constants')
 
 function encodeUnicode (str) {
@@ -12,10 +11,6 @@ function encodeUnicode (str) {
     }
     return char
   }).join('')
-}
-
-function isLLMSpan (span) {
-  return ['llm', 'openai'].includes(span?.context()._tags[SPAN_TYPE])
 }
 
 function validKind (kind) {
@@ -166,7 +161,6 @@ function getFunctionArguments (fn, args = []) {
 
 module.exports = {
   encodeUnicode,
-  isLLMSpan,
   validKind,
   getName,
   getFunctionArguments
