@@ -2199,12 +2199,12 @@ declare namespace tracer {
       /**
        * Enable LLM Observability tracing.
        */
-      enable(options: LLMObsEnableOptions): void,
+      enable (options: LLMObsEnableOptions): void,
 
       /**
        * Disable LLM Observability tracing.
        */
-      disable(): void,
+      disable (): void,
 
       /**
        * Starts a span activated in the scope of the current active span.
@@ -2212,7 +2212,7 @@ declare namespace tracer {
        * @param options Options for the span.
        * @returns The newly created span.
        */
-      startSpan(options: llmobs.LLMObsSpanOptions): tracer.Span
+      startSpan (options: llmobs.LLMObsNamedSpanOptions): tracer.Span
       
       /**
        * Instruments a function by automatically creating a span activated on its
@@ -2231,7 +2231,7 @@ declare namespace tracer {
        * @param options Optional LLM Observability span options.
        * @returns The return value of the function.
        */
-      trace<T> (fn: (span: tracer.Span, done: (error?: Error) => void) => T, options: LLMObsSpanOptions): T
+      trace<T> (options: LLMObsNamedSpanOptions, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T
 
       /**
        * Wrap a function to automatically create a span activated on its
@@ -2250,7 +2250,7 @@ declare namespace tracer {
        * @param options Optional LLM Observability span options.
        * @returns A new function that wraps the provided function with span creation.
        */
-      wrap<T = (...args: any[]) => any> (fn: T, options: LLMObsSpanOptions): T
+      wrap<T = (...args: any[]) => any> (options: LLMObsNamelessSpanOptions, fn: T): T
 
       /**
        * Decorate a function in a javascript runtime that supports function decorators.
@@ -2261,7 +2261,7 @@ declare namespace tracer {
        * 
        * @param options Optional LLM Observability span options.
        */
-      decorate (options: llmobs.LLMObsSpanOptions): any
+      decorate (options: llmobs.LLMObsNamelessSpanOptions): any
 
       /**
        * Returns a representation of a span to export its span and trace IDs.
@@ -2269,7 +2269,7 @@ declare namespace tracer {
        * @param span Optional span to export.
        * @returns An object containing the span and trace IDs.
        */
-      exportSpan(span?: tracer.Span): llmobs.ExportedLLMObsSpan
+      exportSpan (span?: tracer.Span): llmobs.ExportedLLMObsSpan
 
 
       /**
@@ -2278,25 +2278,25 @@ declare namespace tracer {
        * @param span The span to annotate (defaults to the current LLM Observability span if not provided)
        * @param options An object containing the parameters, inputs, outputs, tags, and metrics to set on the span.
        */
-      annotate(options: llmobs.AnnotationOptions): void
-      annotate(span: tracer.Span, options: llmobs.AnnotationOptions): void
+      annotate (options: llmobs.AnnotationOptions): void
+      annotate (span: tracer.Span | undefined, options: llmobs.AnnotationOptions): void
 
       /**
        * Submits a custom evalutation metric for a given span ID and trace ID.
        * @param spanContext The span context of the span to submit the evaluation metric for.
        * @param options An object containing the label, metric type, value, and tags of the evaluation metric.
        */
-      submitEvaluation(spanContext: llmobs.ExportedLLMObsSpan, options: llmobs.EvaluationOptions): void
+      submitEvaluation (spanContext: llmobs.ExportedLLMObsSpan, options: llmobs.EvaluationOptions): void
 
       /**
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
        */
-      flush(): void
+      flush (): void
 
       /**
        * The current active LLMObs span. Undefined if there is no active LLMObs span.
        */
-      active(): tracer.Span | undefined
+      active (): tracer.Span | undefined
     }
 
     interface EvaluationOptions {
@@ -2455,11 +2455,6 @@ declare namespace tracer {
        * LLM Observability span kind. One of `agent`, `workflow`, `task`, `tool`, `retrieval`, `embedding`, or `llm`.
        */
       kind: llmobs.spanKind,
-
-      /**
-       * The name of the traced operation. As a default, the LLM Observability span kind will be used.
-       */
-      name?: string,
   
       /**
        * The ID of the underlying user session. Required for tracking sessions.
@@ -2482,6 +2477,20 @@ declare namespace tracer {
        * If not provided for LLM or embedding spans, a default value of 'custom' will be set.
        */
       modelProvider?: string,
+    }
+
+    interface LLMObsNamedSpanOptions extends LLMObsSpanOptions {
+      /**
+       * The name of the traced operation. As a default, the LLM Observability span kind will be used.
+       */
+      name: string,
+    }
+
+    interface LLMObsNamelessSpanOptions extends LLMObsSpanOptions {
+      /**
+       * The name of the traced operation. As a default, the LLM Observability span kind will be used.
+       */
+      name?: string,
     }
 
     /**

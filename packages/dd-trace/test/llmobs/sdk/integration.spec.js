@@ -13,10 +13,9 @@ const tags = {
 const AgentProxyWriter = require('../../../src/llmobs/writers/spans/agentProxy')
 const EvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
 
-const { channel } = require('dc-polyfill')
-const spanProcessCh = channel('dd-trace:span:process')
+const tracerVersion = require('../../../../../package.json').version
 
-describe.skip('end to end sdk integration tests', () => {
+describe('end to end sdk integration tests', () => {
   let tracer
   let llmobs
   let payloadGenerator
@@ -39,8 +38,8 @@ describe.skip('end to end sdk integration tests', () => {
   }
 
   before(() => {
-    spanProcessCh._subscribers = []
-    tracer = require('../../../../../')
+    delete require.cache[require.resolve('../../../../../package.json')]
+    tracer = require('../../../../dd-trace')
     tracer.init({
       llmobs: {
         mlApp: 'test'
@@ -48,8 +47,6 @@ describe.skip('end to end sdk integration tests', () => {
     })
 
     llmobs = tracer.llmobs
-    llmobs.disable()
-    llmobs.enable({ mlApp: 'test' })
 
     sinon.spy(llmobs._processor, 'process')
     sinon.stub(AgentProxyWriter.prototype, 'append')
@@ -64,11 +61,18 @@ describe.skip('end to end sdk integration tests', () => {
     process.removeAllListeners('beforeExit')
   })
 
+  after(() => {
+    sinon.restore()
+    llmobs.disable()
+    delete global._ddtrace
+    delete require.cache[require.resolve('../../../../dd-trace')]
+  })
+
   it('uses startSpan correctly', () => {
     payloadGenerator = function () {
-      const llmobsParent = llmobs.startSpan('agent', { name: 'llmobsParent' })
+      const llmobsParent = llmobs.startSpan({ kind: 'agent', name: 'llmobsParent' })
       const llmobsChild = llmobs
-        .startSpan('llm', { name: 'llmobsChild', modelName: 'model', modelProvider: 'provider' })
+        .startSpan({ kind: 'llm', name: 'llmobsChild', modelName: 'model', modelProvider: 'provider' })
       llmobs.annotate({ inputData: 'hello', outputData: 'world' })
       llmobsChild.finish()
       llmobsParent.finish()
@@ -101,11 +105,11 @@ describe.skip('end to end sdk integration tests', () => {
 
   it('uses trace correctly', () => {
     payloadGenerator = function () {
-      const result = llmobs.trace('agent', () => {
+      const result = llmobs.trace({ kind: 'agent' }, () => {
         llmobs.annotate({ inputData: 'hello', outputData: 'world', metadata: { foo: 'bar' } })
         return tracer.trace('apmSpan', () => {
           llmobs.annotate({ tags: { bar: 'baz' } }) // should use the current active llmobs span
-          return llmobs.trace('workflow', { name: 'myWorkflow' }, () => {
+          return llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {
             llmobs.annotate({ inputData: 'world', outputData: 'hello' })
             return 'boom'
           })
@@ -148,22 +152,22 @@ describe.skip('end to end sdk integration tests', () => {
         llmobs.annotate({ inputData: 'hello' })
         return apm(input)
       }
-      // eslint-disable-next-line
-      agent = llmobs.wrap('agent', agent)
+      // eslint-disable-next-line no-func-assign
+      agent = llmobs.wrap({ kind: 'agent' }, agent)
 
       function apm (input) {
         llmobs.annotate({ metadata: { foo: 'bar' } }) // should annotate the agent span
         return workflow(input)
       }
-      // eslint-disable-next-line
+      // eslint-disable-next-line no-func-assign
       apm = tracer.wrap('apm', apm)
 
       function workflow () {
         llmobs.annotate({ outputData: 'custom' })
         return 'world'
       }
-      // eslint-disable-next-line
-      workflow = llmobs.wrap('workflow', { name: 'myWorkflow' }, workflow)
+      // eslint-disable-next-line no-func-assign
+      workflow = llmobs.wrap({ kind: 'workflow', name: 'myWorkflow' }, workflow)
 
       agent('my custom input')
     }
@@ -198,17 +202,17 @@ describe.skip('end to end sdk integration tests', () => {
   it('instruments and uninstruments as needed', () => {
     payloadGenerator = function () {
       llmobs.disable()
-      const parent = llmobs.startSpan('agent', { name: 'llmobsParent' })
+      const parent = llmobs.startSpan({ kind: 'agent', name: 'llmobsParent' })
       llmobs.annotate({ inputData: 'hello', outputData: 'world' })
 
       llmobs.enable({ mlApp: 'test1' })
-      const child1 = llmobs.startSpan('workflow', { name: 'child1' })
+      const child1 = llmobs.startSpan({ kind: 'workflow', name: 'child1' })
 
       llmobs.disable()
-      const child2 = llmobs.startSpan('workflow', { name: 'child2' })
+      const child2 = llmobs.startSpan({ kind: 'workflow', name: 'child2' })
 
       llmobs.enable({ mlApp: 'test2' })
-      const child3 = llmobs.startSpan('workflow', { name: 'child3' })
+      const child3 = llmobs.startSpan({ kind: 'workflow', name: 'child3' })
 
       child3.finish()
       child2.finish()
@@ -237,11 +241,16 @@ describe.skip('end to end sdk integration tests', () => {
     ]
 
     check(expected, llmobsSpans)
+
+    // restore original mlApp
+    llmobs.disable()
+    llmobs.enable({ mlApp: 'test' })
   })
 
   it('submits evaluations', () => {
+    sinon.stub(Date, 'now').returns(1234567890)
     payloadGenerator = function () {
-      llmobs.trace('agent', { name: 'myAgent' }, () => {
+      llmobs.trace({ kind: 'agent', name: 'myAgent' }, () => {
         llmobs.annotate({ inputData: 'hello', outputData: 'world' })
         const spanCtx = llmobs.exportSpan()
         llmobs.submitEvaluation(spanCtx, {
@@ -256,5 +265,23 @@ describe.skip('end to end sdk integration tests', () => {
     expect(spans).to.have.lengthOf(1)
     expect(llmobsSpans).to.have.lengthOf(1)
     expect(evaluationMetrics).to.have.lengthOf(1)
+
+    // check eval metrics content
+    const exptected = [
+      {
+        trace_id: spans[0].context().toTraceId(true),
+        span_id: spans[0].context().toSpanId(),
+        label: 'foo',
+        metric_type: 'categorical',
+        categorical_value: 'bar',
+        ml_app: 'test',
+        timestamp_ms: 1234567890,
+        tags: [`dd-trace.version:${tracerVersion}`, 'ml_app:test']
+      }
+    ]
+
+    check(exptected, evaluationMetrics)
+
+    Date.now.restore()
   })
 })

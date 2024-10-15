@@ -27,8 +27,6 @@ const {
 } = require('../constants')
 
 const LLMObsTagger = require('./tagger')
-const AgentlessWriter = require('./writers/spans/agentless')
-const AgentProxyWriter = require('./writers/spans/agentProxy')
 
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
@@ -36,12 +34,10 @@ const logger = require('../log')
 class LLMObsSpanProcessor {
   constructor (config) {
     this._config = config
-    const { llmobs } = config
+  }
 
-    if (llmobs.enabled) {
-      const LLMObsSpanWriter = llmobs.agentlessEnabled ? AgentlessWriter : AgentProxyWriter
-      this._writer = new LLMObsSpanWriter(config)
-    }
+  setWriter (writer) {
+    this._writer = writer
   }
 
   // TODO: instead of relying on the tagger's weakmap registry, can we use some namespaced storage correlation?

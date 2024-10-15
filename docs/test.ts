@@ -558,25 +558,29 @@ llmobs.enable({
 llmobs.disable()
 
 // start span in current context
-llmobs.startSpan({ kind: 'llm' })
-llmobs.startSpan({ kind: 'embedding'})
-llmobs.startSpan({ kind: 'agent'})
-llmobs.startSpan({ kind: 'retrieval'})
-llmobs.startSpan({ kind: 'task'})
-llmobs.startSpan({ kind: 'tool'})
-llmobs.startSpan({ kind: 'workflow'})
+llmobs.startSpan({ name: 'name', kind: 'llm' })
+llmobs.startSpan({ name: 'name', kind: 'embedding'})
+llmobs.startSpan({ name: 'name', kind: 'agent'})
+llmobs.startSpan({ name: 'name', kind: 'retrieval'})
+llmobs.startSpan({ name: 'name', kind: 'task'})
+llmobs.startSpan({ name: 'name', kind: 'tool'})
+llmobs.startSpan({ name: 'name', kind: 'workflow'})
 
 // trace block of code
-llmobs.trace(() => {}, { kind: 'llm' })
-llmobs.trace(() => {}, { kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' })
-llmobs.trace((span, cb) => {
+llmobs.trace({ name: 'name', kind: 'llm' }, () => {})
+llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, () => {})
+llmobs.trace({ name: 'name', kind: 'llm' }, (span, cb) => {
+  llmobs.annotate(span, {})
   span.setTag('foo', 'bar')
   cb(new Error('boom'))
-}, { kind: 'llm' })
+})
 
 // wrap a function
-llmobs.wrap(function myLLM () {}, { kind: 'llm' })()
-llmobs.wrap(function myFunction () {}, { kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' })()
+llmobs.wrap({ kind: 'llm' }, function myLLM () {
+  const s = llmobs.active()
+  llmobs.annotate(s, {})
+})()
+llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction () {})()
 
 // decorate a function
 class MyClass {

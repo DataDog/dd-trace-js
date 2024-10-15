@@ -23,7 +23,7 @@ function validKind (kind) {
 }
 
 function getName (kind, options = {}, fn) {
-  return options.name || fn?.name || kind
+  return options.name || fn?.name || kind || ''
 }
 
 // extracts the argument names from a function string

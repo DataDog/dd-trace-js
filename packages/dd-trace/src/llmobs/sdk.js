@@ -7,19 +7,23 @@ const {
   getName,
   getFunctionArguments
 } = require('./util')
-const { storage } = require('../../../datadog-core')
 const { isTrue } = require('../util')
 
+// storage - context management
+const { storage } = require('../../../datadog-core')
+
 const Span = require('../opentracing/span')
-const LLMObsEvalMetricsWriter = require('./writers/evaluations')
-const LLMObsTagger = require('./tagger')
 
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
+
 const AgentlessWriter = require('./writers/spans/agentless')
 const AgentProxyWriter = require('./writers/spans/agentProxy')
 const LLMObsSpanProcessor = require('./span_processor')
+const LLMObsEvalMetricsWriter = require('./writers/evaluations')
+const LLMObsTagger = require('./tagger')
 
+// communicating with span processing
 const { channel } = require('dc-polyfill')
 const spanProccessCh = channel('dd-trace:span:process')
 
@@ -33,10 +37,7 @@ class LLMObs {
 
     this._handleSpanProcess = data => this._processor.process(data)
 
-    if (this.enabled) {
-      this._evaluationWriter = new LLMObsEvalMetricsWriter(config)
-      spanProccessCh.subscribe(this._handleSpanProcess)
-    }
+    this._enable()
   }
 
   get enabled () {
@@ -48,6 +49,8 @@ class LLMObs {
       logger.debug('LLMObs is already enabled.')
       return
     }
+
+    logger.debug('Enabling LLMObs')
 
     const { mlApp, agentlessEnabled, apiKey } = options
 
@@ -69,12 +72,7 @@ class LLMObs {
     this._config.configure({ ...this._config, llmobs: llmobsConfig })
     this._llmobsModule.enable(this._config)
 
-    // (re)-create writers
-    this._evaluationWriter = new LLMObsEvalMetricsWriter(this._config)
-
-    const SpanWriter = this._config.llmobs.agentlessEnabled ? AgentlessWriter : AgentProxyWriter
-    this._processor._writer = new SpanWriter(this._config)
-    spanProccessCh.subscribe(this._handleSpanProcess)
+    this._enable()
   }
 
   disable () {
@@ -91,10 +89,234 @@ class LLMObs {
     spanProccessCh.unsubscribe(this._handleSpanProcess)
 
     this._evaluationWriter.destroy()
-    this._processor._writer.destroy()
+    this._spanWriter.destroy()
 
     this._evaluationWriter = null
-    this._processor._writer = null
+    this._spanWriter = null
+    this._processor.setWriter(null)
+  }
+
+  startSpan (options = {}) {
+    if (!this.enabled) {
+      logger.warn('Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.')
+    }
+
+    const kind = options.kind
+    const valid = validKind(kind)
+    if (!valid) {
+      logger.warn(`Invalid span kind specified: ${kind}. Span will not be sent to LLM Observability.`)
+    }
+
+    const name = getName(kind, options)
+
+    const {
+      spanOptions,
+      ...llmobsOptions
+    } = this._extractOptions(options)
+
+    const span = this._tracer.startSpan(name, {
+      ...spanOptions,
+      childOf: this._tracer.scope().active()
+    })
+
+    // we need the span to finish in the same context it was started
+    const originalFinish = span.finish
+    span.finish = function () {
+      span.finish = originalFinish
+      storage.enterWith(oldStore)
+      return originalFinish.apply(span, arguments)
+    }
+
+    const oldStore = storage.getStore()
+    const parentLLMObsSpan = oldStore?.llmobsSpan
+
+    this._tagger.setLLMObsSpanTags(span, valid && kind, {
+      ...llmobsOptions,
+      parentLLMObsSpan
+    })
+    const newStore = span ? span._store : oldStore
+
+    if (this.enabled) {
+      storage.enterWith({ ...newStore, span, llmobsSpan: span })
+    } else {
+      storage.enterWith({ ...newStore, span })
+    }
+
+    return span
+  }
+
+  trace (options = {}, fn) {
+    if (!this.enabled) {
+      logger.warn('Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.')
+    }
+
+    if (typeof options === 'function') {
+      fn = options
+      options = {}
+    }
+
+    const kind = options.kind
+    const valid = validKind(kind)
+    if (!valid) {
+      logger.warn(`Invalid span kind specified: ${kind}. Span will not be sent to LLM Observability.`)
+    }
+
+    const name = getName(kind, options)
+
+    const {
+      spanOptions,
+      ...llmobsOptions
+    } = this._extractOptions(options)
+
+    if (fn.length > 1) {
+      return this._tracer.trace(name, spanOptions, (span, cb) => {
+        const oldStore = storage.getStore()
+        const parentLLMObsSpan = oldStore?.llmobsSpan
+        if (this.enabled) storage.enterWith({ ...oldStore, llmobsSpan: span })
+
+        this._tagger.setLLMObsSpanTags(span, valid && kind, {
+          ...llmobsOptions,
+          parentLLMObsSpan
+        })
+
+        return fn(span, err => {
+          storage.enterWith(oldStore)
+          cb(err)
+        })
+      })
+    }
+
+    return this._tracer.trace(name, spanOptions, span => {
+      const oldStore = storage.getStore()
+      const parentLLMObsSpan = oldStore?.llmobsSpan
+      if (this.enabled) storage.enterWith({ ...oldStore, llmobsSpan: span })
+
+      this._tagger.setLLMObsSpanTags(span, valid && kind, {
+        ...llmobsOptions,
+        parentLLMObsSpan
+      })
+
+      try {
+        const result = fn(span)
+
+        if (result && typeof result.then === 'function') {
+          return result.then(value => {
+            storage.enterWith(oldStore)
+            return value
+          }).catch(err => {
+            storage.enterWith(oldStore)
+            throw err
+          })
+        }
+
+        storage.enterWith(oldStore)
+        return result
+      } catch (e) {
+        storage.enterWith(oldStore)
+        throw e
+      }
+    })
+  }
+
+  wrap (options = {}, fn) {
+    if (typeof options === 'function') {
+      fn = options
+      options = {}
+    }
+
+    const kind = options.kind
+    const name = getName(kind, options, fn)
+
+    const {
+      spanOptions,
+      ...llmobsOptions
+    } = this._extractOptions(options)
+
+    const llmobs = this
+
+    function wrapped () {
+      if (!llmobs.enabled) {
+        logger.warn('Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.')
+      }
+
+      const valid = validKind(kind)
+      if (!valid) {
+        logger.warn(`Invalid span kind specified: ${kind}. Span will not be sent to LLM Observability.`)
+      }
+
+      const span = llmobs._tracer.scope().active()
+      const oldStore = storage.getStore()
+      const parentLLMObsSpan = oldStore?.llmobsSpan
+      if (llmobs.enabled) storage.enterWith({ ...oldStore, llmobsSpan: span })
+
+      llmobs._tagger.setLLMObsSpanTags(span, valid && kind, {
+        ...llmobsOptions,
+        parentLLMObsSpan
+      })
+      llmobs.annotate(span, { inputData: getFunctionArguments(fn, arguments) })
+
+      try {
+        const result = fn.apply(this, arguments)
+
+        if (result && typeof result.then === 'function') {
+          return result.then(value => {
+            if (value && kind !== 'retrieval' && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
+              llmobs.annotate(span, { outputData: value })
+            }
+            storage.enterWith(oldStore)
+            return value
+          }).catch(err => {
+            storage.enterWith(oldStore)
+            throw err
+          })
+        }
+
+        if (result && kind !== 'retrieval' && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
+          llmobs.annotate(span, { outputData: result })
+          storage.enterWith(oldStore)
+        }
+
+        return result
+      } catch (e) {
+        storage.enterWith(oldStore)
+        throw e
+      }
+    }
+
+    return this._tracer.wrap(name, spanOptions, wrapped)
+  }
+
+  decorate (options = {}) {
+    const llmobs = this
+    return function (target, ctxOrPropertyKey, descriptor) {
+      if (!ctxOrPropertyKey) return target
+      if (typeof ctxOrPropertyKey === 'object') {
+        const ctx = ctxOrPropertyKey
+        if (ctx.kind !== 'method') return target
+
+        return llmobs.wrap(target, { name: ctx.name, ...options })
+      } else {
+        const propertyKey = ctxOrPropertyKey
+        if (descriptor) {
+          if (typeof descriptor.value !== 'function') return descriptor
+
+          const original = descriptor.value
+          descriptor.value = llmobs.wrap(original, { name: propertyKey, ...options })
+
+          return descriptor
+        } else {
+          if (typeof target[propertyKey] !== 'function') return target[propertyKey]
+
+          const original = target[propertyKey]
+          Object.defineProperty(target, propertyKey, {
+            ...Object.getOwnPropertyDescriptor(target, propertyKey),
+            value: llmobs.wrap(original, { name: propertyKey, ...options })
+          })
+
+          return target
+        }
+      }
+    }
   }
 
   annotate (span, options) {
@@ -173,13 +395,13 @@ class LLMObs {
 
     span = span || this.active()
 
-    if (!(span instanceof Span)) {
-      logger.warn('Span must be a valid Span object.')
+    if (!span) {
+      logger.warn('No span provided and no active LLMObs-generated span found')
       return
     }
 
-    if (!span) {
-      logger.warn('No span provided and no active LLMObs-generated span found')
+    if (!(span instanceof Span)) {
+      logger.warn('Span must be a valid Span object.')
       return
     }
 
@@ -285,219 +507,6 @@ class LLMObs {
     })
   }
 
-  startSpan (options = {}) {
-    if (!this.enabled) {
-      logger.warn('Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.')
-    }
-
-    const kind = options.kind
-    const valid = validKind(kind)
-    if (!valid) {
-      logger.warn(`Invalid span kind specified: ${kind}. Span will not be sent to LLM Observability.`)
-    }
-
-    const name = getName(kind, options)
-
-    const {
-      spanOptions,
-      ...llmobsOptions
-    } = this._extractOptions(options)
-
-    const span = this._tracer.startSpan(name, {
-      ...spanOptions,
-      childOf: this._tracer.scope().active()
-    })
-
-    // we need the span to finish in the same context it was started
-    const originalFinish = span.finish
-    span.finish = function () {
-      span.finish = originalFinish
-      storage.enterWith(oldStore)
-      return originalFinish.apply(span, arguments)
-    }
-
-    const oldStore = storage.getStore()
-    const parentLLMObsSpan = oldStore?.llmobsSpan
-
-    this._tagger.setLLMObsSpanTags(span, valid && kind, {
-      ...llmobsOptions,
-      parentLLMObsSpan
-    })
-    const newStore = span ? span._store : oldStore
-
-    if (this.enabled) {
-      storage.enterWith({ ...newStore, span, llmobsSpan: span })
-    } else {
-      storage.enterWith({ ...newStore, span })
-    }
-
-    return span
-  }
-
-  trace (fn, options = {}) {
-    if (!this.enabled) {
-      logger.warn('Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.')
-    }
-
-    const kind = options.kind
-    const valid = validKind(kind)
-    if (!valid) {
-      logger.warn(`Invalid span kind specified: ${kind}. Span will not be sent to LLM Observability.`)
-    }
-
-    const name = getName(kind, options)
-
-    const {
-      spanOptions,
-      ...llmobsOptions
-    } = this._extractOptions(options)
-
-    if (fn.length > 1) {
-      return this._tracer.trace(name, spanOptions, (span, cb) => {
-        const oldStore = storage.getStore()
-        const parentLLMObsSpan = oldStore?.llmobsSpan
-        if (this.enabled) storage.enterWith({ ...oldStore, llmobsSpan: span })
-
-        this._tagger.setLLMObsSpanTags(span, valid && kind, {
-          ...llmobsOptions,
-          parentLLMObsSpan
-        })
-
-        return fn(span, err => {
-          storage.enterWith(oldStore)
-          cb(err)
-        })
-      })
-    }
-
-    return this._tracer.trace(name, spanOptions, span => {
-      const oldStore = storage.getStore()
-      const parentLLMObsSpan = oldStore?.llmobsSpan
-      if (this.enabled) storage.enterWith({ ...oldStore, llmobsSpan: span })
-
-      this._tagger.setLLMObsSpanTags(span, valid && kind, {
-        ...llmobsOptions,
-        parentLLMObsSpan
-      })
-
-      try {
-        const result = fn(span)
-
-        if (result && typeof result.then === 'function') {
-          return result.then(value => {
-            storage.enterWith(oldStore)
-            return value
-          }).catch(err => {
-            storage.enterWith(oldStore)
-            throw err
-          })
-        }
-
-        storage.enterWith(oldStore)
-        return result
-      } catch (e) {
-        storage.enterWith(oldStore)
-        throw e
-      }
-    })
-  }
-
-  wrap (fn, options = {}) {
-    const kind = options.kind
-    const name = getName(kind, options, fn)
-
-    const {
-      spanOptions,
-      ...llmobsOptions
-    } = this._extractOptions(options)
-
-    const llmobs = this
-
-    function wrapped () {
-      if (!llmobs.enabled) {
-        logger.warn('Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.')
-      }
-
-      const valid = validKind(kind)
-      if (!valid) {
-        logger.warn(`Invalid span kind specified: ${kind}. Span will not be sent to LLM Observability.`)
-      }
-
-      const span = llmobs._tracer.scope().active()
-      const oldStore = storage.getStore()
-      const parentLLMObsSpan = oldStore?.llmobsSpan
-      if (llmobs.enabled) storage.enterWith({ ...oldStore, llmobsSpan: span })
-
-      llmobs._tagger.setLLMObsSpanTags(span, valid && kind, {
-        ...llmobsOptions,
-        parentLLMObsSpan
-      })
-      llmobs.annotate(span, { inputData: getFunctionArguments(fn, arguments) })
-
-      try {
-        const result = fn.apply(this, arguments)
-
-        if (result && typeof result.then === 'function') {
-          return result.then(value => {
-            if (value && kind !== 'retrieval' && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
-              llmobs.annotate(span, { outputData: value })
-            }
-            storage.enterWith(oldStore)
-            return value
-          }).catch(err => {
-            storage.enterWith(oldStore)
-            throw err
-          })
-        }
-
-        if (result && kind !== 'retrieval' && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
-          llmobs.annotate(span, { outputData: result })
-          storage.enterWith(oldStore)
-        }
-
-        return result
-      } catch (e) {
-        storage.enterWith(oldStore)
-        throw e
-      }
-    }
-
-    return this._tracer.wrap(name, spanOptions, wrapped)
-  }
-
-  decorate (options = {}) {
-    const llmobs = this
-    return function (target, ctxOrPropertyKey, descriptor) {
-      if (!ctxOrPropertyKey) return target
-      if (typeof ctxOrPropertyKey === 'object') {
-        const ctx = ctxOrPropertyKey
-        if (ctx.kind !== 'method') return target
-
-        return llmobs.wrap(target, { name: ctx.name, ...options })
-      } else {
-        const propertyKey = ctxOrPropertyKey
-        if (descriptor) {
-          if (typeof descriptor.value !== 'function') return descriptor
-
-          const original = descriptor.value
-          descriptor.value = llmobs.wrap(original, { name: propertyKey, ...options })
-
-          return descriptor
-        } else {
-          if (typeof target[propertyKey] !== 'function') return target[propertyKey]
-
-          const original = target[propertyKey]
-          Object.defineProperty(target, propertyKey, {
-            ...Object.getOwnPropertyDescriptor(target, propertyKey),
-            value: llmobs.wrap(original, { name: propertyKey, ...options })
-          })
-
-          return target
-        }
-      }
-    }
-  }
-
   flush () {
     if (!this.enabled) {
       logger.warn('Flushing when LLMObs is disabled. No spans or evaluation metrics will be sent')
@@ -515,6 +524,19 @@ class LLMObs {
   active () {
     const store = storage.getStore()
     return store?.llmobsSpan
+  }
+
+  _enable () {
+    this._evaluationWriter = new LLMObsEvalMetricsWriter(this._config)
+    this._spanWriter = this._createSpanWriter()
+
+    this._processor.setWriter(this._spanWriter)
+    spanProccessCh.subscribe(this._handleSpanProcess)
+  }
+
+  _createSpanWriter () {
+    const SpanWriter = this._config.llmobs.agentlessEnabled ? AgentlessWriter : AgentProxyWriter
+    return new SpanWriter(this._config)
   }
 
   _extractOptions (options) {

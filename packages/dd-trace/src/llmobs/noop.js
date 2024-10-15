@@ -1,8 +1,11 @@
 'use strict'
 
+const Span = require('../noop/span')
+
 class NoopLLMObs {
   constructor (noopTracer) {
     this._tracer = noopTracer
+    this._span = new Span(noopTracer)
   }
 
   get enabled () {
@@ -13,27 +16,27 @@ class NoopLLMObs {
 
   disable () {}
 
-  annotate (span, options) {}
-
-  exportSpan (span) {}
-
-  submitEvaluation (llmobsSpanContext, options) {}
-
   startSpan (options = {}) {
     const name = options.name || options.kind
     return this._tracer.startSpan(name, options)
   }
 
-  trace (fn, options = {}) {
-    if (typeof fn !== 'function') return
+  trace (options = {}, fn) {
+    if (typeof options === 'function') {
+      fn = options
+      options = {}
+    }
 
     const name = options.name || options.kind || fn.name
 
     return this._tracer.trace(name, options, fn)
   }
 
-  wrap (fn, options = {}) {
-    if (typeof fn !== 'function') return fn
+  wrap (options = {}, fn) {
+    if (typeof options === 'function') {
+      fn = options
+      options = {}
+    }
 
     const name = options.name || options.kind || fn.name
 
@@ -73,7 +76,19 @@ class NoopLLMObs {
     }
   }
 
+  annotate (span, options) {}
+
+  exportSpan (span) {
+    return {}
+  }
+
+  submitEvaluation (llmobsSpanContext, options) {}
+
   flush () {}
+
+  active () {
+    return this._span
+  }
 }
 
 module.exports = NoopLLMObs
