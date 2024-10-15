@@ -17,9 +17,8 @@ function getNumTests (knownTests) {
 
   for (const testModule of Object.values(knownTests)) {
     for (const testSuite of Object.values(testModule)) {
-      for (const testList of Object.values(testSuite)) {
-        totalNumTests += testList.length
-      }
+      // test suites are arrays of tests
+      totalNumTests += testSuite.length
     }
   }
 
