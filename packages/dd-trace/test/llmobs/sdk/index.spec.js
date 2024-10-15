@@ -87,6 +87,7 @@ describe('sdk', () => {
     llmobs.disable()
     delete global._ddtrace
     delete require.cache[require.resolve('../../../../dd-trace')]
+    delete require.cache[require.resolve('../../../src/log')]
   })
 
   describe('enabled', () => {
