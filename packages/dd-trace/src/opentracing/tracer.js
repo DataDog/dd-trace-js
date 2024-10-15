@@ -59,7 +59,7 @@ class DatadogTracer {
 
     // As per unified service tagging spec if a span is created with a service name different from the global
     // service name it will not inherit the global version value
-    if (options?.tags?.service && options?.tags?.service !== this._service) {
+    if (options?.tags?.service && options.tags.service !== this._service) {
       options.tags.version = undefined
     }
 
