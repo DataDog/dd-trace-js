@@ -6,6 +6,7 @@ const remoteConfig = require('./remote_config')
 const {
   bodyParser,
   cookieParser,
+  multerParser,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   passportVerify,
@@ -57,6 +58,7 @@ function enable (_config) {
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
     bodyParser.subscribe(onRequestBodyParsed)
+    multerParser.subscribe(onRequestBodyParsed)
     nextBodyParsed.subscribe(onRequestBodyParsed)
     nextQueryParsed.subscribe(onRequestQueryParsed)
     queryParser.subscribe(onRequestQueryParsed)
