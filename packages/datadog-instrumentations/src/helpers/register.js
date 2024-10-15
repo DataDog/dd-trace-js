@@ -25,7 +25,7 @@ const disabledInstrumentations = new Set(
 // Check for DD_TRACE_<INTEGRATION>_ENABLED environment variables
 for (const [key, value] of Object.entries(process.env)) {
   const match = key.match(/^DD_TRACE_(.+)_ENABLED$/)
-  if (match && value.toLowerCase() === 'false') {
+  if (match && (value.toLowerCase() === 'false' || value === '0')) {
     const integration = match[1].toLowerCase()
     disabledInstrumentations.add(integration)
   }

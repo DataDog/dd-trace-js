@@ -1148,15 +1148,20 @@ class Config {
 
     if (typeof value === 'string') {
       // Split by commas and trim each item in header tags mapping
-      if (name === 'headerTags') {
-        value = value.split(',').map(item => {
-          // Trim each item and remove whitespace around the colon
-          const [key, val] = item.split(':').map(part => part.trim())
-          return val !== undefined ? `${key}:${val}` : key
-        })
-      } else {
-        value = value.split(',')
-      }
+      // if (name === 'headerTags') {
+      //   value = value.split(',').map(item => {
+      //     // Trim each item and remove whitespace around the colon
+      //     const [key, val] = item.split(':').map(part => part.trim())
+      //     return val !== undefined ? `${key}:${val}` : key
+      //   })
+      // } else {
+      //   value = value.split(',')
+      // }
+      value = value.split(',').map(item => {
+        // Trim each item and remove whitespace around the colon
+        const [key, val] = item.split(':').map(part => part.trim())
+        return val !== undefined ? `${key}:${val}` : key
+      })
     }
 
     if (Array.isArray(value)) {
