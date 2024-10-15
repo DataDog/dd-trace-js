@@ -37,7 +37,7 @@ class LLMObs {
 
     this._handleSpanProcess = data => this._processor.process(data)
 
-    this._enable()
+    if (this.enabled) this._enable()
   }
 
   get enabled () {
