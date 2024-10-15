@@ -514,7 +514,7 @@ class LLMObs {
     }
 
     try {
-      this._processor._writer.flush()
+      this._spanWriter.flush()
       this._evaluationWriter.flush()
     } catch {
       logger.warn('Failed to flush LLMObs spans and evaluation metrics')

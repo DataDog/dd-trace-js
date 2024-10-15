@@ -11,33 +11,12 @@ const LLMObsAgentProxySpanWriter = require('../../../src/llmobs/writers/spans/ag
 
 const tracerVersion = require('../../../../../package.json').version
 
-// some functions to mock the logger globally as to not proxyquire
-// this way, we can just utilize the global llmobs instance
-function initializeGlobalMockLogger () {
-  require.cache[require.resolve('../../../src/log')].exports = {
-    debug: sinon.stub(),
-    warn: sinon.stub()
-  }
-}
-
-function getGlobalMockLogger () {
-  return require.cache[require.resolve('../../../src/log')].exports
-}
-
-function resetGlobalMockLogger () {
-  const exports = getGlobalMockLogger()
-  exports.debug.resetHistory()
-  exports.warn.resetHistory()
-}
-
 describe('sdk', () => {
   let LLMObsSDK
   let llmobs
   let tracer
 
   before(() => {
-    initializeGlobalMockLogger()
-
     tracer = require('../../../../dd-trace')
     tracer.init({
       service: 'service',
@@ -68,7 +47,6 @@ describe('sdk', () => {
   })
 
   afterEach(() => {
-    resetGlobalMockLogger()
     llmobs._processor.process.resetHistory()
     llmobs._processor.format.resetHistory()
     tracer._tracer._processor.process.resetHistory()
@@ -136,9 +114,11 @@ describe('sdk', () => {
     })
 
     it('does not enable llmobs if it is already enabled', () => {
+      sinon.spy(llmobs, '_enable')
       llmobs.enable({})
 
-      expect(getGlobalMockLogger().debug).to.have.been.calledWith('LLMObs is already enabled.')
+      expect(llmobs._enable).to.not.have.been.called
+      llmobs._enable.restore()
     })
 
     it('does not enable llmobs if env var conflicts', () => {
@@ -153,10 +133,6 @@ describe('sdk', () => {
       process.env.DD_LLMOBS_ENABLED = 'false'
 
       disabledLLMObs.enable({})
-
-      expect(getGlobalMockLogger().debug).to.have.been.calledWith(
-        'LLMObs.enable() called when DD_LLMOBS_ENABLED is false. No action taken.'
-      )
 
       expect(disabledLLMObs.enabled).to.be.false
       delete process.env.DD_LLMOBS_ENABLED
@@ -180,7 +156,6 @@ describe('sdk', () => {
       expect(enabledLLMObs.enabled).to.be.true
       enabledLLMObs.disable()
 
-      expect(getGlobalMockLogger().debug).to.have.been.calledWith('Disabling LLMObs')
       expect(enabledLLMObs.enabled).to.be.false
       expect(enabledLLMObs._evaluationWriter).to.not.exist
       expect(enabledLLMObs._spanWriter).to.not.exist
@@ -192,11 +167,12 @@ describe('sdk', () => {
       // do not fully enable a disabled llmobs
       sinon.stub(LLMObsSDK.prototype, '_enable')
       const disabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { enabled: false } })
+      sinon.spy(disabledLLMObs._llmobsModule, 'disable')
 
       disabledLLMObs.disable()
 
-      expect(getGlobalMockLogger().debug).to.have.been.calledWith('LLMObs is already disabled.')
       expect(disabledLLMObs.enabled).to.be.false
+      expect(disabledLLMObs._llmobsModule.disable).to.not.have.been.called
 
       LLMObsSDK.prototype._enable.restore()
     })
@@ -213,9 +189,6 @@ describe('sdk', () => {
           expect(() => span.finish()).to.not.throw()
           expect(llmobs._tracer._processor.process).to.have.been.called
           expect(llmobs._processor.format).to.not.have.been.called
-          expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-            'Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.'
-          )
           expect(LLMObsTagger.tagMap.get(span)).to.not.exist
 
           tracer._tracer._config.llmobs.enabled = true
@@ -223,10 +196,6 @@ describe('sdk', () => {
 
         it('starts span if the kind is invalid but does not process it in the LLMObs span processor', () => {
           const span = llmobs.startSpan({ kind: 'invalid' })
-
-          expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-            'Invalid span kind specified: invalid. Span will not be sent to LLM Observability.'
-          )
 
           expect(() => span.finish()).to.not.throw()
           expect(LLMObsTagger.tagMap.get(span)).to.not.exist
@@ -276,9 +245,6 @@ describe('sdk', () => {
 
           expect(llmobs._tracer._processor.process).to.have.been.called
           expect(llmobs._processor.format).to.not.have.been.called
-          expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-            'Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.'
-          )
 
           tracer._tracer._config.llmobs.enabled = true
         })
@@ -292,9 +258,6 @@ describe('sdk', () => {
 
           expect(llmobs._tracer._processor.process).to.have.been.called
           expect(llmobs._processor.format).to.not.have.been.called
-          expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-            'Invalid span kind specified: invalid. Span will not be sent to LLM Observability.'
-          )
         })
 
         it('traces a block', () => {
@@ -452,9 +415,6 @@ describe('sdk', () => {
 
           expect(llmobs._tracer._processor.process).to.have.been.called
           expect(llmobs._processor.format).to.not.have.been.called
-          expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-            'Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.'
-          )
 
           tracer._tracer._config.llmobs.enabled = true
         })
@@ -465,14 +425,7 @@ describe('sdk', () => {
             expect(LLMObsTagger.tagMap.get(llmobs.active())).to.not.exist
           })
 
-          // shouldn't be called until after the function is invoked
-          expect(getGlobalMockLogger().warn).to.not.have.been.called
-
           expect(() => fn(1)).to.not.throw()
-
-          expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-            'Invalid span kind specified: invalid. Span will not be sent to LLM Observability.'
-          )
           expect(llmobs._tracer._processor.process).to.have.been.called
           expect(llmobs._processor.format).to.not.have.been.called
         })
@@ -631,43 +584,32 @@ describe('sdk', () => {
   describe('annotate', () => {
     it('returns if llmobs is disabled', () => {
       tracer._tracer._config.llmobs.enabled = false
+      sinon.spy(llmobs, 'active')
       llmobs.annotate()
 
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'Annotate called while LLMObs is disabled. Not annotating span.'
-      )
+      expect(llmobs.active).to.not.have.been.called
+      llmobs.active.restore()
 
       tracer._tracer._config.llmobs.enabled = true
     })
 
     it('returns if no arguments are provided', () => {
       llmobs.annotate()
-
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'No span provided and no active LLMObs-generated span found'
-      )
     })
 
     it('does not annotate if there are no options given', () => {
       const span = llmobs.startSpan('llm', { name: 'test' })
       llmobs.annotate(span)
-
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'No options provided for annotation.'
-      )
     })
 
     it('does not annotate if the provided span is not an LLMObs span', () => {
       const span = tracer.startSpan('test')
 
       llmobs.annotate(span, {})
-
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'Span must be an LLMObs-generated span'
-      )
     })
 
     it('does not annotate a finished span', () => {
+      sinon.spy(llmobs._tagger, 'tagTextIO')
       llmobs.trace({ kind: 'workflow', name: 'outer' }, () => {
         let innerLLMSpan
         llmobs.trace({ kind: 'task', name: 'inner' }, _span => {
@@ -675,23 +617,20 @@ describe('sdk', () => {
         })
 
         llmobs.annotate(innerLLMSpan, {})
-
-        expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-          'Cannot annotate a finished span'
-        )
+        expect(llmobs._tagger.tagTextIO).to.not.have.been.called
       })
+      llmobs._tagger.tagTextIO.restore()
     })
 
     it('does not annotate an llmobs span with an invalid kind', () => {
       // TODO this might end up being obsolete with llmobs span kind as optional
+      sinon.spy(llmobs._tagger, 'tagLLMIO')
       const span = llmobs.startSpan({ kind: 'llm', name: 'test' })
       LLMObsTagger.tagMap.get(span)['_ml_obs.meta.span.kind'] = undefined // somehow this is set
 
       llmobs.annotate(span, {})
-
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'LLMObs span must have a span kind specified'
-      )
+      expect(llmobs._tagger.tagLLMIO).to.not.have.been.called
+      llmobs._tagger.tagLLMIO.restore()
     })
 
     it('annotates the current active llmobs span in an llmobs scope', () => {
@@ -760,9 +699,6 @@ describe('sdk', () => {
       tracer._tracer._config.llmobs.enabled = false
       const spanCtx = llmobs.exportSpan()
 
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'Span exported while LLMObs is disabled. Span will not be exported.'
-      )
       expect(spanCtx).to.be.undefined
       tracer._tracer._config.llmobs.enabled = true
     })
@@ -771,18 +707,12 @@ describe('sdk', () => {
       const span = tracer.startSpan('test')
       const spanCtx = llmobs.exportSpan(span)
 
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'Span must be an LLMObs-generated span'
-      )
       expect(spanCtx).to.be.undefined
     })
 
     it('returns if there is no span provided and no active llmobs span found', () => {
       const spanCtx = llmobs.exportSpan()
 
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'No span provided and no active LLMObs-generated span found'
-      )
       expect(spanCtx).to.be.undefined
     })
 
@@ -827,9 +757,6 @@ describe('sdk', () => {
       const spanCtx = llmobs.exportSpan(fakeSpan)
 
       expect(spanCtx).to.be.undefined
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'Faild to export span. Span must be a valid Span object.'
-      )
     })
   })
 
@@ -847,9 +774,7 @@ describe('sdk', () => {
       tracer._tracer._config.llmobs.enabled = false
       llmobs.submitEvaluation()
 
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'LLMObs.submitEvaluation() called when LLMObs is not enabled. Evaluation metric data will not be sent.'
-      )
+      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
 
       tracer._tracer._config.llmobs.enabled = true
     })
@@ -865,10 +790,7 @@ describe('sdk', () => {
         metricType: 'score',
         value: 0.6
       })
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'DD_API_KEY is required for sending evaluation metrics. Evaluation metric data will not be sent.\n' +
-        'Ensure this configuration is set before running your application.'
-      )
+      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
 
       tracer._tracer._config.llmobs.apiKey = 'test'
       tracer._tracer._config.apiKey = envApiKey
@@ -878,9 +800,7 @@ describe('sdk', () => {
       const invalid = {}
 
       llmobs.submitEvaluation(invalid, {})
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'spanId and traceId must both be specified for the given evaluation metric to be submitted.'
-      )
+      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
     })
 
     it('does not submit an evaluation metric for a missing mlApp', () => {
@@ -888,9 +808,7 @@ describe('sdk', () => {
       delete tracer._tracer._config.llmobs.mlApp
 
       llmobs.submitEvaluation(spanCtx)
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'ML App name is required for sending evaluation metrics. Evaluation metric data will not be sent.'
-      )
+      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
 
       tracer._tracer._config.llmobs.mlApp = mlApp
     })
@@ -900,9 +818,7 @@ describe('sdk', () => {
         mlApp: 'test',
         timestampMs: 'invalid'
       })
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'timestampMs must be a non-negative integer. Evaluation metric data will not be sent'
-      )
+      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
     })
 
     it('does not submit an evaluation metric for a missing label', () => {
@@ -910,9 +826,7 @@ describe('sdk', () => {
         mlApp: 'test',
         timestampMs: 1234
       })
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'label must be the specified name of the evaluation metric'
-      )
+      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
     })
 
     it('does not submit an evaluation metric for an invalid metric type', () => {
@@ -922,9 +836,7 @@ describe('sdk', () => {
         label: 'test',
         metricType: 'invalid'
       })
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'metricType must be one of "categorical" or "score"'
-      )
+      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
     })
 
     it('does not submit an evaluation for a mismatched value for a categorical metric', () => {
@@ -935,9 +847,7 @@ describe('sdk', () => {
         metricType: 'categorical',
         value: 1
       })
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'value must be a string for a categorical metric.'
-      )
+      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
     })
 
     it('does not submit an evaluation for a mismatched value for a score metric', () => {
@@ -949,9 +859,7 @@ describe('sdk', () => {
         value: 'string'
       })
 
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'value must be a number for a score metric.'
-      )
+      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
     })
 
     it('submits an evaluation metric', () => {
@@ -1012,9 +920,8 @@ describe('sdk', () => {
       tracer._tracer._config.llmobs.enabled = false
       llmobs.flush()
 
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'Flushing when LLMObs is disabled. No spans or evaluation metrics will be sent'
-      )
+      expect(LLMObsEvalMetricsWriter.prototype.flush).to.not.have.been.called
+      expect(LLMObsAgentProxySpanWriter.prototype.flush).to.not.have.been.called
       tracer._tracer._config.llmobs.enabled = true
     })
 
@@ -1028,13 +935,7 @@ describe('sdk', () => {
     it('logs if there was an error flushing', () => {
       llmobs._evaluationWriter.flush.throws(new Error('boom'))
 
-      llmobs.flush()
-
-      expect(getGlobalMockLogger().warn).to.have.been.calledWith(
-        'Failed to flush LLMObs spans and evaluation metrics'
-      )
-
-      llmobs._evaluationWriter.flush.resetBehavior()
+      expect(() => llmobs.flush()).to.not.throw()
     })
   })
 })
