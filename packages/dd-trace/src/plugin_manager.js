@@ -137,7 +137,8 @@ module.exports = class PluginManager {
       dsmEnabled,
       clientIpEnabled,
       memcachedCommandEnabled,
-      ciVisibilityTestSessionName
+      ciVisibilityTestSessionName,
+      ciVisAgentlessLogSubmissionEnabled
     } = this._tracerConfig
 
     const sharedConfig = {
@@ -147,7 +148,8 @@ module.exports = class PluginManager {
       site,
       url,
       headers: headerTags || [],
-      ciVisibilityTestSessionName
+      ciVisibilityTestSessionName,
+      ciVisAgentlessLogSubmissionEnabled
     }
 
     if (logInjection !== undefined) {

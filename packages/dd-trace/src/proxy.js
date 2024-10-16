@@ -164,6 +164,18 @@ class Tracer extends NoopProxy {
           this._testApiManualPlugin.configure({ ...config, enabled: true })
         }
       }
+      if (config.ciVisAgentlessLogSubmissionEnabled) {
+        if (process.env.DD_API_KEY) {
+          const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
+          const automaticLogPlugin = new LogSubmissionPlugin(this)
+          automaticLogPlugin.configure({ ...config, enabled: true })
+        } else {
+          log.warn(
+            'DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set, ' +
+            'but DD_API_KEY is undefined, so no automatic log submission will be performed.'
+          )
+        }
+      }
     } catch (e) {
       log.error(e)
     }

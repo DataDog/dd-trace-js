@@ -152,7 +152,9 @@ interface Plugins {
   "amqp10": tracer.plugins.amqp10;
   "amqplib": tracer.plugins.amqplib;
   "apollo": tracer.plugins.apollo;
+  "avsc": tracer.plugins.avsc;
   "aws-sdk": tracer.plugins.aws_sdk;
+  "azure-functions": tracer.plugins.azure_functions;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
   "child_process": tracer.plugins.child_process;
@@ -195,6 +197,7 @@ interface Plugins {
   "playwright": tracer.plugins.playwright;
   "pg": tracer.plugins.pg;
   "pino": tracer.plugins.pino;
+  "protobufjs": tracer.plugins.protobufjs;
   "redis": tracer.plugins.redis;
   "restify": tracer.plugins.restify;
   "rhea": tracer.plugins.rhea;
@@ -1207,6 +1210,12 @@ declare namespace tracer {
     }
 
     /**
+     * This plugin automatically patches the [avsc](https://github.com/mtth/avsc) module
+     * to collect avro message schemas when Datastreams Monitoring is enabled.
+     */
+    interface avsc extends Integration {}
+
+    /**
      * This plugin automatically instruments the
      * [aws-sdk](https://github.com/aws/aws-sdk-js) module.
      */
@@ -1243,6 +1252,12 @@ declare namespace tracer {
        */
       [key: string]: boolean | Object | undefined;
     }
+
+    /**
+     * This plugin automatically instruments the
+     * @azure/functions module.
+    */
+    interface azure_functions extends Instrumentation {}
 
     /**
      * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
@@ -1746,6 +1761,11 @@ declare namespace tracer {
      * on the tracer.
      */
     interface pino extends Integration {}
+    /**
+     * This plugin automatically patches the [protobufjs](https://protobufjs.github.io/protobuf.js/)
+     * to collect protobuf message schemas when Datastreams Monitoring is enabled.
+     */
+    interface protobufjs extends Integration {}
 
     /**
      * This plugin automatically instruments the
@@ -2160,6 +2180,12 @@ declare namespace tracer {
      * @default 2
      */
     maxContextOperations?: number,
+
+    /**
+     * Defines the pattern to ignore cookie names in the vulnerability hash calculation
+     * @default ".{32,}"
+     */
+    cookieFilterPattern?: string,
 
     /**
      * Whether to enable vulnerability deduplication
