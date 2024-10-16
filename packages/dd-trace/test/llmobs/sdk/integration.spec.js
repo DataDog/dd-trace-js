@@ -60,6 +60,9 @@ describe('end to end sdk integration tests', () => {
     EvalMetricsWriter.prototype.append.resetHistory()
 
     process.removeAllListeners('beforeExit')
+
+    llmobs.disable()
+    llmobs.enable({ mlApp: 'test', apiKey: 'test' })
   })
 
   after(() => {
@@ -242,10 +245,6 @@ describe('end to end sdk integration tests', () => {
     ]
 
     check(expected, llmobsSpans)
-
-    // restore original mlApp
-    llmobs.disable()
-    llmobs.enable({ mlApp: 'test' })
   })
 
   it('submits evaluations', () => {

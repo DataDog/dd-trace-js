@@ -7,6 +7,7 @@ const { storage } = require('../../../datadog-core')
 const { channel } = require('dc-polyfill')
 const injectCh = channel('dd-trace:span:inject')
 
+// this is where we will enable and disable LLMObs plugins
 function enable (config) {
   injectCh.subscribe(handleLLMObsParentIdInjection)
 }
