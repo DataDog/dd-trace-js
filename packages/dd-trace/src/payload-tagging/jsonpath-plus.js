@@ -2,13 +2,46 @@
 
 // NOTE(bengl): This file is taken directly from jsonpath-plus@10.0.0
 //
-// https://github.com/JSONPath-Plus/JSONPath/blob/a04dcbac760fed48760b09f387874a36f289c3f3/dist/index-node-cjs.index-node-cjs
+// https://github.com/JSONPath-Plus/JSONPath/blob/a04dcbac760fed48760b09f387874a36f289c3f3/dist/index-node-cjs.cjs
 //
 // The only changes are:
 // - Replace Object.hasOwn with polyfill
+//
+// This vendoring-and-editing was done to support usage on Node.js 16.0.0, so
+// once support for that release line has ended, this can be replaced with a
+// direct dependency on jsonpath-plus@^10. See the PR that introduced this file
+// for details. More explicitly as a searchable to-do:
+//
+// TODO(bengl): Replace this with a direct dependency on jsonpath-plus@^10 when
+// we drop support for Node 16.
+
+// NOTE(bengl): Here is the license as distributed with jsonpath-plus@10:
+/*
+MIT License
+
+Copyright (c) 2011-2019 Stefan Goessner, Subbu Allamaraju, Mike Brevoort,
+Robert Krahn, Brett Zamir, Richard Schneider
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
 
 const hasOwn = Object.hasOwn || ((obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop));
-
 
 var vm = require('vm');
 
