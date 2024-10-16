@@ -289,6 +289,7 @@ function disable () {
 
   // Channel#unsubscribe() is undefined for non active channels
   if (bodyParser.hasSubscribers) bodyParser.unsubscribe(onRequestBodyParsed)
+  if (multerParser.hasSubscribers) multerParser.unsubscribe(onRequestBodyParsed)
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
   if (queryParser.hasSubscribers) queryParser.unsubscribe(onRequestQueryParsed)
