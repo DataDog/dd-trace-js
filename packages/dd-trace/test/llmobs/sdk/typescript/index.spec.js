@@ -21,11 +21,11 @@ function check (expected, actual) {
 }
 
 const testVersions = [
-  'latest', // will need to update this when 5.x is not latest
-  '4.9.5', // last in 4.x
-  '3.9.7', // last in 3.x
-  '2.9.2', // last in 2.x
-  '1.8.10' // last in 1.x
+  '^1',
+  '^2',
+  '^3',
+  '^4',
+  '^5'
 ]
 
 describe('typescript', () => {
@@ -34,7 +34,16 @@ describe('typescript', () => {
   let sandbox
 
   for (const version of testVersions) {
-    context(`with version ${version}`, () => {
+    // a bit of devex to show the version we're actually testing
+    // so we don't need to know ahead of time
+    const getLatestVersion = (range) => {
+      const command = `npm show typescript@${range} version`
+      const output = execSync(command, { encoding: 'utf-8' }).trim()
+      const versions = output.split('\n').map(line => line.split(' ')[1].replace(/'/g, ''))
+      return versions[versions.length - 1]
+    }
+
+    context(`with version ${getLatestVersion(version)}`, () => {
       before(async function () {
         this.timeout(20000)
         sandbox = await createSandbox(
