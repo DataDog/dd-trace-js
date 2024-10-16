@@ -180,7 +180,8 @@ module.exports = {
   TEST_BROWSER_NAME,
   TEST_BROWSER_VERSION,
   getTestSessionName,
-  TEST_LEVEL_EVENT_TYPES
+  TEST_LEVEL_EVENT_TYPES,
+  getNumFromKnownTests
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -617,4 +618,22 @@ function getTestSessionName (config, testCommand, envTags) {
     return `${envTags[CI_JOB_NAME]}-${testCommand}`
   }
   return testCommand
+}
+
+// Calculate the number of a tests from the known tests response, which has a shape like:
+// { testModule1: { testSuite1: [test1, test2, test3] }, testModule2: { testSuite2: [test4, test5] } }
+function getNumFromKnownTests (knownTests) {
+  if (!knownTests) {
+    return 0
+  }
+
+  let totalNumTests = 0
+
+  for (const testModule of Object.values(knownTests)) {
+    for (const testSuite of Object.values(testModule)) {
+      totalNumTests += testSuite.length
+    }
+  }
+
+  return totalNumTests
 }
