@@ -601,8 +601,9 @@ cls.myLLM()
 cls.myOtherLLM()
 
 // export a span
+llmobs.enable({ mlApp: 'myApp' })
 llmobs.exportSpan()
-const llmobsSpanCtx = llmobs.exportSpan(span)
+const llmobsSpanCtx = llmobs.exportSpan(llmobs.startSpan({ name: 'name', kind: 'llm' }))
 llmobsSpanCtx.traceId;
 llmobsSpanCtx.spanId;
 
@@ -623,6 +624,7 @@ llmobs.annotate(span, {
 })
 
 // submit evaluation
+llmobs.disable()
 llmobs.submitEvaluation(llmobsSpanCtx, {
   label: 'my-eval-metric',
   metricType: 'categorical',
