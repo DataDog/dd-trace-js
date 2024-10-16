@@ -115,7 +115,7 @@
     "aws-sdk": "^2.1446.0",
     "axios": "^1.7.4",
     "benchmark": "^2.1.4",
-    "body-parser": "^1.20.2",
+    "body-parser": "^1.20.3",
     "chai": "^4.3.7",
     "chalk": "^5.3.0",
     "checksum": "^1.0.0",
