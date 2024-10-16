@@ -23,7 +23,7 @@ describe('end to end sdk integration tests', () => {
   function run (payloadGenerator) {
     payloadGenerator()
     return {
-      spans: llmobs._processor.process.args?.map(args => args[0].span),
+      spans: tracer._tracer._processor.process.args.map(args => args[0]).reverse(), // spans finish in reverse order
       llmobsSpans: AgentProxyWriter.prototype.append.args?.map(args => args[0]),
       evaluationMetrics: EvalMetricsWriter.prototype.append.args?.map(args => args[0])
     }
@@ -49,13 +49,15 @@ describe('end to end sdk integration tests', () => {
 
     llmobs = tracer.llmobs
 
-    sinon.spy(llmobs._processor, 'process')
+    // console.log(tracer._tracer._processor.process)
+
+    sinon.spy(tracer._tracer._processor, 'process')
     sinon.stub(AgentProxyWriter.prototype, 'append')
     sinon.stub(EvalMetricsWriter.prototype, 'append')
   })
 
   afterEach(() => {
-    llmobs._processor.process.resetHistory()
+    tracer._tracer._processor.process.resetHistory()
     AgentProxyWriter.prototype.append.resetHistory()
     EvalMetricsWriter.prototype.append.resetHistory()
 

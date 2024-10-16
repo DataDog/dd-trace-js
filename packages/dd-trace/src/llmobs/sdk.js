@@ -17,15 +17,10 @@ const Span = require('../opentracing/span')
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 
-const AgentlessWriter = require('./writers/spans/agentless')
-const AgentProxyWriter = require('./writers/spans/agentProxy')
-const LLMObsSpanProcessor = require('./span_processor')
-const LLMObsEvalMetricsWriter = require('./writers/evaluations')
 const LLMObsTagger = require('./tagger')
 
-// communicating with span processing
-const { channel } = require('dc-polyfill')
-const spanProccessCh = channel('dd-trace:span:process')
+// communicating with writer
+const { flushCh, evalMetricAppendCh } = require('./channels')
 
 class LLMObs {
   constructor (tracer, llmobsModule, config) {
@@ -33,11 +28,6 @@ class LLMObs {
     this._tracer = tracer
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
-    this._processor = new LLMObsSpanProcessor(config)
-
-    this._handleSpanProcess = data => this._processor.process(data)
-
-    if (this.enabled) this._enable()
   }
 
   get enabled () {
@@ -70,9 +60,9 @@ class LLMObs {
 
     this._config.llmobs.enabled = true
     this._config.configure({ ...this._config, llmobs: llmobsConfig })
-    this._llmobsModule.enable(this._config)
 
-    this._enable()
+    // configure writers and channel subscribers
+    this._llmobsModule.enable(this._config)
   }
 
   disable () {
@@ -84,16 +74,9 @@ class LLMObs {
     logger.debug('Disabling LLMObs')
 
     this._config.llmobs.enabled = false
+
+    // disable writers and channel subscribers
     this._llmobsModule.disable()
-
-    spanProccessCh.unsubscribe(this._handleSpanProcess)
-
-    this._evaluationWriter.destroy()
-    this._spanWriter.destroy()
-
-    this._evaluationWriter = null
-    this._spanWriter = null
-    this._processor.setWriter(null)
   }
 
   startSpan (options = {}) {
@@ -180,7 +163,7 @@ class LLMObs {
         })
 
         return fn(span, err => {
-          storage.enterWith(oldStore)
+          if (this.enabled) storage.enterWith(oldStore)
           cb(err)
         })
       })
@@ -201,18 +184,18 @@ class LLMObs {
 
         if (result && typeof result.then === 'function') {
           return result.then(value => {
-            storage.enterWith(oldStore)
+            if (this.enabled) storage.enterWith(oldStore)
             return value
           }).catch(err => {
-            storage.enterWith(oldStore)
+            if (this.enabled) storage.enterWith(oldStore)
             throw err
           })
         }
 
-        storage.enterWith(oldStore)
+        if (this.enabled) storage.enterWith(oldStore)
         return result
       } catch (e) {
-        storage.enterWith(oldStore)
+        if (this.enabled) storage.enterWith(oldStore)
         throw e
       }
     })
@@ -263,22 +246,22 @@ class LLMObs {
             if (value && kind !== 'retrieval' && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
               llmobs.annotate(span, { outputData: value })
             }
-            storage.enterWith(oldStore)
+            if (llmobs.enabled) storage.enterWith(oldStore)
             return value
           }).catch(err => {
-            storage.enterWith(oldStore)
+            if (llmobs.enabled) storage.enterWith(oldStore)
             throw err
           })
         }
 
         if (result && kind !== 'retrieval' && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
           llmobs.annotate(span, { outputData: result })
-          storage.enterWith(oldStore)
+          if (llmobs.enabled) storage.enterWith(oldStore)
         }
 
         return result
       } catch (e) {
-        storage.enterWith(oldStore)
+        if (llmobs.enabled) storage.enterWith(oldStore)
         throw e
       }
     }
@@ -495,7 +478,7 @@ class LLMObs {
       }
     }
 
-    this._evaluationWriter.append({
+    const payload = {
       span_id: spanId,
       trace_id: traceId,
       label,
@@ -504,7 +487,9 @@ class LLMObs {
       [`${metricType}_value`]: value,
       timestamp_ms: timestampMs,
       tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`)
-    })
+    }
+
+    evalMetricAppendCh.publish(payload)
   }
 
   flush () {
@@ -513,30 +498,12 @@ class LLMObs {
       return
     }
 
-    try {
-      this._spanWriter.flush()
-      this._evaluationWriter.flush()
-    } catch {
-      logger.warn('Failed to flush LLMObs spans and evaluation metrics')
-    }
+    flushCh.publish()
   }
 
   active () {
     const store = storage.getStore()
     return store?.llmobsSpan
-  }
-
-  _enable () {
-    this._evaluationWriter = new LLMObsEvalMetricsWriter(this._config)
-    this._spanWriter = this._createSpanWriter()
-
-    this._processor.setWriter(this._spanWriter)
-    spanProccessCh.subscribe(this._handleSpanProcess)
-  }
-
-  _createSpanWriter () {
-    const SpanWriter = this._config.llmobs.agentlessEnabled ? AgentlessWriter : AgentProxyWriter
-    return new SpanWriter(this._config)
   }
 
   _extractOptions (options) {

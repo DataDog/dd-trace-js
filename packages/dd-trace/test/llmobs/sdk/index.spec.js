@@ -8,6 +8,7 @@ const Config = require('../../../src/config')
 const LLMObsTagger = require('../../../src/llmobs/tagger')
 const LLMObsEvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
 const LLMObsAgentProxySpanWriter = require('../../../src/llmobs/writers/spans/agentProxy')
+const LLMObsSpanProcessor = require('../../../src/llmobs/span_processor')
 
 const tracerVersion = require('../../../../../package.json').version
 
@@ -28,10 +29,8 @@ describe('sdk', () => {
     llmobs = tracer.llmobs
 
     // spy on properties
-    sinon.spy(console, 'warn')
-    sinon.spy(console, 'debug')
-    sinon.spy(llmobs._processor, 'process')
-    sinon.spy(llmobs._processor, 'format')
+    sinon.spy(LLMObsSpanProcessor.prototype, 'process')
+    sinon.spy(LLMObsSpanProcessor.prototype, 'format')
     sinon.spy(tracer._tracer._processor, 'process')
 
     // stub writer functionality
@@ -47,8 +46,8 @@ describe('sdk', () => {
   })
 
   afterEach(() => {
-    llmobs._processor.process.resetHistory()
-    llmobs._processor.format.resetHistory()
+    LLMObsSpanProcessor.prototype.process.resetHistory()
+    LLMObsSpanProcessor.prototype.format.resetHistory()
     tracer._tracer._processor.process.resetHistory()
 
     LLMObsEvalMetricsWriter.prototype.append.resetHistory()
@@ -74,12 +73,10 @@ describe('sdk', () => {
       [false, 'disabled']
     ]) {
       it(`returns ${value} when llmobs is ${label}`, () => {
-        if (!value) sinon.stub(LLMObsSDK.prototype, '_enable')
         const enabledOrDisabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { enabled: value } })
 
         expect(enabledOrDisabledLLMObs.enabled).to.equal(value)
         enabledOrDisabledLLMObs.disable() // unsubscribe
-        if (!value) LLMObsSDK.prototype._enable.restore()
       })
     }
   })
@@ -93,9 +90,7 @@ describe('sdk', () => {
       }
 
       // do not fully enable a disabled llmobs
-      sinon.stub(LLMObsSDK.prototype, '_enable')
       const disabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
-      LLMObsSDK.prototype._enable.restore()
 
       disabledLLMObs.enable({
         mlApp: 'mlApp'
@@ -106,19 +101,18 @@ describe('sdk', () => {
       expect(disabledLLMObs._config.llmobs.apiKey).to.be.undefined
       expect(disabledLLMObs._config.llmobs.agentlessEnabled).to.be.false
 
-      expect(disabledLLMObs._evaluationWriter).to.exist
-      expect(disabledLLMObs._processor._writer).to.exist
       expect(llmobsModule.enable).to.have.been.called
 
       disabledLLMObs.disable() // unsubscribe
     })
 
     it('does not enable llmobs if it is already enabled', () => {
-      sinon.spy(llmobs, '_enable')
+      sinon.spy(llmobs._llmobsModule, 'enable')
       llmobs.enable({})
 
-      expect(llmobs._enable).to.not.have.been.called
-      llmobs._enable.restore()
+      expect(llmobs.enabled).to.be.true
+      expect(llmobs._llmobsModule.enable).to.not.have.been.called
+      llmobs._llmobsModule.enable.restore()
     })
 
     it('does not enable llmobs if env var conflicts', () => {
@@ -128,7 +122,6 @@ describe('sdk', () => {
       }
 
       // do not fully enable a disabled llmobs
-      sinon.stub(LLMObsSDK.prototype, '_enable')
       const disabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
       process.env.DD_LLMOBS_ENABLED = 'false'
 
@@ -137,7 +130,6 @@ describe('sdk', () => {
       expect(disabledLLMObs.enabled).to.be.false
       delete process.env.DD_LLMOBS_ENABLED
       disabledLLMObs.disable() // unsubscribe
-      LLMObsSDK.prototype._enable.restore()
     })
   })
 
@@ -157,15 +149,11 @@ describe('sdk', () => {
       enabledLLMObs.disable()
 
       expect(enabledLLMObs.enabled).to.be.false
-      expect(enabledLLMObs._evaluationWriter).to.not.exist
-      expect(enabledLLMObs._spanWriter).to.not.exist
-      expect(enabledLLMObs._processor._writer).to.not.exist
       expect(llmobsModule.disable).to.have.been.called
     })
 
     it('does not disable llmobs if it is already disabled', () => {
       // do not fully enable a disabled llmobs
-      sinon.stub(LLMObsSDK.prototype, '_enable')
       const disabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { enabled: false } })
       sinon.spy(disabledLLMObs._llmobsModule, 'disable')
 
@@ -173,8 +161,6 @@ describe('sdk', () => {
 
       expect(disabledLLMObs.enabled).to.be.false
       expect(disabledLLMObs._llmobsModule.disable).to.not.have.been.called
-
-      LLMObsSDK.prototype._enable.restore()
     })
   })
 
@@ -188,7 +174,7 @@ describe('sdk', () => {
 
           expect(() => span.finish()).to.not.throw()
           expect(llmobs._tracer._processor.process).to.have.been.called
-          expect(llmobs._processor.format).to.not.have.been.called
+          expect(LLMObsSpanProcessor.prototype.format).to.not.have.been.called
           expect(LLMObsTagger.tagMap.get(span)).to.not.exist
 
           tracer._tracer._config.llmobs.enabled = true
@@ -200,7 +186,7 @@ describe('sdk', () => {
           expect(() => span.finish()).to.not.throw()
           expect(LLMObsTagger.tagMap.get(span)).to.not.exist
           expect(llmobs._tracer._processor.process).to.have.been.called
-          expect(llmobs._processor.format).to.not.have.been.called
+          expect(LLMObsSpanProcessor.prototype.format).to.not.have.been.called
         })
       })
 
@@ -244,7 +230,7 @@ describe('sdk', () => {
           })
 
           expect(llmobs._tracer._processor.process).to.have.been.called
-          expect(llmobs._processor.format).to.not.have.been.called
+          expect(LLMObsSpanProcessor.prototype.format).to.not.have.been.called
 
           tracer._tracer._config.llmobs.enabled = true
         })
@@ -257,7 +243,7 @@ describe('sdk', () => {
           })
 
           expect(llmobs._tracer._processor.process).to.have.been.called
-          expect(llmobs._processor.format).to.not.have.been.called
+          expect(LLMObsSpanProcessor.prototype.format).to.not.have.been.called
         })
 
         it('traces a block', () => {
@@ -414,7 +400,7 @@ describe('sdk', () => {
           expect(() => fn(1)).to.not.throw()
 
           expect(llmobs._tracer._processor.process).to.have.been.called
-          expect(llmobs._processor.format).to.not.have.been.called
+          expect(LLMObsSpanProcessor.prototype.format).to.not.have.been.called
 
           tracer._tracer._config.llmobs.enabled = true
         })
@@ -427,7 +413,7 @@ describe('sdk', () => {
 
           expect(() => fn(1)).to.not.throw()
           expect(llmobs._tracer._processor.process).to.have.been.called
-          expect(llmobs._processor.format).to.not.have.been.called
+          expect(LLMObsSpanProcessor.prototype.format).to.not.have.been.called
         })
 
         it('wraps a function', () => {
@@ -874,7 +860,7 @@ describe('sdk', () => {
         }
       })
 
-      expect(llmobs._evaluationWriter.append.getCall(0).args[0]).to.deep.equal({
+      expect(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]).to.deep.equal({
         trace_id: spanCtx.traceId,
         span_id: spanCtx.spanId,
         ml_app: 'test',
@@ -898,7 +884,7 @@ describe('sdk', () => {
         }
       })
 
-      expect(llmobs._evaluationWriter.append.getCall(0).args[0]).to.have.property('categorical_value', 'foo')
+      expect(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]).to.have.property('categorical_value', 'foo')
     })
 
     it('defaults to the current time if no timestamp is provided', () => {
@@ -910,7 +896,7 @@ describe('sdk', () => {
         value: 0.6
       })
 
-      expect(llmobs._evaluationWriter.append.getCall(0).args[0]).to.have.property('timestamp_ms', 1234)
+      expect(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]).to.have.property('timestamp_ms', 1234)
       Date.now.restore()
     })
   })
@@ -928,12 +914,12 @@ describe('sdk', () => {
     it('flushes the evaluation writer and span writer', () => {
       llmobs.flush()
 
-      expect(llmobs._evaluationWriter.flush).to.have.been.called
-      expect(llmobs._processor._writer.flush).to.have.been.called
+      expect(LLMObsEvalMetricsWriter.prototype.flush).to.have.been.called
+      expect(LLMObsAgentProxySpanWriter.prototype.flush).to.have.been.called
     })
 
     it('logs if there was an error flushing', () => {
-      llmobs._evaluationWriter.flush.throws(new Error('boom'))
+      LLMObsEvalMetricsWriter.prototype.flush.throws(new Error('boom'))
 
       expect(() => llmobs.flush()).to.not.throw()
     })
