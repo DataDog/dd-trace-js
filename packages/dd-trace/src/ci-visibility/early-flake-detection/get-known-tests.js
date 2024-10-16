@@ -9,9 +9,10 @@ const {
   TELEMETRY_KNOWN_TESTS_MS,
   TELEMETRY_KNOWN_TESTS_ERRORS,
   TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS,
-  TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES,
-  getNumFromKnownTests
+  TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES
 } = require('../../ci-visibility/telemetry')
+
+const { getNumFromKnownTests } = require('../../plugins/util/test')
 
 function getKnownTests ({
   url,

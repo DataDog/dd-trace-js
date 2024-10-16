@@ -623,6 +623,10 @@ function getTestSessionName (config, testCommand, envTags) {
 // Calculate the number of a tests from the known tests response, which has a shape like:
 // { testModule1: { testSuite1: [test1, test2, test3] }, testModule2: { testSuite2: [test4, test5] } }
 function getNumFromKnownTests (knownTests) {
+  if (!knownTests) {
+    return 0
+  }
+
   let totalNumTests = 0
 
   for (const testModule of Object.values(knownTests)) {
