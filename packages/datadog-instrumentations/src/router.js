@@ -1,7 +1,7 @@
 'use strict'
 
 const METHODS = require('http').METHODS.map(v => v.toLowerCase()).concat('all')
-const pathToRegExp = require('path-to-regexp')
+const { pathToRegexp } = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -145,7 +145,7 @@ function createWrapRouterMethod (name) {
     if (maybeCached) {
       return maybeCached
     }
-    const regexp = pathToRegExp(pattern)
+    const { regexp } = pathToRegexp(pattern)
     regexpCache[pattern] = regexp
     return regexp
   }
