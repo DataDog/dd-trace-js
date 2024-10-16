@@ -381,7 +381,7 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 
 <h3 id="custom-logging">Custom Logging</h3>
 
-By default, logging from this library is disabled. In order to get debugging information and errors sent to logs, the `debug` options should be set to `true` in the [init()](./interfaces/tracer.html#init) method.
+By default, logging from this library is disabled. In order to get debugging information and errors sent to logs, the `DD_TRACE_DEBUG` env var should be set to `true`.
 
 The tracer will then log debug information to `console.log()` and errors to `console.error()`. This behavior can be changed by passing a custom logger to the tracer. The logger should contain a `debug()` and `error()` methods that can handle messages and errors, respectively.
 
@@ -394,14 +394,15 @@ const logger = bunyan.createLogger({
   level: 'trace'
 })
 
+process.env.DD_TRACE_DEBUG = 'true'
+
 const tracer = require('dd-trace').init({
   logger: {
     error: err => logger.error(err),
     warn: message => logger.warn(message),
     info: message => logger.info(message),
     debug: message => logger.trace(message),
-  },
-  debug: true
+  }
 })
 ```
 
