@@ -330,13 +330,13 @@ class EventsProfiler {
     if (!restart) {
       this.stop()
     }
-    const profile = this.eventSerializer.createProfile(startDate, endDate)
+    const thatEventSerializer = this.eventSerializer
     this.eventSerializer = new EventSerializer()
-    return profile
+    return () => thatEventSerializer.createProfile(startDate, endDate)
   }
 
   encode (profile) {
-    return pprof.encode(profile)
+    return pprof.encode(profile())
   }
 }
 

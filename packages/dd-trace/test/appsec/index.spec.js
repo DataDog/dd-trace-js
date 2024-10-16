@@ -10,8 +10,11 @@ const {
   cookieParser,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
-  queryParser,
   passportVerify,
+  queryParser,
+  nextBodyParsed,
+  nextQueryParsed,
+  expressProcessParams,
   responseBody,
   responseWriteHead,
   responseSetHeader
@@ -167,8 +170,11 @@ describe('AppSec Index', function () {
     it('should subscribe to blockable channels', () => {
       expect(bodyParser.hasSubscribers).to.be.false
       expect(cookieParser.hasSubscribers).to.be.false
-      expect(queryParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
+      expect(queryParser.hasSubscribers).to.be.false
+      expect(nextBodyParsed.hasSubscribers).to.be.false
+      expect(nextQueryParsed.hasSubscribers).to.be.false
+      expect(expressProcessParams.hasSubscribers).to.be.false
       expect(responseWriteHead.hasSubscribers).to.be.false
       expect(responseSetHeader.hasSubscribers).to.be.false
 
@@ -176,8 +182,11 @@ describe('AppSec Index', function () {
 
       expect(bodyParser.hasSubscribers).to.be.true
       expect(cookieParser.hasSubscribers).to.be.true
-      expect(queryParser.hasSubscribers).to.be.true
       expect(passportVerify.hasSubscribers).to.be.true
+      expect(queryParser.hasSubscribers).to.be.true
+      expect(nextBodyParsed.hasSubscribers).to.be.true
+      expect(nextQueryParsed.hasSubscribers).to.be.true
+      expect(expressProcessParams.hasSubscribers).to.be.true
       expect(responseWriteHead.hasSubscribers).to.be.true
       expect(responseSetHeader.hasSubscribers).to.be.true
     })
@@ -254,8 +263,11 @@ describe('AppSec Index', function () {
 
       expect(bodyParser.hasSubscribers).to.be.false
       expect(cookieParser.hasSubscribers).to.be.false
-      expect(queryParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
+      expect(queryParser.hasSubscribers).to.be.false
+      expect(nextBodyParsed.hasSubscribers).to.be.false
+      expect(nextQueryParsed.hasSubscribers).to.be.false
+      expect(expressProcessParams.hasSubscribers).to.be.false
       expect(responseWriteHead.hasSubscribers).to.be.false
       expect(responseSetHeader.hasSubscribers).to.be.false
     })
@@ -422,9 +434,6 @@ describe('AppSec Index', function () {
         route: {
           path: '/path/:c'
         },
-        params: {
-          c: '3'
-        },
         cookies: {
           d: '4',
           e: '5'
@@ -446,7 +455,6 @@ describe('AppSec Index', function () {
       expect(waf.run).to.have.been.calledOnceWithExactly({
         persistent: {
           'server.request.body': { a: '1' },
-          'server.request.path_params': { c: '3' },
           'server.request.cookies': { d: '4', e: '5' },
           'server.request.query': { b: '2' }
         }
@@ -1058,7 +1066,10 @@ describe('IP blocking', function () {
   beforeEach(() => {
     appsec.enable(new Config({
       appsec: {
-        enabled: true
+        enabled: true,
+        rasp: {
+          enabled: false // disable rasp to not trigger lfi
+        }
       }
     }))
 
