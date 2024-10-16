@@ -54,15 +54,14 @@ withVersions('multer', 'multer', version => {
       function noop () {}
       multerReadCh.subscribe(noop)
 
-      const form = new FormData()
-      form.append('key', 'value')
+      try {
+        const res = await axios.post(`http://localhost:${port}/`, formData)
 
-      const res = await axios.post(`http://localhost:${port}/`, formData)
-
-      expect(middlewareProcessBodyStub).to.be.calledOnceWithExactly(formData.get('key'))
-      expect(res.data).to.be.equal('DONE')
-
-      multerReadCh.unsubscribe(noop)
+        expect(middlewareProcessBodyStub).to.be.calledOnceWithExactly(formData.get('key'))
+        expect(res.data).to.be.equal('DONE')
+      } finally {
+        multerReadCh.unsubscribe(noop)
+      }
     })
 
     it('should abort the request when abortController.abort() is called', async () => {
@@ -72,12 +71,14 @@ withVersions('multer', 'multer', version => {
       }
       multerReadCh.subscribe(blockRequest)
 
-      const res = await axios.post(`http://localhost:${port}/`, formData)
+      try {
+        const res = await axios.post(`http://localhost:${port}/`, formData)
 
-      expect(middlewareProcessBodyStub).not.to.be.called
-      expect(res.data).to.be.equal('BLOCKED')
-
-      multerReadCh.unsubscribe(blockRequest)
+        expect(middlewareProcessBodyStub).not.to.be.called
+        expect(res.data).to.be.equal('BLOCKED')
+      } finally {
+        multerReadCh.unsubscribe(blockRequest)
+      }
     })
 
     it('should not lose the http async context', async () => {
@@ -90,16 +91,18 @@ withVersions('multer', 'multer', version => {
       }
       multerReadCh.subscribe(handler)
 
-      const res = await axios.post(`http://localhost:${port}/`, formData)
+      try {
+        const res = await axios.post(`http://localhost:${port}/`, formData)
 
-      expect(store).to.have.property('req', payload.req)
-      expect(store).to.have.property('res', payload.res)
-      expect(store).to.have.property('span')
+        expect(store).to.have.property('req', payload.req)
+        expect(store).to.have.property('res', payload.res)
+        expect(store).to.have.property('span')
 
-      expect(middlewareProcessBodyStub).to.be.calledOnceWithExactly(formData.get('key'))
-      expect(res.data).to.be.equal('DONE')
-
-      multerReadCh.unsubscribe(handler)
+        expect(middlewareProcessBodyStub).to.be.calledOnceWithExactly(formData.get('key'))
+        expect(res.data).to.be.equal('DONE')
+      } finally {
+        multerReadCh.unsubscribe(handler)
+      }
     })
   })
 })
