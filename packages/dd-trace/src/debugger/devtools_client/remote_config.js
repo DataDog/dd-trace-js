@@ -66,7 +66,7 @@ async function processMsg (action, probe) {
   }
   if (!probe.where.sourceFile && !probe.where.lines) {
     throw new Error(
-      // eslint-disable-next-line max-len
+      // eslint-disable-next-line @stylistic/js/max-len
       `Unsupported probe insertion point! Only line-based probes are supported (id: ${probe.id}, version: ${probe.version})`
     )
   }
@@ -98,7 +98,7 @@ async function processMsg (action, probe) {
         break
       default:
         throw new Error(
-          // eslint-disable-next-line max-len
+          // eslint-disable-next-line @stylistic/js/max-len
           `Cannot process probe ${probe.id} (version: ${probe.version}) - unknown remote configuration action: ${action}`
         )
     }

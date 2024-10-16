@@ -4,10 +4,11 @@ import 'dd-trace/init.js'
 import assert from 'assert'
 import express from 'express'
 import redis from 'redis'
-const app = express()
-const PORT = 3000
 import pg from 'pg'
 import PGP from 'pg-promise' // transient dep of 'pg'
+
+const app = express()
+const PORT = 3000
 const pgp = PGP()
 
 assert.equal(redis.Graph.name, 'Graph')

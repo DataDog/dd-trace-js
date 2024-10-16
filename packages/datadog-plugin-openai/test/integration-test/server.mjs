@@ -23,7 +23,7 @@ nock('https://api.openai.com:443')
   ])
 
 const openaiApp = new openai.OpenAIApi(new openai.Configuration({
-  apiKey: 'sk-DATADOG-ACCEPTANCE-TESTS',
+  apiKey: 'sk-DATADOG-ACCEPTANCE-TESTS'
 }))
 
 await openaiApp.createCompletion({
