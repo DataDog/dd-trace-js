@@ -18,18 +18,18 @@ const compat = new FlatCompat({
 export default [
   {
     ignores: [
-      '**/coverage',
-      '**/dist',
-      '**/docs',
-      '**/out',
-      '**/node_modules',
-      '**/versions',
-      '**/acmeair-nodejs',
-      '**/vendor',
-      'integration-tests/esbuild/out.js',
-      'integration-tests/esbuild/aws-sdk-out.js',
-      'packages/dd-trace/src/appsec/blocked_templates.js',
-      'packages/dd-trace/src/payload-tagging/jsonpath-plus.js',
+      '**/coverage', // Just coverage reports.
+      '**/dist', // Generated
+      '**/docs', // Any JS here is for presentation only.
+      '**/out', // Generated
+      '**/node_modules', // We don't own these.
+      '**/versions', // This is effectively a node_modules tree.
+      '**/acmeair-nodejs', // We don't own this.
+      '**/vendor', // Generally, we didn't author this code.
+      'integration-tests/esbuild/out.js', // Generated
+      'integration-tests/esbuild/aws-sdk-out.js', // Generated
+      'packages/dd-trace/src/appsec/blocked_templates.js', // TODO Why is this ignored?
+      'packages/dd-trace/src/payload-tagging/jsonpath-plus.js', // Vendored
     ]
   }, ...compat.extends('eslint:recommended', 'standard', 'plugin:mocha/recommended'), {
     plugins: {
@@ -54,23 +54,21 @@ export default [
 
     rules: {
       '@stylistic/js/max-len': ['error', { code: 120, tabWidth: 2 }],
-      'no-var': 'error',
-      'no-console': 'error',
-      'prefer-const': 'error',
-      '@stylistic/js/object-curly-spacing': ['error', 'always'],
-      'import/no-extraneous-dependencies': 'error',
-      'standard/no-callback-literal': 'off',
-      'no-prototype-builtins': 'off',
-      'n/no-restricted-require': ['error', ['diagnostics_channel']],
-      'n/no-callback-literal': 'off',
-
       '@stylistic/js/object-curly-newline': ['error', {
         multiline: true,
         consistent: true
       }],
-
+      '@stylistic/js/object-curly-spacing': ['error', 'always'],
       'import/no-absolute-path': 'off',
-      'no-unused-expressions': 'off'
+      'import/no-extraneous-dependencies': 'error',
+      'n/no-callback-literal': 'off',
+      'n/no-restricted-require': ['error', ['diagnostics_channel']],
+      'no-console': 'error',
+      'no-prototype-builtins': 'off',
+      'no-unused-expressions': 'off',
+      'no-var': 'error',
+      'prefer-const': 'error',
+      'standard/no-callback-literal': 'off'
     }
   },
   {
@@ -94,15 +92,15 @@ export default [
       }
     },
     rules: {
+      'mocha/max-top-level-suites': 'off',
+      'mocha/no-exports': 'off',
+      'mocha/no-global-tests': 'off',
+      'mocha/no-identical-title': 'off',
       'mocha/no-mocha-arrows': 'off',
       'mocha/no-setup-in-describe': 'off',
       'mocha/no-sibling-hooks': 'off',
-      'mocha/no-top-level-hooks': 'off',
-      'mocha/max-top-level-suites': 'off',
-      'mocha/no-identical-title': 'off',
-      'mocha/no-global-tests': 'off',
-      'mocha/no-exports': 'off',
       'mocha/no-skipped-tests': 'off',
+      'mocha/no-top-level-hooks': 'off',
       'n/handle-callback-err': 'off',
       'no-loss-of-precision': 'off'
     }
