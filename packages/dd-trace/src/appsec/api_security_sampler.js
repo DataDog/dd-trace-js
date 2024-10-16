@@ -1,6 +1,6 @@
 'use strict'
 
-const LRUCache = require('lru-cache')
+const TTLCache = require('@isaacs/ttlcache')
 const web = require('../plugins/util/web')
 const log = require('../log')
 const { AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
@@ -14,7 +14,7 @@ let sampledRequests
 function configure ({ apiSecurity }) {
   enabled = apiSecurity.enabled
   const delay = apiSecurity.sampleDelay || DEFAULT_DELAY
-  sampledRequests = new LRUCache({ max: MAX_SIZE, ttl: delay * 1000 })
+  sampledRequests = new TTLCache({ max: MAX_SIZE, ttl: delay * 1000 })
 }
 
 function disable () {

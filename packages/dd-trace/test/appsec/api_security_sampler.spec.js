@@ -1,16 +1,18 @@
 'use strict'
 
-const { performance } = require('node:perf_hooks')
 const proxyquire = require('proxyquire')
+const { assert } = require('chai')
+const { performance } = require('node:perf_hooks')
 const { USER_KEEP, AUTO_KEEP, AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
 
 describe('API Security Sampler', () => {
   const req = { route: { path: '/test' }, method: 'GET' }
   const res = { statusCode: 200 }
-  let apiSecuritySampler, performanceNowStub, webStub, span
+  let apiSecuritySampler, webStub, span, clock, performanceNowStub
 
   beforeEach(() => {
-    performanceNowStub = sinon.stub(performance, 'now').returns(0)
+    clock = sinon.useFakeTimers({ now: 10 })
+    performanceNowStub = sinon.stub(performance, 'now').callsFake(() => clock.now)
 
     webStub = {
       root: sinon.stub(),
@@ -34,102 +36,103 @@ describe('API Security Sampler', () => {
 
     webStub.root.returns(span)
     webStub.getContext.returns({ paths: ['path'] })
-
-    performanceNowStub.returns(performance.now() + 1)
   })
 
   afterEach(() => {
-    performanceNowStub.restore()
     apiSecuritySampler.disable()
+    performanceNowStub.restore()
+    clock.restore()
   })
 
   it('should return false if not enabled', () => {
     apiSecuritySampler.disable()
-    expect(apiSecuritySampler.sampleRequest({}, {})).to.be.false
+    assert.isFalse(apiSecuritySampler.sampleRequest({}, {}))
   })
 
   it('should return false if no root span', () => {
     webStub.root.returns(null)
-    expect(apiSecuritySampler.sampleRequest({}, {})).to.be.false
+    assert.isFalse(apiSecuritySampler.sampleRequest({}, {}))
   })
 
   it('should return false for AUTO_REJECT priority', () => {
     span.context.returns({ _sampling: { priority: AUTO_REJECT } })
-    expect(apiSecuritySampler.sampleRequest(req, res)).to.be.false
+    assert.isFalse(apiSecuritySampler.sampleRequest(req, res))
   })
 
   it('should return false for USER_REJECT priority', () => {
     span.context.returns({ _sampling: { priority: USER_REJECT } })
-    expect(apiSecuritySampler.sampleRequest(req, res)).to.be.false
+    assert.isFalse(apiSecuritySampler.sampleRequest(req, res))
   })
 
   it('should sample for AUTO_KEEP priority without checking prioritySampler', () => {
     span.context.returns({ _sampling: { priority: AUTO_KEEP } })
-    expect(apiSecuritySampler.sampleRequest(req, res)).to.be.true
+    assert.isTrue(apiSecuritySampler.sampleRequest(req, res))
   })
 
   it('should sample for USER_KEEP priority without checking prioritySampler', () => {
     span.context.returns({ _sampling: { priority: USER_KEEP } })
-    expect(apiSecuritySampler.sampleRequest(req, res)).to.be.true
+    assert.isTrue(apiSecuritySampler.sampleRequest(req, res))
   })
 
   it('should not sample before 30 seconds', () => {
-    expect(apiSecuritySampler.sampleRequest(req, res, true)).to.be.true
-    performanceNowStub.returns(performance.now() + 25000)
+    assert.isTrue(apiSecuritySampler.sampleRequest(req, res, true))
 
-    expect(apiSecuritySampler.sampleRequest(req, res, true)).to.be.false
-    expect(apiSecuritySampler.isSampled(req, res)).to.be.true
+    clock.tick(25000)
+
+    assert.isFalse(apiSecuritySampler.sampleRequest(req, res, true))
+
+    assert.isTrue(apiSecuritySampler.isSampled(req, res))
   })
 
   it('should sample after 30 seconds', () => {
-    expect(apiSecuritySampler.sampleRequest(req, res, true)).to.be.true
+    assert.isTrue(apiSecuritySampler.sampleRequest(req, res, true))
 
-    performanceNowStub.returns(performance.now() + 35000)
+    clock.tick(35000)
 
-    expect(apiSecuritySampler.sampleRequest(req, res, true)).to.be.true
+    assert.isTrue(apiSecuritySampler.sampleRequest(req, res, true))
   })
 
   it('should remove oldest entry when max size is exceeded', () => {
     for (let i = 0; i < 4097; i++) {
       const path = `/test${i}`
       webStub.getContext.returns({ paths: [path] })
-      expect(apiSecuritySampler.sampleRequest(req, res, true)).to.be.true
+      assert.isTrue(apiSecuritySampler.sampleRequest(req, res, true))
     }
     webStub.getContext.returns({ paths: ['/test0'] })
-    expect(apiSecuritySampler.isSampled(req, res)).to.be.false
+    assert.isFalse(apiSecuritySampler.isSampled(req, res))
     webStub.getContext.returns({ paths: ['/test4096'] })
-    expect(apiSecuritySampler.isSampled(req, res)).to.be.true
+    assert.isTrue(apiSecuritySampler.isSampled(req, res))
   })
 
   it('should set enabled to false and clear the cache', () => {
-    expect(apiSecuritySampler.sampleRequest(req, res, true)).to.be.true
+    assert.isTrue(apiSecuritySampler.sampleRequest(req, res, true))
 
     apiSecuritySampler.disable()
 
-    expect(apiSecuritySampler.sampleRequest(req, res, true)).to.be.false
+    assert.isFalse(apiSecuritySampler.sampleRequest(req, res, true))
   })
 
   it('should create different keys for different methods', () => {
     const getReq = { method: 'GET' }
     const postReq = { method: 'POST' }
-    expect(apiSecuritySampler.sampleRequest(getReq, res, true)).to.be.true
-    expect(apiSecuritySampler.sampleRequest(postReq, res, true)).to.be.true
-    expect(apiSecuritySampler.isSampled(getReq, res)).to.be.true
-    expect(apiSecuritySampler.isSampled(postReq, res)).to.be.true
+    assert.isTrue(apiSecuritySampler.sampleRequest(getReq, res, true))
+    assert.isTrue(apiSecuritySampler.sampleRequest(postReq, res, true))
+    assert.isTrue(apiSecuritySampler.isSampled(getReq, res))
+    assert.isTrue(apiSecuritySampler.isSampled(postReq, res))
   })
 
   it('should create different keys for different status codes', () => {
     const res200 = { statusCode: 200 }
     const res404 = { statusCode: 404 }
 
-    expect(apiSecuritySampler.sampleRequest(req, res200, true)).to.be.true
-    expect(apiSecuritySampler.sampleRequest(req, res404, true)).to.be.true
-    expect(apiSecuritySampler.isSampled(req, res200)).to.be.true
-    expect(apiSecuritySampler.isSampled(req, res404)).to.be.true
+    assert.isTrue(apiSecuritySampler.sampleRequest(req, res200, true))
+    assert.isTrue(apiSecuritySampler.sampleRequest(req, res404, true))
+    assert.isTrue(apiSecuritySampler.isSampled(req, res200))
+    assert.isTrue(apiSecuritySampler.isSampled(req, res404))
   })
 
   it('should not sample when method or statusCode is not available', () => {
-    expect(apiSecuritySampler.sampleRequest(req, {}, true)).to.be.false
-    expect(apiSecuritySampler.sampleRequest({}, res, true)).to.be.false
+    assert.isFalse(apiSecuritySampler.sampleRequest(req, {}, true))
+    assert.isFalse(apiSecuritySampler.sampleRequest({}, res, true))
   })
 })
