@@ -146,6 +146,10 @@ class Profiler extends EventEmitter {
     const encodedProfiles = {}
 
     try {
+      if (Object.keys(this._config.profilers).length === 0) {
+        throw new Error('No profile types configured.')
+      }
+
       // collect profiles synchronously so that profilers can be safely stopped asynchronously
       for (const profiler of this._config.profilers) {
         const profile = profiler.profile(restart, startDate, endDate)
@@ -156,23 +160,32 @@ class Profiler extends EventEmitter {
         profiles.push({ profiler, profile })
       }
 
-      // encode and export asynchronously
-      for (const { profiler, profile } of profiles) {
-        encodedProfiles[profiler.type] = await profiler.encode(profile)
-        this._logger.debug(() => {
-          const profileJson = JSON.stringify(profile, (key, value) => {
-            return typeof value === 'bigint' ? value.toString() : value
-          })
-          return `Collected ${profiler.type} profile: ` + profileJson
-        })
-      }
-
       if (restart) {
         this._capture(this._timeoutInterval, endDate)
       }
-      await this._submit(encodedProfiles, startDate, endDate, snapshotKind)
-      profileSubmittedChannel.publish()
-      this._logger.debug('Submitted profiles')
+
+      // encode and export asynchronously
+      for (const { profiler, profile } of profiles) {
+        try {
+          encodedProfiles[profiler.type] = await profiler.encode(profile)
+          this._logger.debug(() => {
+            const profileJson = JSON.stringify(profile, (key, value) => {
+              return typeof value === 'bigint' ? value.toString() : value
+            })
+            return `Collected ${profiler.type} profile: ` + profileJson
+          })
+        } catch (err) {
+          // If encoding one of the profile types fails, we should still try to
+          // encode and submit the other profile types.
+          this._logError(err)
+        }
+      }
+
+      if (Object.keys(encodedProfiles).length > 0) {
+        await this._submit(encodedProfiles, startDate, endDate, snapshotKind)
+        profileSubmittedChannel.publish()
+        this._logger.debug('Submitted profiles')
+      }
     } catch (err) {
       this._logError(err)
       this._stop()
@@ -180,9 +193,6 @@ class Profiler extends EventEmitter {
   }
 
   _submit (profiles, start, end, snapshotKind) {
-    if (!Object.keys(profiles).length) {
-      return Promise.reject(new Error('No profiles to submit'))
-    }
     const { tags } = this._config
     const tasks = []
 
