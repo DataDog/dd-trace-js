@@ -1,0 +1,102 @@
+'use strict'
+
+const { execSync } = require('child_process')
+const {
+  FakeAgent,
+  createSandbox,
+  spawnProc
+} = require('../../../../../../integration-tests/helpers')
+const chai = require('chai')
+const path = require('path')
+const { expectedLLMObsNonLLMSpanEvent, deepEqualWithMockValues } = require('../../util')
+
+chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
+
+function check (expected, actual) {
+  for (const expectedLLMObsSpanIdx in expected) {
+    const expectedLLMObsSpan = expected[expectedLLMObsSpanIdx]
+    const actualLLMObsSpan = actual[expectedLLMObsSpanIdx]
+    expect(actualLLMObsSpan).to.deep.deepEqualWithMockValues(expectedLLMObsSpan)
+  }
+}
+
+const testVersions = [
+  'latest', // will need to update this when 5.x is not latest
+  '4.9.5', // last in 4.x
+  '3.9.7', // last in 3.x
+  '2.9.2', // last in 2.x
+  '1.8.10' // last in 1.x
+]
+
+describe('typescript', () => {
+  let agent
+  let proc
+  let sandbox
+
+  for (const version of testVersions) {
+    context(`with version ${version}`, () => {
+      before(async function () {
+        this.timeout(20000)
+        sandbox = await createSandbox(
+          [`typescript@${version}`], false, ['./packages/dd-trace/test/llmobs/sdk/typescript/*']
+        )
+      })
+
+      after(async () => {
+        await sandbox.remove()
+      })
+
+      beforeEach(async () => {
+        agent = await new FakeAgent().start()
+      })
+
+      afterEach(async () => {
+        proc && proc.kill()
+        await agent.stop()
+      })
+
+      it('instruments an application with decorators', async () => {
+        const cwd = sandbox.folder
+
+        let llmobsSpans, apmSpans
+
+        const llmobsRes = agent.assertLlmObsPayloadReceived(({ payload }) => {
+          llmobsSpans = payload.spans
+        })
+
+        const apmRes = agent.assertMessageReceived(({ payload }) => {
+          apmSpans = payload
+        })
+
+        // compile typescript
+        execSync(
+          'tsc --target ES6 --experimentalDecorators --module commonjs --sourceMap index.ts',
+          { cwd, stdio: 'inherit' }
+        )
+
+        proc = await spawnProc(
+          path.join(cwd, 'index.js'),
+          { cwd, env: { DD_TRACE_AGENT_PORT: agent.port } }
+        )
+
+        await Promise.all([llmobsRes, apmRes])
+
+        const actual = llmobsSpans
+        const expected = [
+          expectedLLMObsNonLLMSpanEvent({
+            span: apmSpans[0][0],
+            spanKind: 'agent',
+            tags: {
+              ml_app: 'test',
+              language: 'javascript'
+            },
+            inputValue: 'this is a',
+            outputValue: 'test'
+          })
+        ]
+
+        check(expected, actual)
+      })
+    })
+  }
+})

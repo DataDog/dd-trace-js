@@ -154,9 +154,9 @@ function expectedLLMObsTags ({
 }) {
   tags = tags || {}
 
-  const version = span.meta?.version || span._parentTracer._version
-  const env = span.meta?.env || span._parentTracer._env
-  const service = span.meta?.service || span._parentTracer._service
+  const version = span.meta?.version || span._parentTracer?._version
+  const env = span.meta?.env || span._parentTracer?._env
+  const service = span.meta?.service || span._parentTracer?._service
 
   const spanTags = [
     `version:${version ?? ''}`,
