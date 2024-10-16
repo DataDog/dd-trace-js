@@ -9,21 +9,9 @@ const {
   TELEMETRY_KNOWN_TESTS_MS,
   TELEMETRY_KNOWN_TESTS_ERRORS,
   TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS,
-  TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES
+  TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES,
+  getNumFromKnownTests
 } = require('../../ci-visibility/telemetry')
-
-function getNumTests (knownTests) {
-  let totalNumTests = 0
-
-  for (const testModule of Object.values(knownTests)) {
-    for (const testSuite of Object.values(testModule)) {
-      // test suites are arrays of tests
-      totalNumTests += testSuite.length
-    }
-  }
-
-  return totalNumTests
-}
 
 function getKnownTests ({
   url,
@@ -101,7 +89,7 @@ function getKnownTests ({
       try {
         const { data: { attributes: { tests: knownTests } } } = JSON.parse(res)
 
-        const numTests = getNumTests(knownTests)
+        const numTests = getNumFromKnownTests(knownTests)
 
         incrementCountMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS, {}, numTests)
         distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES, {}, res.length)
