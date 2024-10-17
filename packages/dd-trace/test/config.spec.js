@@ -5,6 +5,7 @@ require('./setup/tap')
 const { expect } = require('chai')
 const { readFileSync } = require('fs')
 const sinon = require('sinon')
+const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
 
 describe('Config', () => {
   let Config
@@ -225,8 +226,8 @@ describe('Config', () => {
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
-    expect(config.grpc.client.error.statuses).to.deep.equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
-    expect(config.grpc.server.error.statuses).to.deep.equal([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
+    expect(config.grpc.client.error.statuses).to.deep.equal(GRPC_CLIENT_ERROR_STATUSES)
+    expect(config.grpc.server.error.statuses).to.deep.equal(GRPC_SERVER_ERROR_STATUSES)
     expect(config).to.have.property('spanComputePeerService', false)
     expect(config).to.have.property('spanRemoveIntegrationFromService', false)
     expect(config).to.have.property('instrumentation_config_id', undefined)

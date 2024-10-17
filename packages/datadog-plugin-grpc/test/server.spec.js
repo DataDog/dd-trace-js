@@ -5,7 +5,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const getPort = require('get-port')
 const Readable = require('stream').Readable
 
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, GRPC_SERVER_ERROR_STATUSES } = require('../../dd-trace/src/constants')
 
 const nodeMajor = parseInt(process.versions.node.split('.')[0])
 const pkgs = nodeMajor > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
@@ -278,7 +278,6 @@ describe('Plugin', () => {
 
         it('should ignore errors not set by DD_GRPC_SERVER_ERROR_STATUSES', async () => {
           tracer._tracer._config.grpc.server.error.statuses = [6, 7, 8, 9, 10, 11, 12, 13]
-          console.log(5555, tracer._tracer._config.grpc.server.error.statuses)
           const client = await buildClient({
             getUnary: (_, callback) => {
               const metadata = new grpc.Metadata()
@@ -305,7 +304,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
-              tracer._tracer._config.grpc.server.error.statuses = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+              tracer._tracer._config.grpc.server.error.statuses = GRPC_SERVER_ERROR_STATUSES
             })
         })
 

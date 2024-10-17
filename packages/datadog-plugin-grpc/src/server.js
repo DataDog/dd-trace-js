@@ -70,7 +70,6 @@ class GrpcServerPlugin extends ServerPlugin {
     if (!span) return
 
     this.addCode(span, error.code)
-    console.log(69696969, error.code, this._tracerConfig.grpc.server.error.statuses)
     if (error.code && !this._tracerConfig.grpc.server.error.statuses.includes(error.code)) {
       return
     }
