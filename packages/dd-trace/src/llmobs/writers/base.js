@@ -6,6 +6,7 @@ const { URL, format } = require('url')
 const logger = require('../../log')
 
 const { encodeUnicode } = require('../util')
+const log = require('../../log')
 
 class BaseLLMObsWriter {
   constructor ({ interval, timeout, endpoint, intake, eventType, protocol, port }) {
@@ -67,6 +68,8 @@ class BaseLLMObsWriter {
       url: this._url,
       timeout: this._timeout
     }
+
+    log.debug(`Encoded LLMObs payload: ${payload}`)
 
     request(payload, options, (err, resp, code) => {
       if (err) {

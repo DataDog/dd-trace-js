@@ -1,6 +1,7 @@
 'use strict'
 
 module.exports = {
+  SPAN_KINDS: ['llm', 'agent', 'workflow', 'task', 'tool', 'embedding', 'retrieval'],
   SPAN_KIND: '_ml_obs.meta.span.kind',
   SESSION_ID: '_ml_obs.session_id',
   METADATA: '_ml_obs.meta.metadata',
