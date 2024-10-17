@@ -64,7 +64,9 @@ class GrpcClientPlugin extends ClientPlugin {
 
   error ({ span, error }) {
     this.addCode(span, error.code)
-    this.addError(error, span)
+    if (error.code && error.code in this._tracerConfig.grpc.client.error.statuses) {
+      this.addError(error, span)
+    }
   }
 
   finish ({ span, result, peer }) {

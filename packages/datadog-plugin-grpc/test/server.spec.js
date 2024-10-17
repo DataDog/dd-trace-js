@@ -276,6 +276,39 @@ describe('Plugin', () => {
             })
         })
 
+        it('should ignore errors not set by DD_GRPC_SERVER_ERROR_STATUSES', async () => {
+          process.env.DD_GRPC_SERVER_ERROR_STATUSES = '6-13'
+          tracer = require('../../dd-trace')
+          const client = await buildClient({
+            getUnary: (_, callback) => {
+              const metadata = new grpc.Metadata()
+
+              metadata.set('extra', 'information')
+
+              const error = new Error('foobar')
+
+              error.code = grpc.status.NOT_FOUND
+
+              const childOf = tracer.scope().active()
+              const child = tracer.startSpan('child', { childOf })
+
+              // Delay trace to ensure auto-cancellation doesn't override the status code.
+              setTimeout(() => child.finish())
+
+              callback(error, {}, metadata)
+            }
+          })
+
+          client.getUnary({ first: 'foobar' }, () => {})
+
+          return agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('error', 0)
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
+              delete process.env.DD_GRPC_SERVER_ERROR_STATUSES
+            })
+        })
+
         it('should handle custom errors', async () => {
           const client = await buildClient({
             getUnary: (_, callback) => {

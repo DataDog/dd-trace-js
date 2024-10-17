@@ -353,6 +353,23 @@ describe('Plugin', () => {
                 })
             })
 
+            it('should ignore errors not set by DD_GRPC_CLIENT_ERROR_STATUSES', async () => {
+              process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '3-13'
+              tracer = require('../../dd-trace')
+              const client = await buildClient({
+                getUnary: (_, callback) => callback(new Error('foobar'))
+              })
+
+              client.getUnary({ first: 'foobar' }, () => {})
+
+              return agent
+                .use(traces => {
+                  expect(traces[0][0]).to.have.property('error', 0)
+                  expect(traces[0][0].metrics).to.have.property('grpc.status.code', 2)
+                  delete process.env.DD_GRPC_CLIENT_ERROR_STATUSES
+                })
+            })
+
             it('should handle protocol errors', async () => {
               const definition = loader.loadSync(path.join(__dirname, 'invalid.proto'))
               const test = grpc.loadPackageDefinition(definition).test
