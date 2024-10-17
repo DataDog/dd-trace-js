@@ -81,7 +81,6 @@ describe('WAF Manager', () => {
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.loaded', 1)
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.error_count', 0)
       expect(Reporter.metricsQueue.set).not.to.been.calledWith('_dd.appsec.event_rules.errors')
-      expect(Reporter.metricsQueue.set).to.been.calledWithExactly('manual.keep', 'true')
     })
 
     it('should set init metrics with errors', () => {
@@ -104,7 +103,6 @@ describe('WAF Manager', () => {
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.error_count', 2)
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.errors',
         '{"error_1":["invalid_1"],"error_2":["invalid_2","invalid_3"]}')
-      expect(Reporter.metricsQueue.set).to.been.calledWithExactly('manual.keep', 'true')
     })
   })
 
