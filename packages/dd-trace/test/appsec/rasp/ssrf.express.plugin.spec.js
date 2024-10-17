@@ -163,7 +163,7 @@ describe('RASP - ssrf', () => {
         })
       })
 
-      describe.only('Test using request', () => {
+      describe('Test using request', () => {
         withVersions('express', 'request', requestVersion => {
           let requestToTest
 
