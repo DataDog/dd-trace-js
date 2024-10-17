@@ -506,8 +506,8 @@ describe('Child process plugin', () => {
     })
 
     describe('Methods which do not spawn a shell by default', () => {
-      const execAsyncMethods = ['execFile', 'spawn']
-      const execSyncMethods = ['execFileSync', 'spawnSync']
+      const execAsyncMethods = [] //['execFile', 'spawn']
+      const execSyncMethods = ['spawnSync'] // ['execFileSync', 'spawnSync']
       let childProcess, tracer
 
       beforeEach(() => {

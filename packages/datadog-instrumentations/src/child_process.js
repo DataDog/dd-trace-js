@@ -23,9 +23,11 @@ names.forEach(name => {
   addHook({ name }, childProcess => {
     if (!patched) {
       patched = true
-      shimmer.massWrap(childProcess, execAsyncMethods, wrapChildProcessAsyncMethod())
-      shimmer.massWrap(childProcess, execSyncMethods, wrapChildProcessSyncMethod())
-      shimmer.wrap(childProcess, 'execSync', wrapChildProcessSyncMethod(true))
+      shimmer.massWrap(childProcess, execAsyncMethods, wrapChildProcessAsyncMethod(childProcess.ChildProcess))
+      // shimmer.massWrap(childProcess, execSyncMethods, wrapChildProcessSyncMethod())
+      shimmer.wrap(childProcess, 'execSync', wrapChildProcessSyncMethod('execSync', true))
+      shimmer.wrap(childProcess, 'execFileSync', wrapChildProcessSyncMethod('execFileSync'))
+      shimmer.wrap(childProcess, 'spawnSync', wrapChildProcessSyncMethod('spawnSync'))
     }
 
     return childProcess
@@ -34,17 +36,21 @@ names.forEach(name => {
 
 function normalizeArgs (args, shell) {
   const childProcessInfo = {
-    command: args[0]
+    command: args[0],
+    file: args[0],
   }
 
   if (Array.isArray(args[1])) {
     childProcessInfo.command = childProcessInfo.command + ' ' + args[1].join(' ')
+    childProcessInfo.fileArgs = args[1]
+
     if (args[2] !== null && typeof args[2] === 'object') {
       childProcessInfo.options = args[2]
     }
   } else if (args[1] !== null && typeof args[1] === 'object') {
     childProcessInfo.options = args[1]
   }
+
   childProcessInfo.shell = shell ||
     childProcessInfo.options?.shell === true ||
     typeof childProcessInfo.options?.shell === 'string'
@@ -52,7 +58,7 @@ function normalizeArgs (args, shell) {
   return childProcessInfo
 }
 
-function wrapChildProcessSyncMethod (shell = false) {
+function wrapChildProcessSyncMethod (methodName, shell = false) {
   return function wrapMethod (childProcessMethod) {
     return function () {
       if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
@@ -63,14 +69,51 @@ function wrapChildProcessSyncMethod (shell = false) {
 
       const innerResource = new AsyncResource('bound-anonymous-fn')
       return innerResource.runInAsyncScope(() => {
-        return childProcessChannel.traceSync(
-          childProcessMethod,
-          {
-            command: childProcessInfo.command,
-            shell: childProcessInfo.shell
-          },
-          this,
-          ...arguments)
+        const context = {
+          command: childProcessInfo.command,
+          file: childProcessInfo.file,
+          shell: childProcessInfo.shell
+        }
+        if (childProcessInfo.fileArgs) {
+          context.fileArgs = childProcessInfo.fileArgs
+        }
+        const abortController = new AbortController()
+
+        childProcessChannel.start.publish({ ...context, abortController })
+
+        try {
+          if (abortController.signal.aborted) {
+            const error = abortController.signal.reason || new Error('Aborted')
+            // expected results on error are different in each method
+            switch (methodName) {
+              case 'execFileSync':
+              case 'execSync':
+                throw error
+              case 'spawnSync':
+                return {
+                  error,
+                  status: null,
+                  signal: null,
+                  output: null,
+                  stdout: null,
+                  stderr: null,
+                  pid: 0
+                }
+            }
+          }
+
+          const result = childProcessMethod.apply(this, arguments)
+          context.result = result
+
+          return result
+        } catch (err) {
+          context.error = err
+          childProcessChannel.error.publish(context)
+
+          throw err
+        } finally {
+          childProcessChannel.end.publish(context)
+        }
       })
     }
   }
@@ -84,18 +127,24 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
 
     const childProcessInfo = normalizeArgs(arguments, shell)
 
+    const context = {
+      command: childProcessInfo.command,
+      file: childProcessInfo.file,
+      shell: childProcessInfo.shell
+    }
+    if (childProcessInfo.fileArgs) {
+      context.fileArgs = childProcessInfo.fileArgs
+    }
+
     return childProcessChannel.tracePromise(
       customPromisifyMethod,
-      {
-        command: childProcessInfo.command,
-        shell: childProcessInfo.shell
-      },
+      context,
       this,
       ...arguments)
   }
 }
 
-function wrapChildProcessAsyncMethod (shell = false) {
+function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
   return function wrapMethod (childProcessMethod) {
     function wrappedChildProcessMethod () {
       if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
@@ -112,9 +161,35 @@ function wrapChildProcessAsyncMethod (shell = false) {
 
       const innerResource = new AsyncResource('bound-anonymous-fn')
       return innerResource.runInAsyncScope(() => {
-        childProcessChannel.start.publish({ command: childProcessInfo.command, shell: childProcessInfo.shell })
+        const abortController = new AbortController()
+        const { command, file, shell, fileArgs } = childProcessInfo
+        const context = {
+          command,
+          file,
+          shell
+        }
+        if (fileArgs) {
+          context.fileArgs = fileArgs
+        }
 
-        const childProcess = childProcessMethod.apply(this, arguments)
+        childProcessChannel.start.publish({ ...context, abortController })
+
+        let childProcess
+        if (abortController.signal.aborted) {
+          childProcess = new ChildProcess()
+          process.nextTick(() => {
+            const error = abortController.signal.reason || new Error('Aborted')
+            childProcess.emit('error', error)
+            const cb = arguments[arguments.length - 1]
+            if (typeof cb === 'function') {
+              cb(error)
+            }
+            childProcess.emit('close')
+          })
+        } else {
+          childProcess = childProcessMethod.apply(this, arguments)
+        }
+
         if (childProcess) {
           let errorExecuted = false
 
@@ -129,8 +204,7 @@ function wrapChildProcessAsyncMethod (shell = false) {
               childProcessChannel.error.publish()
             }
             childProcessChannel.asyncEnd.publish({
-              command: childProcessInfo.command,
-              shell: childProcessInfo.shell,
+              ...context,
               result: code
             })
           })
