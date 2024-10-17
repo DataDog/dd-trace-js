@@ -30,7 +30,14 @@ function start (config, rc) {
   })
 
   rcChannel.port2.on('message', ({ ackId, error }) => {
-    rcAckCallbacks.get(ackId)(error)
+    const ack = rcAckCallbacks.get(ackId)
+    if (ack) {
+      ack(error)
+    } else {
+      // TODO: In what scenario would this happen? Should we handle this differently?
+      log.error(`Product handler already acknowleged for LIVE_DEBUGGING-${ackId}`)
+      log.error(error)
+    }
     rcAckCallbacks.delete(ackId)
   })
   rcChannel.port2.on('messageerror', (err) => log.error(err))
