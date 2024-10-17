@@ -27,7 +27,11 @@ describe('WAF Manager', () => {
     DDWAF.prototype.constructor.version = sinon.stub()
     DDWAF.prototype.dispose = sinon.stub()
     DDWAF.prototype.createContext = sinon.stub()
-    DDWAF.prototype.update = sinon.stub()
+    DDWAF.prototype.update = sinon.stub().callsFake(function (newRules) {
+      if (newRules?.metadata?.rules_version) {
+        this.diagnostics.ruleset_version = newRules?.metadata?.rules_version
+      }
+    })
     DDWAF.prototype.diagnostics = {
       ruleset_version: '1.0.0',
       rules: {
