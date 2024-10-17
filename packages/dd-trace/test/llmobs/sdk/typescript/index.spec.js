@@ -28,21 +28,60 @@ const testVersions = [
   '^5'
 ]
 
+const testCases = [
+  {
+    name: 'not initialized',
+    file: 'noop'
+  },
+  {
+    name: 'instruments an application with decorators',
+    file: 'index',
+    setup: (agent, results = {}) => {
+      const llmobsRes = agent.assertLlmObsPayloadReceived(({ payload }) => {
+        results.llmobsSpans = payload.spans
+      })
+
+      const apmRes = agent.assertMessageReceived(({ payload }) => {
+        results.apmSpans = payload
+      })
+
+      return [llmobsRes, apmRes]
+    },
+    runTest: ({ llmobsSpans, apmSpans }) => {
+      const actual = llmobsSpans
+      const expected = [
+        expectedLLMObsNonLLMSpanEvent({
+          span: apmSpans[0][0],
+          spanKind: 'agent',
+          tags: {
+            ml_app: 'test',
+            language: 'javascript'
+          },
+          inputValue: 'this is a',
+          outputValue: 'test'
+        })
+      ]
+
+      check(expected, actual)
+    }
+  }
+]
+
+// a bit of devex to show the version we're actually testing
+// so we don't need to know ahead of time
+function getLatestVersion (range) {
+  const command = `npm show typescript@${range} version`
+  const output = execSync(command, { encoding: 'utf-8' }).trim()
+  const versions = output.split('\n').map(line => line.split(' ')[1].replace(/'/g, ''))
+  return versions[versions.length - 1]
+}
+
 describe('typescript', () => {
   let agent
   let proc
   let sandbox
 
   for (const version of testVersions) {
-    // a bit of devex to show the version we're actually testing
-    // so we don't need to know ahead of time
-    const getLatestVersion = (range) => {
-      const command = `npm show typescript@${range} version`
-      const output = execSync(command, { encoding: 'utf-8' }).trim()
-      const versions = output.split('\n').map(line => line.split(' ')[1].replace(/'/g, ''))
-      return versions[versions.length - 1]
-    }
-
     context(`with version ${getLatestVersion(version)}`, () => {
       before(async function () {
         this.timeout(20000)
@@ -64,48 +103,31 @@ describe('typescript', () => {
         await agent.stop()
       })
 
-      it('instruments an application with decorators', async () => {
-        const cwd = sandbox.folder
+      for (const test of testCases) {
+        const { name, file } = test
+        it(name, async () => {
+          const cwd = sandbox.folder
 
-        let llmobsSpans, apmSpans
+          const results = {}
+          const waiters = test.setup ? test.setup(agent, results) : []
 
-        const llmobsRes = agent.assertLlmObsPayloadReceived(({ payload }) => {
-          llmobsSpans = payload.spans
+          // compile typescript
+          execSync(
+            `tsc --target ES6 --experimentalDecorators --module commonjs --sourceMap ${file}.ts`,
+            { cwd, stdio: 'inherit' }
+          )
+
+          proc = await spawnProc(
+            path.join(cwd, `${file}.js`),
+            { cwd, env: { DD_TRACE_AGENT_PORT: agent.port } }
+          )
+
+          await Promise.all(waiters)
+
+          // some tests just need the file to run, not assert payloads
+          test.runTest && test.runTest(results)
         })
-
-        const apmRes = agent.assertMessageReceived(({ payload }) => {
-          apmSpans = payload
-        })
-
-        // compile typescript
-        execSync(
-          'tsc --target ES6 --experimentalDecorators --module commonjs --sourceMap index.ts',
-          { cwd, stdio: 'inherit' }
-        )
-
-        proc = await spawnProc(
-          path.join(cwd, 'index.js'),
-          { cwd, env: { DD_TRACE_AGENT_PORT: agent.port } }
-        )
-
-        await Promise.all([llmobsRes, apmRes])
-
-        const actual = llmobsSpans
-        const expected = [
-          expectedLLMObsNonLLMSpanEvent({
-            span: apmSpans[0][0],
-            spanKind: 'agent',
-            tags: {
-              ml_app: 'test',
-              language: 'javascript'
-            },
-            inputValue: 'this is a',
-            outputValue: 'test'
-          })
-        ]
-
-        check(expected, actual)
-      })
+      }
     })
   }
 })
