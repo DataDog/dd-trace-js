@@ -16,11 +16,6 @@ class NoopLLMObs {
 
   disable () {}
 
-  startSpan (options = {}) {
-    const name = options.name || options.kind
-    return this._tracer.startSpan(name, options)
-  }
-
   trace (options = {}, fn) {
     if (typeof options === 'function') {
       fn = options

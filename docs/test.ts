@@ -562,15 +562,6 @@ llmobs.enable({
 // manually disable
 llmobs.disable()
 
-// start span in current context
-llmobs.startSpan({ name: 'name', kind: 'llm' })
-llmobs.startSpan({ name: 'name', kind: 'embedding'})
-llmobs.startSpan({ name: 'name', kind: 'agent'})
-llmobs.startSpan({ name: 'name', kind: 'retrieval'})
-llmobs.startSpan({ name: 'name', kind: 'task'})
-llmobs.startSpan({ name: 'name', kind: 'tool'})
-llmobs.startSpan({ name: 'name', kind: 'workflow'})
-
 // trace block of code
 llmobs.trace({ name: 'name', kind: 'llm' }, () => {})
 llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, () => {})
@@ -603,9 +594,22 @@ cls.myOtherLLM()
 // export a span
 llmobs.enable({ mlApp: 'myApp' })
 llmobs.exportSpan()
-const llmobsSpanCtx = llmobs.exportSpan(llmobs.startSpan({ name: 'name', kind: 'llm' }))
-llmobsSpanCtx.traceId;
-llmobsSpanCtx.spanId;
+llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
+  const llmobsSpanCtx = llmobs.exportSpan(span)
+  llmobsSpanCtx.traceId;
+  llmobsSpanCtx.spanId;
+
+  // submit evaluation
+  llmobs.disable()
+  llmobs.submitEvaluation(llmobsSpanCtx, {
+    label: 'my-eval-metric',
+    metricType: 'categorical',
+    value: 'good',
+    mlApp: 'myApp',
+    tags: {},
+    timestampMs: Date.now()
+  })
+})
 
 // annotate a span
 llmobs.annotate({
@@ -623,16 +627,7 @@ llmobs.annotate(span, {
   tags: {}
 })
 
-// submit evaluation
-llmobs.disable()
-llmobs.submitEvaluation(llmobsSpanCtx, {
-  label: 'my-eval-metric',
-  metricType: 'categorical',
-  value: 'good',
-  mlApp: 'myApp',
-  tags: {},
-  timestampMs: Date.now()
-})
+
 
 // flush
 llmobs.flush()

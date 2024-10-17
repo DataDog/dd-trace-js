@@ -79,55 +79,6 @@ class LLMObs {
     this._llmobsModule.disable()
   }
 
-  startSpan (options = {}) {
-    if (!this.enabled) {
-      logger.warn('Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.')
-    }
-
-    const kind = options.kind
-    const valid = validKind(kind)
-    if (!valid) {
-      logger.warn(`Invalid span kind specified: ${kind}. Span will not be sent to LLM Observability.`)
-    }
-
-    const name = getName(kind, options)
-
-    const {
-      spanOptions,
-      ...llmobsOptions
-    } = this._extractOptions(options)
-
-    const span = this._tracer.startSpan(name, {
-      ...spanOptions,
-      childOf: this._tracer.scope().active()
-    })
-
-    // we need the span to finish in the same context it was started
-    const originalFinish = span.finish
-    span.finish = function () {
-      span.finish = originalFinish
-      storage.enterWith(oldStore)
-      return originalFinish.apply(span, arguments)
-    }
-
-    const oldStore = storage.getStore()
-    const parentLLMObsSpan = oldStore?.llmobsSpan
-
-    this._tagger.setLLMObsSpanTags(span, valid && kind, {
-      ...llmobsOptions,
-      parentLLMObsSpan
-    })
-    const newStore = span ? span._store : oldStore
-
-    if (this.enabled) {
-      storage.enterWith({ ...newStore, span, llmobsSpan: span })
-    } else {
-      storage.enterWith({ ...newStore, span })
-    }
-
-    return span
-  }
-
   trace (options = {}, fn) {
     if (!this.enabled) {
       logger.warn('Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.')

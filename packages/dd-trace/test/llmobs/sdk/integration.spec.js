@@ -1,6 +1,6 @@
 'use strict'
 
-const { expectedLLMObsNonLLMSpanEvent, deepEqualWithMockValues, expectedLLMObsLLMSpanEvent } = require('../util')
+const { expectedLLMObsNonLLMSpanEvent, deepEqualWithMockValues } = require('../util')
 const chai = require('chai')
 
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
@@ -72,41 +72,6 @@ describe('end to end sdk integration tests', () => {
     llmobs.disable()
     delete global._ddtrace
     delete require.cache[require.resolve('../../../../dd-trace')]
-  })
-
-  it('uses startSpan correctly', () => {
-    payloadGenerator = function () {
-      const llmobsParent = llmobs.startSpan({ kind: 'agent', name: 'llmobsParent' })
-      const llmobsChild = llmobs
-        .startSpan({ kind: 'llm', name: 'llmobsChild', modelName: 'model', modelProvider: 'provider' })
-      llmobs.annotate({ inputData: 'hello', outputData: 'world' })
-      llmobsChild.finish()
-      llmobsParent.finish()
-    }
-
-    const { spans, llmobsSpans } = run(payloadGenerator)
-    expect(spans).to.have.lengthOf(2)
-    expect(llmobsSpans).to.have.lengthOf(2)
-
-    const expected = [
-      expectedLLMObsNonLLMSpanEvent({
-        span: spans[0],
-        spanKind: 'agent',
-        tags
-      }),
-      expectedLLMObsLLMSpanEvent({
-        span: spans[1],
-        spanKind: 'llm',
-        parentId: spans[0].context().toSpanId(),
-        tags,
-        inputMessages: [{ content: 'hello' }],
-        outputMessages: [{ content: 'world' }],
-        modelName: 'model',
-        modelProvider: 'provider'
-      })
-    ]
-
-    check(expected, llmobsSpans)
   })
 
   it('uses trace correctly', () => {
@@ -208,22 +173,17 @@ describe('end to end sdk integration tests', () => {
   it('instruments and uninstruments as needed', () => {
     payloadGenerator = function () {
       llmobs.disable()
-      const parent = llmobs.startSpan({ kind: 'agent', name: 'llmobsParent' })
-      llmobs.annotate({ inputData: 'hello', outputData: 'world' })
-
-      llmobs.enable({ mlApp: 'test1' })
-      const child1 = llmobs.startSpan({ kind: 'workflow', name: 'child1' })
-
-      llmobs.disable()
-      const child2 = llmobs.startSpan({ kind: 'workflow', name: 'child2' })
-
-      llmobs.enable({ mlApp: 'test2' })
-      const child3 = llmobs.startSpan({ kind: 'workflow', name: 'child3' })
-
-      child3.finish()
-      child2.finish()
-      child1.finish()
-      parent.finish()
+      llmobs.trace({ kind: 'agent', name: 'llmobsParent' }, () => {
+        llmobs.annotate({ inputData: 'hello', outputData: 'world' })
+        llmobs.enable({ mlApp: 'test1' })
+        llmobs.trace({ kind: 'workflow', name: 'child1' }, () => {
+          llmobs.disable()
+          llmobs.trace({ kind: 'workflow', name: 'child2' }, () => {
+            llmobs.enable({ mlApp: 'test2' })
+            llmobs.trace({ kind: 'workflow', name: 'child3' }, () => {})
+          })
+        })
+      })
     }
 
     const { spans, llmobsSpans } = run(payloadGenerator)

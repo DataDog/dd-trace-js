@@ -165,59 +165,6 @@ describe('sdk', () => {
   })
 
   describe('tracing', () => {
-    describe('startSpan', () => {
-      describe('tracing behavior', () => {
-        it('starts a span if llmobs is disabled but does not process it in the LLMObs span processor', () => {
-          tracer._tracer._config.llmobs.enabled = false
-
-          const span = llmobs.startSpan({ kind: 'workflow' })
-
-          expect(() => span.finish()).to.not.throw()
-          expect(llmobs._tracer._processor.process).to.have.been.called
-          expect(LLMObsSpanProcessor.prototype.format).to.not.have.been.called
-          expect(LLMObsTagger.tagMap.get(span)).to.not.exist
-
-          tracer._tracer._config.llmobs.enabled = true
-        })
-
-        it('starts span if the kind is invalid but does not process it in the LLMObs span processor', () => {
-          const span = llmobs.startSpan({ kind: 'invalid' })
-
-          expect(() => span.finish()).to.not.throw()
-          expect(LLMObsTagger.tagMap.get(span)).to.not.exist
-          expect(llmobs._tracer._processor.process).to.have.been.called
-          expect(LLMObsSpanProcessor.prototype.format).to.not.have.been.called
-        })
-      })
-
-      describe('parentage', () => {
-        // it('starts a span with a distinct trace id', () => {
-        //   const span = llmobs.startSpan('workflow')
-
-        //   expect(span.context()._tags['_ml_obs.trace_id'])
-        //     .to.exist.and.to.not.equal(span.context().toTraceId(true))
-        // })
-
-        it('sets span parentage correctly', () => {
-          const span = llmobs.startSpan({ kind: 'workflow' })
-          const child = llmobs.startSpan({ kind: 'task' })
-
-          expect(LLMObsTagger.tagMap.get(child)['_ml_obs.llmobs_parent_id']).to.equal(span.context().toSpanId())
-          // expect(child.context()._tags['_ml_obs.trace_id'])
-          //   .to.equal(span.context()._tags['_ml_obs.trace_id'])
-        })
-
-        it('maintains llmobs parentage through apm spans', () => {
-          const outerLLMObs = llmobs.startSpan({ kind: 'workflow' })
-          tracer.startSpan('apmSpan', { childOf: outerLLMObs })
-          const innerLLMObs = llmobs.startSpan({ kind: 'task' })
-
-          expect(LLMObsTagger.tagMap.get(innerLLMObs)['_ml_obs.llmobs_parent_id'])
-            .to.equal(outerLLMObs.context().toSpanId())
-        })
-      })
-    })
-
     describe('trace', () => {
       describe('tracing behavior', () => {
         it('starts a span if llmobs is disabled but does not process it in the LLMObs span processor', () => {
@@ -584,14 +531,27 @@ describe('sdk', () => {
     })
 
     it('does not annotate if there are no options given', () => {
-      const span = llmobs.startSpan('llm', { name: 'test' })
-      llmobs.annotate(span)
+      // const span = llmobs.startSpan('llm', { name: 'test' })
+      // llmobs.annotate(span)
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate(span)
+
+        // span should still exist in the registry, just with no annotations, and it shoul not throw
+        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined'
+        })
+      })
     })
 
     it('does not annotate if the provided span is not an LLMObs span', () => {
-      const span = tracer.startSpan('test')
+      tracer.trace('test', span => {
+        llmobs.annotate(span, {})
 
-      llmobs.annotate(span, {})
+        // no span in registry, should not throw
+        expect(LLMObsTagger.tagMap.get(span)).to.not.exist
+      })
     })
 
     it('does not annotate a finished span', () => {
@@ -611,10 +571,11 @@ describe('sdk', () => {
     it('does not annotate an llmobs span with an invalid kind', () => {
       // TODO this might end up being obsolete with llmobs span kind as optional
       sinon.spy(llmobs._tagger, 'tagLLMIO')
-      const span = llmobs.startSpan({ kind: 'llm', name: 'test' })
-      LLMObsTagger.tagMap.get(span)['_ml_obs.meta.span.kind'] = undefined // somehow this is set
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        LLMObsTagger.tagMap.get(span)['_ml_obs.meta.span.kind'] = undefined // somehow this is set
+        llmobs.annotate(span, {})
+      })
 
-      llmobs.annotate(span, {})
       expect(llmobs._tagger.tagLLMIO).to.not.have.been.called
       llmobs._tagger.tagLLMIO.restore()
     })
@@ -669,11 +630,12 @@ describe('sdk', () => {
       it(`annotates ${optionLowerCase} if present`, () => {
         sinon.spy(llmobs._tagger, `tag${method}`)
 
-        const span = llmobs.startSpan({ kind: 'llm', name: 'test' })
-        const opt = {}
-        llmobs.annotate(span, { [optionLowerCase]: opt })
+        llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+          const opt = {}
+          llmobs.annotate(span, { [optionLowerCase]: opt })
 
-        expect(llmobs._tagger[`tag${method}`]).to.have.been.calledWith(span, opt)
+          expect(llmobs._tagger[`tag${method}`]).to.have.been.calledWith(span, opt)
+        })
 
         llmobs._tagger[`tag${method}`].restore()
       })
@@ -690,10 +652,11 @@ describe('sdk', () => {
     })
 
     it('returns if the provided span is not an LLMObs span', () => {
-      const span = tracer.startSpan('test')
-      const spanCtx = llmobs.exportSpan(span)
+      tracer.trace('test', span => {
+        const spanCtx = llmobs.exportSpan(span)
 
-      expect(spanCtx).to.be.undefined
+        expect(spanCtx).to.be.undefined
+      })
     })
 
     it('returns if there is no span provided and no active llmobs span found', () => {
@@ -703,13 +666,14 @@ describe('sdk', () => {
     })
 
     it('uses the provided span', () => {
-      const span = llmobs.startSpan({ kind: 'llm', name: 'test' })
-      const spanCtx = llmobs.exportSpan(span)
+      llmobs.trace({ kind: 'workflow', name: 'test' }, span => {
+        const spanCtx = llmobs.exportSpan(span)
 
-      const traceId = span.context().toTraceId(true)
-      const spanId = span.context().toSpanId()
+        const traceId = span.context().toTraceId(true)
+        const spanId = span.context().toSpanId()
 
-      expect(spanCtx).to.deep.equal({ traceId, spanId })
+        expect(spanCtx).to.deep.equal({ traceId, spanId })
+      })
     })
 
     it('uses the active span in an llmobs scope', () => {
@@ -737,12 +701,13 @@ describe('sdk', () => {
     })
 
     it('returns undefined if the provided span is not a span', () => {
-      const fakeSpan = llmobs.startSpan({ kind: 'llm', name: 'test' })
-      fakeSpan.context().toTraceId = undefined // something that would throw
-      LLMObsTagger.tagMap.set(fakeSpan, {})
-      const spanCtx = llmobs.exportSpan(fakeSpan)
+      llmobs.trace({ kind: 'workflow', name: 'test' }, fakeSpan => {
+        fakeSpan.context().toTraceId = undefined // something that would throw
+        LLMObsTagger.tagMap.set(fakeSpan, {})
+        const spanCtx = llmobs.exportSpan(fakeSpan)
 
-      expect(spanCtx).to.be.undefined
+        expect(spanCtx).to.be.undefined
+      })
     })
   })
 

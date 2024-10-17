@@ -22,17 +22,6 @@ describe('noop', () => {
     expect(() => span.setTag('foo', 'bar')).does.not.throw()
   })
 
-  describe('startSpan', () => {
-    it('should not throw', () => {
-      expect(() => llmobs.startSpan({})).does.not.throw
-    })
-
-    it('should return an object with a finish method', () => {
-      const span = llmobs.startSpan({})
-      expect(() => span.finish()).does.not.throw
-    })
-  })
-
   describe('trace', () => {
     it('should not throw with just a span', () => {
       const res = llmobs.trace({}, (span) => {

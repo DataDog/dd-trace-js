@@ -2231,14 +2231,6 @@ declare namespace tracer {
        * Disable LLM Observability tracing.
        */
       disable (): void,
-
-      /**
-       * Starts a span activated in the scope of the current active span.
-       * This span must be manually finished.
-       * @param options Options for the span.
-       * @returns The newly created span.
-       */
-      startSpan (options: llmobs.LLMObsNamedSpanOptions): tracer.Span
       
       /**
        * Instruments a function by automatically creating a span activated on its
