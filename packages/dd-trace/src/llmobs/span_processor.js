@@ -27,8 +27,6 @@ const {
 } = require('../constants')
 
 const LLMObsTagger = require('./tagger')
-const AgentlessWriter = require('./writers/spans/agentless')
-const AgentProxyWriter = require('./writers/spans/agentProxy')
 
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
@@ -36,12 +34,10 @@ const logger = require('../log')
 class LLMObsSpanProcessor {
   constructor (config) {
     this._config = config
-    const { llmobs } = config
+  }
 
-    if (llmobs.enabled) {
-      const LLMObsSpanWriter = llmobs.agentlessEnabled ? AgentlessWriter : AgentProxyWriter
-      this._writer = new LLMObsSpanWriter(config)
-    }
+  setWriter (writer) {
+    this._writer = writer
   }
 
   // TODO: instead of relying on the tagger's weakmap registry, can we use some namespaced storage correlation?
@@ -49,9 +45,9 @@ class LLMObsSpanProcessor {
     if (!this._config.llmobs.enabled) return
     // if the span is not in our private tagger map, it is not an llmobs span
     if (!LLMObsTagger.tagMap.has(span)) return
-    const formattedEvent = this.format(span)
 
     try {
+      const formattedEvent = this.format(span)
       this._writer.append(formattedEvent)
     } catch (e) {
       // this should be a rare case
@@ -74,8 +70,8 @@ class LLMObsSpanProcessor {
     const input = {}
     const output = {}
 
-    if (['llm', 'embedding'].includes(spanKind) && mlObsTags[MODEL_NAME]) {
-      meta.model_name = mlObsTags[MODEL_NAME]
+    if (['llm', 'embedding'].includes(spanKind)) {
+      meta.model_name = mlObsTags[MODEL_NAME] || 'custom'
       meta.model_provider = (mlObsTags[MODEL_PROVIDER] || 'custom').toLowerCase()
     }
     if (mlObsTags[METADATA]) {

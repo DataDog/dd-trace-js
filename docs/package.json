@@ -11,6 +11,6 @@
   "private": true,
   "devDependencies": {
     "typedoc": "^0.25.8",
-    "typescript": "^4.6"
+    "typescript": "^5.0"
   }
 }
