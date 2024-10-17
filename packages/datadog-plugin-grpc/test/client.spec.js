@@ -356,6 +356,7 @@ describe('Plugin', () => {
             it('should ignore errors not set by DD_GRPC_CLIENT_ERROR_STATUSES', async () => {
               process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '3-13'
               tracer = require('../../dd-trace')
+              console.log(88888, tracer._tracer._config)
               const client = await buildClient({
                 getUnary: (_, callback) => callback(new Error('foobar'))
               })
