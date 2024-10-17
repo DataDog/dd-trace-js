@@ -181,7 +181,9 @@ describe('WAF Manager', () => {
 
     it('should call Reporter.reportWafUpdate', () => {
       const rules = {
-        version: '4.2.0',
+        metadata: {
+          rules_version: '4.2.0'
+        },
         rules_data: [
           {
             id: 'blocked_users',
