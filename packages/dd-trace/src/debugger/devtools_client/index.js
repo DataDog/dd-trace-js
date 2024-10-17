@@ -23,12 +23,13 @@ session.on('Debugger.paused', async ({ params }) => {
   const timestamp = Date.now()
 
   let captureSnapshotForProbe = null
-  let maxReferenceDepth, maxLength
+  let maxReferenceDepth, maxCollectionSize, maxLength
   const probes = params.hitBreakpoints.map((id) => {
     const probe = breakpoints.get(id)
     if (probe.captureSnapshot) {
       captureSnapshotForProbe = probe
       maxReferenceDepth = highestOrUndefined(probe.capture.maxReferenceDepth, maxReferenceDepth)
+      maxCollectionSize = highestOrUndefined(probe.capture.maxCollectionSize, maxCollectionSize)
       maxLength = highestOrUndefined(probe.capture.maxLength, maxLength)
     }
     return probe
@@ -38,7 +39,10 @@ session.on('Debugger.paused', async ({ params }) => {
   if (captureSnapshotForProbe !== null) {
     try {
       // TODO: Create unique states for each affected probe based on that probes unique `capture` settings (DEBUG-2863)
-      processLocalState = await getLocalStateForCallFrame(params.callFrames[0], { maxReferenceDepth, maxLength })
+      processLocalState = await getLocalStateForCallFrame(
+        params.callFrames[0],
+        { maxReferenceDepth, maxCollectionSize, maxLength }
+      )
     } catch (err) {
       // TODO: This error is not tied to a specific probe, but to all probes with `captureSnapshot: true`.
       // However, in 99,99% of cases, there will be just a single probe, so I guess this simplification is ok?

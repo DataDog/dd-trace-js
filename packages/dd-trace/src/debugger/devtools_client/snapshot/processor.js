@@ -1,5 +1,7 @@
 'use strict'
 
+const { collectionSizeSym } = require('./symbols')
+
 module.exports = {
   processRawState: processProperties
 }
@@ -147,6 +149,8 @@ function toArray (type, elements, maxLength) {
   const expectedLength = elements.length - 1
   const result = { type, elements: new Array(expectedLength) }
 
+  setNotCaptureReasonOnCollection(result, elements)
+
   let i = 0
   for (const elm of elements) {
     if (elm.enumerable === false) continue // the value of the `length` property should not be part of the array
@@ -165,6 +169,8 @@ function toMap (type, pairs, maxLength) {
   // Perf: Create array of expected size in advance (expect that it contains only one non-enumrable element)
   const expectedLength = pairs.length - 1
   const result = { type, entries: new Array(expectedLength) }
+
+  setNotCaptureReasonOnCollection(result, pairs)
 
   let i = 0
   for (const pair of pairs) {
@@ -192,6 +198,8 @@ function toSet (type, values, maxLength) {
   // Perf: Create array of expected size in advance (expect that it contains only one non-enumrable element)
   const expectedLength = values.length - 1
   const result = { type, elements: new Array(expectedLength) }
+
+  setNotCaptureReasonOnCollection(result, values)
 
   let i = 0
   for (const value of values) {
@@ -234,6 +242,13 @@ function arrayBufferToString (bytes, size) {
     buf[i] = bytes[i].value.value
   }
   return buf.toString()
+}
+
+function setNotCaptureReasonOnCollection (result, collection) {
+  if (collectionSizeSym in collection) {
+    result.notCapturedReason = 'collectionSize'
+    result.size = collection[collectionSizeSym]
+  }
 }
 
 function notCapturedDepth (type) {
