@@ -10,6 +10,7 @@ const { storage } = require('../../../datadog-core')
 class Kinesis extends BaseAwsSdkPlugin {
   static get id () { return 'kinesis' }
   static get peerServicePrecursors () { return ['streamname'] }
+  static get isPayloadReporter () { return true }
 
   constructor (...args) {
     super(...args)
