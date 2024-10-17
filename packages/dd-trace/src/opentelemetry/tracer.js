@@ -16,6 +16,7 @@ class Tracer {
     this._tracerProvider = tracerProvider
     // Is there a reason this is public?
     this.instrumentationLibrary = library
+    this._isOtelLibrary = library?.name?.startsWith('@opentelemetry/instrumentation-')
     this._spanLimits = {}
   }
 
