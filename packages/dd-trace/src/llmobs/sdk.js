@@ -21,11 +21,13 @@ const LLMObsTagger = require('./tagger')
 
 // communicating with writer
 const { flushCh, evalMetricAppendCh } = require('./channels')
+const NoopLLMObs = require('./noop')
 
-class LLMObs {
+class LLMObs extends NoopLLMObs {
   constructor (tracer, llmobsModule, config) {
+    super(tracer)
+
     this._config = config
-    this._tracer = tracer
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
   }
@@ -218,39 +220,6 @@ class LLMObs {
     }
 
     return this._tracer.wrap(name, spanOptions, wrapped)
-  }
-
-  decorate (options = {}) {
-    const llmobs = this
-    return function (target, ctxOrPropertyKey, descriptor) {
-      if (!ctxOrPropertyKey) return target
-      if (typeof ctxOrPropertyKey === 'object') {
-        const ctx = ctxOrPropertyKey
-        if (ctx.kind !== 'method') return target
-
-        return llmobs.wrap({ name: ctx.name, ...options }, target)
-      } else {
-        const propertyKey = ctxOrPropertyKey
-        if (descriptor) {
-          if (typeof descriptor.value !== 'function') return descriptor
-
-          const original = descriptor.value
-          descriptor.value = llmobs.wrap({ name: propertyKey, ...options }, original)
-
-          return descriptor
-        } else {
-          if (typeof target[propertyKey] !== 'function') return target[propertyKey]
-
-          const original = target[propertyKey]
-          Object.defineProperty(target, propertyKey, {
-            ...Object.getOwnPropertyDescriptor(target, propertyKey),
-            value: llmobs.wrap({ name: propertyKey, ...options }, original)
-          })
-
-          return target
-        }
-      }
-    }
   }
 
   annotate (span, options) {
