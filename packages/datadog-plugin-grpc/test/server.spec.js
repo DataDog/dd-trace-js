@@ -277,9 +277,8 @@ describe('Plugin', () => {
         })
 
         it('should ignore errors not set by DD_GRPC_SERVER_ERROR_STATUSES', async () => {
-          process.env.DD_GRPC_SERVER_ERROR_STATUSES = '6-13'
-          tracer = require('../../dd-trace')
-          console.log(5555, tracer._tracer._config)
+          tracer._tracer._config.grpc.server.error.statuses = [6, 7, 8, 9, 10, 11, 12, 13]
+          console.log(5555, tracer._tracer._config.grpc.server.error.statuses)
           const client = await buildClient({
             getUnary: (_, callback) => {
               const metadata = new grpc.Metadata()
@@ -306,7 +305,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
-              delete process.env.DD_GRPC_SERVER_ERROR_STATUSES
+              tracer._tracer._config.grpc.server.error.statuses = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
             })
         })
 
