@@ -23,7 +23,7 @@ function publishRequestBodyAndNext (req, res, next) {
 addHook({
   name: 'multer',
   file: 'lib/make-middleware.js',
-  versions: ['>=1.4.4 < 2.0.0']
+  versions: ['^1.4.4-lts.1']
 }, makeMiddleware => {
   return shimmer.wrapFunction(makeMiddleware, makeMiddleware => function () {
     const middleware = makeMiddleware.apply(this, arguments)

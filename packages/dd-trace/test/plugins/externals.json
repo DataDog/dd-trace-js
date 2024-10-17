@@ -68,7 +68,7 @@
     },
     {
       "name": "multer",
-      "versions": [">=1.4.4 <2.0.0"]
+      "versions": ["^1.4.4-lts.1"]
     }
   ],
   "express-mongo-sanitize": [
