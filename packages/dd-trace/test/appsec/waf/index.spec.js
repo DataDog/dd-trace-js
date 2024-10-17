@@ -181,6 +181,7 @@ describe('WAF Manager', () => {
 
     it('should call Reporter.reportWafUpdate', () => {
       const rules = {
+        version: '4.2.0',
         rules_data: [
           {
             id: 'blocked_users',
@@ -197,8 +198,7 @@ describe('WAF Manager', () => {
 
       waf.update(rules)
 
-      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion,
-        DDWAF.prototype.diagnostics.ruleset_version)
+      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '4.2.0')
     })
   })
 
