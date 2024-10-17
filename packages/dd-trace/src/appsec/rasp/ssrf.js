@@ -21,7 +21,7 @@ function disable () {
 function analyzeSsrf (ctx) {
   const store = storage.getStore()
   const req = store?.req
-  const uri = (ctx.args.options?.uri && url.format(ctx.args.options?.uri)) ?? ctx.args.uri
+  const uri = (ctx.args.options?.uri && url.format(ctx.args.options.uri)) ?? ctx.args.uri
 
   if (!req || !uri) return
 
