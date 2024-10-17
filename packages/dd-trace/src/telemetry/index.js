@@ -314,7 +314,9 @@ function updateConfig (changes, config) {
     logInjection: 'DD_LOG_INJECTION',
     headerTags: 'DD_TRACE_HEADER_TAGS',
     tags: 'DD_TAGS',
-    'sampler.rules': 'DD_TRACE_SAMPLING_RULES'
+    'sampler.rules': 'DD_TRACE_SAMPLING_RULES',
+    'grpc.client.error.statuses': 'DD_GRPC_CLIENT_ERROR_STATUSES',
+    'grpc.server.error.statuses': 'DD_GRPC_SERVER_ERROR_STATUSES'
   }
 
   const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])

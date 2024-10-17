@@ -7,7 +7,7 @@ const semver = require('semver')
 const Readable = require('stream').Readable
 const getService = require('./service')
 const loader = require('../../../versions/@grpc/proto-loader').get()
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, GRPC_CLIENT_ERROR_STATUSES } = require('../../dd-trace/src/constants')
 
 const { DD_MAJOR } = require('../../../version')
 const nodeMajor = parseInt(process.versions.node.split('.')[0])
@@ -350,6 +350,23 @@ describe('Plugin', () => {
                   })
                   expect(traces[0][0].meta).to.have.property(ERROR_STACK)
                   expect(traces[0][0].metrics).to.have.property('grpc.status.code', 2)
+                })
+            })
+
+            it('should ignore errors not set by DD_GRPC_CLIENT_ERROR_STATUSES', async () => {
+              tracer._tracer._config.grpc.client.error.statuses = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+              const client = await buildClient({
+                getUnary: (_, callback) => callback(new Error('foobar'))
+              })
+
+              client.getUnary({ first: 'foobar' }, () => {})
+
+              return agent
+                .use(traces => {
+                  expect(traces[0][0]).to.have.property('error', 0)
+                  expect(traces[0][0].metrics).to.have.property('grpc.status.code', 2)
+                  tracer._tracer._config.grpc.client.error.statuses =
+                  GRPC_CLIENT_ERROR_STATUSES
                 })
             })
 
