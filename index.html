@@ -13,9 +13,11 @@
 <h5 id="amqplib"></h5>
 <h5 id="amqplib-tags"></h5>
 <h5 id="amqplib-config"></h5>
+<h5 id="avsc"></h5>
 <h5 id="aws-sdk"></h5>
 <h5 id="aws-sdk-tags"></h5>
 <h5 id="aws-sdk-config"></h5>
+<h5 id="azure-functions"></h5>
 <h5 id="bunyan"></h5>
 <h5 id="couchbase"></h5>
 <h5 id="cucumber"></h5>
@@ -76,6 +78,7 @@
 <h5 id="pg"></h5>
 <h5 id="pg-tags"></h5>
 <h5 id="pg-config"></h5>
+<h5 id="protobufjs"></h5>
 <h5 id="redis"></h5>
 <h5 id="redis-tags"></h5>
 <h5 id="redis-config"></h5>
@@ -91,7 +94,9 @@
 <ul>
 <li><a href="./interfaces/export_.plugins.amqp10.html">amqp10</a></li>
 <li><a href="./interfaces/export_.plugins.amqplib.html">amqplib</a></li>
+<li><a href="./interfaces/export_.plugins.avsc.html">avsc</a></li>
 <li><a href="./interfaces/export_.plugins.aws_sdk.html">aws-sdk</a></li>
+<li><a href="./interfaces/export_.plugins.azure_functions.html">azure-functions</a></li>
 <li><a href="./interfaces/export_.plugins.bluebird.html">bluebird</a></li>
 <li><a href="./interfaces/export_.plugins.couchbase.html">couchbase</a></li>
 <li><a href="./interfaces/export_.plugins.cucumber.html">cucumber</a></li>
@@ -132,6 +137,7 @@
 <li><a href="./interfaces/export_.plugins.pg.html">pg</a></li>
 <li><a href="./interfaces/export_.plugins.promise.html">promise</a></li>
 <li><a href="./interfaces/export_.plugins.promise_js.html">promise-js</a></li>
+<li><a href="./interfaces/export_.plugins.protobufjs.html">protobufjs</a></li>
 <li><a href="./interfaces/export_.plugins.q.html">q</a></li>
 <li><a href="./interfaces/export_.plugins.redis.html">redis</a></li>
 <li><a href="./interfaces/export_.plugins.restify.html">restify</a></li>
@@ -239,10 +245,10 @@ is not provided, the function is bound to the span that is active when
 <p>Options can be configured as a parameter to the <a href="./interfaces/tracer.html#init">init()</a> method or as environment variables. These are documented over on <a href="https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs">Configuring the NodeJS Tracing Library</a>.</p>
 <h3 id="custom-logging">Custom Logging</h3>
 
-<p>By default, logging from this library is disabled. In order to get debugging information and errors sent to logs, the <code>debug</code> options should be set to <code>true</code> in the <a href="./interfaces/tracer.html#init">init()</a> method.</p>
+<p>By default, logging from this library is disabled. In order to get debugging information and errors sent to logs, the <code>DD_TRACE_DEBUG</code> env var should be set to <code>true</code>.</p>
 <p>The tracer will then log debug information to <code>console.log()</code> and errors to <code>console.error()</code>. This behavior can be changed by passing a custom logger to the tracer. The logger should contain a <code>debug()</code> and <code>error()</code> methods that can handle messages and errors, respectively.</p>
 <p>For example:</p>
-<pre><code class="language-javascript"><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">bunyan</span><span class="hl-1"> = </span><span class="hl-3">require</span><span class="hl-1">(</span><span class="hl-4">&#39;bunyan&#39;</span><span class="hl-1">)</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">logger</span><span class="hl-1"> = </span><span class="hl-6">bunyan</span><span class="hl-1">.</span><span class="hl-3">createLogger</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-6">name:</span><span class="hl-1"> </span><span class="hl-4">&#39;dd-trace&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-6">level:</span><span class="hl-1"> </span><span class="hl-4">&#39;trace&#39;</span><br/><span class="hl-1">})</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">tracer</span><span class="hl-1"> = </span><span class="hl-3">require</span><span class="hl-1">(</span><span class="hl-4">&#39;dd-trace&#39;</span><span class="hl-1">).</span><span class="hl-3">init</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-6">logger:</span><span class="hl-1"> {</span><br/><span class="hl-1">    </span><span class="hl-3">error</span><span class="hl-6">:</span><span class="hl-1"> </span><span class="hl-6">err</span><span class="hl-1"> </span><span class="hl-0">=&gt;</span><span class="hl-1"> </span><span class="hl-6">logger</span><span class="hl-1">.</span><span class="hl-3">error</span><span class="hl-1">(</span><span class="hl-6">err</span><span class="hl-1">),</span><br/><span class="hl-1">    </span><span class="hl-3">warn</span><span class="hl-6">:</span><span class="hl-1"> </span><span class="hl-6">message</span><span class="hl-1"> </span><span class="hl-0">=&gt;</span><span class="hl-1"> </span><span class="hl-6">logger</span><span class="hl-1">.</span><span class="hl-3">warn</span><span class="hl-1">(</span><span class="hl-6">message</span><span class="hl-1">),</span><br/><span class="hl-1">    </span><span class="hl-3">info</span><span class="hl-6">:</span><span class="hl-1"> </span><span class="hl-6">message</span><span class="hl-1"> </span><span class="hl-0">=&gt;</span><span class="hl-1"> </span><span class="hl-6">logger</span><span class="hl-1">.</span><span class="hl-3">info</span><span class="hl-1">(</span><span class="hl-6">message</span><span class="hl-1">),</span><br/><span class="hl-1">    </span><span class="hl-3">debug</span><span class="hl-6">:</span><span class="hl-1"> </span><span class="hl-6">message</span><span class="hl-1"> </span><span class="hl-0">=&gt;</span><span class="hl-1"> </span><span class="hl-6">logger</span><span class="hl-1">.</span><span class="hl-3">trace</span><span class="hl-1">(</span><span class="hl-6">message</span><span class="hl-1">),</span><br/><span class="hl-1">  },</span><br/><span class="hl-1">  </span><span class="hl-6">debug:</span><span class="hl-1"> </span><span class="hl-0">true</span><br/><span class="hl-1">})</span>
+<pre><code class="language-javascript"><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">bunyan</span><span class="hl-1"> = </span><span class="hl-3">require</span><span class="hl-1">(</span><span class="hl-4">&#39;bunyan&#39;</span><span class="hl-1">)</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">logger</span><span class="hl-1"> = </span><span class="hl-6">bunyan</span><span class="hl-1">.</span><span class="hl-3">createLogger</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-6">name:</span><span class="hl-1"> </span><span class="hl-4">&#39;dd-trace&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-6">level:</span><span class="hl-1"> </span><span class="hl-4">&#39;trace&#39;</span><br/><span class="hl-1">})</span><br/><br/><span class="hl-6">process</span><span class="hl-1">.</span><span class="hl-6">env</span><span class="hl-1">.</span><span class="hl-2">DD_TRACE_DEBUG</span><span class="hl-1"> = </span><span class="hl-4">&#39;true&#39;</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">tracer</span><span class="hl-1"> = </span><span class="hl-3">require</span><span class="hl-1">(</span><span class="hl-4">&#39;dd-trace&#39;</span><span class="hl-1">).</span><span class="hl-3">init</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-6">logger:</span><span class="hl-1"> {</span><br/><span class="hl-1">    </span><span class="hl-3">error</span><span class="hl-6">:</span><span class="hl-1"> </span><span class="hl-6">err</span><span class="hl-1"> </span><span class="hl-0">=&gt;</span><span class="hl-1"> </span><span class="hl-6">logger</span><span class="hl-1">.</span><span class="hl-3">error</span><span class="hl-1">(</span><span class="hl-6">err</span><span class="hl-1">),</span><br/><span class="hl-1">    </span><span class="hl-3">warn</span><span class="hl-6">:</span><span class="hl-1"> </span><span class="hl-6">message</span><span class="hl-1"> </span><span class="hl-0">=&gt;</span><span class="hl-1"> </span><span class="hl-6">logger</span><span class="hl-1">.</span><span class="hl-3">warn</span><span class="hl-1">(</span><span class="hl-6">message</span><span class="hl-1">),</span><br/><span class="hl-1">    </span><span class="hl-3">info</span><span class="hl-6">:</span><span class="hl-1"> </span><span class="hl-6">message</span><span class="hl-1"> </span><span class="hl-0">=&gt;</span><span class="hl-1"> </span><span class="hl-6">logger</span><span class="hl-1">.</span><span class="hl-3">info</span><span class="hl-1">(</span><span class="hl-6">message</span><span class="hl-1">),</span><br/><span class="hl-1">    </span><span class="hl-3">debug</span><span class="hl-6">:</span><span class="hl-1"> </span><span class="hl-6">message</span><span class="hl-1"> </span><span class="hl-0">=&gt;</span><span class="hl-1"> </span><span class="hl-6">logger</span><span class="hl-1">.</span><span class="hl-3">trace</span><span class="hl-1">(</span><span class="hl-6">message</span><span class="hl-1">),</span><br/><span class="hl-1">  }</span><br/><span class="hl-1">})</span>
 </code><button>Copy</button></pre>
 <h3 id="span-hooks">Span Hooks</h3>
 
