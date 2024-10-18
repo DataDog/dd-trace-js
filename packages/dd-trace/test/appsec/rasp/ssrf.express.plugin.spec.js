@@ -162,6 +162,49 @@ describe('RASP - ssrf', () => {
           })
         })
       })
+
+      describe('Test using request', () => {
+        withVersions('express', 'request', requestVersion => {
+          let requestToTest
+
+          beforeEach(() => {
+            requestToTest = require(`../../../../../versions/request@${requestVersion}`).get()
+          })
+
+          it('Should not detect threat', async () => {
+            app = (req, res) => {
+              requestToTest.get(`https://${req.query.host}`).on('response', () => {
+                res.end('end')
+              })
+            }
+
+            axios.get('/?host=www.datadoghq.com')
+
+            return checkRaspExecutedAndNotThreat(agent)
+          })
+
+          it('Should detect threat doing a GET request', async () => {
+            app = async (req, res) => {
+              try {
+                requestToTest.get(`https://${req.query.host}`)
+                  .on('error', (e) => {
+                    if (e.message === 'DatadogRaspAbortError') {
+                      res.writeHead(500)
+                    }
+                    res.end('end')
+                  })
+              } catch (e) {
+                if (e.cause.message === 'DatadogRaspAbortError') {
+                  res.writeHead(500)
+                }
+                res.end('end')
+              }
+            }
+
+            await testBlockingRequest()
+          })
+        })
+      })
     })
   })
 
