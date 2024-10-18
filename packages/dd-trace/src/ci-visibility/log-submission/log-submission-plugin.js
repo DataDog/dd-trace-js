@@ -1,6 +1,15 @@
 const Plugin = require('../../plugins/plugin')
 const log = require('../../log')
 
+// if you want to use agent endpoint /debugger/v1/input:
+// const defaultParameters = {
+//   host: 'localhost',
+//   port: 8126,
+//   path: `/debugger/v1/input?ddsource=dd_debugger&service=${service}`,
+//   ssl: false,
+//   headers: { 'Content-Type': 'application/json; charset=utf-8' }
+// }
+
 function getWinstonLogSubmissionParameters (config) {
   const { site, service } = config
 
