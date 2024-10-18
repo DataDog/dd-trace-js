@@ -6,6 +6,7 @@ const { block, isBlocked } = require('../blocking')
 const ssrf = require('./ssrf')
 const sqli = require('./sql_injection')
 const lfi = require('./lfi')
+const cmdi = require('./command_injection')
 
 const { DatadogRaspAbortError } = require('./utils')
 
@@ -95,6 +96,7 @@ function enable (config) {
   ssrf.enable(config)
   sqli.enable(config)
   lfi.enable(config)
+  cmdi.enable(config)
 
   process.on('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
   expressMiddlewareError.subscribe(blockOnDatadogRaspAbortError)
@@ -104,6 +106,7 @@ function disable () {
   ssrf.disable()
   sqli.disable()
   lfi.disable()
+  cmdi.disable()
 
   process.off('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
   if (expressMiddlewareError.hasSubscribers) expressMiddlewareError.unsubscribe(blockOnDatadogRaspAbortError)
