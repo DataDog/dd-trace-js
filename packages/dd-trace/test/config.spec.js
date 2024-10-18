@@ -370,7 +370,7 @@ describe('Config', () => {
       { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' },
       { name: 'tracing', value: true, origin: 'default' },
       { name: 'url', value: undefined, origin: 'default' },
-      { name: 'version', value: undefined, origin: 'default' }
+      { name: 'version', value: '', origin: 'default' }
     ])
   })
 
@@ -400,6 +400,15 @@ describe('Config', () => {
 
     expect(config).to.have.property('service', 'test')
     expect(config.tags).to.have.property('service', 'test')
+  })
+
+  it('should initialize from the default version', () => {
+    pkg.version = '1.2.3'
+
+    const config = new Config()
+
+    expect(config).to.have.property('version', '1.2.3')
+    expect(config.tags).to.have.property('version', '1.2.3')
   })
 
   it('should initialize from environment variables', () => {
@@ -653,7 +662,7 @@ describe('Config', () => {
 
     expect(config).to.have.property('service', 'node')
     expect(config).to.have.property('env', undefined)
-    expect(config).to.have.property('version', undefined)
+    expect(config).to.have.property('version', '')
   })
 
   it('should read case-insensitive booleans from environment variables', () => {

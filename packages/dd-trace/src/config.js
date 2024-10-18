@@ -547,7 +547,7 @@ class Config {
     this._setValue(defaults, 'tracePropagationStyle.otelPropagators', false)
     this._setValue(defaults, 'tracing', true)
     this._setValue(defaults, 'url', undefined)
-    this._setValue(defaults, 'version', undefined)
+    this._setValue(defaults, 'version', pkg.version)
     this._setValue(defaults, 'instrumentation_config_id', undefined)
   }
 
@@ -1147,16 +1147,6 @@ class Config {
     }
 
     if (typeof value === 'string') {
-      // Split by commas and trim each item in header tags mapping
-      // if (name === 'headerTags') {
-      //   value = value.split(',').map(item => {
-      //     // Trim each item and remove whitespace around the colon
-      //     const [key, val] = item.split(':').map(part => part.trim())
-      //     return val !== undefined ? `${key}:${val}` : key
-      //   })
-      // } else {
-      //   value = value.split(',')
-      // }
       value = value.split(',').map(item => {
         // Trim each item and remove whitespace around the colon
         const [key, val] = item.split(':').map(part => part.trim())

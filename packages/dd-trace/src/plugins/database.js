@@ -2,7 +2,6 @@
 
 const StoragePlugin = require('./storage')
 const { PEER_SERVICE_KEY, PEER_SERVICE_SOURCE_KEY } = require('../constants')
-const pkg = require('../pkg')
 
 class DatabasePlugin extends StoragePlugin {
   static get operation () { return 'query' }
@@ -33,7 +32,7 @@ class DatabasePlugin extends StoragePlugin {
     this.encodingServiceTags('dddbs', 'encodedDddbs', serviceName)
     this.encodingServiceTags('dde', 'encodedDde', this.tracer._env)
     this.encodingServiceTags('ddps', 'encodedDdps', this.tracer._service)
-    this.encodingServiceTags('ddpv', 'encodedDdpv', this.tracer._version || pkg.version)
+    this.encodingServiceTags('ddpv', 'encodedDdpv', this.tracer._version)
     if (span.context()._tags['out.host']) {
       this.encodingServiceTags('ddh', 'encodedDdh', span._spanContext._tags['out.host'])
     }
