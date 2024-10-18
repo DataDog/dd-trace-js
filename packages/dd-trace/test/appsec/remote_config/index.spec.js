@@ -9,7 +9,6 @@ let RemoteConfigManager
 let RuleManager
 let appsec
 let remoteConfig
-let apiSecuritySampler
 
 describe('Remote Config index', () => {
   beforeEach(() => {
@@ -33,11 +32,6 @@ describe('Remote Config index', () => {
       updateWafFromRC: sinon.stub()
     }
 
-    apiSecuritySampler = {
-      configure: sinon.stub(),
-      setRequestSampling: sinon.stub()
-    }
-
     appsec = {
       enable: sinon.spy(),
       disable: sinon.spy()
@@ -46,7 +40,6 @@ describe('Remote Config index', () => {
     remoteConfig = proxyquire('../src/appsec/remote_config', {
       './manager': RemoteConfigManager,
       '../rule_manager': RuleManager,
-      '../api_security_sampler': apiSecuritySampler,
       '..': appsec
     })
   })
@@ -84,28 +77,6 @@ describe('Remote Config index', () => {
       expect(rc.setProductHandler).to.not.have.been.called
     })
 
-    it('should listen ASM_API_SECURITY_SAMPLE_RATE when appsec.enabled=undefined and appSecurity.enabled=true', () => {
-      config.appsec = { enabled: undefined, apiSecurity: { enabled: true } }
-
-      remoteConfig.enable(config)
-
-      expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
-      expect(rc.updateCapabilities)
-        .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ACTIVATION, true)
-      expect(rc.updateCapabilities)
-        .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
-    })
-
-    it('should listen ASM_API_SECURITY_SAMPLE_RATE when appsec.enabled=true and appSecurity.enabled=true', () => {
-      config.appsec = { enabled: true, apiSecurity: { enabled: true } }
-
-      remoteConfig.enable(config)
-
-      expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
-      expect(rc.updateCapabilities)
-        .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
-    })
-
     describe('ASM_FEATURES remote config listener', () => {
       let listener
 
@@ -140,106 +111,6 @@ describe('Remote Config index', () => {
 
         expect(appsec.enable).to.not.have.been.called
         expect(appsec.disable).to.not.have.been.called
-      })
-    })
-
-    describe('API Security Request Sampling', () => {
-      describe('OneClick', () => {
-        let listener
-
-        beforeEach(() => {
-          config = {
-            appsec: {
-              enabled: undefined,
-              apiSecurity: {
-                requestSampling: 0.1
-              }
-            }
-          }
-
-          remoteConfig.enable(config)
-
-          listener = rc.setProductHandler.firstCall.args[1]
-        })
-
-        it('should update apiSecuritySampler config', () => {
-          listener('apply', {
-            api_security: {
-              request_sample_rate: 0.5
-            }
-          })
-
-          expect(apiSecuritySampler.setRequestSampling).to.be.calledOnceWithExactly(0.5)
-        })
-
-        it('should update apiSecuritySampler config and disable it', () => {
-          listener('apply', {
-            api_security: {
-              request_sample_rate: 0
-            }
-          })
-
-          expect(apiSecuritySampler.setRequestSampling).to.be.calledOnceWithExactly(0)
-        })
-
-        it('should not update apiSecuritySampler config with values greater than 1', () => {
-          listener('apply', {
-            api_security: {
-              request_sample_rate: 5
-            }
-          })
-
-          expect(apiSecuritySampler.configure).to.not.be.called
-        })
-
-        it('should not update apiSecuritySampler config with values less than 0', () => {
-          listener('apply', {
-            api_security: {
-              request_sample_rate: -0.4
-            }
-          })
-
-          expect(apiSecuritySampler.configure).to.not.be.called
-        })
-
-        it('should not update apiSecuritySampler config with incorrect values', () => {
-          listener('apply', {
-            api_security: {
-              request_sample_rate: 'not_a_number'
-            }
-          })
-
-          expect(apiSecuritySampler.configure).to.not.be.called
-        })
-      })
-
-      describe('Enabled', () => {
-        let listener
-
-        beforeEach(() => {
-          config = {
-            appsec: {
-              enabled: true,
-              apiSecurity: {
-                requestSampling: 0.1
-              }
-            }
-          }
-
-          remoteConfig.enable(config)
-
-          listener = rc.setProductHandler.firstCall.args[1]
-        })
-
-        it('should update config apiSecurity.requestSampling property value', () => {
-          listener('apply', {
-            api_security: {
-              request_sample_rate: 0.5
-            }
-          })
-
-          expect(apiSecuritySampler.setRequestSampling).to.be.calledOnceWithExactly(0.5)
-        })
       })
     })
   })
