@@ -65,6 +65,10 @@
     {
       "name": "cookie-parser",
       "versions": [">=1.4.6"]
+    },
+    {
+      "name": "request",
+      "versions": ["2.88.2"]
     }
   ],
   "express-mongo-sanitize": [
