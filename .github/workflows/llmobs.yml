@@ -1,0 +1,30 @@
+name: LLMObs
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: '0 4 * * *'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - uses: ./.github/actions/install
+      - uses: ./.github/actions/node/18
+      - run: yarn test:llmobs:ci
+      - uses: ./.github/actions/node/20
+      - run: yarn test:llmobs:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:llmobs:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v3
