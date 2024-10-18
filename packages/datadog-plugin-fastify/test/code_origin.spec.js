@@ -3,6 +3,7 @@
 const axios = require('axios')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { getNextLineNumber } = require('../../dd-trace/test/plugins/helpers')
 const { NODE_MAJOR } = require('../../../version')
 
 const host = 'localhost'
@@ -49,13 +50,13 @@ describe('Plugin', () => {
 
             // Wrap in a named function to have at least one frame with a function name
             function wrapperFunction () {
-              routeRegisterLine = getNextLineNumber()
+              routeRegisterLine = String(getNextLineNumber())
               app.get('/user', function userHandler (request, reply) {
                 reply.send()
               })
             }
 
-            const callWrapperLine = getNextLineNumber()
+            const callWrapperLine = String(getNextLineNumber())
             wrapperFunction()
 
             app.listen(() => {
@@ -95,7 +96,7 @@ describe('Plugin', () => {
             let routeRegisterLine
 
             app.register(function v1Handler (app, opts, done) {
-              routeRegisterLine = getNextLineNumber()
+              routeRegisterLine = String(getNextLineNumber())
               app.get('/user', function userHandler (request, reply) {
                 reply.send()
               })
@@ -134,7 +135,7 @@ describe('Plugin', () => {
               next()
             })
 
-            const routeRegisterLine = getNextLineNumber()
+            const routeRegisterLine = String(getNextLineNumber())
             app.get('/user', function userHandler (request, reply) {
               reply.send()
             })
@@ -170,7 +171,7 @@ describe('Plugin', () => {
           // number of where the route handler is defined. However, this might not be the right choice and it might be
           // better to point to the middleware.
           it.skip('should point to middleware if middleware responds early', function testCase (done) {
-            const middlewareRegisterLine = getNextLineNumber()
+            const middlewareRegisterLine = String(getNextLineNumber())
             app.use(function middleware (req, res, next) {
               res.end()
             })
@@ -210,7 +211,3 @@ describe('Plugin', () => {
     })
   })
 })
-
-function getNextLineNumber () {
-  return String(Number(new Error().stack.split('\n')[2].match(/:(\d+):/)[1]) + 1)
-}

@@ -117,11 +117,16 @@ function unbreakThen (promise) {
   }
 }
 
+function getNextLineNumber () {
+  return Number(new Error().stack.split('\n')[2].match(/:(\d+):/)[1]) + 1
+}
+
 module.exports = {
   breakThen,
   compare,
   deepInclude,
   expectSomeSpan,
+  getNextLineNumber,
   resolveNaming,
   unbreakThen,
   withDefaults
