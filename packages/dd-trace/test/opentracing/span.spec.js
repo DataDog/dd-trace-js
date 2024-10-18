@@ -2,6 +2,7 @@
 
 require('../setup/tap')
 
+const { USER_KEEP } = require('../../../../ext/priority')
 const Config = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
@@ -404,6 +405,21 @@ describe('Span', () => {
       span.finish()
 
       expect(processor.process).to.have.been.calledOnce
+    })
+  })
+
+  describe('keep', () => {
+    it('should set priority using configured prioritySampler', () => {
+      const prioritySampler = {
+        setPriority: sinon.stub()
+      }
+
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      const mechanism = 42
+      span.keep(mechanism)
+
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWith(span, USER_KEEP, mechanism)
     })
   })
 })
