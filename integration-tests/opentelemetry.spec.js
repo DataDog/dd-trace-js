@@ -348,6 +348,52 @@ describe('opentelemetry', () => {
     }, true)
   })
 
+  it('should capture auto-instrumentation telemetry', async () => {
+    const SERVER_PORT = 6666
+    proc = fork(join(cwd, 'opentelemetry/auto-instrumentation.js'), {
+      cwd,
+      env: {
+        DD_TRACE_AGENT_PORT: agent.port,
+        DD_TRACE_OTEL_ENABLED: 1,
+        SERVER_PORT,
+        DD_TRACE_DISABLED_INSTRUMENTATIONS: 'http,dns,express,net',
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: 1
+      }
+    })
+    await new Promise(resolve => setTimeout(resolve, 1000)) // Adjust the delay as necessary
+    await axios.get(`http://localhost:${SERVER_PORT}/first-endpoint`)
+
+    return check(agent, proc, 10000, ({ payload }) => {
+      assert.strictEqual(payload.request_type, 'generate-metrics')
+
+      const metrics = payload.payload
+      assert.strictEqual(metrics.namespace, 'tracers')
+
+      const spanCreated = metrics.series.find(({ metric }) => metric === 'spans_created')
+      const spanFinished = metrics.series.find(({ metric }) => metric === 'spans_finished')
+
+      // Validate common fields between start and finish
+      for (const series of [spanCreated, spanFinished]) {
+        assert.ok(series)
+
+        assert.strictEqual(series.points.length, 1)
+        assert.strictEqual(series.points[0].length, 2)
+
+        const [ts, value] = series.points[0]
+        assert.ok(nearNow(ts, Date.now() / 1e3))
+        assert.strictEqual(value, 9)
+
+        assert.strictEqual(series.type, 'count')
+        assert.strictEqual(series.common, true)
+        assert.deepStrictEqual(series.tags, [
+          'integration_name:otel.library',
+          'otel_enabled:true',
+          `version:${process.version}`
+        ])
+      }
+    }, true)
+  })
+
   it('should work within existing datadog-traced http request', async () => {
     proc = fork(join(cwd, 'opentelemetry/server.js'), {
       cwd,
