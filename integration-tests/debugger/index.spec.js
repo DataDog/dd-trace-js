@@ -436,7 +436,9 @@ describe('Dynamic Instrumentation', function () {
               elements: [
                 { type: 'number', value: '1' },
                 { type: 'number', value: '2' },
-                { type: 'number', value: '3' }
+                { type: 'number', value: '3' },
+                { type: 'number', value: '4' },
+                { type: 'number', value: '5' }
               ]
             },
             obj: {
@@ -556,6 +558,27 @@ describe('Dynamic Instrumentation', function () {
 
         agent.addRemoteConfig(generateRemoteConfig({ captureSnapshot: true, capture: { maxLength: 10 } }))
       })
+
+      it('should respect maxCollectionSize', (done) => {
+        agent.on('debugger-input', ({ payload: { 'debugger.snapshot': { captures } } }) => {
+          const { locals } = captures.lines[probeLineNo]
+
+          assert.deepEqual(locals.arr, {
+            type: 'Array',
+            elements: [
+              { type: 'number', value: '1' },
+              { type: 'number', value: '2' },
+              { type: 'number', value: '3' }
+            ],
+            notCapturedReason: 'collectionSize',
+            size: 5
+          })
+
+          done()
+        })
+
+        agent.addRemoteConfig(generateRemoteConfig({ captureSnapshot: true, capture: { maxCollectionSize: 3 } }))
+      })
     })
   })
 
@@ -612,7 +635,9 @@ function generateRemoteConfig (overrides = {}) {
   }
 }
 
-function generateProbeConfig (overrides) {
+function generateProbeConfig (overrides = {}) {
+  overrides.capture = { maxReferenceDepth: 3, ...overrides.capture }
+  overrides.sampling = { snapshotsPerSecond: 5000, ...overrides.sampling }
   return {
     id: randomUUID(),
     version: 0,
@@ -623,8 +648,6 @@ function generateProbeConfig (overrides) {
     template: 'Hello World!',
     segments: [{ str: 'Hello World!' }],
     captureSnapshot: false,
-    capture: { maxReferenceDepth: 3 },
-    sampling: { snapshotsPerSecond: 5000 },
     evaluateAt: 'EXIT',
     ...overrides
   }
