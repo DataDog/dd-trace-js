@@ -263,9 +263,9 @@ class MochaPlugin extends CiPlugin {
           span.setTag(TEST_STATUS, 'fail')
           span.setTag('error.debug_info_captured', 'true')
 
-          span.setTag('_dd.di.error.0.file', 'sum.js') // TODO: look at error stack
-          span.setTag('_dd.di.error.0.line', '4') // TODO: look at error stack
-          span.setTag('_dd.di.error.0.snapshot_id', global.__snapshotId)
+          span.setTag('_dd.debug.error.0.file', 'sum.js') // TODO: look at error stack
+          span.setTag('_dd.debug.error.0.line', '4') // TODO: look at error stack
+          span.setTag('_dd.debug.error.0.snapshot_id', global.__snapshotId)
 
           span.setTag('error', err)
         }
