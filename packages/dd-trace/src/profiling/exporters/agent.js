@@ -114,11 +114,17 @@ class AgentExporter {
           version
         },
         runtime: {
+          // os.availableParallelism only available in node 18.14.0/19.4.0 and above
+          available_processors: typeof os.availableParallelism === 'function'
+            ? os.availableParallelism()
+            : os.cpus().length,
           // Using `nodejs` for consistency with the existing `runtime` tag.
           // Note that the event `family` property uses `node`, as that's what's
           // proscribed by the Intake API, but that's an internal enum and is
           // not customer visible.
           engine: 'nodejs',
+          // Sent as a string, we'll let the backend figure out the effective numeric value.
+          libuv_threadpool_size: process.env.UV_THREADPOOL_SIZE,
           // strip off leading 'v'. This makes the format consistent with other
           // runtimes (e.g. Ruby) but not with the existing `runtime_version` tag.
           // We'll keep it like this as we want cross-engine consistency. We
