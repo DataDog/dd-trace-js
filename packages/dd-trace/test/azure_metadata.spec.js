@@ -13,6 +13,7 @@ describe('Azure metadata', () => {
     })
 
     it('provided with DD_AZURE_APP_SERVICES', () => {
+      delete process.env.COMPUTERNAME // actually defined on Windows
       process.env.DD_AZURE_APP_SERVICES = '1'
       delete process.env.WEBSITE_SITE_NAME
       expect(getAzureAppMetadata()).to.deep.equal({ operatingSystem: os.platform(), siteKind: 'app', siteType: 'app' })
