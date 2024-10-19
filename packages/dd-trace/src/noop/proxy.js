@@ -78,6 +78,10 @@ class Tracer {
     return this._tracer.getRumData.apply(this._tracer, arguments)
   }
 
+  flush () {
+    return this._tracer.flush.apply(this._tracer, arguments)
+  }
+
   setUser (user) {
     this.appsec.setUser(user)
     return this
