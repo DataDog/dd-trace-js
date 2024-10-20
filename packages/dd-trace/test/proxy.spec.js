@@ -54,7 +54,7 @@ describe('TracerProxy', () => {
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
       configure: sinon.spy(),
-      flush: sinon.spy()
+      flush: sinon.stub()
     }
 
     noop = {
@@ -66,7 +66,7 @@ describe('TracerProxy', () => {
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
       configure: sinon.spy(),
-      flush: sinon.spy()
+      flush: sinon.stub()
     }
 
     noopAppsecSdk = {
@@ -642,10 +642,10 @@ describe('TracerProxy', () => {
 
     describe('flush', () => {
       it('should call the underlying DatadogTracer', () => {
-        const fn = () => {}
-        proxy.flush(fn)
+        const cb = () => {}
+        proxy.flush(cb)
 
-        expect(noop.flush).to.have.been.calledWith(fn)
+        expect(noop.flush).to.have.been.calledWith(cb)
       })
     })
 
@@ -772,10 +772,10 @@ describe('TracerProxy', () => {
 
     describe('flush', () => {
       it('should call the underlying DatadogTracer', () => {
-        const fn = () => {}
-        proxy.flush(fn)
+        const cb = () => {}
+        proxy.flush(cb)
 
-        expect(tracer.flush).to.have.been.calledWith(fn)
+        expect(tracer.flush).to.have.been.calledWith(cb)
       })
     })
 
