@@ -49,7 +49,11 @@ describe('NoopTracer', () => {
   })
 
   describe('flush', () => {
-    it('should call the callback', () => {
+    it('should accept empty callback', () => {
+      expect(tracer.flush()).not.to.throw
+    })
+
+    it('should fire callback', () => {
       const cb = sinon.stub()
 
       expect(tracer.flush(cb))

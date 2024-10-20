@@ -27,7 +27,7 @@ class NoopTracer {
     return ''
   }
 
-  flush (done) {
+  flush (done = () => {}) {
     done()
   }
 

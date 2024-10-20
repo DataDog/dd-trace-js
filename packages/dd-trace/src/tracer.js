@@ -159,7 +159,7 @@ class DatadogTracer extends Tracer {
 <meta name="dd-trace-time" content="${traceTime}" />`
   }
 
-  flush (done) {
+  flush (done = () => {}) {
     return this._exporter._writer.flush(done)
   }
 }
