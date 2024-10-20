@@ -555,7 +555,7 @@ describe('Tracer', () => {
   })
 
   describe('flush', () => {
-    it('should flush the exporter without callback', () => {
+    it('should flush the exporter', () => {
       sinon.spy(tracer._exporter._writer, 'flush')
 
       tracer.flush()
@@ -563,7 +563,7 @@ describe('Tracer', () => {
       expect(tracer._exporter._writer.flush).to.have.been.calledOnce
     })
 
-    it('should flush the exporter with callback', () => {
+    it('should flush the exporter and fire callback', () => {
       const cb = sinon.spy()
       sinon.spy(tracer._exporter._writer, 'flush')
 
