@@ -288,7 +288,7 @@ class TextMapPropagator {
         if (this._config.tracePropagationExtractFirst) {
           return spanContext
         }
-        if (extractor !== 'tracecontext') {
+        if (extractor !== 'tracecontext' && extractor !== 'baggage') {
           continue
         }
         spanContext = this._resolveTraceContextConflicts(
@@ -297,6 +297,8 @@ class TextMapPropagator {
       }
 
       switch (extractor) {
+        case 'baggage':
+          spanContext = this._extractBaggageContext(carrier)
         case 'datadog':
           spanContext = this._extractDatadogContext(carrier)
           break
@@ -341,6 +343,12 @@ class TextMapPropagator {
       spanContext._tracestate = tc._tracestate
     }
 
+    return spanContext
+  }
+
+  _extractBaggageContext (carrier) {
+    const spanContext = new DatadogSpanContext()
+    this._extractBaggageItems(carrier, spanContext)
     return spanContext
   }
 
@@ -578,7 +586,8 @@ class TextMapPropagator {
           spanContext._baggageItems = {}
           return
         }
-        spanContext._baggageItems[key] = spanContext._baggageItems[key] || value
+        if (key in spanContext._baggageItems) return
+        spanContext._baggageItems[key] = value
       }
     }
   }
