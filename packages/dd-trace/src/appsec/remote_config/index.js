@@ -29,7 +29,9 @@ function enable (config, appsec) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
     }
 
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
+    if (config.appsec.eventTracking?.enabled) {
+      rc.updateCapabilities(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
+    }
 
     rc.setProductHandler('ASM_FEATURES', (action, rcConfig) => {
       if (!rcConfig) return
@@ -40,7 +42,8 @@ function enable (config, appsec) {
 
       apiSecuritySampler.setRequestSampling(rcConfig.api_security?.request_sample_rate)
 
-      if (typeof rcConfig.auto_user_instrum?.mode === 'string') {
+      // TODO: does local config take precedence?
+      if (config.appsec.eventTracking?.enabled && typeof rcConfig.auto_user_instrum?.mode === 'string') {
         if (action === 'apply' || action === 'modify') {
           setCollectionMode(rcConfig.auto_user_instrum.mode)
         } else {
