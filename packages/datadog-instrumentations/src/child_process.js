@@ -61,14 +61,17 @@ function wrapChildProcessSyncMethod (shell = false) {
 
       const childProcessInfo = normalizeArgs(arguments, shell)
 
-      return childProcessChannel.traceSync(
-        childProcessMethod,
-        {
-          command: childProcessInfo.command,
-          shell: childProcessInfo.shell
-        },
-        this,
-        ...arguments)
+      const innerResource = new AsyncResource('bound-anonymous-fn')
+      return innerResource.runInAsyncScope(() => {
+        return childProcessChannel.traceSync(
+          childProcessMethod,
+          {
+            command: childProcessInfo.command,
+            shell: childProcessInfo.shell
+          },
+          this,
+          ...arguments)
+      })
     }
   }
 }
@@ -100,6 +103,12 @@ function wrapChildProcessAsyncMethod (shell = false) {
       }
 
       const childProcessInfo = normalizeArgs(arguments, shell)
+
+      const cb = arguments[arguments.length - 1]
+      if (typeof cb === 'function') {
+        const callbackResource = new AsyncResource('bound-anonymous-fn')
+        arguments[arguments.length - 1] = callbackResource.bind(cb)
+      }
 
       const innerResource = new AsyncResource('bound-anonymous-fn')
       return innerResource.runInAsyncScope(() => {

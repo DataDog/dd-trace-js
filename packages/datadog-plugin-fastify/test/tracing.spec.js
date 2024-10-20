@@ -5,6 +5,7 @@ const axios = require('axios')
 const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { NODE_MAJOR } = require('../../../version')
 
 const host = 'localhost'
 
@@ -14,7 +15,9 @@ describe('Plugin', () => {
   let app
 
   describe('fastify', () => {
-    withVersions('fastify', 'fastify', version => {
+    withVersions('fastify', 'fastify', (version, _, specificVersion) => {
+      if (NODE_MAJOR <= 18 && semver.satisfies(specificVersion, '>=5')) return
+
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })

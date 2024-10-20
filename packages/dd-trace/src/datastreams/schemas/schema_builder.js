@@ -4,13 +4,36 @@ const { Schema } = require('./schema')
 
 const maxDepth = 10
 const maxProperties = 1000
-const CACHE = new LRUCache({ max: 32 })
+const CACHE = new LRUCache({ max: 256 })
 
 class SchemaBuilder {
   constructor (iterator) {
     this.schema = new OpenApiSchema()
     this.iterator = iterator
-    this.proerties = 0
+    this.properties = 0
+  }
+
+  static getCache () {
+    return CACHE
+  }
+
+  static getSchemaDefinition (schema) {
+    const noNones = convertToJsonCompatible(schema)
+    const definition = jsonStringify(noNones)
+    const id = fnv64(Buffer.from(definition, 'utf-8')).toString()
+    return new Schema(definition, id)
+  }
+
+  static getSchema (schemaName, iterator, builder) {
+    if (!CACHE.has(schemaName)) {
+      CACHE.set(schemaName, (builder ?? new SchemaBuilder(iterator)).build())
+    }
+    return CACHE.get(schemaName)
+  }
+
+  build () {
+    this.iterator.iterateOverSchema(this)
+    return this.schema
   }
 
   addProperty (schemaName, fieldName, isArray, type, description, ref, format, enumValues) {
@@ -26,14 +49,6 @@ class SchemaBuilder {
     return true
   }
 
-  build () {
-    this.iterator.iterateOverSchema(this)
-    const noNones = convertToJsonCompatible(this.schema)
-    const definition = jsonStringify(noNones)
-    const id = fnv64(Buffer.from(definition, 'utf-8')).toString()
-    return new Schema(definition, id)
-  }
-
   shouldExtractSchema (schemaName, depth) {
     if (depth > maxDepth) {
       return false
@@ -43,13 +58,6 @@ class SchemaBuilder {
     }
     this.schema.components.schemas[schemaName] = new OpenApiSchema.SCHEMA()
     return true
-  }
-
-  static getSchema (schemaName, iterator) {
-    if (!CACHE.has(schemaName)) {
-      CACHE.set(schemaName, new SchemaBuilder(iterator).build())
-    }
-    return CACHE.get(schemaName)
   }
 }
 

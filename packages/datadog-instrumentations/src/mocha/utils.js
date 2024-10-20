@@ -24,6 +24,7 @@ const originalFns = new WeakMap()
 const testToStartLine = new WeakMap()
 const testFileToSuiteAr = new Map()
 const wrappedFunctions = new WeakSet()
+const newTests = {}
 
 function isNewTest (test, knownTests) {
   const testSuite = getTestSuitePath(test.file, process.cwd())
@@ -151,7 +152,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
   return RunnablePackage
 }
 
-function getOnTestHandler (isMain, newTests) {
+function getOnTestHandler (isMain) {
   return function (test) {
     const testStartLine = testToStartLine.get(test)
     const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -179,20 +180,20 @@ function getOnTestHandler (isMain, newTests) {
       testStartLine
     }
 
-    if (isMain) {
-      testInfo.isNew = isNew
-      testInfo.isEfdRetry = isEfdRetry
-      // We want to store the result of the new tests
-      if (isNew) {
-        const testFullName = getTestFullName(test)
-        if (newTests[testFullName]) {
-          newTests[testFullName].push(test)
-        } else {
-          newTests[testFullName] = [test]
-        }
-      }
-    } else {
+    if (!isMain) {
       testInfo.isParallel = true
+    }
+
+    testInfo.isNew = isNew
+    testInfo.isEfdRetry = isEfdRetry
+    // We want to store the result of the new tests
+    if (isNew) {
+      const testFullName = getTestFullName(test)
+      if (newTests[testFullName]) {
+        newTests[testFullName].push(test)
+      } else {
+        newTests[testFullName] = [test]
+      }
     }
 
     asyncResource.runInAsyncScope(() => {
@@ -327,6 +328,23 @@ function getOnPendingHandler () {
     }
   }
 }
+
+// Hook to add retries to tests if EFD is enabled
+function getRunTestsWrapper (runTests, config) {
+  return function (suite, fn) {
+    if (config.isEarlyFlakeDetectionEnabled) {
+      // by the time we reach `this.on('test')`, it is too late. We need to add retries here
+      suite.tests.forEach(test => {
+        if (!test.isPending() && isNewTest(test, config.knownTests)) {
+          test._ddIsNew = true
+          retryTest(test, config.earlyFlakeDetectionNumRetries)
+        }
+      })
+    }
+    return runTests.apply(this, arguments)
+  }
+}
+
 module.exports = {
   isNewTest,
   retryTest,
@@ -345,5 +363,7 @@ module.exports = {
   getOnHookEndHandler,
   getOnFailHandler,
   getOnPendingHandler,
-  testFileToSuiteAr
+  testFileToSuiteAr,
+  getRunTestsWrapper,
+  newTests
 }

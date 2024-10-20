@@ -194,7 +194,7 @@ class Sqs extends BaseAwsSdkPlugin {
           parsedAttributes = this.parseDatadogAttributes(message.MessageAttributes._datadog)
         }
       }
-      if (parsedAttributes && DsmPathwayCodec.contextExists(parsedAttributes)) {
+      if (parsedAttributes) {
         const payloadSize = getHeadersSize({
           Body: message.Body,
           MessageAttributes: message.MessageAttributes

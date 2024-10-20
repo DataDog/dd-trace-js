@@ -1,5 +1,6 @@
 'use strict'
 
+const { format } = require('url')
 const { httpClientRequestStart } = require('../channels')
 const { storage } = require('../../../../datadog-core')
 const addresses = require('../addresses')
@@ -20,12 +21,12 @@ function disable () {
 function analyzeSsrf (ctx) {
   const store = storage.getStore()
   const req = store?.req
-  const url = ctx.args.uri
+  const outgoingUrl = (ctx.args.options?.uri && format(ctx.args.options.uri)) ?? ctx.args.uri
 
-  if (!req || !url) return
+  if (!req || !outgoingUrl) return
 
   const persistent = {
-    [addresses.HTTP_OUTGOING_URL]: url
+    [addresses.HTTP_OUTGOING_URL]: outgoingUrl
   }
 
   const result = waf.run({ persistent }, req, RULE_TYPES.SSRF)

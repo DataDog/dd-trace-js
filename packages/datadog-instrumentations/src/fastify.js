@@ -5,6 +5,7 @@ const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 
 const errorChannel = channel('apm:fastify:middleware:error')
 const handleChannel = channel('apm:fastify:request:handle')
+const routeAddedChannel = channel('apm:fastify:route:added')
 
 const parsingResources = new WeakMap()
 
@@ -16,6 +17,7 @@ function wrapFastify (fastify, hasParsingEvents) {
 
     if (!app || typeof app.addHook !== 'function') return app
 
+    app.addHook('onRoute', onRoute)
     app.addHook('onRequest', onRequest)
     app.addHook('preHandler', preHandler)
 
@@ -86,8 +88,9 @@ function onRequest (request, reply, done) {
 
   const req = getReq(request)
   const res = getRes(reply)
+  const routeConfig = getRouteConfig(request)
 
-  handleChannel.publish({ req, res })
+  handleChannel.publish({ req, res, routeConfig })
 
   return done()
 }
@@ -142,12 +145,20 @@ function getRes (reply) {
   return reply && (reply.raw || reply.res || reply)
 }
 
+function getRouteConfig (request) {
+  return request?.routeOptions?.config
+}
+
 function publishError (error, req) {
   if (error) {
     errorChannel.publish({ error, req })
   }
 
   return error
+}
+
+function onRoute (routeOptions) {
+  routeAddedChannel.publish({ routeOptions, onRoute })
 }
 
 addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
