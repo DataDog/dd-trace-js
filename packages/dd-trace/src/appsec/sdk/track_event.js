@@ -63,7 +63,7 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode) {
     tags[`_dd.appsec.events.${eventName}.sdk`] = 'true'
   }
 
-  if (mode === 'safe' || mode === 'extended') {
+  if (mode && mode !== 'sdk') {
     tags[`_dd.appsec.events.${eventName}.auto.mode`] = mode
   }
 
