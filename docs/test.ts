@@ -439,6 +439,9 @@ tracer.wrap('x', () => {
   const rumData: string = tracer.getRumData();
 })
 
+tracer.flush()
+tracer.flush(() => 'test')
+
 const result: Tracer = tracer.setUser({ id: '123' })
 
 const user: User = {
