@@ -126,10 +126,9 @@ interface Tracer extends opentracing.Tracer {
   getRumData (): string;
 
   /**
-   * Force collected spans to be spent. Useful when wanting to ensure spans
-   * are exported before force killing a process with process.exit().
+   * Forces any unsent spans to be sent.
    */
-  flush (): void;
+  flush (fn?: () => any): void;
 
   /**
    * Links an authenticated user to the current trace.
