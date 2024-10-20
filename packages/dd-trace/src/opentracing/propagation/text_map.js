@@ -316,7 +316,6 @@ class TextMapPropagator {
           break
         case 'baggage':
           spanContext = this._extractBaggageContext(carrier)
-          break
         default:
           log.warn(`Unknown propagation style: ${extractor}`)
       }
