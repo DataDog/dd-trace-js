@@ -770,6 +770,15 @@ describe('TracerProxy', () => {
       })
     })
 
+    describe('flush', () => {
+      it('should call the underlying DatadogTracer', () => {
+        const fn = () => {}
+        proxy.flush(fn)
+
+        expect(tracer.flush).to.have.been.calledWith(fn)
+      })
+    })
+
     describe('appsec', () => {
       describe('trackUserLoginSuccessEvent', () => {
         it('should call the underlying AppsecSdk method', () => {
