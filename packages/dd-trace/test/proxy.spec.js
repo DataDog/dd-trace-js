@@ -53,7 +53,8 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('tracer'),
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
-      configure: sinon.spy()
+      configure: sinon.spy(),
+      flush: sinon.spy()
     }
 
     noop = {
@@ -64,7 +65,8 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('noop'),
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
-      configure: sinon.spy()
+      configure: sinon.spy(),
+      flush: sinon.spy()
     }
 
     noopAppsecSdk = {
@@ -635,6 +637,15 @@ describe('TracerProxy', () => {
 
         expect(noop.setUrl).to.have.been.calledWith('http://example.com')
         expect(returnValue).to.equal(proxy)
+      })
+    })
+
+    describe('flush', () => {
+      it('should call the underlying DatadogTracer', () => {
+        const fn = () => {}
+        proxy.flush(fn)
+
+        expect(noop.flush).to.have.been.calledWith(fn)
       })
     })
 
