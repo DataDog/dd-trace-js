@@ -222,7 +222,7 @@ function onPassportVerify ({ credentials, user }) {
     return
   }
 
-  passportTrackEvent(credentials, user, rootSpan, config.appsec.eventTracking.mode)
+  passportTrackEvent(credentials, user, rootSpan)
 }
 
 const responseAnalyzedSet = new WeakSet()
