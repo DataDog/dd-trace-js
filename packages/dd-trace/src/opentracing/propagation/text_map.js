@@ -297,9 +297,6 @@ class TextMapPropagator {
       }
 
       switch (extractor) {
-        case 'baggage':
-          spanContext = this._extractBaggageContext(carrier)
-          break
         case 'datadog':
           spanContext = this._extractDatadogContext(carrier)
           break
@@ -316,6 +313,9 @@ class TextMapPropagator {
         case 'b3':
         case 'b3multi':
           spanContext = this._extractB3MultiContext(carrier)
+          break
+        case 'baggage':
+          spanContext = this._extractBaggageContext(carrier)
           break
         default:
           log.warn(`Unknown propagation style: ${extractor}`)
