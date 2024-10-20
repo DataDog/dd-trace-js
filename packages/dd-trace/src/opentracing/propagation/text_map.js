@@ -299,6 +299,7 @@ class TextMapPropagator {
       switch (extractor) {
         case 'baggage':
           spanContext = this._extractBaggageContext(carrier)
+          break
         case 'datadog':
           spanContext = this._extractDatadogContext(carrier)
           break
