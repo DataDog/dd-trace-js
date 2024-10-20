@@ -651,7 +651,7 @@ declare namespace tracer {
          * On extended mode, no redaction will take place.
          * @default 'safe'
          */
-        mode?: 'safe' | 'extended' | 'disabled'
+        mode?: 'anonymous' | 'identification' | 'safe' | 'extended' | 'disabled'
       },
       /**
        * Configuration for Api Security sampling
