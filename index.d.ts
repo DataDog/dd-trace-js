@@ -127,9 +127,9 @@ interface Tracer extends opentracing.Tracer {
 
   /**
    * Forces any unsent spans to be sent.
-   * @param {fn} fn Callback fired after flush completes.
+   * @param {cb} cb Callback fired after flush completes.
    */
-  flush (fn?: () => any): void;
+  flush (cb?: () => any): void;
 
   /**
    * Links an authenticated user to the current trace.
