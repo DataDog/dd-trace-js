@@ -96,6 +96,7 @@ module.exports.setup = function (build) {
 
       let pathToPackageJson
       try {
+        // we can't use require.resolve('pkg/package.json') as ESM modules don't make the file available
         pathToPackageJson = require.resolve(`${extracted.pkg}`, { paths: [args.resolveDir] })
         pathToPackageJson = extractPackageAndModulePath(pathToPackageJson).pkgJson
       } catch (err) {
