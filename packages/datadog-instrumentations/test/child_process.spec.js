@@ -6,11 +6,6 @@ const dc = require('dc-polyfill')
 const { NODE_MAJOR } = require('../../../version')
 
 describe('child process', () => {
-  // const modules = ['child_process']
-  // const execAsyncMethods = ['execFile']
-  // const execAsyncShellMethods = []
-  // const execSyncMethods = []
-  // const execSyncShellMethods = []
   const modules = ['child_process', 'node:child_process']
   const execAsyncMethods = ['execFile', 'spawn']
   const execAsyncShellMethods = ['exec']

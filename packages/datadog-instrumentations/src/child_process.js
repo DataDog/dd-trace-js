@@ -23,7 +23,6 @@ names.forEach(name => {
     if (!patched) {
       patched = true
       shimmer.massWrap(childProcess, execAsyncMethods, wrapChildProcessAsyncMethod(childProcess.ChildProcess))
-      // shimmer.massWrap(childProcess, execSyncMethods, wrapChildProcessSyncMethod())
       shimmer.wrap(childProcess, 'execSync', wrapChildProcessSyncMethod('execSync', true))
       shimmer.wrap(childProcess, 'execFileSync', wrapChildProcessSyncMethod('execFileSync'))
       shimmer.wrap(childProcess, 'spawnSync', wrapChildProcessSyncMethod('spawnSync'))
@@ -83,11 +82,12 @@ function wrapChildProcessSyncMethod (methodName, shell = false) {
         try {
           if (abortController.signal.aborted) {
             const error = abortController.signal.reason || new Error('Aborted')
-            // expected results on error are different in each method
+            // expected behaviors on error are different
             switch (methodName) {
               case 'execFileSync':
               case 'execSync':
                 throw error
+
               case 'spawnSync':
                 context.result = {
                   error,
@@ -146,7 +146,7 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
     })
 
     let result
-    if (abortController) {
+    if (abortController.signal.aborted) {
       result = Promise.reject(abortController.signal.reason || new Error('Aborted'))
     } else {
       try {
