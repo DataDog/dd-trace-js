@@ -231,7 +231,7 @@ class AgentExporter {
 
         sendRequest(options, form, (err, response) => {
           if (operation.retry(err)) {
-            this._logger.error(`Error from the agent: ${err.message}`)
+            this._logger.warn(`Error from the agent: ${err.message}`)
             return
           } else if (err) {
             reject(err)
@@ -240,7 +240,7 @@ class AgentExporter {
 
           getBody(response, (err, body) => {
             if (err) {
-              this._logger.error(`Error reading agent response: ${err.message}`)
+              this._logger.warn(`Error reading agent response: ${err.message}`)
             } else {
               this._logger.debug(() => {
                 const bytes = (body.toString('hex').match(/../g) || []).join(' ')
