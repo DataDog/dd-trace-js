@@ -1,8 +1,10 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
-const { childProcessExecutionStart } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
+const { childProcessExecutionTracingChannel } = require('../../../src/appsec/channels')
+
+const { start } = childProcessExecutionTracingChannel
 
 describe('RASP - command_injection.js', () => {
   let waf, datadogCore, commandInjection, utils, config
@@ -49,12 +51,13 @@ describe('RASP - command_injection.js', () => {
   describe('analyzeCommandInjection', () => {
     it('should analyze command_injection without arguments', () => {
       const ctx = {
-        file: 'cmd'
+        file: 'cmd',
+        shell: true
       }
       const req = {}
       datadogCore.storage.getStore.returns({ req })
 
-      childProcessExecutionStart.publish(ctx)
+      start.publish(ctx)
 
       const persistent = { [addresses.SHELL_COMMAND]: 'cmd' }
       sinon.assert.calledOnceWithExactly(waf.run, { persistent }, req, 'command_injection')
@@ -63,15 +66,31 @@ describe('RASP - command_injection.js', () => {
     it('should analyze command_injection with arguments', () => {
       const ctx = {
         file: 'cmd',
-        fileArgs: ['arg0', 'arg1']
+        fileArgs: ['arg0', 'arg1'],
+        shell: true
       }
       const req = {}
       datadogCore.storage.getStore.returns({ req })
 
-      childProcessExecutionStart.publish(ctx)
+      start.publish(ctx)
 
-      const persistent = { [addresses.SHELL_COMMAND]: ['cmd', 'arg0', 'arg1'] }
+      // TODO remove join with new libddwaf version
+      const persistent = { [addresses.SHELL_COMMAND]: ['cmd', 'arg0', 'arg1'].join(' ') }
       sinon.assert.calledOnceWithExactly(waf.run, { persistent }, req, 'command_injection')
+    })
+
+    it('should not analyze command_injection when it is not shell', () => {
+      const ctx = {
+        file: 'cmd',
+        fileArgs: ['arg0', 'arg1'],
+        shell: false
+      }
+      const req = {}
+      datadogCore.storage.getStore.returns({ req })
+
+      start.publish(ctx)
+
+      sinon.assert.notCalled(waf.run)
     })
 
     it('should not analyze command_injection if rasp is disabled', () => {
@@ -82,7 +101,7 @@ describe('RASP - command_injection.js', () => {
       const req = {}
       datadogCore.storage.getStore.returns({ req })
 
-      childProcessExecutionStart.publish(ctx)
+      start.publish(ctx)
 
       sinon.assert.notCalled(waf.run)
     })
@@ -93,7 +112,7 @@ describe('RASP - command_injection.js', () => {
       }
       datadogCore.storage.getStore.returns(undefined)
 
-      childProcessExecutionStart.publish(ctx)
+      start.publish(ctx)
 
       sinon.assert.notCalled(waf.run)
     })
@@ -104,7 +123,7 @@ describe('RASP - command_injection.js', () => {
       }
       datadogCore.storage.getStore.returns({})
 
-      childProcessExecutionStart.publish(ctx)
+      start.publish(ctx)
 
       sinon.assert.notCalled(waf.run)
     })
@@ -115,21 +134,21 @@ describe('RASP - command_injection.js', () => {
       }
       datadogCore.storage.getStore.returns({})
 
-      childProcessExecutionStart.publish(ctx)
+      start.publish(ctx)
 
       sinon.assert.notCalled(waf.run)
     })
 
     it('should call handleResult', () => {
       const abortController = { abort: 'abort' }
-      const ctx = { file: 'cmd', abortController }
+      const ctx = { file: 'cmd', abortController, shell: true }
       const wafResult = { waf: 'waf' }
       const req = { req: 'req' }
       const res = { res: 'res' }
       waf.run.returns(wafResult)
       datadogCore.storage.getStore.returns({ req, res })
 
-      childProcessExecutionStart.publish(ctx)
+      start.publish(ctx)
 
       sinon.assert.calledOnceWithExactly(utils.handleResult, wafResult, req, res, abortController, config)
     })
