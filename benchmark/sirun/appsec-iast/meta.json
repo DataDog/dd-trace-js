@@ -5,15 +5,17 @@
   "iterations": 15,
   "variants": {
     "startup-time-control": {
-      "run": "node --require ../../../init.js insecure-bank.js",
-      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js insecure-bank.js\"",
+      "run": "node --cpu-prof --require ../../../init.js insecure-bank.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --cpu-prof --require ../../../init.js insecure-bank.js\"",
+      "teardown": "cp *cpuprofile /go/src/github.com/DataDog/apm-reliability/dd-trace-js/platform/artifacts/",
       "env": {
         "DD_IAST_ENABLED": "0"
       }
     },
     "startup-time-iast-enabled": {
-      "run": "node --require ../../../init.js insecure-bank.js",
-      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js insecure-bank.js\"",
+      "run": "node --cpu-prof --require ../../../init.js insecure-bank.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --cpu-prof --require ../../../init.js insecure-bank.js\"",
+      "teardown": "cp *cpuprofile /go/src/github.com/DataDog/apm-reliability/dd-trace-js/platform/artifacts/",
       "baseline": "startup-time-control",
       "env": {
         "DD_IAST_ENABLED": "1"
