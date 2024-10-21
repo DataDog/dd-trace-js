@@ -21,6 +21,8 @@ const batchConsumerStartCh = channel('apm:kafkajs:consume-batch:start')
 const batchConsumerFinishCh = channel('apm:kafkajs:consume-batch:finish')
 const batchConsumerErrorCh = channel('apm:kafkajs:consume-batch:error')
 
+let clusterId
+
 function commitsFromEvent (event) {
   const { payload: { groupId, topics } } = event
   const commitList = []
@@ -52,6 +54,10 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     const send = producer.send
     const bootstrapServers = this._brokers
 
+    getKafkaClusterId(this).then((id) => {
+      clusterId = id
+    })
+
     producer.send = function () {
       const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -67,7 +73,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
               message.headers = message.headers || {}
             }
           }
-          producerStartCh.publish({ topic, messages, bootstrapServers })
+          producerStartCh.publish({ topic, messages, bootstrapServers, clusterId })
 
           const result = send.apply(this, arguments)
 
@@ -100,15 +106,19 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
       return createConsumer.apply(this, arguments)
     }
 
+    getKafkaClusterId(this).then((id) => {
+      clusterId = id
+    })
+
     const eachMessageExtractor = (args) => {
       const { topic, partition, message } = args[0]
-      return { topic, partition, message, groupId }
+      return { topic, partition, message, groupId, clusterId }
     }
 
     const eachBatchExtractor = (args) => {
       const { batch } = args[0]
       const { topic, partition, messages } = batch
-      return { topic, partition, messages, groupId }
+      return { topic, partition, messages, groupId, clusterId }
     }
 
     const consumer = createConsumer.apply(this, arguments)
@@ -153,6 +163,7 @@ const wrapFunction = (fn, startCh, finishCh, errorCh, extractArgs) => {
       const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
       return innerAsyncResource.runInAsyncScope(() => {
         const extractedArgs = extractArgs(args)
+
         startCh.publish(extractedArgs)
         try {
           const result = fn.apply(this, args)
@@ -178,4 +189,24 @@ const wrapFunction = (fn, startCh, finishCh, errorCh, extractArgs) => {
       })
     }
     : fn
+}
+
+const getKafkaClusterId = async (kafka) => {
+  if (!kafka.admin) {
+    // pass
+    return null
+  }
+
+  const admin = kafka.admin()
+
+  if (!admin.describeCluster) {
+    return null
+  }
+
+  await admin.connect()
+  const clusterInfo = await admin.describeCluster()
+  const clusterId = clusterInfo?.clusterId
+  await admin.disconnect()
+
+  return clusterId
 }
