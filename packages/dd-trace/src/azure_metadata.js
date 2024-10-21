@@ -43,13 +43,13 @@ function buildMetadata () {
     FUNCTIONS_WORKER_RUNTIME,
     FUNCTIONS_WORKER_RUNTIME_VERSION,
     WEBSITE_INSTANCE_ID,
-    WEBSITE_ONWER_NAME,
+    WEBSITE_OWNER_NAME,
     WEBSITE_OS,
     WEBSITE_RESOURCE_GROUP,
     WEBSITE_SITE_NAME
   } = process.env
 
-  const subscriptionID = extractSubscriptionID(WEBSITE_ONWER_NAME)
+  const subscriptionID = extractSubscriptionID(WEBSITE_OWNER_NAME)
 
   const siteName = WEBSITE_SITE_NAME
 
@@ -57,7 +57,7 @@ function buildMetadata () {
     ? ['functionapp', 'function']
     : ['app', 'app']
 
-  const resourceGroup = WEBSITE_RESOURCE_GROUP ?? extractResourceGroup(WEBSITE_ONWER_NAME)
+  const resourceGroup = WEBSITE_RESOURCE_GROUP ?? extractResourceGroup(WEBSITE_OWNER_NAME)
 
   return trimObject({
     extensionVersion: DD_AAS_DOTNET_EXTENSION_VERSION,
