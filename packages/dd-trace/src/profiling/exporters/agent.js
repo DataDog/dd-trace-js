@@ -235,7 +235,7 @@ class AgentExporter {
           if (err) {
             const { status } = err
             if ((typeof status !== 'number' || status >= 500 || status === 429) && operation.retry(err)) {
-              this._logger.error(`Error from the agent: ${err.message}`)
+              this._logger.warn(`Error from the agent: ${err.message}`)
             } else {
               reject(err)
             }
@@ -244,7 +244,7 @@ class AgentExporter {
 
           getBody(response, (err, body) => {
             if (err) {
-              this._logger.error(`Error reading agent response: ${err.message}`)
+              this._logger.warn(`Error reading agent response: ${err.message}`)
             } else {
               this._logger.debug(() => {
                 const bytes = (body.toString('hex').match(/../g) || []).join(' ')
