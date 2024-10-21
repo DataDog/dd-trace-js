@@ -51,6 +51,10 @@ class WAFManager {
   update (newRules) {
     this.ddwaf.update(newRules)
 
+    if (this.ddwaf.diagnostics.ruleset_version) {
+      this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
+    }
+
     Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion)
   }
 
