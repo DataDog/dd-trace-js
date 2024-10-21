@@ -12,7 +12,7 @@ function exec (...args) {
       if (code === 0) {
         resolve()
       } else {
-        reject(new Error('Process exited with non-zero code.'))
+        reject(new Error(`Process exited with non-zero code. ${code}`))
       }
     })
   })
