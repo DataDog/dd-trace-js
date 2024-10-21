@@ -108,6 +108,7 @@
     "tlhunter-sorted-set": "^0.1.0"
   },
   "devDependencies": {
+    "@apollo/server": "^4.11.0",
     "@types/node": ">=16",
     "autocannon": "^4.5.2",
     "aws-sdk": "^2.1446.0",
