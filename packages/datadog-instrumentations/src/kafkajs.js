@@ -47,10 +47,11 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     }
   }
 
-  shimmer.wrap(Kafka.prototype, 'producer', createProducer => function () {
+  shimmer.wrap(Kafka.prototype, 'producer', createProducer => async function () {
     const producer = createProducer.apply(this, arguments)
     const send = producer.send
     const bootstrapServers = this._brokers
+    // const clusterId = await getKafkaClusterId(this)
 
     producer.send = function () {
       const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
@@ -67,7 +68,8 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
               message.headers = message.headers || {}
             }
           }
-          producerStartCh.publish({ topic, messages, bootstrapServers })
+          const clusterId = '0'
+          producerStartCh.publish({ topic, messages, bootstrapServers, clusterId })
 
           const result = send.apply(this, arguments)
 
@@ -95,20 +97,23 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     return producer
   })
 
-  shimmer.wrap(Kafka.prototype, 'consumer', createConsumer => function () {
+  shimmer.wrap(Kafka.prototype, 'consumer', createConsumer => async function () {
     if (!consumerStartCh.hasSubscribers) {
       return createConsumer.apply(this, arguments)
     }
 
+    // const clusterId = await getKafkaClusterId(this)
+    const clusterId = '0'
+
     const eachMessageExtractor = (args) => {
       const { topic, partition, message } = args[0]
-      return { topic, partition, message, groupId }
+      return { topic, partition, message, groupId, clusterId }
     }
 
     const eachBatchExtractor = (args) => {
       const { batch } = args[0]
       const { topic, partition, messages } = batch
-      return { topic, partition, messages, groupId }
+      return { topic, partition, messages, groupId, clusterId }
     }
 
     const consumer = createConsumer.apply(this, arguments)
@@ -153,6 +158,7 @@ const wrapFunction = (fn, startCh, finishCh, errorCh, extractArgs) => {
       const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
       return innerAsyncResource.runInAsyncScope(() => {
         const extractedArgs = extractArgs(args)
+
         startCh.publish(extractedArgs)
         try {
           const result = fn.apply(this, args)
@@ -179,3 +185,18 @@ const wrapFunction = (fn, startCh, finishCh, errorCh, extractArgs) => {
     }
     : fn
 }
+
+// const getKafkaClusterId = async (kafka) => {
+//   if (!kafka.admin) {
+//     // pass
+//     return null
+//   }
+
+//   const admin = kafka.admin()
+//   await admin.connect()
+
+//   const clusterId = await admin.describeCluster()
+//   await admin.disconnect()
+
+//   return clusterId
+// }
