@@ -29,7 +29,6 @@ const TaintTrackingNoop = {
   substr: noop,
   substring: noop,
   stringCase: noop,
-  tplOperator: noop,
   trim: noop,
   trimEnd: noop
 }
@@ -113,20 +112,6 @@ function csiMethodsOverrides (getContext) {
         }
       } catch (e) {
         iastLog.error('Error invoking CSI plusOperator')
-          .errorAndPublish(e)
-      }
-      return res
-    },
-
-    tplOperator: function (res, ...rest) {
-      try {
-        const iastContext = getContext()
-        const transactionId = getTransactionId(iastContext)
-        if (transactionId) {
-          return TaintedUtils.concat(transactionId, res, ...rest)
-        }
-      } catch (e) {
-        iastLog.error('Error invoking CSI tplOperator')
           .errorAndPublish(e)
       }
       return res
