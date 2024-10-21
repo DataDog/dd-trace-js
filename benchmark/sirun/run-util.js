@@ -7,10 +7,7 @@ function exec (...args) {
   return new Promise((resolve, reject) => {
     const proc = childProcess.spawn(...args)
     streamAddVersion(proc.stdout)
-    proc.on('error', error => {
-      console.error(error)
-      reject(error)
-    })
+    proc.on('error', reject)
     proc.on('exit', (code) => {
       if (code === 0) {
         resolve()
