@@ -11,12 +11,11 @@ class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
       if (!message || !message.headers) continue
       const payloadSize = getMessageSize(message)
       this.tracer.decodeDataStreamsContext(message.headers)
-      this.tracer
-        .setCheckpoint(
-          ['direction:in', `group:${groupId}`, `kafka_cluster_id:${clusterId}`, `topic:${topic}`, 'type:kafka'],
-          null,
-          payloadSize
-        )
+      const edgeTags = ['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka']
+      if (clusterId) {
+        edgeTags.push(`kafka_cluster_id:${clusterId}`)
+      }
+      this.tracer.setCheckpoint(edgeTags, null, payloadSize)
     }
   }
 }

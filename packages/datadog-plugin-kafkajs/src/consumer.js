@@ -81,12 +81,11 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
     if (this.config.dsmEnabled && message?.headers) {
       const payloadSize = getMessageSize(message)
       this.tracer.decodeDataStreamsContext(message.headers)
-      this.tracer
-        .setCheckpoint(
-          ['direction:in', `group:${groupId}`, `kafka_cluster_id:${clusterId}`, `topic:${topic}`, 'type:kafka'],
-          span,
-          payloadSize
-        )
+      const edgeTags = ['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka']
+      if (clusterId) {
+        edgeTags.push(`kafka_cluster_id:${clusterId}`)
+      }
+      this.tracer.setCheckpoint(edgeTags, span, payloadSize)
     }
 
     if (afterStartCh.hasSubscribers) {
