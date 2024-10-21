@@ -14,6 +14,7 @@ const { oomExportStrategies, snapshotKinds } = require('./constants')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
+const { getAzureTagsFromMetadata, getAzureAppMetadata } = require('../azure_metadata')
 
 class Config {
   constructor (options = {}) {
@@ -71,7 +72,8 @@ class Config {
     this.tags = Object.assign(
       tagger.parse(DD_TAGS),
       tagger.parse(options.tags),
-      tagger.parse({ env, host, service, version, functionname })
+      tagger.parse({ env, host, service, version, functionname }),
+      getAzureTagsFromMetadata(getAzureAppMetadata())
     )
 
     // Add source code integration tags if available
