@@ -53,7 +53,8 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('tracer'),
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
-      configure: sinon.spy()
+      configure: sinon.spy(),
+      flush: sinon.stub()
     }
 
     noop = {
@@ -64,7 +65,8 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('noop'),
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
-      configure: sinon.spy()
+      configure: sinon.spy(),
+      flush: sinon.stub()
     }
 
     noopAppsecSdk = {
@@ -638,6 +640,15 @@ describe('TracerProxy', () => {
       })
     })
 
+    describe('flush', () => {
+      it('should call the underlying DatadogTracer', () => {
+        const cb = () => {}
+        proxy.flush(cb)
+
+        expect(noop.flush).to.have.been.calledWith(cb)
+      })
+    })
+
     describe('appsec', () => {
       describe('trackUserLoginSuccessEvent', () => {
         it('should call the underlying NoopAppsecSdk method', () => {
@@ -756,6 +767,15 @@ describe('TracerProxy', () => {
 
         expect(tracer.setUrl).to.have.been.calledWith('http://example.com')
         expect(returnValue).to.equal(proxy)
+      })
+    })
+
+    describe('flush', () => {
+      it('should call the underlying DatadogTracer', () => {
+        const cb = () => {}
+        proxy.flush(cb)
+
+        expect(tracer.flush).to.have.been.calledWith(cb)
       })
     })
 
