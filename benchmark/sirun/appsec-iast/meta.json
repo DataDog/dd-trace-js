@@ -5,14 +5,14 @@
   "iterations": 1,
   "variants": {
     "startup-time-control": {
-      "run": "node --cpu-prof --require ../../../init.js insecure-bank.js && cp CPU* /go/src/github.com/DataDog/apm-reliability/dd-trace-js/platform/artifacts/",
+      "run": "node --cpu-prof --cpu-prof-name sysctl.txt --require ../../../init.js insecure-bank.js && cp sysctl.txt /go/src/github.com/DataDog/apm-reliability/dd-trace-js/platform/artifacts/",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js insecure-bank.js\"",
       "env": {
         "DD_IAST_ENABLED": "0"
       }
     },
     "startup-time-iast-enabled": {
-      "run": "node --cpu-prof --require ../../../init.js insecure-bank.js && cp CPU* /go/src/github.com/DataDog/apm-reliability/dd-trace-js/platform/artifacts/",
+      "run": "node --cpu-prof --cpu-prof-name uname.txt --require ../../../init.js insecure-bank.js && cp uname.txt /go/src/github.com/DataDog/apm-reliability/dd-trace-js/platform/artifacts/",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js insecure-bank.js\"",
       "baseline": "startup-time-control",
       "env": {
