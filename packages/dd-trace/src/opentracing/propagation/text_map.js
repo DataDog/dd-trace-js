@@ -107,10 +107,28 @@ class TextMapPropagator {
     }
   }
 
+  _encodeOtelBaggageKey (key) {
+    let encoded = encodeURIComponent(key)
+    encoded = encoded.replaceAll('(', '%28')
+    encoded = encoded.replaceAll(')', '%29')
+    return encoded
+  }
+
   _injectBaggageItems (spanContext, carrier) {
-    spanContext._baggageItems && Object.keys(spanContext._baggageItems).forEach(key => {
-      carrier[baggagePrefix + key] = String(spanContext._baggageItems[key])
-    })
+    if (this._config.legacyBaggageEnabled) {
+      spanContext._baggageItems && Object.keys(spanContext._baggageItems).forEach(key => {
+        carrier[baggagePrefix + key] = String(spanContext._baggageItems[key])
+      })
+    }
+    if (this._hasPropagationStyle('inject', 'baggage')) {
+      if (Object.keys(spanContext._baggageItems).length > this._config.baggageMaxItems) return
+      const baggage = Object.entries(spanContext._baggageItems)
+        .map(([key, value]) =>
+        `${this._encodeOtelBaggageKey(String(key).trim())}=${encodeURIComponent(String(value).trim())}`).join(',')
+      const buf = Buffer.from(baggage)
+      if (buf.length > this._config.baggageMaxBytes) return
+      if (baggage) carrier.baggage = baggage
+    }
   }
 
   _injectTags (spanContext, carrier) {
@@ -270,7 +288,7 @@ class TextMapPropagator {
         if (this._config.tracePropagationExtractFirst) {
           return spanContext
         }
-        if (extractor !== 'tracecontext') {
+        if (extractor !== 'tracecontext' && extractor !== 'baggage') {
           continue
         }
         spanContext = this._resolveTraceContextConflicts(
@@ -296,6 +314,8 @@ class TextMapPropagator {
         case 'b3multi':
           spanContext = this._extractB3MultiContext(carrier)
           break
+        case 'baggage':
+          spanContext = this._extractBaggageContext(carrier)
         default:
           log.warn(`Unknown propagation style: ${extractor}`)
       }
@@ -323,6 +343,12 @@ class TextMapPropagator {
       spanContext._tracestate = tc._tracestate
     }
 
+    return spanContext
+  }
+
+  _extractBaggageContext (carrier) {
+    const spanContext = new DatadogSpanContext()
+    this._extractBaggageItems(carrier, spanContext)
     return spanContext
   }
 
@@ -528,14 +554,42 @@ class TextMapPropagator {
     }
   }
 
-  _extractBaggageItems (carrier, spanContext) {
-    Object.keys(carrier).forEach(key => {
-      const match = key.match(baggageExpr)
+  _decodeOtelBaggageKey (key) {
+    let decoded = decodeURIComponent(key)
+    decoded = decoded.replaceAll('%28', '(')
+    decoded = decoded.replaceAll('%29', ')')
+    return decoded
+  }
 
-      if (match) {
-        spanContext._baggageItems[match[1]] = carrier[key]
+  _extractBaggageItems (carrier, spanContext) {
+    if (this._config.legacyBaggageEnabled) {
+      Object.keys(carrier).forEach(key => {
+        const match = key.match(baggageExpr)
+
+        if (match) {
+          spanContext._baggageItems[match[1]] = carrier[key]
+        }
+      })
+    }
+    // the current code assumes precedence of ot-baggage- over baggage
+    if (this._hasPropagationStyle('extract', 'baggage') && carrier.baggage) {
+      const baggages = carrier.baggage.split(',')
+      for (const keyValue of baggages) {
+        if (!keyValue.includes('=')) {
+          spanContext._baggageItems = {}
+          return
+        }
+        let [key, value] = keyValue.split('=')
+        key = this._decodeOtelBaggageKey(key.trim())
+        value = decodeURIComponent(value.trim())
+        if (!key || !value) {
+          spanContext._baggageItems = {}
+          return
+        }
+        if (key in spanContext._baggageItems) return
+        spanContext._baggageItems[key] = value
       }
-    })
+    }
   }
 
   _extractSamplingPriority (carrier, spanContext) {

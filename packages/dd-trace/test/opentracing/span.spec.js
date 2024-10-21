@@ -346,6 +346,40 @@ describe('Span', () => {
     })
   })
 
+  describe('getAllBaggageItems', () => {
+    it('should get all baggage items', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      expect(span.getAllBaggageItems()).to.equal(JSON.stringify({}))
+
+      span._spanContext._baggageItems.foo = 'bar'
+      span._spanContext._baggageItems.raccoon = 'cute'
+      expect(span.getAllBaggageItems()).to.equal(JSON.stringify({
+        foo: 'bar',
+        raccoon: 'cute'
+      }))
+    })
+  })
+
+  describe('removeBaggageItem', () => {
+    it('should remove a baggage item', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      span._spanContext._baggageItems.foo = 'bar'
+      expect(span.getBaggageItem('foo')).to.equal('bar')
+      span.removeBaggageItem('foo')
+      expect(span.getBaggageItem('foo')).to.be.undefined
+    })
+  })
+
+  describe('removeAllBaggageItems', () => {
+    it('should remove all baggage items', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      span._spanContext._baggageItems.foo = 'bar'
+      span._spanContext._baggageItems.raccoon = 'cute'
+      span.removeAllBaggageItems()
+      expect(span._spanContext._baggageItems).to.deep.equal({})
+    })
+  })
+
   describe('setTag', () => {
     it('should set a tag', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
