@@ -314,11 +314,14 @@ class TextMapPropagator {
         case 'b3multi':
           spanContext = this._extractB3MultiContext(carrier)
           break
-        case 'baggage':
-          spanContext = this._extractBaggageContext(carrier)
         default:
           log.warn(`Unknown propagation style: ${extractor}`)
       }
+    }
+
+    if (this._config.tracePropagationStyle.extract.includes('baggage')) {
+      spanContext = spanContext || new DatadogSpanContext()
+      this._extractBaggageItems(carrier, spanContext)
     }
 
     return spanContext || this._extractSqsdContext(carrier)
@@ -330,7 +333,7 @@ class TextMapPropagator {
     if (!spanContext) return spanContext
 
     this._extractOrigin(carrier, spanContext)
-    this._extractBaggageItems(carrier, spanContext)
+    this._extractLegacyBaggageItems(carrier, spanContext)
     this._extractSamplingPriority(carrier, spanContext)
     this._extractTags(carrier, spanContext)
 
@@ -343,12 +346,6 @@ class TextMapPropagator {
       spanContext._tracestate = tc._tracestate
     }
 
-    return spanContext
-  }
-
-  _extractBaggageContext (carrier) {
-    const spanContext = new DatadogSpanContext()
-    this._extractBaggageItems(carrier, spanContext)
     return spanContext
   }
 
@@ -470,7 +467,7 @@ class TextMapPropagator {
         }
       })
 
-      this._extractBaggageItems(carrier, spanContext)
+      this._extractLegacyBaggageItems(carrier, spanContext)
       return spanContext
     }
     return null
@@ -561,7 +558,7 @@ class TextMapPropagator {
     return decoded
   }
 
-  _extractBaggageItems (carrier, spanContext) {
+  _extractLegacyBaggageItems (carrier, spanContext) {
     if (this._config.legacyBaggageEnabled) {
       Object.keys(carrier).forEach(key => {
         const match = key.match(baggageExpr)
@@ -571,8 +568,10 @@ class TextMapPropagator {
         }
       })
     }
-    // the current code assumes precedence of ot-baggage- over baggage
-    if (this._hasPropagationStyle('extract', 'baggage') && carrier.baggage) {
+  }
+
+  _extractBaggageItems (carrier, spanContext) {
+    if (carrier.baggage) {
       const baggages = carrier.baggage.split(',')
       for (const keyValue of baggages) {
         if (!keyValue.includes('=')) {
@@ -586,6 +585,7 @@ class TextMapPropagator {
           spanContext._baggageItems = {}
           return
         }
+        // the current code assumes precedence of ot-baggage- (legacy opentracing baggage) over baggage
         if (key in spanContext._baggageItems) return
         spanContext._baggageItems[key] = value
       }
