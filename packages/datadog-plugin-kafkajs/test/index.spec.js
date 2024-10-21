@@ -33,7 +33,7 @@ const getDsmPathwayHash = (clusterIdAvailable, isProducer, parentHash) => {
 describe('Plugin', () => {
   describe('kafkajs', function () {
     // TODO: remove when new internal trace has landed
-    this.timeout(30000)
+    this.timeout(10000)
 
     afterEach(() => {
       return agent.close({ ritmReset: false })
