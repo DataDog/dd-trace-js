@@ -47,4 +47,17 @@ describe('NoopTracer', () => {
       expect(span.context().toSpanId()).to.match(/^\d+$/)
     })
   })
+
+  describe('flush', () => {
+    it('should accept empty callback', () => {
+      expect(tracer.flush()).not.to.throw
+    })
+
+    it('should fire callback', () => {
+      const cb = sinon.stub()
+
+      expect(tracer.flush(cb))
+      expect(cb).to.have.been.calledOnce
+    })
+  })
 })
