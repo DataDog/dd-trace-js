@@ -66,12 +66,13 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     }
   }
 
-  start ({ topic, messages, bootstrapServers }) {
+  start ({ topic, messages, bootstrapServers, clusterId }) {
     const span = this.startSpan({
       resource: topic,
       meta: {
         component: 'kafkajs',
-        'kafka.topic': topic
+        'kafka.topic': topic,
+        'kafka.cluster_id': clusterId
       },
       metrics: {
         'kafka.batch_size': messages.length
@@ -86,7 +87,9 @@ class KafkajsProducerPlugin extends ProducerPlugin {
         if (this.config.dsmEnabled) {
           const payloadSize = getMessageSize(message)
           const dataStreamsContext = this.tracer
-            .setCheckpoint(['direction:out', `topic:${topic}`, 'type:kafka'], span, payloadSize)
+            .setCheckpoint(
+              ['direction:out', `kafka_cluster_id:${clusterId}`, `topic:${topic}`, 'type:kafka'], span, payloadSize
+            )
           DsmPathwayCodec.encode(dataStreamsContext, message.headers)
         }
       }

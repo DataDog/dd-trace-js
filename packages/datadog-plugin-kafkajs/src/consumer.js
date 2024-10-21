@@ -62,7 +62,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
     }
   }
 
-  start ({ topic, partition, message, groupId }) {
+  start ({ topic, partition, message, groupId, clusterId }) {
     const childOf = extract(this.tracer, message.headers)
     const span = this.startSpan({
       childOf,
@@ -71,7 +71,8 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       meta: {
         component: 'kafkajs',
         'kafka.topic': topic,
-        'kafka.message.offset': message.offset
+        'kafka.message.offset': message.offset,
+        'kafka.cluster_id': clusterId
       },
       metrics: {
         'kafka.partition': partition
@@ -81,7 +82,11 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       const payloadSize = getMessageSize(message)
       this.tracer.decodeDataStreamsContext(message.headers)
       this.tracer
-        .setCheckpoint(['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka'], span, payloadSize)
+        .setCheckpoint(
+          ['direction:in', `group:${groupId}`, `kafka_cluster_id:${clusterId}`, `topic:${topic}`, 'type:kafka'],
+          span,
+          payloadSize
+        )
     }
 
     if (afterStartCh.hasSubscribers) {
