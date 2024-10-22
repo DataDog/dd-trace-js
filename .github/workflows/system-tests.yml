@@ -31,7 +31,7 @@ jobs:
     uses: DataDog/system-tests/.github/workflows/compute-workflow-parameters.yml@main
     with:
       library: nodejs
-      scenarios: CROSSED_TRACING_LIBRARIES
+      scenarios: CROSSED_TRACING_LIBRARIES, INTEGRATIONS_AWS
       scenarios_groups: essentials
 
   system-tests:
@@ -55,6 +55,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'DataDog/system-tests'
+          ref: conti/fix-php-errors
       - name: Checkout dd-trace-js
         uses: actions/checkout@v4
         with:
