@@ -24,3 +24,10 @@ onboarding_tests_installer:
 onboarding_tests_k8s_injection:
   variables:
     WEBLOG_VARIANT: sample-app
+
+requirements_json_test:
+  rules:
+    - when: on_success
+  variables:
+    REQUIREMENTS_BLOCK_JSON_PATH: ".gitlab/requirements_block.json"
+    REQUIREMENTS_ALLOW_JSON_PATH: ".gitlab/requirements_allow.json"
