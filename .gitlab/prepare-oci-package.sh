@@ -21,3 +21,5 @@ fi
 echo -n $JS_PACKAGE_VERSION > packaging/sources/version
 
 cd packaging
+
+cp ../requirements.json sources/requirements.json
