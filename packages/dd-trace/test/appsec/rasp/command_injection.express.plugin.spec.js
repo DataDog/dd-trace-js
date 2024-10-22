@@ -29,6 +29,7 @@ describe('RASP - command_injection', () => {
     function checkRaspNotExecutedAndNotThreat (agent, checkRuleEval = true) {
       return agent.use((traces) => {
         const span = getWebSpan(traces)
+
         assert.notProperty(span.meta, '_dd.appsec.json')
         assert.notProperty(span.meta_struct || {}, '_dd.stack')
         if (checkRuleEval) {
@@ -88,6 +89,7 @@ describe('RASP - command_injection', () => {
         axios = Axios.create({
           baseURL: `http://localhost:${port}`
         })
+
         done()
       })
     })
@@ -163,6 +165,7 @@ describe('RASP - command_injection', () => {
         beforeEach(() => {
           app = (req, res) => {
             const childProcess = require('child_process')
+
             try {
               childProcess.execSync(`ls ${req.query.dir}`)
             } catch (e) {
@@ -180,7 +183,6 @@ describe('RASP - command_injection', () => {
     })
 
     describe('execFile', () => {
-      // requires new libddwaf with support for array
       describe('with shell: true', () => {
         describe('with callback', () => {
           beforeEach(() => {
@@ -347,7 +349,6 @@ describe('RASP - command_injection', () => {
     })
 
     describe('spawn', () => {
-      // requires new libddwaf with support for array
       describe('with shell: true', () => {
         describe('with event emitter', () => {
           beforeEach(() => {
