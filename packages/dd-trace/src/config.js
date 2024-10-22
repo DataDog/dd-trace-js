@@ -520,7 +520,7 @@ class Config {
     this._setValue(defaults, 'reportHostname', false)
     this._setValue(defaults, 'runtimeMetrics', false)
     this._setValue(defaults, 'sampleRate', undefined)
-    this._setValue(defaults, 'sampler.rateLimit', undefined)
+    this._setValue(defaults, 'sampler.rateLimit', 100)
     this._setValue(defaults, 'sampler.rules', [])
     this._setValue(defaults, 'sampler.spanSamplingRules', [])
     this._setValue(defaults, 'scope', undefined)
@@ -541,6 +541,7 @@ class Config {
     this._setValue(defaults, 'telemetry.heartbeatInterval', 60000)
     this._setValue(defaults, 'telemetry.logCollection', false)
     this._setValue(defaults, 'telemetry.metrics', true)
+    this._setValue(defaults, 'traceEnabled', true)
     this._setValue(defaults, 'traceId128BitGenerationEnabled', true)
     this._setValue(defaults, 'traceId128BitLoggingEnabled', false)
     this._setValue(defaults, 'tracePropagationExtractFirst', false)
@@ -627,6 +628,7 @@ class Config {
       DD_TRACE_AGENT_PROTOCOL_VERSION,
       DD_TRACE_CLIENT_IP_ENABLED,
       DD_TRACE_CLIENT_IP_HEADER,
+      DD_TRACE_ENABLED,
       DD_TRACE_EXPERIMENTAL_EXPORTER,
       DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
       DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
@@ -713,6 +715,7 @@ class Config {
     this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
     this._setBoolean(env, 'dynamicInstrumentationEnabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
     this._setString(env, 'env', DD_ENV || tags.env)
+    this._setBoolean(env, 'traceEnabled', DD_TRACE_ENABLED)
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     this._setString(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
     this._setBoolean(env, 'experimental.runtimeId', DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED)
@@ -1155,7 +1158,11 @@ class Config {
     }
 
     if (typeof value === 'string') {
-      value = value.split(',')
+      value = value.split(',').map(item => {
+        // Trim each item and remove whitespace around the colon
+        const [key, val] = item.split(':').map(part => part.trim())
+        return val !== undefined ? `${key}:${val}` : key
+      })
     }
 
     if (Array.isArray(value)) {
