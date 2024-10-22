@@ -2,8 +2,8 @@ name: Outdated Integrations
 
 on:
   schedule:
-    # Yes, this runs a _lot_. We don't want to be out of date for very long.
-    - cron: '37 12,16,22 * * *'
+    # This, will run every weekday at 2pm UTC
+    - cron: '0 14 * * 1,2,3,4,5'
 
 jobs:
   outdated-integrations:

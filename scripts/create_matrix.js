@@ -1,6 +1,7 @@
 const path = require('path')
 const fs = require('fs')
 const yaml = require('js-yaml')
+const plugin = require('eslint-plugin-mocha')
 
 const matricesPath = path.join(
   __dirname,
@@ -21,7 +22,7 @@ const versionsPath = path.join(
   'versions.json'
 )
 
-const matricesJson = require(matricesPath)
+const matricesJson = { matrices: {} }
 
 const versionsJson = require(versionsPath)
 const versionsNames = Object.getOwnPropertyNames(yaml.load(fs.readFileSync(versionsPath, 'utf-8')).matrices)
@@ -29,6 +30,7 @@ const versionsNames = Object.getOwnPropertyNames(yaml.load(fs.readFileSync(versi
 function generateMatrix () {
   let versionsPlugin
   let matrix
+  let pluginName
 
   for (const name of versionsNames) {
     // object is by plugin name
@@ -39,6 +41,9 @@ function generateMatrix () {
     // if the plugin does not require a node version it will just have a range
 
     versionsPlugin = versionsJson.matrices[name]
+    pluginName = versionsJson.matrices[name]['plugin-name']
+
+    if (!matricesJson.matrices[pluginName]) matricesJson.matrices[pluginName] = {}
 
     if (versionsPlugin['by-node-version'] === true) {
       matrix = {
@@ -63,12 +68,12 @@ function generateMatrix () {
           }]
         }
       }
-      matricesJson.matrices[name] = matrix
+      matricesJson.matrices[pluginName] = matrix
     } else {
       matrix = {
         range: versionsPlugin.range
       }
-      matricesJson.matrices[name] = matrix
+      matricesJson.matrices[pluginName] = matrix
     }
   }
   return matricesJson

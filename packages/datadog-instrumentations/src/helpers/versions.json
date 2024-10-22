@@ -1,7 +1,7 @@
 {
   "matrices": {
     "couchbase": {
-      "name": "couchbase",
+      "plugin-name": "couchbase",
       "min-version": "2.4.2",
       "by-node-version": true,
       "node-versions": {
@@ -20,24 +20,36 @@
       }
     },
     "aerospike": {
+      "plugin-name": "aerospike",
       "min-version": "4.0.0",
-      "range": [
-        "4.0.0 - 4.0.5",
-        "5.0.0 - 5.12.1"
-      ]
+      "by-node-version": true,
+      "node-versions": {
+        "16": [
+          "4.0.0 - 4.0.5"
+
+        ],
+        "18": [
+          "5.2.0 - 5.7.0"
+        ],
+        "20": [
+          "5.12.1"
+        ]}
     },
     "amqp10": {
+      "plugin-name": "amqp10",
       "range": [
         "3.0.0 - 3.6.0"
       ]
     },
     "amqplib": {
+      "plugin-name": "amqplib",
       "min-version": "0.5.0",
       "range": [
         "0.5.3 - 0.10.4"
       ]
     },
     "@apollo/gateway": {
+      "plugin-name": "apollo",
       "min-version": "0.1.0",
       "range": [
         "0.1.0 - 0.54.1",
@@ -51,12 +63,14 @@
       ]
     },
     "aws-sdk": {
+      "plugin-name": "aws-sdk",
       "min-version": "2.1.35",
       "range": [
         "2.1.35 - 2.1691.0"
       ]
     },
     "bluebird": {
+      "plugin-name": "bluebird",
       "min-version": "2.0.0",
       "range": [
         "2.0.0 - 2.11.0",
@@ -70,12 +84,14 @@
       ]
     },
     "bunyan": {
+      "plugin-name": "bunyan",
       "min-version": "1.0.0",
       "range": [
         "1.0.0 - 1.8.15"
       ]
     },
     "cassandra-driver": {
+      "plugin-name": "cassandra",
       "min-version": "3.0.0",
       "range": [
         "3.0.0 - 3.6.0",
@@ -83,6 +99,7 @@
       ]
     },
     "connect": {
+      "plugin-name": "connect",
       "min-version": "2.0.0",
       "range": [
         "2.0.0 - 2.30.2",
@@ -102,6 +119,7 @@
       ]
     },
     "@cucumber/cucumber": {
+      "plugin-name": "cucumber",
       "min-version": "7.0.0",
       "range": [
         "7.0.0 - 7.3.2",
@@ -112,6 +130,7 @@
       ]
     },
     "cypress": {
+      "plugin-name": "cypress",
       "min-version": "0.0.1",
       "range": [
         "0.0.1 - 0.20.3",
@@ -140,17 +159,9 @@
       ]
     },
     "elasticsearch": {
-      "min-version": "0.2.0",
+      "plugin-name": "elasticsearch",
+      "min-version": "10.0.0",
       "range": [
-        "0.2.0 - 0.3.9",
-        "1.0.0 - 1.5.14",
-        "2.0.0 - 2.4.3",
-        "3.0.0 - 3.1.4",
-        "4.0.0 - 4.1.0",
-        "5.0.0 - 5.0.0",
-        "6.0.0 - 6.1.0",
-        "8.0.1 - 8.2.0",
-        "9.0.0 - 9.0.2",
         "10.0.0 - 10.1.3",
         "11.0.0 - 11.0.1",
         "12.0.0 - 12.1.3",
@@ -168,12 +179,14 @@
       ]
     },
     "express": {
+      "plugin-name": "express",
       "min-version": "4.0.0",
       "range": [
         "4.0.0 - 4.21.0"
       ]
     },
     "fastify": {
+      "plugin-name": "fastify",
       "min-version": "1.0.0",
       "range": [
         "1.0.0 - 1.14.6",
@@ -198,6 +211,7 @@
       ]
     },
     "generic-pool": {
+      "plugin-name": "generic-pool",
       "min-version": "2.0.0",
       "range": [
         "2.0.0 - 2.5.4",
@@ -205,6 +219,7 @@
       ]
     },
     "@google-cloud/pubsub": {
+      "plugin-name": "google-cloud-pubsub",
       "min-version": "1.2.0",
       "range": [
         "1.2.0 - 1.7.3",
@@ -221,6 +236,7 @@
       ]
     },
     "graphql": {
+      "plugin-name": "graphql",
       "min-version": "0.10.0",
       "range": [
         "0.10.0 - 0.13.2",
@@ -230,12 +246,14 @@
       ]
     },
     "@grpc/grpc-js": {
+      "plugin-name": "grpc",
       "min-version": "1.0.3",
       "range": [
         "1.0.3 - 1.11.3"
       ]
     },
     "@hapi/hapi": {
+      "plugin-name": "hapi",
       "min-version": "17.9.0",
       "range": [
         "17.9.0 - 17.9.0",
@@ -246,6 +264,7 @@
       ]
     },
     "hapi": {
+      "plugin-name": "hapi",
       "min-version": "16.0.0",
       "range": [
         "16.0.0 - 16.8.4",
@@ -263,6 +282,7 @@
       ]
     },
     "jest-environment-node": {
+      "plugin-name": "jest",
       "min-version": "24.8.0",
       "range": [
         "24.8.0 - 24.9.0",
@@ -274,6 +294,7 @@
       ]
     },
     "kafkajs": {
+      "plugin-name": "kafkajs",
       "min-version": "1.4.0",
       "range": [
         "1.4.0 - 1.16.0",
@@ -281,6 +302,7 @@
       ]
     },
     "knex": {
+      "plugin-name": "knex",
       "min-version": "0.8.0",
       "range": [
         "0.8.0 - 0.95.15",
@@ -290,6 +312,7 @@
       ]
     },
     "koa": {
+      "plugin-name": "koa",
       "min-version": "2.0.0",
       "range": [
         "2.0.0 - 2.15.3"
@@ -328,6 +351,7 @@
       ]
     },
     "limitd-client": {
+      "plugin-name": "limitd-client",
       "min-version": "1.0.0",
       "range": [
         "1.0.0 - 1.13.1",
@@ -351,12 +375,14 @@
       ]
     },
     "memcached": {
+      "plugin-name": "memcached",
       "min-version": "2.2.0",
       "range": [
         "2.2.0 - 2.2.2"
       ]
     },
     "microgateway-core": {
+      "plugin-name": "microgateway-core",
       "min-version": "2.1.0",
       "range": [
         "2.1.0 - 2.5.17",
@@ -364,6 +390,7 @@
       ]
     },
     "moleculer": {
+      "plugin-name": "moleculer",
       "min-version": "0.14.0",
       "range": [
         "0.14.0 - 0.14.34"
@@ -377,6 +404,7 @@
       ]
     },
     "mongodb": {
+      "plugin-name": "mongodb",
       "min-version": "3.3.0",
       "range": [
         "3.3.0 - 3.7.4",
@@ -386,6 +414,7 @@
       ]
     },
     "mongoose": {
+      "plugin-name": "mongoose",
       "min-version": "4.6.4",
       "range": [
         "4.6.4 - 4.13.21",
@@ -407,12 +436,14 @@
       ]
     },
     "mysql": {
+      "plugin-name": "msql",
       "min-version": "2.0.0",
       "range": [
         "2.0.0 - 2.18.1"
       ]
     },
     "mysql2": {
+      "plugin-name": "mysql2",
       "min-version": "1.0.0",
       "range": [
         "1.0.0 - 1.6.6",
@@ -421,6 +452,7 @@
       ]
     },
     "next": {
+      "plugin-name": "next",
       "min-version": "9.5.0",
       "range": [
         "9.5.0 - 9.5.5",
@@ -432,6 +464,7 @@
       ]
     },
     "openai": {
+      "plugin-name": "openai",
       "min-version": "3.0.0",
       "range": [
         "3.0.0 - 3.3.0",
@@ -439,6 +472,7 @@
       ]
     },
     "@opensearch-project/opensearch": {
+      "plugin-name": "opensearch",
       "min-version": "1.0.0",
       "range": [
         "1.0.0 - 1.2.0",
@@ -446,6 +480,7 @@
       ]
     },
     "oracledb": {
+      "plugin-name": "oracledb",
       "min-version": "5.0.0",
       "range": [
         "5.0.0 - 5.5.0",
@@ -453,6 +488,7 @@
       ]
     },
     "paperplane": {
+      "plugin-name": "paperplane",
       "min-version": "2.3.0",
       "range": [
         "2.3.0 - 2.3.2",
@@ -473,6 +509,7 @@
       ]
     },
     "pg": {
+      "plugin-name": "postgres",
       "min-version": "4.0.0",
       "range": [
         "4.0.0 - 4.5.7",
@@ -483,6 +520,7 @@
       ]
     },
     "pino": {
+      "plugin-name": "pino",
       "min-version": "2.0.0",
       "range": [
         "2.0.0 - 2.16.0",
@@ -526,12 +564,14 @@
       ]
     },
     "promise-js": {
+      "plugin-name": "promise-js",
       "min-version": "0.0.3",
       "range": [
         "0.0.3 - 0.0.7"
       ]
     },
     "promise": {
+      "plugin-name": "promise",
       "min-version": "7.0.0",
       "range": [
         "7.0.0 - 7.3.1",
@@ -539,6 +579,7 @@
       ]
     },
     "q": {
+      "plugin-name": "q",
       "min-version": "1.0.0",
       "range": [
         "1.0.0 - 1.5.1"
@@ -569,6 +610,7 @@
       ]
     },
     "redis": {
+      "plugin-name": "redis",
       "min-version": "0.12.0",
       "range": [
         "0.12.0 - 0.12.1",
@@ -579,6 +621,7 @@
       ]
     },
     "restify": {
+      "plugin-name": "resify",
       "min-version": "3.0.0",
       "range": [
         "3.0.0 - 3.0.3",
@@ -593,6 +636,7 @@
       ]
     },
     "rhea": {
+      "plugin-name": "rhea",
       "min-version": "1.0.0",
       "range": [
         "1.0.0 - 1.0.24",
@@ -601,6 +645,7 @@
       ]
     },
     "router": {
+      "plugin-name": "router",
       "min-version": "0.2.1",
       "range": [
         "0.2.1 - 0.6.2",
@@ -628,6 +673,7 @@
       ]
     },
     "sharedb": {
+      "plugin-name": "sharedb",
       "min-version": "1.0.0",
       "range": [
         "1.0.0 - 1.9.2",
@@ -638,6 +684,7 @@
       ]
     },
     "tedious": {
+      "plugin-name": "tedious",
       "min-version": "1.0.0",
       "range": [
         "1.0.0 - 1.15.0",
@@ -661,6 +708,7 @@
       ]
     },
     "undici": {
+      "plugin-name": "undici",
       "min-version": "0.1.0",
       "range": [
         "0.1.0 - 0.5.0",
@@ -689,12 +737,14 @@
       ]
     },
     "when": {
+      "plugin-name": "when",
       "min-version": "3.0.0",
       "range": [
         "3.0.0 - 3.7.8"
       ]
     },
     "winston": {
+      "plugin-name": "winston",
       "min-version": "1.0.0",
       "range": [
         "1.0.0 - 1.1.2",

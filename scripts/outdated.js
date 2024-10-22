@@ -43,7 +43,6 @@ const latestsJson = require(latestsPath)
 const internalsNames = Array.from(new Set(getInternals().map(n => n.name)))
   .filter(x => typeof x === 'string' && x !== 'child_process' && !x.startsWith('node:'))
 
-const matricesJson = require(matricesPath)
 const versionsJson = require(versionsPath)
 const pluginNames = Object.getOwnPropertyNames(yaml.load(fs.readFileSync(matricesPath, 'utf-8')).matrices)
 
@@ -51,7 +50,7 @@ const pluginNames = Object.getOwnPropertyNames(yaml.load(fs.readFileSync(matrice
 
 function makeAPR (branchName) {
   const title = 'Fix: Update Outdated Versions'
-  const body = 'Checking for and updating outdated integration versions'
+  const body = 'Updating outdated integration versions'
   execSync(`gh pr create --title ${title} --body ${body} --base master --head ${branchName} `)
 }
 
@@ -97,7 +96,6 @@ async function updatePlugin (name) {
 async function fix () {
   for (const name of pluginNames) {
     await updatePlugin(name)
-    // generateMatrix(name)
   }
 
   const result = execSync('git status').toString()

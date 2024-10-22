@@ -178,10 +178,10 @@ jobs:
       - uses: ./.github/actions/plugins/test-and-upstream
 
   aws-sdk:
+    needs: 
+      - versions
     strategy:
-      matrix:
-        node-version: ['18', 'latest']
-        range: ['2.1691.0']
+      matrix: ${{fromJson(needs.versions.outputs.matrices).matrices.aws-sdk}}
     runs-on: ubuntu-latest
     services:
       localstack:
@@ -217,6 +217,7 @@ jobs:
       PLUGINS: aws-sdk
       SERVICES: localstack localstack-legacy
       DD_DATA_STREAMS_ENABLED: true
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -247,12 +248,14 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   bluebird:
+    needs: 
+      - versions
     strategy:
-      matrix:
-        range: ['3.7.2']
+      matrix: ${{fromJson(needs.versions.outputs.matrices).matrices.bluebird}}
     runs-on: ubuntu-latest
     env:
       PLUGINS: bluebird
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
@@ -266,20 +269,23 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   bunyan:
+    needs: 
+      - versions
     strategy:
-      matrix:
-        range: ['1.8.15']
+      matrix: ${{fromJson(needs.versions.outputs.matrices).matrices.bunyan}}
     runs-on: ubuntu-latest
     env:
       PLUGINS: bunyan
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test-and-upstream
 
   cassandra:
+    needs: 
+      - versions
     strategy:
-      matrix:
-        range: ['>=3.0.0 <=4.7.2']
+      matrix: ${{fromJson(needs.versions.outputs.matrices).matrices.cassandra}}
     runs-on: ubuntu-latest
     services:
       cassandra:
@@ -289,6 +295,7 @@ jobs:
     env:
       PLUGINS: cassandra-driver
       SERVICES: cassandra
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
@@ -346,35 +353,41 @@ jobs:
       - uses: codecov/codecov-action@v3
 
   connect:
+    needs: 
+      - versions
     strategy:
-      matrix:
-        range: ['3.7.0']
+      matrix: ${{fromJson(needs.versions.outputs.matrices).matrices.connect}}
     runs-on: ubuntu-latest
     env:
       PLUGINS: connect
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test-and-upstream
 
   cucumber:
+    needs: 
+      - versions
     strategy:
-      matrix:
-        range: ['11.0.1']
+      matrix: ${{fromJson(needs.versions.outputs.matrices).matrices.cucumber}}
     runs-on: ubuntu-latest
     env:
       PLUGINS: cucumber
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
 
   # TODO: fix performance issues and test more Node versions
   cypress:
+    needs: 
+      - versions
     strategy:
-      matrix:
-        range: ['13.14.2']
+      matrix: ${{fromJson(needs.versions.outputs.matrices).matrices.cypress}}
     runs-on: ubuntu-latest
     env:
       PLUGINS: cypress
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -405,9 +418,10 @@ jobs:
       - uses: codecov/codecov-action@v3
 
   elasticsearch:
+    needs: 
+      - versions
     strategy:
-      matrix:
-        range: ['16.7.3']
+      matrix: ${{fromJson(needs.versions.outputs.matrices).matrices.elasticsearch}}
     runs-on: ubuntu-latest
     services:
       elasticsearch:
@@ -419,6 +433,7 @@ jobs:
     env:
       PLUGINS: elasticsearch
       SERVICES: elasticsearch
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -431,9 +446,10 @@ jobs:
       - uses: codecov/codecov-action@v3
 
   express:
+    needs: 
+      - versions
     strategy:
-      matrix:
-        range: ['4.21.0']
+      matrix: ${{fromJson(needs.versions.outputs.matrices).matrices.express}}
     runs-on: ubuntu-latest
     env:
       PLUGINS: express
@@ -457,12 +473,14 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   fastify:
+    needs: 
+      - versions
     strategy:
-      matrix:
-        range: ['4.28.1']
+      matrix: ${{fromJson(needs.versions.outputs.matrices).matrices.fastify}}
     runs-on: ubuntu-latest
     env:
       PLUGINS: fastify
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
@@ -476,12 +494,14 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   generic-pool:
+    needs: 
+      - versions
     strategy:
-      matrix:
-        range: ['3.9.0']
+      matrix: ${{fromJson(needs.versions.outputs.matrices).matrices.generic-pool}}
     runs-on: ubuntu-latest
     env:
       PLUGINS: generic-pool
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
