@@ -23,13 +23,14 @@ session.on('Debugger.paused', async ({ params }) => {
   const timestamp = Date.now()
 
   let captureSnapshotForProbe = null
-  let maxReferenceDepth, maxCollectionSize, maxLength
+  let maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength
   const probes = params.hitBreakpoints.map((id) => {
     const probe = breakpoints.get(id)
     if (probe.captureSnapshot) {
       captureSnapshotForProbe = probe
       maxReferenceDepth = highestOrUndefined(probe.capture.maxReferenceDepth, maxReferenceDepth)
       maxCollectionSize = highestOrUndefined(probe.capture.maxCollectionSize, maxCollectionSize)
+      maxFieldCount = highestOrUndefined(probe.capture.maxFieldCount, maxFieldCount)
       maxLength = highestOrUndefined(probe.capture.maxLength, maxLength)
     }
     return probe
@@ -41,7 +42,7 @@ session.on('Debugger.paused', async ({ params }) => {
       // TODO: Create unique states for each affected probe based on that probes unique `capture` settings (DEBUG-2863)
       processLocalState = await getLocalStateForCallFrame(
         params.callFrames[0],
-        { maxReferenceDepth, maxCollectionSize, maxLength }
+        { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength }
       )
     } catch (err) {
       // TODO: This error is not tied to a specific probe, but to all probes with `captureSnapshot: true`.

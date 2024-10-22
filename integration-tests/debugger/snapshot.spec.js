@@ -96,8 +96,8 @@ describe('Dynamic Instrumentation', function () {
 
           // from closure scope
           // There's no reason to test the `fastify` object 100%, instead just check its fingerprint
-          assert.deepEqual(Object.keys(fastify), ['type', 'fields'])
           assert.equal(fastify.type, 'Object')
+          assert.typeOf(fastify.fields, 'Object')
 
           assert.deepEqual(getSomeData, {
             type: 'Function',
@@ -185,6 +185,54 @@ describe('Dynamic Instrumentation', function () {
         })
 
         t.agent.addRemoteConfig(t.generateRemoteConfig({ captureSnapshot: true, capture: { maxCollectionSize: 3 } }))
+      })
+
+      it('should respect maxFieldCount', (done) => {
+        const maxFieldCount = 3
+
+        function assertMaxFieldCount (prop) {
+          if ('fields' in prop) {
+            if (prop.notCapturedReason === 'fieldCount') {
+              assert.strictEqual(Object.keys(prop.fields).length, maxFieldCount)
+              assert.isAbove(prop.size, maxFieldCount)
+            } else {
+              assert.isBelow(Object.keys(prop.fields).length, maxFieldCount)
+            }
+          }
+
+          for (const value of Object.values(prop.fields || prop.elements || prop.entries || {})) {
+            assertMaxFieldCount(value)
+          }
+        }
+
+        t.agent.on('debugger-input', ({ payload: { 'debugger.snapshot': { captures } } }) => {
+          const { locals } = captures.lines[t.breakpoint.line]
+
+          assert.deepEqual(Object.keys(locals), [
+            // Up to 3 properties from the local scope
+            'request', 'nil', 'undef',
+            // Up to 3 properties from the closure scope
+            'fastify', 'getSomeData'
+          ])
+
+          assert.strictEqual(locals.request.type, 'Request')
+          assert.strictEqual(Object.keys(locals.request.fields).length, maxFieldCount)
+          assert.strictEqual(locals.request.notCapturedReason, 'fieldCount')
+          assert.isAbove(locals.request.size, maxFieldCount)
+
+          assert.strictEqual(locals.fastify.type, 'Object')
+          assert.strictEqual(Object.keys(locals.fastify.fields).length, maxFieldCount)
+          assert.strictEqual(locals.fastify.notCapturedReason, 'fieldCount')
+          assert.isAbove(locals.fastify.size, maxFieldCount)
+
+          for (const value of Object.values(locals)) {
+            assertMaxFieldCount(value)
+          }
+
+          done()
+        })
+
+        t.agent.addRemoteConfig(t.generateRemoteConfig({ captureSnapshot: true, capture: { maxFieldCount } }))
       })
     })
   })
