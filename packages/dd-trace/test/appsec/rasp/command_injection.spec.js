@@ -74,8 +74,7 @@ describe('RASP - command_injection.js', () => {
 
       start.publish(ctx)
 
-      // TODO remove join with new libddwaf version
-      const persistent = { [addresses.SHELL_COMMAND]: ['cmd', 'arg0', 'arg1'].join(' ') }
+      const persistent = { [addresses.SHELL_COMMAND]: ['cmd', 'arg0', 'arg1'] }
       sinon.assert.calledOnceWithExactly(waf.run, { persistent }, req, 'command_injection')
     })
 

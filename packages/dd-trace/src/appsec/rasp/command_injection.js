@@ -31,8 +31,7 @@ function analyzeCommandInjection ({ file, fileArgs, shell, abortController }) {
   const req = store?.req
   if (!req) return
 
-  // TODO remove join(' ') with new libddwaf
-  const commandParams = fileArgs ? [file, ...fileArgs].join(' ') : file
+  const commandParams = fileArgs ? [file, ...fileArgs] : file
 
   const persistent = {
     [addresses.SHELL_COMMAND]: commandParams
