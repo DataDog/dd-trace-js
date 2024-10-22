@@ -52,6 +52,7 @@ module.exports = {
   graphql: () => require('../graphql'),
   grpc: () => require('../grpc'),
   hapi: () => require('../hapi'),
+  hono: () => require('../hono'),
   http: () => require('../http'),
   http2: () => require('../http2'),
   https: () => require('../http'),
