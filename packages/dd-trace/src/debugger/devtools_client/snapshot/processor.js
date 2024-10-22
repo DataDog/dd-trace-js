@@ -1,5 +1,7 @@
 'use strict'
 
+const { collectionSizeSym } = require('./symbols')
+
 module.exports = {
   processRawState: processProperties
 }
@@ -144,17 +146,14 @@ function toArray (type, elements, maxLength) {
   if (elements === undefined) return notCapturedDepth(type)
 
   // Perf: Create array of expected size in advance (expect that it contains only one non-enumrable element)
-  const expectedLength = elements.length - 1
-  const result = { type, elements: new Array(expectedLength) }
+  const result = { type, elements: new Array(elements.length) }
+
+  setNotCaptureReasonOnCollection(result, elements)
 
   let i = 0
   for (const elm of elements) {
-    if (elm.enumerable === false) continue // the value of the `length` property should not be part of the array
     result.elements[i++] = getPropertyValue(elm, maxLength)
   }
-
-  // Safe-guard in case there were more than one non-enumerable element
-  if (i < expectedLength) result.elements.length = i
 
   return result
 }
@@ -162,13 +161,13 @@ function toArray (type, elements, maxLength) {
 function toMap (type, pairs, maxLength) {
   if (pairs === undefined) return notCapturedDepth(type)
 
-  // Perf: Create array of expected size in advance (expect that it contains only one non-enumrable element)
-  const expectedLength = pairs.length - 1
-  const result = { type, entries: new Array(expectedLength) }
+  // Perf: Create array of expected size in advance
+  const result = { type, entries: new Array(pairs.length) }
+
+  setNotCaptureReasonOnCollection(result, pairs)
 
   let i = 0
   for (const pair of pairs) {
-    if (pair.enumerable === false) continue // the value of the `length` property should not be part of the map
     // The following code is based on assumptions made when researching the output of the Chrome DevTools Protocol.
     // There doesn't seem to be any documentation to back it up:
     //
@@ -180,9 +179,6 @@ function toMap (type, pairs, maxLength) {
     result.entries[i++] = [key, val]
   }
 
-  // Safe-guard in case there were more than one non-enumerable element
-  if (i < expectedLength) result.entries.length = i
-
   return result
 }
 
@@ -190,12 +186,12 @@ function toSet (type, values, maxLength) {
   if (values === undefined) return notCapturedDepth(type)
 
   // Perf: Create array of expected size in advance (expect that it contains only one non-enumrable element)
-  const expectedLength = values.length - 1
-  const result = { type, elements: new Array(expectedLength) }
+  const result = { type, elements: new Array(values.length) }
+
+  setNotCaptureReasonOnCollection(result, values)
 
   let i = 0
   for (const value of values) {
-    if (value.enumerable === false) continue // the value of the `length` property should not be part of the set
     // The following code is based on assumptions made when researching the output of the Chrome DevTools Protocol.
     // There doesn't seem to be any documentation to back it up:
     //
@@ -204,9 +200,6 @@ function toSet (type, values, maxLength) {
     // of the Set.
     result.elements[i++] = getPropertyValue(value.value.properties[0], maxLength)
   }
-
-  // Safe-guard in case there were more than one non-enumerable element
-  if (i < expectedLength) result.elements.length = i
 
   return result
 }
@@ -234,6 +227,13 @@ function arrayBufferToString (bytes, size) {
     buf[i] = bytes[i].value.value
   }
   return buf.toString()
+}
+
+function setNotCaptureReasonOnCollection (result, collection) {
+  if (collectionSizeSym in collection) {
+    result.notCapturedReason = 'collectionSize'
+    result.size = collection[collectionSizeSym]
+  }
 }
 
 function notCapturedDepth (type) {
