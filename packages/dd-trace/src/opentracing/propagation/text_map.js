@@ -288,7 +288,7 @@ class TextMapPropagator {
         if (this._config.tracePropagationExtractFirst) {
           return spanContext
         }
-        if (extractor !== 'tracecontext' && extractor !== 'baggage') {
+        if (extractor !== 'tracecontext') {
           continue
         }
         spanContext = this._resolveTraceContextConflicts(
@@ -317,11 +317,11 @@ class TextMapPropagator {
         default:
           log.warn(`Unknown propagation style: ${extractor}`)
       }
-    }
 
-    if (this._config.tracePropagationStyle.extract.includes('baggage')) {
-      spanContext = spanContext || new DatadogSpanContext()
-      this._extractBaggageItems(carrier, spanContext)
+      if (this._config.tracePropagationStyle.extract.includes('baggage') && carrier.baggage) {
+        spanContext = spanContext || new DatadogSpanContext()
+        this._extractBaggageItems(carrier, spanContext)
+      }
     }
 
     return spanContext || this._extractSqsdContext(carrier)
@@ -571,24 +571,22 @@ class TextMapPropagator {
   }
 
   _extractBaggageItems (carrier, spanContext) {
-    if (carrier.baggage) {
-      const baggages = carrier.baggage.split(',')
-      for (const keyValue of baggages) {
-        if (!keyValue.includes('=')) {
-          spanContext._baggageItems = {}
-          return
-        }
-        let [key, value] = keyValue.split('=')
-        key = this._decodeOtelBaggageKey(key.trim())
-        value = decodeURIComponent(value.trim())
-        if (!key || !value) {
-          spanContext._baggageItems = {}
-          return
-        }
-        // the current code assumes precedence of ot-baggage- (legacy opentracing baggage) over baggage
-        if (key in spanContext._baggageItems) return
-        spanContext._baggageItems[key] = value
+    const baggages = carrier.baggage.split(',')
+    for (const keyValue of baggages) {
+      if (!keyValue.includes('=')) {
+        spanContext._baggageItems = {}
+        return
       }
+      let [key, value] = keyValue.split('=')
+      key = this._decodeOtelBaggageKey(key.trim())
+      value = decodeURIComponent(value.trim())
+      if (!key || !value) {
+        spanContext._baggageItems = {}
+        return
+      }
+      // the current code assumes precedence of ot-baggage- (legacy opentracing baggage) over baggage
+      if (key in spanContext._baggageItems) return
+      spanContext._baggageItems[key] = value
     }
   }
 
