@@ -18,7 +18,7 @@ describe('Suspicious request blocking - multer', () => {
       before(async () => {
         sandbox = await createSandbox(['express', `multer@${version}`])
         cwd = sandbox.folder
-        startupTestFile = path.join(cwd, 'multer/index.js')
+        startupTestFile = path.join(cwd, 'multer', index.js')
       })
 
       after(async () => {
