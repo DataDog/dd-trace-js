@@ -36,6 +36,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
     super(config)
     this._timer = undefined
     this._coverageTimer = undefined
+    this._logsTimer = undefined // set in `export` to do the flushing
     this._coverageBuffer = []
     // The library can use new features like ITR and test suite level visibility
     // AKA CI Vis Protocol
@@ -253,6 +254,19 @@ class CiVisibilityExporter extends AgentInfoExporter {
     }
 
     this._export(formattedCoverage, this._coverageWriter, '_coverageTimer')
+  }
+
+  exportLogs (logs) {
+    // Until it's initialized, we just store the logs as is
+    if (!this._isInitialized) {
+      this._logsBuffer.push(logs)
+      return
+    }
+    if (!this._canForwardLogs) {
+      return
+    }
+
+    this._export(logs, this._logsWriter, '_logsTimer')
   }
 
   flush (done = () => {}) {

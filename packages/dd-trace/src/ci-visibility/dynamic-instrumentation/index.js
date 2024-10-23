@@ -3,7 +3,7 @@ const { Worker } = require('worker_threads')
 const { randomUUID } = require('crypto')
 
 /**
- * TODOS:
+ * TODO:
  * - console.log -> log
  */
 
@@ -17,7 +17,7 @@ class TestVisDynamicInstrumentation {
     this.config = config // do I need config?
   }
 
-  // returns a promise that's resolved when the breakpoint is hit
+  // Return a promise that's resolved when the breakpoint is hit
   activateDebugger ({ file, line }) {
     return new Promise(resolve => {
       const id = randomUUID()
@@ -29,19 +29,19 @@ class TestVisDynamicInstrumentation {
   start () {
     if (this.worker) return
 
-    const { NODE_OPTIONS, ...env } = process.env
+    const { NODE_OPTIONS, ...envWithoutNodeOptions } = process.env
 
     console.log('Starting Dynamic Instrumentation client...')
 
     this.worker = new Worker(
       join(__dirname, 'worker', 'index.js'),
       {
-        execArgv: [], // Avoid worker thread inheriting the `-r` command line argument
-        env // Avoid worker thread inheriting the `NODE_OPTIONS` environment variable (in case it contains `-r`)
+        execArgv: [],
+        env: envWithoutNodeOptions
       }
     )
 
-    // allow the parent to exit even if the worker is still running
+    // Allow the parent to exit even if the worker is still running
     this.worker.unref()
 
     this.worker.on('message', ({ id, probe, state, stack, snapshot }) => {
