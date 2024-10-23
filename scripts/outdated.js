@@ -43,7 +43,7 @@ const versionsPath = path.join(
 const latestsJson = require(latestsPath)
 const internalsNames = Array.from(new Set(getInternals().map(n => n.name))).filter(x => typeof x === 'string' && x !== 'child_process' && !x.startsWith('node:'))
 
-const matricesJson = require(matricesPath)
+// const matricesJson = require(matricesPath)
 const versionsJson = require(versionsPath)
 const pluginNames = Object.getOwnPropertyNames(yaml.load(fs.readFileSync(matricesPath, 'utf-8')).matrices)
 
