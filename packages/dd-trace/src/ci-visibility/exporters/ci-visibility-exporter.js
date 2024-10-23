@@ -8,6 +8,7 @@ const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligen
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
 const log = require('../../log')
 const AgentInfoExporter = require('../../exporters/common/agent-info-exporter')
+const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
 
 function getTestConfigurationTags (tags) {
   if (!tags) {
@@ -256,30 +257,72 @@ class CiVisibilityExporter extends AgentInfoExporter {
     this._export(formattedCoverage, this._coverageWriter, '_coverageTimer')
   }
 
-  exportLogs (logs) {
+  // DI logs
+  exportLogs (testConfiguration, logMessage) {
     // Until it's initialized, we just store the logs as is
     if (!this._isInitialized) {
-      this._logsBuffer.push(logs)
+      this._logsBuffer.push(logMessage)
       return
     }
     if (!this._canForwardLogs) {
       return
     }
+    const {
+      [GIT_REPOSITORY_URL]: gitRepositoryUrl,
+      [GIT_COMMIT_SHA]: gitCommitSha
+    } = testConfiguration
 
-    this._export(logs, this._logsWriter, '_logsTimer')
+    const {
+      service,
+      env,
+      version
+    } = this._config
+
+    this._export({
+      ddtags: [
+        ...(logMessage.ddtags || []),
+        `${GIT_REPOSITORY_URL}:${gitRepositoryUrl}`,
+        `${GIT_COMMIT_SHA}:${gitCommitSha}`
+      ].join(','),
+      level: 'error',
+      service: this._config.service,
+      dd: {
+        ...(logMessage.dd || []),
+        service,
+        env,
+        version
+      },
+      ddsource: 'dd_debugger',
+      ...logMessage
+    }, this._logsWriter, '_logsTimer')
   }
 
   flush (done = () => {}) {
     if (!this._isInitialized) {
       return done()
     }
-    this._writer.flush(() => {
-      if (this._coverageWriter) {
-        this._coverageWriter.flush(done)
-      } else {
+
+    // TODO: safe to do them at once? Or do we want to do them one by one?
+    const writers = [
+      this._writer,
+      this._coverageWriter,
+      this._logsWriter
+    ].filter(writer => writer)
+
+    let remaining = writers.length
+
+    if (remaining === 0) {
+      return done()
+    }
+
+    const onFlushComplete = () => {
+      remaining -= 1
+      if (remaining === 0) {
         done()
       }
-    })
+    }
+
+    writers.forEach(writer => writer.flush(onFlushComplete))
   }
 
   exportUncodedCoverages () {

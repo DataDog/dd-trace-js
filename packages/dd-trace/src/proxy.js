@@ -118,11 +118,6 @@ class Tracer extends NoopProxy {
         }
       }
 
-      debugger
-      // if (config.isCiVisibility) {
-      //   DynamicInstrumentation.start(config)
-      // }
-
       if (config.isCiVisibility) {
         getTvDynamicInstrumentation(config).start()
       }

@@ -16,7 +16,7 @@ class LogsWriter extends BaseWriter {
 
   _sendPayload (data, _, done) {
     const options = {
-      path: '/api/v2/logs', // ?ddsource=dd_debugger&service=${service} // TODO: can these be in headers instead?
+      path: '/api/v2/logs',
       method: 'POST',
       headers: {
         'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY,

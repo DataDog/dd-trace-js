@@ -203,9 +203,6 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:start', (testInfo) => {
-      global._getResult = new Promise(resolve => {
-        global._getDd = resolve
-      })
       const store = storage.getStore()
       const span = this.startTestSpan(testInfo)
 
@@ -272,6 +269,8 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
+    // An test has failed and it's about to be retried.
+    // At this moment we start Dynamic Instrumentation
     this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, err }) => {
       // retrying test because it failed, so we're going to activate DI
       const store = storage.getStore()
@@ -283,10 +282,19 @@ class MochaPlugin extends CiPlugin {
         }
         if (err) {
           span.setTag('error', err)
-          const [filePath, lineNumber] = getFileAndLineNumberFromError(err)
-          this.di.activateDebugger({ file: filePath, line: lineNumber }).then(({ probe, snapshot }) => {
-            global._getDd({ probe, snapshot })
-          })
+          const [file, line] = getFileAndLineNumberFromError(err)
+          // TODO: we need to figure out what to do with sync issues: mocha will not
+          // wait for this promise
+          this.di.activateDebugger({ file, line })
+            .then(({ snapshot }) => {
+              // TODO: this needs to include the active span from the following attempt:
+              // basically this is not a good place to run the `then` handle
+              this.tracer._exporter.exportLogs(this.testEnvironmentMetadata, {
+                // TODO: add dd.trace_id and dd.span_id, so we need the active span
+                level: 'error',
+                debugger: { snapshot }
+              })
+            })
         }
 
         const spanTags = span.context()._tags
