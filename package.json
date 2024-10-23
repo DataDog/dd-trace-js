@@ -12,8 +12,8 @@
     "bench:e2e:ci-visibility": "node benchmark/e2e-ci/benchmark-run.js",
     "type:doc": "cd docs && yarn && yarn build",
     "type:test": "cd docs && yarn && yarn test",
-    "lint": "node scripts/check_licenses.js && eslint . && yarn audit --groups dependencies",
-    "lint-fix": "node scripts/check_licenses.js && eslint . --fix && yarn audit --groups dependencies",
+    "lint": "node scripts/check_licenses.js && eslint . && yarn audit",
+    "lint-fix": "node scripts/check_licenses.js && eslint . --fix && yarn audit",
     "services": "node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",
     "test": "SERVICES=* yarn services && mocha --expose-gc 'packages/dd-trace/test/setup/node.js' 'packages/*/test/**/*.spec.js'",
     "test:appsec": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" --exclude \"packages/dd-trace/test/appsec/**/*.plugin.spec.js\" \"packages/dd-trace/test/appsec/**/*.spec.js\"",
@@ -76,7 +76,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@datadog/native-appsec": "8.1.1",
+    "@datadog/native-appsec": "8.2.1",
     "@datadog/native-iast-rewriter": "2.5.0",
     "@datadog/native-iast-taint-tracking": "3.1.0",
     "@datadog/native-metrics": "^2.0.0",
@@ -108,6 +108,7 @@
     "tlhunter-sorted-set": "^0.1.0"
   },
   "devDependencies": {
+    "@apollo/server": "^4.11.0",
     "@types/node": "^16.18.103",
     "autocannon": "^4.5.2",
     "aws-sdk": "^2.1446.0",
