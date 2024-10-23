@@ -8,8 +8,7 @@ const { execSync } = require('child_process')
 const yaml = require('js-yaml')
 
 const { generateMatrix } = require('./create_matrix')
-const outdated_integrations = {};
-
+let outdated_integrations = {};
 
 const latestsPath = path.join(
   __dirname,
@@ -152,6 +151,7 @@ async function check () {
       // process.exitCode = 1
     }
     outdated_integrations[name] = npmLatest
+    console.log(outdated_integrations)
 
   }
   // TODO: write this to latests
