@@ -110,8 +110,9 @@ function updateLatests(latestsPath) {
 }
 
 async function fix () {
-  updateLatests(latestsPath)
-  console.log("Generating matrix..")
+  await check();
+  updateLatests(latestsPath);
+  console.log("Generating matrix..");
   for (const name of pluginNames) {
     await updatePlugin(name)
     generateMatrix(name)
@@ -196,7 +197,6 @@ function splitting (element) {
   return +element.split('.')[0]
 }
 
-check();
 fix();
 // if (process.argv.includes('fix')) // TODO: fix this parsing
 // {  fix();
