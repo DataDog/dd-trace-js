@@ -151,10 +151,10 @@ async function check () {
       // process.exitCode = 1
     }
     outdated_integrations[name] = npmLatest
-    console.log(outdated_integrations)
-
   }
   // TODO: write this to latests
+  console.log(outdated_integrations)
+
 }
 
 function minVersion (range) {
