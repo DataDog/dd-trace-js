@@ -73,8 +73,6 @@ async function loopRange (name, range) {
     range[ele] = `${latest[0]} - ${latest[1]}`
   }
   fs.writeFileSync(versionsPath, JSON.stringify(versionsJson, null, 2))
-  fs.writeFileSync(matricesPath, JSON.stringify(matricesJson, null, 2))
-
 }
 
 async function updatePlugin (name) {
