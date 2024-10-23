@@ -98,7 +98,8 @@ async function updatePlugin (name) {
 function updateLatests(latestsPath) {
   try {
     const existingLatests = JSON.parse(fs.readFileSync(latestsPath, 'utf-8'));
-    console.log(existingLatests["latests"])
+    // console.log(existingLatests["latests"])
+    console.log(outdated_integrations)
     Object.assign(existingLatests["latests"], outdated_integrations);
 
     // Write the updated data back to latests.json
@@ -153,8 +154,6 @@ async function check () {
     outdated_integrations[name] = npmLatest
 
   }
-  console.log("Outdated:")
-  console.log(outdated_integrations)
   // TODO: write this to latests
 }
 
