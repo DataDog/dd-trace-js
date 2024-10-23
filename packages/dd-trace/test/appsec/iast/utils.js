@@ -288,12 +288,10 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
     before((done) => {
       const express = require(`../../../../../versions/express@${expressVersion}`).get()
       const bodyParser = require('../../../../../versions/body-parser').get()
-      const multer = require('../../../../../versions/multer').get()
-      const uploadToMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200000 } })
 
       const expressApp = express()
 
-      if (loadMiddlewares) loadMiddlewares(expressApp)
+      if (loadMiddlewares) loadMiddlewares(expressApp, listener)
 
       expressApp.use(bodyParser.json())
       try {
@@ -304,7 +302,6 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
         // it in all the iast tests
       }
 
-      expressApp.post('/', uploadToMemory.single('file'), listener)
       expressApp.all('/', listener)
 
       server = expressApp.listen(0, () => {
