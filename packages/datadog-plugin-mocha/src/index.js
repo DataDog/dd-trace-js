@@ -242,13 +242,16 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:retry', (isFirstAttempt) => {
+    this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, err }) => {
       const store = storage.getStore()
       const span = store?.span
       if (span) {
         span.setTag(TEST_STATUS, 'fail')
         if (!isFirstAttempt) {
           span.setTag(TEST_IS_RETRY, 'true')
+        }
+        if (err) {
+          span.setTag('error', err)
         }
 
         const spanTags = span.context()._tags
