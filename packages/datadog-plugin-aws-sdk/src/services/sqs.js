@@ -9,6 +9,7 @@ const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
 class Sqs extends BaseAwsSdkPlugin {
   static get id () { return 'sqs' }
   static get peerServicePrecursors () { return ['queuename'] }
+  static get isPayloadReporter () { return true }
 
   constructor (...args) {
     super(...args)
