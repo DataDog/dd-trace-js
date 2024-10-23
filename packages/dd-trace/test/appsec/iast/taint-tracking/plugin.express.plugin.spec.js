@@ -22,6 +22,19 @@ describe('Taint tracking plugin sources express tests', () => {
           }, 'COMMAND_INJECTION', 1, noop, makePostRequest)
         })
 
+        describe('tainted multipart body', () => {
+          function makeMultipartPostRequest (done) {
+            const formData = new FormData()
+            formData.append('command', 'echo 1')
+            axios.post(`http://localhost:${config.port}/`, formData).catch(done)
+          }
+
+          testThatRequestHasVulnerability((req) => {
+            const childProcess = require('child_process')
+            childProcess.exec(req.body.command, noop)
+          }, 'COMMAND_INJECTION', 1, noop, makeMultipartPostRequest)
+        })
+
         describe('tainted query param', () => {
           function makeRequestWithQueryParam (done) {
             axios.get(`http://localhost:${config.port}/?command=echo`).catch(done)
