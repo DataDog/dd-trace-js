@@ -16,7 +16,9 @@ class LangChainPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const { resource, type } = ctx
-    const tags = handlers[type]().getStartTags(ctx)
+
+    const tagsHandler = handlers[type] || handlers.default
+    const tags = tagsHandler().getStartTags(ctx)
 
     const span = this.startSpan('langchain.request', {
       service: this.config.service,

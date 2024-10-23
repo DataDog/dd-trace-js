@@ -3,5 +3,11 @@
 module.exports = {
   chain: () => require('./chain'),
   chat: () => require('./chat'),
-  llm: () => require('./llm')
+  llm: () => require('./llm'),
+  default: () => {
+    return {
+      getStartTags () {},
+      getEndTags () {}
+    }
+  }
 }
