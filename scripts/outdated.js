@@ -49,12 +49,6 @@ const pluginNames = Object.getOwnPropertyNames(yaml.load(fs.readFileSync(matrice
 
 // TODO A lot of this can be optimized by using `npm outdated`.
 
-function makeAPR (branchName) {
-  const title = 'Fix: Update Outdated Versions'
-  const body = 'Checking for and updating outdated integration versions'
-  execSync(`gh pr create --title ${title} --body ${body} --base master --head ${branchName} `)
-}
-
 function maxVersion (range) {
   if (typeof range === 'string') {
     return range
@@ -97,65 +91,38 @@ async function updatePlugin (name) {
 function updateLatests(latestsPath) {
   try {
     const existingLatests = JSON.parse(fs.readFileSync(latestsPath, 'utf-8'));
-    // console.log(existingLatests["latests"])
-    // console.log(outdated_integrations)
     Object.assign(existingLatests["latests"], outdated_integrations);
 
     // Write the updated data back to latests.json
     fs.writeFileSync(latestsPath, JSON.stringify(existingLatests, null, 2));
-    console.log('latests updated successfully.');
   } catch (error) {
-    console.error('Error updating latests.json:', error);
+    console.error('Error updating latests.json: ', error);
   }
 }
 
 async function fix () {
   await check();
   updateLatests(latestsPath);
-  console.log("Generating matrix..");
   for (const name of pluginNames) {
     await updatePlugin(name)
     generateMatrix(name)
   }
-  const result = execSync('git status').toString()
-  console.log(result)
 }
 
-//   if (result.includes(matricesPath)) {
-//     const branchName = 'update_outdated_integrations'
-//     console.log(branchName)
-//     try {
-//       execSync(`git checkout -b ${branchName}`)
-//       execSync(`git add ${matricesPath}`)
-//       execSync('git commit -m "fix: update integr latests.json"')
-//       execSync(`git push origin ${branchName}`)
-
-//       makeAPR(branchName)
-//     } catch (e) {
-//       console.log('ERROR', e)
-//       process.exitCode = 1
-//     }
-//   }
-// }
 
 async function check () {
   for (const name of internalsNames) {
     const latest = latestsJson.latests[name]
     if (!latest) {
       console.log(`No latest version found for "${name}"`)
-      // process.exitCode = 1
     }
     const distTags = await npmView(name + ' dist-tags')
     const npmLatest = distTags.latest
     if (npmLatest !== latest) {
       console.log(`"latests.json: is not up to date for "${name}": expected "${npmLatest}", got "${latest}"`)
-      // process.exitCode = 1
     }
     outdated_integrations[name] = npmLatest
   }
-  // TODO: write this to latests
-  // console.log(outdated_integrations)
-
 }
 
 function minVersion (range) {
@@ -198,9 +165,4 @@ function splitting (element) {
 }
 
 fix();
-// if (process.argv.includes('fix')) // TODO: fix this parsing
-// {  fix();
-// }else {
-//   check();
-// }
 
