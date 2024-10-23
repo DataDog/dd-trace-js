@@ -1,6 +1,7 @@
 'use strict'
 
 const { isAbsolute } = require('path')
+const { getNextLineNumber } = require('../helpers')
 
 require('../../setup/tap')
 
@@ -62,7 +63,3 @@ describe('stacktrace utils', () => {
     })
   })
 })
-
-function getNextLineNumber () {
-  return Number(new Error().stack.split('\n')[2].match(/:(\d+):/)[1]) + 1
-}
