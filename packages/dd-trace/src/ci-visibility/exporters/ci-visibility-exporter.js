@@ -8,6 +8,7 @@ const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligen
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
 const log = require('../../log')
 const AgentInfoExporter = require('../../exporters/common/agent-info-exporter')
+const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
 
 function getTestConfigurationTags (tags) {
   if (!tags) {
@@ -36,6 +37,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
     super(config)
     this._timer = undefined
     this._coverageTimer = undefined
+    this._logsTimer = undefined
     this._coverageBuffer = []
     // The library can use new features like ITR and test suite level visibility
     // AKA CI Vis Protocol
@@ -253,6 +255,47 @@ class CiVisibilityExporter extends AgentInfoExporter {
     }
 
     this._export(formattedCoverage, this._coverageWriter, '_coverageTimer')
+  }
+
+  formatLogMessage (testConfiguration, logMessage) {
+    const {
+      [GIT_REPOSITORY_URL]: gitRepositoryUrl,
+      [GIT_COMMIT_SHA]: gitCommitSha
+    } = testConfiguration
+
+    const { service, env, version } = this._config
+
+    return {
+      ddtags: [
+        ...(logMessage.ddtags || []),
+        `${GIT_REPOSITORY_URL}:${gitRepositoryUrl}`,
+        `${GIT_COMMIT_SHA}:${gitCommitSha}`
+      ].join(','),
+      level: 'error',
+      service,
+      dd: {
+        ...(logMessage.dd || []),
+        service,
+        env,
+        version
+      },
+      ddsource: 'dd_debugger',
+      ...logMessage
+    }
+  }
+
+  // DI logs
+  exportDiLogs (testConfiguration, logMessage) {
+    // TODO: could we lose logs if it's not initialized?
+    if (!this._config.isTestDynamicInstrumentationEnabled || !this._isInitialized || !this._canForwardLogs) {
+      return
+    }
+
+    this._export(
+      this.formatLogMessage(testConfiguration, logMessage),
+      this._logsWriter,
+      '_logsTimer'
+    )
   }
 
   flush (done = () => {}) {
