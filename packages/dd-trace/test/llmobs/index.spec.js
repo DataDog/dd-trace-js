@@ -97,7 +97,6 @@ describe('module', () => {
         'x-datadog-tags': ''
       }
       injectCh.publish({ carrier })
-      expect(logger.debug).to.have.been.calledWith('No active span to inject LLMObs info.')
       expect(carrier['x-datadog-tags']).to.equal('')
     })
   })

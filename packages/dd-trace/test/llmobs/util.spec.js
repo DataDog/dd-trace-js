@@ -2,7 +2,6 @@
 
 const {
   encodeUnicode,
-  getName,
   getFunctionArguments,
   validateKind
 } = require('../../src/llmobs/util')
@@ -35,20 +34,6 @@ describe('util', () => {
 
     it('should throw for an undefined kind', () => {
       expect(() => validateKind()).to.throw()
-    })
-  })
-
-  describe('getName', () => {
-    it('should return the name from options', () => {
-      expect(getName('llm', { name: 'test' })).to.equal('test')
-    })
-
-    it('should return the name from the function', () => {
-      expect(getName('llm', {}, function test () {})).to.equal('test')
-    })
-
-    it('should return the kind', () => {
-      expect(getName('llm')).to.equal('llm')
     })
   })
 

@@ -24,10 +24,6 @@ function validateKind (kind) {
   return kind
 }
 
-function getName (kind, options = {}, fn) {
-  return options.name || fn?.name || kind || ''
-}
-
 // extracts the argument names from a function string
 function parseArgumentNames (str) {
   const result = []
@@ -176,6 +172,5 @@ function getFunctionArguments (fn, args = []) {
 module.exports = {
   encodeUnicode,
   validateKind,
-  getName,
   getFunctionArguments
 }

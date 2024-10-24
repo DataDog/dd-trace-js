@@ -1,6 +1,5 @@
 'use strict'
 
-const logger = require('../log')
 const {
   MODEL_NAME,
   MODEL_PROVIDER,
@@ -115,7 +114,7 @@ class LLMObsTagger {
       if (typeof value === 'number') {
         filterdMetrics[processedKey] = value
       } else {
-        logger.warn(`Value for metric '${key}' must be a number, instead got ${value}`)
+        throw new Error(`Value for metric '${key}' must be a number, instead got ${value}`)
       }
     }
 
@@ -140,7 +139,7 @@ class LLMObsTagger {
           setTag(span, key, JSON.stringify(data))
         } catch {
           const type = key === INPUT_VALUE ? 'input' : 'output'
-          logger.warn(`Failed to parse ${type} value, must be JSON serializable.`)
+          throw new Error(`Failed to parse ${type} value, must be JSON serializable.`)
         }
       }
     }
@@ -157,27 +156,23 @@ class LLMObsTagger {
           return { text: document }
         }
 
-        let validDocument = true
-
         if (document == null || typeof document !== 'object') {
-          logger.warn('Documents must be a string, object, or list of objects.')
-          return undefined // returning here as we need document to be an object
+          throw new Error('Documents must be a string, object, or list of objects.')
         }
 
         const { text, name, id, score } = document
 
         if (typeof text !== 'string') {
-          logger.warn('Document text must be a string.')
-          validDocument = false
+          throw new Error('Document text must be a string.')
         }
 
         const documentObj = { text }
 
-        validDocument = this._tagConditionalString(name, 'Document name', documentObj, 'name') && validDocument
-        validDocument = this._tagConditionalString(id, 'Document ID', documentObj, 'id') && validDocument
-        validDocument = this._tagConditionalNumber(score, 'Document score', documentObj, 'score') && validDocument
+        this._tagConditionalString(name, 'Document name', documentObj, 'name')
+        this._tagConditionalString(id, 'Document ID', documentObj, 'id')
+        this._tagConditionalNumber(score, 'Document score', documentObj, 'score')
 
-        return validDocument ? documentObj : undefined
+        return documentObj
       }).filter(doc => !!doc)
 
       if (documents.length) {
@@ -198,22 +193,18 @@ class LLMObsTagger {
         }
 
         if (message == null || typeof message !== 'object') {
-          logger.warn('Messages must be a string, object, or list of objects')
-          return undefined // returning here as we need message to be an object
+          throw new Error('Messages must be a string, object, or list of objects')
         }
-
-        let validMessage = true
 
         const { content = '', role } = message
         let toolCalls = message.toolCalls
         const messageObj = { content }
 
         if (typeof content !== 'string') {
-          logger.warn('Message content must be a string.')
-          validMessage = false
+          throw new Error('Message content must be a string.')
         }
 
-        validMessage = this._tagConditionalString(role, 'Message role', messageObj, 'role') && validMessage
+        this._tagConditionalString(role, 'Message role', messageObj, 'role')
 
         if (toolCalls) {
           if (!Array.isArray(toolCalls)) {
@@ -222,21 +213,18 @@ class LLMObsTagger {
 
           const filteredToolCalls = toolCalls.map(toolCall => {
             if (typeof toolCall !== 'object') {
-              logger.warn('Tool call must be an object.')
-              return undefined // returning here as we need tool call to be an object
+              throw new Error('Tool call must be an object.')
             }
-
-            let validTool = true
 
             const { name, arguments: args, toolId, type } = toolCall
             const toolCallObj = {}
 
-            validTool = this._tagConditionalString(name, 'Tool name', toolCallObj, 'name') && validTool
-            validTool = this._tagConditionalObject(args, 'Tool arguments', toolCallObj, 'arguments') && validTool
-            validTool = this._tagConditionalString(toolId, 'Tool ID', toolCallObj, 'tool_id') && validTool
-            validTool = this._tagConditionalString(type, 'Tool type', toolCallObj, 'type') && validTool
+            this._tagConditionalString(name, 'Tool name', toolCallObj, 'name')
+            this._tagConditionalObject(args, 'Tool arguments', toolCallObj, 'arguments')
+            this._tagConditionalString(toolId, 'Tool ID', toolCallObj, 'tool_id')
+            this._tagConditionalString(type, 'Tool type', toolCallObj, 'type')
 
-            return validTool ? toolCallObj : undefined
+            return toolCallObj
           }).filter(toolCall => !!toolCall)
 
           if (filteredToolCalls.length) {
@@ -244,7 +232,7 @@ class LLMObsTagger {
           }
         }
 
-        return validMessage ? messageObj : undefined
+        return messageObj
       }).filter(msg => !!msg)
 
       if (messages.length) {
@@ -254,35 +242,27 @@ class LLMObsTagger {
   }
 
   _tagConditionalString (data, type, carrier, key) {
-    // returning true here means we won't drop the whole object (message/document)
-    // if the field isn't there. we check for mandatory fields separately
-    if (!data) return true
+    if (!data) return
     if (typeof data !== 'string') {
-      logger.warn(`${type} must be a string.`)
-      return false
+      throw new Error(`${type} must be a string.`)
     }
     carrier[key] = data
-    return true
   }
 
   _tagConditionalNumber (data, type, carrier, key) {
-    if (!data) return true
+    if (!data) return
     if (typeof data !== 'number') {
-      logger.warn(`${type} must be a number.`)
-      return false
+      throw new Error(`${type} must be a number.`)
     }
     carrier[key] = data
-    return true
   }
 
   _tagConditionalObject (data, type, carrier, key) {
-    if (!data) return true
+    if (!data) return
     if (typeof data !== 'object') {
-      logger.warn(`${type} must be an object.`)
-      return false
+      throw new Error(`${type} must be an object.`)
     }
     carrier[key] = data
-    return true
   }
 }
 

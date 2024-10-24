@@ -64,10 +64,7 @@ function disable () {
 // we need to propogate the parent id.
 function handleLLMObsParentIdInjection ({ carrier }) {
   const parent = storage.getStore()?.llmobsSpan
-  if (!parent) {
-    log.debug('No active span to inject LLMObs info.')
-    return
-  }
+  if (!parent) return
 
   const parentId = parent?.context().toSpanId()
 

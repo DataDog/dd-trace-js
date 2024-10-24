@@ -189,6 +189,7 @@ describe('sdk', () => {
           expect(LLMObsSpanProcessor.prototype.format).to.not.have.been.called
         })
 
+        // need span kind optional for this
         // it('throws if no name is provided', () => {
         //   expect(() => llmobs.trace({ kind: 'workflow' }, () => {})).to.throw()
 
@@ -434,6 +435,18 @@ describe('sdk', () => {
             '_ml_obs.meta.input.value': 'input'
           })
         })
+
+        // need span kind optional for this test
+        // it('sets the span name to "unnamed-anonymous-function" if no name is provided', () => {
+        //   let span
+        //   const fn = llmobs.wrap({ kind: 'workflow' }, () => {
+        //     span = llmobs._active()
+        //   })
+
+        //   fn()
+
+        //   expect(span.context()._name).to.equal('unnamed-anonymous-function')
+        // })
       })
 
       describe('parentage', () => {
@@ -647,78 +660,112 @@ describe('sdk', () => {
       llmobs._tagger.tagTextIO.restore()
     })
 
-    for (const spanKind of ['LLM', 'Embedding', 'Retrieval']) {
-      const spanKindLowerCase = spanKind.toLowerCase()
-      it(`annotates ${spanKindLowerCase} io for a ${spanKindLowerCase} span`, () => {
-        sinon.spy(llmobs._tagger, `tag${spanKind}IO`)
+    it('annotates llm io for an llm span', () => {
+      const inputData = [{ role: 'system', content: 'system prompt' }]
+      const outputData = [{ role: 'ai', content: 'no question was asked' }]
 
-        llmobs.trace({ kind: spanKindLowerCase, name: 'test' }, span => {
-          const inputData = {}
-          llmobs.annotate({ inputData })
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ inputData, outputData })
 
-          expect(llmobs._tagger[`tag${spanKind}IO`]).to.have.been.calledWith(span, inputData, undefined)
+        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.meta.input.messages': inputData,
+          '_ml_obs.meta.output.messages': outputData
         })
-
-        llmobs._tagger[`tag${spanKind}IO`].restore()
       })
-    }
+    })
 
-    for (const option of ['Metadata', 'Metrics', 'Tags']) {
-      const optionLowerCase = option.toLowerCase()
-      const method = option === 'Tags' ? 'SpanTags' : option
-      it(`annotates ${optionLowerCase} if present`, () => {
-        sinon.spy(llmobs._tagger, `tag${method}`)
+    it('annotates embedding io for an embedding span', () => {
+      const inputData = [{ text: 'input text' }]
+      const outputData = 'documents embedded'
 
-        llmobs.trace({ kind: 'llm', name: 'test' }, span => {
-          const opt = {}
-          llmobs.annotate(span, { [optionLowerCase]: opt })
+      llmobs.trace({ kind: 'embedding', name: 'test' }, span => {
+        llmobs.annotate({ inputData, outputData })
 
-          expect(llmobs._tagger[`tag${method}`]).to.have.been.calledWith(span, opt)
+        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'embedding',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.meta.input.documents': inputData,
+          '_ml_obs.meta.output.value': outputData
         })
-
-        llmobs._tagger[`tag${method}`].restore()
       })
-    }
+    })
+
+    it('annotates retrieval io for a retrieval span', () => {
+      const inputData = 'input text'
+      const outputData = [{ text: 'output text' }]
+
+      llmobs.trace({ kind: 'retrieval', name: 'test' }, span => {
+        llmobs.annotate({ inputData, outputData })
+
+        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'retrieval',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.meta.input.value': inputData,
+          '_ml_obs.meta.output.documents': outputData
+        })
+      })
+    })
+
+    it('annotates metadata if present', () => {
+      const metadata = { response_type: 'json' }
+
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ metadata })
+
+        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.meta.metadata': metadata
+        })
+      })
+    })
+
+    it('annotates metrics if present', () => {
+      const metrics = { score: 0.6 }
+
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ metrics })
+
+        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.metrics': metrics
+        })
+      })
+    })
+
+    it('annotates tags if present', () => {
+      const tags = { 'custom.tag': 'value' }
+
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ tags })
+
+        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.tags': tags
+        })
+      })
+    })
   })
 
   describe('exportSpan', () => {
-    it('returns if llmobs is disabled and no span is provided', () => {
-      tracer._tracer._config.llmobs.enabled = false
-
-      llmobs.trace({ kind: 'workflow', name: 'test' }, () => {
-        const spanCtx = llmobs.exportSpan()
-
-        expect(spanCtx).to.be.undefined
-      })
-
-      tracer._tracer._config.llmobs.enabled = true
+    it('throws if no span is provided', () => {
+      expect(() => llmobs.exportSpan()).to.throw()
     })
 
-    it('returns if llmobs is disabled and a span is provided', () => {
-      tracer._tracer._config.llmobs.enabled = false
-
-      llmobs.trace({ kind: 'workflow', name: 'test' }, span => {
-        const spanCtx = llmobs.exportSpan(span)
-
-        // the span was never registerd as an llmobs span since it was disabled
-        expect(spanCtx).to.be.undefined
-      })
-
-      tracer._tracer._config.llmobs.enabled = true
-    })
-
-    it('returns if the provided span is not an LLMObs span', () => {
+    it('throws if the provided span is not an LLMObs span', () => {
       tracer.trace('test', span => {
-        const spanCtx = llmobs.exportSpan(span)
-
-        expect(spanCtx).to.be.undefined
+        expect(() => llmobs.exportSpan(span)).to.throw()
       })
-    })
-
-    it('returns if there is no span provided and no active llmobs span found', () => {
-      const spanCtx = llmobs.exportSpan()
-
-      expect(spanCtx).to.be.undefined
     })
 
     it('uses the provided span', () => {
@@ -769,12 +816,22 @@ describe('sdk', () => {
 
   describe('submitEvaluation', () => {
     let spanCtx
+    let originalApiKey
+
+    before(() => {
+      originalApiKey = tracer._tracer._config.apiKey
+      tracer._tracer._config.apiKey = 'test'
+    })
 
     beforeEach(() => {
       spanCtx = {
         traceId: '1234',
         spanId: '5678'
       }
+    })
+
+    after(() => {
+      tracer._tracer._config.apiKey = originalApiKey
     })
 
     it('does not submit an evaluation if llmobs is disabled', () => {
@@ -786,85 +843,88 @@ describe('sdk', () => {
       tracer._tracer._config.llmobs.enabled = true
     })
 
-    it('does not submit an evaluation metric for a missing API key', () => {
-      delete tracer._tracer._config.llmobs.apiKey
-
-      const envApiKey = process.env.DD_API_KEY
+    it('throws for a missing API key', () => {
+      const apiKey = tracer._tracer._config.apiKey
       delete tracer._tracer._config.apiKey
 
-      llmobs.submitEvaluation(spanCtx, {
-        label: 'test',
-        metricType: 'score',
-        value: 0.6
-      })
+      expect(() => llmobs.submitEvaluation(spanCtx)).to.throw()
       expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
 
-      tracer._tracer._config.llmobs.apiKey = 'test'
-      tracer._tracer._config.apiKey = envApiKey
+      tracer._tracer._config.apiKey = apiKey
     })
 
-    it('does not submit an evaluation metric for an invalid span context', () => {
+    it('throws for an invalid span context', () => {
       const invalid = {}
 
-      llmobs.submitEvaluation(invalid, {})
+      expect(() => llmobs.submitEvaluation(invalid, {})).to.throw()
       expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
     })
 
-    it('does not submit an evaluation metric for a missing mlApp', () => {
+    it('throws for a missing mlApp', () => {
       const mlApp = tracer._tracer._config.llmobs.mlApp
       delete tracer._tracer._config.llmobs.mlApp
 
-      llmobs.submitEvaluation(spanCtx)
+      expect(() => llmobs.submitEvaluation(spanCtx)).to.throw()
       expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
 
       tracer._tracer._config.llmobs.mlApp = mlApp
     })
 
-    it('does not submit an evaluation metric for an invalid timestamp', () => {
-      llmobs.submitEvaluation(spanCtx, {
-        mlApp: 'test',
-        timestampMs: 'invalid'
-      })
+    it('throws for an invalid timestamp', () => {
+      expect(() => {
+        llmobs.submitEvaluation(spanCtx, {
+          mlApp: 'test',
+          timestampMs: 'invalid'
+        })
+      }).to.throw()
       expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
     })
 
-    it('does not submit an evaluation metric for a missing label', () => {
-      llmobs.submitEvaluation(spanCtx, {
-        mlApp: 'test',
-        timestampMs: 1234
-      })
+    it('throws for a missing label', () => {
+      expect(() => {
+        llmobs.submitEvaluation(spanCtx, {
+          mlApp: 'test',
+          timestampMs: 1234
+        })
+      }).to.throw()
       expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
     })
 
-    it('does not submit an evaluation metric for an invalid metric type', () => {
-      llmobs.submitEvaluation(spanCtx, {
-        mlApp: 'test',
-        timestampMs: 1234,
-        label: 'test',
-        metricType: 'invalid'
-      })
+    it('throws for an invalid metric type', () => {
+      expect(() => {
+        llmobs.submitEvaluation(spanCtx, {
+          mlApp: 'test',
+          timestampMs: 1234,
+          label: 'test',
+          metricType: 'invalid'
+        })
+      }).to.throw()
       expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
     })
 
-    it('does not submit an evaluation for a mismatched value for a categorical metric', () => {
-      llmobs.submitEvaluation(spanCtx, {
-        mlApp: 'test',
-        timestampMs: 1234,
-        label: 'test',
-        metricType: 'categorical',
-        value: 1
-      })
+    it('throws for a mismatched value for a categorical metric', () => {
+      expect(() => {
+        llmobs.submitEvaluation(spanCtx, {
+          mlApp: 'test',
+          timestampMs: 1234,
+          label: 'test',
+          metricType: 'categorical',
+          value: 1
+        })
+      }).to.throw()
       expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
     })
 
-    it('does not submit an evaluation for a mismatched value for a score metric', () => {
-      llmobs.submitEvaluation(spanCtx, {
-        mlApp: 'test',
-        timestampMs: 1234,
-        label: 'test',
-        metricType: 'score',
-        value: 'string'
-      })
+    it('throws for a mismatched value for a score metric', () => {
+      expect(() => {
+        llmobs.submitEvaluation(spanCtx, {
+          mlApp: 'test',
+          timestampMs: 1234,
+          label: 'test',
+          metricType: 'score',
+          value: 'string'
+        })
+      }).to.throw()
 
       expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
     })

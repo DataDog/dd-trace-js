@@ -3,7 +3,6 @@
 const { SPAN_KIND, OUTPUT_VALUE } = require('./constants')
 
 const {
-  getName,
   getFunctionArguments,
   validateKind
 } = require('./util')
@@ -158,7 +157,12 @@ class LLMObs extends NoopLLMObs {
     }
 
     const kind = validateKind(options.kind) // will throw if kind is undefined or not an expected kind
-    const name = getName(kind, options, fn)
+    let name = options.name || (fn?.name ? fn.name : undefined) || kind
+
+    if (!name) {
+      logger.warn('No span name provided for `wrap`. Defaulting to "unnamed-anonymous-function".')
+      name = 'unnamed-anonymous-function'
+    }
 
     const {
       spanOptions,
@@ -275,18 +279,15 @@ class LLMObs extends NoopLLMObs {
     span = span || this._active()
 
     if (!span) {
-      logger.warn('No span provided and no active LLMObs-generated span found')
-      return
+      throw new Error('No span provided and no active LLMObs-generated span found')
     }
 
     if (!(span instanceof Span)) {
-      logger.warn('Span must be a valid Span object.')
-      return
+      throw new Error('Span must be a valid Span object.')
     }
 
     if (!LLMObsTagger.tagMap.has(span)) {
-      logger.warn('Span must be an LLMObs-generated span')
-      return
+      throw new Error('Span must be an LLMObs-generated span')
     }
 
     try {
@@ -303,51 +304,45 @@ class LLMObs extends NoopLLMObs {
     if (!this.enabled) return
 
     if (!this._config.llmobs.apiKey && !this._config.apiKey) {
-      logger.warn(
+      throw new Error(
         'DD_API_KEY is required for sending evaluation metrics. Evaluation metric data will not be sent.\n' +
         'Ensure this configuration is set before running your application.'
       )
-      return
     }
 
     const { traceId, spanId } = llmobsSpanContext
     if (!traceId || !spanId) {
-      logger.warn(
+      throw new Error(
         'spanId and traceId must both be specified for the given evaluation metric to be submitted.'
       )
-      return
     }
 
     const mlApp = options.mlApp || this._config.llmobs.mlApp
     if (!mlApp) {
-      logger.warn('ML App name is required for sending evaluation metrics. Evaluation metric data will not be sent.')
-      return
+      throw new Error(
+        'ML App name is required for sending evaluation metrics. Evaluation metric data will not be sent.'
+      )
     }
 
     const timestampMs = options.timestampMs || Date.now()
     if (typeof timestampMs !== 'number' || timestampMs < 0) {
-      logger.warn('timestampMs must be a non-negative integer. Evaluation metric data will not be sent')
-      return
+      throw new Error('timestampMs must be a non-negative integer. Evaluation metric data will not be sent')
     }
 
     const { label, value, tags } = options
     const metricType = options.metricType?.toLowerCase()
     if (!label) {
-      logger.warn('label must be the specified name of the evaluation metric')
-      return
+      throw new Error('label must be the specified name of the evaluation metric')
     }
     if (!metricType || !['categorical', 'score'].includes(metricType)) {
-      logger.warn('metricType must be one of "categorical" or "score"')
-      return
+      throw new Error('metricType must be one of "categorical" or "score"')
     }
 
     if (metricType === 'categorical' && typeof value !== 'string') {
-      logger.warn('value must be a string for a categorical metric.')
-      return
+      throw new Error('value must be a string for a categorical metric.')
     }
     if (metricType === 'score' && typeof value !== 'number') {
-      logger.warn('value must be a number for a score metric.')
-      return
+      throw new Error('value must be a number for a score metric.')
     }
 
     const evaluationTags = {
@@ -362,8 +357,13 @@ class LLMObs extends NoopLLMObs {
           evaluationTags[key] = tag
         } else if (typeof tag.toString === 'function') {
           evaluationTags[key] = tag.toString()
+        } else if (tag == null) {
+          evaluationTags[key] = Object.prototype.toString.call(tag)
         } else {
-          logger.warn('Failed to parse tags. Tags for evaluation metrics must be strings')
+          // should be a rare case
+          // every object in JS has a toString, otherwise every primitive has its own toString
+          // null and undefined are handled above
+          throw new Error('Failed to parse tags. Tags for evaluation metrics must be strings')
         }
       }
     }

@@ -183,19 +183,14 @@ describe('tagger', () => {
       })
     })
 
-    it('removes non-number entries', () => {
+    it('throws for non-number entries', () => {
       const metrics = {
         a: 1,
         b: 'foo',
         c: { depth: 1 },
         d: undefined
       }
-      tagger.tagMetrics(span, metrics)
-      expect(Tagger.tagMap.get(span)).to.deep.equal({
-        '_ml_obs.metrics': { a: 1 }
-      })
-
-      expect(logger.warn).to.have.been.calledThrice
+      expect(() => tagger.tagMetrics(span, metrics)).to.throw()
     })
   })
 
@@ -243,31 +238,28 @@ describe('tagger', () => {
       })
     })
 
-    it('filters out malformed properties on messages', () => {
-      const inputData = [
-        true,
-        { content: 5 },
-        { content: 'hello', role: 5 },
-        'hi'
+    it('throws for a non-object message', () => {
+      const messages = [
+        5
       ]
-      const outputData = [
-        undefined,
-        null,
-        { content: 5 },
-        { content: 'goodbye', role: 5 }
-      ]
-      tagger.tagLLMIO(span, inputData, outputData)
-      expect(Tagger.tagMap.get(span)).to.deep.equal({
-        '_ml_obs.meta.input.messages': [{ content: 'hi' }]
-      })
 
-      expect(logger.warn.getCall(0).firstArg).to.equal('Messages must be a string, object, or list of objects')
-      expect(logger.warn.getCall(1).firstArg).to.equal('Message content must be a string.')
-      expect(logger.warn.getCall(2).firstArg).to.equal('Message role must be a string.')
-      expect(logger.warn.getCall(3).firstArg).to.equal('Messages must be a string, object, or list of objects')
-      expect(logger.warn.getCall(4).firstArg).to.equal('Messages must be a string, object, or list of objects')
-      expect(logger.warn.getCall(5).firstArg).to.equal('Message content must be a string.')
-      expect(logger.warn.getCall(6).firstArg).to.equal('Message role must be a string.')
+      expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+    })
+
+    it('throws for a non-string message content', () => {
+      const messages = [
+        { content: 5 }
+      ]
+
+      expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+    })
+
+    it('throws for a non-string message role', () => {
+      const messages = [
+        { content: 'a', role: 5 }
+      ]
+
+      expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
     })
 
     describe('tagging tool calls appropriately', () => {
@@ -294,41 +286,44 @@ describe('tagger', () => {
         })
       })
 
-      it('filters out malformed tool calls', () => {
-        const inputData = [
-          { content: 'a', toolCalls: 5 }, // tool calls must be objects
-          { content: 'b', toolCalls: [5] }, // tool calls must be objects
-          { content: 'c', toolCalls: [{ name: 5 }] }, // tool name must be a string
-          { content: 'd', toolCalls: [{ arguments: 5 }] }, // tool arguments must be an object
-          { content: 'e', toolCalls: [{ toolId: 5 }] }, // tool id must be a string
-          { content: 'f', toolCalls: [{ type: 5 }] }, // tool type must be a string
-          {
-            content: 'g',
-            toolCalls: [
-              { name: 'tool1', arguments: 5 }, { name: 'tool2' } // second tool call should be tagged
-            ]
-          } // tool arguments must be an object
+      it('throws for a non-object tool call', () => {
+        const messages = [
+          { content: 'a', toolCalls: 5 }
         ]
 
-        tagger.tagLLMIO(span, inputData, undefined)
-        expect(Tagger.tagMap.get(span)).to.deep.equal({
-          '_ml_obs.meta.input.messages': [
-            { content: 'a' },
-            { content: 'b' },
-            { content: 'c' },
-            { content: 'd' },
-            { content: 'e' },
-            { content: 'f' },
-            { content: 'g', tool_calls: [{ name: 'tool2' }] }]
-        })
+        expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+      })
 
-        expect(logger.warn.getCall(0).firstArg).to.equal('Tool call must be an object.')
-        expect(logger.warn.getCall(1).firstArg).to.equal('Tool call must be an object.')
-        expect(logger.warn.getCall(2).firstArg).to.equal('Tool name must be a string.')
-        expect(logger.warn.getCall(3).firstArg).to.equal('Tool arguments must be an object.')
-        expect(logger.warn.getCall(4).firstArg).to.equal('Tool ID must be a string.')
-        expect(logger.warn.getCall(5).firstArg).to.equal('Tool type must be a string.')
-        expect(logger.warn.getCall(6).firstArg).to.equal('Tool arguments must be an object.')
+      it('throws for a non-string tool name', () => {
+        const messages = [
+          { content: 'a', toolCalls: [{ name: 5 }] }
+        ]
+
+        expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+      })
+
+      it('throws for a non-object tool arguments', () => {
+        const messages = [
+          { content: 'a', toolCalls: [{ name: 'tool1', arguments: 5 }] }
+        ]
+
+        expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+      })
+
+      it('throws for a non-string tool id', () => {
+        const messages = [
+          { content: 'a', toolCalls: [{ name: 'tool1', toolId: 5 }] }
+        ]
+
+        expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+      })
+
+      it('throws for a non-string tool type', () => {
+        const messages = [
+          { content: 'a', toolCalls: [{ name: 'tool1', type: 5 }] }
+        ]
+
+        expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
       })
 
       it('logs multiple errors if there are multiple errors for a message and filters it out', () => {
@@ -336,13 +331,7 @@ describe('tagger', () => {
           { content: 'a', toolCalls: [5, { name: 5, type: 7 }], role: 7 }
         ]
 
-        tagger.tagLLMIO(span, messages, undefined)
-        expect(Tagger.tagMap.get(span)).to.deep.equal(undefined)
-
-        expect(logger.warn.getCall(0).firstArg).to.equal('Message role must be a string.')
-        expect(logger.warn.getCall(1).firstArg).to.equal('Tool call must be an object.')
-        expect(logger.warn.getCall(2).firstArg).to.equal('Tool name must be a string.')
-        expect(logger.warn.getCall(3).firstArg).to.equal('Tool type must be a string.')
+        expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
       })
     })
   })
@@ -371,41 +360,44 @@ describe('tagger', () => {
       })
     })
 
-    it('filters out malformed properties on documents', () => {
-      const inputData = [
-        true,
-        { text: 5 },
-        { text: 'foo', name: 5 },
-        'hi',
-        null,
-        undefined
+    it('throws for a non-object document', () => {
+      const documents = [
+        5
       ]
-      const outputData = 'output'
-      tagger.tagEmbeddingIO(span, inputData, outputData)
-      expect(Tagger.tagMap.get(span)).to.deep.equal({
-        '_ml_obs.meta.input.documents': [{ text: 'hi' }],
-        '_ml_obs.meta.output.value': 'output'
-      })
 
-      expect(logger.warn.getCall(0).firstArg).to.equal('Documents must be a string, object, or list of objects.')
-      expect(logger.warn.getCall(1).firstArg).to.equal('Document text must be a string.')
-      expect(logger.warn.getCall(2).firstArg).to.equal('Document name must be a string.')
-      expect(logger.warn.getCall(3).firstArg).to.equal('Documents must be a string, object, or list of objects.')
-      expect(logger.warn.getCall(4).firstArg).to.equal('Documents must be a string, object, or list of objects.')
+      expect(() => tagger.tagEmbeddingIO(span, documents, undefined)).to.throw()
     })
 
-    it('logs multiple errors if there are multiple errors for a document and filters it out', () => {
+    it('throws for a non-string document text', () => {
       const documents = [
-        { text: 'a', name: 5, id: 7, score: 9 }
+        { text: 5 }
       ]
 
-      tagger.tagEmbeddingIO(span, documents, 'output')
-      expect(Tagger.tagMap.get(span)).to.deep.equal({
-        '_ml_obs.meta.output.value': 'output'
-      })
+      expect(() => tagger.tagEmbeddingIO(span, documents, undefined)).to.throw()
+    })
 
-      expect(logger.warn.getCall(0).firstArg).to.equal('Document name must be a string.')
-      expect(logger.warn.getCall(1).firstArg).to.equal('Document ID must be a string.')
+    it('throws for a non-string document name', () => {
+      const documents = [
+        { text: 'a', name: 5 }
+      ]
+
+      expect(() => tagger.tagEmbeddingIO(span, documents, undefined)).to.throw()
+    })
+
+    it('throws for a non-string document id', () => {
+      const documents = [
+        { text: 'a', id: 5 }
+      ]
+
+      expect(() => tagger.tagEmbeddingIO(span, documents, undefined)).to.throw()
+    })
+
+    it('throws for a non-number document score', () => {
+      const documents = [
+        { text: 'a', score: '5' }
+      ]
+
+      expect(() => tagger.tagEmbeddingIO(span, documents, undefined)).to.throw()
     })
   })
 
@@ -434,7 +426,7 @@ describe('tagger', () => {
       })
     })
 
-    it('filters out malformed properties on documents', () => {
+    it('throws for malformed properties on documents', () => {
       const inputData = 'some query'
       const outputData = [
         true,
@@ -444,17 +436,9 @@ describe('tagger', () => {
         null,
         undefined
       ]
-      tagger.tagRetrievalIO(span, inputData, outputData)
-      expect(Tagger.tagMap.get(span)).to.deep.equal({
-        '_ml_obs.meta.input.value': 'some query',
-        '_ml_obs.meta.output.documents': [{ text: 'hi' }]
-      })
 
-      expect(logger.warn.getCall(0).firstArg).to.equal('Documents must be a string, object, or list of objects.')
-      expect(logger.warn.getCall(1).firstArg).to.equal('Document text must be a string.')
-      expect(logger.warn.getCall(2).firstArg).to.equal('Document name must be a string.')
-      expect(logger.warn.getCall(3).firstArg).to.equal('Documents must be a string, object, or list of objects.')
-      expect(logger.warn.getCall(4).firstArg).to.equal('Documents must be a string, object, or list of objects.')
+      // specific cases of throwing tested with embedding inputs
+      expect(() => tagger.tagRetrievalIO(span, inputData, outputData)).to.throw()
     })
   })
 
@@ -469,13 +453,9 @@ describe('tagger', () => {
       })
     })
 
-    it('logs when the value is not JSON serializable', () => {
+    it('throws when the value is not JSON serializable', () => {
       const data = unserializbleObject()
-      tagger.tagTextIO(span, data, 'output')
-      expect(logger.warn).to.have.been.calledOnceWith('Failed to parse input value, must be JSON serializable.')
-      expect(Tagger.tagMap.get(span)).to.deep.equal({
-        '_ml_obs.meta.output.value': 'output'
-      })
+      expect(() => tagger.tagTextIO(span, data, 'output')).to.throw()
     })
   })
 })
