@@ -6,9 +6,10 @@ const { JSONEncoder } = require('../../encode/json-encoder')
 
 const BaseWriter = require('../../../exporters/common/writer')
 
-// Writer to encode and send logs to both the logs intake directly and the
+// Writer used by the integration between Dynamic Instrumentation and Test Visibility
+// It is used to encode and send logs to both the logs intake directly and the
 // `/debugger/v1/input` endpoint in the agent, which is a proxy to the logs intake.
-class LogsWriter extends BaseWriter {
+class DynamicInstrumentationLogsWriter extends BaseWriter {
   constructor ({ url, isAgentProxy = false }) {
     super(...arguments)
     this._url = url
@@ -47,4 +48,4 @@ class LogsWriter extends BaseWriter {
   }
 }
 
-module.exports = LogsWriter
+module.exports = DynamicInstrumentationLogsWriter
