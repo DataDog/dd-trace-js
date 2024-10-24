@@ -303,7 +303,7 @@ describe('exporters/agent', function () {
         /^Adding wall profile to agent export:( [0-9a-f]{2})+$/,
         /^Adding space profile to agent export:( [0-9a-f]{2})+$/,
         /^Submitting profiler agent report attempt #1 to:/i,
-        /^Error from the agent: HTTP Error 400$/,
+        /^Error from the agent: HTTP Error 500$/,
         /^Submitting profiler agent report attempt #2 to:/i,
         /^Agent export response: ([0-9a-f]{2}( |$))*/
       ]
@@ -344,7 +344,7 @@ describe('exporters/agent', function () {
           return
         }
         const data = Buffer.from(json)
-        res.writeHead(400, {
+        res.writeHead(500, {
           'content-type': 'application/json',
           'content-length': data.length
         })
