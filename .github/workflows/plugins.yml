@@ -387,6 +387,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
 
+  express-mongo-sanitize:
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: circleci/mongo
+        ports:
+          - 27017:27017
+    env:
+      PLUGINS: express-mongo-sanitize
+      PACKAGE_NAMES: express-mongo-sanitize
+      SERVICES: mongo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
+
   fastify:
     runs-on: ubuntu-latest
     env:
