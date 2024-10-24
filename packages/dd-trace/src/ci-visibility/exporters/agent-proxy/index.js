@@ -41,7 +41,8 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       prioritySampler,
       lookup,
       protocolVersion,
-      headers
+      headers,
+      isTestDynamicInstrumentationEnabled
     } = config
 
     this.getAgentInfo((err, agentInfo) => {
@@ -49,8 +50,6 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       let latestEvpProxyVersion = getLatestEvpProxyVersion(err, agentInfo)
       const isEvpCompatible = latestEvpProxyVersion >= 2
       const isGzipCompatible = latestEvpProxyVersion >= 4
-
-      const canFowardLogs = getCanForwardDebuggerLogs(err, agentInfo)
 
       // v3 does not work well citestcycle, so we downgrade to v2
       if (latestEvpProxyVersion === 3) {
@@ -70,14 +69,17 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
           url: this._url,
           evpProxyPrefix
         })
-        if (canFowardLogs && config.isTestDynamicInstrumentationEnabled) {
-          const DynamicInstrumentationLogsWriter = require('../agentless/di-logs-writer')
-          this._logsWriter = new DynamicInstrumentationLogsWriter({
-            url: this._url,
-            tags,
-            isAgentProxy: true
-          })
-          this._canForwardLogs = true
+        if (isTestDynamicInstrumentationEnabled) {
+          const canFowardLogs = getCanForwardDebuggerLogs(err, agentInfo)
+          if (canFowardLogs) {
+            const DynamicInstrumentationLogsWriter = require('../agentless/di-logs-writer')
+            this._logsWriter = new DynamicInstrumentationLogsWriter({
+              url: this._url,
+              tags,
+              isAgentProxy: true
+            })
+            this._canForwardLogs = true
+          }
         }
       } else {
         this._writer = new AgentWriter({
