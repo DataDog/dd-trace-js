@@ -49,7 +49,7 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   const snapshot = {
-    id: global.__snapshotId,
+    id: probe.snapshotId,
     timestamp: Date.now(),
     probe: {
       id: probe.probeId,
@@ -75,9 +75,8 @@ session.on('Debugger.paused', async ({ params }) => {
 // TODO: add option to remove breakpoint
 // message handling
 parentPort.on('message', async ({ snapshotId, probe: { id: probeId, file, line } }) => {
-  global.__snapshotId = snapshotId
   // only message at the moment is a line probe
-  await addBreakpoint({ probeId, file, line })
+  await addBreakpoint({ probeId, file, line, snapshotId })
 })
 
 async function addBreakpoint (probe) {

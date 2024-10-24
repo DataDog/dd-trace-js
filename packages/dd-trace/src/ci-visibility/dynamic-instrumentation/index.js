@@ -7,7 +7,6 @@ const { randomUUID } = require('crypto')
  * - console.log -> log
  */
 
-global.__snapshotId = randomUUID()
 
 const messages = new Map()
 
@@ -19,11 +18,19 @@ class TestVisDynamicInstrumentation {
 
   // Return a promise that's resolved when the breakpoint is hit
   activateDebugger ({ file, line }) {
-    return new Promise(resolve => {
-      const id = randomUUID()
-      messages.set(id, resolve)
-      this.worker.postMessage({ snapshotId: global.__snapshotId, probe: { id, file, line } })
-    })
+    const snapshotId = randomUUID()
+
+    return [
+      snapshotId,
+      new Promise(resolve => {
+        const id = randomUUID()
+        messages.set(id, resolve)
+        this.worker.postMessage({
+          snapshotId,
+          probe: { id, file, line }
+        })
+      })
+    ]
   }
 
   start () {

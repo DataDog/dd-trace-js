@@ -207,6 +207,18 @@ class MochaPlugin extends CiPlugin {
       const span = this.startTestSpan(testInfo)
 
       this.enter(span, store)
+
+      if (this.debuggerParameters) { // there is a breakpoint
+        const spanContext = span.context()
+        const spanId = spanContext.toSpanId()
+        const traceId = spanContext.toTraceId()
+        this.retriedTestIds = {
+          spanId,
+          traceId
+        }
+        // we probably need a map, as there are sync issues here
+        // onHitProbePromise might not sync correctly with test start / end
+      }
     })
 
     this.addSub('ci:mocha:worker:finish', () => {
@@ -258,11 +270,25 @@ class MochaPlugin extends CiPlugin {
           span.setTag(TEST_STATUS, 'skip')
         } else {
           span.setTag(TEST_STATUS, 'fail')
-          span.setTag('error.debug_info_captured', 'true')
+          // big problems with sync here!
+          if (this.debuggerParameters) {
+            // good news: the logs export does not need to be synced with test event
+            // export, so as long as we have the trace and span id we're good, even
+            // if the test finishes before we handle the debuggerPromise
+            const {
+              snapshotId,
+              file,
+              line
+            } = this.debuggerParameters
+            span.setTag('error.debug_info_captured', 'true')
+            span.setTag('_dd.debug.error.0.snapshot_id', snapshotId)
+            // TODO: we need to figure out if the error is the same as the one we added a line probe to
+            span.setTag('_dd.debug.error.0.file', file)
+            span.setTag('_dd.debug.error.0.line', line)
 
-          span.setTag('_dd.debug.error.0.file', 'sum.js') // TODO: look at error stack
-          span.setTag('_dd.debug.error.0.line', '4') // TODO: look at error stack
-          span.setTag('_dd.debug.error.0.snapshot_id', global.__snapshotId)
+            // do we need to remove it?
+            this.debuggerParameters = null
+          }
 
           span.setTag('error', err)
         }
@@ -282,19 +308,27 @@ class MochaPlugin extends CiPlugin {
         }
         if (err) {
           span.setTag('error', err)
+          // TODO: only do this if ATR + DI is configured
           const [file, line] = getFileAndLineNumberFromError(err)
           // TODO: we need to figure out what to do with sync issues: mocha will not
           // wait for this promise
-          this.di.activateDebugger({ file, line })
-            .then(({ snapshot }) => {
-              // TODO: this needs to include the active span from the following attempt:
-              // basically this is not a good place to run the `then` handle
-              this.tracer._exporter.exportLogs(this.testEnvironmentMetadata, {
-                // TODO: add dd.trace_id and dd.span_id, so we need the active span
-                level: 'error',
-                debugger: { snapshot }
-              })
+          // TODO: what if the probe is not hit?
+          const [snapshotId, onHitProbePromise] = this.di.activateDebugger({ file, line })
+
+          this.debuggerParameters = {
+            snapshotId,
+            file,
+            line
+          }
+          onHitProbePromise.then(({ snapshot }) => {
+            this.tracer._exporter.exportLogs(this.testEnvironmentMetadata, {
+              debugger: { snapshot },
+              dd: {
+                trace_id: this.retriedTestIds.traceId,
+                span_id: this.retriedTestIds.spanId
+              }
             })
+          })
         }
 
         const spanTags = span.context()._tags
