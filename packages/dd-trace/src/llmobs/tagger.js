@@ -97,8 +97,23 @@ class LLMObsTagger {
   tagMetrics (span, metrics) {
     const filterdMetrics = {}
     for (const [key, value] of Object.entries(metrics)) {
+      let processedKey = key
+
+      // processing these specifically for our metrics ingestion
+      switch (key) {
+        case 'inputTokens':
+          processedKey = 'input_tokens'
+          break
+        case 'outputTokens':
+          processedKey = 'output_tokens'
+          break
+        case 'totalTokens':
+          processedKey = 'total_tokens'
+          break
+      }
+
       if (typeof value === 'number') {
-        filterdMetrics[key] = value
+        filterdMetrics[processedKey] = value
       } else {
         logger.warn(`Value for metric '${key}' must be a number, instead got ${value}`)
       }
