@@ -13,8 +13,15 @@ function encodeUnicode (str) {
   }).join('')
 }
 
-function validKind (kind) {
-  return SPAN_KINDS.includes(kind)
+function validateKind (kind) {
+  if (!SPAN_KINDS.includes(kind)) {
+    throw new Error(`
+      Invalid span kind specified: "${kind}"
+      Must be one of: ${SPAN_KINDS.join(', ')}
+    `)
+  }
+
+  return kind
 }
 
 function getName (kind, options = {}, fn) {
@@ -168,7 +175,7 @@ function getFunctionArguments (fn, args = []) {
 
 module.exports = {
   encodeUnicode,
-  validKind,
+  validateKind,
   getName,
   getFunctionArguments
 }

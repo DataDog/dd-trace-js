@@ -4,7 +4,7 @@ const {
   encodeUnicode,
   getName,
   getFunctionArguments,
-  validKind
+  validateKind
 } = require('../../src/llmobs/util')
 
 describe('util', () => {
@@ -18,23 +18,23 @@ describe('util', () => {
     })
   })
 
-  describe('validKind', () => {
+  describe('validateKind', () => {
     for (const kind of ['llm', 'agent', 'task', 'tool', 'workflow', 'retrieval', 'embedding']) {
       it(`should return true for valid kind: ${kind}`, () => {
-        expect(validKind(kind)).to.equal(true)
+        expect(validateKind(kind)).to.equal(kind)
       })
     }
 
-    it('should return false for an empty string', () => {
-      expect(validKind('')).to.equal(false)
+    it('should throw for an empty string', () => {
+      expect(() => validateKind('')).to.throw()
     })
 
-    it('should return false for an invalid kind', () => {
-      expect(validKind('invalid')).to.equal(false)
+    it('should throw for an invalid kind', () => {
+      expect(() => validateKind('invalid')).to.throw()
     })
 
-    it('should return false for an undefined kind', () => {
-      expect(validKind(undefined)).to.equal(false)
+    it('should throw for an undefined kind', () => {
+      expect(() => validateKind()).to.throw()
     })
   })
 
