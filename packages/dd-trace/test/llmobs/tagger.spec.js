@@ -9,7 +9,7 @@ function unserializbleObject () {
   return obj
 }
 
-describe.only('tagger', () => {
+describe('tagger', () => {
   let span
   let spanContext
   let Tagger
