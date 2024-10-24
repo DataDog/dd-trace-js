@@ -267,7 +267,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
-    cookie-parser:
+  cookie-parser:
     runs-on: ubuntu-latest
     env:
       PLUGINS: cookie-parser
