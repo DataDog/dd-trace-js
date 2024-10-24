@@ -378,6 +378,62 @@ describe('sdk', () => {
 
           expect(span.finish).to.have.been.called
         })
+
+        it('does not auto-annotate llm spans', () => {
+          let span
+          function myLLM (input) {
+            span = llmobs._active()
+            return ''
+          }
+
+          const wrappedMyLLM = llmobs.wrap({ kind: 'llm' }, myLLM)
+
+          wrappedMyLLM('input')
+
+          expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+            '_ml_obs.meta.span.kind': 'llm',
+            '_ml_obs.meta.ml_app': 'mlApp',
+            '_ml_obs.llmobs_parent_id': 'undefined'
+          })
+        })
+
+        it('does not auto-annotate embedding spans input', () => {
+          let span
+          function myEmbedding (input) {
+            span = llmobs._active()
+            return 'output'
+          }
+
+          const wrappedMyEmbedding = llmobs.wrap({ kind: 'embedding' }, myEmbedding)
+
+          wrappedMyEmbedding('input')
+
+          expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+            '_ml_obs.meta.span.kind': 'embedding',
+            '_ml_obs.meta.ml_app': 'mlApp',
+            '_ml_obs.llmobs_parent_id': 'undefined',
+            '_ml_obs.meta.output.value': 'output'
+          })
+        })
+
+        it('does not auto-annotate retrieval spans output', () => {
+          let span
+          function myRetrieval (input) {
+            span = llmobs._active()
+            return 'output'
+          }
+
+          const wrappedMyRetrieval = llmobs.wrap({ kind: 'retrieval' }, myRetrieval)
+
+          wrappedMyRetrieval('input')
+
+          expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+            '_ml_obs.meta.span.kind': 'retrieval',
+            '_ml_obs.meta.ml_app': 'mlApp',
+            '_ml_obs.llmobs_parent_id': 'undefined',
+            '_ml_obs.meta.input.value': 'input'
+          })
+        })
       })
 
       describe('parentage', () => {
