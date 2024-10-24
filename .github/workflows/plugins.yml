@@ -445,34 +445,6 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
 
-  elasticsearch:
-    needs: 
-      - versions
-    strategy:
-      matrix: ${{fromJson(needs.versions.outputs.matrices).matrices.elasticsearch}}
-    runs-on: ubuntu-latest
-    services:
-      elasticsearch:
-        image: elasticsearch:7.17.22
-        env:
-          discovery.type: single-node
-        ports:
-          - 9200:9200
-    env:
-      PLUGINS: elasticsearch
-      SERVICES: elasticsearch
-      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/setup
-      - uses: ./.github/actions/install
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-      - uses: codecov/codecov-action@v3
-
   express:
     needs: 
       - versions
