@@ -20,6 +20,7 @@ module.exports = {
   ASM_RASP_SQLI: 1n << 21n,
   ASM_RASP_LFI: 1n << 22n,
   ASM_RASP_SSRF: 1n << 23n,
+  ASM_RASP_SHI: 1n << 24n,
   APM_TRACING_SAMPLE_RULES: 1n << 29n,
   ASM_ENDPOINT_FINGERPRINT: 1n << 32n,
   ASM_NETWORK_FINGERPRINT: 1n << 34n,
