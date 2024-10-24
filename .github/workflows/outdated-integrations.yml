@@ -1,0 +1,15 @@
+name: Outdated Integrations
+
+on:
+  schedule:
+    # This, will run every weekday at 2pm UTC
+    - cron: '0 14 * * 1,2,3,4,5'
+
+jobs:
+  outdated-integrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - run: yarn outdated-integrations

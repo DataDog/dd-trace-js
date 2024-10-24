@@ -12,6 +12,7 @@
     "bench:e2e:ci-visibility": "node benchmark/e2e-ci/benchmark-run.js",
     "type:doc": "cd docs && yarn && yarn build",
     "type:test": "cd docs && yarn && yarn test",
+    "outdated-integrations": "node scripts/outdated.js",
     "lint": "node scripts/check_licenses.js && eslint . && yarn audit",
     "lint-fix": "node scripts/check_licenses.js && eslint . --fix && yarn audit",
     "services": "node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",
