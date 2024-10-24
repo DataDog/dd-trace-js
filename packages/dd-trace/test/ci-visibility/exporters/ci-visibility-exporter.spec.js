@@ -815,4 +815,59 @@ describe('CI Visibility Exporter', () => {
       })
     })
   })
+
+  describe('exportDiLogs', () => {
+    context('is not initialized', () => {
+      it('should do nothing', () => {
+        const log = { message: 'log' }
+        const ciVisibilityExporter = new CiVisibilityExporter({ port, isTestDynamicInstrumentationEnabled: true })
+        ciVisibilityExporter.exportDiLogs(log)
+        ciVisibilityExporter._export = sinon.spy()
+        expect(ciVisibilityExporter._export).not.to.be.called
+      })
+    })
+
+    context('is initialized but can not forward logs', () => {
+      it('should do nothing', () => {
+        const writer = {
+          append: sinon.spy(),
+          flush: sinon.spy(),
+          setUrl: sinon.spy()
+        }
+        const log = { message: 'log' }
+        const ciVisibilityExporter = new CiVisibilityExporter({ port, isTestDynamicInstrumentationEnabled: true })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._logsWriter = writer
+        ciVisibilityExporter._canForwardLogs = false
+        ciVisibilityExporter.exportDiLogs(log)
+        expect(ciVisibilityExporter._logsWriter.append).not.to.be.called
+      })
+    })
+
+    context('is initialized and can forward logs', () => {
+      it('should export formatted logs', () => {
+        const writer = {
+          append: sinon.spy(),
+          flush: sinon.spy(),
+          setUrl: sinon.spy()
+        }
+        const log = { message: 'log' }
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          port,
+          isTestDynamicInstrumentationEnabled: true,
+          service: 'my-service'
+        })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._logsWriter = writer
+        ciVisibilityExporter._canForwardLogs = true
+        ciVisibilityExporter.exportDiLogs({}, log)
+        expect(ciVisibilityExporter._logsWriter.append).to.be.calledWith(sinon.match({
+          message: 'log',
+          level: 'error',
+          ddsource: 'dd_debugger',
+          service: 'my-service'
+        }))
+      })
+    })
+  })
 })

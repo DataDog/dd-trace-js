@@ -6,6 +6,7 @@ const nock = require('nock')
 
 const AgentProxyCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/agent-proxy')
 const AgentlessWriter = require('../../../../src/ci-visibility/exporters/agentless/writer')
+const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 const CoverageWriter = require('../../../../src/ci-visibility/exporters/agentless/coverage-writer')
 const AgentWriter = require('../../../../src/exporters/agent/writer')
 
@@ -68,7 +69,10 @@ describe('AgentProxyCiVisibilityExporter', () => {
         .get('/info')
         .delay(queryDelay)
         .reply(200, JSON.stringify({
-          endpoints: ['/evp_proxy/v2/']
+          endpoints: [
+            '/evp_proxy/v2/',
+            '/debugger/v1/input'
+          ]
         }))
     })
 
@@ -111,6 +115,35 @@ describe('AgentProxyCiVisibilityExporter', () => {
       agentProxyCiVisibilityExporter._libraryConfig = { isCodeCoverageEnabled: true }
       agentProxyCiVisibilityExporter.exportCoverage(coverage)
       expect(mockWriter.append).to.have.been.calledWith({ spanId: '1', traceId: '1', files: [] })
+    })
+
+    context('if isTestDynamicInstrumentationEnabled is set', () => {
+      it('should initialise DynamicInstrumentationLogsWriter', async () => {
+        const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({
+          port,
+          tags,
+          isTestDynamicInstrumentationEnabled: true
+        })
+        await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
+        expect(agentProxyCiVisibilityExporter._logsWriter).to.be.instanceOf(DynamicInstrumentationLogsWriter)
+      })
+
+      it('should process logs', async () => {
+        const mockWriter = {
+          append: sinon.spy(),
+          flush: sinon.spy()
+        }
+        const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({
+          port,
+          tags,
+          isTestDynamicInstrumentationEnabled: true
+        })
+        await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
+        agentProxyCiVisibilityExporter._logsWriter = mockWriter
+        const log = { message: 'hello' }
+        agentProxyCiVisibilityExporter.exportDiLogs({}, log)
+        expect(mockWriter.append).to.have.been.calledWith(sinon.match(log))
+      })
     })
   })
 
@@ -165,6 +198,35 @@ describe('AgentProxyCiVisibilityExporter', () => {
         files: []
       })
       expect(mockWriter.append).not.to.have.been.called
+    })
+
+    context('if isTestDynamicInstrumentationEnabled is set', () => {
+      it('should not initialise DynamicInstrumentationLogsWriter', async () => {
+        const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({
+          port,
+          tags,
+          isTestDynamicInstrumentationEnabled: true
+        })
+        await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
+        expect(agentProxyCiVisibilityExporter._logsWriter).to.be.undefined
+      })
+
+      it('should not process logs', async () => {
+        const mockWriter = {
+          append: sinon.spy(),
+          flush: sinon.spy()
+        }
+        const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({
+          port,
+          tags,
+          isTestDynamicInstrumentationEnabled: true
+        })
+        await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
+        agentProxyCiVisibilityExporter._logsWriter = mockWriter
+        const log = { message: 'hello' }
+        agentProxyCiVisibilityExporter.exportDiLogs({}, log)
+        expect(mockWriter.append).not.to.have.been.called
+      })
     })
   })
 
