@@ -52,6 +52,14 @@ function computeRetries (uploadTimeout) {
   return [tries, Math.floor(uploadTimeout)]
 }
 
+function shouldRetry (retryOp, err) {
+  const { status } = err
+  if (typeof status === 'number' && status < 500 && status !== 429) {
+    return false
+  }
+  return retryOp.retry(err)
+}
+
 class AgentExporter {
   constructor ({ url, logger, uploadTimeout, env, host, service, version, libraryInjected, activation } = {}) {
     this._url = url
@@ -195,7 +203,7 @@ class AgentExporter {
         })
 
         sendRequest(options, form, (err, response) => {
-          if (operation.retry(err)) {
+          if (shouldRetry(operation, err)) {
             this._logger.error(`Error from the agent: ${err.message}`)
             return
           } else if (err) {
