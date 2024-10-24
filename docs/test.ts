@@ -587,7 +587,6 @@ cls.myOtherLLM()
 
 // export a span
 llmobs.enable({ mlApp: 'myApp' })
-llmobs.exportSpan()
 llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
   const llmobsSpanCtx = llmobs.exportSpan(span)
   llmobsSpanCtx.traceId;
