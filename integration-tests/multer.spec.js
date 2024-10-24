@@ -10,7 +10,7 @@ const {
   spawnProc
 } = require('./helpers')
 
-describe('Suspicious request blocking - multer', () => {
+describe('multer', () => {
   let sandbox, cwd, startupTestFile, agent, proc, env
 
   ['1.4.4-lts.1', '1.4.5-lts.1'].forEach((version) => {
@@ -18,7 +18,7 @@ describe('Suspicious request blocking - multer', () => {
       before(async () => {
         sandbox = await createSandbox(['express', `multer@${version}`])
         cwd = sandbox.folder
-        startupTestFile = path.join(cwd, 'multer', index.js')
+        startupTestFile = path.join(cwd, 'multer', 'index.js')
       })
 
       after(async () => {
@@ -43,26 +43,53 @@ describe('Suspicious request blocking - multer', () => {
         await agent.stop()
       })
 
-      it('should not block the request without an attack', async () => {
-        const form = new FormData()
-        form.append('key', 'value')
+      describe('Suspicious request blocking', () => {
+        it('should not block the request without an attack', async () => {
+          const form = new FormData()
+          form.append('key', 'value')
 
-        const res = await axios.post(proc.url, form)
+          const res = await axios.post(proc.url, form)
 
-        assert.equal(res.data, 'DONE')
+          assert.equal(res.data, 'DONE')
+        })
+
+        it('should block the request when attack is detected', async () => {
+          try {
+            const form = new FormData()
+            form.append('key', 'testattack')
+
+            await axios.post(proc.url, form)
+
+            return Promise.reject(new Error('Request should not return 200'))
+          } catch (e) {
+            assert.equal(e.response.status, 403)
+          }
+        })
       })
 
-      it('should block the request when attack is detected', async () => {
-        try {
-          const form = new FormData()
-          form.append('key', 'testattack')
+      describe('IAST', () => {
+        it('should taint multipart body', async () => {
+          const resultPromise = agent.assertMessageReceived(({ payload }) => {
+            assert.isArray(payload)
+            assert.strictEqual(payload.length, 1)
+            assert.isArray(payload[0])
 
-          await axios.post(proc.url, form)
+            const { meta } = payload[0][0]
 
-          return Promise.reject(new Error('Request should not return 200'))
-        } catch (e) {
-          assert.equal(e.response.status, 403)
-        }
+            assert.property(meta, '_dd.iast.json')
+
+            const iastJson = JSON.parse(meta['_dd.iast.json'])
+
+            assert.isTrue(iastJson.vulnerabilities.some(v => v.type === 'COMMAND_INJECTION'))
+            assert.isTrue(iastJson.sources.some(s => s.origin === 'http.request.body'))
+          })
+
+          const formData = new FormData()
+          formData.append('command', 'echo 1')
+          await axios.post(`${proc.url}/cmd`, formData)
+
+          return resultPromise
+        })
       })
     })
   })

@@ -3,6 +3,10 @@
 const options = {
   appsec: {
     enabled: true
+  },
+  iast: {
+    enabled: true,
+    requestSampling: 100
   }
 }
 
@@ -19,6 +23,8 @@ tracer.init(options)
 
 const http = require('http')
 const express = require('express')
+const childProcess = require('child_process')
+
 const multer = require('multer')
 const uploadToMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200000 } })
 
@@ -26,6 +32,12 @@ const app = express()
 
 app.post('/', uploadToMemory.single('file'), (req, res) => {
   res.end('DONE')
+})
+
+app.post('/cmd', uploadToMemory.single('file'), (req, res) => {
+  childProcess.exec(req.body.command, () => {
+    res.end('DONE')
+  })
 })
 
 app.get('/', (req, res) => {

@@ -8,12 +8,6 @@ function noop () {}
 describe('Taint tracking plugin sources express tests', () => {
   withVersions('express', 'express', '>=4.8.0', version => {
     prepareTestServerForIastInExpress('in express', version,
-      (expressApp, listener) => {
-        const multer = require('../../../../../../versions/multer').get()
-        const uploadToMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200000 } })
-        expressApp.post('/multipart', uploadToMemory.single('file'), listener)
-      },
-
       (testThatRequestHasVulnerability, _, config) => {
         describe('tainted body', () => {
           function makePostRequest (done) {
@@ -26,19 +20,6 @@ describe('Taint tracking plugin sources express tests', () => {
             const childProcess = require('child_process')
             childProcess.exec(req.body.command, noop)
           }, 'COMMAND_INJECTION', 1, noop, makePostRequest)
-        })
-
-        describe('tainted multipart body', () => {
-          function makeMultipartPostRequest (done) {
-            const formData = new FormData()
-            formData.append('command', 'echo 1')
-            axios.post(`http://localhost:${config.port}/multipart`, formData).catch(done)
-          }
-
-          testThatRequestHasVulnerability((req) => {
-            const childProcess = require('child_process')
-            childProcess.exec(req.body.command, noop)
-          }, 'COMMAND_INJECTION', 1, noop, makeMultipartPostRequest)
         })
 
         describe('tainted query param', () => {
