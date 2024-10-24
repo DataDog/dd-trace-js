@@ -1875,7 +1875,7 @@ describe('mocha CommonJS', function () {
     })
   })
 
-  context('flaky test retries', () => {
+  context('auto test retries', () => {
     it('retries failed tests automatically', (done) => {
       receiver.setSettings({
         itr_enabled: false,
@@ -1910,6 +1910,10 @@ describe('mocha CommonJS', function () {
 
           const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
           assert.equal(failedAttempts.length, 2)
+
+          failedAttempts.forEach((failedTest, index) => {
+            assert.include(failedTest.meta[ERROR_MESSAGE], `expected ${index + 1} to equal 3`)
+          })
 
           // The first attempt is not marked as a retry
           const retriedFailure = failedAttempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')

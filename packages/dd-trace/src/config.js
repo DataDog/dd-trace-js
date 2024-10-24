@@ -17,7 +17,7 @@ const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
 const { getIsGCPFunction, getIsAzureFunction } = require('./serverless')
-const { ORIGIN_KEY } = require('./constants')
+const { ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
@@ -477,6 +477,8 @@ class Config {
     this._setValue(defaults, 'flushInterval', 2000)
     this._setValue(defaults, 'flushMinSpans', 1000)
     this._setValue(defaults, 'gitMetadataEnabled', true)
+    this._setValue(defaults, 'grpc.client.error.statuses', GRPC_CLIENT_ERROR_STATUSES)
+    this._setValue(defaults, 'grpc.server.error.statuses', GRPC_SERVER_ERROR_STATUSES)
     this._setValue(defaults, 'headerTags', [])
     this._setValue(defaults, 'hostname', '127.0.0.1')
     this._setValue(defaults, 'iast.cookieFilterPattern', '.{32,}')
@@ -524,7 +526,7 @@ class Config {
     this._setValue(defaults, 'reportHostname', false)
     this._setValue(defaults, 'runtimeMetrics', false)
     this._setValue(defaults, 'sampleRate', undefined)
-    this._setValue(defaults, 'sampler.rateLimit', undefined)
+    this._setValue(defaults, 'sampler.rateLimit', 100)
     this._setValue(defaults, 'sampler.rules', [])
     this._setValue(defaults, 'sampler.spanSamplingRules', [])
     this._setValue(defaults, 'scope', undefined)
@@ -545,6 +547,7 @@ class Config {
     this._setValue(defaults, 'telemetry.heartbeatInterval', 60000)
     this._setValue(defaults, 'telemetry.logCollection', false)
     this._setValue(defaults, 'telemetry.metrics', true)
+    this._setValue(defaults, 'traceEnabled', true)
     this._setValue(defaults, 'traceId128BitGenerationEnabled', true)
     this._setValue(defaults, 'traceId128BitLoggingEnabled', false)
     this._setValue(defaults, 'tracePropagationExtractFirst', false)
@@ -588,6 +591,8 @@ class Config {
       DD_EXPERIMENTAL_API_SECURITY_ENABLED,
       DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,
       DD_EXPERIMENTAL_PROFILING_ENABLED,
+      DD_GRPC_CLIENT_ERROR_STATUSES,
+      DD_GRPC_SERVER_ERROR_STATUSES,
       JEST_WORKER_ID,
       DD_IAST_COOKIE_FILTER_PATTERN,
       DD_IAST_DEDUPLICATION_ENABLED,
@@ -634,6 +639,7 @@ class Config {
       DD_TRACE_AGENT_PROTOCOL_VERSION,
       DD_TRACE_CLIENT_IP_ENABLED,
       DD_TRACE_CLIENT_IP_HEADER,
+      DD_TRACE_ENABLED,
       DD_TRACE_EXPERIMENTAL_EXPORTER,
       DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
       DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
@@ -720,6 +726,7 @@ class Config {
     this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
     this._setBoolean(env, 'dynamicInstrumentationEnabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
     this._setString(env, 'env', DD_ENV || tags.env)
+    this._setBoolean(env, 'traceEnabled', DD_TRACE_ENABLED)
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     this._setString(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
     this._setBoolean(env, 'experimental.runtimeId', DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED)
@@ -727,6 +734,8 @@ class Config {
     this._setValue(env, 'flushMinSpans', maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS))
     this._envUnprocessed.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this._setBoolean(env, 'gitMetadataEnabled', DD_TRACE_GIT_METADATA_ENABLED)
+    this._setIntegerRangeSet(env, 'grpc.client.error.statuses', DD_GRPC_CLIENT_ERROR_STATUSES)
+    this._setIntegerRangeSet(env, 'grpc.server.error.statuses', DD_GRPC_SERVER_ERROR_STATUSES)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
     this._setString(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
     this._setString(env, 'iast.cookieFilterPattern', DD_IAST_COOKIE_FILTER_PATTERN)
@@ -1177,12 +1186,36 @@ class Config {
     }
 
     if (typeof value === 'string') {
-      value = value.split(',')
+      value = value.split(',').map(item => {
+        // Trim each item and remove whitespace around the colon
+        const [key, val] = item.split(':').map(part => part.trim())
+        return val !== undefined ? `${key}:${val}` : key
+      })
     }
 
     if (Array.isArray(value)) {
       this._setValue(obj, name, value)
     }
+  }
+
+  _setIntegerRangeSet (obj, name, value) {
+    if (value == null) {
+      return this._setValue(obj, name, null)
+    }
+    value = value.split(',')
+    const result = []
+
+    value.forEach(val => {
+      if (val.includes('-')) {
+        const [start, end] = val.split('-').map(Number)
+        for (let i = start; i <= end; i++) {
+          result.push(i)
+        }
+      } else {
+        result.push(Number(val))
+      }
+    })
+    this._setValue(obj, name, result)
   }
 
   _setSamplingRule (obj, name, value) {

@@ -5,6 +5,7 @@ require('./setup/tap')
 const { expect } = require('chai')
 const { readFileSync } = require('fs')
 const sinon = require('sinon')
+const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
 
 describe('Config', () => {
   let Config
@@ -215,6 +216,7 @@ describe('Config', () => {
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config.tags).to.have.property('service', 'node')
     expect(config).to.have.property('plugins', true)
+    expect(config).to.have.property('traceEnabled', true)
     expect(config).to.have.property('env', undefined)
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
@@ -224,6 +226,8 @@ describe('Config', () => {
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
+    expect(config.grpc.client.error.statuses).to.deep.equal(GRPC_CLIENT_ERROR_STATUSES)
+    expect(config.grpc.server.error.statuses).to.deep.equal(GRPC_SERVER_ERROR_STATUSES)
     expect(config).to.have.property('spanComputePeerService', false)
     expect(config).to.have.property('spanRemoveIntegrationFromService', false)
     expect(config).to.have.property('instrumentation_config_id', undefined)
@@ -357,7 +361,8 @@ describe('Config', () => {
       { name: 'reportHostname', value: false, origin: 'default' },
       { name: 'runtimeMetrics', value: false, origin: 'default' },
       { name: 'sampleRate', value: undefined, origin: 'default' },
-      { name: 'sampler.rateLimit', value: undefined, origin: 'default' },
+      { name: 'sampler.rateLimit', value: 100, origin: 'default' },
+      { name: 'traceEnabled', value: true, origin: 'default' },
       { name: 'sampler.rules', value: [], origin: 'default' },
       { name: 'scope', value: undefined, origin: 'default' },
       { name: 'service', value: 'node', origin: 'default' },
@@ -504,6 +509,9 @@ describe('Config', () => {
     process.env.DD_INSTRUMENTATION_CONFIG_ID = 'abcdef123'
     process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
     process.env.DD_LLMOBS_ML_APP = 'myMlApp'
+    process.env.DD_TRACE_ENABLED = 'true'
+    process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '3,13,400-403'
+    process.env.DD_GRPC_SERVER_ERROR_STATUSES = '3,13,400-403'
 
     // required if we want to check updates to config.debug and config.logLevel which is fetched from logger
     reloadLoggerAndConfig()
@@ -521,12 +529,15 @@ describe('Config', () => {
     expect(config).to.have.property('queryStringObfuscation', '.*')
     expect(config).to.have.property('clientIpEnabled', true)
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
+    expect(config.grpc.client.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
+    expect(config.grpc.server.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.nested.property('codeOriginForSpans.enabled', true)
     expect(config).to.have.property('dynamicInstrumentationEnabled', true)
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
+    expect(config).to.have.property('traceEnabled', true)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanAttributeSchema', 'v1')
@@ -1019,6 +1030,32 @@ describe('Config', () => {
 
     expect(log.warn).to.have.been.calledWith('Unexpected input for config.spanAttributeSchema, picked default v0')
     expect(config).to.have.property('spanAttributeSchema', 'v0')
+  })
+
+  it('should parse integer range sets', () => {
+    process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '3,13,400-403'
+    process.env.DD_GRPC_SERVER_ERROR_STATUSES = '3,13,400-403'
+
+    let config = new Config()
+
+    expect(config.grpc.client.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
+    expect(config.grpc.server.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
+
+    process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '1'
+    process.env.DD_GRPC_SERVER_ERROR_STATUSES = '1'
+
+    config = new Config()
+
+    expect(config.grpc.client.error.statuses).to.deep.equal([1])
+    expect(config.grpc.server.error.statuses).to.deep.equal([1])
+
+    process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '2,10,13-15'
+    process.env.DD_GRPC_SERVER_ERROR_STATUSES = '2,10,13-15'
+
+    config = new Config()
+
+    expect(config.grpc.client.error.statuses).to.deep.equal([2, 10, 13, 14, 15])
+    expect(config.grpc.server.error.statuses).to.deep.equal([2, 10, 13, 14, 15])
   })
 
   context('peer service tagging', () => {
@@ -1665,7 +1702,7 @@ describe('Config', () => {
     }, true)
     expect(config).to.have.deep.nested.property('sampler', {
       spanSamplingRules: [],
-      rateLimit: undefined,
+      rateLimit: 100,
       rules: [
         {
           resource: '*',

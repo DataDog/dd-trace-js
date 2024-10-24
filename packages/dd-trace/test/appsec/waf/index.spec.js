@@ -27,7 +27,11 @@ describe('WAF Manager', () => {
     DDWAF.prototype.constructor.version = sinon.stub()
     DDWAF.prototype.dispose = sinon.stub()
     DDWAF.prototype.createContext = sinon.stub()
-    DDWAF.prototype.update = sinon.stub()
+    DDWAF.prototype.update = sinon.stub().callsFake(function (newRules) {
+      if (newRules?.metadata?.rules_version) {
+        this.diagnostics.ruleset_version = newRules?.metadata?.rules_version
+      }
+    })
     DDWAF.prototype.diagnostics = {
       ruleset_version: '1.0.0',
       rules: {
@@ -177,10 +181,14 @@ describe('WAF Manager', () => {
       waf.update(rules)
 
       expect(DDWAF.prototype.update).to.be.calledOnceWithExactly(rules)
+      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '1.0.0')
     })
 
     it('should call Reporter.reportWafUpdate', () => {
       const rules = {
+        metadata: {
+          rules_version: '4.2.0'
+        },
         rules_data: [
           {
             id: 'blocked_users',
@@ -197,8 +205,7 @@ describe('WAF Manager', () => {
 
       waf.update(rules)
 
-      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion,
-        DDWAF.prototype.diagnostics.ruleset_version)
+      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '4.2.0')
     })
   })
 
