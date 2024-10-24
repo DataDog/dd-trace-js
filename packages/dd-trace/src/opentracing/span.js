@@ -145,6 +145,18 @@ class DatadogSpan {
     return this._spanContext._baggageItems[key]
   }
 
+  getAllBaggageItems () {
+    return JSON.stringify(this._spanContext._baggageItems)
+  }
+
+  removeBaggageItem (key) {
+    delete this._spanContext._baggageItems[key]
+  }
+
+  removeAllBaggageItems () {
+    this._spanContext._baggageItems = {}
+  }
+
   setTag (key, value) {
     this._addTags({ [key]: value })
     return this
