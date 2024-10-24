@@ -13,12 +13,19 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
     // we don't need to request /info because we are using agentless by configuration
     this._isInitialized = true
     this._resolveCanUseCiVisProtocol(true)
+    this._canForwardLogs = true
 
     this._url = url || new URL(`https://citestcycle-intake.${site}`)
     this._writer = new Writer({ url: this._url, tags })
 
     this._coverageUrl = url || new URL(`https://citestcov-intake.${site}`)
     this._coverageWriter = new CoverageWriter({ url: this._coverageUrl })
+
+    if (config.isTestDynamicInstrumentationEnabled) {
+      const LogsWriter = require('./logs-writer')
+      this._logsUrl = url || new URL(`https://http-intake.logs.${site}`)
+      this._logsWriter = new LogsWriter({ url: this._logsUrl, tags }) // TODO: pass tags? Pass other config?
+    }
 
     this._apiUrl = url || new URL(`https://api.${site}`)
     // Agentless is always gzip compatible
