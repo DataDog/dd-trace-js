@@ -1,6 +1,7 @@
 'use strict'
 
 module.exports = {
+  SPAN_KINDS: ['llm', 'agent', 'workflow', 'task', 'tool', 'embedding', 'retrieval'],
   SPAN_KIND: '_ml_obs.meta.span.kind',
   SESSION_ID: '_ml_obs.session_id',
   METADATA: '_ml_obs.meta.metadata',
@@ -37,5 +38,9 @@ module.exports = {
 
   DROPPED_IO_COLLECTION_ERROR: 'dropped_io',
   DROPPED_VALUE_TEXT: "[This value has been dropped because this span's size exceeds the 1MB size limit.]",
-  UNSERIALIZABLE_VALUE_TEXT: 'Unserializable value'
+  UNSERIALIZABLE_VALUE_TEXT: 'Unserializable value',
+
+  INPUT_TOKENS_METRIC_KEY: 'input_tokens',
+  OUTPUT_TOKENS_METRIC_KEY: 'output_tokens',
+  TOTAL_TOKENS_METRIC_KEY: 'total_tokens'
 }

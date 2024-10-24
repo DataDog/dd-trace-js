@@ -9,8 +9,6 @@ const LLMObsTagger = require('../../src/llmobs/tagger')
 describe('span processor', () => {
   let LLMObsSpanProcessor
   let processor
-  let AgentlessWriter
-  let AgentProxyWriter
   let writer
   let log
 
@@ -18,38 +16,18 @@ describe('span processor', () => {
     writer = {
       append: sinon.stub()
     }
-    AgentlessWriter = sinon.stub().returns(writer)
-    AgentProxyWriter = sinon.stub().returns(writer)
+
     log = {
       warn: sinon.stub()
     }
 
     LLMObsSpanProcessor = proxyquire('../../src/llmobs/span_processor', {
-      './writers/spans/agentless': AgentlessWriter,
-      './writers/spans/agentProxy': AgentProxyWriter,
       '../../../../package.json': { version: 'x.y.z' },
       '../log': log
     })
-  })
 
-  describe('initialization', () => {
-    it('should not create a writer if llmobs is not enabled', () => {
-      processor = new LLMObsSpanProcessor({ llmobs: { enabled: false } })
-
-      expect(processor._writer).to.be.undefined
-    })
-
-    it('should create an agentless writer if agentless is enabled', () => {
-      processor = new LLMObsSpanProcessor({ llmobs: { enabled: true, agentlessEnabled: true } })
-
-      expect(AgentlessWriter).to.have.been.calledOnce
-    })
-
-    it('should create an agent proxy writer if agentless is not enabled', () => {
-      processor = new LLMObsSpanProcessor({ llmobs: { enabled: true, agentlessEnabled: false } })
-
-      expect(AgentProxyWriter).to.have.been.calledOnce
-    })
+    processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
+    processor.setWriter(writer)
   })
 
   describe('process', () => {
@@ -62,7 +40,6 @@ describe('span processor', () => {
     })
 
     it('should do nothing if the span is not an llm obs span', () => {
-      processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
       span = { context: () => ({ _tags: {} }) }
 
       expect(processor._writer.append).to.not.have.been.called
@@ -93,8 +70,6 @@ describe('span processor', () => {
         '_ml_obs.meta.output.messages': [{ role: 'assistant', content: 'world' }],
         '_ml_obs.llmobs_parent_id': '1234'
       })
-
-      processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
       processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
@@ -167,7 +142,6 @@ describe('span processor', () => {
         '_ml_obs.meta.metadata': metadata
       })
 
-      processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
       processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
 
@@ -194,8 +168,6 @@ describe('span processor', () => {
         '_ml_obs.meta.span.kind': 'retrieval',
         '_ml_obs.meta.output.documents': [{ text: 'hello', name: 'myDoc', id: '1', score: 0.6 }]
       })
-
-      processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
       processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
@@ -224,8 +196,6 @@ describe('span processor', () => {
         '_ml_obs.meta.input.documents': [{ text: 'hello', name: 'myDoc', id: '1', score: 0.6 }]
       })
 
-      processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
-
       processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
 
@@ -253,8 +223,6 @@ describe('span processor', () => {
         '_ml_obs.meta.model_name': 'myModel'
       })
 
-      processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
-
       processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
 
@@ -279,8 +247,6 @@ describe('span processor', () => {
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'llm'
       })
-
-      processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
       processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
@@ -310,8 +276,6 @@ describe('span processor', () => {
         '_ml_obs.meta.span.kind': 'llm'
       })
 
-      processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
-
       processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
 
@@ -340,8 +304,6 @@ describe('span processor', () => {
         '_ml_obs.name': 'mySpan'
       })
 
-      processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
-
       processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
 
@@ -363,8 +325,6 @@ describe('span processor', () => {
         '_ml_obs.meta.span.kind': 'llm',
         '_ml_obs.session_id': '1234'
       })
-
-      processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
       processor.process({ span })
       const payload = writer.append.getCall(0).firstArg
@@ -388,8 +348,6 @@ describe('span processor', () => {
         '_ml_obs.meta.span.kind': 'llm',
         '_ml_obs.tags': { hostname: 'localhost', foo: 'bar', source: 'mySource' }
       })
-
-      processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
 
       processor.process({ span })
       const payload = writer.append.getCall(0).firstArg

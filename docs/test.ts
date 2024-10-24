@@ -536,3 +536,96 @@ const otelTraceId: string = spanContext.traceId
 const otelSpanId: string = spanContext.spanId
 const otelTraceFlags: number = spanContext.traceFlags
 const otelTraceState: opentelemetry.TraceState = spanContext.traceState!
+
+// -- LLM Observability --
+const llmobsEnableOptions = {
+  apiKey: 'dd-api-key',
+  mlApp: 'mlApp',
+  agentlessEnabled: true
+}
+tracer.init({
+  llmobs: llmobsEnableOptions,
+})
+const llmobs = tracer.llmobs
+const enabled = llmobs.enabled
+
+// manually enable
+llmobs.enable({
+  apiKey: 'dd-api-key',
+  mlApp: 'mlApp',
+  agentlessEnabled: true
+})
+
+// manually disable
+llmobs.disable()
+
+// trace block of code
+llmobs.trace({ name: 'name', kind: 'llm' }, () => {})
+llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, () => {})
+llmobs.trace({ name: 'name', kind: 'llm' }, (span, cb) => {
+  llmobs.annotate(span, {})
+  span.setTag('foo', 'bar')
+  cb(new Error('boom'))
+})
+
+// wrap a function
+llmobs.wrap({ kind: 'llm' }, function myLLM () {})()
+llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction () {})()
+
+// decorate a function
+class MyClass {
+  @llmobs.decorate({ kind: 'llm' })
+  myLLM () {}
+
+  @llmobs.decorate({ kind: 'llm', name: 'myOtherLLM', modelName: 'myModel', modelProvider: 'myProvider' })
+  myOtherLLM () {}
+}
+
+const cls = new MyClass()
+cls.myLLM()
+cls.myOtherLLM()
+
+// export a span
+llmobs.enable({ mlApp: 'myApp' })
+llmobs.exportSpan()
+llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
+  const llmobsSpanCtx = llmobs.exportSpan(span)
+  llmobsSpanCtx.traceId;
+  llmobsSpanCtx.spanId;
+
+  // submit evaluation
+  llmobs.disable()
+  llmobs.submitEvaluation(llmobsSpanCtx, {
+    label: 'my-eval-metric',
+    metricType: 'categorical',
+    value: 'good',
+    mlApp: 'myApp',
+    tags: {},
+    timestampMs: Date.now()
+  })
+})
+
+// annotate a span
+llmobs.annotate({
+  inputData: 'input',
+  outputData: 'output',
+  metadata: {},
+  metrics: {
+    inputTokens: 10,
+    outputTokens: 5,
+    totalTokens: 15
+  },
+  tags: {}
+})
+llmobs.annotate(span, {
+  inputData: 'input',
+  outputData: 'output',
+  metadata: {},
+  metrics: {},
+  tags: {}
+})
+
+
+
+// flush
+llmobs.flush()

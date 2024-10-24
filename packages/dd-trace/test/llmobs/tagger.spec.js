@@ -165,9 +165,21 @@ describe('tagger', () => {
 
   describe('tagMetrics', () => {
     it('tags a span with metrics', () => {
-      tagger.tagMetadata(span, { a: 1, b: 2 })
+      tagger.tagMetrics(span, { a: 1, b: 2 })
       expect(Tagger.tagMap.get(span)).to.deep.equal({
-        '_ml_obs.meta.metadata': { a: 1, b: 2 }
+        '_ml_obs.metrics': { a: 1, b: 2 }
+      })
+    })
+
+    it('tags maps token metric names appropriately', () => {
+      tagger.tagMetrics(span, {
+        inputTokens: 1,
+        outputTokens: 2,
+        totalTokens: 3,
+        foo: 10
+      })
+      expect(Tagger.tagMap.get(span)).to.deep.equal({
+        '_ml_obs.metrics': { input_tokens: 1, output_tokens: 2, total_tokens: 3, foo: 10 }
       })
     })
 
