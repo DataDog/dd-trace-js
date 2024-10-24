@@ -47,6 +47,18 @@
       "versions": [">=3"]
     }
   ],
+  "body-parser": [
+    {
+      "name": "express",
+      "versions": ["^4"]
+    }
+  ],
+  "cookie-parser": [
+    {
+      "name": "express",
+      "versions": ["^4"]
+    }
+  ],
   "cypress": [
     {
       "name": "cypress",
