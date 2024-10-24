@@ -30,6 +30,8 @@
     "test:core:ci": "npm run test:core -- --coverage --nyc-arg=--include=\"packages/datadog-core/src/**/*.js\"",
     "test:lambda": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/dd-trace/test/lambda/**/*.spec.js\"",
     "test:lambda:ci": "nyc --no-clean --include \"packages/dd-trace/src/lambda/**/*.js\" -- npm run test:lambda",
+    "test:llmobs": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/dd-trace/test/llmobs/**/*.spec.js\"",
+    "test:llmobs:ci": "nyc --no-clean --include \"packages/dd-trace/src/llmobs/**/*.js\" -- npm run test:llmobs",
     "test:plugins": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/datadog-instrumentations/test/@($(echo $PLUGINS)).spec.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\"",
     "test:plugins:ci": "yarn services && nyc --no-clean --include \"packages/datadog-instrumentations/src/@($(echo $PLUGINS)).js\" --include \"packages/datadog-instrumentations/src/@($(echo $PLUGINS))/**/*.js\" --include \"packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js\" -- npm run test:plugins",
     "test:plugins:upstream": "node ./packages/dd-trace/test/plugins/suite.js",
