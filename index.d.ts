@@ -540,11 +540,6 @@ declare namespace tracer {
           enabled?: boolean
         }
       }
-
-      /**
-       * Configuration enabling LLM Observability. Enablement is superceded by the DD_LLMOBS_ENABLED environment variable.
-       */
-      llmobs?: llmobs.LLMObsEnableOptions
     };
 
     /**
@@ -2291,10 +2286,24 @@ declare namespace tracer {
 
 
       /**
-       * Sets parameters, inputs, outputs, tags, and metrics as provided for a given LLM Observability span.
+       * Sets inputs, outputs, tags, metadata, and metrics as provided for a given LLM Observability span.
        * Note that with the exception of tags, this method will override any existing values for the provided fields.
+       * 
+       * For example:
+       * ```javascript
+       * llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'gpt-4o', modelProvider: 'openai' }, () => {
+       *  llmobs.annotate({
+       *    inputData: [{ content: 'system prompt, role: 'system' }, { content: 'user prompt', role: 'user' }],
+       *    outputData: { content: 'response', role: 'ai' },
+       *    metadata: { temperature: 0.7 },
+       *    tags: { host: 'localhost' },
+       *    metrics: { inputTokens: 10, outputTokens: 20, totalTokens: 30 }
+       *  })
+       * })
+       * ```
+       * 
        * @param span The span to annotate (defaults to the current LLM Observability span if not provided)
-       * @param options An object containing the parameters, inputs, outputs, tags, and metrics to set on the span.
+       * @param options An object containing the inputs, outputs, tags, metadata, and metrics to set on the span.
        */
       annotate (options: llmobs.AnnotationOptions): void
       annotate (span: tracer.Span | undefined, options: llmobs.AnnotationOptions): void
@@ -2310,11 +2319,6 @@ declare namespace tracer {
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
        */
       flush (): void
-
-      /**
-       * The current active LLMObs span. Undefined if there is no active LLMObs span.
-       */
-      active (): tracer.Span | undefined
     }
 
     interface EvaluationOptions {
@@ -2418,7 +2422,7 @@ declare namespace tracer {
     }
 
     /**
-     * 
+     * Annotation options for LLM Observability spans.
      */
     interface AnnotationOptions {
       /**
@@ -2443,7 +2447,7 @@ declare namespace tracer {
       metadata?: { [key: string]: any },
 
       /**
-       * Object of JSON seraliazable key-value metrics (number) pairs, such as `{prompt,completion,total}_tokens`
+       * Object of JSON seraliazable key-value metrics (number) pairs, such as `{input,output,total}Tokens`
        */
       metrics?: { [key: string]: number },
 
@@ -2499,14 +2503,14 @@ declare namespace tracer {
 
     interface LLMObsNamedSpanOptions extends LLMObsSpanOptions {
       /**
-       * The name of the traced operation. As a default, the LLM Observability span kind will be used.
+       * The name of the traced operation. This is a required option.
        */
       name: string,
     }
 
     interface LLMObsNamelessSpanOptions extends LLMObsSpanOptions {
       /**
-       * The name of the traced operation. As a default, the LLM Observability span kind will be used.
+       * The name of the traced operation.
        */
       name?: string,
     }

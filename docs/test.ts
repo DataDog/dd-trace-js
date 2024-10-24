@@ -545,9 +545,6 @@ const llmobsEnableOptions = {
 }
 tracer.init({
   llmobs: llmobsEnableOptions,
-  experimental: {
-    llmobs: llmobsEnableOptions
-  }
 })
 const llmobs = tracer.llmobs
 const enabled = llmobs.enabled
@@ -572,10 +569,7 @@ llmobs.trace({ name: 'name', kind: 'llm' }, (span, cb) => {
 })
 
 // wrap a function
-llmobs.wrap({ kind: 'llm' }, function myLLM () {
-  const s = llmobs.active()
-  llmobs.annotate(s, {})
-})()
+llmobs.wrap({ kind: 'llm' }, function myLLM () {})()
 llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction () {})()
 
 // decorate a function
@@ -616,7 +610,11 @@ llmobs.annotate({
   inputData: 'input',
   outputData: 'output',
   metadata: {},
-  metrics: {},
+  metrics: {
+    inputTokens: 10,
+    outputTokens: 5,
+    totalTokens: 15
+  },
   tags: {}
 })
 llmobs.annotate(span, {
@@ -631,5 +629,3 @@ llmobs.annotate(span, {
 
 // flush
 llmobs.flush()
-
-const llmobsSpan: Span | undefined = llmobs.active()

@@ -3,9 +3,9 @@
 const { SPAN_KIND, OUTPUT_VALUE } = require('./constants')
 
 const {
-  validKind,
   getName,
-  getFunctionArguments
+  getFunctionArguments,
+  validateKind
 } = require('./util')
 const { isTrue } = require('../util')
 
@@ -82,22 +82,19 @@ class LLMObs extends NoopLLMObs {
   }
 
   trace (options = {}, fn) {
-    if (!this.enabled) {
-      logger.warn('Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.')
-    }
-
     if (typeof options === 'function') {
       fn = options
       options = {}
     }
 
-    const kind = options.kind
-    const valid = validKind(kind)
-    if (!valid) {
-      logger.warn(`Invalid span kind specified: ${kind}. Span will not be sent to LLM Observability.`)
-    }
+    const kind = validateKind(options.kind) // will throw if kind is undefined or not an expected kind
 
-    const name = getName(kind, options)
+    // name is required for spans generated with `trace`
+    // while `kind` is required, this should never throw (as otherwise it would have thrown above)
+    const name = options.name || kind
+    if (!name) {
+      throw new Error('No span name provided for `trace`.')
+    }
 
     const {
       spanOptions,
@@ -110,7 +107,7 @@ class LLMObs extends NoopLLMObs {
         const parentLLMObsSpan = oldStore?.llmobsSpan
         if (this.enabled) storage.enterWith({ ...oldStore, llmobsSpan: span })
 
-        this._tagger.setLLMObsSpanTags(span, valid && kind, {
+        this._tagger.setLLMObsSpanTags(span, kind, {
           ...llmobsOptions,
           parentLLMObsSpan
         })
@@ -127,7 +124,7 @@ class LLMObs extends NoopLLMObs {
       const parentLLMObsSpan = oldStore?.llmobsSpan
       if (this.enabled) storage.enterWith({ ...oldStore, llmobsSpan: span })
 
-      this._tagger.setLLMObsSpanTags(span, valid && kind, {
+      this._tagger.setLLMObsSpanTags(span, kind, {
         ...llmobsOptions,
         parentLLMObsSpan
       })
@@ -160,7 +157,7 @@ class LLMObs extends NoopLLMObs {
       options = {}
     }
 
-    const kind = options.kind
+    const kind = validateKind(options.kind) // will throw if kind is undefined or not an expected kind
     const name = getName(kind, options, fn)
 
     const {
@@ -171,25 +168,19 @@ class LLMObs extends NoopLLMObs {
     const llmobs = this
 
     function wrapped () {
-      if (!llmobs.enabled) {
-        logger.warn('Span started while LLMObs is disabled. Spans will not be sent to LLM Observability.')
-      }
-
-      const valid = validKind(kind)
-      if (!valid) {
-        logger.warn(`Invalid span kind specified: ${kind}. Span will not be sent to LLM Observability.`)
-      }
-
       const span = llmobs._tracer.scope().active()
       const oldStore = storage.getStore()
       const parentLLMObsSpan = oldStore?.llmobsSpan
       if (llmobs.enabled) storage.enterWith({ ...oldStore, llmobsSpan: span })
 
-      llmobs._tagger.setLLMObsSpanTags(span, valid && kind, {
+      llmobs._tagger.setLLMObsSpanTags(span, kind, {
         ...llmobsOptions,
         parentLLMObsSpan
       })
-      llmobs.annotate(span, { inputData: getFunctionArguments(fn, arguments) })
+
+      if (!['llm', 'embedding'].includes(kind)) {
+        llmobs.annotate(span, { inputData: getFunctionArguments(fn, arguments) })
+      }
 
       try {
         const result = fn.apply(this, arguments)
@@ -207,7 +198,7 @@ class LLMObs extends NoopLLMObs {
           })
         }
 
-        if (result && kind !== 'retrieval' && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
+        if (result && !['llm', 'retrieval'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
           llmobs.annotate(span, { outputData: result })
           if (llmobs.enabled) storage.enterWith(oldStore)
         }
@@ -223,44 +214,34 @@ class LLMObs extends NoopLLMObs {
   }
 
   annotate (span, options) {
-    if (!this.enabled) {
-      logger.warn(
-        'Annotate called while LLMObs is disabled. Not annotating span.'
-      )
-      return
-    }
+    if (!this.enabled) return
 
     if (!span) {
-      span = this.active()
+      span = this._active()
     }
 
     if ((span && !options) && !(span instanceof Span)) {
       options = span
-      span = this.active()
+      span = this._active()
     }
 
     if (!span) {
-      logger.warn('No span provided and no active LLMObs-generated span found')
-      return
+      throw new Error('No span provided and no active LLMObs-generated span found')
     }
     if (!options) {
-      logger.warn('No options provided for annotation.')
-      return
+      throw new Error('No options provided for annotation.')
     }
 
     if (!LLMObsTagger.tagMap.has(span)) {
-      logger.warn('Span must be an LLMObs-generated span')
-      return
+      throw new Error('Span must be an LLMObs-generated span')
     }
     if (span._duration !== undefined) {
-      logger.warn('Cannot annotate a finished span')
-      return
+      throw new Error('Cannot annotate a finished span')
     }
 
     const spanKind = LLMObsTagger.tagMap.get(span)[SPAN_KIND]
     if (!spanKind) {
-      logger.warn('LLMObs span must have a span kind specified')
-      return
+      throw new Error('LLMObs span must have a span kind specified')
     }
 
     const { inputData, outputData, metadata, metrics, tags } = options
@@ -291,12 +272,7 @@ class LLMObs extends NoopLLMObs {
   }
 
   exportSpan (span) {
-    if (!this.enabled) {
-      logger.warn('Span exported while LLMObs is disabled. Span will not be exported.')
-      return
-    }
-
-    span = span || this.active()
+    span = span || this._active()
 
     if (!span) {
       logger.warn('No span provided and no active LLMObs-generated span found')
@@ -320,17 +296,11 @@ class LLMObs extends NoopLLMObs {
       }
     } catch {
       logger.warn('Faild to export span. Span must be a valid Span object.')
-      return undefined
     }
   }
 
   submitEvaluation (llmobsSpanContext, options = {}) {
-    if (!this.enabled) {
-      logger.warn(
-        'LLMObs.submitEvaluation() called when LLMObs is not enabled. Evaluation metric data will not be sent.'
-      )
-      return
-    }
+    if (!this.enabled) return
 
     if (!this._config.llmobs.apiKey && !this._config.apiKey) {
       logger.warn(
@@ -413,15 +383,12 @@ class LLMObs extends NoopLLMObs {
   }
 
   flush () {
-    if (!this.enabled) {
-      logger.warn('Flushing when LLMObs is disabled. No spans or evaluation metrics will be sent')
-      return
-    }
+    if (!this.enabled) return
 
     flushCh.publish()
   }
 
-  active () {
+  _active () {
     const store = storage.getStore()
     return store?.llmobsSpan
   }

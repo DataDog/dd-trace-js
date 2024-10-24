@@ -16,12 +16,6 @@ describe('noop', () => {
     })
   }
 
-  it('using "active" returns a span', () => {
-    let span
-    expect(() => { span = llmobs.active() }).does.not.throw()
-    expect(() => span.setTag('foo', 'bar')).does.not.throw()
-  })
-
   describe('trace', () => {
     it('should not throw with just a span', () => {
       const res = llmobs.trace({}, (span) => {

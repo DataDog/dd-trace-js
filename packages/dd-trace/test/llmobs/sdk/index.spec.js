@@ -182,16 +182,19 @@ describe('sdk', () => {
           tracer._tracer._config.llmobs.enabled = true
         })
 
-        it('starts span if the kind is invalid but does not process it in the LLMObs span processor', () => {
-          llmobs.trace({ kind: 'invalid' }, (span, cb) => {
-            expect(LLMObsTagger.tagMap.get(span)).to.not.exist
-            expect(() => span.setTag('k', 'v')).to.not.throw()
-            expect(() => cb()).to.not.throw()
-          })
+        it('throws if the kind is invalid', () => {
+          expect(() => llmobs.trace({ kind: 'invalid' }, () => {})).to.throw()
 
-          expect(llmobs._tracer._processor.process).to.have.been.called
+          expect(llmobs._tracer._processor.process).to.not.have.been.called
           expect(LLMObsSpanProcessor.prototype.format).to.not.have.been.called
         })
+
+        // it('throws if no name is provided', () => {
+        //   expect(() => llmobs.trace({ kind: 'workflow' }, () => {})).to.throw()
+
+        //   expect(llmobs._tracer._processor.process).to.not.have.been.called
+        //   expect(LLMObsSpanProcessor.prototype.format).to.not.have.been.called
+        // })
 
         it('traces a block', () => {
           let span
@@ -245,17 +248,6 @@ describe('sdk', () => {
 
           deferred.resolve()
         })
-
-        it('traces a block without options', () => {
-          let span
-
-          llmobs.trace('workflow', _span => {
-            span = _span
-            sinon.spy(span, 'finish')
-          })
-
-          expect(span.finish).to.have.been.called
-        })
       })
 
       describe('parentage', () => {
@@ -279,11 +271,11 @@ describe('sdk', () => {
 
         it('maintains llmobs parentage separately from apm spans', () => {
           llmobs.trace({ kind: 'workflow', name: 'outer-llm' }, outerLLMSpan => {
-            expect(llmobs.active()).to.equal(outerLLMSpan)
+            expect(llmobs._active()).to.equal(outerLLMSpan)
             tracer.trace('apmSpan', apmSpan => {
-              expect(llmobs.active()).to.equal(outerLLMSpan)
+              expect(llmobs._active()).to.equal(outerLLMSpan)
               llmobs.trace({ kind: 'workflow', name: 'inner-llm' }, innerLLMSpan => {
-                expect(llmobs.active()).to.equal(innerLLMSpan)
+                expect(llmobs._active()).to.equal(innerLLMSpan)
 
                 // llmobs span linkage
                 expect(LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.llmobs_parent_id'])
@@ -318,15 +310,15 @@ describe('sdk', () => {
         it('maintains the llmobs parentage when error callbacks are used', () => {
           llmobs.trace({ kind: 'workflow' }, outer => {
             llmobs.trace({ kind: 'task' }, (inner, cb) => {
-              expect(llmobs.active()).to.equal(inner)
+              expect(llmobs._active()).to.equal(inner)
               expect(LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id']).to.equal(outer.context().toSpanId())
               cb() // finish the span
             })
 
-            expect(llmobs.active()).to.equal(outer)
+            expect(llmobs._active()).to.equal(outer)
 
             llmobs.trace({ kind: 'task' }, (inner) => {
-              expect(llmobs.active()).to.equal(inner)
+              expect(llmobs._active()).to.equal(inner)
               expect(LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id']).to.equal(outer.context().toSpanId())
             })
           })
@@ -341,7 +333,7 @@ describe('sdk', () => {
 
           const fn = llmobs.wrap({ kind: 'workflow' }, (a) => {
             expect(a).to.equal(1)
-            expect(LLMObsTagger.tagMap.get(llmobs.active())).to.not.exist
+            expect(LLMObsTagger.tagMap.get(llmobs._active())).to.not.exist
           })
 
           expect(() => fn(1)).to.not.throw()
@@ -352,15 +344,8 @@ describe('sdk', () => {
           tracer._tracer._config.llmobs.enabled = true
         })
 
-        it('starts span if the kind is invalid but does not process it in the LLMObs span processor', () => {
-          const fn = llmobs.wrap({ kind: 'invalid' }, (a) => {
-            expect(a).to.equal(1)
-            expect(LLMObsTagger.tagMap.get(llmobs.active())).to.not.exist
-          })
-
-          expect(() => fn(1)).to.not.throw()
-          expect(llmobs._tracer._processor.process).to.have.been.called
-          expect(LLMObsSpanProcessor.prototype.format).to.not.have.been.called
+        it('throws if the kind is invalid', () => {
+          expect(() => llmobs.wrap({ kind: 'invalid' }, () => {})).to.throw()
         })
 
         it('wraps a function', () => {
@@ -398,7 +383,7 @@ describe('sdk', () => {
       describe('parentage', () => {
         // it('starts a span with a distinct trace id', () => {
         //   const fn = llmobs.wrap('workflow', { name: 'test' }, () => {
-        //     const span = llmobs.active()
+        //     const span = llmobs._active()
         //     expect(span.context()._tags['_ml_obs.trace_id'])
         //       .to.exist.and.to.not.equal(span.context().toTraceId(true))
         //   })
@@ -410,12 +395,12 @@ describe('sdk', () => {
           let outerLLMSpan, innerLLMSpan
 
           function outer () {
-            outerLLMSpan = llmobs.active()
+            outerLLMSpan = llmobs._active()
             innerWrapped()
           }
 
           function inner () {
-            innerLLMSpan = llmobs.active()
+            innerLLMSpan = llmobs._active()
             expect(LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.llmobs_parent_id'])
               .to.equal(outerLLMSpan.context().toSpanId())
             // expect(innerLLMSpan.context()._tags['_ml_obs.trace_id'])
@@ -432,17 +417,17 @@ describe('sdk', () => {
           let outerLLMObsSpan, innerLLMObsSpan
 
           function outerLLMObs () {
-            outerLLMObsSpan = llmobs.active()
+            outerLLMObsSpan = llmobs._active()
             expect(outerLLMObsSpan).to.equal(tracer.scope().active())
 
             apmWrapped()
           }
           function apm () {
-            expect(llmobs.active()).to.equal(outerLLMObsSpan)
+            expect(llmobs._active()).to.equal(outerLLMObsSpan)
             innerWrapped()
           }
           function innerLLMObs () {
-            innerLLMObsSpan = llmobs.active()
+            innerLLMObsSpan = llmobs._active()
             expect(innerLLMObsSpan).to.equal(tracer.scope().active())
             expect(LLMObsTagger.tagMap.get(innerLLMObsSpan)['_ml_obs.llmobs_parent_id'])
               .to.equal(outerLLMObsSpan.context().toSpanId())
@@ -465,10 +450,10 @@ describe('sdk', () => {
         //     llmObsWrapped2()
         //   }
         //   function llmObs1 () {
-        //     traceId1 = llmobs.active().context()._tags['_ml_obs.trace_id']
+        //     traceId1 = llmobs._active().context()._tags['_ml_obs.trace_id']
         //   }
         //   function llmObs2 () {
-        //     traceId2 = llmobs.active().context()._tags['_ml_obs.trace_id']
+        //     traceId2 = llmobs._active().context()._tags['_ml_obs.trace_id']
         //   }
 
         //   const apmWrapped = tracer.wrap('workflow', apm)
@@ -485,7 +470,7 @@ describe('sdk', () => {
         it('maintains the llmobs parentage when callbacks are used', () => {
           let outerSpan
           function outer () {
-            outerSpan = llmobs.active()
+            outerSpan = llmobs._active()
             wrappedInner1(() => {})
             expect(outerSpan).to.equal(tracer.scope().active())
             wrappedInner2()
@@ -493,14 +478,14 @@ describe('sdk', () => {
 
           function inner1 (cb) {
             const inner = tracer.scope().active()
-            expect(llmobs.active()).to.equal(inner)
+            expect(llmobs._active()).to.equal(inner)
             expect(LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id']).to.equal(outerSpan.context().toSpanId())
             cb()
           }
 
           function inner2 () {
             const inner = tracer.scope().active()
-            expect(llmobs.active()).to.equal(inner)
+            expect(llmobs._active()).to.equal(inner)
             expect(LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id']).to.equal(outerSpan.context().toSpanId())
           }
 
@@ -517,26 +502,24 @@ describe('sdk', () => {
   describe('annotate', () => {
     it('returns if llmobs is disabled', () => {
       tracer._tracer._config.llmobs.enabled = false
-      sinon.spy(llmobs, 'active')
+      sinon.spy(llmobs, '_active')
       llmobs.annotate()
 
-      expect(llmobs.active).to.not.have.been.called
-      llmobs.active.restore()
+      expect(llmobs._active).to.not.have.been.called
+      llmobs._active.restore()
 
       tracer._tracer._config.llmobs.enabled = true
     })
 
-    it('returns if no arguments are provided', () => {
-      llmobs.annotate()
+    it('throws if no arguments are provided', () => {
+      expect(() => llmobs.annotate()).to.throw()
     })
 
-    it('does not annotate if there are no options given', () => {
-      // const span = llmobs.startSpan('llm', { name: 'test' })
-      // llmobs.annotate(span)
+    it('throws if there are no options given', () => {
       llmobs.trace({ kind: 'llm', name: 'test' }, span => {
-        llmobs.annotate(span)
+        expect(() => llmobs.annotate(span)).to.throw()
 
-        // span should still exist in the registry, just with no annotations, and it shoul not throw
+        // span should still exist in the registry, just with no annotations
         expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
@@ -545,16 +528,16 @@ describe('sdk', () => {
       })
     })
 
-    it('does not annotate if the provided span is not an LLMObs span', () => {
+    it('throws if the provided span is not an LLMObs span', () => {
       tracer.trace('test', span => {
-        llmobs.annotate(span, {})
+        expect(() => llmobs.annotate(span, {})).to.throw()
 
         // no span in registry, should not throw
         expect(LLMObsTagger.tagMap.get(span)).to.not.exist
       })
     })
 
-    it('does not annotate a finished span', () => {
+    it('throws if the span is finished', () => {
       sinon.spy(llmobs._tagger, 'tagTextIO')
       llmobs.trace({ kind: 'workflow', name: 'outer' }, () => {
         let innerLLMSpan
@@ -562,18 +545,18 @@ describe('sdk', () => {
           innerLLMSpan = _span
         })
 
-        llmobs.annotate(innerLLMSpan, {})
+        expect(() => llmobs.annotate(innerLLMSpan, {})).to.throw()
         expect(llmobs._tagger.tagTextIO).to.not.have.been.called
       })
       llmobs._tagger.tagTextIO.restore()
     })
 
-    it('does not annotate an llmobs span with an invalid kind', () => {
+    it('throws for an llmobs span with an invalid kind', () => {
       // TODO this might end up being obsolete with llmobs span kind as optional
       sinon.spy(llmobs._tagger, 'tagLLMIO')
       llmobs.trace({ kind: 'llm', name: 'test' }, span => {
         LLMObsTagger.tagMap.get(span)['_ml_obs.meta.span.kind'] = undefined // somehow this is set
-        llmobs.annotate(span, {})
+        expect(() => llmobs.annotate(span, {})).to.throw()
       })
 
       expect(llmobs._tagger.tagLLMIO).to.not.have.been.called
@@ -643,11 +626,28 @@ describe('sdk', () => {
   })
 
   describe('exportSpan', () => {
-    it('returns if llmobs is disabled', () => {
+    it('returns if llmobs is disabled and no span is provided', () => {
       tracer._tracer._config.llmobs.enabled = false
-      const spanCtx = llmobs.exportSpan()
 
-      expect(spanCtx).to.be.undefined
+      llmobs.trace({ kind: 'workflow', name: 'test' }, () => {
+        const spanCtx = llmobs.exportSpan()
+
+        expect(spanCtx).to.be.undefined
+      })
+
+      tracer._tracer._config.llmobs.enabled = true
+    })
+
+    it('returns if llmobs is disabled and a span is provided', () => {
+      tracer._tracer._config.llmobs.enabled = false
+
+      llmobs.trace({ kind: 'workflow', name: 'test' }, span => {
+        const spanCtx = llmobs.exportSpan(span)
+
+        // the span was never registerd as an llmobs span since it was disabled
+        expect(spanCtx).to.be.undefined
+      })
+
       tracer._tracer._config.llmobs.enabled = true
     })
 

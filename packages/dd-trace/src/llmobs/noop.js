@@ -1,7 +1,5 @@
 'use strict'
 
-const Span = require('../noop/span')
-
 class NoopLLMObs {
   constructor (noopTracer) {
     this._tracer = noopTracer
@@ -79,10 +77,6 @@ class NoopLLMObs {
   submitEvaluation (llmobsSpanContext, options) {}
 
   flush () {}
-
-  active () {
-    return new Span(this._tracer)
-  }
 }
 
 module.exports = NoopLLMObs
