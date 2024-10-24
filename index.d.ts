@@ -2435,7 +2435,7 @@ declare namespace tracer {
 
       /**
        * A single output string, object, or a list of objects based on the span kind:
-       * 1. LLM spans: accepts sa string, or an object of the form {content: "...", role: "..."}, or a list of objects with the same signature.
+       * 1. LLM spans: accepts a string, or an object of the form {content: "...", role: "..."}, or a list of objects with the same signature.
        * 2. Retrieval spans: An object containing any of the key value pairs {name: str, id: str, text: str, source: number} or a list of dictionaries with the same signature.
        * 3. Other: any JSON serializable type
        */
