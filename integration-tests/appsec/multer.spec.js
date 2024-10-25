@@ -8,7 +8,7 @@ const {
   createSandbox,
   FakeAgent,
   spawnProc
-} = require('./helpers')
+} = require('../helpers')
 
 describe('multer', () => {
   let sandbox, cwd, startupTestFile, agent, proc, env
@@ -18,7 +18,7 @@ describe('multer', () => {
       before(async () => {
         sandbox = await createSandbox(['express', `multer@${version}`])
         cwd = sandbox.folder
-        startupTestFile = path.join(cwd, 'multer', 'index.js')
+        startupTestFile = path.join(cwd, 'appsec', 'multer', 'index.js')
       })
 
       after(async () => {
@@ -30,7 +30,7 @@ describe('multer', () => {
 
         env = {
           AGENT_PORT: agent.port,
-          DD_APPSEC_RULES: path.join(cwd, 'multer/body-parser-rules.json')
+          DD_APPSEC_RULES: path.join(cwd, 'appsec', 'multer', 'body-parser-rules.json')
         }
 
         const execArgv = []
