@@ -2,7 +2,6 @@
 
 require('../setup/tap')
 
-const { USER_KEEP } = require('../../../../ext/priority')
 const Config = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
