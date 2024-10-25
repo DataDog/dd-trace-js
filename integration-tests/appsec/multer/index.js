@@ -34,9 +34,23 @@ app.post('/', uploadToMemory.single('file'), (req, res) => {
   res.end('DONE')
 })
 
+app.post('/no-middleware', (req, res) => {
+  uploadToMemory.none()(req, res, () => {
+    res.end('DONE')
+  })
+})
+
 app.post('/cmd', uploadToMemory.single('file'), (req, res) => {
   childProcess.exec(req.body.command, () => {
     res.end('DONE')
+  })
+})
+
+app.post('/cmd-no-middleware', (req, res) => {
+  uploadToMemory.none()(req, res, () => {
+    childProcess.exec(req.body.command, () => {
+      res.end('DONE')
+    })
   })
 })
 
