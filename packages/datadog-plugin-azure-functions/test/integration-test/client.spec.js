@@ -8,13 +8,18 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { spawn } = require('child_process')
 const { assert } = require('chai')
+const { NODE_MAJOR } = require('../../../../version')
+const { satisfies } = require('semver')
 
 describe('esm', () => {
   let agent
   let proc
   let sandbox
 
-  withVersions('azure-functions', '@azure/functions', version => {
+  withVersions('azure-functions', '@azure/functions', (version, module, specificVersion) => {
+    // last version (currently 4.5.1) of @azure/functions is not supporting node 23 yet
+    if (NODE_MAJOR === 23 && satisfies(specificVersion, '<=4.5.1')) return
+
     before(async function () {
       this.timeout(50000)
       sandbox = await createSandbox([`@azure/functions@${version}`, 'azure-functions-core-tools@4'], false,
