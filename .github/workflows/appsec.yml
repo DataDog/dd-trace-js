@@ -94,7 +94,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/18
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node/22
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@v3
 

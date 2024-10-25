@@ -578,7 +578,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
-  
+
   mariadb:
     runs-on: ubuntu-latest
     services:
@@ -867,7 +867,20 @@ jobs:
       SERVICES: postgres
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/plugins/test
+#        TODO Restore next line and delete the rest when new pg version is released
+#      - uses: ./.github/actions/plugins/test
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - uses: ./.github/actions/install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+        shell: bash
+      - uses: ./.github/actions/node/22
+      - run: yarn test:plugins:ci
+        shell: bash
+      - uses: codecov/codecov-action@v3
+      - if: always()
+        uses: ./.github/actions/testagent/logs
 
   promise:
     runs-on: ubuntu-latest
