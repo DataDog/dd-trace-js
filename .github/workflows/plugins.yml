@@ -578,7 +578,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
-
   mariadb:
     runs-on: ubuntu-latest
     services:
