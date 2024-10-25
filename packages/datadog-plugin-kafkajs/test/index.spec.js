@@ -13,18 +13,22 @@ const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 
 const testTopic = 'test-topic'
-const expectedProducerHash = computePathwayHash(
-  'test',
-  'tester',
-  ['direction:out', 'topic:' + testTopic, 'type:kafka'],
-  ENTRY_PARENT_HASH
-)
-const expectedConsumerHash = computePathwayHash(
-  'test',
-  'tester',
-  ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka'],
-  expectedProducerHash
-)
+const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
+
+const getDsmPathwayHash = (clusterIdAvailable, isProducer, parentHash) => {
+  let edgeTags
+  if (isProducer) {
+    edgeTags = ['direction:out', 'topic:' + testTopic, 'type:kafka']
+  } else {
+    edgeTags = ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka']
+  }
+
+  if (clusterIdAvailable) {
+    edgeTags.push(`kafka_cluster_id:${testKafkaClusterId}`)
+  }
+  edgeTags.sort()
+  return computePathwayHash('test', 'tester', edgeTags, parentHash)
+}
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
@@ -38,6 +42,16 @@ describe('Plugin', () => {
       let kafka
       let tracer
       let Kafka
+      let clusterIdAvailable
+      let expectedProducerHash
+      let expectedConsumerHash
+
+      before(() => {
+        clusterIdAvailable = semver.intersects(version, '>=1.13')
+        expectedProducerHash = getDsmPathwayHash(clusterIdAvailable, true, ENTRY_PARENT_HASH)
+        expectedConsumerHash = getDsmPathwayHash(clusterIdAvailable, false, expectedProducerHash)
+      })
+
       describe('without configuration', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
 
@@ -56,14 +70,17 @@ describe('Plugin', () => {
 
         describe('producer', () => {
           it('should be instrumented', async () => {
+            const meta = {
+              'span.kind': 'producer',
+              component: 'kafkajs',
+              'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString()
+            }
+            if (clusterIdAvailable) meta['kafka.cluster_id'] = testKafkaClusterId
+
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.send.opName,
               service: expectedSchema.send.serviceName,
-              meta: {
-                'span.kind': 'producer',
-                component: 'kafkajs',
-                'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString()
-              },
+              meta,
               metrics: {
                 'kafka.batch_size': messages.length
               },
@@ -353,6 +370,12 @@ describe('Plugin', () => {
             await consumer.subscribe({ topic: testTopic })
           })
 
+          before(() => {
+            clusterIdAvailable = semver.intersects(version, '>=1.13')
+            expectedProducerHash = getDsmPathwayHash(clusterIdAvailable, true, ENTRY_PARENT_HASH)
+            expectedConsumerHash = getDsmPathwayHash(clusterIdAvailable, false, expectedProducerHash)
+          })
+
           afterEach(async () => {
             await consumer.disconnect()
           })
@@ -367,19 +390,6 @@ describe('Plugin', () => {
             afterEach(() => {
               setDataStreamsContextSpy.restore()
             })
-
-            const expectedProducerHash = computePathwayHash(
-              'test',
-              'tester',
-              ['direction:out', 'topic:' + testTopic, 'type:kafka'],
-              ENTRY_PARENT_HASH
-            )
-            const expectedConsumerHash = computePathwayHash(
-              'test',
-              'tester',
-              ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka'],
-              expectedProducerHash
-            )
 
             it('Should set a checkpoint on produce', async () => {
               const messages = [{ key: 'consumerDSM1', value: 'test2' }]
@@ -476,9 +486,9 @@ describe('Plugin', () => {
                 }
 
                 /**
-                 * No choice but to reinitialize everything, because the only way to flush eachMessage
-                 * calls is to disconnect.
-                 */
+                   * No choice but to reinitialize everything, because the only way to flush eachMessage
+                   * calls is to disconnect.
+                   */
                 consumer.connect()
                 await sendMessages(kafka, testTopic, messages)
                 await consumer.run({ eachMessage: async () => {}, autoCommit: false })
