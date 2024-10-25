@@ -491,4 +491,22 @@ describe('PrioritySampler', () => {
       expect(context._trace.tags[DECISION_MAKER_KEY]).to.equal('-0')
     })
   })
+
+  describe('keepTrace', () => {
+    it('should not fail if no _prioritySampler', () => {
+      expect(() => {
+        PrioritySampler.keepTrace(span, SAMPLING_MECHANISM_APPSEC)
+      }).to.not.throw()
+    })
+
+    it('should call setPriority with span USER_KEEP and mechanism', () => {
+      const setPriority = sinon.stub(prioritySampler, 'setPriority')
+
+      span._prioritySampler = prioritySampler
+
+      PrioritySampler.keepTrace(span, SAMPLING_MECHANISM_APPSEC)
+
+      expect(setPriority).to.be.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+    })
+  })
 })
