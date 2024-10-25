@@ -3,6 +3,6 @@ description: "Starts the APM Test Agent image with environment."
 runs:
   using: composite
   steps:
-    - uses: actions/checkout@v2
-    - run: docker-compose up -d testagent
+    - uses: actions/checkout@v4
+    - run: docker compose up -d testagent
       shell: bash

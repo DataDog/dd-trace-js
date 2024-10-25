@@ -34,6 +34,6 @@ const rawExpectedSchema = {
 }
 
 module.exports = {
-  rawExpectedSchema: rawExpectedSchema,
+  rawExpectedSchema,
   expectedSchema: resolveNaming(rawExpectedSchema)
 }

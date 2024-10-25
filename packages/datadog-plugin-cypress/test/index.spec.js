@@ -1,5 +1,4 @@
 'use strict'
-const getPort = require('get-port')
 const { expect } = require('chai')
 const semver = require('semver')
 
@@ -31,15 +30,16 @@ describe('Plugin', function () {
   let agentListenPort
   this.retries(2)
   withVersions('cypress', 'cypress', (version, moduleName) => {
-    beforeEach(function () {
+    beforeEach(() => {
+      return agent.load()
+    })
+    beforeEach(function (done) {
       this.timeout(10000)
-      return agent.load().then(() => {
-        agentListenPort = agent.server.address().port
-        cypressExecutable = require(`../../../versions/cypress@${version}`).get()
-        return getPort().then(port => {
-          appPort = port
-          appServer.listen(appPort)
-        })
+      agentListenPort = agent.server.address().port
+      cypressExecutable = require(`../../../versions/cypress@${version}`).get()
+      appServer.listen(0, () => {
+        appPort = appServer.address().port
+        done()
       })
     })
     afterEach(() => agent.close({ ritmReset: false }))
@@ -49,17 +49,22 @@ describe('Plugin', function () {
 
     describe('cypress', function () {
       this.timeout(testTimeout)
+
       it('instruments tests', function (done) {
         process.env.DD_TRACE_AGENT_PORT = agentListenPort
+        const testSuiteFolder = semver.intersects(version, '>=10')
+          ? 'app-10'
+          : 'app'
+
         cypressExecutable.run({
-          project: semver.intersects(version, '>=10')
-            ? './packages/datadog-plugin-cypress/test/app-10' : './packages/datadog-plugin-cypress/test/app',
+          project: `./packages/datadog-plugin-cypress/test/${testSuiteFolder}`,
           config: {
             baseUrl: `http://localhost:${appPort}`
           },
           quiet: true,
           headless: true
         })
+
         agent.use(traces => {
           const passedTestSpan = traces[0][0]
           const failedTestSpan = traces[1][0]
@@ -77,14 +82,15 @@ describe('Plugin', function () {
             [TEST_NAME]: 'can visit a page renders a hello world',
             [TEST_STATUS]: 'pass',
             [TEST_SUITE]: 'cypress/integration/integration-test.js',
-            [TEST_SOURCE_FILE]: 'cypress/integration/integration-test.js',
+            [TEST_SOURCE_FILE]:
+              `packages/datadog-plugin-cypress/test/${testSuiteFolder}/cypress/integration/integration-test.js`,
             [TEST_TYPE]: 'browser',
             [ORIGIN_KEY]: CI_APP_ORIGIN,
             [TEST_IS_RUM_ACTIVE]: 'true',
-            [TEST_CODE_OWNERS]: JSON.stringify(['@datadog']),
             [LIBRARY_VERSION]: ddTraceVersion,
             [COMPONENT]: 'cypress'
           })
+          expect(passedTestSpan.meta[TEST_CODE_OWNERS]).to.contain('@DataDog')
           expect(passedTestSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           expect(passedTestSpan.metrics[TEST_SOURCE_START]).to.exist
 
@@ -102,7 +108,8 @@ describe('Plugin', function () {
             [TEST_NAME]: 'can visit a page will fail',
             [TEST_STATUS]: 'fail',
             [TEST_SUITE]: 'cypress/integration/integration-test.js',
-            [TEST_SOURCE_FILE]: 'cypress/integration/integration-test.js',
+            [TEST_SOURCE_FILE]:
+              `packages/datadog-plugin-cypress/test/${testSuiteFolder}/cypress/integration/integration-test.js`,
             [TEST_TYPE]: 'browser',
             [ORIGIN_KEY]: CI_APP_ORIGIN,
             [ERROR_TYPE]: 'AssertionError',

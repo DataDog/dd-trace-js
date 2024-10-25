@@ -2,6 +2,7 @@
 
 const { TEXT_MAP } = require('../../../ext/formats')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
+const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams/processor')
 const { getResourceName } = require('./util')
 
 class AmqplibConsumerPlugin extends ConsumerPlugin {
@@ -13,7 +14,7 @@ class AmqplibConsumerPlugin extends ConsumerPlugin {
 
     const childOf = extract(this.tracer, message)
 
-    this.startSpan({
+    const span = this.startSpan({
       childOf,
       resource: getResourceName(method, fields),
       type: 'worker',
@@ -26,6 +27,16 @@ class AmqplibConsumerPlugin extends ConsumerPlugin {
         'amqp.destination': fields.destination
       }
     })
+
+    if (
+      this.config.dsmEnabled && message?.properties?.headers
+    ) {
+      const payloadSize = getAmqpMessageSize({ headers: message.properties.headers, content: message.content })
+      const queue = fields.queue ? fields.queue : fields.routingKey
+      this.tracer.decodeDataStreamsContext(message.properties.headers)
+      this.tracer
+        .setCheckpoint(['direction:in', `topic:${queue}`, 'type:rabbitmq'], span, payloadSize)
+    }
   }
 }
 

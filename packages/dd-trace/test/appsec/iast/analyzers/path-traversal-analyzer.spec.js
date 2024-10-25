@@ -45,6 +45,14 @@ const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/inje
 })
 
 describe('path-traversal-analyzer', () => {
+  before(() => {
+    pathTraversalAnalyzer.enable()
+  })
+
+  after(() => {
+    pathTraversalAnalyzer.disable()
+  })
+
   it('Analyzer should be subscribed to proper channel', () => {
     expect(pathTraversalAnalyzer._subscriptions).to.have.lengthOf(1)
     expect(pathTraversalAnalyzer._subscriptions[0]._channel.name).to.equals('apm:fs:operation:start')
@@ -172,6 +180,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
           return fn(callArgs)
         }, 'PATH_TRAVERSAL', { occurrences: 1 })
       })
+
       describe('no vulnerable', () => {
         testThatRequestHasNoVulnerability(function () {
           return fn(args)
@@ -221,9 +230,11 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
 
   describe('test appendFile', () => {
     const filename = path.join(os.tmpdir(), 'test-appendfile')
+
     beforeEach(() => {
       fs.writeFileSync(filename, '')
     })
+
     afterEach(() => {
       fs.unlinkSync(filename)
     })
@@ -233,9 +244,11 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
 
   describe('test chmod', () => {
     const filename = path.join(os.tmpdir(), 'test-chmod')
+
     beforeEach(() => {
       fs.writeFileSync(filename, '')
     })
+
     afterEach(() => {
       fs.unlinkSync(filename)
     })
@@ -245,9 +258,11 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
   describe('test copyFile', () => {
     const src = path.join(os.tmpdir(), 'test-copyFile-src')
     const dest = path.join(os.tmpdir(), 'test-copyFile-dst')
+
     beforeEach(() => {
       fs.writeFileSync(src, '')
     })
+
     afterEach(() => {
       fs.unlinkSync(src)
       fs.unlinkSync(dest)
@@ -260,9 +275,11 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     describe('test cp', () => {
       const src = path.join(os.tmpdir(), 'test-cp-src')
       const dest = path.join(os.tmpdir(), 'test-cp-dst')
+
       beforeEach(() => {
         fs.writeFileSync(src, '')
       })
+
       afterEach(() => {
         fs.unlinkSync(src)
         fs.unlinkSync(dest)
@@ -273,7 +290,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
   }
 
   describe('test createReadStream', () => {
-    runFsMethodTest(`test fs.createReadStream method`, 0, (args) => {
+    runFsMethodTest('test fs.createReadStream method', 0, (args) => {
       const rs = fs.createReadStream(...args)
       rs.close()
     }, __filename)
@@ -281,14 +298,16 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
 
   describe('test createWriteStream', () => {
     const filepath = path.join(os.tmpdir(), 'test-createWriteStream')
+
     beforeEach(() => {
       fs.writeFileSync(filepath, '')
     })
+
     afterEach(() => {
       fs.unlinkSync(filepath)
     })
 
-    runFsMethodTest(`test fs.createWriteStream method`, 0, (args) => {
+    runFsMethodTest('test fs.createWriteStream method', 0, (args) => {
       const rs = fs.createWriteStream(...args)
       return new Promise((resolve, reject) => {
         rs.close((err) => {
@@ -305,9 +324,11 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
   describe('test link', () => {
     const src = path.join(os.tmpdir(), 'test-link-src')
     const dest = path.join(os.tmpdir(), 'test-link-dst')
+
     beforeEach(() => {
       fs.writeFileSync(src, '')
     })
+
     afterEach(() => {
       fs.unlinkSync(src)
       fs.unlinkSync(dest)
@@ -348,9 +369,11 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
 
   describe('test opendir', () => {
     const dirname = path.join(os.tmpdir(), 'test-opendir')
+
     beforeEach(() => {
       fs.mkdirSync(dirname)
     })
+
     afterEach(() => {
       fs.rmdirSync(dirname)
     })
@@ -361,9 +384,11 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
 
   describe('test readdir', () => {
     const dirname = path.join(os.tmpdir(), 'test-opendir')
+
     beforeEach(() => {
       fs.mkdirSync(dirname)
     })
+
     afterEach(() => {
       fs.rmdirSync(dirname)
     })
@@ -382,6 +407,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
       fs.writeFileSync(src, '')
       fs.linkSync(src, dest)
     })
+
     afterEach(() => {
       fs.unlinkSync(src)
       fs.unlinkSync(dest)
@@ -393,7 +419,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
   describe('test realpath', () => {
     runFsMethodTestThreeWay('realpath', 0, null, __filename)
 
-    runFsMethodTest(`test fs.realpath.native method`, 0, (args) => {
+    runFsMethodTest('test fs.realpath.native method', 0, (args) => {
       fs.realpath.native(...args, () => {})
     }, __filename)
   })
@@ -401,9 +427,11 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
   describe('test rename', () => {
     const src = path.join(os.tmpdir(), 'test-rename-src')
     const dest = path.join(os.tmpdir(), 'test-rename-dst')
+
     beforeEach(() => {
       fs.writeFileSync(src, '')
     })
+
     afterEach(() => {
       fs.unlinkSync(dest)
     })
@@ -413,6 +441,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
 
   describe('test rmdir', () => {
     const dirname = path.join(os.tmpdir(), 'test-rmdir')
+
     beforeEach(() => {
       fs.mkdirSync(dirname)
     })
@@ -422,6 +451,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
   if (fs.rm) {
     describe('test rm', () => {
       const filename = path.join(os.tmpdir(), 'test-rmdir')
+
       beforeEach(() => {
         fs.writeFileSync(filename, '')
       })
@@ -437,9 +467,11 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
   describe('test symlink', () => {
     const src = path.join(os.tmpdir(), 'test-symlink-src')
     const dest = path.join(os.tmpdir(), 'test-symlink-dst')
+
     beforeEach(() => {
       fs.writeFileSync(src, '')
     })
+
     afterEach(() => {
       fs.unlinkSync(src)
       fs.unlinkSync(dest)
@@ -450,9 +482,11 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
 
   describe('test truncate', () => {
     const src = path.join(os.tmpdir(), 'test-truncate-src')
+
     beforeEach(() => {
       fs.writeFileSync(src, 'aaaaaa')
     })
+
     afterEach(() => {
       fs.unlinkSync(src)
     })
@@ -461,6 +495,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
 
   describe('test unlink', () => {
     const src = path.join(os.tmpdir(), 'test-unlink-src')
+
     beforeEach(() => {
       fs.writeFileSync(src, '')
     })
@@ -469,16 +504,18 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
 
   describe('test unwatchFile', () => {
     const listener = () => {}
+
     beforeEach(() => {
       fs.watchFile(__filename, listener)
     })
-    runFsMethodTest(`test fs.watchFile method`, 0, (args) => {
+    runFsMethodTest('test fs.watchFile method', 0, (args) => {
       fs.unwatchFile(...args)
     }, __filename, listener)
   })
 
   describe('test writeFile', () => {
     const src = path.join(os.tmpdir(), 'test-writeFile-src')
+
     afterEach(() => {
       fs.unlinkSync(src)
     })
@@ -486,7 +523,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
   })
 
   describe('test watch', () => {
-    runFsMethodTest(`test fs.watch method`, 0, (args) => {
+    runFsMethodTest('test fs.watch method', 0, (args) => {
       const watcher = fs.watch(...args, () => {})
       watcher.close()
     }, __filename)
@@ -494,10 +531,11 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
 
   describe('test watchFile', () => {
     const listener = () => {}
+
     afterEach(() => {
       fs.unwatchFile(__filename, listener)
     })
-    runFsMethodTest(`test fs.watchFile method`, 0, (args) => {
+    runFsMethodTest('test fs.watchFile method', 0, (args) => {
       fs.watchFile(...args, listener)
     }, __filename)
   })

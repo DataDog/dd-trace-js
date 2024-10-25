@@ -17,7 +17,7 @@ describe('esm', () => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'@opensearch-project/opensearch@${version}'`], false, [
-        `./packages/datadog-plugin-opensearch/test/integration-test/*`])
+        './packages/datadog-plugin-opensearch/test/integration-test/*'])
     })
 
     after(async () => {

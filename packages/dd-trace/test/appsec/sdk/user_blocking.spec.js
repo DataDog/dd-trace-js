@@ -5,11 +5,19 @@ const agent = require('../../plugins/agent')
 const tracer = require('../../../../../index')
 const appsec = require('../../../src/appsec')
 const Config = require('../../../src/config')
-const getPort = require('get-port')
 const axios = require('axios')
 const path = require('path')
 const waf = require('../../../src/appsec/waf')
 const { USER_ID } = require('../../../src/appsec/addresses')
+const blocking = require('../../../src/appsec/blocking')
+
+const resultActions = {
+  block_request: {
+    status_code: '401',
+    type: 'auto',
+    grpc_status_code: '10'
+  }
+}
 
 describe('user_blocking', () => {
   describe('Internal API', () => {
@@ -21,8 +29,8 @@ describe('user_blocking', () => {
 
     before(() => {
       const runStub = sinon.stub(waf, 'run')
-      runStub.withArgs({ [USER_ID]: 'user' }).returns(['block'])
-      runStub.withArgs({ [USER_ID]: 'gooduser' }).returns([''])
+      runStub.withArgs({ persistent: { [USER_ID]: 'user' } }).returns(resultActions)
+      runStub.withArgs({ persistent: { [USER_ID]: 'gooduser' } }).returns({})
     })
 
     beforeEach(() => {
@@ -158,7 +166,6 @@ describe('user_blocking', () => {
     }
 
     before(async () => {
-      port = await getPort()
       await agent.load('http')
       http = require('http')
     })
@@ -166,7 +173,10 @@ describe('user_blocking', () => {
     before(done => {
       const server = new http.Server(listener)
       appListener = server
-        .listen(port, 'localhost', () => done())
+        .listen(port, 'localhost', () => {
+          port = appListener.address().port
+          done()
+        })
 
       appsec.enable(config)
     })
@@ -219,6 +229,16 @@ describe('user_blocking', () => {
     })
 
     describe('blockRequest', () => {
+      beforeEach(() => {
+        // reset to default, other tests may have changed it with RC
+        blocking.setDefaultBlockingActionParameters(undefined)
+      })
+
+      afterEach(() => {
+        // reset to default
+        blocking.setDefaultBlockingActionParameters(undefined)
+      })
+
       it('should set the proper tags', (done) => {
         controller = (req, res) => {
           const ret = tracer.appsec.blockRequest(req, res)
@@ -254,6 +274,34 @@ describe('user_blocking', () => {
           expect(traces[0][0].meta).to.have.property('http.status_code', '200')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
+      })
+
+      it('should block using redirect data if it is configured', (done) => {
+        blocking.setDefaultBlockingActionParameters([
+          {
+            id: 'notblock',
+            parameters: {
+              location: '/notfound',
+              status_code: 404
+            }
+          },
+          {
+            id: 'block',
+            parameters: {
+              location: '/redirected',
+              status_code: 302
+            }
+          }
+        ])
+        controller = (req, res) => {
+          const ret = tracer.appsec.blockRequest(req, res)
+          expect(ret).to.be.true
+        }
+        agent.use(traces => {
+          expect(traces[0][0].meta).to.have.property('appsec.blocked', 'true')
+          expect(traces[0][0].meta).to.have.property('http.status_code', '302')
+        }).then(done).catch(done)
+        axios.get(`http://localhost:${port}/`, { maxRedirects: 0 })
       })
     })
   })

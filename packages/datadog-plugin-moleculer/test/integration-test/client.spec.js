@@ -21,7 +21,7 @@ describe('esm', () => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'moleculer@${version}'`, 'get-port'], false, [
-        `./packages/datadog-plugin-moleculer/test/integration-test/*`])
+        './packages/datadog-plugin-moleculer/test/integration-test/*'])
     })
 
     after(async () => {

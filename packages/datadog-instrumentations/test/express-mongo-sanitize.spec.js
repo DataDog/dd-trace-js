@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const getPort = require('get-port')
 const { channel } = require('dc-polyfill')
 const axios = require('axios')
 describe('express-mongo-sanitize', () => {
@@ -25,11 +24,9 @@ describe('express-mongo-sanitize', () => {
           res.end()
         })
 
-        getPort().then(newPort => {
-          port = newPort
-          server = app.listen(port, () => {
-            done()
-          })
+        server = app.listen(0, () => {
+          port = server.address().port
+          done()
         })
       })
 
@@ -58,7 +55,7 @@ describe('express-mongo-sanitize', () => {
           await axios.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
 
           expect(requestBody).to.be.calledOnce
-          expect(requestBody.firstCall.args[0].query.param['$eq']).to.be.undefined
+          expect(requestBody.firstCall.args[0].query.param.$eq).to.be.undefined
         })
       })
 
@@ -89,7 +86,7 @@ describe('express-mongo-sanitize', () => {
           await axios.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
 
           expect(requestBody).to.be.calledOnce
-          expect(requestBody.firstCall.args[0].query.param['$eq']).to.be.undefined
+          expect(requestBody.firstCall.args[0].query.param.$eq).to.be.undefined
         })
 
         it('subscription is called with expected parameters without sanitization request', async () => {
@@ -111,7 +108,7 @@ describe('express-mongo-sanitize', () => {
           expect(subscription).to.be.calledOnce
           expect(subscription.firstCall.args[0].sanitizedProperties)
             .to.be.deep.equal(['body', 'params', 'headers', 'query'])
-          expect(subscription.firstCall.args[0].req.query.param['$eq']).to.be.undefined
+          expect(subscription.firstCall.args[0].req.query.param.$eq).to.be.undefined
         })
       })
     })
@@ -150,7 +147,7 @@ describe('express-mongo-sanitize', () => {
 
           const objectToSanitize = {
             unsafeKey: {
-              '$ne': 'test'
+              $ne: 'test'
             },
             safeKey: 'safeValue'
           }
@@ -158,7 +155,7 @@ describe('express-mongo-sanitize', () => {
           const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
 
           expect(sanitizedObject.safeKey).to.be.equal(objectToSanitize.safeKey)
-          expect(sanitizedObject.unsafeKey['$ne']).to.be.undefined
+          expect(sanitizedObject.unsafeKey.$ne).to.be.undefined
         })
       })
 
@@ -193,7 +190,7 @@ describe('express-mongo-sanitize', () => {
 
           const objectToSanitize = {
             unsafeKey: {
-              '$ne': 'test'
+              $ne: 'test'
             },
             safeKey: 'safeValue'
           }
@@ -201,7 +198,7 @@ describe('express-mongo-sanitize', () => {
           const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
 
           expect(sanitizedObject.safeKey).to.be.equal(objectToSanitize.safeKey)
-          expect(sanitizedObject.unsafeKey['$ne']).to.be.undefined
+          expect(sanitizedObject.unsafeKey.$ne).to.be.undefined
           expect(subscription).to.be.calledOnceWith({ sanitizedObject })
         })
       })

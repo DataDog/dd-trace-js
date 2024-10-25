@@ -13,15 +13,18 @@ const KEYS_REGEX_WITHOUT_SENSITIVE_RANGES = new RegExp(`"(${STRINGIFY_RANGE_KEY}
 
 const sensitiveValueRegex = new RegExp(DEFAULT_IAST_REDACTION_VALUE_PATTERN, 'gmi')
 
-function iterateObject (target, fn, levelKeys = [], depth = 50) {
+function iterateObject (target, fn, levelKeys = [], depth = 10, visited = new Set()) {
   Object.keys(target).forEach((key) => {
     const nextLevelKeys = [...levelKeys, key]
     const val = target[key]
 
-    fn(val, nextLevelKeys, target, key)
+    if (typeof val !== 'object' || !visited.has(val)) {
+      visited.add(val)
+      fn(val, nextLevelKeys, target, key)
 
-    if (val !== null && typeof val === 'object') {
-      iterateObject(val, fn, nextLevelKeys, depth - 1)
+      if (val !== null && typeof val === 'object' && depth > 0) {
+        iterateObject(val, fn, nextLevelKeys, depth - 1, visited)
+      }
     }
   })
 }

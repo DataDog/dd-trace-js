@@ -178,6 +178,7 @@ describe('mongoose instrumentations', () => {
                   Test.deleteOne({ type: 'test' }, (err) => {
                     expect(err).to.be.null
 
+                    // eslint-disable-next-line n/handle-callback-err
                     Test.count({ type: 'test' }, (err, res) => {
                       expect(res).to.be.equal(2) // 3 -> delete 1 -> 2
 
@@ -258,6 +259,7 @@ describe('mongoose instrumentations', () => {
                     expect(item).not.to.be.null
                     expect(item.name).to.be.equal('test1')
 
+                    // eslint-disable-next-line n/handle-callback-err
                     Test.count({ type: 'test' }, (err, res) => {
                       expect(res).to.be.equal(2) // 3 -> delete 1 -> 2
 
@@ -367,7 +369,7 @@ describe('mongoose instrumentations', () => {
           describe('findOneAndUpdate', () => {
             if (range !== '>=7') {
               it('continue working as expected with cb', (done) => {
-                Test.findOneAndUpdate({ name: 'test1' }, { '$set': { name: 'test1-modified' } }, (err) => {
+                Test.findOneAndUpdate({ name: 'test1' }, { $set: { name: 'test1-modified' } }, (err) => {
                   expect(err).to.be.null
 
                   Test.findOne({ name: 'test1-modified' }, (err, item) => {
@@ -381,7 +383,7 @@ describe('mongoose instrumentations', () => {
             }
 
             it('continue working as expected with then', (done) => {
-              Test.findOneAndUpdate({ name: 'test1' }, { '$set': { name: 'test1-modified' } }).then((res) => {
+              Test.findOneAndUpdate({ name: 'test1' }, { $set: { name: 'test1-modified' } }).then((res) => {
                 Test.findOne({ name: 'test1-modified' }).then((item) => {
                   expect(item).not.to.be.null
 
@@ -390,7 +392,7 @@ describe('mongoose instrumentations', () => {
               })
             })
 
-            testCallbacksCalled('findOneAndUpdate', [{ type: 'test' }, { '$set': { name: 'test1-modified' } }])
+            testCallbacksCalled('findOneAndUpdate', [{ type: 'test' }, { $set: { name: 'test1-modified' } }])
           })
 
           if (semver.intersects(version, '>=5')) {
@@ -398,7 +400,7 @@ describe('mongoose instrumentations', () => {
               if (range !== '>=7') {
                 it('continue working as expected with cb', (done) => {
                   Test.updateMany({ type: 'test' }, {
-                    '$set': {
+                    $set: {
                       other: 'modified-other'
                     }
                   }, (err) => {
@@ -420,9 +422,10 @@ describe('mongoose instrumentations', () => {
 
               it('continue working as expected with then', (done) => {
                 Test.updateMany({ type: 'test' }, {
-                  '$set': {
+                  $set: {
                     other: 'modified-other'
                   }
+                // eslint-disable-next-line n/handle-callback-err
                 }).then((err) => {
                   Test.find({ type: 'test' }).then((items) => {
                     expect(items.length).to.be.equal(3)
@@ -436,7 +439,7 @@ describe('mongoose instrumentations', () => {
                 })
               })
 
-              testCallbacksCalled('updateMany', [{ type: 'test' }, { '$set': { other: 'modified-other' } }])
+              testCallbacksCalled('updateMany', [{ type: 'test' }, { $set: { other: 'modified-other' } }])
             })
           }
 
@@ -445,7 +448,7 @@ describe('mongoose instrumentations', () => {
               if (range !== '>=7') {
                 it('continue working as expected with cb', (done) => {
                   Test.updateOne({ name: 'test1' }, {
-                    '$set': {
+                    $set: {
                       other: 'modified-other'
                     }
                   }, (err) => {
@@ -463,7 +466,7 @@ describe('mongoose instrumentations', () => {
 
               it('continue working as expected with then', (done) => {
                 Test.updateOne({ name: 'test1' }, {
-                  '$set': {
+                  $set: {
                     other: 'modified-other'
                   }
                 }).then(() => {
@@ -475,7 +478,7 @@ describe('mongoose instrumentations', () => {
                 })
               })
 
-              testCallbacksCalled('updateOne', [{ name: 'test1' }, { '$set': { other: 'modified-other' } }])
+              testCallbacksCalled('updateOne', [{ name: 'test1' }, { $set: { other: 'modified-other' } }])
             })
           }
         })
@@ -483,8 +486,8 @@ describe('mongoose instrumentations', () => {
         if (semver.intersects(version, '>=6')) {
           describe('sanitizeFilter', () => {
             it('continues working as expected without sanitization', () => {
-              const source = { 'username': 'test' }
-              const expected = { 'username': 'test' }
+              const source = { username: 'test' }
+              const expected = { username: 'test' }
 
               const sanitizedObject = mongoose.sanitizeFilter(source)
 
@@ -492,8 +495,8 @@ describe('mongoose instrumentations', () => {
             })
 
             it('continues working as expected without sanitization', () => {
-              const source = { 'username': { '$ne': 'test' } }
-              const expected = { 'username': { '$eq': { '$ne': 'test' } } }
+              const source = { username: { $ne: 'test' } }
+              const expected = { username: { $eq: { $ne: 'test' } } }
 
               const sanitizedObject = mongoose.sanitizeFilter(source)
 
@@ -501,7 +504,7 @@ describe('mongoose instrumentations', () => {
             })
 
             it('channel is published with the result object', () => {
-              const source = { 'username': { '$ne': 'test' } }
+              const source = { username: { $ne: 'test' } }
 
               const listener = sinon.stub()
               sanitizeFilterFinishCh.subscribe(listener)

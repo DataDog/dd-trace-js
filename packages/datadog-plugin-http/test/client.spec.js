@@ -1,6 +1,5 @@
 'use strict'
 
-const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
 const fs = require('fs')
 const path = require('path')
@@ -25,17 +24,25 @@ describe('Plugin', () => {
   let appListener
   let tracer
 
-  ['http', 'https'].forEach(protocol => {
-    describe(protocol, () => {
-      function server (app, port, listener) {
+  ['http', 'https', 'node:http', 'node:https'].forEach(pluginToBeLoaded => {
+    const protocol = pluginToBeLoaded.split(':')[1] || pluginToBeLoaded
+    describe(pluginToBeLoaded, () => {
+      function server (app, listener) {
         let server
-        if (protocol === 'https') {
+        if (pluginToBeLoaded === 'https') {
           process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
           server = require('https').createServer({ key, cert }, app)
-        } else {
+        } else if (pluginToBeLoaded === 'node:https') {
+          process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+          server = require('node:https').createServer({ key, cert }, app)
+        } else if (pluginToBeLoaded === 'http') {
           server = require('http').createServer(app)
+        } else {
+          server = require('node:http').createServer(app)
         }
-        server.listen(port, 'localhost', listener)
+        server.listen(0, 'localhost', () => {
+          listener(server.address().port)
+        })
         return server
       }
 
@@ -55,7 +62,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           return agent.load('http', { server: false })
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -65,13 +72,12 @@ describe('Plugin', () => {
           app.get('/user', (req, res) => {
             res.status(200).send()
           })
-          getPort().then(port => {
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => {})
-              })
-              req.end()
+          appListener = server(app, () => {
+            const port = appListener.address().port
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => {})
             })
+            req.end()
           })
         }
 
@@ -93,7 +99,8 @@ describe('Plugin', () => {
           app.get('/user', (req, res) => {
             res.status(200).send()
           })
-          getPort().then(port => {
+
+          appListener = server(app, port => {
             agent
               .use(traces => {
                 expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
@@ -109,39 +116,35 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => {})
-              })
-
-              req.end()
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => {})
             })
+
+            req.end()
           })
         })
 
-        it(`should also support get()`, done => {
+        it('should also support get()', done => {
           const app = express()
 
           app.get('/user', (req, res) => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-                expect(traces[0][0]).to.not.be.undefined
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.get(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => {})
-              })
-
-              req.end()
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+              expect(traces[0][0]).to.not.be.undefined
             })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port => {
+            const req = http.get(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => {})
+            })
+
+            req.end()
           })
         })
 
@@ -150,7 +153,8 @@ describe('Plugin', () => {
           app.get('/user', (req, res) => {
             res.status(200).send()
           })
-          getPort().then(port => {
+
+          appListener = server(app, port => {
             agent
               .use(traces => {
                 expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
@@ -166,27 +170,25 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = server(app, port, () => {
-              appListener.on('connect', (req, clientSocket, head) => {
-                clientSocket.write('HTTP/1.1 200 Connection Established\r\n' +
+            appListener.on('connect', (req, clientSocket, head) => {
+              clientSocket.write('HTTP/1.1 200 Connection Established\r\n' +
                                   'Proxy-agent: Node.js-Proxy\r\n' +
                                   '\r\n')
-                clientSocket.end()
-                appListener.close()
-              })
-
-              const req = http.request({
-                protocol: `${protocol}:`,
-                port,
-                method: 'CONNECT',
-                hostname: 'localhost',
-                path: '/user'
-              })
-
-              req.on('connect', (res, socket) => socket.end())
-              req.on('error', () => {})
-              req.end()
+              clientSocket.end()
+              appListener.close()
             })
+
+            const req = http.request({
+              protocol: `${protocol}:`,
+              port,
+              method: 'CONNECT',
+              hostname: 'localhost',
+              path: '/user'
+            })
+
+            req.on('connect', (res, socket) => socket.end())
+            req.on('error', () => {})
+            req.end()
           })
         })
 
@@ -195,7 +197,8 @@ describe('Plugin', () => {
           app.get('/user', (req, res) => {
             res.status(200).send()
           })
-          getPort().then(port => {
+
+          appListener = server(app, port => {
             agent
               .use(traces => {
                 expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
@@ -210,30 +213,28 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = server(app, port, () => {
-              appListener.on('upgrade', (req, socket, head) => {
-                socket.write('HTTP/1.1 101 Web Socket Protocol Handshake\r\n' +
+            appListener.on('upgrade', (req, socket, head) => {
+              socket.write('HTTP/1.1 101 Web Socket Protocol Handshake\r\n' +
                              'Upgrade: WebSocket\r\n' +
                              'Connection: Upgrade\r\n' +
                              '\r\n')
-                socket.pipe(socket)
-              })
-
-              const req = http.request({
-                protocol: `${protocol}:`,
-                port,
-                hostname: 'localhost',
-                path: '/user',
-                headers: {
-                  'Connection': 'Upgrade',
-                  'Upgrade': 'websocket'
-                }
-              })
-
-              req.on('upgrade', (res, socket) => socket.end())
-              req.on('error', () => {})
-              req.end()
+              socket.pipe(socket)
             })
+
+            const req = http.request({
+              protocol: `${protocol}:`,
+              port,
+              hostname: 'localhost',
+              path: '/user',
+              headers: {
+                Connection: 'Upgrade',
+                Upgrade: 'websocket'
+              }
+            })
+
+            req.on('upgrade', (res, socket) => socket.end())
+            req.on('error', () => {})
+            req.end()
           })
         })
 
@@ -243,7 +244,7 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
+          appListener = server(app, port => {
             agent
               .use(traces => {
                 expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
@@ -257,12 +258,9 @@ describe('Plugin', () => {
               port,
               path: '/user'
             }
+            const req = http.request(uri)
 
-            appListener = server(app, port, () => {
-              const req = http.request(uri)
-
-              req.end()
-            })
+            req.end()
           })
         })
 
@@ -273,7 +271,7 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
+          appListener = server(app, port => {
             agent
               .use(traces => {
                 expect(traces[0][0].meta).to.have.property('http.status_code', '200')
@@ -282,13 +280,11 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user?foo=bar`, res => {
-                res.on('data', () => {})
-              })
-
-              req.end()
+            const req = http.request(`${protocol}://localhost:${port}/user?foo=bar`, res => {
+              res.on('data', () => {})
             })
+
+            req.end()
           })
         })
 
@@ -301,7 +297,7 @@ describe('Plugin', () => {
               res.status(200).send()
             })
 
-            getPort().then(port => {
+            appListener = server(app, port => {
               agent
                 .use(traces => {
                   expect(traces[0][0].meta).to.have.property('http.status_code', '200')
@@ -310,11 +306,9 @@ describe('Plugin', () => {
                 .then(done)
                 .catch(done)
 
-              appListener = server(app, port, () => {
-                const req = http.request(`${protocol}://localhost:${port}/another-path`, { path: '/user' })
+              const req = http.request(`${protocol}://localhost:${port}/another-path`, { path: '/user' })
 
-                req.end()
-              })
+              req.end()
             })
           })
         }
@@ -326,7 +320,7 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
+          appListener = server(app, port => {
             agent
               .use(traces => {
                 expect(traces[0][0].meta).to.have.property('http.status_code', '200')
@@ -341,30 +335,27 @@ describe('Plugin', () => {
               port,
               pathname: '/another-path'
             }
+            const req = http.request(uri, { path: '/user' })
 
-            appListener = server(app, port, () => {
-              const req = http.request(uri, { path: '/user' })
-
-              req.end()
-            })
+            req.end()
           })
         })
 
-        it('should support configuration as an WHATWG URL object', async () => {
+        it('should support configuration as an WHATWG URL object', done => {
           const app = express()
-          const port = await getPort()
-          const url = new URL(`${protocol}://localhost:${port}/user`)
 
-          app.get('/user', (req, res) => res.status(200).send())
+          appListener = server(app, port => {
+            const url = new URL(`${protocol}://localhost:${port}/user`)
 
-          appListener = server(app, port, () => {
+            app.get('/user', (req, res) => res.status(200).send())
+
+            agent.use(traces => {
+              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+              expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+            }).then(done, done)
+
             const req = http.request(url)
             req.end()
-          })
-
-          await agent.use(traces => {
-            expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-            expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
           })
         })
 
@@ -375,7 +366,7 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
+          appListener = server(app, port => {
             agent
               .use(traces => {
                 expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/`)
@@ -383,14 +374,12 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = server(app, port, () => {
-              const req = http.request({
-                protocol: `${protocol}:`,
-                port
-              })
-
-              req.end()
+            const req = http.request({
+              protocol: `${protocol}:`,
+              port
             })
+
+            req.end()
           })
         })
 
@@ -401,19 +390,17 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                expect(traces[0][0]).to.not.be.undefined
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`)
-
-              req.end()
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.not.be.undefined
             })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`)
+
+            req.end()
           })
         })
 
@@ -424,16 +411,14 @@ describe('Plugin', () => {
             res.status(200).send('OK')
           })
 
-          getPort().then(port => {
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                setTimeout(() => {
-                  res.on('data', () => done())
-                })
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              setTimeout(() => {
+                res.on('data', () => done())
               })
-
-              req.end()
             })
+
+            req.end()
           })
         })
 
@@ -447,137 +432,17 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`)
-
-              req.end()
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
             })
-          })
-        })
+            .then(done)
+            .catch(done)
 
-        it('should skip injecting if the Authorization header contains an AWS signature', done => {
-          const app = express()
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`)
 
-          app.get('/', (req, res) => {
-            try {
-              expect(req.get('x-datadog-trace-id')).to.be.undefined
-              expect(req.get('x-datadog-parent-id')).to.be.undefined
-
-              res.status(200).send()
-
-              done()
-            } catch (e) {
-              done(e)
-            }
-          })
-
-          getPort().then(port => {
-            appListener = server(app, port, () => {
-              const req = http.request({
-                port,
-                headers: {
-                  Authorization: 'AWS4-HMAC-SHA256 ...'
-                }
-              })
-
-              req.end()
-            })
-          })
-        })
-
-        it('should skip injecting if one of the Authorization headers contains an AWS signature', done => {
-          const app = express()
-
-          app.get('/', (req, res) => {
-            try {
-              expect(req.get('x-datadog-trace-id')).to.be.undefined
-              expect(req.get('x-datadog-parent-id')).to.be.undefined
-
-              res.status(200).send()
-
-              done()
-            } catch (e) {
-              done(e)
-            }
-          })
-
-          getPort().then(port => {
-            appListener = server(app, port, () => {
-              const req = http.request({
-                port,
-                headers: {
-                  Authorization: ['AWS4-HMAC-SHA256 ...']
-                }
-              })
-
-              req.end()
-            })
-          })
-        })
-
-        it('should skip injecting if the X-Amz-Signature header is set', done => {
-          const app = express()
-
-          app.get('/', (req, res) => {
-            try {
-              expect(req.get('x-datadog-trace-id')).to.be.undefined
-              expect(req.get('x-datadog-parent-id')).to.be.undefined
-
-              res.status(200).send()
-
-              done()
-            } catch (e) {
-              done(e)
-            }
-          })
-
-          getPort().then(port => {
-            appListener = server(app, port, () => {
-              const req = http.request({
-                port,
-                headers: {
-                  'X-Amz-Signature': 'abc123'
-                }
-              })
-
-              req.end()
-            })
-          })
-        })
-
-        it('should skip injecting if the X-Amz-Signature query param is set', done => {
-          const app = express()
-
-          app.get('/', (req, res) => {
-            try {
-              expect(req.get('x-datadog-trace-id')).to.be.undefined
-              expect(req.get('x-datadog-parent-id')).to.be.undefined
-
-              res.status(200).send()
-
-              done()
-            } catch (e) {
-              done(e)
-            }
-          })
-
-          getPort().then(port => {
-            appListener = server(app, port, () => {
-              const req = http.request({
-                port,
-                path: '/?X-Amz-Signature=abc123'
-              })
-
-              req.end()
-            })
+            req.end()
           })
         })
 
@@ -587,15 +452,14 @@ describe('Plugin', () => {
           app.get('/user', (req, res) => {
             res.status(200).send('OK')
           })
-          getPort().then(port => {
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                expect(tracer.scope().active()).to.be.null
-                done()
-              })
 
-              req.end()
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              expect(tracer.scope().active()).to.be.null
+              done()
             })
+
+            req.end()
           })
         })
 
@@ -606,20 +470,18 @@ describe('Plugin', () => {
             res.status(200).send('OK')
           })
 
-          getPort().then(port => {
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                const span = tracer.scope().active()
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              const span = tracer.scope().active()
 
-                res.on('data', () => {})
-                res.on('end', () => {
-                  expect(tracer.scope().active()).to.equal(span)
-                  done()
-                })
+              res.on('data', () => {})
+              res.on('end', () => {
+                expect(tracer.scope().active()).to.equal(span)
+                done()
               })
-
-              req.end()
             })
+
+            req.end()
           })
         })
 
@@ -630,42 +492,38 @@ describe('Plugin', () => {
             res.status(200).send('OK')
           })
 
-          getPort().then(port => {
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, () => {})
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, () => {})
 
-              req.on('response', () => {
-                expect(tracer.scope().active()).to.not.be.null
-                done()
-              })
-
-              req.end()
-            })
-          })
-        })
-
-        it('should handle connection errors', done => {
-          getPort().then(port => {
-            let error
-
-            agent
-              .use(traces => {
-                expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message || error.code)
-                expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(traces[0][0].meta).to.have.property('component', 'http')
-              })
-              .then(done)
-              .catch(done)
-
-            const req = http.request(`${protocol}://localhost:${port}/user`)
-
-            req.on('error', err => {
-              error = err
+            req.on('response', () => {
+              expect(tracer.scope().active()).to.not.be.null
+              done()
             })
 
             req.end()
           })
+        })
+
+        it('should handle connection errors', done => {
+          let error
+
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message || error.code)
+              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+              expect(traces[0][0].meta).to.have.property('component', 'http')
+            })
+            .then(done)
+            .catch(done)
+
+          const req = http.request(`${protocol}://localhost:7357/user`)
+
+          req.on('error', err => {
+            error = err
+          })
+
+          req.end()
         })
 
         it('should not record HTTP 5XX responses as errors by default', done => {
@@ -675,21 +533,19 @@ describe('Plugin', () => {
             res.status(500).send()
           })
 
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                expect(traces[0][0]).to.have.property('error', 0)
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => { })
-              })
-
-              req.end()
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('error', 0)
             })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => { })
+            })
+
+            req.end()
           })
         })
 
@@ -700,21 +556,19 @@ describe('Plugin', () => {
             res.status(400).send()
           })
 
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                expect(traces[0][0]).to.have.property('error', 1)
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => { })
-              })
-
-              req.end()
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('error', 1)
             })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => { })
+            })
+
+            req.end()
           })
         })
 
@@ -723,32 +577,30 @@ describe('Plugin', () => {
 
           app.get('/user', (req, res) => {})
 
-          getPort().then(port => {
-            let error
+          let error
 
-            agent
-              .use(traces => {
-                expect(traces[0][0]).to.have.property('error', 1)
-                expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(traces[0][0].meta).to.not.have.property('http.status_code')
-                expect(traces[0][0].meta).to.have.property('component', 'http')
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => { })
-              })
-
-              req.on('error', err => {
-                error = err
-              })
-
-              req.destroy()
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('error', 1)
+              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+              expect(traces[0][0].meta).to.not.have.property('http.status_code')
+              expect(traces[0][0].meta).to.have.property('component', 'http')
             })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => { })
+            })
+
+            req.on('error', err => {
+              error = err
+            })
+
+            req.destroy()
           })
         })
 
@@ -757,24 +609,22 @@ describe('Plugin', () => {
 
           app.get('/user', (req, res) => {})
 
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                expect(traces[0][0]).to.have.property('error', 0)
-                expect(traces[0][0].meta).to.not.have.property('http.status_code')
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => { })
-              })
-
-              req.on('abort', () => {})
-
-              req.abort()
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('error', 0)
+              expect(traces[0][0].meta).to.not.have.property('http.status_code')
             })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => { })
+            })
+
+            req.on('abort', () => {})
+
+            req.abort()
           })
         })
 
@@ -783,25 +633,23 @@ describe('Plugin', () => {
 
           app.get('/user', (req, res) => {})
 
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                expect(traces[0][0]).to.have.property('error', 1)
-                expect(traces[0][0].meta).to.not.have.property('http.status_code')
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => { })
-              })
-
-              req.on('error', () => {})
-
-              req.setTimeout(1)
-              req.end()
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('error', 1)
+              expect(traces[0][0].meta).to.not.have.property('http.status_code')
             })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => { })
+            })
+
+            req.on('error', () => {})
+
+            req.setTimeout(1)
+            req.end()
           })
         })
 
@@ -816,23 +664,21 @@ describe('Plugin', () => {
               res.status(200).send()
             })
 
-            getPort().then(port => {
-              agent
-                .use(traces => {
-                  expect(traces[0][0]).to.have.property('error', 0)
-                })
-                .then(done)
-                .catch(done)
-
-              appListener = server(app, port, async () => {
-                const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                  res.on('data', () => { })
-                })
-
-                req.on('error', () => {})
-
-                req.end()
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('error', 0)
               })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => { })
+              })
+
+              req.on('error', () => {})
+
+              req.end()
             })
           }).timeout(10000)
 
@@ -846,27 +692,25 @@ describe('Plugin', () => {
               res.status(200).send()
             })
 
-            getPort().then(port => {
-              agent
-                .use(traces => {
-                  expect(traces[0][0]).to.have.property('error', 1)
-                })
-                .then(done)
-                .catch(done)
-
-              const options = {
-                agent: new http.Agent({ keepAlive: true, timeout: 5000 }) // custom agent with same default timeout
-              }
-
-              appListener = server(app, port, async () => {
-                const req = http.request(`${protocol}://localhost:${port}/user`, options, res => {
-                  res.on('data', () => { })
-                })
-
-                req.on('error', () => {})
-
-                req.end()
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('error', 1)
               })
+              .then(done)
+              .catch(done)
+
+            const options = {
+              agent: new http.Agent({ keepAlive: true, timeout: 5000 }) // custom agent with same default timeout
+            }
+
+            appListener = server(app, port => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, options, res => {
+                res.on('data', () => { })
+              })
+
+              req.on('error', () => {})
+
+              req.end()
             })
           }).timeout(10000)
 
@@ -880,32 +724,35 @@ describe('Plugin', () => {
               res.status(200).send()
             })
 
-            getPort().then(port => {
-              agent
-                .use(traces => {
-                  expect(traces[0][0]).to.have.property('error', 1)
-                })
-                .then(done)
-                .catch(done)
-
-              appListener = server(app, port, async () => {
-                const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                  res.on('data', () => { })
-                })
-
-                req.on('error', () => {})
-                req.setTimeout(5000) // match default timeout
-
-                req.end()
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('error', 1)
               })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => { })
+              })
+
+              req.on('error', () => {})
+              req.setTimeout(5000) // match default timeout
+
+              req.end()
             })
           }).timeout(10000)
         }
 
         it('should only record a request once', done => {
           // Make sure both plugins are loaded, which could cause double-counting.
-          require('http')
-          require('https')
+          if (pluginToBeLoaded.includes('node:')) {
+            require('node:http')
+            require('node:https')
+          } else {
+            require('http')
+            require('https')
+          }
 
           const app = express()
 
@@ -913,33 +760,31 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                const spans = traces[0]
-                expect(spans.length).to.equal(3)
+          agent
+            .use(traces => {
+              const spans = traces[0]
+              expect(spans.length).to.equal(3)
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port => {
+            // Activate a new parent span so we capture any double counting that may happen, otherwise double-counts
+            // would be siblings and our test would only capture 1 as a false positive.
+            const span = tracer.startSpan('http-test')
+            tracer.scope().activate(span, () => {
+              // Test `http(s).request
+              const req = http.request(`${protocol}://localhost:${port}/user?test=request`, res => {
+                res.on('data', () => {})
               })
-              .then(done)
-              .catch(done)
+              req.end()
 
-            appListener = server(app, port, () => {
-              // Activate a new parent span so we capture any double counting that may happen, otherwise double-counts
-              // would be siblings and our test would only capture 1 as a false positive.
-              const span = tracer.startSpan('http-test')
-              tracer.scope().activate(span, () => {
-                // Test `http(s).request
-                const req = http.request(`${protocol}://localhost:${port}/user?test=request`, res => {
-                  res.on('data', () => {})
-                })
-                req.end()
-
-                // Test `http(s).get`
-                http.get(`${protocol}://localhost:${port}/user?test=get`, res => {
-                  res.on('data', () => {})
-                })
-
-                span.finish()
+              // Test `http(s).get`
+              http.get(`${protocol}://localhost:${port}/user?test=get`, res => {
+                res.on('data', () => {})
               })
+
+              span.finish()
             })
           })
         })
@@ -951,19 +796,17 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/abort`)
-
-              req.abort()
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
             })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/abort`)
+
+            req.abort()
           })
         })
 
@@ -974,7 +817,7 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
+          appListener = server(app, port => {
             agent
               .use(traces => {
                 expect(traces[0][0].meta).to.have.property('http.status_code', '200')
@@ -983,17 +826,15 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = server(app, port, () => {
-              const req = http.request({
-                hostname: 'localhost',
-                port,
-                path: '/user?foo=bar'
-              }, res => {
-                res.on('data', () => {})
-              })
-
-              req.end()
+            const req = http.request({
+              hostname: 'localhost',
+              port,
+              path: '/user?foo=bar'
+            }, res => {
+              res.on('data', () => {})
             })
+
+            req.end()
           })
         })
 
@@ -1004,7 +845,7 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
+          appListener = server(app, port => {
             agent
               .use(traces => {
                 expect(traces[0][1]).to.have.property('error', 0)
@@ -1014,17 +855,15 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = server(app, port, () => {
-              tracer.trace('test.request', (span, finish) => {
-                const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                  res.on('data', () => {})
-                  res.on('end', () => {
-                    setTimeout(finish)
-                  })
+            tracer.trace('test.request', (span, finish) => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => {})
+                res.on('end', () => {
+                  setTimeout(finish)
                 })
-
-                req.end()
               })
+
+              req.end()
             })
           })
         })
@@ -1037,26 +876,24 @@ describe('Plugin', () => {
               res.status(200).send()
             })
 
-            getPort().then(port => {
-              const timer = setTimeout(done, 100)
+            const timer = setTimeout(done, 100)
 
-              agent
-                .use(() => {
-                  done(new Error('Noop request was traced.'))
-                  clearTimeout(timer)
-                })
-
-              appListener = server(app, port, () => {
-                const store = storage.getStore()
-
-                storage.enterWith({ noop: true })
-                const req = http.request(tracer._tracer._url.href)
-
-                req.on('error', () => {})
-                req.end()
-
-                storage.enterWith(store)
+            agent
+              .use(() => {
+                done(new Error('Noop request was traced.'))
+                clearTimeout(timer)
               })
+
+            appListener = server(app, port => {
+              const store = storage.getStore()
+
+              storage.enterWith({ noop: true })
+              const req = http.request(tracer._tracer._url.href)
+
+              req.on('error', () => {})
+              req.end()
+
+              storage.enterWith(store)
             })
           })
         }
@@ -1072,7 +909,7 @@ describe('Plugin', () => {
               ch = require('dc-polyfill').channel('apm:http:client:request:start')
               sub = () => {}
               tracer = require('../../dd-trace')
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
             })
         })
 
@@ -1085,23 +922,21 @@ describe('Plugin', () => {
             res.end()
           }
 
-          getPort().then(port => {
-            appListener = server(app, port, () => {
-              ch.subscribe(sub)
+          appListener = server(app, port => {
+            ch.subscribe(sub)
 
-              tracer.use('http', false)
+            tracer.use('http', false)
 
-              const req = http.request(`${protocol}://localhost:${port}`, res => {
-                res.on('error', done)
-                res.on('data', () => {})
-                res.on('end', () => done())
-              })
-              req.on('error', done)
-
-              tracer.use('http', true)
-
-              req.end()
+            const req = http.request(`${protocol}://localhost:${port}`, res => {
+              res.on('error', done)
+              res.on('data', () => {})
+              res.on('end', () => done())
             })
+            req.on('error', done)
+
+            tracer.use('http', true)
+
+            req.end()
           })
         })
       })
@@ -1119,7 +954,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1131,67 +966,19 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                expect(traces[0][0]).to.have.property('service', 'custom')
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => {})
-              })
-
-              req.end()
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('service', 'custom')
             })
-          })
-        })
-      })
+            .then(done)
+            .catch(done)
 
-      describe('with config enablePropagationWithAmazonHeaders enabled', () => {
-        let config
-
-        beforeEach(() => {
-          config = {
-            enablePropagationWithAmazonHeaders: true
-          }
-
-          return agent.load('http', config)
-            .then(() => {
-              http = require(protocol)
-              express = require('express')
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => {})
             })
-        })
 
-        it('should inject tracing header into AWS signed request', done => {
-          const app = express()
-
-          app.get('/', (req, res) => {
-            try {
-              expect(req.get('x-datadog-trace-id')).to.be.a('string')
-              expect(req.get('x-datadog-parent-id')).to.be.a('string')
-
-              res.status(200).send()
-
-              done()
-            } catch (e) {
-              done(e)
-            }
-          })
-
-          getPort().then(port => {
-            appListener = server(app, port, () => {
-              const req = http.request({
-                port,
-                headers: {
-                  Authorization: 'AWS4-HMAC-SHA256 ...'
-                }
-              })
-
-              req.end()
-            })
+            req.end()
           })
         })
       })
@@ -1209,7 +996,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1221,21 +1008,19 @@ describe('Plugin', () => {
             res.status(500).send()
           })
 
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                expect(traces[0][0]).to.have.property('error', 1)
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => { })
-              })
-
-              req.end()
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('error', 1)
             })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => { })
+            })
+
+            req.end()
           })
         })
       })
@@ -1254,7 +1039,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1265,14 +1050,12 @@ describe('Plugin', () => {
             app.get('/user', (req, res) => {
               res.status(200).send()
             })
-            getPort().then(port => {
+            appListener = server(app, port => {
               serverPort = port
-              appListener = server(app, port, () => {
-                const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                  res.on('data', () => {})
-                })
-                req.end()
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => {})
               })
+              req.end()
             })
           },
           {
@@ -1294,7 +1077,7 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
+          appListener = server(app, port => {
             agent
               .use(traces => {
                 expect(traces[0][0]).to.have.property('service', `localhost:${port}`)
@@ -1302,13 +1085,11 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => {})
-              })
-
-              req.end()
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => {})
             })
+
+            req.end()
           })
         })
       })
@@ -1326,7 +1107,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1340,28 +1121,26 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
+          appListener = server(app, port => {
             agent
               .use(traces => {
                 const meta = traces[0][0].meta
 
                 expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.host`, `localhost:${port}`)
-                expect(meta).to.have.property(`http.baz`, 'baz')
+                expect(meta).to.have.property('http.baz', 'baz')
                 expect(meta).to.have.property(`${HTTP_RESPONSE_HEADERS}.x-foo`, 'foo')
-                expect(meta).to.have.property(`http.bar`, 'bar')
+                expect(meta).to.have.property('http.bar', 'bar')
               })
               .then(done)
               .catch(done)
 
-            appListener = server(app, port, () => {
-              const url = `${protocol}://localhost:${port}/user`
-              const headers = { 'x-baz': 'baz' }
-              const req = http.request(url, { headers }, res => {
-                res.on('data', () => {})
-              })
-
-              req.end()
+            const url = `${protocol}://localhost:${port}/user`
+            const headers = { 'x-baz': 'baz' }
+            const req = http.request(url, { headers }, res => {
+              res.on('data', () => {})
             })
+
+            req.end()
           })
         })
 
@@ -1372,24 +1151,22 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                const meta = traces[0][0].meta
+          agent
+            .use(traces => {
+              const meta = traces[0][0].meta
 
-                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, `bar`)
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => {})
-              })
-
-              req.setHeader('x-foo', 'bar')
-              req.end()
+              expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, 'bar')
             })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => {})
+            })
+
+            req.setHeader('x-foo', 'bar')
+            req.end()
           })
         })
 
@@ -1400,24 +1177,22 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                const meta = traces[0][0].meta
+          agent
+            .use(traces => {
+              const meta = traces[0][0].meta
 
-                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, `bar1,bar2`)
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => { })
-              })
-
-              req.setHeader('x-foo', ['bar1', 'bar2'])
-              req.end()
+              expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, 'bar1,bar2')
             })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => { })
+            })
+
+            req.setHeader('x-foo', ['bar1', 'bar2'])
+            req.end()
           })
         })
       })
@@ -1439,7 +1214,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1451,23 +1226,21 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', 'GET /user')
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => {})
-              })
-
-              req._route = '/user'
-
-              req.end()
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('resource', 'GET /user')
             })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => {})
+            })
+
+            req._route = '/user'
+
+            req.end()
           })
         })
       })
@@ -1485,7 +1258,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1506,15 +1279,13 @@ describe('Plugin', () => {
             }
           })
 
-          getPort().then(port => {
-            appListener = server(app, port, () => {
-              const req = http.request({
-                port,
-                path: '/users'
-              })
-
-              req.end()
+          appListener = server(app, port => {
+            const req = http.request({
+              port,
+              path: '/users'
             })
+
+            req.end()
           })
         })
       })
@@ -1532,7 +1303,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1544,23 +1315,21 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
-            const timer = setTimeout(done, 100)
+          const timer = setTimeout(done, 100)
 
-            agent
-              .use(() => {
-                clearTimeout(timer)
-                done(new Error('Blocklisted requests should not be recorded.'))
-              })
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => {})
-              })
-
-              req.end()
+          agent
+            .use(() => {
+              clearTimeout(timer)
+              done(new Error('Blocklisted requests should not be recorded.'))
             })
+            .catch(done)
+
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => {})
+            })
+
+            req.end()
           })
         })
       })

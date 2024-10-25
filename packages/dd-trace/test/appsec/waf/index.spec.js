@@ -7,6 +7,14 @@ const Reporter = require('../../../src/appsec/reporter')
 const web = require('../../../src/plugins/util/web')
 
 describe('WAF Manager', () => {
+  const knownAddresses = new Set([
+    'server.io.net.url',
+    'server.request.headers.no_cookies',
+    'server.request.uri.raw',
+    'processor.address',
+    'server.request.body',
+    'waf.context.processor'
+  ])
   let waf, WAFManager
   let DDWAF
   let config
@@ -19,13 +27,18 @@ describe('WAF Manager', () => {
     DDWAF.prototype.constructor.version = sinon.stub()
     DDWAF.prototype.dispose = sinon.stub()
     DDWAF.prototype.createContext = sinon.stub()
-    DDWAF.prototype.update = sinon.stub()
+    DDWAF.prototype.update = sinon.stub().callsFake(function (newRules) {
+      if (newRules?.metadata?.rules_version) {
+        this.diagnostics.ruleset_version = newRules?.metadata?.rules_version
+      }
+    })
     DDWAF.prototype.diagnostics = {
       ruleset_version: '1.0.0',
       rules: {
         loaded: ['rule_1'], failed: []
       }
     }
+    DDWAF.prototype.knownAddresses = knownAddresses
 
     WAFManager = proxyquire('../../../src/appsec/waf/waf_manager', {
       '@datadog/native-appsec': { DDWAF }
@@ -39,11 +52,12 @@ describe('WAF Manager', () => {
     sinon.stub(Reporter, 'reportMetrics')
     sinon.stub(Reporter, 'reportAttack')
     sinon.stub(Reporter, 'reportWafUpdate')
-    sinon.stub(Reporter, 'reportSchemas')
+    sinon.stub(Reporter, 'reportDerivatives')
 
     webContext = {}
     sinon.stub(web, 'getContext').returns(webContext)
   })
+
   afterEach(() => {
     sinon.restore()
     waf.destroy()
@@ -77,8 +91,8 @@ describe('WAF Manager', () => {
           loaded: ['rule_1'],
           failed: ['rule_2', 'rule_3'],
           errors: {
-            'error_1': ['invalid_1'],
-            'error_2': ['invalid_2', 'invalid_3']
+            error_1: ['invalid_1'],
+            error_2: ['invalid_2', 'invalid_3']
           }
         }
       }
@@ -91,6 +105,32 @@ describe('WAF Manager', () => {
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.errors',
         '{"error_1":["invalid_1"],"error_2":["invalid_2","invalid_3"]}')
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('manual.keep', 'true')
+    })
+  })
+
+  describe('run', () => {
+    it('should call wafManager.run with raspRuleType', () => {
+      const run = sinon.stub()
+      WAFManager.prototype.getWAFContext = sinon.stub().returns({ run })
+      waf.init(rules, config.appsec)
+
+      const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
+      const req = {}
+      waf.run(payload, req, 'ssrf')
+
+      expect(run).to.be.calledOnceWithExactly(payload, 'ssrf')
+    })
+
+    it('should call wafManager.run without raspRuleType', () => {
+      const run = sinon.stub()
+      WAFManager.prototype.getWAFContext = sinon.stub().returns({ run })
+      waf.init(rules, config.appsec)
+
+      const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
+      const req = {}
+      waf.run(payload, req)
+
+      expect(run).to.be.calledOnceWithExactly(payload, undefined)
     })
   })
 
@@ -124,7 +164,7 @@ describe('WAF Manager', () => {
 
     it('should call ddwaf.update', () => {
       const rules = {
-        'rules_data': [
+        rules_data: [
           {
             id: 'blocked_users',
             type: 'data_with_expiration',
@@ -141,11 +181,15 @@ describe('WAF Manager', () => {
       waf.update(rules)
 
       expect(DDWAF.prototype.update).to.be.calledOnceWithExactly(rules)
+      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '1.0.0')
     })
 
     it('should call Reporter.reportWafUpdate', () => {
       const rules = {
-        'rules_data': [
+        metadata: {
+          rules_version: '4.2.0'
+        },
+        rules_data: [
           {
             id: 'blocked_users',
             type: 'data_with_expiration',
@@ -161,8 +205,7 @@ describe('WAF Manager', () => {
 
       waf.update(rules)
 
-      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion,
-        DDWAF.prototype.diagnostics.ruleset_version)
+      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '4.2.0')
     })
   })
 
@@ -174,7 +217,7 @@ describe('WAF Manager', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -214,15 +257,19 @@ describe('WAF Manager', () => {
         ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1 })
 
         wafContextWrapper.run({
-          'server.request.headers.no_cookies': { 'header': 'value' },
-          'server.request.uri.raw': 'https://testurl',
-          'processor.address': { 'extract-schema': true }
+          persistent: {
+            'server.request.headers.no_cookies': { header: 'value' },
+            'server.request.uri.raw': 'https://testurl',
+            'processor.address': { 'extract-schema': true }
+          }
         })
 
         expect(ddwafContext.run).to.be.calledOnceWithExactly({
-          'server.request.headers.no_cookies': { 'header': 'value' },
-          'server.request.uri.raw': 'https://testurl',
-          'processor.address': { 'extract-schema': true }
+          persistent: {
+            'server.request.headers.no_cookies': { header: 'value' },
+            'server.request.uri.raw': 'https://testurl',
+            'processor.address': { 'extract-schema': true }
+          }
         }, config.appsec.wafTimeout)
       })
 
@@ -235,7 +282,9 @@ describe('WAF Manager', () => {
 
         ddwafContext.run.returns(result)
         const params = {
-          'server.request.headers.no_cookies': { 'header': 'value' }
+          persistent: {
+            'server.request.headers.no_cookies': { header: 'value' }
+          }
         }
 
         wafContextWrapper.run(params)
@@ -252,7 +301,9 @@ describe('WAF Manager', () => {
 
         ddwafContext.run.returns(result)
         const params = {
-          'server.request.headers.no_cookies': { 'header': 'value' }
+          persistent: {
+            'server.request.headers.no_cookies': { header: 'value' }
+          }
         }
 
         wafContextWrapper.run(params)
@@ -263,10 +314,50 @@ describe('WAF Manager', () => {
         expect(reportMetricsArg.ruleTriggered).to.be.true
       })
 
+      it('should report raspRuleType', () => {
+        const result = {
+          totalRuntime: 1,
+          durationExt: 1
+        }
+
+        ddwafContext.run.returns(result)
+        const params = {
+          persistent: {
+            'server.request.headers.no_cookies': { header: 'value' }
+          }
+        }
+
+        wafContextWrapper.run(params, 'rule_type')
+
+        expect(Reporter.reportMetrics).to.be.calledOnce
+        expect(Reporter.reportMetrics.firstCall.args[1]).to.be.equal('rule_type')
+      })
+
+      it('should not report raspRuleType when it is not provided', () => {
+        const result = {
+          totalRuntime: 1,
+          durationExt: 1
+        }
+
+        ddwafContext.run.returns(result)
+        const params = {
+          persistent: {
+            'server.request.headers.no_cookies': { header: 'value' }
+          }
+        }
+
+        wafContextWrapper.run(params)
+
+        expect(Reporter.reportMetrics).to.be.calledOnce
+        expect(Reporter.reportMetrics.firstCall.args[1]).to.be.equal(undefined)
+      })
+
       it('should not report attack when ddwafContext does not return events', () => {
         ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1 })
         const params = {
-          'server.request.headers.no_cookies': { 'header': 'value' }
+          persistent: {
+            'server.request.headers.no_cookies': { header: 'value' }
+          }
         }
 
         wafContextWrapper.run(params)
@@ -277,7 +368,9 @@ describe('WAF Manager', () => {
       it('should not report attack when ddwafContext returns empty data', () => {
         ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1, events: [] })
         const params = {
-          'server.request.headers.no_cookies': { 'header': 'value' }
+          persistent: {
+            'server.request.headers.no_cookies': { header: 'value' }
+          }
         }
 
         wafContextWrapper.run(params)
@@ -287,10 +380,12 @@ describe('WAF Manager', () => {
 
       it('should return the actions', () => {
         const actions = ['block']
-        ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1, events: [], actions: actions })
+        ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1, events: [], actions })
 
         const params = {
-          'server.request.headers.no_cookies': { 'header': 'value' }
+          persistent: {
+            'server.request.headers.no_cookies': { header: 'value' }
+          }
         }
 
         const result = wafContextWrapper.run(params)
@@ -305,16 +400,40 @@ describe('WAF Manager', () => {
           derivatives: [{ '_dd.appsec.s.req.body': [8] }]
         }
         const params = {
-          'server.request.body': 'value',
-          'waf.context.processor': {
-            'extract-schema': true
+          persistent: {
+            'server.request.body': 'value',
+            'waf.context.processor': {
+              'extract-schema': true
+            }
           }
         }
 
         ddwafContext.run.returns(result)
 
         wafContextWrapper.run(params)
-        expect(Reporter.reportSchemas).to.be.calledOnceWithExactly(result.derivatives)
+        expect(Reporter.reportDerivatives).to.be.calledOnceWithExactly(result.derivatives)
+      })
+
+      it('should report fingerprints when ddwafContext returns fingerprints in results derivatives', () => {
+        const result = {
+          totalRuntime: 1,
+          durationExt: 1,
+          derivatives: {
+            '_dd.appsec.s.req.body': [8],
+            '_dd.appsec.fp.http.endpoint': 'http-post-abcdefgh-12345678-abcdefgh',
+            '_dd.appsec.fp.http.network': 'net-1-0100000000',
+            '_dd.appsec.fp.http.headers': 'hdr-0110000110-abcdefgh-5-12345678'
+          }
+        }
+
+        ddwafContext.run.returns(result)
+
+        wafContextWrapper.run({
+          persistent: {
+            'server.request.body': 'foo'
+          }
+        })
+        sinon.assert.calledOnceWithExactly(Reporter.reportDerivatives, result.derivatives)
       })
     })
   })

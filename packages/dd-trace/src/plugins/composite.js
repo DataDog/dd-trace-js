@@ -12,11 +12,11 @@ class CompositePlugin extends Plugin {
   }
 
   configure (config) {
+    super.configure(config)
     for (const name in this.constructor.plugins) {
-      const pluginConfig = config[name] === false ? false : {
-        ...config,
-        ...config[name]
-      }
+      const pluginConfig = config[name] === false
+        ? false
+        : { ...config, ...config[name] }
 
       this[name].configure(pluginConfig)
     }

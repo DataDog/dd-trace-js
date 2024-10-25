@@ -36,6 +36,7 @@ module.exports = http.createServer((req, res) => {
     cltSocket.pipe(targetConnection)
   }
 
+  // eslint-disable-next-line n/no-deprecated-api
   const targetUrl = url.parse(util.format('%s://%s', proto, req.url))
 
   let targetConnection

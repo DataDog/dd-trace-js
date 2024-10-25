@@ -87,7 +87,7 @@ const registerLambdaHook = () => {
   const lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT
   const originalLambdaHandler = process.env.DD_LAMBDA_HANDLER
 
-  if (originalLambdaHandler !== undefined) {
+  if (originalLambdaHandler !== undefined && lambdaTaskRoot !== undefined) {
     const [moduleRoot, moduleAndHandler] = _extractModuleRootAndHandler(originalLambdaHandler)
     const [_module] = _extractModuleNameAndHandlerPath(moduleAndHandler)
 

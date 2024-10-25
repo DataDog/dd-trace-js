@@ -33,6 +33,8 @@ const map = {
 function format (span) {
   const formatted = formatSpan(span)
 
+  extractSpanLinks(formatted, span)
+  extractSpanEvents(formatted, span)
   extractRootTags(formatted, span)
   extractChunkTags(formatted, span)
   extractTags(formatted, span)
@@ -51,9 +53,11 @@ function formatSpan (span) {
     resource: String(spanContext._name),
     error: 0,
     meta: {},
+    meta_struct: span.meta_struct,
     metrics: {},
     start: Math.round(span._startTime * 1e6),
-    duration: Math.round(span._duration * 1e6)
+    duration: Math.round(span._duration * 1e6),
+    links: []
   }
 }
 
@@ -62,6 +66,44 @@ function setSingleSpanIngestionTags (span, options) {
   addTag({}, span.metrics, SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN)
   addTag({}, span.metrics, SPAN_SAMPLING_RULE_RATE, options.sampleRate)
   addTag({}, span.metrics, SPAN_SAMPLING_MAX_PER_SECOND, options.maxPerSecond)
+}
+
+function extractSpanLinks (trace, span) {
+  const links = []
+  if (span._links) {
+    for (const link of span._links) {
+      const { context, attributes } = link
+      const formattedLink = {}
+
+      formattedLink.trace_id = context.toTraceId(true)
+      formattedLink.span_id = context.toSpanId(true)
+
+      if (attributes && Object.keys(attributes).length > 0) {
+        formattedLink.attributes = attributes
+      }
+      if (context?._sampling?.priority >= 0) formattedLink.flags = context._sampling.priority > 0 ? 1 : 0
+      if (context?._tracestate) formattedLink.tracestate = context._tracestate.toString()
+
+      links.push(formattedLink)
+    }
+  }
+  if (links.length > 0) { trace.meta['_dd.span_links'] = JSON.stringify(links) }
+}
+
+function extractSpanEvents (trace, span) {
+  const events = []
+  if (span._events) {
+    for (const event of span._events) {
+      const formattedEvent = {
+        name: event.name,
+        time_unix_nano: Math.round(event.startTime * 1e6),
+        attributes: event.attributes && Object.keys(event.attributes).length > 0 ? event.attributes : undefined
+      }
+
+      events.push(formattedEvent)
+    }
+  }
+  if (events.length > 0) { trace.meta.events = JSON.stringify(events) }
 }
 
 function extractTags (trace, span) {
@@ -84,7 +126,6 @@ function extractTags (trace, span) {
 
   for (const tag in tags) {
     switch (tag) {
-      case 'operation.name':
       case 'service.name':
       case 'span.type':
       case 'resource.name':
@@ -111,7 +152,10 @@ function extractTags (trace, span) {
       case ERROR_STACK:
         // HACK: remove when implemented in the backend
         if (context._name !== 'fs.operation') {
-          trace.error = 1
+          // HACK: to ensure otel.recordException does not influence trace.error
+          if (tags.setTraceError) {
+            trace.error = 1
+          }
         } else {
           break
         }
@@ -119,7 +163,6 @@ function extractTags (trace, span) {
         addTag(trace.meta, trace.metrics, tag, tags[tag])
     }
   }
-
   setSingleSpanIngestionTags(trace, context._spanSampling)
 
   addTag(trace.meta, trace.metrics, 'language', 'javascript')

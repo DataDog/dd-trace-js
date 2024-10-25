@@ -17,7 +17,7 @@ describe('esm', () => {
     before(async function () {
       this.timeout(50000)
       sandbox = await createSandbox([`'express@${version}'`], false,
-        [`./packages/datadog-plugin-express/test/integration-test/*`])
+        ['./packages/datadog-plugin-express/test/integration-test/*'])
     })
 
     after(async function () {

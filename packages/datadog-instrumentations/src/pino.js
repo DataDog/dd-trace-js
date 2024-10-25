@@ -76,19 +76,19 @@ function wrapPrettyFactory (prettyFactory) {
 addHook({ name: 'pino', versions: ['2 - 3', '4', '>=5 <5.14.0'] }, pino => {
   const asJsonSym = (pino.symbols && pino.symbols.asJsonSym) || 'asJson'
 
-  return shimmer.wrap(pino, wrapPino(asJsonSym, wrapAsJson, pino))
+  return shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino))
 })
 
 addHook({ name: 'pino', versions: ['>=5.14.0 <6.8.0'] }, pino => {
   const mixinSym = pino.symbols.mixinSym
 
-  return shimmer.wrap(pino, wrapPino(mixinSym, wrapMixin, pino))
+  return shimmer.wrapFunction(pino, pino => wrapPino(mixinSym, wrapMixin, pino))
 })
 
 addHook({ name: 'pino', versions: ['>=6.8.0'] }, pino => {
   const mixinSym = pino.symbols.mixinSym
 
-  const wrapped = shimmer.wrap(pino, wrapPino(mixinSym, wrapMixin, pino))
+  const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(mixinSym, wrapMixin, pino))
   wrapped.pino = wrapped
   wrapped.default = wrapped
 
@@ -101,5 +101,5 @@ addHook({ name: 'pino-pretty', file: 'lib/utils.js', versions: ['>=3'] }, utils 
 })
 
 addHook({ name: 'pino-pretty', versions: ['1 - 2'] }, prettyFactory => {
-  return shimmer.wrap(prettyFactory, wrapPrettyFactory(prettyFactory))
+  return shimmer.wrapFunction(prettyFactory, wrapPrettyFactory)
 })

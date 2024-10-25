@@ -15,10 +15,18 @@ const startTCPCh = channel('apm:net:tcp:start')
 const finishTCPCh = channel('apm:net:tcp:finish')
 const errorTCPCh = channel('apm:net:tcp:error')
 
-const connectionCh = channel(`apm:net:tcp:connection`)
+const connectionCh = channel('apm:net:tcp:connection')
 
-addHook({ name: 'net' }, net => {
-  require('dns')
+const names = ['net', 'node:net']
+
+addHook({ name: names }, (net, version, name) => {
+  // explicitly require dns so that net gets an instrumented instance
+  // so that we don't miss the dns calls
+  if (name === 'net') {
+    require('dns')
+  } else {
+    require('node:dns')
+  }
 
   shimmer.wrap(net.Socket.prototype, 'connect', connect => function () {
     if (!startICPCh.hasSubscribers || !startTCPCh.hasSubscribers) {
@@ -50,7 +58,7 @@ addHook({ name: 'net' }, net => {
       }
 
       const emit = this.emit
-      this.emit = function (eventName) {
+      this.emit = shimmer.wrapFunction(emit, emit => function (eventName) {
         switch (eventName) {
           case 'ready':
           case 'connect':
@@ -60,7 +68,7 @@ addHook({ name: 'net' }, net => {
           default:
             return emit.apply(this, arguments)
         }
-      }
+      })
 
       try {
         return connect.apply(this, arguments)

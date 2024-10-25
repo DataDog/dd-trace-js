@@ -19,7 +19,8 @@ const {
   GIT_COMMIT_AUTHOR_NAME,
   GIT_COMMIT_MESSAGE,
   CI_WORKSPACE_PATH,
-  CI_PIPELINE_URL
+  CI_PIPELINE_URL,
+  CI_JOB_NAME
 } = require('./tags')
 const id = require('../../id')
 
@@ -27,6 +28,9 @@ const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../
 const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { version: ddTraceVersion } = require('../../../../../package.json')
+
+// session tags
+const TEST_SESSION_NAME = 'test_session.name'
 
 const TEST_FRAMEWORK = 'test.framework'
 const TEST_FRAMEWORK_VERSION = 'test.framework_version'
@@ -48,10 +52,21 @@ const TEST_MODULE_ID = 'test_module_id'
 const TEST_SUITE_ID = 'test_suite_id'
 const TEST_TOOLCHAIN = 'test.toolchain'
 const TEST_SKIPPED_BY_ITR = 'test.skipped_by_itr'
+// Browser used in browser test. Namespaced by test.configuration because it affects the fingerprint
+const TEST_CONFIGURATION_BROWSER_NAME = 'test.configuration.browser_name'
+// Early flake detection
+const TEST_IS_NEW = 'test.is_new'
+const TEST_IS_RETRY = 'test.is_retry'
+const TEST_EARLY_FLAKE_ENABLED = 'test.early_flake.enabled'
+const TEST_EARLY_FLAKE_ABORT_REASON = 'test.early_flake.abort_reason'
 
 const CI_APP_ORIGIN = 'ciapp-test'
 
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
+const JEST_DISPLAY_NAME = 'test.jest.display_name'
+
+const CUCUMBER_IS_PARALLEL = 'test.cucumber.is_parallel'
+const MOCHA_IS_PARALLEL = 'test.mocha.is_parallel'
 
 const TEST_ITR_TESTS_SKIPPED = '_dd.ci.itr.tests_skipped'
 const TEST_ITR_SKIPPING_ENABLED = 'test.itr.tests_skipping.enabled'
@@ -60,18 +75,46 @@ const TEST_ITR_SKIPPING_COUNT = 'test.itr.tests_skipping.count'
 const TEST_CODE_COVERAGE_ENABLED = 'test.code_coverage.enabled'
 const TEST_ITR_UNSKIPPABLE = 'test.itr.unskippable'
 const TEST_ITR_FORCED_RUN = 'test.itr.forced_run'
+const ITR_CORRELATION_ID = 'itr_correlation_id'
 
 const TEST_CODE_COVERAGE_LINES_PCT = 'test.code_coverage.lines_pct'
+
+// selenium tags
+const TEST_BROWSER_DRIVER = 'test.browser.driver'
+const TEST_BROWSER_DRIVER_VERSION = 'test.browser.driver_version'
+const TEST_BROWSER_NAME = 'test.browser.name'
+const TEST_BROWSER_VERSION = 'test.browser.version'
 
 // jest worker variables
 const JEST_WORKER_TRACE_PAYLOAD_CODE = 60
 const JEST_WORKER_COVERAGE_PAYLOAD_CODE = 61
 
+// cucumber worker variables
+const CUCUMBER_WORKER_TRACE_PAYLOAD_CODE = 70
+
+// mocha worker variables
+const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
+
+// Early flake detection util strings
+const EFD_STRING = "Retried by Datadog's Early Flake Detection"
+const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
+
+const TEST_LEVEL_EVENT_TYPES = [
+  'test',
+  'test_suite_end',
+  'test_module_end',
+  'test_session_end'
+]
+
 module.exports = {
   TEST_CODE_OWNERS,
+  TEST_SESSION_NAME,
   TEST_FRAMEWORK,
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
+  JEST_DISPLAY_NAME,
+  CUCUMBER_IS_PARALLEL,
+  MOCHA_IS_PARALLEL,
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
@@ -84,8 +127,15 @@ module.exports = {
   LIBRARY_VERSION,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
+  CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
+  MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
+  TEST_CONFIGURATION_BROWSER_NAME,
+  TEST_IS_NEW,
+  TEST_IS_RETRY,
+  TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -111,15 +161,27 @@ module.exports = {
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
+  ITR_CORRELATION_ID,
   addIntelligentTestRunnerSpanTags,
   getCoveredFilenamesFromCoverage,
   resetCoverage,
   mergeCoverage,
   fromCoverageMapToCoverage,
   getTestLineStart,
-  getCallSites,
   removeInvalidMetadata,
-  parseAnnotations
+  parseAnnotations,
+  EFD_STRING,
+  EFD_TEST_NAME_REGEX,
+  removeEfdStringFromTestName,
+  addEfdStringToTestName,
+  getIsFaultyEarlyFlakeDetection,
+  TEST_BROWSER_DRIVER,
+  TEST_BROWSER_DRIVER_VERSION,
+  TEST_BROWSER_NAME,
+  TEST_BROWSER_VERSION,
+  getTestSessionName,
+  TEST_LEVEL_EVENT_TYPES,
+  getNumFromKnownTests
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -251,7 +313,6 @@ function getTestCommonTags (name, suite, version, testFramework) {
     [SAMPLING_PRIORITY]: AUTO_KEEP,
     [TEST_NAME]: name,
     [TEST_SUITE]: suite,
-    [TEST_SOURCE_FILE]: suite,
     [RESOURCE_NAME]: `${suite}.${name}`,
     [TEST_FRAMEWORK_VERSION]: version,
     [LIBRARY_VERSION]: ddTraceVersion
@@ -267,7 +328,8 @@ function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
     return sourceRoot
   }
   const testSuitePath = testSuiteAbsolutePath === sourceRoot
-    ? testSuiteAbsolutePath : path.relative(sourceRoot, testSuiteAbsolutePath)
+    ? testSuiteAbsolutePath
+    : path.relative(sourceRoot, testSuiteAbsolutePath)
 
   return testSuitePath.replace(path.sep, '/')
 }
@@ -279,16 +341,36 @@ const POSSIBLE_CODEOWNERS_LOCATIONS = [
   '.gitlab/CODEOWNERS'
 ]
 
-function getCodeOwnersFileEntries (rootDir = process.cwd()) {
-  let codeOwnersContent
-
-  POSSIBLE_CODEOWNERS_LOCATIONS.forEach(location => {
+function readCodeOwners (rootDir) {
+  for (const location of POSSIBLE_CODEOWNERS_LOCATIONS) {
     try {
-      codeOwnersContent = fs.readFileSync(`${rootDir}/${location}`).toString()
+      return fs.readFileSync(path.join(rootDir, location)).toString()
     } catch (e) {
       // retry with next path
     }
-  })
+  }
+  return ''
+}
+
+function getCodeOwnersFileEntries (rootDir) {
+  let codeOwnersContent
+  let usedRootDir = rootDir
+  let isTriedCwd = false
+
+  const processCwd = process.cwd()
+
+  if (!usedRootDir || usedRootDir === processCwd) {
+    usedRootDir = processCwd
+    isTriedCwd = true
+  }
+
+  codeOwnersContent = readCodeOwners(usedRootDir)
+
+  // If we haven't found CODEOWNERS in the provided root dir, we try with process.cwd()
+  if (!codeOwnersContent && !isTriedCwd) {
+    codeOwnersContent = readCodeOwners(processCwd)
+  }
+
   if (!codeOwnersContent) {
     return null
   }
@@ -475,26 +557,6 @@ function getTestLineStart (err, testSuitePath) {
   }
 }
 
-// From https://github.com/felixge/node-stack-trace/blob/ba06dcdb50d465cd440d84a563836e293b360427/index.js#L1
-function getCallSites () {
-  const oldLimit = Error.stackTraceLimit
-  Error.stackTraceLimit = Infinity
-
-  const dummy = {}
-
-  const v8Handler = Error.prepareStackTrace
-  Error.prepareStackTrace = function (_, v8StackTrace) {
-    return v8StackTrace
-  }
-  Error.captureStackTrace(dummy)
-
-  const v8StackTrace = dummy.stack
-  Error.prepareStackTrace = v8Handler
-  Error.stackTraceLimit = oldLimit
-
-  return v8StackTrace
-}
-
 /**
  * Gets an object of test tags from an Playwright annotations array.
  * @param {Object[]} annotations - Annotations from a Playwright test.
@@ -520,4 +582,58 @@ function parseAnnotations (annotations) {
     }
     return tags
   }, {})
+}
+
+function addEfdStringToTestName (testName, numAttempt) {
+  return `${EFD_STRING} (#${numAttempt}): ${testName}`
+}
+
+function removeEfdStringFromTestName (testName) {
+  return testName.replace(EFD_TEST_NAME_REGEX, '')
+}
+
+function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {
+  let newSuites = 0
+  for (const suite of projectSuites) {
+    if (!testsBySuiteName[suite]) {
+      newSuites++
+    }
+  }
+  const newSuitesPercentage = (newSuites / projectSuites.length) * 100
+
+  // The faulty threshold represents a percentage, but we also want to consider
+  // smaller projects, where big variations in the % are more likely.
+  // This is why we also check the absolute number of new suites.
+  return (
+    newSuites > faultyThresholdPercentage &&
+    newSuitesPercentage > faultyThresholdPercentage
+  )
+}
+
+function getTestSessionName (config, testCommand, envTags) {
+  if (config.ciVisibilityTestSessionName) {
+    return config.ciVisibilityTestSessionName
+  }
+  if (envTags[CI_JOB_NAME]) {
+    return `${envTags[CI_JOB_NAME]}-${testCommand}`
+  }
+  return testCommand
+}
+
+// Calculate the number of a tests from the known tests response, which has a shape like:
+// { testModule1: { testSuite1: [test1, test2, test3] }, testModule2: { testSuite2: [test4, test5] } }
+function getNumFromKnownTests (knownTests) {
+  if (!knownTests) {
+    return 0
+  }
+
+  let totalNumTests = 0
+
+  for (const testModule of Object.values(knownTests)) {
+    for (const testSuite of Object.values(testModule)) {
+      totalNumTests += testSuite.length
+    }
+  }
+
+  return totalNumTests
 }

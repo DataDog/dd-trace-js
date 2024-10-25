@@ -46,7 +46,7 @@ function wrapHandleApiRequest (handleApiRequest) {
 function wrapHandleApiRequestWithMatch (handleApiRequest) {
   return function (req, res, query, match) {
     return instrument(req, res, () => {
-      const page = (typeof match === 'object' && typeof match.definition === 'object')
+      const page = (match !== null && typeof match === 'object' && typeof match.definition === 'object')
         ? match.definition.pathname
         : undefined
 
@@ -65,7 +65,7 @@ function wrapRenderToHTML (renderToHTML) {
 
 function wrapRenderErrorToHTML (renderErrorToHTML) {
   return function (err, req, res, pathname, query) {
-    return instrument(req, res, () => renderErrorToHTML.apply(this, arguments))
+    return instrument(req, res, err, () => renderErrorToHTML.apply(this, arguments))
   }
 }
 
@@ -76,8 +76,8 @@ function wrapRenderToResponse (renderToResponse) {
 }
 
 function wrapRenderErrorToResponse (renderErrorToResponse) {
-  return function (ctx) {
-    return instrument(ctx.req, ctx.res, () => renderErrorToResponse.apply(this, arguments))
+  return function (ctx, err) {
+    return instrument(ctx.req, ctx.res, err, () => renderErrorToResponse.apply(this, arguments))
   }
 }
 
@@ -111,13 +111,23 @@ function getPageFromPath (page, dynamicRoutes = []) {
   return getPagePath(page)
 }
 
-function instrument (req, res, handler) {
+function instrument (req, res, error, handler) {
+  if (typeof error === 'function') {
+    handler = error
+    error = null
+  }
+
   req = req.originalRequest || req
   res = res.originalResponse || res
 
   // TODO support middleware properly in the future?
   const isMiddleware = req.headers[MIDDLEWARE_HEADER]
-  if (isMiddleware || requests.has(req)) return handler()
+  if (isMiddleware || requests.has(req)) {
+    if (error) {
+      errorChannel.publish({ error })
+    }
+    return handler()
+  }
 
   requests.add(req)
 
@@ -178,7 +188,7 @@ function finish (ctx, result, err) {
 // however, it is not provided as a class function or exported property
 addHook({
   name: 'next',
-  versions: ['>=13.3.0'],
+  versions: ['>=13.3.0 <14.2.7'],
   file: 'dist/server/web/spec-extension/adapters/next-request.js'
 }, NextRequestAdapter => {
   shimmer.wrap(NextRequestAdapter.NextRequestAdapter, 'fromNodeNextRequest', fromNodeNextRequest => {
@@ -193,7 +203,7 @@ addHook({
 
 addHook({
   name: 'next',
-  versions: ['>=11.1'],
+  versions: ['>=11.1 <14.2.7'],
   file: 'dist/server/serve-static.js'
 }, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
 
@@ -203,7 +213,7 @@ addHook({
   file: 'dist/next-server/server/serve-static.js'
 }, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
 
-addHook({ name: 'next', versions: ['>=11.1'], file: 'dist/server/next-server.js' }, nextServer => {
+addHook({ name: 'next', versions: ['>=11.1 <14.2.7'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
 
   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
@@ -220,7 +230,7 @@ addHook({ name: 'next', versions: ['>=11.1'], file: 'dist/server/next-server.js'
 })
 
 // `handleApiRequest` changes parameters/implementation at 13.2.0
-addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js' }, nextServer => {
+addHook({ name: 'next', versions: ['>=13.2 <14.2.7'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
   return nextServer
@@ -254,7 +264,7 @@ addHook({
 
 addHook({
   name: 'next',
-  versions: ['>=13'],
+  versions: ['>=13 <14.2.7'],
   file: 'dist/server/web/spec-extension/request.js'
 }, request => {
   const nextUrlDescriptor = Object.getOwnPropertyDescriptor(request.NextRequest.prototype, 'nextUrl')
@@ -280,9 +290,23 @@ addHook({
   shimmer.massWrap(request.NextRequest.prototype, ['text', 'json'], function (originalMethod) {
     return async function wrappedJson () {
       const body = await originalMethod.apply(this, arguments)
-      bodyParsedChannel.publish({
-        body
-      })
+
+      bodyParsedChannel.publish({ body })
+
+      return body
+    }
+  })
+
+  shimmer.wrap(request.NextRequest.prototype, 'formData', function (originalFormData) {
+    return async function wrappedFormData () {
+      const body = await originalFormData.apply(this, arguments)
+
+      let normalizedBody = body
+      if (typeof body.entries === 'function') {
+        normalizedBody = Object.fromEntries(body.entries())
+      }
+      bodyParsedChannel.publish({ body: normalizedBody })
+
       return body
     }
   })

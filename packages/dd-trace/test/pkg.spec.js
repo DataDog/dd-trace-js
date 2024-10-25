@@ -12,7 +12,7 @@ describe('pkg', () => {
   if (os.platform() !== 'win32') {
     describe('in pre-require', () => {
       it('should load the package.json correctly', () => {
-        const pkg = JSON.parse(execSync(`node --require ./pkg-loader.js -e ""`, {
+        const pkg = JSON.parse(execSync('node --require ./pkg-loader.js -e ""', {
           cwd: __dirname
         }).toString())
         expect(pkg.name).to.equal('dd-trace')
@@ -39,6 +39,6 @@ describe('load', () => {
     pathStub.parse = function () {
       return undefined
     }
-    proxyquire('../src/pkg', { 'path': pathStub })
+    proxyquire('../src/pkg', { path: pathStub })
   })
 })

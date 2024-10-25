@@ -43,10 +43,16 @@ class VulnerabilityFormatter {
     const valueParts = []
     let fromIndex = 0
 
+    if (evidence.value == null) return { valueParts }
+
     if (typeof evidence.value === 'object' && evidence.rangesToApply) {
       const { value, ranges } = stringifyWithRanges(evidence.value, evidence.rangesToApply)
       evidence.value = value
       evidence.ranges = ranges
+    }
+
+    if (!evidence.ranges) {
+      return { value: evidence.value }
     }
 
     evidence.ranges.forEach((range, rangeIndex) => {
@@ -65,12 +71,8 @@ class VulnerabilityFormatter {
   }
 
   formatEvidence (type, evidence, sourcesIndexes, sources) {
-    if (!evidence.ranges && !evidence.rangesToApply) {
-      if (typeof evidence.value === 'undefined') {
-        return undefined
-      } else {
-        return { value: evidence.value }
-      }
+    if (evidence.value === undefined) {
+      return undefined
     }
 
     return this._redactVulnearbilities

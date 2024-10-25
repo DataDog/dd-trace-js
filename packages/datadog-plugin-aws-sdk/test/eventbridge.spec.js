@@ -55,7 +55,7 @@ describe('EventBridge', () => {
       expect(eventbridge.generateTags(params, 'putEvent', {})).to.deep.equal({
         'aws.eventbridge.source': 'my.event',
         'resource.name': 'putEvent my.event',
-        'rulename': 'my-rule-name'
+        rulename: 'my-rule-name'
       })
     })
     it('won\'t create tags for a malformed event', () => {
@@ -88,7 +88,7 @@ describe('EventBridge', () => {
       parentId = '0000000000000000'
       eventbridge.requestInject(span.context(), request)
 
-      expect(request.params).to.deep.equal({ 'Entries': [{ 'Detail': '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}' }] })
+      expect(request.params).to.deep.equal({ Entries: [{ Detail: '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}' }] })
     })
 
     it('skips injecting trace context to Eventbridge if message is full', () => {
@@ -133,7 +133,7 @@ describe('EventBridge', () => {
       expect(eventbridge.generateTags(params, 'putEvent', {})).to.deep.equal({
         'aws.eventbridge.source': 'my.event',
         'resource.name': 'putEvent my.event',
-        'rulename': ''
+        rulename: ''
       })
     })
 
@@ -146,7 +146,7 @@ describe('EventBridge', () => {
       expect(eventbridge.generateTags(params, null, {})).to.deep.equal({
         'aws.eventbridge.source': 'my.event',
         'resource.name': 'my.event',
-        'rulename': 'my-rule-name'
+        rulename: 'my-rule-name'
       })
     })
     it('handles null response gracefully', () => {
@@ -158,7 +158,7 @@ describe('EventBridge', () => {
       expect(eventbridge.generateTags(params, 'putEvent', null)).to.deep.equal({
         'aws.eventbridge.source': 'my.event',
         'resource.name': 'putEvent my.event',
-        'rulename': 'my-rule-name'
+        rulename: 'my-rule-name'
       })
     })
   })

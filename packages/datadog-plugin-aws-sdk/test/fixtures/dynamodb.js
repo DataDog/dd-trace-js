@@ -2,7 +2,7 @@
 
 const ddb = {}
 
-ddb['create'] = {
+ddb.create = {
   AttributeDefinitions: [
     {
       AttributeName: 'CUSTOMER_ID',
@@ -30,29 +30,29 @@ ddb['create'] = {
   TableName: 'CUSTOMER_LIST'
 }
 
-ddb['put'] = {
+ddb.put = {
   TableName: 'CUSTOMER_LIST',
   Item: {
-    'CUSTOMER_ID': { N: '001' },
-    'CUSTOMER_NAME': { S: 'Richard Roe' }
+    CUSTOMER_ID: { N: '001' },
+    CUSTOMER_NAME: { S: 'Richard Roe' }
   }
 }
 
-ddb['get'] = {
+ddb.get = {
   TableName: 'CUSTOMER_LIST',
   Key: {
-    'CUSTOMER_ID': { N: '001' },
-    'CUSTOMER_NAME': { S: 'Richard Roe' }
+    CUSTOMER_ID: { N: '001' },
+    CUSTOMER_NAME: { S: 'Richard Roe' }
   }
 }
 
-ddb['batch'] = {
+ddb.batch = {
   RequestItems: {
-    'CUSTOMER_LIST': {
+    CUSTOMER_LIST: {
       Keys: [
         {
-          'CUSTOMER_ID': { N: '001' },
-          'CUSTOMER_NAME': { S: 'Richard Roe' }
+          CUSTOMER_ID: { N: '001' },
+          CUSTOMER_NAME: { S: 'Richard Roe' }
         }
       ],
       ConsistentRead: true

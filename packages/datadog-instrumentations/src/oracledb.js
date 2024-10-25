@@ -21,7 +21,7 @@ function finish (err) {
   finishChannel.publish(undefined)
 }
 
-addHook({ name: 'oracledb', versions: ['5'] }, oracledb => {
+addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
   shimmer.wrap(oracledb.Connection.prototype, 'execute', execute => {
     return function wrappedExecute (dbQuery, ...args) {
       if (!startChannel.hasSubscribers) {
@@ -31,10 +31,10 @@ addHook({ name: 'oracledb', versions: ['5'] }, oracledb => {
       if (arguments.length && typeof arguments[arguments.length - 1] === 'function') {
         const cb = arguments[arguments.length - 1]
         const outerAr = new AsyncResource('apm:oracledb:outer-scope')
-        arguments[arguments.length - 1] = function wrappedCb (err, result) {
+        arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function wrappedCb (err, result) {
           finish(err)
           return outerAr.runInAsyncScope(() => cb.apply(this, arguments))
-        }
+        })
       }
 
       return new AsyncResource('apm:oracledb:inner-scope').runInAsyncScope(() => {
@@ -67,12 +67,12 @@ addHook({ name: 'oracledb', versions: ['5'] }, oracledb => {
   shimmer.wrap(oracledb, 'getConnection', getConnection => {
     return function wrappedGetConnection (connAttrs, callback) {
       if (callback) {
-        arguments[1] = (err, connection) => {
+        arguments[1] = shimmer.wrapFunction(callback, callback => (err, connection) => {
           if (connection) {
             connectionAttributes.set(connection, connAttrs)
           }
           callback(err, connection)
-        }
+        })
 
         getConnection.apply(this, arguments)
       } else {
@@ -86,12 +86,12 @@ addHook({ name: 'oracledb', versions: ['5'] }, oracledb => {
   shimmer.wrap(oracledb, 'createPool', createPool => {
     return function wrappedCreatePool (poolAttrs, callback) {
       if (callback) {
-        arguments[1] = (err, pool) => {
+        arguments[1] = shimmer.wrapFunction(callback, callback => (err, pool) => {
           if (pool) {
             poolAttributes.set(pool, poolAttrs)
           }
           callback(err, pool)
-        }
+        })
 
         createPool.apply(this, arguments)
       } else {
@@ -109,12 +109,12 @@ addHook({ name: 'oracledb', versions: ['5'] }, oracledb => {
         callback = arguments[arguments.length - 1]
       }
       if (callback) {
-        arguments[arguments.length - 1] = (err, connection) => {
+        arguments[arguments.length - 1] = shimmer.wrapFunction(callback, callback => (err, connection) => {
           if (connection) {
             connectionAttributes.set(connection, poolAttributes.get(this))
           }
           callback(err, connection)
-        }
+        })
         getConnection.apply(this, arguments)
       } else {
         return getConnection.apply(this, arguments).then((connection) => {

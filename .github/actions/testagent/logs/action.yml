@@ -12,7 +12,7 @@ runs:
         if [ -n "${{inputs.container-id}}" ]; then
           docker logs ${{inputs.container-id}}
         else
-          docker-compose logs testagent
+          docker compose logs testagent
         fi
       shell: bash
     - name: Get Tested Integrations from Test Agent

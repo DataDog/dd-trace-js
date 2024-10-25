@@ -12,7 +12,7 @@ function waitForCouchbase () {
       axios({
         method: 'POST',
         url: cbasEndpoint,
-        data: { 'statement': 'SELECT * FROM datatest', 'timeout': '75000000us' },
+        data: { statement: 'SELECT * FROM datatest', timeout: '75000000us' },
         auth: {
           username: 'Administrator',
           password: 'password'

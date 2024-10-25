@@ -1,4 +1,3 @@
-
 const {
   DD_TRACE_SCOPE,
   COUNT

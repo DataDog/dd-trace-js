@@ -13,12 +13,12 @@ jobs:
       id-token: 'write'
     strategy:
       matrix:
-        version: [16, latest]
+        version: [18, latest]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}

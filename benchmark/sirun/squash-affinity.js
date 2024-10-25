@@ -32,4 +32,4 @@ function squashAffinity (obj) {
   }
 }
 
-fs.writeFileSync(path.join(process.cwd(), `meta-temp.json`), JSON.stringify(metaJson, null, 2))
+fs.writeFileSync(path.join(process.cwd(), 'meta-temp.json'), JSON.stringify(metaJson, null, 2))

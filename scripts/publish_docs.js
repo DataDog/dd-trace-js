@@ -3,7 +3,7 @@
 const exec = require('./helpers/exec')
 const title = require('./helpers/title')
 
-title(`Publishing API documentation to GitHub Pages`)
+title('Publishing API documentation to GitHub Pages')
 
 const msg = process.argv[2]
 
@@ -11,7 +11,12 @@ if (!msg) {
   throw new Error('Please provide a reason for the change. Example: node scripts/publish_docs.js "fix typo"')
 }
 
-exec('yarn install', { cwd: './docs' })
+try {
+  exec('yarn install', { cwd: './docs' })
+} catch (e) { // retry in case of error from registry
+  exec('yarn install', { cwd: './docs' })
+}
+
 exec('rm -rf ./out', { cwd: './docs' })
 exec('yarn type:doc') // run first because typedoc requires an empty directory
 exec('git init', { cwd: './docs/out' }) // cloning would overwrite generated docs

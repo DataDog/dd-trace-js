@@ -1,4 +1,5 @@
 const { storage } = require('../../datadog-core')
+const log = require('./log')
 
 function getDataStreamsContext () {
   const store = storage.getStore()
@@ -6,7 +7,9 @@ function getDataStreamsContext () {
 }
 
 function setDataStreamsContext (dataStreamsContext) {
-  storage.enterWith({ ...(storage.getStore()), dataStreamsContext })
+  log.debug(() => `Setting new DSM Context: ${JSON.stringify(dataStreamsContext)}.`)
+
+  if (dataStreamsContext) storage.enterWith({ ...(storage.getStore()), dataStreamsContext })
 }
 
 module.exports = {

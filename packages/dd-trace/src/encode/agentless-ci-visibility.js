@@ -2,14 +2,21 @@
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const { AgentEncoder } = require('./0.4')
 const { version: ddTraceVersion } = require('../../../../package.json')
-const id = require('../../../dd-trace/src/id')
-const ENCODING_VERSION = 1
+const { ITR_CORRELATION_ID } = require('../../src/plugins/util/test')
+const id = require('../../src/id')
+const {
+  distributionMetric,
+  TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
+  TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT
+} = require('../ci-visibility/telemetry')
 
+const ENCODING_VERSION = 1
 const ALLOWED_CONTENT_TYPES = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
 
 const TEST_SUITE_KEYS_LENGTH = 12
 const TEST_MODULE_KEYS_LENGTH = 11
 const TEST_SESSION_KEYS_LENGTH = 10
+const TEST_AND_SPAN_KEYS_LENGTH = 11
 
 const INTAKE_SOFT_LIMIT = 2 * 1024 * 1024 // 2MB
 
@@ -36,11 +43,23 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     // length of `payload.events` when calling `makePayload`
     this._eventCount = 0
 
+    this.metadataTags = {}
+
     this.reset()
   }
 
+  setMetadataTags (tags) {
+    this.metadataTags = tags
+  }
+
   _encodeTestSuite (bytes, content) {
-    this._encodeMapPrefix(bytes, TEST_SUITE_KEYS_LENGTH)
+    let keysLength = TEST_SUITE_KEYS_LENGTH
+    const itrCorrelationId = content.meta[ITR_CORRELATION_ID]
+    if (itrCorrelationId) {
+      keysLength++
+    }
+
+    this._encodeMapPrefix(bytes, keysLength)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, content.type)
 
@@ -52,6 +71,12 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
 
     this._encodeString(bytes, 'test_suite_id')
     this._encodeId(bytes, content.span_id)
+
+    if (itrCorrelationId) {
+      this._encodeString(bytes, ITR_CORRELATION_ID)
+      this._encodeString(bytes, itrCorrelationId)
+      delete content.meta[ITR_CORRELATION_ID]
+    }
 
     this._encodeString(bytes, 'error')
     this._encodeNumber(bytes, content.error)
@@ -127,9 +152,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encodeEventContent (bytes, content) {
-    const keysLength = Object.keys(content).length
-
-    let totalKeysLength = keysLength
+    let totalKeysLength = TEST_AND_SPAN_KEYS_LENGTH
     if (content.meta.test_session_id) {
       totalKeysLength = totalKeysLength + 1
     }
@@ -137,6 +160,13 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       totalKeysLength = totalKeysLength + 1
     }
     if (content.meta.test_suite_id) {
+      totalKeysLength = totalKeysLength + 1
+    }
+    const itrCorrelationId = content.meta[ITR_CORRELATION_ID]
+    if (itrCorrelationId) {
+      totalKeysLength = totalKeysLength + 1
+    }
+    if (content.type) {
       totalKeysLength = totalKeysLength + 1
     }
     this._encodeMapPrefix(bytes, totalKeysLength)
@@ -187,6 +217,12 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       this._encodeString(bytes, 'test_suite_id')
       this._encodeId(bytes, id(content.meta.test_suite_id, 10))
       delete content.meta.test_suite_id
+    }
+
+    if (itrCorrelationId) {
+      this._encodeString(bytes, ITR_CORRELATION_ID)
+      this._encodeString(bytes, itrCorrelationId)
+      delete content.meta[ITR_CORRELATION_ID]
     }
 
     this._encodeString(bytes, 'meta')
@@ -247,6 +283,12 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encode (bytes, trace) {
+    if (this._isReset) {
+      this._encodePayloadStart(bytes)
+      this._isReset = false
+    }
+    const startTime = Date.now()
+
     const rawEvents = trace.map(formatSpan)
 
     const testSessionEvents = rawEvents.filter(
@@ -261,9 +303,15 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     for (const event of events) {
       this._encodeEvent(bytes, event)
     }
+    distributionMetric(
+      TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
+      { endpoint: 'test_cycle' },
+      Date.now() - startTime
+    )
   }
 
   makePayload () {
+    distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT, { endpoint: 'test_cycle' }, this._eventCount)
     const bytes = this._traceBytes
     const eventsOffset = this._eventsOffset
     const eventsCount = this._eventCount
@@ -290,9 +338,10 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       version: ENCODING_VERSION,
       metadata: {
         '*': {
-          'language': 'javascript',
-          'library_version': ddTraceVersion
-        }
+          language: 'javascript',
+          library_version: ddTraceVersion
+        },
+        ...this.metadataTags
       },
       events: []
     }
@@ -311,6 +360,22 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeMapPrefix(bytes, Object.keys(payload.metadata).length)
     this._encodeString(bytes, '*')
     this._encodeMap(bytes, payload.metadata['*'])
+    if (payload.metadata.test) {
+      this._encodeString(bytes, 'test')
+      this._encodeMap(bytes, payload.metadata.test)
+    }
+    if (payload.metadata.test_suite_end) {
+      this._encodeString(bytes, 'test_suite_end')
+      this._encodeMap(bytes, payload.metadata.test_suite_end)
+    }
+    if (payload.metadata.test_module_end) {
+      this._encodeString(bytes, 'test_module_end')
+      this._encodeMap(bytes, payload.metadata.test_module_end)
+    }
+    if (payload.metadata.test_session_end) {
+      this._encodeString(bytes, 'test_session_end')
+      this._encodeMap(bytes, payload.metadata.test_session_end)
+    }
     this._encodeString(bytes, 'events')
     // Get offset of the events list to update the length of the array when calling `makePayload`
     this._eventsOffset = bytes.length
@@ -321,7 +386,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   reset () {
     this._reset()
     this._eventCount = 0
-    this._encodePayloadStart(this._traceBytes)
+    this._isReset = true
   }
 }
 

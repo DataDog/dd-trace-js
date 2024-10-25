@@ -24,7 +24,7 @@ describe('esm', () => {
     before(async function () {
       this.timeout(30000)
       sandbox = await createSandbox([`'mongodb@${version}'`], false, [
-        `./packages/datadog-plugin-mongodb-core/test/integration-test/*`])
+        './packages/datadog-plugin-mongodb-core/test/integration-test/*'])
     })
 
     after(async function () {
@@ -58,7 +58,7 @@ describe('esm', () => {
     before(async function () {
       this.timeout(30000)
       sandbox = await createSandbox([`'mongodb-core@${version}'`], false, [
-        `./packages/datadog-plugin-mongodb-core/test/integration-test/*`])
+        './packages/datadog-plugin-mongodb-core/test/integration-test/*'])
     })
 
     after(async function () {

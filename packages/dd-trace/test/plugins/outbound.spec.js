@@ -50,6 +50,7 @@ describe('OuboundPlugin', () => {
       expect(getRemapStub).to.not.be.called
     })
   })
+
   describe('peer.service computation', () => {
     let instance = null
 
@@ -88,7 +89,7 @@ describe('OuboundPlugin', () => {
 
     it('should use specific tags in order of precedence if they are available', () => {
       class WithPrecursors extends OutboundPlugin {
-        static get peerServicePrecursors () { return [ 'foo', 'bar' ] }
+        static get peerServicePrecursors () { return ['foo', 'bar'] }
       }
       const res = new WithPrecursors().getPeerService({
         fooIsNotAPrecursor: 'bar',
@@ -101,6 +102,7 @@ describe('OuboundPlugin', () => {
       })
     })
   })
+
   describe('remapping computation', () => {
     let instance = null
     let mappingStub = null
@@ -119,8 +121,8 @@ describe('OuboundPlugin', () => {
 
     it('should return peer data unchanged if there is no peer service', () => {
       mappingStub = sinon.stub(instance, '_tracerConfig').value({})
-      const mappingData = instance.getPeerServiceRemap({ 'foo': 'bar' })
-      expect(mappingData).to.deep.equal({ 'foo': 'bar' })
+      const mappingData = instance.getPeerServiceRemap({ foo: 'bar' })
+      expect(mappingData).to.deep.equal({ foo: 'bar' })
     })
 
     it('should return peer data unchanged if no mapping is available', () => {

@@ -1,6 +1,7 @@
 'use strict'
 const path = require('path')
 const { PassThrough } = require('stream')
+const semver = require('semver')
 
 const proxyquire = require('proxyquire').noPreserveCache()
 const nock = require('nock')
@@ -23,6 +24,7 @@ const {
   TEST_SOURCE_START
 } = require('../../dd-trace/src/plugins/util/test')
 
+const { NODE_MAJOR } = require('../../../version')
 const { version: ddTraceVersion } = require('../../../package.json')
 
 const runCucumber = (version, Cucumber, requireName, featureName, testName) => {
@@ -53,7 +55,9 @@ const runCucumber = (version, Cucumber, requireName, featureName, testName) => {
 describe('Plugin', function () {
   let Cucumber
   this.timeout(10000)
-  withVersions('cucumber', '@cucumber/cucumber', version => {
+  withVersions('cucumber', '@cucumber/cucumber', (version, _, specificVersion) => {
+    if (NODE_MAJOR <= 16 && semver.satisfies(specificVersion, '>=10')) return
+
     afterEach(() => {
       // > If you want to run tests multiple times, you may need to clear Node's require cache
       // before subsequent calls in whichever manner best suits your needs.
@@ -108,6 +112,7 @@ describe('Plugin', function () {
           expect(result.success).to.equal(true)
           await checkTraces
         })
+
         it('should create spans for each cucumber step', async () => {
           const steps = [
             { name: 'datadog', stepStatus: 'pass' },
@@ -136,6 +141,7 @@ describe('Plugin', function () {
           await checkTraces
         })
       })
+
       describe('failing test', () => {
         it('should create a test span', async function () {
           const checkTraces = agent.use(traces => {
@@ -167,6 +173,7 @@ describe('Plugin', function () {
           expect(result.success).to.equal(false)
           await checkTraces
         })
+
         it('should create spans for each cucumber step', async () => {
           const steps = [
             { name: 'datadog', stepStatus: 'pass' },
@@ -202,6 +209,7 @@ describe('Plugin', function () {
           await checkTraces
         })
       })
+
       describe('skipped test', () => {
         it('should create a test span', async function () {
           const checkTraces = agent.use(traces => {
@@ -233,6 +241,7 @@ describe('Plugin', function () {
           expect(result.success).to.equal(true)
           await checkTraces
         })
+
         it('should create spans for each cucumber step', async () => {
           const steps = [
             { name: 'datadog', stepStatus: 'pass' },
@@ -261,6 +270,7 @@ describe('Plugin', function () {
           await checkTraces
         })
       })
+
       describe('skipped test based on tag', () => {
         it('should create a test span', async function () {
           const checkTraces = agent.use(traces => {
@@ -298,6 +308,7 @@ describe('Plugin', function () {
           expect(result.success).to.equal(true)
           await checkTraces
         })
+
         it('should create spans for each cucumber step', async () => {
           const steps = [
             { name: 'datadog', stepStatus: 'skip' }
@@ -330,6 +341,7 @@ describe('Plugin', function () {
           await checkTraces
         })
       })
+
       describe('not implemented step', () => {
         it('should create a test span with a skip reason', async () => {
           const checkTraces = agent.use(traces => {
@@ -360,6 +372,7 @@ describe('Plugin', function () {
           await checkTraces
         })
       })
+
       describe('integration test', () => {
         it('should create a test span and a span for the integration', async function () {
           const checkTraces = agent.use(traces => {
@@ -396,6 +409,7 @@ describe('Plugin', function () {
           expect(result.success).to.equal(true)
           await checkTraces
         })
+
         it('should create spans for each cucumber step', async () => {
           const steps = [
             { name: 'datadog', stepStatus: 'pass' },
@@ -424,6 +438,7 @@ describe('Plugin', function () {
           await checkTraces
         })
       })
+
       describe('hook fail', () => {
         it('should create a test span', async function () {
           const checkTraces = agent.use(traces => {
@@ -451,14 +466,17 @@ describe('Plugin', function () {
             expect(testSpan.name).to.equal('cucumber.test')
             expect(testSpan.resource.endsWith('simple.feature.hooks fail')).to.equal(true)
             expect(
-              testSpan.meta[ERROR_MESSAGE].startsWith(`TypeError: Cannot set property 'boom' of undefined`) ||
-              testSpan.meta[ERROR_MESSAGE].startsWith(`TypeError: Cannot set properties of undefined (setting 'boom')`)
+              testSpan.meta[ERROR_MESSAGE].startsWith(
+                'TypeError: Cannot set property \'boom\' of undefined') ||
+              testSpan.meta[ERROR_MESSAGE].startsWith(
+                'TypeError: Cannot set properties of undefined (setting \'boom\')')
             ).to.equal(true)
           })
           const result = await runCucumber(version, Cucumber, 'simple.js', 'simple.feature', 'hooks fail')
           expect(result.success).to.equal(false)
           await checkTraces
         })
+
         it('should create spans for each cucumber step', async () => {
           const steps = [
             { name: 'datadog', stepStatus: 'skip' },

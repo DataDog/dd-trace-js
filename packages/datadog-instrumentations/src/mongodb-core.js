@@ -7,9 +7,9 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const startCh = channel(`apm:mongodb:query:start`)
-const finishCh = channel(`apm:mongodb:query:finish`)
-const errorCh = channel(`apm:mongodb:query:error`)
+const startCh = channel('apm:mongodb:query:start')
+const finishCh = channel('apm:mongodb:query:finish')
+const errorCh = channel('apm:mongodb:query:error')
 
 addHook({ name: 'mongodb-core', versions: ['2 - 3.1.9'] }, Server => {
   const serverProto = Server.Server.prototype
@@ -32,9 +32,15 @@ addHook({ name: 'mongodb', versions: ['>=4 <4.6.0'], file: 'lib/cmap/connection.
   return Connection
 })
 
-addHook({ name: 'mongodb', versions: ['>=4.6.0'], file: 'lib/cmap/connection.js' }, Connection => {
+addHook({ name: 'mongodb', versions: ['>=4.6.0 <6.4.0'], file: 'lib/cmap/connection.js' }, Connection => {
   const proto = Connection.Connection.prototype
   shimmer.wrap(proto, 'command', command => wrapConnectionCommand(command, 'command'))
+  return Connection
+})
+
+addHook({ name: 'mongodb', versions: ['>=6.4.0'], file: 'lib/cmap/connection.js' }, Connection => {
+  const proto = Connection.Connection.prototype
+  shimmer.wrap(proto, 'command', command => wrapConnectionCommand(command, 'command', undefined, instrumentPromise))
   return Connection
 })
 
@@ -86,10 +92,10 @@ function wrapUnifiedCommand (command, operation, name) {
     }
     return instrument(operation, command, this, arguments, server, ns, ops, { name })
   }
-  return shimmer.wrap(command, wrapped)
+  return wrapped
 }
 
-function wrapConnectionCommand (command, operation, name) {
+function wrapConnectionCommand (command, operation, name, instrumentFn = instrument) {
   const wrapped = function (ns, ops) {
     if (!startCh.hasSubscribers) {
       return command.apply(this, arguments)
@@ -101,9 +107,9 @@ function wrapConnectionCommand (command, operation, name) {
     const topology = { s: { options } }
 
     ns = `${ns.db}.${ns.collection}`
-    return instrument(operation, command, this, arguments, topology, ns, ops, { name })
+    return instrumentFn(operation, command, this, arguments, topology, ns, ops, { name })
   }
-  return shimmer.wrap(command, wrapped)
+  return wrapped
 }
 
 function wrapQuery (query, operation, name) {
@@ -117,7 +123,7 @@ function wrapQuery (query, operation, name) {
     return instrument(operation, query, this, arguments, pool, ns, ops)
   }
 
-  return shimmer.wrap(query, wrapped)
+  return wrapped
 }
 
 function wrapCursor (cursor, operation, name) {
@@ -129,7 +135,7 @@ function wrapCursor (cursor, operation, name) {
     const ns = this.ns
     return instrument(operation, cursor, this, arguments, pool, ns, {}, { name })
   }
-  return shimmer.wrap(cursor, wrapped)
+  return wrapped
 }
 
 function wrapCommand (command, operation, name) {
@@ -139,7 +145,7 @@ function wrapCommand (command, operation, name) {
     }
     return instrument(operation, command, this, arguments, this, ns, ops, { name })
   }
-  return shimmer.wrap(command, wrapped)
+  return wrapped
 }
 
 function instrument (operation, command, ctx, args, server, ns, ops, options = {}) {
@@ -158,7 +164,7 @@ function instrument (operation, command, ctx, args, server, ns, ops, options = {
   return asyncResource.runInAsyncScope(() => {
     startCh.publish({ ns, ops, options: serverInfo, name })
 
-    args[index] = asyncResource.bind(function (err, res) {
+    args[index] = shimmer.wrapFunction(callback, callback => asyncResource.bind(function (err, res) {
       if (err) {
         errorCh.publish(err)
       }
@@ -168,7 +174,7 @@ function instrument (operation, command, ctx, args, server, ns, ops, options = {
       if (callback) {
         return callback.apply(this, arguments)
       }
-    })
+    }))
 
     try {
       return command.apply(ctx, args)
@@ -177,5 +183,28 @@ function instrument (operation, command, ctx, args, server, ns, ops, options = {
 
       throw err
     }
+  })
+}
+
+function instrumentPromise (operation, command, ctx, args, server, ns, ops, options = {}) {
+  const name = options.name || (ops && Object.keys(ops)[0])
+
+  const serverInfo = server && server.s && server.s.options
+  const asyncResource = new AsyncResource('bound-anonymous-fn')
+
+  return asyncResource.runInAsyncScope(() => {
+    startCh.publish({ ns, ops, options: serverInfo, name })
+
+    const promise = command.apply(ctx, args)
+
+    return promise.then(function (res) {
+      finishCh.publish()
+      return res
+    }, function (err) {
+      errorCh.publish(err)
+      finishCh.publish()
+
+      return Promise.reject(err)
+    })
   })
 }

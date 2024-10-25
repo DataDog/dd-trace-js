@@ -1,8 +1,4 @@
-module.exports = require('../../..').init({
-  service: 'test',
-  flushInterval: 0,
-  plugins: false
-}).use('next', process.env.WITH_CONFIG ? {
+const config = {
   validateStatus: code => false,
   hooks: {
     request: (span, req) => {
@@ -15,4 +11,10 @@ module.exports = require('../../..').init({
       span.setTag('foo', 'bar')
     }
   }
-} : true).use('http')
+}
+
+module.exports = require('../../..').init({
+  service: 'test',
+  flushInterval: 0,
+  plugins: false
+}).use('next', process.env.WITH_CONFIG ? config : true).use('http')

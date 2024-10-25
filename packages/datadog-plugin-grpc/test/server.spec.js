@@ -1,10 +1,11 @@
 'use strict'
 
+const path = require('path')
 const agent = require('../../dd-trace/test/plugins/agent')
 const getPort = require('get-port')
 const Readable = require('stream').Readable
 
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, GRPC_SERVER_ERROR_STATUSES } = require('../../dd-trace/src/constants')
 
 const nodeMajor = parseInt(process.versions.node.split('.')[0])
 const pkgs = nodeMajor > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
@@ -27,7 +28,7 @@ describe('Plugin', () => {
     }, service)
 
     const loader = require('../../../versions/@grpc/proto-loader').get()
-    const definition = loader.loadSync(`${__dirname}/test.proto`)
+    const definition = loader.loadSync(path.join(__dirname, 'test.proto'))
     const TestService = grpc.loadPackageDefinition(definition).test.TestService
 
     server = new grpc.Server()
@@ -272,6 +273,38 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, 'Error')
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
               expect(traces[0][0].meta).to.have.property('component', 'grpc')
+            })
+        })
+
+        it('should ignore errors not set by DD_GRPC_SERVER_ERROR_STATUSES', async () => {
+          tracer._tracer._config.grpc.server.error.statuses = [6, 7, 8, 9, 10, 11, 12, 13]
+          const client = await buildClient({
+            getUnary: (_, callback) => {
+              const metadata = new grpc.Metadata()
+
+              metadata.set('extra', 'information')
+
+              const error = new Error('foobar')
+
+              error.code = grpc.status.NOT_FOUND
+
+              const childOf = tracer.scope().active()
+              const child = tracer.startSpan('child', { childOf })
+
+              // Delay trace to ensure auto-cancellation doesn't override the status code.
+              setTimeout(() => child.finish())
+
+              callback(error, {}, metadata)
+            }
+          })
+
+          client.getUnary({ first: 'foobar' }, () => {})
+
+          return agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('error', 0)
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
+              tracer._tracer._config.grpc.server.error.statuses = GRPC_SERVER_ERROR_STATUSES
             })
         })
 

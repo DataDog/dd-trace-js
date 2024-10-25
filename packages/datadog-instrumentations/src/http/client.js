@@ -14,9 +14,9 @@ const endChannel = channel('apm:http:client:request:end')
 const asyncStartChannel = channel('apm:http:client:request:asyncStart')
 const errorChannel = channel('apm:http:client:request:error')
 
-addHook({ name: 'https' }, hookFn)
+const names = ['http', 'https', 'node:http', 'node:https']
 
-addHook({ name: 'http' }, hookFn)
+addHook({ name: names }, hookFn)
 
 function hookFn (http) {
   patch(http, 'request')
@@ -43,18 +43,20 @@ function patch (http, methodName) {
         return request.apply(this, arguments)
       }
 
-      const ctx = { args, http }
+      const abortController = new AbortController()
+
+      const ctx = { args, http, abortController }
 
       return startChannel.runStores(ctx, () => {
         let finished = false
         let callback = args.callback
 
         if (callback) {
-          callback = function () {
+          callback = shimmer.wrapFunction(args.callback, cb => function () {
             return asyncStartChannel.runStores(ctx, () => {
-              return args.callback.apply(this, arguments)
+              return cb.apply(this, arguments)
             })
-          }
+          })
         }
 
         const options = args.options
@@ -107,6 +109,10 @@ function patch (http, methodName) {
             return emit.apply(this, arguments)
           }
 
+          if (abortController.signal.aborted) {
+            req.destroy(abortController.signal.reason || new Error('Aborted'))
+          }
+
           return req
         } catch (e) {
           ctx.error = e
@@ -132,7 +138,7 @@ function patch (http, methodName) {
   }
 
   function combineOptions (inputURL, inputOptions) {
-    if (typeof inputOptions === 'object') {
+    if (inputOptions !== null && typeof inputOptions === 'object') {
       return Object.assign(inputURL || {}, inputOptions)
     } else {
       return inputURL
@@ -155,6 +161,7 @@ function patch (http, methodName) {
       try {
         return urlToOptions(new url.URL(inputURL))
       } catch (e) {
+        // eslint-disable-next-line n/no-deprecated-api
         return url.parse(inputURL)
       }
     } else if (inputURL instanceof url.URL) {

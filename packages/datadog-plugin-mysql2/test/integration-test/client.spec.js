@@ -21,7 +21,7 @@ describe('esm', () => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'mysql2@${version}'`], false, [
-        `./packages/datadog-plugin-mysql2/test/integration-test/*`])
+        './packages/datadog-plugin-mysql2/test/integration-test/*'])
     })
 
     after(async () => {

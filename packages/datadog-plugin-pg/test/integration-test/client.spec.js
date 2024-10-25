@@ -17,7 +17,7 @@ describe('esm', () => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'pg@${version}'`], false, [
-        `./packages/datadog-plugin-pg/test/integration-test/*`])
+        './packages/datadog-plugin-pg/test/integration-test/*'])
     })
 
     after(async () => {

@@ -13,6 +13,7 @@ const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
+const spanleak = require('../spanleak')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -25,12 +26,14 @@ const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
 
 const OTEL_ENABLED = !!process.env.DD_TRACE_OTEL_ENABLED
+const ALLOWED = ['string', 'number', 'boolean']
 
 const integrationCounters = {
-  span_created: {},
-  span_finished: {}
+  spans_created: {},
+  spans_finished: {}
 }
 
+const startCh = channel('dd-trace:span:start')
 const finishCh = channel('dd-trace:span:finish')
 
 function getIntegrationCounter (event, integration) {
@@ -64,13 +67,15 @@ class DatadogSpan {
     this._store = storage.getStore()
     this._duration = undefined
 
+    this._events = []
+
     // For internal use only. You probably want `context()._name`.
     // This name property is not updated when the span name changes.
     // This is necessary for span count metrics.
     this._name = operationName
     this._integrationName = fields.integrationName || 'opentracing'
 
-    getIntegrationCounter('span_created', this._integrationName).inc()
+    getIntegrationCounter('spans_created', this._integrationName).inc()
 
     this._spanContext = this._createContext(parent, fields)
     this._spanContext._name = operationName
@@ -81,6 +86,9 @@ class DatadogSpan {
 
     this._startTime = fields.startTime || this._getTime()
 
+    this._links = []
+    fields.links && fields.links.forEach(link => this.addLink(link.context, link.attributes))
+
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.increment('runtime.node.spans.unfinished')
       runtimeMetrics.increment('runtime.node.spans.unfinished.by.name', `span_name:${operationName}`)
@@ -89,6 +97,11 @@ class DatadogSpan {
       runtimeMetrics.increment('runtime.node.spans.open.by.name', `span_name:${operationName}`)
 
       unfinishedRegistry.register(this, operationName, this)
+    }
+    spanleak.addSpan(this, operationName)
+
+    if (startCh.hasSubscribers) {
+      startCh.publish({ span: this, fields })
     }
   }
 
@@ -148,6 +161,26 @@ class DatadogSpan {
 
   logEvent () {}
 
+  addLink (context, attributes) {
+    this._links.push({
+      context: context._ddContext ? context._ddContext : context,
+      attributes: this._sanitizeAttributes(attributes)
+    })
+  }
+
+  addEvent (name, attributesOrStartTime, startTime) {
+    const event = { name }
+    if (attributesOrStartTime) {
+      if (typeof attributesOrStartTime === 'object') {
+        event.attributes = this._sanitizeEventAttributes(attributesOrStartTime)
+      } else {
+        startTime = attributesOrStartTime
+      }
+    }
+    event.startTime = startTime || this._getTime()
+    this._events.push(event)
+  }
+
   finish (finishTime) {
     if (this._duration !== undefined) {
       return
@@ -159,7 +192,7 @@ class DatadogSpan {
       }
     }
 
-    getIntegrationCounter('span_finished', this._integrationName).inc()
+    getIntegrationCounter('spans_finished', this._integrationName).inc()
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.decrement('runtime.node.spans.unfinished')
@@ -181,6 +214,56 @@ class DatadogSpan {
     this._spanContext._isFinished = true
     finishCh.publish(this)
     this._processor.process(this)
+  }
+
+  _sanitizeAttributes (attributes = {}) {
+    const sanitizedAttributes = {}
+
+    const addArrayOrScalarAttributes = (key, maybeArray) => {
+      if (Array.isArray(maybeArray)) {
+        for (const subkey in maybeArray) {
+          addArrayOrScalarAttributes(`${key}.${subkey}`, maybeArray[subkey])
+        }
+      } else {
+        const maybeScalar = maybeArray
+        if (ALLOWED.includes(typeof maybeScalar)) {
+          // Wrap the value as a string if it's not already a string
+          sanitizedAttributes[key] = typeof maybeScalar === 'string' ? maybeScalar : String(maybeScalar)
+        } else {
+          log.warn('Dropping span link attribute. It is not of an allowed type')
+        }
+      }
+    }
+
+    Object.entries(attributes).forEach(entry => {
+      const [key, value] = entry
+      addArrayOrScalarAttributes(key, value)
+    })
+    return sanitizedAttributes
+  }
+
+  _sanitizeEventAttributes (attributes = {}) {
+    const sanitizedAttributes = {}
+
+    for (const key in attributes) {
+      const value = attributes[key]
+      if (Array.isArray(value)) {
+        const newArray = []
+        for (const subkey in value) {
+          if (ALLOWED.includes(typeof value[subkey])) {
+            newArray.push(value[subkey])
+          } else {
+            log.warn('Dropping span event attribute. It is not of an allowed type')
+          }
+        }
+        sanitizedAttributes[key] = newArray
+      } else if (ALLOWED.includes(typeof value)) {
+        sanitizedAttributes[key] = value
+      } else {
+        log.warn('Dropping span event attribute. It is not of an allowed type')
+      }
+    }
+    return sanitizedAttributes
   }
 
   _createContext (parent, fields) {
@@ -226,6 +309,8 @@ class DatadogSpan {
     if (startTime) {
       spanContext._trace.startTime = startTime
     }
+    // SpanContext was NOT propagated from a remote parent
+    spanContext._isRemote = false
 
     return spanContext
   }

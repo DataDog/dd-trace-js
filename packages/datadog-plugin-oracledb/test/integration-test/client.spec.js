@@ -17,7 +17,7 @@ describe('esm', () => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'oracledb@${version}'`], false, [
-        `./packages/datadog-plugin-oracledb/test/integration-test/*`])
+        './packages/datadog-plugin-oracledb/test/integration-test/*'])
     })
 
     after(async () => {

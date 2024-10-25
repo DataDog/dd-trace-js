@@ -39,33 +39,40 @@ describe('Overhead controller', () => {
     describe('Global context', () => {
       let originalSetInterval
       let originalClearInterval
+
       before(() => {
         originalSetInterval = global.setInterval
         originalClearInterval = global.clearInterval
       })
+
       beforeEach(() => {
         global.setInterval = sinon.spy(global.setInterval)
         global.clearInterval = sinon.spy(global.clearInterval)
       })
+
       afterEach(() => {
         sinon.restore()
       })
+
       after(() => {
         global.setInterval = originalSetInterval
         global.clearInterval = originalClearInterval
       })
+
       it('should not start refresher interval when already started', () => {
         overheadController.startGlobalContext()
         overheadController.startGlobalContext()
         expect(global.setInterval).to.have.been.calledOnce
         overheadController.finishGlobalContext()
       })
+
       it('should stop refresher interval once when already finished', () => {
         overheadController.startGlobalContext()
         overheadController.finishGlobalContext()
         overheadController.finishGlobalContext()
         expect(global.clearInterval).to.have.been.calledOnce
       })
+
       it('should restart refresher when already finished', () => {
         overheadController.startGlobalContext()
         overheadController.finishGlobalContext()
@@ -216,6 +223,7 @@ describe('Overhead controller', () => {
       })
     })
   })
+
   describe('full feature', () => {
     describe('multiple request at same time', () => {
       const TEST_REQUEST_STARTED = 'test-request-started'

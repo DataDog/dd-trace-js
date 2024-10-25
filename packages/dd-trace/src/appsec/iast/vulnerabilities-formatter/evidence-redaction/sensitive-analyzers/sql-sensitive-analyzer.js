@@ -68,7 +68,7 @@ module.exports = function extractSensitiveRanges (evidence) {
   try {
     let pattern = patterns[evidence.dialect]
     if (!pattern) {
-      pattern = patterns['ANSI']
+      pattern = patterns.ANSI
     }
     pattern.lastIndex = 0
     const tokens = []

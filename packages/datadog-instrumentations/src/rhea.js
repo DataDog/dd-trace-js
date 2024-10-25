@@ -22,7 +22,7 @@ const dispatchReceiveCh = channel('apm:rhea:receive:dispatch')
 const errorReceiveCh = channel('apm:rhea:receive:error')
 const finishReceiveCh = channel('apm:rhea:receive:finish')
 
-const contexts = new WeakMap()
+const contexts = new WeakMap() // key: delivery Fn, val: context
 
 addHook({ name: 'rhea', versions: ['>=1'] }, rhea => {
   shimmer.wrap(rhea.message, 'encode', encode => function (msg) {
@@ -45,14 +45,17 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
     const { host, port } = getHostAndPort(this.connection)
 
     const targetAddress = this.options && this.options.target &&
-      this.options.target.address ? this.options.target.address : undefined
+      this.options.target.address
+      ? this.options.target.address
+      : undefined
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
       startSendCh.publish({ targetAddress, host, port, msg })
       const delivery = send.apply(this, arguments)
       const context = {
-        asyncResource
+        asyncResource,
+        connection: this.connection
       }
       contexts.set(delivery, context)
 
@@ -80,7 +83,8 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
 
         if (msgObj.delivery) {
           const context = {
-            asyncResource
+            asyncResource,
+            connection: this.connection
           }
           contexts.set(msgObj.delivery, context)
           msgObj.delivery.update = wrapDeliveryUpdate(msgObj.delivery, msgObj.delivery.update)
@@ -114,7 +118,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/connection.js' }, Connecti
 
           asyncResource.runInAsyncScope(() => {
             errorReceiveCh.publish(error)
-            beforeFinish(delivery, null)
+            exports.beforeFinish(delivery, null)
             finishReceiveCh.publish()
           })
         })
@@ -149,11 +153,11 @@ function wrapDeliveryUpdate (obj, update) {
   const asyncResource = context.asyncResource
   if (obj && asyncResource) {
     const cb = asyncResource.bind(update)
-    return AsyncResource.bind(function wrappedUpdate (settled, stateData) {
+    return shimmer.wrapFunction(cb, cb => AsyncResource.bind(function wrappedUpdate (settled, stateData) {
       const state = getStateFromData(stateData)
       dispatchReceiveCh.publish({ state })
       return cb.apply(this, arguments)
-    })
+    }))
   }
   return function wrappedUpdate (settled, stateData) {
     return update.apply(this, arguments)
@@ -174,7 +178,7 @@ function patchCircularBuffer (proto, Session) {
         }
         if (CircularBuffer && !patched.has(CircularBuffer.prototype)) {
           shimmer.wrap(CircularBuffer.prototype, 'pop_if', popIf => function (fn) {
-            arguments[0] = AsyncResource.bind(function (entry) {
+            arguments[0] = shimmer.wrapFunction(fn, fn => AsyncResource.bind(function (entry) {
               const context = contexts.get(entry)
               const asyncResource = context && context.asyncResource
 
@@ -185,15 +189,16 @@ function patchCircularBuffer (proto, Session) {
               if (shouldPop) {
                 const remoteState = entry.remote_state
                 const state = remoteState && remoteState.constructor
-                  ? entry.remote_state.constructor.composite_type : undefined
+                  ? entry.remote_state.constructor.composite_type
+                  : undefined
                 asyncResource.runInAsyncScope(() => {
-                  beforeFinish(entry, state)
+                  exports.beforeFinish(entry, state)
                   finishSendCh.publish()
                 })
               }
 
               return shouldPop
-            })
+            }))
             return popIf.apply(this, arguments)
           })
           patched.add(CircularBuffer.prototype)
@@ -217,13 +222,13 @@ function addToInFlightDeliveries (connection, delivery) {
 }
 
 function beforeFinish (delivery, state) {
-  const obj = contexts.get(delivery)
-  if (obj) {
+  const context = contexts.get(delivery)
+  if (context) {
     if (state) {
       dispatchReceiveCh.publish({ state })
     }
-    if (obj.connection && obj.connection[inFlightDeliveries]) {
-      obj.connection[inFlightDeliveries].delete(delivery)
+    if (context.connection && context.connection[inFlightDeliveries]) {
+      context.connection[inFlightDeliveries].delete(delivery)
     }
   }
 }
@@ -238,3 +243,7 @@ function getStateFromData (stateData) {
     }
   }
 }
+
+module.exports.inFlightDeliveries = inFlightDeliveries
+module.exports.beforeFinish = beforeFinish
+module.exports.contexts = contexts

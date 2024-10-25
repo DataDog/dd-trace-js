@@ -4,7 +4,6 @@ const Plugin = require('./plugin')
 const { storage } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
 const { COMPONENT } = require('../constants')
-const Nomenclature = require('../service-naming')
 
 class TracingPlugin extends Plugin {
   constructor (...args) {
@@ -29,7 +28,7 @@ class TracingPlugin extends Plugin {
       kind = this.constructor.kind
     } = opts
 
-    return Nomenclature.serviceName(type, kind, id, opts)
+    return this._tracer._nomenclature.serviceName(type, kind, id, opts)
   }
 
   operationName (opts = {}) {
@@ -39,7 +38,7 @@ class TracingPlugin extends Plugin {
       kind = this.constructor.kind
     } = opts
 
-    return Nomenclature.opName(type, kind, id, opts)
+    return this._tracer._nomenclature.opName(type, kind, id, opts)
   }
 
   configure (config) {
@@ -58,8 +57,12 @@ class TracingPlugin extends Plugin {
     this.activeSpan?.finish()
   }
 
-  error (error) {
-    this.addError(error)
+  error (ctxOrError) {
+    if (ctxOrError?.currentStore) {
+      ctxOrError.currentStore?.span.setTag('error', ctxOrError?.error)
+      return
+    }
+    this.addError(ctxOrError)
   }
 
   addTraceSubs () {
@@ -91,7 +94,7 @@ class TracingPlugin extends Plugin {
   }
 
   addError (error, span = this.activeSpan) {
-    if (!span._spanContext._tags['error']) {
+    if (!span._spanContext._tags.error) {
       // Errors may be wrapped in a context.
       error = (error && error.error) || error
       span.setTag('error', error || 1)

@@ -19,11 +19,14 @@ describe('Plugin', () => {
   describe('fs not instrumented without internal method call', () => {
     let fs
     let tracer
+
     afterEach(() => agent.close({ ritmReset: false }))
+
     beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
       tracer = require('../../dd-trace')
       fs = require('fs')
     }))
+
     describe('with parent span', () => {
       beforeEach((done) => {
         const parentSpan = tracer.startSpan('parent')
@@ -64,24 +67,29 @@ describe('Plugin', () => {
       })
     })
   })
+
   describe('fs', () => {
     let fs
     let tmpdir
     let tracer
+
     afterEach(() => agent.close({ ritmReset: false }))
+
     beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
       tracer = require('../../dd-trace')
       fs = require('fs')
       tracer.use('fs', { enabled: true })
     }))
+
     before(() => {
       tmpdir = realFS.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-js-test'))
-      plugins['fs'] = require('../../datadog-plugin-fs/src')
+      plugins.fs = require('../../datadog-plugin-fs/src')
       channel('dd-trace:instrumentation:load').publish({ name: 'fs' })
     })
+
     after((done) => {
       rimraf(tmpdir, realFS, done)
-      delete plugins['fs']
+      delete plugins.fs
     })
 
     describe('without parent span', () => {
@@ -113,6 +121,7 @@ describe('Plugin', () => {
 
       describe('open', () => {
         let fd
+
         afterEach(() => {
           if (typeof fd === 'number') {
             realFS.closeSync(fd)
@@ -138,6 +147,7 @@ describe('Plugin', () => {
 
       describe('open', () => {
         let fd
+
         afterEach(() => {
           if (typeof fd === 'number') {
             realFS.closeSync(fd)
@@ -177,6 +187,7 @@ describe('Plugin', () => {
 
         it('should handle errors', (done) => {
           const filename = path.join(__filename, Math.random().toString())
+          // eslint-disable-next-line n/handle-callback-err
           fs.open(filename, 'r', (err) => {
             expectOneSpan(agent, done, {
               resource: 'open',
@@ -193,6 +204,7 @@ describe('Plugin', () => {
       if (realFS.promises) {
         describe('promises.open', () => {
           let fd
+
           afterEach(() => {
             if (typeof fd === 'number') {
               realFS.closeSync(fd)
@@ -230,6 +242,7 @@ describe('Plugin', () => {
 
           it('should handle errors', (done) => {
             const filename = path.join(__filename, Math.random().toString())
+            // eslint-disable-next-line n/handle-callback-err
             fs.promises.open(filename, 'r').catch((err) => {
               expectOneSpan(agent, done, {
                 resource: 'promises.open',
@@ -246,6 +259,7 @@ describe('Plugin', () => {
 
       describe('openSync', () => {
         let fd
+
         afterEach(() => {
           if (typeof fd === 'number') {
             realFS.closeSync(fd)
@@ -697,9 +711,11 @@ describe('Plugin', () => {
 
       describe('createWriteStream', () => {
         let filename
+
         beforeEach(() => {
           filename = path.join(tmpdir, 'createWriteStream')
         })
+
         afterEach(done => {
           // swallow errors since we're causing a race condition in one of the tests
           realFS.unlink(filename, () => done())
@@ -807,7 +823,7 @@ describe('Plugin', () => {
 
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
-            resource: resource,
+            resource,
             meta: {
               'file.descriptor': fd.toString(),
               'file.mode': mode.toString(8)
@@ -1282,6 +1298,7 @@ describe('Plugin', () => {
 
       describe('mkdtemp', () => {
         let tmpdir
+
         afterEach(() => {
           try {
             realFS.rmdirSync(tmpdir)
@@ -1313,6 +1330,7 @@ describe('Plugin', () => {
 
       describe('mkdtempSync', () => {
         let tmpdir
+
         afterEach(() => {
           try {
             realFS.rmdirSync(tmpdir)
@@ -1348,11 +1366,14 @@ describe('Plugin', () => {
               'file.path': __filename
             }
           })
-          fs.exists(__filename, () => {}) // eslint-disable-line node/no-deprecated-api
+          // eslint-disable-next-line n/handle-callback-err
+          // eslint-disable-next-line n/no-deprecated-api
+          fs.exists(__filename, () => {})
         })
 
         it('should support promisification', () => {
-          const exists = util.promisify(fs.exists) // eslint-disable-line node/no-deprecated-api
+          // eslint-disable-next-line n/no-deprecated-api
+          const exists = util.promisify(fs.exists)
 
           return exists(__filename)
         })
@@ -1418,6 +1439,7 @@ describe('Plugin', () => {
         describe('Dir', () => {
           let dirname
           let dir
+
           beforeEach(async () => {
             dirname = path.join(tmpdir, 'dir')
             fs.mkdirSync(dirname)
@@ -1426,6 +1448,7 @@ describe('Plugin', () => {
             fs.writeFileSync(path.join(dirname, '3'), '3')
             dir = await fs.promises.opendir(dirname)
           })
+
           afterEach(async () => {
             try {
               await dir.close()
@@ -1599,11 +1622,13 @@ describe('Plugin', () => {
         describe('FileHandle', () => {
           let filehandle
           let filename
+
           beforeEach(async () => {
             filename = path.join(os.tmpdir(), 'filehandle')
             fs.writeFileSync(filename, 'some data')
             filehandle = await fs.promises.open(filename, 'w+')
           })
+
           afterEach(async () => {
             try {
               await filehandle.close()
@@ -1712,6 +1737,7 @@ describe('Plugin', () => {
 
           describe('chmod', () => {
             let mode
+
             beforeEach(() => {
               mode = realFS.statSync(__filename).mode % 0o100000
             })
@@ -1735,6 +1761,7 @@ describe('Plugin', () => {
           describe('chown', () => {
             let uid
             let gid
+
             beforeEach(() => {
               const stats = realFS.statSync(filename)
               uid = stats.uid
@@ -1932,6 +1959,7 @@ function testHandleErrors (fs, name, tested, args, agent) {
       if (err) reject(err)
       else resolve()
     }
+    // eslint-disable-next-line n/handle-callback-err
     tested(fs, args, null, err => {
       expectOneSpan(agent, done, {
         resource: name,

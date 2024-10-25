@@ -53,7 +53,7 @@ describe('Plugin', () => {
 
         collectionName = id().toString()
 
-        BSON = require(`../../../versions/bson@4.0.0`).get()
+        BSON = require('../../../versions/bson@4.0.0').get()
       })
 
       afterEach(() => {
@@ -108,8 +108,8 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `planCacheListPlans test.$cmd`
-                const query = `{}`
+                const resource = 'planCacheListPlans test.$cmd'
+                const query = '{}'
 
                 expect(span).to.have.property('resource', resource)
                 expect(span.meta).to.have.property('mongodb.query', query)
@@ -128,7 +128,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collectionName}`
-                const query = `{"_id":"?"}`
+                const query = '{"_id":"?"}'
 
                 expect(span).to.have.property('resource', resource)
                 expect(span.meta).to.have.property('mongodb.query', query)
@@ -146,7 +146,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collectionName}`
-                const query = `{"_bin":"?"}`
+                const query = '{"_bin":"?"}'
 
                 expect(span).to.have.property('resource', resource)
                 expect(span.meta).to.have.property('mongodb.query', query)
@@ -184,7 +184,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collectionName}`
-                const query = `{"_time":{"$timestamp":"0"}}`
+                const query = '{"_time":{"$timestamp":"0"}}'
 
                 expect(span).to.have.property('resource', resource)
                 expect(span.meta).to.have.property('mongodb.query', query)
@@ -202,7 +202,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collectionName}`
-                const query = `{"_id":"?"}`
+                const query = '{"_id":"?"}'
 
                 expect(span).to.have.property('resource', resource)
                 expect(span.meta).to.have.property('mongodb.query', query)
@@ -220,7 +220,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collectionName}`
-                const query = `{"_id":"1234"}`
+                const query = '{"_id":"1234"}'
 
                 expect(span).to.have.property('resource', resource)
                 expect(span.meta).to.have.property('mongodb.query', query)

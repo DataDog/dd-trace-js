@@ -6,10 +6,12 @@ describe('getFormattedJestTestParameters', () => {
     const result = getFormattedJestTestParameters([[[1, 2], [3, 4]]])
     expect(result).to.eql([[1, 2], [3, 4]])
   })
+
   it('returns formatted parameters for strings', () => {
     const result = getFormattedJestTestParameters([['\n    a    | b    | expected\n    '], 1, 2, 3, 3, 5, 8, 0, 1, 1])
     expect(result).to.eql([{ a: 1, b: 2, expected: 3 }, { a: 3, b: 5, expected: 8 }, { a: 0, b: 1, expected: 1 }])
   })
+
   it('does not crash for invalid inputs', () => {
     const resultUndefined = getFormattedJestTestParameters(undefined)
     const resultEmptyArray = getFormattedJestTestParameters([])
@@ -153,18 +155,24 @@ describe('getJestSuitesToRun', () => {
 
   it('adds extra `testEnvironmentOptions` if suite is unskippable or forced to run', () => {
     const skippableSuites = ['fixtures/test-unskippable.js']
-    const testContext = { config: { testEnvironmentOptions: {} } }
+    // tests share a config object
+    const globalConfig = { testEnvironmentOptions: {} }
     const tests = [
-      { path: path.join(__dirname, './fixtures/test-to-run.js') },
+      {
+        path: path.join(__dirname, './fixtures/test-to-run.js'),
+        context: { config: globalConfig }
+      },
       {
         path: path.join(__dirname, './fixtures/test-unskippable.js'),
-        context: testContext
+        context: { config: globalConfig }
       }
     ]
     const rootDir = __dirname
 
     getJestSuitesToRun(skippableSuites, tests, rootDir)
-    expect(testContext.config.testEnvironmentOptions['_ddUnskippable']).to.equal(true)
-    expect(testContext.config.testEnvironmentOptions['_ddForcedToRun']).to.equal(true)
+    expect(globalConfig.testEnvironmentOptions._ddUnskippable)
+      .to.eql(JSON.stringify({ 'fixtures/test-unskippable.js': true }))
+    expect(globalConfig.testEnvironmentOptions._ddForcedToRun)
+      .to.eql(JSON.stringify({ 'fixtures/test-unskippable.js': true }))
   })
 })

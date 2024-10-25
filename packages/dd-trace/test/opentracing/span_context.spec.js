@@ -20,6 +20,7 @@ describe('SpanContext', () => {
       traceId: '123',
       spanId: '456',
       parentId: '789',
+      isRemote: false,
       name: 'test',
       isFinished: true,
       tags: {},
@@ -41,6 +42,7 @@ describe('SpanContext', () => {
       _traceId: '123',
       _spanId: '456',
       _parentId: '789',
+      _isRemote: false,
       _name: 'test',
       _isFinished: true,
       _tags: {},
@@ -54,7 +56,8 @@ describe('SpanContext', () => {
         tags: { foo: 'bar' }
       },
       _traceparent: '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01',
-      _tracestate: TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
+      _tracestate: TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar'),
+      _otelSpanContext: undefined
     })
   })
 
@@ -68,6 +71,7 @@ describe('SpanContext', () => {
       _traceId: '123',
       _spanId: '456',
       _parentId: null,
+      _isRemote: true,
       _name: undefined,
       _isFinished: false,
       _tags: {},
@@ -81,7 +85,8 @@ describe('SpanContext', () => {
         tags: {}
       },
       _traceparent: undefined,
-      _tracestate: undefined
+      _tracestate: undefined,
+      _otelSpanContext: undefined
     })
   })
 

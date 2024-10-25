@@ -2,9 +2,9 @@
 
 const proxyquire = require('proxyquire')
 const agent = require('../../plugins/agent')
-const getPort = require('get-port')
 const axios = require('axios')
 const tracer = require('../../../../../index')
+const { LOGIN_SUCCESS, LOGIN_FAILURE } = require('../../../src/appsec/addresses')
 
 describe('track_event', () => {
   describe('Internal API', () => {
@@ -14,6 +14,8 @@ describe('track_event', () => {
     let getRootSpan
     let setUserTags
     let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent, trackEvent
+    let sample
+    let waf
 
     beforeEach(() => {
       log = {
@@ -28,6 +30,12 @@ describe('track_event', () => {
 
       setUserTags = sinon.stub()
 
+      sample = sinon.stub()
+
+      waf = {
+        run: sinon.spy()
+      }
+
       const trackEvents = proxyquire('../../../src/appsec/sdk/track_event', {
         '../../log': log,
         './utils': {
@@ -35,13 +43,21 @@ describe('track_event', () => {
         },
         './set_user': {
           setUserTags
-        }
+        },
+        '../standalone': {
+          sample
+        },
+        '../waf': waf
       })
 
       trackUserLoginSuccessEvent = trackEvents.trackUserLoginSuccessEvent
       trackUserLoginFailureEvent = trackEvents.trackUserLoginFailureEvent
       trackCustomEvent = trackEvents.trackCustomEvent
       trackEvent = trackEvents.trackEvent
+    })
+
+    afterEach(() => {
+      sinon.restore()
     })
 
     describe('trackUserLoginSuccessEvent', () => {
@@ -100,6 +116,16 @@ describe('track_event', () => {
           'manual.keep': 'true',
           '_dd.appsec.events.users.login.success.sdk': 'true'
         })
+      })
+
+      it('should call waf run with login success address', () => {
+        const user = { id: 'user_id' }
+
+        trackUserLoginSuccessEvent(tracer, user)
+        sinon.assert.calledOnceWithExactly(
+          waf.run,
+          { persistent: { [LOGIN_SUCCESS]: null } }
+        )
       })
     })
 
@@ -177,6 +203,14 @@ describe('track_event', () => {
           'appsec.events.users.login.failure.usr.exists': 'true'
         })
       })
+
+      it('should call waf run with login failure address', () => {
+        trackUserLoginFailureEvent(tracer, 'user_id')
+        sinon.assert.calledOnceWithExactly(
+          waf.run,
+          { persistent: { [LOGIN_FAILURE]: null } }
+        )
+      })
     })
 
     describe('trackCustomEvent', () => {
@@ -249,6 +283,16 @@ describe('track_event', () => {
           'appsec.events.event.metakey2': 'metaValue2'
         })
       })
+
+      it('should call standalone sample', () => {
+        trackEvent('event', undefined, 'trackEvent', rootSpan, undefined)
+
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
+          'appsec.events.event.track': 'true',
+          'manual.keep': 'true'
+        })
+        expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
+      })
     })
   })
 
@@ -265,7 +309,6 @@ describe('track_event', () => {
     }
 
     before(async () => {
-      port = await getPort()
       await agent.load('http')
       http = require('http')
     })
@@ -273,7 +316,10 @@ describe('track_event', () => {
     before(done => {
       const server = new http.Server(listener)
       appListener = server
-        .listen(port, 'localhost', () => done())
+        .listen(port, 'localhost', () => {
+          port = appListener.address().port
+          done()
+        })
     })
 
     after(() => {

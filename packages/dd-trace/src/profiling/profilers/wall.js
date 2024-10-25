@@ -7,15 +7,20 @@ const { HTTP_METHOD, HTTP_ROUTE, RESOURCE_NAME, SPAN_TYPE } = require('../../../
 const { WEB } = require('../../../../../ext/types')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
-const { END_TIMESTAMP, THREAD_NAME, threadNamePrefix } = require('./shared')
+const {
+  END_TIMESTAMP_LABEL,
+  SPAN_ID_LABEL,
+  LOCAL_ROOT_SPAN_ID_LABEL,
+  getNonJSThreadsLabels,
+  getThreadLabels
+} = require('./shared')
 
 const beforeCh = dc.channel('dd-trace:storage:before')
 const enterCh = dc.channel('dd-trace:storage:enter')
 const spanFinishCh = dc.channel('dd-trace:span:finish')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
-const threadName = `${threadNamePrefix} Event Loop`
 
-const MemoizedWebTags = Symbol('NativeWallProfiler.MemoizedWebTags')
+const ProfilingContext = Symbol('NativeWallProfiler.ProfilingContext')
 
 let kSampleCount
 
@@ -39,36 +44,42 @@ function endpointNameFromTags (tags) {
   ].filter(v => v).join(' ')
 }
 
-function getWebTags (startedSpans, i, span) {
-  // Are web tags for this span already memoized?
-  const memoizedWebTags = span[MemoizedWebTags]
-  if (memoizedWebTags !== undefined) {
-    return memoizedWebTags
-  }
-  // No, we'll have to memoize a new value
-  function memoize (tags) {
-    span[MemoizedWebTags] = tags
-    return tags
-  }
-  // Is this span itself a web span?
-  const context = span.context()
-  const tags = context._tags
-  if (isWebServerSpan(tags)) {
-    return memoize(tags)
-  }
-  // It isn't. Get parent's web tags (memoize them too recursively.)
-  // There might be several webspans, for example with next.js, http plugin creates the first span
-  // and then next.js plugin creates a child span, and this child span has the correct endpoint
-  // information. That's why we always use the tags of the closest ancestor web span.
-  const parentId = context._parentId
-  while (--i >= 0) {
-    const ispan = startedSpans[i]
-    if (ispan.context()._spanId === parentId) {
-      return memoize(getWebTags(startedSpans, i, ispan))
+let channelsActivated = false
+function ensureChannelsActivated () {
+  if (channelsActivated) return
+
+  const { AsyncLocalStorage, createHook } = require('async_hooks')
+  const shimmer = require('../../../../datadog-shimmer')
+
+  createHook({ before: () => beforeCh.publish() }).enable()
+
+  let inRun = false
+  shimmer.wrap(AsyncLocalStorage.prototype, 'enterWith', function (original) {
+    return function (...args) {
+      const retVal = original.apply(this, args)
+      if (!inRun) enterCh.publish()
+      return retVal
     }
-  }
-  // Local root span with no web span
-  return memoize(null)
+  })
+
+  shimmer.wrap(AsyncLocalStorage.prototype, 'run', function (original) {
+    return function (store, callback, ...args) {
+      const wrappedCb = shimmer.wrapFunction(callback, cb => function (...args) {
+        inRun = false
+        enterCh.publish()
+        const retVal = cb.apply(this, args)
+        inRun = true
+        return retVal
+      })
+      inRun = true
+      const retVal = original.call(this, store, wrappedCb, ...args)
+      enterCh.publish()
+      inRun = false
+      return retVal
+    }
+  })
+
+  channelsActivated = true
 }
 
 class NativeWallProfiler {
@@ -79,13 +90,15 @@ class NativeWallProfiler {
     this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
     this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
     this._timelineEnabled = !!options.timelineEnabled
+    this._cpuProfilingEnabled = !!options.cpuProfilingEnabled
     // We need to capture span data into the sample context for either code hotspots
     // or endpoint collection.
     this._captureSpanData = this._codeHotspotsEnabled || this._endpointCollectionEnabled
     // We need to run the pprof wall profiler with sample contexts if we're either
     // capturing span data or timeline is enabled (so we need sample timestamps, and for now
-    // timestamps require the sample contexts feature in the pprof wall profiler.)
-    this._withContexts = this._captureSpanData || this._timelineEnabled
+    // timestamps require the sample contexts feature in the pprof wall profiler), or
+    // cpu profiling is enabled.
+    this._withContexts = this._captureSpanData || this._timelineEnabled || this._cpuProfilingEnabled
     this._v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
     this._mapper = undefined
     this._pprof = undefined
@@ -96,12 +109,9 @@ class NativeWallProfiler {
         this._enter = this._enter.bind(this)
         this._spanFinished = this._spanFinished.bind(this)
       }
-      this._generateLabels = this._generateLabels.bind(this)
-    } else {
-      // Explicitly assigning, to express the intent that this is meant to be
-      // undefined when passed to pprof.time.stop() when not using sample contexts.
-      this._generateLabels = undefined
     }
+    this._generateLabels = this._generateLabels.bind(this)
+
     this._logger = options.logger
     this._started = false
   }
@@ -116,6 +126,8 @@ class NativeWallProfiler {
 
   start ({ mapper } = {}) {
     if (this._started) return
+
+    ensureChannelsActivated()
 
     this._mapper = mapper
     this._pprof = require('@datadog/pprof')
@@ -135,18 +147,15 @@ class NativeWallProfiler {
       sourceMapper: this._mapper,
       withContexts: this._withContexts,
       lineNumbers: false,
-      workaroundV8Bug: this._v8ProfilerBugWorkaroundEnabled
+      workaroundV8Bug: this._v8ProfilerBugWorkaroundEnabled,
+      collectCpuTime: this._cpuProfilingEnabled
     })
 
     if (this._withContexts) {
-      this._currentContext = {}
-      this._pprof.time.setContext(this._currentContext)
+      this._setNewContext()
 
       if (this._captureSpanData) {
         this._profilerState = this._pprof.time.getState()
-        this._lastSpan = undefined
-        this._lastStartedSpans = undefined
-        this._lastWebTags = undefined
         this._lastSampleCount = 0
 
         beforeCh.subscribe(this._enter)
@@ -164,51 +173,78 @@ class NativeWallProfiler {
     const sampleCount = this._profilerState[kSampleCount]
     if (sampleCount !== this._lastSampleCount) {
       this._lastSampleCount = sampleCount
-      const context = this._currentContext
-      this._currentContext = {}
-      this._pprof.time.setContext(this._currentContext)
+      const context = this._currentContext.ref
+      this._setNewContext()
 
       this._updateContext(context)
     }
 
     const span = getActiveSpan()
-    if (span) {
+    this._currentContext.ref = span ? this._getProfilingContext(span) : {}
+  }
+
+  _getProfilingContext (span) {
+    let profilingContext = span[ProfilingContext]
+    if (profilingContext === undefined) {
       const context = span.context()
-      this._lastSpan = span
       const startedSpans = getStartedSpans(context)
-      this._lastStartedSpans = startedSpans
-      if (this._endpointCollectionEnabled) {
-        this._lastWebTags = getWebTags(startedSpans, startedSpans.length, span)
+
+      let spanId
+      let rootSpanId
+      if (this._codeHotspotsEnabled) {
+        spanId = context._spanId
+        rootSpanId = startedSpans.length ? startedSpans[0].context()._spanId : context._spanId
       }
-    } else {
-      this._lastStartedSpans = undefined
-      this._lastSpan = undefined
-      this._lastWebTags = undefined
+
+      let webTags
+      if (this._endpointCollectionEnabled) {
+        const tags = context._tags
+        if (isWebServerSpan(tags)) {
+          webTags = tags
+        } else {
+          // Get parent's context's web tags
+          const parentId = context._parentId
+          for (let i = startedSpans.length; --i >= 0;) {
+            const ispan = startedSpans[i]
+            if (ispan.context()._spanId === parentId) {
+              webTags = this._getProfilingContext(ispan).webTags
+              break
+            }
+          }
+        }
+      }
+
+      profilingContext = { spanId, rootSpanId, webTags }
+      span[ProfilingContext] = profilingContext
     }
+    return profilingContext
+  }
+
+  _setNewContext () {
+    this._pprof.time.setContext(
+      this._currentContext = {
+        ref: {}
+      }
+    )
   }
 
   _updateContext (context) {
-    if (!this._lastSpan) {
-      return
+    if (typeof context.spanId === 'object') {
+      context.spanId = context.spanId.toString(10)
     }
-    if (this._codeHotspotsEnabled) {
-      context.spanId = this._lastSpan.context().toSpanId()
-      const rootSpan = this._lastStartedSpans[0]
-      if (rootSpan) {
-        context.rootSpanId = rootSpan.context().toSpanId()
-      }
+    if (typeof context.rootSpanId === 'object') {
+      context.rootSpanId = context.rootSpanId.toString(10)
     }
-    if (this._lastWebTags) {
-      context.webTags = this._lastWebTags
+    if (context.webTags !== undefined && context.endpoint === undefined) {
       // endpoint may not be determined yet, but keep it as fallback
       // if tags are not available anymore during serialization
-      context.endpoint = endpointNameFromTags(this._lastWebTags)
+      context.endpoint = endpointNameFromTags(context.webTags)
     }
   }
 
   _spanFinished (span) {
-    if (span[MemoizedWebTags]) {
-      span[MemoizedWebTags] = undefined
+    if (span[ProfilingContext] !== undefined) {
+      span[ProfilingContext] = undefined
     }
   }
 
@@ -224,35 +260,61 @@ class NativeWallProfiler {
 
   _stop (restart) {
     if (!this._started) return
+
     if (this._captureSpanData) {
       // update last sample context if needed
       this._enter()
       this._lastSampleCount = 0
     }
     const profile = this._pprof.time.stop(restart, this._generateLabels)
+
     if (restart) {
       const v8BugDetected = this._pprof.time.v8ProfilerStuckEventLoopDetected()
       if (v8BugDetected !== 0) {
         this._reportV8bug(v8BugDetected === 1)
       }
+    } else {
+      if (this._captureSpanData) {
+        beforeCh.unsubscribe(this._enter)
+        enterCh.unsubscribe(this._enter)
+        spanFinishCh.unsubscribe(this._spanFinished)
+        this._profilerState = undefined
+      }
+      this._started = false
     }
+
     return profile
   }
 
-  _generateLabels ({ context: { spanId, rootSpanId, webTags, endpoint }, timestamp }) {
-    const labels = this._timelineEnabled ? {
-      [THREAD_NAME]: threadName,
-      // Incoming timestamps are in microseconds, we emit nanos.
-      [END_TIMESTAMP]: timestamp * 1000n
-    } : {}
+  _generateLabels ({ node, context }) {
+    // check for special node that represents CPU time all non-JS threads.
+    // In that case only return a special thread name label since we cannot associate any timestamp/span/endpoint to it.
+    if (node.name === this._pprof.time.constants.NON_JS_THREADS_FUNCTION_NAME) {
+      return getNonJSThreadsLabels()
+    }
 
-    if (spanId) {
-      labels['span id'] = spanId
+    if (context == null) {
+      // generateLabels is also called for samples without context.
+      // In that case just return thread labels.
+      return getThreadLabels()
     }
-    if (rootSpanId) {
-      labels['local root span id'] = rootSpanId
+
+    const labels = { ...getThreadLabels() }
+
+    const { context: { ref: { spanId, rootSpanId, webTags, endpoint } }, timestamp } = context
+
+    if (this._timelineEnabled) {
+      // Incoming timestamps are in microseconds, we emit nanos.
+      labels[END_TIMESTAMP_LABEL] = timestamp * 1000n
     }
-    if (webTags && Object.keys(webTags).length !== 0) {
+
+    if (spanId !== undefined) {
+      labels[SPAN_ID_LABEL] = spanId
+    }
+    if (rootSpanId !== undefined) {
+      labels[LOCAL_ROOT_SPAN_ID_LABEL] = rootSpanId
+    }
+    if (webTags !== undefined && Object.keys(webTags).length !== 0) {
       labels['trace endpoint'] = endpointNameFromTags(webTags)
     } else if (endpoint) {
       // fallback to endpoint computed when sample was taken
@@ -262,8 +324,8 @@ class NativeWallProfiler {
     return labels
   }
 
-  profile () {
-    return this._stop(true)
+  profile (restart) {
+    return this._stop(restart)
   }
 
   encode (profile) {
@@ -271,21 +333,11 @@ class NativeWallProfiler {
   }
 
   stop () {
-    if (!this._started) return
+    this._stop(false)
+  }
 
-    const profile = this._stop(false)
-    if (this._captureSpanData) {
-      beforeCh.unsubscribe(this._enter)
-      enterCh.unsubscribe(this._enter)
-      spanFinishCh.unsubscribe(this._spanFinished)
-      this._profilerState = undefined
-      this._lastSpan = undefined
-      this._lastStartedSpans = undefined
-      this._lastWebTags = undefined
-    }
-
-    this._started = false
-    return profile
+  isStarted () {
+    return this._started
   }
 }
 

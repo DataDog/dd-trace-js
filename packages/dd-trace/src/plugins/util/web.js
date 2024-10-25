@@ -1,6 +1,6 @@
 'use strict'
 
-const uniq = require('lodash.uniq')
+const uniq = require('../../../../datadog-core/src/utils/src/uniq')
 const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = 'http_headers'
 const log = require('../../log')
@@ -36,6 +36,8 @@ const contexts = new WeakMap()
 const ends = new WeakMap()
 
 const web = {
+  TYPE: WEB,
+
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
     const headers = getHeadersToRecord(config)
@@ -63,7 +65,7 @@ const web = {
     if (!span) return
 
     span.context()._name = `${name}.request`
-    span.context()._tags['component'] = name
+    span.context()._tags.component = name
 
     web.setConfig(req, config)
   },
@@ -103,7 +105,7 @@ const web = {
     context.res = res
 
     this.setConfig(req, config)
-    addRequestTags(context)
+    addRequestTags(context, this.TYPE)
 
     return span
   },
@@ -263,7 +265,7 @@ const web = {
     const context = contexts.get(req)
     const span = context.span
     const error = context.error
-    const hasExistingError = span.context()._tags['error'] || span.context()._tags[ERROR_MESSAGE]
+    const hasExistingError = span.context()._tags.error || span.context()._tags[ERROR_MESSAGE]
 
     if (!hasExistingError && !context.config.validateStatus(statusCode)) {
       span.setTag(ERROR, error || true)
@@ -296,7 +298,7 @@ const web = {
 
     if (context.finished && !req.stream) return
 
-    addRequestTags(context)
+    addRequestTags(context, this.TYPE)
     addResponseTags(context)
 
     context.config.hooks.request(context.span, req, res)
@@ -405,7 +407,7 @@ function addAllowHeaders (req, res, headers) {
 }
 
 function isOriginAllowed (req, headers) {
-  const origin = req.headers['origin']
+  const origin = req.headers.origin
   const allowOrigin = headers['access-control-allow-origin']
 
   return origin && (allowOrigin === '*' || allowOrigin === origin)
@@ -423,7 +425,7 @@ function reactivate (req, fn) {
     : fn()
 }
 
-function addRequestTags (context) {
+function addRequestTags (context, spanType) {
   const { req, span, config } = context
   const url = extractURL(req)
 
@@ -431,7 +433,7 @@ function addRequestTags (context) {
     [HTTP_URL]: web.obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
-    [SPAN_TYPE]: WEB,
+    [SPAN_TYPE]: spanType,
     [HTTP_USERAGENT]: req.headers['user-agent']
   })
 
@@ -498,7 +500,7 @@ function extractURL (req) {
     return `${headers[HTTP2_HEADER_SCHEME]}://${headers[HTTP2_HEADER_AUTHORITY]}${headers[HTTP2_HEADER_PATH]}`
   } else {
     const protocol = getProtocol(req)
-    return `${protocol}://${req.headers['host']}${req.originalUrl || req.url}`
+    return `${protocol}://${req.headers.host}${req.originalUrl || req.url}`
   }
 }
 

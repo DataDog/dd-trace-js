@@ -41,8 +41,8 @@ describe('plugins/util/web', () => {
     req = {
       method: 'GET',
       headers: {
-        'host': 'localhost',
-        'date': 'now'
+        host: 'localhost',
+        date: 'now'
       }
     }
     end = sinon.stub()
@@ -250,8 +250,8 @@ describe('plugins/util/web', () => {
       })
 
       it('should add configured headers to the span tags', () => {
-        req.headers['req'] = 'incoming'
-        req.headers['res'] = 'outgoing'
+        req.headers.req = 'incoming'
+        req.headers.res = 'outgoing'
         config.headers = ['host', 'req:http.req', 'server', 'res:http.res']
         config = web.normalizeConfig(config)
 
@@ -353,7 +353,7 @@ describe('plugins/util/web', () => {
         ].join(',')
 
         req.method = 'OPTIONS'
-        req.headers['origin'] = 'http://test.com'
+        req.headers.origin = 'http://test.com'
         req.headers['access-control-request-headers'] = headers
 
         res.getHeaders.returns({
@@ -374,7 +374,7 @@ describe('plugins/util/web', () => {
         ].join(',')
 
         req.method = 'OPTIONS'
-        req.headers['origin'] = 'http://test.com'
+        req.headers.origin = 'http://test.com'
         req.headers['access-control-request-headers'] = headers
 
         res.getHeaders.returns({
@@ -392,7 +392,7 @@ describe('plugins/util/web', () => {
         const headers = ['x-datadog-trace-id']
 
         req.method = 'OPTIONS'
-        req.headers['origin'] = 'http://test.com'
+        req.headers.origin = 'http://test.com'
         req.headers['access-control-request-headers'] = headers
 
         web.instrument(tracer, config, req, res, 'test.request')
@@ -404,7 +404,7 @@ describe('plugins/util/web', () => {
 
       it('should handle CORS preflight when no header was requested', () => {
         req.method = 'OPTIONS'
-        req.headers['origin'] = 'http://test.com'
+        req.headers.origin = 'http://test.com'
 
         res.getHeaders.returns({
           'access-control-allow-origin': 'http://test.com'
@@ -902,7 +902,7 @@ describe('plugins/util/web', () => {
 
     beforeEach(() => {
       config = {
-        queryStringObfuscation: new RegExp('secret', 'gi')
+        queryStringObfuscation: /secret/gi
       }
     })
 

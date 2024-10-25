@@ -7,7 +7,7 @@ const { Verbosity } = require('../../../../src/appsec/iast/telemetry/verbosity')
 
 describe('rewriter telemetry', () => {
   let iastTelemetry, rewriter, getRewriteFunction
-  let instrumentedPropagationAdd
+  let instrumentedPropagationInc
 
   beforeEach(() => {
     iastTelemetry = {
@@ -27,7 +27,7 @@ describe('rewriter telemetry', () => {
         }
       }
     }
-    instrumentedPropagationAdd = sinon.stub(INSTRUMENTED_PROPAGATION, 'add')
+    instrumentedPropagationInc = sinon.stub(INSTRUMENTED_PROPAGATION, 'inc')
   })
 
   afterEach(() => {
@@ -40,7 +40,7 @@ describe('rewriter telemetry', () => {
     const rewriteFn = getRewriteFunction(rewriter)
     rewriteFn('const a = b + c', 'test.js')
 
-    expect(instrumentedPropagationAdd).to.not.be.called
+    expect(instrumentedPropagationInc).to.not.be.called
   })
 
   it('should increase information metrics with MANDATORY verbosity', () => {
@@ -49,7 +49,7 @@ describe('rewriter telemetry', () => {
     const rewriteFn = getRewriteFunction(rewriter)
     const result = rewriteFn('const a = b + c', 'test.js')
 
-    expect(instrumentedPropagationAdd).to.be.calledOnceWith(result.metrics.instrumentedPropagation)
+    expect(instrumentedPropagationInc).to.be.calledOnceWith(undefined, result.metrics.instrumentedPropagation)
   })
 
   it('should increase information metrics with INFORMATION verbosity', () => {
@@ -58,7 +58,7 @@ describe('rewriter telemetry', () => {
     const rewriteFn = getRewriteFunction(rewriter)
     const result = rewriteFn('const a = b + c', 'test.js')
 
-    expect(instrumentedPropagationAdd).to.be.calledOnceWith(result.metrics.instrumentedPropagation)
+    expect(instrumentedPropagationInc).to.be.calledOnceWith(undefined, result.metrics.instrumentedPropagation)
   })
 
   it('should increase debug metrics with DEBUG verbosity', () => {
@@ -67,6 +67,6 @@ describe('rewriter telemetry', () => {
     const rewriteFn = getRewriteFunction(rewriter)
     const result = rewriteFn('const a = b + c', 'test.js')
 
-    expect(instrumentedPropagationAdd).to.be.calledOnceWith(result.metrics.instrumentedPropagation)
+    expect(instrumentedPropagationInc).to.be.calledOnceWith(undefined, result.metrics.instrumentedPropagation)
   })
 })

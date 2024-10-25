@@ -6,6 +6,8 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
+const ddpv = require('mocha/package.json').version
+
 describe('Plugin', () => {
   let mysql2
   let tracer
@@ -55,6 +57,7 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             const span = tracer.scope().active()
 
+            // eslint-disable-next-line n/handle-callback-err
             connection.query('SELECT 1 + 1 AS solution', (err, results, fields) => {
               try {
                 expect(results).to.not.be.null
@@ -365,14 +368,15 @@ describe('Plugin', () => {
         it('should contain comment in query text', done => {
           const connect = connection.query('SELECT 1 + 1 AS solution', (...args) => {
             try {
-              expect(connect.sql).to.equal(`/*dddbs='serviced',dde='tester',` +
-              `ddps='test',ddpv='8.4.0'*/ SELECT 1 + 1 AS solution`)
+              expect(connect.sql).to.equal('/*dddb=\'db\',dddbs=\'serviced\',dde=\'tester\',ddh=\'127.0.0.1\',' +
+              `ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
             } catch (e) {
               done(e)
             }
             done()
           })
         })
+
         it('trace query resource should not be changed when propagation is enabled', done => {
           agent.use(traces => {
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
@@ -411,8 +415,8 @@ describe('Plugin', () => {
           const connect = connection.query('SELECT 1 + 1 AS solution', () => {
             try {
               expect(connect.sql).to.equal(
-                `/*dddbs='~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E',dde='tester',` +
-              `ddps='test',ddpv='8.4.0'*/ SELECT 1 + 1 AS solution`)
+                '/*dddb=\'db\',dddbs=\'~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E\',dde=\'tester\',' +
+                `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
               done()
             } catch (e) {
               done(e)
@@ -449,7 +453,7 @@ describe('Plugin', () => {
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
             expect(queryText).to.equal(
-              `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0',` +
+              `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
             `traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
           const clock = sinon.useFakeTimers(new Date())
@@ -458,6 +462,7 @@ describe('Plugin', () => {
             queryText = connect.sql
           })
         })
+
         it('query should inject _dd.dbm_trace_injected into span', done => {
           agent.use(traces => {
             expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
@@ -492,7 +497,8 @@ describe('Plugin', () => {
           const queryPool = pool.query('SELECT 1 + 1 AS solution', () => {
             try {
               expect(queryPool.sql).to.equal(
-                `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0'*/ SELECT 1 + 1 AS solution`)
+                '/*dddb=\'db\',dddbs=\'post\',dde=\'tester\',ddh=\'127.0.0.1\',' +
+                `ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
             } catch (e) {
               done(e)
             }
@@ -529,7 +535,7 @@ describe('Plugin', () => {
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
             expect(queryText).to.equal(
-              `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0',` +
+              `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
             `traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
           const clock = sinon.useFakeTimers(new Date())
@@ -538,6 +544,7 @@ describe('Plugin', () => {
             queryText = queryPool.sql
           })
         })
+
         it('query should inject _dd.dbm_trace_injected into span', done => {
           agent.use(traces => {
             expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')

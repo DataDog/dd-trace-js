@@ -7,6 +7,7 @@ const iastContextFunctions = require('../../../src/appsec/iast/iast-context')
 const overheadController = require('../../../src/appsec/iast/overhead-controller')
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
 const { testInRequest } = require('./utils')
+const { IAST_MODULE } = require('../../../src/appsec/rasp/fs-plugin')
 
 describe('IAST Index', () => {
   beforeEach(() => {
@@ -102,6 +103,8 @@ describe('IAST Index', () => {
     let mockVulnerabilityReporter
     let mockIast
     let mockOverheadController
+    let appsecFsPlugin
+    let analyzers
 
     const config = new Config({
       experimental: {
@@ -125,15 +128,40 @@ describe('IAST Index', () => {
         startGlobalContext: sinon.stub(),
         finishGlobalContext: sinon.stub()
       }
+      appsecFsPlugin = {
+        enable: sinon.stub(),
+        disable: sinon.stub()
+      }
+      analyzers = {
+        enableAllAnalyzers: sinon.stub()
+      }
       mockIast = proxyquire('../../../src/appsec/iast', {
         './vulnerability-reporter': mockVulnerabilityReporter,
-        './overhead-controller': mockOverheadController
+        './overhead-controller': mockOverheadController,
+        '../rasp/fs-plugin': appsecFsPlugin,
+        './analyzers': analyzers
       })
     })
 
     afterEach(() => {
       sinon.restore()
       mockIast.disable()
+    })
+
+    describe('enable', () => {
+      it('should enable AppsecFsPlugin', () => {
+        mockIast.enable(config)
+        expect(appsecFsPlugin.enable).to.have.been.calledOnceWithExactly(IAST_MODULE)
+        expect(analyzers.enableAllAnalyzers).to.have.been.calledAfter(appsecFsPlugin.enable)
+      })
+    })
+
+    describe('disable', () => {
+      it('should disable AppsecFsPlugin', () => {
+        mockIast.enable(config)
+        mockIast.disable()
+        expect(appsecFsPlugin.disable).to.have.been.calledOnceWithExactly(IAST_MODULE)
+      })
     })
 
     describe('managing overhead controller global context', () => {
@@ -143,8 +171,23 @@ describe('IAST Index', () => {
       })
 
       it('should finish global context refresher on iast disabled', () => {
+        mockIast.enable(config)
+
         mockIast.disable()
         expect(mockOverheadController.finishGlobalContext).to.have.been.calledOnce
+      })
+
+      it('should start global context only once when calling enable multiple times', () => {
+        mockIast.enable(config)
+        mockIast.enable(config)
+
+        expect(mockOverheadController.startGlobalContext).to.have.been.calledOnce
+      })
+
+      it('should not finish global context if not enabled before ', () => {
+        mockIast.disable(config)
+
+        expect(mockOverheadController.finishGlobalContext).to.have.been.not.called
       })
     })
 
@@ -156,6 +199,8 @@ describe('IAST Index', () => {
       })
 
       it('should stop vulnerability reporter on iast disabled', () => {
+        mockIast.enable(config)
+
         mockIast.disable()
         expect(mockVulnerabilityReporter.stop).to.have.been.calledOnce
       })

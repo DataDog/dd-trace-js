@@ -2,14 +2,14 @@
 
 const sqs = {}
 
-sqs['create'] = {
+sqs.create = {
   QueueName: 'SQS_QUEUE_NAME',
   Attributes: {
-    'MessageRetentionPeriod': '86400'
+    MessageRetentionPeriod: '86400'
   }
 }
 
-sqs['get'] = {
+sqs.get = {
   QueueUrl: undefined
 }
 

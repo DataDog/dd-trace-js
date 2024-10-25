@@ -6,41 +6,46 @@ const remoteConfig = require('./remote_config')
 const {
   bodyParser,
   cookieParser,
-  graphqlFinishExecute,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   passportVerify,
   queryParser,
   nextBodyParsed,
-  nextQueryParsed
+  nextQueryParsed,
+  expressProcessParams,
+  responseBody,
+  responseWriteHead,
+  responseSetHeader
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const appsecTelemetry = require('./telemetry')
+const apiSecuritySampler = require('./api_security_sampler')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
-const { block, setTemplates } = require('./blocking')
+const { isBlocked, block, setTemplates, getBlockingAction } = require('./blocking')
 const { passportTrackEvent } = require('./passport')
 const { storage } = require('../../../datadog-core')
+const graphql = require('./graphql')
+const rasp = require('./rasp')
+
+const responseAnalyzedSet = new WeakSet()
 
 let isEnabled = false
 let config
-
-function sampleRequest ({ enabled, requestSampling }) {
-  if (!enabled || !requestSampling) {
-    return false
-  }
-
-  return Math.random() <= requestSampling
-}
 
 function enable (_config) {
   if (isEnabled) return
 
   try {
     appsecTelemetry.enable(_config.telemetry)
+    graphql.enable()
+
+    if (_config.appsec.rasp.enabled) {
+      rasp.enable(_config)
+    }
 
     setTemplates(_config)
 
@@ -50,14 +55,19 @@ function enable (_config) {
 
     Reporter.setRateLimit(_config.appsec.rateLimit)
 
+    apiSecuritySampler.configure(_config.appsec)
+
+    bodyParser.subscribe(onRequestBodyParsed)
+    cookieParser.subscribe(onRequestCookieParser)
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
-    bodyParser.subscribe(onRequestBodyParsed)
+    queryParser.subscribe(onRequestQueryParsed)
     nextBodyParsed.subscribe(onRequestBodyParsed)
     nextQueryParsed.subscribe(onRequestQueryParsed)
-    queryParser.subscribe(onRequestQueryParsed)
-    cookieParser.subscribe(onRequestCookieParser)
-    graphqlFinishExecute.subscribe(onGraphqlFinishExecute)
+    expressProcessParams.subscribe(onRequestProcessParams)
+    responseBody.subscribe(onResponseBody)
+    responseWriteHead.subscribe(onResponseWriteHead)
+    responseSetHeader.subscribe(onResponseSetHeader)
 
     if (_config.appsec.eventTracking.enabled) {
       passportVerify.subscribe(onPassportVerify)
@@ -71,6 +81,41 @@ function enable (_config) {
 
     disable()
   }
+}
+
+function onRequestBodyParsed ({ req, res, body, abortController }) {
+  if (body === undefined || body === null) return
+
+  if (!req) {
+    const store = storage.getStore()
+    req = store?.req
+  }
+
+  const rootSpan = web.root(req)
+  if (!rootSpan) return
+
+  const results = waf.run({
+    persistent: {
+      [addresses.HTTP_INCOMING_BODY]: body
+    }
+  }, req)
+
+  handleResults(results, req, res, rootSpan, abortController)
+}
+
+function onRequestCookieParser ({ req, res, abortController, cookies }) {
+  if (!cookies || typeof cookies !== 'object') return
+
+  const rootSpan = web.root(req)
+  if (!rootSpan) return
+
+  const results = waf.run({
+    persistent: {
+      [addresses.HTTP_INCOMING_COOKIES]: cookies
+    }
+  }, req)
+
+  handleResults(results, req, res, rootSpan, abortController)
 }
 
 function incomingHttpStartTranslator ({ req, res, abortController }) {
@@ -88,78 +133,62 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
   const requestHeaders = Object.assign({}, req.headers)
   delete requestHeaders.cookie
 
-  const payload = {
+  const persistent = {
     [addresses.HTTP_INCOMING_URL]: req.url,
     [addresses.HTTP_INCOMING_HEADERS]: requestHeaders,
     [addresses.HTTP_INCOMING_METHOD]: req.method
   }
 
   if (clientIp) {
-    payload[addresses.HTTP_CLIENT_IP] = clientIp
+    persistent[addresses.HTTP_CLIENT_IP] = clientIp
   }
 
-  if (sampleRequest(config.appsec.apiSecurity)) {
-    payload[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
+  if (apiSecuritySampler.sampleRequest(req)) {
+    persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
 
-  const actions = waf.run(payload, req)
+  const actions = waf.run({ persistent }, req)
 
   handleResults(actions, req, res, rootSpan, abortController)
 }
 
 function incomingHttpEndTranslator ({ req, res }) {
-  // TODO: this doesn't support headers sent with res.writeHead()
-  const responseHeaders = Object.assign({}, res.getHeaders())
-  delete responseHeaders['set-cookie']
-
-  const payload = {
-    [addresses.HTTP_INCOMING_RESPONSE_CODE]: '' + res.statusCode,
-    [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
-  }
+  const persistent = {}
 
   // we need to keep this to support other body parsers
   // TODO: no need to analyze it if it was already done by the body-parser hook
   if (req.body !== undefined && req.body !== null) {
-    payload[addresses.HTTP_INCOMING_BODY] = req.body
-  }
-
-  // TODO: temporary express instrumentation, will use express plugin later
-  if (req.params && typeof req.params === 'object') {
-    payload[addresses.HTTP_INCOMING_PARAMS] = req.params
+    persistent[addresses.HTTP_INCOMING_BODY] = req.body
   }
 
   // we need to keep this to support other cookie parsers
-  if (req.cookies && typeof req.cookies === 'object') {
-    payload[addresses.HTTP_INCOMING_COOKIES] = req.cookies
+  if (req.cookies !== null && typeof req.cookies === 'object') {
+    persistent[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
 
-  if (req.query && typeof req.query === 'object') {
-    payload[addresses.HTTP_INCOMING_QUERY] = req.query
+  if (req.query !== null && typeof req.query === 'object') {
+    persistent[addresses.HTTP_INCOMING_QUERY] = req.query
   }
 
-  waf.run(payload, req)
+  if (Object.keys(persistent).length) {
+    waf.run({ persistent }, req)
+  }
 
   waf.disposeContext(req)
 
   Reporter.finishRequest(req, res)
 }
 
-function onRequestBodyParsed ({ req, res, body, abortController }) {
-  if (body === undefined || body === null) return
+function onPassportVerify ({ credentials, user }) {
+  const store = storage.getStore()
+  const rootSpan = store?.req && web.root(store.req)
 
-  if (!req) {
-    const store = storage.getStore()
-    req = store?.req
+  if (!rootSpan) {
+    log.warn('No rootSpan found in onPassportVerify')
+    return
   }
 
-  const rootSpan = web.root(req)
-  if (!rootSpan) return
-
-  const results = waf.run({
-    [addresses.HTTP_INCOMING_BODY]: body
-  }, req)
-
-  handleResults(results, req, res, rootSpan, abortController)
+  passportTrackEvent(credentials, user, rootSpan, config.appsec.eventTracking.mode)
 }
 
 function onRequestQueryParsed ({ req, res, query, abortController }) {
@@ -174,56 +203,83 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
   if (!rootSpan) return
 
   const results = waf.run({
-    [addresses.HTTP_INCOMING_QUERY]: query
+    persistent: {
+      [addresses.HTTP_INCOMING_QUERY]: query
+    }
   }, req)
 
   handleResults(results, req, res, rootSpan, abortController)
 }
 
-function onRequestCookieParser ({ req, res, abortController, cookies }) {
-  if (!cookies || typeof cookies !== 'object') return
+function onRequestProcessParams ({ req, res, abortController, params }) {
+  const rootSpan = web.root(req)
+  if (!rootSpan) return
+
+  if (!params || typeof params !== 'object' || !Object.keys(params).length) return
+
+  const results = waf.run({
+    persistent: {
+      [addresses.HTTP_INCOMING_PARAMS]: params
+    }
+  }, req)
+
+  handleResults(results, req, res, rootSpan, abortController)
+}
+
+function onResponseBody ({ req, body }) {
+  if (!body || typeof body !== 'object') return
+  if (!apiSecuritySampler.isSampled(req)) return
+
+  // we don't support blocking at this point, so no results needed
+  waf.run({
+    persistent: {
+      [addresses.HTTP_INCOMING_RESPONSE_BODY]: body
+    }
+  }, req)
+}
+
+function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
+  // avoid "write after end" error
+  if (isBlocked(res)) {
+    abortController?.abort()
+    return
+  }
+
+  // avoid double waf call
+  if (responseAnalyzedSet.has(res)) {
+    return
+  }
 
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
+  responseHeaders = Object.assign({}, responseHeaders)
+  delete responseHeaders['set-cookie']
+
   const results = waf.run({
-    [addresses.HTTP_INCOMING_COOKIES]: cookies
+    persistent: {
+      [addresses.HTTP_INCOMING_RESPONSE_CODE]: '' + statusCode,
+      [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
+    }
   }, req)
+
+  responseAnalyzedSet.add(res)
 
   handleResults(results, req, res, rootSpan, abortController)
 }
 
-function onPassportVerify ({ credentials, user }) {
-  const store = storage.getStore()
-  const rootSpan = store && store.req && web.root(store.req)
-
-  if (!rootSpan) {
-    log.warn('No rootSpan found in onPassportVerify')
-    return
+function onResponseSetHeader ({ res, abortController }) {
+  if (isBlocked(res)) {
+    abortController?.abort()
   }
-
-  passportTrackEvent(credentials, user, rootSpan, config.appsec.eventTracking.mode)
-}
-
-function onGraphqlFinishExecute ({ context }) {
-  const store = storage.getStore()
-  const req = store?.req
-
-  if (!req) return
-
-  const resolvers = context?.resolvers
-
-  if (!resolvers || typeof resolvers !== 'object') return
-
-  // Don't collect blocking result because it only works in monitor mode.
-  waf.run({ [addresses.HTTP_INCOMING_GRAPHQL_RESOLVERS]: resolvers }, req)
 }
 
 function handleResults (actions, req, res, rootSpan, abortController) {
   if (!actions || !req || !res || !rootSpan || !abortController) return
 
-  if (actions.includes('block')) {
-    block(req, res, rootSpan, abortController)
+  const blockingAction = getBlockingAction(actions)
+  if (blockingAction) {
+    block(req, res, rootSpan, abortController, blockingAction)
   }
 }
 
@@ -234,17 +290,26 @@ function disable () {
   RuleManager.clearAllRules()
 
   appsecTelemetry.disable()
+  graphql.disable()
+  rasp.disable()
 
   remoteConfig.disableWafUpdate()
 
+  apiSecuritySampler.disable()
+
   // Channel#unsubscribe() is undefined for non active channels
   if (bodyParser.hasSubscribers) bodyParser.unsubscribe(onRequestBodyParsed)
-  if (graphqlFinishExecute.hasSubscribers) graphqlFinishExecute.unsubscribe(onGraphqlFinishExecute)
+  if (cookieParser.hasSubscribers) cookieParser.unsubscribe(onRequestCookieParser)
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
-  if (queryParser.hasSubscribers) queryParser.unsubscribe(onRequestQueryParsed)
-  if (cookieParser.hasSubscribers) cookieParser.unsubscribe(onRequestCookieParser)
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
+  if (queryParser.hasSubscribers) queryParser.unsubscribe(onRequestQueryParsed)
+  if (nextBodyParsed.hasSubscribers) nextBodyParsed.unsubscribe(onRequestBodyParsed)
+  if (nextQueryParsed.hasSubscribers) nextQueryParsed.unsubscribe(onRequestQueryParsed)
+  if (expressProcessParams.hasSubscribers) expressProcessParams.unsubscribe(onRequestProcessParams)
+  if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
+  if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
+  if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseSetHeader)
 }
 
 module.exports = {

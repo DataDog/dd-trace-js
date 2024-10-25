@@ -2,28 +2,38 @@
 
 const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
-const ext = require('../../../ext')
 const { setSamplingRules } = require('./startup-log')
+const SamplingRule = require('./sampling_rule')
+const { hasOwn } = require('./util')
 
 const {
   SAMPLING_MECHANISM_DEFAULT,
   SAMPLING_MECHANISM_AGENT,
   SAMPLING_MECHANISM_RULE,
   SAMPLING_MECHANISM_MANUAL,
+  SAMPLING_MECHANISM_REMOTE_USER,
+  SAMPLING_MECHANISM_REMOTE_DYNAMIC,
   SAMPLING_RULE_DECISION,
   SAMPLING_LIMIT_DECISION,
   SAMPLING_AGENT_DECISION,
   DECISION_MAKER_KEY
 } = require('./constants')
 
-const SERVICE_NAME = ext.tags.SERVICE_NAME
-const SAMPLING_PRIORITY = ext.tags.SAMPLING_PRIORITY
-const MANUAL_KEEP = ext.tags.MANUAL_KEEP
-const MANUAL_DROP = ext.tags.MANUAL_DROP
-const USER_REJECT = ext.priority.USER_REJECT
-const AUTO_REJECT = ext.priority.AUTO_REJECT
-const AUTO_KEEP = ext.priority.AUTO_KEEP
-const USER_KEEP = ext.priority.USER_KEEP
+const {
+  tags: {
+    MANUAL_KEEP,
+    MANUAL_DROP,
+    SAMPLING_PRIORITY,
+    SERVICE_NAME
+  },
+  priority: {
+    AUTO_REJECT,
+    AUTO_KEEP,
+    USER_REJECT,
+    USER_KEEP
+  }
+} = require('../../../ext')
+
 const DEFAULT_KEY = 'service:,env:'
 
 const defaultSampler = new Sampler(AUTO_KEEP)
@@ -34,9 +44,9 @@ class PrioritySampler {
     this.update({})
   }
 
-  configure (env, { sampleRate, rateLimit = 100, rules = [] } = {}) {
+  configure (env, { sampleRate, provenance = undefined, rateLimit = 100, rules = [] } = {}) {
     this._env = env
-    this._rules = this._normalizeRules(rules, sampleRate)
+    this._rules = this._normalizeRules(rules, sampleRate, rateLimit, provenance)
     this._limiter = new RateLimiter(rateLimit)
 
     setSamplingRules(this._rules)
@@ -57,7 +67,7 @@ class PrioritySampler {
     if (context._sampling.priority !== undefined) return
     if (!root) return // noop span
 
-    const tag = this._getPriorityFromTags(context._tags)
+    const tag = this._getPriorityFromTags(context._tags, context)
 
     if (this.validate(tag)) {
       context._sampling.priority = tag
@@ -104,7 +114,7 @@ class PrioritySampler {
 
   _getPriorityFromAuto (span) {
     const context = this._getContext(span)
-    const rule = this._findRule(context)
+    const rule = this._findRule(span)
 
     return rule
       ? this._getPriorityByRule(context, rule)
@@ -130,8 +140,12 @@ class PrioritySampler {
   _getPriorityByRule (context, rule) {
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
     context._sampling.mechanism = SAMPLING_MECHANISM_RULE
+    if (rule.provenance === 'customer') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_USER
+    if (rule.provenance === 'dynamic') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_DYNAMIC
 
-    return rule.sampler.isSampled(context) && this._isSampledByRateLimit(context) ? USER_KEEP : USER_REJECT
+    return rule.sample() && this._isSampledByRateLimit(context)
+      ? USER_KEEP
+      : USER_REJECT
   }
 
   _isSampledByRateLimit (context) {
@@ -172,37 +186,21 @@ class PrioritySampler {
     }
   }
 
-  _normalizeRules (rules, sampleRate) {
+  _normalizeRules (rules, sampleRate, rateLimit, provenance) {
     rules = [].concat(rules || [])
 
     return rules
-      .concat({ sampleRate })
+      .concat({ sampleRate, maxPerSecond: rateLimit, provenance })
       .map(rule => ({ ...rule, sampleRate: parseFloat(rule.sampleRate) }))
       .filter(rule => !isNaN(rule.sampleRate))
-      .map(rule => ({ ...rule, sampler: new Sampler(rule.sampleRate) }))
+      .map(SamplingRule.from)
   }
 
-  _findRule (context) {
-    for (let i = 0, l = this._rules.length; i < l; i++) {
-      if (this._matchRule(context, this._rules[i])) return this._rules[i]
+  _findRule (span) {
+    for (const rule of this._rules) {
+      if (rule.match(span)) return rule
     }
   }
-
-  _matchRule (context, rule) {
-    const name = context._name
-    const service = context._tags['service.name']
-
-    if (rule.name instanceof RegExp && !rule.name.test(name)) return false
-    if (typeof rule.name === 'string' && rule.name !== name) return false
-    if (rule.service instanceof RegExp && !rule.service.test(service)) return false
-    if (typeof rule.service === 'string' && rule.service !== service) return false
-
-    return true
-  }
-}
-
-function hasOwn (object, prop) {
-  return Object.prototype.hasOwnProperty.call(object, prop)
 }
 
 module.exports = PrioritySampler

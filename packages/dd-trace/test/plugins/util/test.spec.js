@@ -14,35 +14,39 @@ const {
   mergeCoverage,
   resetCoverage,
   removeInvalidMetadata,
-  parseAnnotations
+  parseAnnotations,
+  getIsFaultyEarlyFlakeDetection,
+  getNumFromKnownTests
 } = require('../../../src/plugins/util/test')
 
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
 
 describe('getTestParametersString', () => {
   it('returns formatted test parameters and removes params from input', () => {
-    const input = { 'test_stuff': [['params'], [{ b: 'c' }]] }
+    const input = { test_stuff: [['params'], [{ b: 'c' }]] }
     expect(getTestParametersString(input, 'test_stuff')).to.equal(
       JSON.stringify({ arguments: ['params'], metadata: {} })
     )
-    expect(input).to.eql({ 'test_stuff': [[{ b: 'c' }]] })
+    expect(input).to.eql({ test_stuff: [[{ b: 'c' }]] })
     expect(getTestParametersString(input, 'test_stuff')).to.equal(
       JSON.stringify({ arguments: [{ b: 'c' }], metadata: {} })
     )
-    expect(input).to.eql({ 'test_stuff': [] })
+    expect(input).to.eql({ test_stuff: [] })
   })
+
   it('does not crash when test name is not found and does not modify input', () => {
-    const input = { 'test_stuff': [['params'], ['params2']] }
+    const input = { test_stuff: [['params'], ['params2']] }
     expect(getTestParametersString(input, 'test_not_present')).to.equal('')
-    expect(input).to.eql({ 'test_stuff': [['params'], ['params2']] })
+    expect(input).to.eql({ test_stuff: [['params'], ['params2']] })
   })
+
   it('does not crash when parameters can not be serialized and removes params from input', () => {
     const circular = { a: 'b' }
     circular.b = circular
 
-    const input = { 'test_stuff': [[circular], ['params2']] }
+    const input = { test_stuff: [[circular], ['params2']] }
     expect(getTestParametersString(input, 'test_stuff')).to.equal('')
-    expect(input).to.eql({ 'test_stuff': [['params2']] })
+    expect(input).to.eql({ test_stuff: [['params2']] })
     expect(getTestParametersString(input, 'test_stuff')).to.equal(
       JSON.stringify({ arguments: ['params2'], metadata: {} })
     )
@@ -55,6 +59,7 @@ describe('getTestSuitePath', () => {
     const testSuitePath = getTestSuitePath(undefined, sourceRoot)
     expect(testSuitePath).to.equal(sourceRoot)
   })
+
   it('returns sourceRoot if the test path has the same value', () => {
     const sourceRoot = '/users/opt'
     const testSuiteAbsolutePath = sourceRoot
@@ -77,11 +82,34 @@ describe('getCodeOwnersFileEntries', () => {
       owners: ['@datadog-dd-trace-js']
     })
   })
+
   it('returns null if CODEOWNERS can not be found', () => {
     const rootDir = path.join(__dirname, '__not_found__')
+    // We have to change the working directory,
+    // otherwise it will find the CODEOWNERS file in the root of dd-trace-js
+    const oldCwd = process.cwd()
+    process.chdir(path.join(__dirname))
+    const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
+    expect(codeOwnersFileEntries).to.equal(null)
+    process.chdir(oldCwd)
+  })
+
+  it('tries both input rootDir and process.cwd()', () => {
+    const rootDir = path.join(__dirname, '__not_found__')
+    const oldCwd = process.cwd()
+
+    process.chdir(path.join(__dirname, '__test__'))
     const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
 
-    expect(codeOwnersFileEntries).to.equal(null)
+    expect(codeOwnersFileEntries[0]).to.eql({
+      pattern: 'packages/dd-trace/test/plugins/util/test.spec.js',
+      owners: ['@datadog-ci-app']
+    })
+    expect(codeOwnersFileEntries[1]).to.eql({
+      pattern: 'packages/dd-trace/test/plugins/util/*',
+      owners: ['@datadog-dd-trace-js']
+    })
+    process.chdir(oldCwd)
   })
 })
 
@@ -91,6 +119,7 @@ describe('getCodeOwnersForFilename', () => {
 
     expect(codeOwners).to.equal(null)
   })
+
   it('returns the code owners for a given file path', () => {
     const rootDir = path.join(__dirname, '__test__')
     const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
@@ -113,15 +142,18 @@ describe('getCodeOwnersForFilename', () => {
 
 describe('coverage utils', () => {
   let coverage
+
   beforeEach(() => {
     delete require.cache[require.resolve('./fixtures/coverage.json')]
     coverage = require('./fixtures/coverage.json')
   })
+
   describe('getCoveredFilenamesFromCoverage', () => {
     it('returns the list of files the code coverage includes', () => {
       const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
       expect(coverageFiles).to.eql(['subtract.js', 'add.js'])
     })
+
     it('returns an empty list if coverage is empty', () => {
       const coverageFiles = getCoveredFilenamesFromCoverage({})
       expect(coverageFiles).to.eql([])
@@ -144,6 +176,7 @@ describe('coverage utils', () => {
       mergeCoverage(coverage, newCoverageMap)
       expect(JSON.stringify(coverage)).to.equal(JSON.stringify(newCoverageMap.toJSON()))
     })
+
     it('returns a copy that is not affected by other copies being reset', () => {
       const newCoverageMap = istanbul.createCoverageMap()
 
@@ -177,7 +210,7 @@ describe('metadata validation', () => {
       [GIT_COMMIT_SHA]: 'abc123'
     }
     const invalidMetadata2 = {
-      [GIT_REPOSITORY_URL]: 'https://datadog.com/repo',
+      [GIT_REPOSITORY_URL]: 'htps://datadog.com/repo',
       [CI_PIPELINE_URL]: 'datadog.com',
       [GIT_COMMIT_SHA]: 'abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123'
     }
@@ -194,9 +227,12 @@ describe('metadata validation', () => {
     const invalidMetadata5 = { [GIT_REPOSITORY_URL]: '', [CI_PIPELINE_URL]: '', [GIT_COMMIT_SHA]: '' }
     const invalidMetadatas = [invalidMetadata1, invalidMetadata2, invalidMetadata3, invalidMetadata4, invalidMetadata5]
     invalidMetadatas.forEach((invalidMetadata) => {
-      expect(JSON.stringify(removeInvalidMetadata(invalidMetadata))).to.equal(JSON.stringify({}))
+      expect(
+        JSON.stringify(removeInvalidMetadata(invalidMetadata)), `${JSON.stringify(invalidMetadata)} is valid`
+      ).to.equal(JSON.stringify({}))
     })
   })
+
   it('should keep valid metadata', () => {
     const validMetadata1 = {
       [GIT_REPOSITORY_URL]: 'https://datadoghq.com/myrepo/repo.git',
@@ -237,6 +273,7 @@ describe('parseAnnotations', () => {
       'test.responsible_team': 'sales'
     })
   })
+
   it('does not crash with invalid arguments', () => {
     const tags = parseAnnotations([
       {},
@@ -246,5 +283,85 @@ describe('parseAnnotations', () => {
       { type: 'test.requirement', description: 'sure' }
     ])
     expect(tags).to.eql({})
+  })
+})
+
+describe('getIsFaultyEarlyFlakeDetection', () => {
+  it('returns false if the absolute number of new suites is smaller or equal than the threshold', () => {
+    const faultyThreshold = 30
+
+    // Session has 50 tests and 25 are marked as new (50%): not faulty.
+    const projectSuites = Array.from({ length: 50 }).map((_, i) => `test${i}.spec.js`)
+    const knownSuites = Array.from({ length: 25 }).reduce((acc, _, i) => {
+      acc[`test${i}.spec.js`] = ['test']
+      return acc
+    }, {})
+
+    const isFaulty = getIsFaultyEarlyFlakeDetection(
+      projectSuites,
+      knownSuites,
+      faultyThreshold
+    )
+    expect(isFaulty).to.be.false
+
+    // Session has 60 tests and 30 are marked as new (50%): not faulty.
+    const projectSuites2 = Array.from({ length: 60 }).map((_, i) => `test${i}.spec.js`)
+    const knownSuites2 = Array.from({ length: 30 }).reduce((acc, _, i) => {
+      acc[`test${i}.spec.js`] = ['test']
+      return acc
+    }, {})
+    const isFaulty2 = getIsFaultyEarlyFlakeDetection(
+      projectSuites2,
+      knownSuites2,
+      faultyThreshold
+    )
+    expect(isFaulty2).to.be.false
+  })
+
+  it('returns true if the percentage is above the threshold', () => {
+    const faultyThreshold = 30
+
+    // Session has 100 tests and 31 are marked as new (31%): faulty.
+    const projectSuites = Array.from({ length: 100 }).map((_, i) => `test${i}.spec.js`)
+    const knownSuites = Array.from({ length: 69 }).reduce((acc, _, i) => {
+      acc[`test${i}.spec.js`] = ['test']
+      return acc
+    }, {})
+
+    const isFaulty = getIsFaultyEarlyFlakeDetection(
+      projectSuites,
+      knownSuites,
+      faultyThreshold
+    )
+    expect(isFaulty).to.be.true
+  })
+})
+
+describe('getNumFromKnownTests', () => {
+  it('calculates the number of tests from the known tests', () => {
+    const knownTests = {
+      testModule: {
+        'test1.spec.js': ['test1', 'test2'],
+        'test2.spec.js': ['test3']
+      }
+    }
+
+    const numTests = getNumFromKnownTests(knownTests)
+    expect(numTests).to.equal(3)
+  })
+
+  it('does not crash with empty dictionaries', () => {
+    const knownTests = {}
+
+    const numTests = getNumFromKnownTests(knownTests)
+    expect(numTests).to.equal(0)
+  })
+
+  it('does not crash if known tests is undefined or null', () => {
+    const numTestsUndefined = getNumFromKnownTests(undefined)
+    expect(numTestsUndefined).to.equal(0)
+
+    const numTestsNull = getNumFromKnownTests(null)
+    expect(numTestsNull).to.equal(0)
   })
 })

@@ -1,10 +1,10 @@
 'use strict'
 
 const axios = require('axios')
-const getPort = require('get-port')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { AsyncLocalStorage } = require('async_hooks')
 
 const versionRange = parseInt(process.versions.node.split('.')[0]) > 14
   ? '<17 || >18'
@@ -47,15 +47,13 @@ describe('Plugin', () => {
 
       if (semver.intersects(version, '>=17')) {
         beforeEach(() => {
-          return getPort()
-            .then(_port => {
-              port = _port
-              server = Hapi.server({
-                address: '127.0.0.1',
-                port
-              })
-              return server.start()
-            })
+          server = Hapi.server({
+            address: 'localhost',
+            port: 0
+          })
+          return server.start().then(() => {
+            port = server.listener.address().port
+          })
         })
 
         afterEach(() => {
@@ -63,19 +61,19 @@ describe('Plugin', () => {
         })
       } else {
         beforeEach(done => {
-          getPort()
-            .then(_port => {
-              port = _port
+          if (Hapi.Server.prototype.connection) {
+            server = new Hapi.Server()
+            server.connection({ address: 'localhost', port })
+          } else {
+            server = new Hapi.Server('localhost', port)
+          }
 
-              if (Hapi.Server.prototype.connection) {
-                server = new Hapi.Server()
-                server.connection({ address: '127.0.0.1', port })
-              } else {
-                server = new Hapi.Server('127.0.0.1', port)
-              }
-
-              server.start(done)
-            })
+          server.start(err => {
+            if (!err) {
+              port = server.listener.address().port
+            }
+            done(err)
+          })
         })
 
         afterEach(done => {
@@ -349,6 +347,30 @@ describe('Plugin', () => {
 
         axios
           .get(`http://localhost:${port}/user/123`)
+          .catch(() => {})
+      })
+
+      it('should persist AsyncLocalStorage context', (done) => {
+        const als = new AsyncLocalStorage()
+        const path = '/path'
+
+        server.ext('onRequest', (request, h) => {
+          als.enterWith({ path: request.path })
+          return reply(request, h)
+        })
+
+        server.route({
+          method: 'GET',
+          path,
+          handler: async (request, h) => {
+            expect(als.getStore()).to.deep.equal({ path })
+            done()
+            return h.response ? h.response() : h()
+          }
+        })
+
+        axios
+          .get(`http://localhost:${port}${path}`)
           .catch(() => {})
       })
     })

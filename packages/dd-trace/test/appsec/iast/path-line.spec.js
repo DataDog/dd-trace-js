@@ -9,12 +9,15 @@ class CallSiteMock {
     this.lineNumber = lineNumber
     this.columnNumber = columnNumber
   }
+
   getLineNumber () {
     return this.lineNumber
   }
+
   getColumnNumber () {
     return this.columnNumber
   }
+
   getFileName () {
     return this.fileName
   }
@@ -37,14 +40,16 @@ describe('path-line', function () {
     'diagnostics_channel'
   ]
   let mockPath, pathLine, mockProcess
+
   beforeEach(() => {
     mockPath = {}
     mockProcess = {}
     pathLine = proxyquire('../../../src/appsec/iast/path-line', {
-      'path': mockPath,
-      'process': mockProcess
+      path: mockPath,
+      process: mockProcess
     })
   })
+
   describe('getFirstNonDDPathAndLine', () => {
     it('call does not fail', () => {
       const obj = pathLine.getFirstNonDDPathAndLine()

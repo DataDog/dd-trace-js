@@ -7,6 +7,7 @@ const Sampler = require('./sampler')
 const Span = require('./span')
 const id = require('../id')
 const SpanContext = require('./span_context')
+const TextMapPropagator = require('../opentracing/propagation/text_map')
 
 class Tracer {
   constructor (library, config, tracerProvider) {
@@ -15,10 +16,30 @@ class Tracer {
     this._tracerProvider = tracerProvider
     // Is there a reason this is public?
     this.instrumentationLibrary = library
+    this._isOtelLibrary = library?.name?.startsWith('@opentelemetry/instrumentation-')
+    this._spanLimits = {}
   }
 
   get resource () {
     return this._tracerProvider.resource
+  }
+
+  _createSpanContextFromParent (parentSpanContext) {
+    return new SpanContext({
+      traceId: parentSpanContext._traceId,
+      spanId: id(),
+      parentId: parentSpanContext._spanId,
+      sampling: parentSpanContext._sampling,
+      baggageItems: Object.assign({}, parentSpanContext._baggageItems),
+      trace: parentSpanContext._trace,
+      tracestate: parentSpanContext._tracestate
+    })
+  }
+
+  // Extracted method to create span context for a new span
+  _createSpanContextForNewSpan (context) {
+    const { traceId, spanId, traceFlags, traceState } = context
+    return TextMapPropagator._convertOtelContextToDatadog(traceId, spanId, traceFlags, traceState)
   }
 
   startSpan (name, options = {}, context = api.context.active()) {
@@ -28,21 +49,11 @@ class Tracer {
     }
     const parentSpan = api.trace.getSpan(context)
     const parentSpanContext = parentSpan && parentSpan.spanContext()
-
     let spanContext
-    // TODO: Need a way to get 128-bit trace IDs for the validity check API to work...
-    // if (parent && api.trace.isSpanContextValid(parent)) {
-    if (parentSpanContext && parentSpanContext.traceId) {
-      const parent = parentSpanContext._ddContext
-      spanContext = new SpanContext({
-        traceId: parent._traceId,
-        spanId: id(),
-        parentId: parent._spanId,
-        sampling: parent._sampling,
-        baggageItems: Object.assign({}, parent._baggageItems),
-        trace: parent._trace,
-        tracestate: parent._tracestate
-      })
+    if (parentSpanContext && api.trace.isSpanContextValid(parentSpanContext)) {
+      spanContext = parentSpanContext._ddContext
+        ? this._createSpanContextFromParent(parentSpanContext._ddContext)
+        : this._createSpanContextForNewSpan(parentSpanContext)
     } else {
       spanContext = new SpanContext()
     }
@@ -117,6 +128,11 @@ class Tracer {
 
   getActiveSpanProcessor () {
     return this._tracerProvider.getActiveSpanProcessor()
+  }
+
+  // not used in our codebase but needed for compatibility. See issue #1244
+  getSpanLimits () {
+    return this._spanLimits
   }
 }
 

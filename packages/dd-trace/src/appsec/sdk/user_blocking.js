@@ -3,17 +3,14 @@
 const { USER_ID } = require('../addresses')
 const waf = require('../waf')
 const { getRootSpan } = require('./utils')
-const { block } = require('../blocking')
+const { block, getBlockingAction } = require('../blocking')
 const { storage } = require('../../../../datadog-core')
 const { setUserTags } = require('./set_user')
 const log = require('../../log')
 
 function isUserBlocked (user) {
-  const actions = waf.run({ [USER_ID]: user.id })
-
-  if (!actions) return false
-
-  return actions.includes('block')
+  const actions = waf.run({ persistent: { [USER_ID]: user.id } })
+  return !!getBlockingAction(actions)
 }
 
 function checkUserAndSetUser (tracer, user) {

@@ -14,14 +14,14 @@ class DynamoDb extends BaseAwsSdkPlugin {
         Object.assign(tags, {
           'resource.name': `${operation} ${params.TableName}`,
           'aws.dynamodb.table_name': params.TableName,
-          'tablename': params.TableName
+          tablename: params.TableName
         })
       }
 
       // batch operations have different format, collect table name for batch
       // https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/DynamoDB.html#batchGetItem-property`
       // dynamoDB batch TableName
-      if (params.RequestItems) {
+      if (params.RequestItems !== null) {
         if (typeof params.RequestItems === 'object') {
           if (Object.keys(params.RequestItems).length === 1) {
             const tableName = Object.keys(params.RequestItems)[0]
@@ -30,7 +30,7 @@ class DynamoDb extends BaseAwsSdkPlugin {
             Object.assign(tags, {
               'resource.name': `${operation} ${tableName}`,
               'aws.dynamodb.table_name': tableName,
-              'tablename': tableName
+              tablename: tableName
             })
           }
         }

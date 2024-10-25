@@ -11,7 +11,7 @@ esbuild.build({
   outfile: 'skip-external-out.js',
   plugins: [ddPlugin],
   platform: 'node',
-  target: ['node16'],
+  target: ['node18'],
   external: [
     'knex'
   ]

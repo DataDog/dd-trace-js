@@ -1,6 +1,6 @@
 'use strict'
 
-const graphql = require(`../../../versions/graphql`).get()
+const graphql = require('../../../versions/graphql').get()
 
 const Human = new graphql.GraphQLObjectType({
   name: 'Human',

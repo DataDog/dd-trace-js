@@ -32,13 +32,6 @@ function globMatch (pattern, subject) {
     if (px < pattern.length) {
       const c = pattern[px]
       switch (c) {
-        default: // ordinary character
-          if (sx < subject.length && subject[sx] === c) {
-            px++
-            sx++
-            continue
-          }
-          break
         case '?':
           if (sx < subject.length) {
             px++
@@ -51,6 +44,13 @@ function globMatch (pattern, subject) {
           nextSx = sx + 1
           px++
           continue
+        default: // ordinary character
+          if (sx < subject.length && subject[sx] === c) {
+            px++
+            sx++
+            continue
+          }
+          break
       }
     }
     if (nextSx > 0 && nextSx <= subject.length) {
@@ -69,10 +69,15 @@ function calculateDDBasePath (dirname) {
   return dirSteps.slice(0, packagesIndex + 1).join(path.sep) + path.sep
 }
 
+function hasOwn (object, prop) {
+  return Object.prototype.hasOwnProperty.call(object, prop)
+}
+
 module.exports = {
   isTrue,
   isFalse,
   isError,
   globMatch,
-  calculateDDBasePath
+  calculateDDBasePath,
+  hasOwn
 }

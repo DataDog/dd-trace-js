@@ -20,7 +20,7 @@ describe('esm', () => {
   before(async function () {
     this.timeout(20000)
     sandbox = await createSandbox(['net', 'get-port'], false, [
-      `./packages/datadog-plugin-net/test/integration-test/*`])
+      './packages/datadog-plugin-net/test/integration-test/*'])
   })
 
   after(async () => {

@@ -1,7 +1,5 @@
 'use strict'
 
-const EventEmitter = require('events')
-
 require('./setup/tap')
 
 describe('TracerProxy', () => {
@@ -26,9 +24,13 @@ describe('TracerProxy', () => {
   let iast
   let PluginManager
   let pluginManager
+  let flare
   let remoteConfig
+  let handlers
   let rc
-  let noopDogStatsD
+  let dogStatsD
+  let noopDogStatsDClient
+  let NoopDogStatsDClient
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = false
@@ -71,6 +73,14 @@ describe('TracerProxy', () => {
       trackCustomEvent: sinon.stub()
     }
 
+    noopDogStatsDClient = {
+      increment: sinon.spy(),
+      gauge: sinon.spy(),
+      distribution: sinon.spy(),
+      histogram: sinon.spy(),
+      flush: sinon.spy()
+    }
+
     {
       const dogstatsdIncrements = []
       let dogstatsdConfig
@@ -80,15 +90,17 @@ describe('TracerProxy', () => {
         constructor (cfg) {
           dogstatsdConfig = cfg
         }
+
         increment () {
           dogstatsdIncrements.push(arguments)
         }
+
         flush () {
           dogstatsdFlushes++
         }
       }
 
-      noopDogStatsD = {
+      dogStatsD = {
         CustomMetrics: FauxDogStatsDClient,
         _increments: () => dogstatsdIncrements,
         _config: () => dogstatsdConfig,
@@ -105,10 +117,12 @@ describe('TracerProxy', () => {
     AppsecSdk = sinon.stub().returns(appsecSdk)
     NoopAppsecSdk = sinon.stub().returns(noopAppsecSdk)
     PluginManager = sinon.stub().returns(pluginManager)
+    NoopDogStatsDClient = sinon.stub().returns(noopDogStatsDClient)
 
     config = {
       tracing: true,
       experimental: {},
+      injectionEnabled: [],
       logger: 'logger',
       debug: true,
       profiling: {},
@@ -130,7 +144,8 @@ describe('TracerProxy', () => {
     }
 
     appsec = {
-      enable: sinon.spy()
+      enable: sinon.spy(),
+      disable: sinon.spy()
     }
 
     telemetry = {
@@ -138,21 +153,34 @@ describe('TracerProxy', () => {
     }
 
     iast = {
-      enable: sinon.spy()
+      enable: sinon.spy(),
+      disable: sinon.spy()
+    }
+
+    flare = {
+      enable: sinon.spy(),
+      disable: sinon.spy(),
+      prepare: sinon.spy(),
+      send: sinon.spy(),
+      cleanup: sinon.spy()
     }
 
     remoteConfig = {
       enable: sinon.stub()
     }
 
-    rc = new EventEmitter()
+    handlers = new Map()
+    rc = {
+      setProductHandler (product, handler) { handlers.set(product, handler) },
+      removeProductHandler (product) { handlers.delete(product) }
+    }
 
     remoteConfig.enable.returns(rc)
 
     NoopProxy = proxyquire('../src/noop/proxy', {
       './tracer': NoopTracer,
       '../appsec/sdk/noop': NoopAppsecSdk,
-      './dogstatsd': noopDogStatsD
+      './dogstatsd': NoopDogStatsDClient
     })
 
     Proxy = proxyquire('../src/proxy', {
@@ -168,7 +196,9 @@ describe('TracerProxy', () => {
       './telemetry': telemetry,
       './appsec/remote_config': remoteConfig,
       './appsec/sdk': AppsecSdk,
-      './dogstatsd': noopDogStatsD
+      './dogstatsd': dogStatsD,
+      './noop/dogstatsd': NoopDogStatsDClient,
+      './flare': flare
     })
 
     proxy = new Proxy()
@@ -226,11 +256,127 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        rc.emit('APM_TRACING', 'apply', { lib_config: conf })
+        handlers.get('APM_TRACING')('apply', { lib_config: conf })
 
         expect(config.configure).to.have.been.calledWith(conf)
         expect(tracer.configure).to.have.been.calledWith(config)
         expect(pluginManager.configure).to.have.been.calledWith(config)
+      })
+
+      it('should support enabling debug logs for tracer flares', () => {
+        const logLevel = 'debug'
+
+        proxy.init()
+
+        handlers.get('AGENT_CONFIG')('apply', {
+          config: {
+            log_level: logLevel
+          },
+          name: 'flare-log-level.debug'
+        })
+
+        expect(flare.enable).to.have.been.calledWith(config)
+        expect(flare.prepare).to.have.been.calledWith(logLevel)
+      })
+
+      it('should support sending tracer flares', () => {
+        const task = {
+          case_id: '111',
+          hostname: 'myhostname',
+          user_handle: 'user.name@datadoghq.com'
+        }
+
+        proxy.init()
+
+        handlers.get('AGENT_TASK')('apply', {
+          args: task,
+          task_type: 'tracer_flare',
+          uuid: 'd53fc8a4-8820-47a2-aa7d-d565582feb81'
+        })
+
+        expect(flare.enable).to.have.been.calledWith(config)
+        expect(flare.send).to.have.been.calledWith(task)
+      })
+
+      it('should cleanup flares when the config is removed', () => {
+        const conf = {
+          config: {
+            log_level: 'debug'
+          },
+          name: 'flare-log-level.debug'
+        }
+
+        proxy.init()
+
+        handlers.get('AGENT_CONFIG')('apply', conf)
+        handlers.get('AGENT_CONFIG')('unapply', conf)
+
+        expect(flare.disable).to.have.been.called
+      })
+
+      it('should support applying remote config', () => {
+        const RemoteConfigProxy = proxyquire('../src/proxy', {
+          './tracer': DatadogTracer,
+          './appsec': appsec,
+          './appsec/iast': iast,
+          './appsec/remote_config': remoteConfig,
+          './appsec/sdk': AppsecSdk
+        })
+
+        const remoteConfigProxy = new RemoteConfigProxy()
+        remoteConfigProxy.init()
+        expect(DatadogTracer).to.have.been.calledOnce
+        expect(AppsecSdk).to.have.been.calledOnce
+        expect(appsec.enable).to.not.have.been.called
+        expect(iast.enable).to.not.have.been.called
+
+        let conf = { tracing_enabled: false }
+        handlers.get('APM_TRACING')('apply', { lib_config: conf })
+        expect(appsec.disable).to.not.have.been.called
+        expect(iast.disable).to.not.have.been.called
+
+        conf = { tracing_enabled: true }
+        handlers.get('APM_TRACING')('apply', { lib_config: conf })
+        expect(DatadogTracer).to.have.been.calledOnce
+        expect(AppsecSdk).to.have.been.calledOnce
+        expect(appsec.enable).to.not.have.been.called
+        expect(iast.enable).to.not.have.been.called
+      })
+
+      it('should support applying remote config (only call disable if enabled before)', () => {
+        const RemoteConfigProxy = proxyquire('../src/proxy', {
+          './tracer': DatadogTracer,
+          './config': Config,
+          './appsec': appsec,
+          './appsec/iast': iast,
+          './appsec/remote_config': remoteConfig,
+          './appsec/sdk': AppsecSdk
+        })
+
+        config.telemetry = {}
+        config.appsec.enabled = true
+        config.iast.enabled = true
+        config.configure = conf => {
+          config.tracing = conf.tracing_enabled
+        }
+
+        const remoteConfigProxy = new RemoteConfigProxy()
+        remoteConfigProxy.init()
+
+        expect(appsec.enable).to.have.been.calledOnceWithExactly(config)
+        expect(iast.enable).to.have.been.calledOnceWithExactly(config, tracer)
+
+        let conf = { tracing_enabled: false }
+        handlers.get('APM_TRACING')('apply', { lib_config: conf })
+        expect(appsec.disable).to.have.been.called
+        expect(iast.disable).to.have.been.called
+
+        conf = { tracing_enabled: true }
+        handlers.get('APM_TRACING')('apply', { lib_config: conf })
+        expect(appsec.enable).to.have.been.calledTwice
+        expect(appsec.enable.secondCall).to.have.been.calledWithExactly(config)
+        expect(iast.enable).to.have.been.calledTwice
+        expect(iast.enable.secondCall).to.have.been.calledWithExactly(config, tracer)
       })
 
       it('should start capturing runtimeMetrics when configured', () => {
@@ -268,11 +414,11 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        expect(noopDogStatsD._flushes()).to.equal(0)
+        expect(dogStatsD._flushes()).to.equal(0)
 
         clock.tick(10000)
 
-        expect(noopDogStatsD._flushes()).to.equal(1)
+        expect(dogStatsD._flushes()).to.equal(1)
       })
 
       it('should expose real metrics methods after init when configured', () => {
@@ -288,10 +434,10 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        expect(noopDogStatsD._config().dogstatsd.hostname).to.equal('localhost')
+        expect(dogStatsD._config().dogstatsd.hostname).to.equal('localhost')
 
         proxy.dogstatsd.increment('foo', 10, { alpha: 'bravo' })
-        const incs = noopDogStatsD._increments()
+        const incs = dogStatsD._increments()
         expect(incs.length).to.equal(1)
         expect(incs[0][0]).to.equal('foo')
         expect(incs[0][1]).to.equal(10)
@@ -347,7 +493,7 @@ describe('TracerProxy', () => {
       })
 
       it('should load profiler when configured', () => {
-        config.profiling = { enabled: true }
+        config.profiling = { enabled: 'true' }
 
         proxy.init()
 
@@ -355,7 +501,7 @@ describe('TracerProxy', () => {
       })
 
       it('should throw an error since profiler fails to be imported', () => {
-        config.profiling = { enabled: true }
+        config.profiling = { enabled: 'true' }
 
         const ProfilerImportFailureProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
@@ -365,6 +511,7 @@ describe('TracerProxy', () => {
           './log': log,
           './profiler': null, // this will cause the import failure error
           './appsec': appsec,
+          './telemetry': telemetry,
           './appsec/remote_config': remoteConfig
         })
 
@@ -379,6 +526,30 @@ describe('TracerProxy', () => {
         proxy.init()
 
         expect(telemetry.start).to.have.been.called
+      })
+
+      it('should configure appsec standalone', () => {
+        const standalone = {
+          configure: sinon.stub()
+        }
+
+        const options = {}
+        const DatadogProxy = proxyquire('../src/proxy', {
+          './tracer': DatadogTracer,
+          './config': Config,
+          './appsec': appsec,
+          './appsec/iast': iast,
+          './appsec/remote_config': remoteConfig,
+          './appsec/sdk': AppsecSdk,
+          './appsec/standalone': standalone,
+          './telemetry': telemetry
+        })
+
+        const proxy = new DatadogProxy()
+        proxy.init(options)
+
+        const config = AppsecSdk.firstCall.args[1]
+        expect(standalone.configure).to.have.been.calledOnceWithExactly(config)
       })
     })
 
@@ -494,6 +665,19 @@ describe('TracerProxy', () => {
           proxy.appsec.trackCustomEvent(eventName, metadata)
           expect(noopAppsecSdk.trackCustomEvent).to.have.been.calledOnceWithExactly(eventName, metadata)
         })
+      })
+    })
+
+    describe('dogstatsd', () => {
+      it('should not throw when calling noop methods', () => {
+        proxy.dogstatsd.increment('inc')
+        expect(noopDogStatsDClient.increment).to.have.been.calledWith('inc')
+        proxy.dogstatsd.distribution('dist')
+        expect(noopDogStatsDClient.distribution).to.have.been.calledWith('dist')
+        proxy.dogstatsd.histogram('hist')
+        expect(noopDogStatsDClient.histogram).to.have.been.calledWith('hist')
+        proxy.dogstatsd.flush()
+        expect(noopDogStatsDClient.flush).to.have.been.called
       })
     })
   })

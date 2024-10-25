@@ -44,9 +44,14 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
 
     if (this.isExcludedHeaderName(lowerCasedHeaderName) || typeof value !== 'string') return
 
-    return super._isVulnerable(value, iastContext) &&
-      !(this.isCookieExclusion(lowerCasedHeaderName, value, iastContext) ||
-        this.isAccessControlAllowOriginExclusion(lowerCasedHeaderName, value, iastContext))
+    const ranges = getRanges(iastContext, value)
+    if (ranges?.length > 0) {
+      return !(this.isCookieExclusion(lowerCasedHeaderName, ranges) ||
+        this.isSameHeaderExclusion(lowerCasedHeaderName, ranges) ||
+        this.isAccessControlAllowExclusion(lowerCasedHeaderName, ranges))
+    }
+
+    return false
   }
 
   _getEvidence (headerInfo, iastContext) {
@@ -70,22 +75,26 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
     return EXCLUDED_HEADER_NAMES.includes(name)
   }
 
-  isCookieExclusion (name, value, iastContext) {
+  isCookieExclusion (name, ranges) {
     if (name === 'set-cookie') {
-      return getRanges(iastContext, value)
+      return ranges
         .every(range => range.iinfo.type === HTTP_REQUEST_COOKIE_VALUE || range.iinfo.type === HTTP_REQUEST_COOKIE_NAME)
     }
 
     return false
   }
 
-  isAccessControlAllowOriginExclusion (name, value, iastContext) {
-    if (name === 'access-control-allow-origin') {
-      return getRanges(iastContext, value)
+  isAccessControlAllowExclusion (name, ranges) {
+    if (name?.startsWith('access-control-allow-')) {
+      return ranges
         .every(range => range.iinfo.type === HTTP_REQUEST_HEADER_VALUE)
     }
 
     return false
+  }
+
+  isSameHeaderExclusion (name, ranges) {
+    return ranges.length === 1 && name === ranges[0].iinfo.parameterName?.toLowerCase()
   }
 
   _getExcludedPaths () {

@@ -39,7 +39,8 @@ class WAFManager {
         this.ddwaf.createContext(),
         this.wafTimeout,
         this.ddwafVersion,
-        this.rulesVersion
+        this.rulesVersion,
+        this.ddwaf.knownAddresses
       )
       contexts.set(req, wafContext)
     }
@@ -49,6 +50,10 @@ class WAFManager {
 
   update (newRules) {
     this.ddwaf.update(newRules)
+
+    if (this.ddwaf.diagnostics.ruleset_version) {
+      this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
+    }
 
     Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion)
   }

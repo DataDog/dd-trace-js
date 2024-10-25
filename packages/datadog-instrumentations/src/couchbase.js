@@ -37,7 +37,7 @@ function wrapMaybeInvoke (_maybeInvoke) {
 
     return _maybeInvoke.apply(this, arguments)
   }
-  return shimmer.wrap(_maybeInvoke, wrapped)
+  return wrapped
 }
 
 function wrapQuery (query) {
@@ -51,7 +51,7 @@ function wrapQuery (query) {
     const res = query.apply(this, arguments)
     return res
   }
-  return shimmer.wrap(query, wrapped)
+  return wrapped
 }
 
 function wrap (prefix, fn) {
@@ -76,13 +76,13 @@ function wrap (prefix, fn) {
 
       startCh.publish({ bucket: { name: this.name || this._name }, seedNodes: this._dd_hosts })
 
-      arguments[callbackIndex] = asyncResource.bind(function (error, result) {
+      arguments[callbackIndex] = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (error, result) {
         if (error) {
           errorCh.publish(error)
         }
         finishCh.publish(result)
         return cb.apply(this, arguments)
-      })
+      }))
 
       try {
         return fn.apply(this, arguments)
@@ -94,7 +94,7 @@ function wrap (prefix, fn) {
       }
     })
   }
-  return shimmer.wrap(fn, wrapped)
+  return wrapped
 }
 
 // semver >=3
@@ -118,13 +118,13 @@ function wrapCBandPromise (fn, name, startData, thisArg, args) {
         // v3 offers callback or promises event handling
         // NOTE: this does not work with v3.2.0-3.2.1 cluster.query, as there is a bug in the couchbase source code
         const cb = callbackResource.bind(args[cbIndex])
-        args[cbIndex] = asyncResource.bind(function (error, result) {
+        args[cbIndex] = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (error, result) {
           if (error) {
             errorCh.publish(error)
           }
           finishCh.publish({ result })
           return cb.apply(thisArg, arguments)
-        })
+        }))
       }
       const res = fn.apply(thisArg, args)
 
@@ -166,8 +166,8 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
   const finishCh = channel('apm:couchbase:query:finish')
   const errorCh = channel('apm:couchbase:query:error')
 
-  Bucket.prototype._maybeInvoke = wrapMaybeInvoke(Bucket.prototype._maybeInvoke)
-  Bucket.prototype.query = wrapQuery(Bucket.prototype.query)
+  shimmer.wrap(Bucket.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke))
+  shimmer.wrap(Bucket.prototype, 'query', query => wrapQuery(query))
 
   shimmer.wrap(Bucket.prototype, '_n1qlReq', _n1qlReq => function (host, q, adhoc, emitter) {
     if (!startCh.hasSubscribers) {
@@ -203,15 +203,15 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
   })
 
   wrapAllNames(['upsert', 'insert', 'replace', 'append', 'prepend'], name => {
-    Bucket.prototype[name] = wrap(`apm:couchbase:${name}`, Bucket.prototype[name])
+    shimmer.wrap(Bucket.prototype, name, fn => wrap(`apm:couchbase:${name}`, fn))
   })
 
   return Bucket
 })
 
 addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.12'] }, Cluster => {
-  Cluster.prototype._maybeInvoke = wrapMaybeInvoke(Cluster.prototype._maybeInvoke)
-  Cluster.prototype.query = wrapQuery(Cluster.prototype.query)
+  shimmer.wrap(Cluster.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke))
+  shimmer.wrap(Cluster.prototype, 'query', query => wrapQuery(query))
 
   shimmer.wrap(Cluster.prototype, 'openBucket', openBucket => {
     return function () {
@@ -252,9 +252,10 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^3.0.7', '^3.1.
   return Cluster
 })
 
-// semver >=3.2.0
+// semver >=3.2.2
+// NOTE: <3.2.2 segfaults on cluster.close() https://issues.couchbase.com/browse/JSCBC-936
 
-addHook({ name: 'couchbase', file: 'dist/collection.js', versions: ['>=3.2.0'] }, collection => {
+addHook({ name: 'couchbase', file: 'dist/collection.js', versions: ['>=3.2.2'] }, collection => {
   const Collection = collection.Collection
 
   wrapAllNames(['upsert', 'insert', 'replace'], name => {
@@ -264,7 +265,7 @@ addHook({ name: 'couchbase', file: 'dist/collection.js', versions: ['>=3.2.0'] }
   return collection
 })
 
-addHook({ name: 'couchbase', file: 'dist/bucket.js', versions: ['>=3.2.0'] }, bucket => {
+addHook({ name: 'couchbase', file: 'dist/bucket.js', versions: ['>=3.2.2'] }, bucket => {
   const Bucket = bucket.Bucket
   shimmer.wrap(Bucket.prototype, 'collection', getCollection => {
     return function () {
@@ -278,7 +279,7 @@ addHook({ name: 'couchbase', file: 'dist/bucket.js', versions: ['>=3.2.0'] }, bu
   return bucket
 })
 
-addHook({ name: 'couchbase', file: 'dist/cluster.js', versions: ['3.2.0 - 3.2.1', '>=3.2.2'] }, (cluster) => {
+addHook({ name: 'couchbase', file: 'dist/cluster.js', versions: ['>=3.2.2'] }, (cluster) => {
   const Cluster = cluster.Cluster
 
   shimmer.wrap(Cluster.prototype, 'query', wrapV3Query)

@@ -5,6 +5,7 @@ const telemetryMetrics = require('../telemetry/metrics')
 const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
 const DD_TELEMETRY_WAF_RESULT_TAGS = Symbol('_dd.appsec.telemetry.waf.result.tags')
+const DD_TELEMETRY_REQUEST_METRICS = Symbol('_dd.appsec.telemetry.request.metrics')
 
 const tags = {
   REQUEST_BLOCKED: 'request_blocked',
@@ -26,10 +27,22 @@ function disable () {
   enabled = false
 }
 
+function newStore () {
+  return {
+    [DD_TELEMETRY_REQUEST_METRICS]: {
+      duration: 0,
+      durationExt: 0,
+      raspDuration: 0,
+      raspDurationExt: 0,
+      raspEvalCount: 0
+    }
+  }
+}
+
 function getStore (req) {
   let store = metricsStoreMap.get(req)
   if (!store) {
-    store = {}
+    store = newStore()
     metricsStoreMap.set(req, store)
   }
   return store
@@ -51,9 +64,7 @@ function trackWafDurations (metrics, versionsTags) {
   }
 }
 
-function getOrCreateMetricTags (req, versionsTags) {
-  const store = getStore(req)
-
+function getOrCreateMetricTags (store, versionsTags) {
   let metricTags = store[DD_TELEMETRY_WAF_RESULT_TAGS]
   if (!metricTags) {
     metricTags = {
@@ -68,14 +79,43 @@ function getOrCreateMetricTags (req, versionsTags) {
   return metricTags
 }
 
+function updateRaspRequestsMetricTags (metrics, req, raspRuleType) {
+  if (!req) return
+
+  const store = getStore(req)
+
+  // it does not depend on whether telemetry is enabled or not
+  addRaspRequestMetrics(store, metrics)
+
+  if (!enabled) return
+
+  const tags = { rule_type: raspRuleType, waf_version: metrics.wafVersion }
+  appsecMetrics.count('rasp.rule.eval', tags).inc(1)
+
+  if (metrics.wafTimeout) {
+    appsecMetrics.count('rasp.timeout', tags).inc(1)
+  }
+
+  if (metrics.ruleTriggered) {
+    appsecMetrics.count('rasp.rule.match', tags).inc(1)
+  }
+}
+
 function updateWafRequestsMetricTags (metrics, req) {
-  if (!req || !enabled) return
+  if (!req) return
+
+  const store = getStore(req)
+
+  // it does not depend on whether telemetry is enabled or not
+  addRequestMetrics(store, metrics)
+
+  if (!enabled) return
 
   const versionsTags = getVersionsTags(metrics.wafVersion, metrics.rulesVersion)
 
   trackWafDurations(metrics, versionsTags)
 
-  const metricTags = getOrCreateMetricTags(req, versionsTags)
+  const metricTags = getOrCreateMetricTags(store, versionsTags)
 
   const { blockTriggered, ruleTriggered, wafTimeout } = metrics
 
@@ -121,12 +161,33 @@ function incrementWafRequestsMetric (req) {
   metricsStoreMap.delete(req)
 }
 
+function addRequestMetrics (store, { duration, durationExt }) {
+  store[DD_TELEMETRY_REQUEST_METRICS].duration += duration || 0
+  store[DD_TELEMETRY_REQUEST_METRICS].durationExt += durationExt || 0
+}
+
+function addRaspRequestMetrics (store, { duration, durationExt }) {
+  store[DD_TELEMETRY_REQUEST_METRICS].raspDuration += duration || 0
+  store[DD_TELEMETRY_REQUEST_METRICS].raspDurationExt += durationExt || 0
+  store[DD_TELEMETRY_REQUEST_METRICS].raspEvalCount++
+}
+
+function getRequestMetrics (req) {
+  if (req) {
+    const store = getStore(req)
+    return store?.[DD_TELEMETRY_REQUEST_METRICS]
+  }
+}
+
 module.exports = {
   enable,
   disable,
 
   updateWafRequestsMetricTags,
+  updateRaspRequestsMetricTags,
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
-  incrementWafRequestsMetric
+  incrementWafRequestsMetric,
+
+  getRequestMetrics
 }

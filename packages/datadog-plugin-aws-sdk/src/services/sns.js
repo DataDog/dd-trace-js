@@ -1,26 +1,31 @@
 'use strict'
+const { getHeadersSize } = require('../../../dd-trace/src/datastreams/processor')
+const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 
 class Sns extends BaseAwsSdkPlugin {
   static get id () { return 'sns' }
   static get peerServicePrecursors () { return ['topicname'] }
+  static get isPayloadReporter () { return true }
 
   generateTags (params, operation, response) {
     if (!params) return {}
 
     if (!params.TopicArn && !(response.data && response.data.TopicArn)) return {}
     const TopicArn = params.TopicArn || response.data.TopicArn
+
     // Split the ARN into its parts
     // ex.'arn:aws:sns:us-east-1:123456789012:my-topic'
     const arnParts = TopicArn.split(':')
 
     // Get the topic name from the last part of the ARN
     const topicName = arnParts[arnParts.length - 1]
+
     return {
       'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
       'aws.sns.topic_arn': TopicArn,
-      'topicname': topicName
+      topicname: topicName
     }
 
     // TODO: should arn be sanitized or quantized in some way here,
@@ -52,17 +57,22 @@ class Sns extends BaseAwsSdkPlugin {
 
     switch (operation) {
       case 'publish':
-        this._injectMessageAttributes(span, params)
+        this.injectToMessage(span, params, params.TopicArn, true)
         break
       case 'publishBatch':
-        if (params.PublishBatchRequestEntries && params.PublishBatchRequestEntries.length > 0) {
-          this._injectMessageAttributes(span, params.PublishBatchRequestEntries[0])
+        for (let i = 0; i < params.PublishBatchRequestEntries.length; i++) {
+          this.injectToMessage(
+            span,
+            params.PublishBatchRequestEntries[i],
+            params.TopicArn,
+            i === 0 || (this.config.batchPropagationEnabled)
+          )
         }
         break
     }
   }
 
-  _injectMessageAttributes (span, params) {
+  injectToMessage (span, params, topicArn, injectTraceContext) {
     if (!params.MessageAttributes) {
       params.MessageAttributes = {}
     }
@@ -70,11 +80,46 @@ class Sns extends BaseAwsSdkPlugin {
       log.info('Message attributes full, skipping trace context injection')
       return
     }
+
     const ddInfo = {}
-    this.tracer.inject(span, 'text_map', ddInfo)
-    params.MessageAttributes._datadog = {
-      DataType: 'Binary',
-      BinaryValue: Buffer.from(JSON.stringify(ddInfo)) // BINARY types are automatically base64 encoded
+    // for now, we only want to inject to the first message, this may change for batches in the future
+    if (injectTraceContext) {
+      this.tracer.inject(span, 'text_map', ddInfo)
+      // add ddInfo before checking DSM so we can include DD attributes in payload size
+      params.MessageAttributes._datadog = {
+        DataType: 'Binary',
+        BinaryValue: ddInfo
+      }
+    }
+
+    if (this.config.dsmEnabled) {
+      if (!params.MessageAttributes._datadog) {
+        params.MessageAttributes._datadog = {
+          DataType: 'Binary',
+          BinaryValue: ddInfo
+        }
+      }
+
+      const dataStreamsContext = this.setDSMCheckpoint(span, params, topicArn)
+      DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
+    }
+
+    if (Object.keys(ddInfo).length !== 0) {
+      // BINARY types are automatically base64 encoded
+      params.MessageAttributes._datadog.BinaryValue = Buffer.from(JSON.stringify(ddInfo))
+    } else if (params.MessageAttributes._datadog) {
+      // let's avoid adding any additional information to payload if we failed to inject
+      delete params.MessageAttributes._datadog
+    }
+  }
+
+  setDSMCheckpoint (span, params, topicArn) {
+    // only set a checkpoint if publishing to a topic
+    if (topicArn) {
+      const payloadSize = getHeadersSize(params)
+      const dataStreamsContext = this.tracer
+        .setCheckpoint(['direction:out', `topic:${topicArn}`, 'type:sns'], span, payloadSize)
+      return dataStreamsContext
     }
   }
 }

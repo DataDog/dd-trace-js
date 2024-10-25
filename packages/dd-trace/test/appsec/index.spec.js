@@ -8,23 +8,37 @@ const appsec = require('../../src/appsec')
 const {
   bodyParser,
   cookieParser,
-  graphqlFinishExecute,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
+  passportVerify,
   queryParser,
-  passportVerify
+  nextBodyParsed,
+  nextQueryParsed,
+  expressProcessParams,
+  responseBody,
+  responseWriteHead,
+  responseSetHeader
 } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
 const Config = require('../../src/config')
 const axios = require('axios')
-const getPort = require('get-port')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
-const addresses = require('../../src/appsec/addresses')
 const telemetryMetrics = require('../../src/telemetry/metrics')
+const addresses = require('../../src/appsec/addresses')
 
-describe('AppSec Index', () => {
+const resultActions = {
+  block_request: {
+    status_code: '401',
+    type: 'auto',
+    grpc_status_code: '10'
+  }
+}
+
+describe('AppSec Index', function () {
+  this.timeout(5000)
+
   let config
   let AppSec
   let web
@@ -32,6 +46,9 @@ describe('AppSec Index', () => {
   let passport
   let log
   let appsecTelemetry
+  let graphql
+  let apiSecuritySampler
+  let rasp
 
   const RULES = { rules: [{ a: 1 }] }
 
@@ -53,6 +70,9 @@ describe('AppSec Index', () => {
         apiSecurity: {
           enabled: false,
           requestSampling: 0
+        },
+        rasp: {
+          enabled: true
         }
       }
     }
@@ -80,12 +100,29 @@ describe('AppSec Index', () => {
       disable: sinon.stub()
     }
 
+    graphql = {
+      enable: sinon.stub(),
+      disable: sinon.stub()
+    }
+
+    apiSecuritySampler = require('../../src/appsec/api_security_sampler')
+    sinon.spy(apiSecuritySampler, 'sampleRequest')
+    sinon.spy(apiSecuritySampler, 'isSampled')
+
+    rasp = {
+      enable: sinon.stub(),
+      disable: sinon.stub()
+    }
+
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
       '../plugins/util/web': web,
       './blocking': blocking,
       './passport': passport,
-      './telemetry': appsecTelemetry
+      './telemetry': appsecTelemetry,
+      './graphql': graphql,
+      './api_security_sampler': apiSecuritySampler,
+      './rasp': rasp
     })
 
     sinon.stub(fs, 'readFileSync').returns(JSON.stringify(RULES))
@@ -112,6 +149,7 @@ describe('AppSec Index', () => {
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
+      expect(graphql.enable).to.have.been.calledOnceWithExactly()
     })
 
     it('should log when enable fails', () => {
@@ -132,17 +170,25 @@ describe('AppSec Index', () => {
     it('should subscribe to blockable channels', () => {
       expect(bodyParser.hasSubscribers).to.be.false
       expect(cookieParser.hasSubscribers).to.be.false
-      expect(queryParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
-      expect(graphqlFinishExecute.hasSubscribers).to.be.false
+      expect(queryParser.hasSubscribers).to.be.false
+      expect(nextBodyParsed.hasSubscribers).to.be.false
+      expect(nextQueryParsed.hasSubscribers).to.be.false
+      expect(expressProcessParams.hasSubscribers).to.be.false
+      expect(responseWriteHead.hasSubscribers).to.be.false
+      expect(responseSetHeader.hasSubscribers).to.be.false
 
       AppSec.enable(config)
 
       expect(bodyParser.hasSubscribers).to.be.true
       expect(cookieParser.hasSubscribers).to.be.true
-      expect(graphqlFinishExecute.hasSubscribers).to.be.true
-      expect(queryParser.hasSubscribers).to.be.true
       expect(passportVerify.hasSubscribers).to.be.true
+      expect(queryParser.hasSubscribers).to.be.true
+      expect(nextBodyParsed.hasSubscribers).to.be.true
+      expect(nextQueryParsed.hasSubscribers).to.be.true
+      expect(expressProcessParams.hasSubscribers).to.be.true
+      expect(responseWriteHead.hasSubscribers).to.be.true
+      expect(responseSetHeader.hasSubscribers).to.be.true
     })
 
     it('should not subscribe to passportVerify if eventTracking is disabled', () => {
@@ -162,6 +208,19 @@ describe('AppSec Index', () => {
       AppSec.enable(config)
 
       expect(appsecTelemetry.enable).to.be.calledOnceWithExactly(config.telemetry)
+    })
+
+    it('should call rasp enable', () => {
+      AppSec.enable(config)
+
+      expect(rasp.enable).to.be.calledOnceWithExactly(config)
+    })
+
+    it('should not call rasp enable when rasp is disabled', () => {
+      config.appsec.rasp.enabled = false
+      AppSec.enable(config)
+
+      expect(rasp.enable).to.not.be.called
     })
   })
 
@@ -183,6 +242,8 @@ describe('AppSec Index', () => {
       expect(incomingHttpRequestStart.unsubscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(incomingHttpRequestEnd.unsubscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
+      expect(graphql.disable).to.have.been.calledOnceWithExactly()
+      expect(rasp.disable).to.have.been.calledOnceWithExactly()
     })
 
     it('should disable AppSec when DC channels are not active', () => {
@@ -202,9 +263,13 @@ describe('AppSec Index', () => {
 
       expect(bodyParser.hasSubscribers).to.be.false
       expect(cookieParser.hasSubscribers).to.be.false
-      expect(graphqlFinishExecute.hasSubscribers).to.be.false
-      expect(queryParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
+      expect(queryParser.hasSubscribers).to.be.false
+      expect(nextBodyParsed.hasSubscribers).to.be.false
+      expect(nextQueryParsed.hasSubscribers).to.be.false
+      expect(expressProcessParams.hasSubscribers).to.be.false
+      expect(responseWriteHead.hasSubscribers).to.be.false
+      expect(responseSetHeader.hasSubscribers).to.be.false
     })
 
     it('should call appsec telemetry disable', () => {
@@ -234,7 +299,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -253,10 +318,12 @@ describe('AppSec Index', () => {
         'http.client_ip': '127.0.0.1'
       })
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
-        'server.request.method': 'POST',
-        'http.client_ip': '127.0.0.1'
+        persistent: {
+          'server.request.uri.raw': '/path',
+          'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+          'server.request.method': 'POST',
+          'http.client_ip': '127.0.0.1'
+        }
       }, req)
     })
   })
@@ -274,12 +341,12 @@ describe('AppSec Index', () => {
       web.root.returns(rootSpan)
     })
 
-    it('should propagate incoming http end data', () => {
+    it('should not propagate incoming http end data without express', () => {
       const req = {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -302,20 +369,17 @@ describe('AppSec Index', () => {
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.response.status': '201',
-        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
-      }, req)
+      expect(waf.run).to.have.not.been.called
 
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
 
-    it('should propagate incoming http end data with invalid framework properties', () => {
+    it('should not propagate incoming http end data with invalid framework properties', () => {
       const req = {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -343,10 +407,7 @@ describe('AppSec Index', () => {
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.response.status': '201',
-        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
-      }, req)
+      expect(waf.run).to.have.not.been.called
 
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
@@ -356,7 +417,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -372,9 +433,6 @@ describe('AppSec Index', () => {
         },
         route: {
           path: '/path/:c'
-        },
-        params: {
-          c: '3'
         },
         cookies: {
           d: '4',
@@ -395,12 +453,11 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.response.status': '201',
-        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
-        'server.request.body': { a: '1' },
-        'server.request.path_params': { c: '3' },
-        'server.request.cookies': { d: '4', e: '5' },
-        'server.request.query': { b: '2' }
+        persistent: {
+          'server.request.body': { a: '1' },
+          'server.request.cookies': { d: '4', e: '5' },
+          'server.request.query': { b: '2' }
+        }
       }, req)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
@@ -429,7 +486,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -443,10 +500,12 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpStartTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
-        'server.request.method': 'POST',
-        'http.client_ip': '127.0.0.1'
+        persistent: {
+          'server.request.uri.raw': '/path',
+          'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+          'server.request.method': 'POST',
+          'http.client_ip': '127.0.0.1'
+        }
       }, req)
     })
 
@@ -462,7 +521,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -476,10 +535,12 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpStartTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
-        'server.request.method': 'POST',
-        'http.client_ip': '127.0.0.1'
+        persistent: {
+          'server.request.uri.raw': '/path',
+          'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+          'server.request.method': 'POST',
+          'http.client_ip': '127.0.0.1'
+        }
       }, req)
     })
 
@@ -495,7 +556,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -509,12 +570,61 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpStartTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
-        'server.request.method': 'POST',
-        'http.client_ip': '127.0.0.1',
-        'waf.context.processor': { 'extract-schema': true }
+        persistent: {
+          'server.request.uri.raw': '/path',
+          'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+          'server.request.method': 'POST',
+          'http.client_ip': '127.0.0.1',
+          'waf.context.processor': { 'extract-schema': true }
+        }
       }, req)
+    })
+
+    describe('onResponseBody', () => {
+      beforeEach(() => {
+        config.appsec.apiSecurity = {
+          enabled: true,
+          requestSampling: 1
+        }
+        AppSec.enable(config)
+      })
+
+      afterEach(() => {
+        AppSec.disable()
+      })
+
+      it('should not do anything if body is not an object', () => {
+        responseBody.publish({ req: {}, body: 'string' })
+        responseBody.publish({ req: {}, body: null })
+
+        expect(apiSecuritySampler.isSampled).to.not.been.called
+        expect(waf.run).to.not.been.called
+      })
+
+      it('should not call to the waf if it is not a sampled request', () => {
+        apiSecuritySampler.isSampled = apiSecuritySampler.isSampled.instantiateFake(() => false)
+        const req = {}
+
+        responseBody.publish({ req, body: {} })
+
+        expect(apiSecuritySampler.isSampled).to.have.been.calledOnceWith(req)
+        expect(waf.run).to.not.been.called
+      })
+
+      it('should call to the waf if it is a sampled request', () => {
+        apiSecuritySampler.isSampled = apiSecuritySampler.isSampled.instantiateFake(() => true)
+        const req = {}
+        const body = {}
+
+        responseBody.publish({ req, body })
+
+        expect(apiSecuritySampler.isSampled).to.have.been.calledOnceWith(req)
+        expect(waf.run).to.been.calledOnceWith({
+          persistent: {
+            [addresses.HTTP_INCOMING_RESPONSE_BODY]: body
+          }
+        }, req)
+      })
     })
   })
 
@@ -533,7 +643,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost'
+          host: 'localhost'
         },
         method: 'POST',
         socket: {
@@ -546,16 +656,14 @@ describe('AppSec Index', () => {
           'content-type': 'application/json',
           'content-lenght': 42
         }),
-        setHeader: sinon.stub(),
-        end: sinon.stub()
+        writeHead: sinon.stub(),
+        end: sinon.stub(),
+        getHeaderNames: sinon.stub().returns([])
       }
+      res.writeHead.returns(res)
 
       AppSec.enable(config)
       AppSec.incomingHttpStartTranslator({ req, res })
-    })
-
-    afterEach(() => {
-      AppSec.disable()
     })
 
     describe('onRequestBodyParsed', () => {
@@ -577,7 +685,9 @@ describe('AppSec Index', () => {
         bodyParser.publish({ req, res, body, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
-          'server.request.body': { key: 'value' }
+          persistent: {
+            'server.request.body': { key: 'value' }
+          }
         })
         expect(abortController.abort).not.to.have.been.called
         expect(res.end).not.to.have.been.called
@@ -586,12 +696,14 @@ describe('AppSec Index', () => {
       it('Should block when it is detected as attack', () => {
         const body = { key: 'value' }
         req.body = body
-        sinon.stub(waf, 'run').returns(['block'])
+        sinon.stub(waf, 'run').returns(resultActions)
 
         bodyParser.publish({ req, res, body, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
-          'server.request.body': { key: 'value' }
+          persistent: {
+            'server.request.body': { key: 'value' }
+          }
         })
         expect(abortController.abort).to.have.been.called
         expect(res.end).to.have.been.called
@@ -616,7 +728,9 @@ describe('AppSec Index', () => {
         cookieParser.publish({ req, res, abortController, cookies })
 
         expect(waf.run).to.have.been.calledOnceWith({
-          'server.request.cookies': { key: 'value' }
+          persistent: {
+            'server.request.cookies': { key: 'value' }
+          }
         })
         expect(abortController.abort).not.to.have.been.called
         expect(res.end).not.to.have.been.called
@@ -624,12 +738,14 @@ describe('AppSec Index', () => {
 
       it('Should block when it is detected as attack', () => {
         const cookies = { key: 'value' }
-        sinon.stub(waf, 'run').returns(['block'])
+        sinon.stub(waf, 'run').returns(resultActions)
 
         cookieParser.publish({ req, res, abortController, cookies })
 
         expect(waf.run).to.have.been.calledOnceWith({
-          'server.request.cookies': { key: 'value' }
+          persistent: {
+            'server.request.cookies': { key: 'value' }
+          }
         })
         expect(abortController.abort).to.have.been.called
         expect(res.end).to.have.been.called
@@ -655,7 +771,9 @@ describe('AppSec Index', () => {
         queryParser.publish({ req, res, query, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
-          'server.request.query': { key: 'value' }
+          persistent: {
+            'server.request.query': { key: 'value' }
+          }
         })
         expect(abortController.abort).not.to.have.been.called
         expect(res.end).not.to.have.been.called
@@ -664,12 +782,14 @@ describe('AppSec Index', () => {
       it('Should block when it is detected as attack', () => {
         const query = { key: 'value' }
         req.query = query
-        sinon.stub(waf, 'run').returns(['block'])
+        sinon.stub(waf, 'run').returns(resultActions)
 
         queryParser.publish({ req, res, query, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
-          'server.request.query': { key: 'value' }
+          persistent: {
+            'server.request.query': { key: 'value' }
+          }
         })
         expect(abortController.abort).to.have.been.called
         expect(res.end).to.have.been.called
@@ -705,63 +825,136 @@ describe('AppSec Index', () => {
       })
     })
 
-    describe('onGraphqlQueryParse', () => {
-      it('Should not call waf if resolvers is undefined', () => {
-        const resolvers = undefined
-        const rootSpan = {}
+    describe('onResponseWriteHead', () => {
+      it('should call abortController if response was already blocked', () => {
+        sinon.stub(waf, 'run').returns(resultActions)
 
-        sinon.stub(waf, 'run')
-        sinon.stub(storage, 'getStore').returns({ req: {} })
-        web.root.returns(rootSpan)
-
-        graphqlFinishExecute.publish({ resolvers })
-
-        expect(waf.run).not.to.have.been.called
-      })
-
-      it('Should not call waf if resolvers is not an object', () => {
-        const resolvers = ''
-        const rootSpan = {}
-
-        sinon.stub(waf, 'run')
-        sinon.stub(storage, 'getStore').returns({ req: {} })
-        web.root.returns(rootSpan)
-
-        graphqlFinishExecute.publish({ resolvers })
-
-        expect(waf.run).not.to.have.been.called
-      })
-
-      it('Should not call waf if req is unavailable', () => {
-        const resolvers = { user: [ { id: '1234' } ] }
-        sinon.stub(waf, 'run')
-        sinon.stub(storage, 'getStore').returns({})
-
-        graphqlFinishExecute.publish({ resolvers })
-
-        expect(waf.run).not.to.have.been.called
-      })
-
-      it('Should call waf if resolvers is well formatted', () => {
-        const context = {
-          resolvers: {
-            user: [ { id: '1234' } ]
-          }
+        const responseHeaders = {
+          'content-type': 'application/json',
+          'content-lenght': 42,
+          'set-cookie': 'a=1;b=2'
         }
-        const rootSpan = {}
 
-        sinon.stub(waf, 'run')
-        sinon.stub(storage, 'getStore').returns({ req: {} })
-        web.root.returns(rootSpan)
+        responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
 
-        graphqlFinishExecute.publish({ context })
+        expect(waf.run).to.have.been.calledOnceWithExactly({
+          persistent: {
+            'server.response.status': '404',
+            'server.response.headers.no_cookies': {
+              'content-type': 'application/json',
+              'content-lenght': 42
+            }
+          }
+        }, req)
+        expect(abortController.abort).to.have.been.calledOnce
+        expect(res.end).to.have.been.calledOnce
 
-        expect(waf.run).to.have.been.calledOnceWithExactly(
-          {
-            [addresses.HTTP_INCOMING_GRAPHQL_RESOLVERS]: context.resolvers
-          },
-          {}
-        )
+        abortController.abort.resetHistory()
+
+        responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
+
+        expect(waf.run).to.have.been.calledOnce
+        expect(abortController.abort).to.have.been.calledOnce
+        expect(res.end).to.have.been.calledOnce
+      })
+
+      it('should not call the WAF if response was already analyzed', () => {
+        sinon.stub(waf, 'run').returns(null)
+
+        const responseHeaders = {
+          'content-type': 'application/json',
+          'content-lenght': 42,
+          'set-cookie': 'a=1;b=2'
+        }
+
+        responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
+
+        expect(waf.run).to.have.been.calledOnceWithExactly({
+          persistent: {
+            'server.response.status': '404',
+            'server.response.headers.no_cookies': {
+              'content-type': 'application/json',
+              'content-lenght': 42
+            }
+          }
+        }, req)
+        expect(abortController.abort).to.have.not.been.called
+        expect(res.end).to.have.not.been.called
+
+        responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
+
+        expect(waf.run).to.have.been.calledOnce
+        expect(abortController.abort).to.have.not.been.called
+        expect(res.end).to.have.not.been.called
+      })
+
+      it('should not do anything without a root span', () => {
+        web.root.returns(null)
+        sinon.stub(waf, 'run').returns(null)
+
+        const responseHeaders = {
+          'content-type': 'application/json',
+          'content-lenght': 42,
+          'set-cookie': 'a=1;b=2'
+        }
+
+        responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
+
+        expect(waf.run).to.have.not.been.called
+        expect(abortController.abort).to.have.not.been.called
+        expect(res.end).to.have.not.been.called
+      })
+
+      it('should call the WAF with responde code and headers', () => {
+        sinon.stub(waf, 'run').returns(resultActions)
+
+        const responseHeaders = {
+          'content-type': 'application/json',
+          'content-lenght': 42,
+          'set-cookie': 'a=1;b=2'
+        }
+
+        responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
+
+        expect(waf.run).to.have.been.calledOnceWithExactly({
+          persistent: {
+            'server.response.status': '404',
+            'server.response.headers.no_cookies': {
+              'content-type': 'application/json',
+              'content-lenght': 42
+            }
+          }
+        }, req)
+        expect(abortController.abort).to.have.been.calledOnce
+        expect(res.end).to.have.been.calledOnce
+      })
+    })
+
+    describe('onResponseSetHeader', () => {
+      it('should call abortController if response was already blocked', () => {
+        // First block the request
+        sinon.stub(waf, 'run').returns(resultActions)
+
+        const responseHeaders = {
+          'content-type': 'application/json',
+          'content-lenght': 42,
+          'set-cookie': 'a=1;b=2'
+        }
+        responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
+
+        expect(abortController.abort).to.have.been.calledOnce
+
+        abortController.abort.reset()
+
+        responseSetHeader.publish({ res, abortController })
+
+        expect(abortController.abort).to.have.been.calledOnce
+      })
+
+      it('should not call abortController if response was not blocked', () => {
+        responseSetHeader.publish({ res, abortController })
+
+        expect(abortController.abort).to.have.not.been.calledOnce
       })
     })
   })
@@ -826,7 +1019,9 @@ describe('AppSec Index', () => {
   })
 })
 
-describe('IP blocking', () => {
+describe('IP blocking', function () {
+  this.timeout(5000)
+
   const invalidIp = '1.2.3.4'
   const validIp = '4.3.2.1'
   const ruleData = {
@@ -848,30 +1043,33 @@ describe('IP blocking', () => {
   const jsonDefaultContent = JSON.parse(blockedTemplate.json)
 
   let http, appListener, port
-  before(() => {
-    return getPort().then(newPort => {
-      port = newPort
-    })
-  })
+
   before(() => {
     return agent.load('http')
       .then(() => {
         http = require('http')
       })
   })
+
   before(done => {
     const server = new http.Server((req, res) => {
       res.writeHead(200)
       res.end(JSON.stringify({ message: 'OK' }))
     })
     appListener = server
-      .listen(port, 'localhost', () => done())
+      .listen(0, 'localhost', () => {
+        port = appListener.address().port
+        done()
+      })
   })
 
   beforeEach(() => {
     appsec.enable(new Config({
       appsec: {
-        enabled: true
+        enabled: true,
+        rasp: {
+          enabled: false // disable rasp to not trigger lfi
+        }
       }
     }))
 
@@ -934,7 +1132,7 @@ describe('IP blocking', () => {
         await axios.get(`http://localhost:${port}/`, {
           headers: {
             [ipHeader]: invalidIp,
-            'Accept': '*/*'
+            Accept: '*/*'
           }
         }).catch((err) => {
           expect(err.response.status).to.be.equal(403)
@@ -946,7 +1144,7 @@ describe('IP blocking', () => {
         await axios.get(`http://localhost:${port}/`, {
           headers: {
             [ipHeader]: invalidIp,
-            'Accept': 'text/html'
+            Accept: 'text/html'
           }
         }).catch((err) => {
           expect(err.response.status).to.be.equal(403)
@@ -995,6 +1193,7 @@ describe('IP blocking', () => {
         }).then(() => {
           throw new Error('Not expected')
         }).catch((err) => {
+          expect(err.message).to.not.equal('Not expected')
           expect(err.response.status).to.be.equal(500)
           expect(err.response.data).to.deep.equal(jsonDefaultContent)
         })
@@ -1004,11 +1203,12 @@ describe('IP blocking', () => {
         return axios.get(`http://localhost:${port}/`, {
           headers: {
             'x-forwarded-for': invalidIp,
-            'Accept': 'text/html'
+            Accept: 'text/html'
           }
         }).then(() => {
           throw new Error('Not expected')
         }).catch((err) => {
+          expect(err.message).to.not.equal('Not expected')
           expect(err.response.status).to.be.equal(500)
           expect(err.response.data).to.deep.equal(htmlDefaultContent)
         })
@@ -1054,6 +1254,7 @@ describe('IP blocking', () => {
         }).then(() => {
           throw new Error('Not resolve expected')
         }).catch((err) => {
+          expect(err.message).to.not.equal('Not resolve expected')
           expect(err.response.status).to.be.equal(301)
           expect(err.response.headers.location).to.be.equal('/error')
         })

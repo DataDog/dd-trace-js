@@ -4,7 +4,6 @@ const { channel } = require('dc-polyfill')
 const { isFalse } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
-const Nomenclature = require('./service-naming')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
@@ -102,7 +101,7 @@ module.exports = class PluginManager {
   // like instrumenter.enable()
   configure (config = {}) {
     this._tracerConfig = config
-    Nomenclature.configure(config)
+    this._tracer._nomenclature.configure(config)
 
     for (const name in pluginClasses) {
       this.loadPlugin(name)
@@ -137,10 +136,21 @@ module.exports = class PluginManager {
       dbmPropagationMode,
       dsmEnabled,
       clientIpEnabled,
-      memcachedCommandEnabled
+      memcachedCommandEnabled,
+      ciVisibilityTestSessionName,
+      ciVisAgentlessLogSubmissionEnabled
     } = this._tracerConfig
 
-    const sharedConfig = {}
+    const sharedConfig = {
+      dbmPropagationMode,
+      dsmEnabled,
+      memcachedCommandEnabled,
+      site,
+      url,
+      headers: headerTags || [],
+      ciVisibilityTestSessionName,
+      ciVisAgentlessLogSubmissionEnabled
+    }
 
     if (logInjection !== undefined) {
       sharedConfig.logInjection = logInjection
@@ -150,10 +160,6 @@ module.exports = class PluginManager {
       sharedConfig.queryStringObfuscation = queryStringObfuscation
     }
 
-    sharedConfig.dbmPropagationMode = dbmPropagationMode
-    sharedConfig.dsmEnabled = dsmEnabled
-    sharedConfig.memcachedCommandEnabled = memcachedCommandEnabled
-
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]
     }
@@ -161,10 +167,6 @@ module.exports = class PluginManager {
     if (clientIpEnabled !== undefined) {
       sharedConfig.clientIpEnabled = clientIpEnabled
     }
-
-    sharedConfig.site = site
-    sharedConfig.url = url
-    sharedConfig.headers = headerTags || []
 
     return sharedConfig
   }

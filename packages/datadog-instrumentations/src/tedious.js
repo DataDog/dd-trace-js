@@ -7,7 +7,7 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-addHook({ name: 'tedious', versions: [ '>=1.0.0' ] }, tedious => {
+addHook({ name: 'tedious', versions: ['>=1.0.0'] }, tedious => {
   const startCh = channel('apm:tedious:request:start')
   const finishCh = channel('apm:tedious:request:finish')
   const errorCh = channel('apm:tedious:request:error')

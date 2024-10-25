@@ -6,19 +6,25 @@ const fs = require('fs')
 const path = require('path')
 
 const proxyquire = require('proxyquire')
-const sanitizedExecStub = sinon.stub().returns('')
+const execFileSyncStub = sinon.stub().returns('')
 
 const { getCIMetadata } = require('../../../src/plugins/util/ci')
-const { CI_ENV_VARS, CI_NODE_LABELS } = require('../../../src/plugins/util/tags')
+const {
+  CI_ENV_VARS,
+  CI_NODE_LABELS,
+  GIT_PULL_REQUEST_BASE_BRANCH,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_COMMIT_HEAD_SHA
+} = require('../../../src/plugins/util/tags')
 
 const { getGitMetadata } = proxyquire('../../../src/plugins/util/git', {
-  './exec': {
-    'sanitizedExec': sanitizedExecStub
+  child_process: {
+    execFileSync: execFileSyncStub
   }
 })
 const { getTestEnvironmentMetadata } = proxyquire('../../../src/plugins/util/test', {
   './git': {
-    'getGitMetadata': getGitMetadata
+    getGitMetadata
   }
 })
 
@@ -27,6 +33,7 @@ describe('test environment data', () => {
     const tags = getTestEnvironmentMetadata('jest', { service: 'service-name' })
     expect(tags).to.contain({ 'service.name': 'service-name' })
   })
+
   it('getCIMetadata returns an empty object if the CI is not supported', () => {
     process.env = {}
     expect(getCIMetadata()).to.eql({})
@@ -35,10 +42,49 @@ describe('test environment data', () => {
   const ciProviders = fs.readdirSync(path.join(__dirname, 'ci-env'))
   ciProviders.forEach(ciProvider => {
     const assertions = require(path.join(__dirname, 'ci-env', ciProvider))
+    if (ciProvider === 'github.json') {
+      // We grab the first assertion because we only need to test one
+      const [env] = assertions[0]
+      it('can read pull request data from GitHub Actions', () => {
+        process.env = env
+        process.env.GITHUB_BASE_REF = 'datadog:main'
+        process.env.GITHUB_EVENT_PATH = path.join(__dirname, 'fixtures', 'github_event_payload.json')
+        const {
+          [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
+          [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
+          [GIT_COMMIT_HEAD_SHA]: headCommitSha
+        } = getTestEnvironmentMetadata()
+
+        expect({
+          pullRequestBaseBranch,
+          pullRequestBaseBranchSha,
+          headCommitSha
+        }).to.eql({
+          pullRequestBaseBranch: 'datadog:main',
+          pullRequestBaseBranchSha: '52e0974c74d41160a03d59ddc73bb9f5adab054b',
+          headCommitSha: 'df289512a51123083a8e6931dd6f57bb3883d4c4'
+        })
+      })
+      it('does not crash if GITHUB_EVENT_PATH is not a valid JSON file', () => {
+        process.env = env
+        process.env.GITHUB_BASE_REF = 'datadog:main'
+        process.env.GITHUB_EVENT_PATH = path.join(__dirname, 'fixtures', 'github_event_payload_malformed.json')
+        const {
+          [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
+          [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
+          [GIT_COMMIT_HEAD_SHA]: headCommitSha
+        } = getTestEnvironmentMetadata()
+
+        expect(pullRequestBaseBranch).to.equal('datadog:main')
+        expect(pullRequestBaseBranchSha).to.be.undefined
+        expect(headCommitSha).to.be.undefined
+      })
+    }
 
     assertions.forEach(([env, expectedSpanTags], index) => {
       it(`reads env info for spec ${index} from ${ciProvider}`, () => {
         process.env = env
+        const { DD_TEST_CASE_NAME: testCaseName } = env
         const { [CI_ENV_VARS]: envVars, [CI_NODE_LABELS]: nodeLabels, ...restOfTags } = getTestEnvironmentMetadata()
         const {
           [CI_ENV_VARS]: expectedEnvVars,
@@ -46,7 +92,7 @@ describe('test environment data', () => {
           ...restOfExpectedTags
         } = expectedSpanTags
 
-        expect(restOfTags).to.contain(restOfExpectedTags)
+        expect(restOfTags, testCaseName ? `${testCaseName} has failed.` : undefined).to.contain(restOfExpectedTags)
         // `CI_ENV_VARS` key contains a dictionary, so we do a `eql` comparison
         if (envVars && expectedEnvVars) {
           expect(JSON.parse(envVars)).to.eql(JSON.parse(expectedEnvVars))

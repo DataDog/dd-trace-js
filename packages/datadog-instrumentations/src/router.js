@@ -1,6 +1,6 @@
 'use strict'
 
-const METHODS = require('methods').concat('all')
+const METHODS = require('http').METHODS.map(v => v.toLowerCase()).concat('all')
 const pathToRegExp = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
@@ -18,7 +18,7 @@ function createWrapRouterMethod (name) {
   function wrapLayerHandle (layer, original) {
     original._name = original._name || layer.name
 
-    const handle = shimmer.wrap(original, function () {
+    const handle = shimmer.wrapFunction(original, original => function () {
       if (!enterChannel.hasSubscribers) return original.apply(this, arguments)
 
       const matchers = layerMatchers.get(layer)
@@ -89,7 +89,7 @@ function createWrapRouterMethod (name) {
   }
 
   function wrapNext (req, next) {
-    return function (error) {
+    return shimmer.wrapFunction(next, next => function (error) {
       if (error && error !== 'route' && error !== 'router') {
         errorChannel.publish({ req, error })
       }
@@ -98,7 +98,7 @@ function createWrapRouterMethod (name) {
       finishChannel.publish({ req })
 
       next.apply(this, arguments)
-    }
+    })
   }
 
   function extractMatchers (fn) {
@@ -151,7 +151,7 @@ function createWrapRouterMethod (name) {
   }
 
   function wrapMethod (original) {
-    return function methodWithTrace (fn) {
+    return shimmer.wrapFunction(original, original => function methodWithTrace (fn) {
       const offset = this.stack ? [].concat(this.stack).length : 0
       const router = original.apply(this, arguments)
 
@@ -162,7 +162,7 @@ function createWrapRouterMethod (name) {
       wrapStack(this.stack, offset, extractMatchers(fn))
 
       return router
-    }
+    })
   }
 
   return wrapMethod

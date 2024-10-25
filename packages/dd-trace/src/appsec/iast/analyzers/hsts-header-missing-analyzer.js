@@ -9,6 +9,7 @@ class HstsHeaderMissingAnalyzer extends MissingHeaderAnalyzer {
   constructor () {
     super(HSTS_HEADER_MISSING, HSTS_HEADER_NAME)
   }
+
   _isVulnerableFromRequestAndResponse (req, res) {
     const headerValues = this._getHeaderValues(res, HSTS_HEADER_NAME)
     return this._isHttpsProtocol(req) && (

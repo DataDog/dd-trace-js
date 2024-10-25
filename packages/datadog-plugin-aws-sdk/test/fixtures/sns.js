@@ -2,11 +2,11 @@
 
 const sns = {}
 
-sns['create'] = {
+sns.create = {
   Name: 'example_aws_topic'
 }
 
-sns['get'] = {
+sns.get = {
   TopicArn: undefined
 }
 

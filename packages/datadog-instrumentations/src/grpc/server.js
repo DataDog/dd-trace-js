@@ -92,7 +92,9 @@ function createWrapEmit (call, ctx, onCancel) {
           finishChannel.publish(ctx)
           call.removeListener('cancelled', onCancel)
           break
-        case 'finish':
+        // Streams are always cancelled before `finish` since 1.10.0 so we have
+        // to use `prefinish` instead to avoid cancellation false positives.
+        case 'prefinish':
           if (call.status) {
             updateChannel.publish(call.status)
           }
@@ -117,7 +119,7 @@ function wrapStream (call, ctx, onCancel) {
 }
 
 function wrapCallback (callback = () => {}, call, ctx, onCancel) {
-  return function (err, value, trailer, flags) {
+  return shimmer.wrapFunction(callback, callback => function (err, value, trailer, flags) {
     if (err) {
       ctx.error = err
       errorChannel.publish(ctx)
@@ -134,7 +136,7 @@ function wrapCallback (callback = () => {}, call, ctx, onCancel) {
       return callback.apply(this, arguments)
       // No async end channel needed
     })
-  }
+  })
 }
 
 function wrapSendStatus (sendStatus, ctx) {

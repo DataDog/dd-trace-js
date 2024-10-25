@@ -227,13 +227,224 @@ describe('shimmer', () => {
     it('should not throw when unwrapping a method that was not wrapped', () => {
       expect(() => shimmer.unwrap({ a: () => {} }, 'a')).to.not.throw()
     })
+
+    describe('safe mode', () => {
+      let obj
+
+      before(() => {
+        shimmer.setSafe(true)
+      })
+
+      after(() => {
+        shimmer.setSafe(false)
+      })
+
+      describe('sync', () => {
+        beforeEach(() => {
+          obj = { count: () => 3 }
+        })
+
+        it('should not throw when wrapper code is throwing', () => {
+          shimmer.wrap(obj, 'count', () => {
+            return () => {
+              throw new Error('wrapper error')
+            }
+          })
+
+          expect(obj.count()).to.equal(3)
+        })
+
+        it('should not throw when wrapper code is throwing after return', () => {
+          shimmer.wrap(obj, 'count', (count) => {
+            return () => {
+              count()
+              throw new Error('wrapper error')
+            }
+          })
+
+          expect(obj.count()).to.equal(3)
+        })
+      })
+
+      describe('sync recursive', () => {
+        beforeEach(() => {
+          obj = { count: (x = 1) => x === 3 ? 3 : obj.count(x + 1) }
+        })
+
+        it('should not throw when wrapper code is throwing', () => {
+          shimmer.wrap(obj, 'count', (count) => {
+            return function (x) {
+              if (x === 2) {
+                throw new Error('wrapper error')
+              }
+              return count.apply(this, arguments)
+            }
+          })
+
+          expect(obj.count()).to.equal(3)
+        })
+
+        it('should not throw when wrapper code is throwing mid-recursion', () => {
+          shimmer.wrap(obj, 'count', (count) => {
+            return function (x) {
+              const returnValue = count.apply(this, arguments)
+              if (x === 2) {
+                throw new Error('wrapper error')
+              }
+              return returnValue
+            }
+          })
+
+          expect(obj.count()).to.equal(3)
+        })
+
+        it('should not throw when wrapper code is throwing after return', () => {
+          shimmer.wrap(obj, 'count', (count) => {
+            return function (x) {
+              const returnValue = count.apply(this, arguments)
+              if (x === 3) {
+                throw new Error('wrapper error')
+              }
+              return returnValue
+            }
+          })
+
+          expect(obj.count()).to.equal(3)
+        })
+      })
+
+      describe('async', () => {
+        beforeEach(() => {
+          obj = { count: async () => await Promise.resolve(3) }
+        })
+
+        it('should not throw when wrapper code is throwing', async () => {
+          shimmer.wrap(obj, 'count', (count) => {
+            return async function (x) {
+              if (x === 2) {
+                throw new Error('wrapper error')
+              }
+              return await count.apply(this, arguments)
+            }
+          })
+
+          expect(await obj.count()).to.equal(3)
+        })
+
+        it('should not throw when wrapper code is throwing after return', async () => {
+          shimmer.wrap(obj, 'count', (count) => {
+            return async () => {
+              await count()
+              throw new Error('wrapper error')
+            }
+          })
+
+          expect(await obj.count()).to.equal(3)
+        })
+      })
+
+      describe('async recursion', () => {
+        beforeEach(() => {
+          obj = {
+            async count (x = 1) {
+              if (x === 3) return await Promise.resolve(3)
+              else return await obj.count(x + 1)
+            }
+          }
+        })
+
+        it('should not throw when wrapper code is throwing', async () => {
+          shimmer.wrap(obj, 'count', (count) => {
+            return async function (x) {
+              if (x === 2) {
+                throw new Error('wrapper error')
+              }
+              return await count.apply(this, arguments)
+            }
+          })
+
+          expect(await obj.count()).to.equal(3)
+        })
+
+        it('should not throw when wrapper code is throwing mid-recursion', async () => {
+          shimmer.wrap(obj, 'count', (count) => {
+            return async function (x) {
+              const returnValue = await count.apply(this, arguments)
+              if (x === 2) {
+                throw new Error('wrapper error')
+              }
+              return returnValue
+            }
+          })
+
+          expect(await obj.count()).to.equal(3)
+        })
+
+        it('should not throw when wrapper code is throwing after return', async () => {
+          shimmer.wrap(obj, 'count', (count) => {
+            return async function (x) {
+              const returnValue = await count.apply(this, arguments)
+              if (x === 3) {
+                throw new Error('wrapper error')
+              }
+              return returnValue
+            }
+          })
+
+          expect(await obj.count()).to.equal(3)
+        })
+      })
+      // describe('callback', () => {
+      //   it('should not throw when wrapper code is throwing', (done) => {
+      //     const obj = { count: cb => setImmediate(() => cb(null, 3)) }
+
+      //     shimmer.wrap(obj, 'count', () => {
+      //       return () => {
+      //         throw new Error('wrapper error')
+      //       }
+      //     })
+
+      //     obj.count((err, res) => {
+      //       expect(res).to.equal(3)
+      //       done()
+      //     })
+      //   })
+      //   it('should not throw when wrapper code calls cb with error', async () => {
+      //     const obj = { count: cb => setImmediate(() => cb(null, 3)) }
+
+      //     shimmer.wrap(obj, 'count', (count) => {
+      //       return (cb) => {
+      //         count((err, val) => {
+      //           cb(new Error('wrapper error'))
+      //         })
+      //       }
+      //     })
+
+      //     obj.count((err, res) => {
+      //       expect(err).to.be.undefined
+      //       expect(res).to.equal(3)
+      //       done()
+      //     })
+      //   })
+      // })
+    })
   })
 
   describe('with a function', () => {
+    it('should not work with a wrap()', () => {
+      expect(() => shimmer.wrap(() => {}, () => {})).to.throw()
+    })
+
+    it('should work without a function', () => {
+      const a = { b: 1 }
+      const wrapped = shimmer.wrapFunction(a, x => () => x)
+      expect(wrapped()).to.equal(a)
+    })
+
     it('should wrap the function', () => {
       const count = inc => inc
 
-      const wrapped = shimmer.wrap(count, inc => count(inc) + 1)
+      const wrapped = shimmer.wrapFunction(count, count => inc => count(inc) + 1)
 
       expect(wrapped).to.not.equal(count)
       expect(wrapped(1)).to.equal(2)
@@ -244,7 +455,7 @@ describe('shimmer', () => {
         this.value = start
       }
 
-      const WrappedCounter = shimmer.wrap(Counter, function (...args) {
+      const WrappedCounter = shimmer.wrapFunction(Counter, Counter => function (...args) {
         Counter.apply(this, arguments)
         this.value++
       })
@@ -262,7 +473,7 @@ describe('shimmer', () => {
         }
       }
 
-      expect(() => shimmer.wrap(Counter, function () {})).to.throw(
+      expect(() => shimmer.wrapFunction(Counter, Counter => function () {})).to.throw(
         'Target is a native class constructor and cannot be wrapped.'
       )
     })
@@ -276,7 +487,7 @@ describe('shimmer', () => {
 
       Counter.toString = 'invalid'
 
-      expect(() => shimmer.wrap(Counter, function () {})).to.throw(
+      expect(() => shimmer.wrapFunction(Counter, Counter => function () {})).to.throw(
         'Target is a native class constructor and cannot be wrapped.'
       )
     })
@@ -291,7 +502,7 @@ describe('shimmer', () => {
       count.foo = 'foo'
       count[sym] = 'sym'
 
-      const wrapped = shimmer.wrap(count, () => {})
+      const wrapped = shimmer.wrapFunction(count, count => () => {})
       const bar = Object.getOwnPropertyDescriptor(wrapped, 'bar')
 
       expect(wrapped).to.have.property('foo', 'foo')
@@ -304,7 +515,7 @@ describe('shimmer', () => {
     it('should preserve the original function length', () => {
       const count = (a, b, c) => {}
 
-      const wrapped = shimmer.wrap(count, () => {})
+      const wrapped = shimmer.wrapFunction(count, count => () => {})
 
       expect(wrapped).to.have.length(3)
     })
@@ -312,7 +523,7 @@ describe('shimmer', () => {
     it('should preserve the original function name', () => {
       const count = function count (a, b, c) {}
 
-      const wrapped = shimmer.wrap(count, () => {})
+      const wrapped = shimmer.wrapFunction(count, count => () => {})
 
       expect(wrapped).to.have.property('name', 'count')
     })
@@ -322,7 +533,7 @@ describe('shimmer', () => {
 
       Object.getPrototypeOf(count).test = 'test'
 
-      const wrapped = shimmer.wrap(count, () => {})
+      const wrapped = shimmer.wrapFunction(count, count => () => {})
 
       expect(wrapped).to.have.property('test', 'test')
       expect(Object.getOwnPropertyNames(wrapped)).to.not.include('test')
@@ -331,7 +542,7 @@ describe('shimmer', () => {
     it('should unwrap a function', () => {
       const count = inc => inc
 
-      const wrapped = shimmer.wrap(count, inc => count(inc) + 1)
+      const wrapped = shimmer.wrapFunction(count, count => inc => count(inc) + 1)
 
       shimmer.unwrap(wrapped)
 
@@ -343,7 +554,7 @@ describe('shimmer', () => {
         this.value = start
       }
 
-      const WrappedCounter = shimmer.wrap(Counter, function (...args) {
+      const WrappedCounter = shimmer.wrapFunction(Counter, Counter => function (...args) {
         Counter.apply(this, arguments)
         this.value++
       })

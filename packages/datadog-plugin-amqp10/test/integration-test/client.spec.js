@@ -16,7 +16,7 @@ describe('esm', () => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'amqp10@${version}'`, 'rhea'], false, [
-        `./packages/datadog-plugin-amqp10/test/integration-test/*`])
+        './packages/datadog-plugin-amqp10/test/integration-test/*'])
     })
 
     after(async () => {

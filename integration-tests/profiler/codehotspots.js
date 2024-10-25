@@ -8,8 +8,8 @@ function busyLoop () {
   const start = process.hrtime.bigint()
   for (;;) {
     const now = process.hrtime.bigint()
-    // Busy cycle for 20ms
-    if (now - start > 20000000n) {
+    // Busy cycle for 100ms
+    if (now - start > 100000000n) {
       break
     }
   }

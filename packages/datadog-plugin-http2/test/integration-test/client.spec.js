@@ -16,7 +16,7 @@ describe('esm', () => {
   before(async function () {
     this.timeout(50000)
     sandbox = await createSandbox(['http2'], false, [
-      `./packages/datadog-plugin-http2/test/integration-test/*`])
+      './packages/datadog-plugin-http2/test/integration-test/*'])
   })
 
   after(async function () {
@@ -52,7 +52,7 @@ describe('esm', () => {
 })
 
 async function curl (url) {
-  if (typeof url === 'object') {
+  if (url !== null && typeof url === 'object') {
     if (url.then) {
       return curl(await url)
     }

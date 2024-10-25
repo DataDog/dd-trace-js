@@ -8,10 +8,22 @@ const {
   finishAllTraceSpans,
   getTestSuitePath,
   getTestSuiteCommonTags,
-  TEST_SOURCE_START
+  TEST_SOURCE_START,
+  TEST_CODE_OWNERS,
+  TEST_SOURCE_FILE,
+  TEST_CONFIGURATION_BROWSER_NAME,
+  TEST_IS_NEW,
+  TEST_IS_RETRY,
+  TEST_EARLY_FLAKE_ENABLED,
+  TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
+const {
+  TELEMETRY_EVENT_CREATED,
+  TELEMETRY_EVENT_FINISHED
+} = require('../../dd-trace/src/ci-visibility/telemetry')
+const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 
 class PlaywrightPlugin extends CiPlugin {
   static get id () {
@@ -22,20 +34,42 @@ class PlaywrightPlugin extends CiPlugin {
     super(...args)
 
     this._testSuites = new Map()
+    this.numFailedTests = 0
+    this.numFailedSuites = 0
 
-    this.addSub('ci:playwright:session:finish', ({ status, onDone }) => {
+    this.addSub('ci:playwright:session:finish', ({ status, isEarlyFlakeDetectionEnabled, onDone }) => {
       this.testModuleSpan.setTag(TEST_STATUS, status)
       this.testSessionSpan.setTag(TEST_STATUS, status)
 
+      if (isEarlyFlakeDetectionEnabled) {
+        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
+      }
+
+      if (this.numFailedSuites > 0) {
+        let errorMessage = `Test suites failed: ${this.numFailedSuites}.`
+        if (this.numFailedTests > 0) {
+          errorMessage += ` Tests failed: ${this.numFailedTests}`
+        }
+        const error = new Error(errorMessage)
+        this.testModuleSpan.setTag('error', error)
+        this.testSessionSpan.setTag('error', error)
+      }
+
       this.testModuleSpan.finish()
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
+      this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
+      appClosingTelemetry()
       this.tracer._exporter.flush(onDone)
+      this.numFailedTests = 0
     })
 
     this.addSub('ci:playwright:test-suite:start', (testSuiteAbsolutePath) => {
       const store = storage.getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
+      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
 
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
@@ -43,6 +77,14 @@ class PlaywrightPlugin extends CiPlugin {
         testSuite,
         'playwright'
       )
+      if (testSourceFile) {
+        testSuiteMetadata[TEST_SOURCE_FILE] = testSourceFile
+        testSuiteMetadata[TEST_SOURCE_START] = 1
+      }
+      const codeOwners = this.getCodeOwners(testSuiteMetadata)
+      if (codeOwners) {
+        testSuiteMetadata[TEST_CODE_OWNERS] = codeOwners
+      }
 
       const testSuiteSpan = this.tracer.startSpan('playwright.test_suite', {
         childOf: this.testModuleSpan,
@@ -52,27 +94,40 @@ class PlaywrightPlugin extends CiPlugin {
           ...testSuiteMetadata
         }
       })
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       this.enter(testSuiteSpan, store)
 
       this._testSuites.set(testSuite, testSuiteSpan)
     })
 
-    this.addSub('ci:playwright:test-suite:finish', (status) => {
+    this.addSub('ci:playwright:test-suite:finish', ({ status, error }) => {
       const store = storage.getStore()
       const span = store && store.span
       if (!span) return
-      span.setTag(TEST_STATUS, status)
+      if (error) {
+        span.setTag('error', error)
+        span.setTag(TEST_STATUS, 'fail')
+      } else {
+        span.setTag(TEST_STATUS, status)
+      }
+
+      if (status === 'fail' || error) {
+        this.numFailedSuites++
+      }
+
       span.finish()
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
 
-    this.addSub('ci:playwright:test:start', ({ testName, testSuiteAbsolutePath, testSourceLine }) => {
+    this.addSub('ci:playwright:test:start', ({ testName, testSuiteAbsolutePath, testSourceLine, browserName }) => {
       const store = storage.getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
-      const span = this.startTestSpan(testName, testSuite, testSourceLine)
+      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const span = this.startTestSpan(testName, testSuite, testSourceFile, testSourceLine, browserName)
 
       this.enter(span, store)
     })
-    this.addSub('ci:playwright:test:finish', ({ testStatus, steps, error, extraTags }) => {
+    this.addSub('ci:playwright:test:finish', ({ testStatus, steps, error, extraTags, isNew, isEfdRetry, isRetry }) => {
       const store = storage.getStore()
       const span = store && store.span
       if (!span) return
@@ -84,6 +139,15 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (extraTags) {
         span.addTags(extraTags)
+      }
+      if (isNew) {
+        span.setTag(TEST_IS_NEW, 'true')
+        if (isEfdRetry) {
+          span.setTag(TEST_IS_RETRY, 'true')
+        }
+      }
+      if (isRetry) {
+        span.setTag(TEST_IS_RETRY, 'true')
       }
 
       steps.forEach(step => {
@@ -100,17 +164,46 @@ class PlaywrightPlugin extends CiPlugin {
         if (step.error) {
           stepSpan.setTag('error', step.error)
         }
-        stepSpan.finish(stepStartTime + step.duration)
+        let stepDuration = step.duration
+        if (stepDuration <= 0 || isNaN(stepDuration)) {
+          stepDuration = 0
+        }
+        stepSpan.finish(stepStartTime + stepDuration)
       })
 
+      if (testStatus === 'fail') {
+        this.numFailedTests++
+      }
+
+      this.telemetry.ciVisEvent(
+        TELEMETRY_EVENT_FINISHED,
+        'test',
+        {
+          hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS],
+          isNew,
+          browserDriver: 'playwright'
+        }
+      )
       span.finish()
+
       finishAllTraceSpans(span)
     })
   }
 
-  startTestSpan (testName, testSuite, testSourceLine) {
+  startTestSpan (testName, testSuite, testSourceFile, testSourceLine, browserName) {
     const testSuiteSpan = this._testSuites.get(testSuite)
-    return super.startTestSpan(testName, testSuite, testSuiteSpan, { [TEST_SOURCE_START]: testSourceLine })
+
+    const extraTags = {
+      [TEST_SOURCE_START]: testSourceLine
+    }
+    if (testSourceFile) {
+      extraTags[TEST_SOURCE_FILE] = testSourceFile || testSuite
+    }
+    if (browserName) {
+      extraTags[TEST_CONFIGURATION_BROWSER_NAME] = browserName
+    }
+
+    return super.startTestSpan(testName, testSuite, testSuiteSpan, extraTags)
   }
 }
 

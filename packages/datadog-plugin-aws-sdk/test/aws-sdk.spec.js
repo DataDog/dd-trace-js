@@ -35,11 +35,11 @@ describe('Plugin', () => {
             })
 
             expect(span.meta).to.include({
-              'component': 'aws-sdk',
+              component: 'aws-sdk',
               'aws.region': 'us-east-1',
-              'region': 'us-east-1',
+              region: 'us-east-1',
               'aws.service': 'S3',
-              'aws_service': 'S3',
+              aws_service: 'S3',
               'aws.operation': 'listBuckets'
             })
           }).then(done, done)
@@ -102,13 +102,35 @@ describe('Plugin', () => {
             })
 
             expect(span.meta).to.include({
-              'component': 'aws-sdk',
+              component: 'aws-sdk',
               'aws.region': 'us-east-1',
-              'region': 'us-east-1',
+              region: 'us-east-1',
               'aws.service': 'S3',
-              'aws_service': 'S3',
+              aws_service: 'S3',
               'aws.operation': 'listBuckets'
             })
+          }).then(done, done)
+
+          s3.listBuckets({}, e => e && done(e))
+        })
+
+        // different versions of aws-sdk use different casings and different AWS headers
+        it('should include tracing headers and not cause a 403 error', (done) => {
+          const HttpClientPlugin = require('../../datadog-plugin-http/src/client.js')
+          const spy = sinon.spy(HttpClientPlugin.prototype, 'bindStart')
+          agent.use(traces => {
+            const headers = new Set(
+              Object.keys(spy.firstCall.firstArg.args.options.headers)
+                .map(x => x.toLowerCase())
+            )
+            spy.restore()
+
+            expect(headers).to.include('authorization')
+            expect(headers).to.include('x-amz-date')
+            expect(headers).to.include('x-datadog-trace-id')
+            expect(headers).to.include('x-datadog-parent-id')
+            expect(headers).to.include('x-datadog-sampling-priority')
+            expect(headers).to.include('x-datadog-tags')
           }).then(done, done)
 
           s3.listBuckets({}, e => e && done(e))
@@ -122,7 +144,7 @@ describe('Plugin', () => {
 
             expect(span).to.include({
               name: 'aws.request',
-              resource: 'completeMultipartUpload',
+              resource: 'completeMultipartUpload my-bucket',
               service: 'test-aws-s3'
             })
 
@@ -130,11 +152,18 @@ describe('Plugin', () => {
               [ERROR_TYPE]: error.name,
               [ERROR_MESSAGE]: error.message,
               [ERROR_STACK]: error.stack,
-              'component': 'aws-sdk'
+              component: 'aws-sdk'
             })
+            if (semver.intersects(version, '>=2.3.4')) {
+              expect(span.meta['aws.response.request_id']).to.match(/[\w]{8}(-[\w]{4}){3}-[\w]{12}/)
+            }
           }).then(done, done)
 
-          s3.completeMultipartUpload('invalid', e => {
+          s3.completeMultipartUpload({
+            Bucket: 'my-bucket',
+            Key: 'my-key',
+            UploadId: 'my-upload-id'
+          }, e => {
             error = e
           })
         })
@@ -210,7 +239,7 @@ describe('Plugin', () => {
               request (span, response) {
                 span.setTag('hook.operation', response.request.operation)
                 span.addTags({
-                  'error': 0
+                  error: 0
                 })
               }
             }
@@ -238,7 +267,7 @@ describe('Plugin', () => {
             expect(span).to.have.property('error', 0)
             expect(span.meta).to.include({
               'hook.operation': 'listBuckets',
-              'component': 'aws-sdk'
+              component: 'aws-sdk'
             })
           }).then(done, done)
 
@@ -305,6 +334,65 @@ describe('Plugin', () => {
               done(e)
             }
           }, 250)
+        })
+      })
+
+      describe('with programmatic batchPropagationEnabled configuration', () => {
+        before(() => {
+          return agent.load(['aws-sdk'], [{
+            service: 'test',
+            batchPropagationEnabled: true,
+            kinesis: {
+              batchPropagationEnabled: false
+            },
+            sns: false,
+            sqs: {
+              batchPropagationEnabled: false
+            }
+          }])
+        })
+
+        before(() => {
+          tracer = require('../../dd-trace')
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        it('should be configurable on a per-service basis', () => {
+          const { kinesis, sns, sqs } = tracer._pluginManager._pluginsByName['aws-sdk'].services
+
+          expect(kinesis.config.batchPropagationEnabled).to.equal(false)
+          expect(sns.config.batchPropagationEnabled).to.equal(true)
+          expect(sns.config.enabled).to.equal(false)
+          expect(sqs.config.batchPropagationEnabled).to.equal(false)
+        })
+      })
+
+      describe('with env variable _BATCH_PROPAGATION_ENABLED configuration', () => {
+        before(() => {
+          process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED = true
+          process.env.DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED = false
+          process.env.DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED = true
+
+          return agent.load(['aws-sdk'])
+        })
+
+        before(() => {
+          tracer = require('../../dd-trace')
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        it('should be configurable on a per-service basis', () => {
+          const { kinesis, sns, sqs } = tracer._pluginManager._pluginsByName['aws-sdk'].services
+
+          expect(kinesis.config.batchPropagationEnabled).to.equal(false)
+          expect(sns.config.batchPropagationEnabled).to.equal(true)
+          expect(sqs.config.batchPropagationEnabled).to.equal(true)
         })
       })
     })

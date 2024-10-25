@@ -16,7 +16,7 @@ describe('esm', () => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'pino@${version}'`],
-        false, [`./packages/datadog-plugin-pino/test/integration-test/*`])
+        false, ['./packages/datadog-plugin-pino/test/integration-test/*'])
     })
 
     after(async () => {

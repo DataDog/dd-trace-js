@@ -17,15 +17,21 @@ exports.channel = function (name) {
 /**
  * @param {string} args.name module name
  * @param {string[]} args.versions array of semver range strings
- * @param {string} args.file path to file within package to instrument?
+ * @param {string} args.file path to file within package to instrument
+ * @param {string} args.filePattern pattern to match files within package to instrument
  * @param Function hook
  */
-exports.addHook = function addHook ({ name, versions, file }, hook) {
-  if (!instrumentations[name]) {
-    instrumentations[name] = []
+exports.addHook = function addHook ({ name, versions, file, filePattern }, hook) {
+  if (typeof name === 'string') {
+    name = [name]
   }
 
-  instrumentations[name].push({ name, versions, file, hook })
+  for (const val of name) {
+    if (!instrumentations[val]) {
+      instrumentations[val] = []
+    }
+    instrumentations[val].push({ name: val, versions, file, filePattern, hook })
+  }
 }
 
 // AsyncResource.bind exists and binds `this` properly only from 17.8.0 and up.
@@ -51,13 +57,13 @@ if (semver.satisfies(process.versions.node, '>=17.8.0')) {
         bound = this.runInAsyncScope.bind(this, fn, thisArg)
       }
       Object.defineProperties(bound, {
-        'length': {
+        length: {
           configurable: true,
           enumerable: false,
           value: fn.length,
           writable: false
         },
-        'asyncResource': {
+        asyncResource: {
           configurable: true,
           enumerable: true,
           value: this,

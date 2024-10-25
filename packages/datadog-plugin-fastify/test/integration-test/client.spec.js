@@ -1,5 +1,5 @@
 'use strict'
-
+const semver = require('semver')
 const {
   FakeAgent,
   createSandbox,
@@ -8,19 +8,21 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
+const { NODE_MAJOR } = require('../../../../version')
 
 describe('esm', () => {
   let agent
   let proc
   let sandbox
 
-  // TODO: fastify instrumentation breaks with esm for version 4.23.2 but works for commonJS,
-  // fix it and change the versions tested
-  withVersions('fastify', 'fastify', '^3', version => {
+  // skip older versions of fastify due to syntax differences
+  withVersions('fastify', 'fastify', '>=3', (version, _, specificVersion) => {
+    if (NODE_MAJOR <= 18 && semver.satisfies(specificVersion, '>=5')) return
+
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'fastify@${version}'`], false,
-        [`./packages/datadog-plugin-fastify/test/integration-test/*`])
+        ['./packages/datadog-plugin-fastify/test/integration-test/*'])
     })
 
     after(async () => {

@@ -16,7 +16,7 @@ class TediousPlugin extends DatabasePlugin {
       kind: 'client',
       meta: {
         'db.type': 'mssql',
-        'component': 'tedious',
+        component: 'tedious',
         'out.host': connectionConfig.server,
         [CLIENT_PORT_KEY]: connectionConfig.options.port,
         'db.user': connectionConfig.userName || connectionConfig.authentication.options.userName,
