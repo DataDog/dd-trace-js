@@ -21,11 +21,11 @@ class TestVisDynamicInstrumentation {
     return [
       snapshotId,
       new Promise(resolve => {
-        const id = randomUUID()
-        probeIdToResolvePromise.set(id, resolve)
+        const probeId = randomUUID()
+        probeIdToResolvePromise.set(probeId, resolve)
         this.worker.postMessage({
           snapshotId,
-          probe: { id, file, line }
+          probe: { id: probeId, file, line }
         })
       })
     ]
@@ -49,11 +49,12 @@ class TestVisDynamicInstrumentation {
     // Allow the parent to exit even if the worker is still running
     this.worker.unref()
 
-    this.worker.on('message', ({ id, probe, state, stack, snapshot }) => {
-      const resolveSnapshot = probeIdToResolvePromise.get(id)
-      if (resolveSnapshot) {
-        resolveSnapshot({ probe, state, stack, snapshot })
-        probeIdToResolvePromise.delete(id)
+    this.worker.on('message', ({ snapshot }) => {
+      const { probe: { id: probeId } } = snapshot
+      const resolve = probeIdToResolvePromise.get(probeId)
+      if (resolve) {
+        resolve({ snapshot })
+        probeIdToResolvePromise.delete(probeId)
       }
     }).unref() // We also need to unref this message handler
   }
