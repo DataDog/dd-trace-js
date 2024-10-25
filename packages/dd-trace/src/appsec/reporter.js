@@ -15,6 +15,7 @@ const {
 const zlib = require('zlib')
 const standalone = require('./standalone')
 const { SAMPLING_MECHANISM_APPSEC } = require('../constants')
+const { keepTrace } = require('../priority_sampler')
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
@@ -127,7 +128,7 @@ function reportAttack (attackData) {
   }
 
   if (limiter.isAllowed()) {
-    rootSpan.keep(SAMPLING_MECHANISM_APPSEC)
+    keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
 
     standalone.sample(rootSpan)
   }
@@ -182,7 +183,7 @@ function finishRequest (req, res) {
   if (metricsQueue.size) {
     rootSpan.addTags(Object.fromEntries(metricsQueue))
 
-    rootSpan.keep(SAMPLING_MECHANISM_APPSEC)
+    keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
 
     standalone.sample(rootSpan)
 

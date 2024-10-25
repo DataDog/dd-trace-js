@@ -4,6 +4,7 @@ const proxyquire = require('proxyquire')
 const { storage } = require('../../../datadog-core')
 const zlib = require('zlib')
 const { SAMPLING_MECHANISM_APPSEC } = require('../../src/constants')
+const { USER_KEEP } = require('../../../../ext/priority')
 
 describe('reporter', () => {
   let Reporter
@@ -11,9 +12,15 @@ describe('reporter', () => {
   let web
   let telemetry
   let sample
+  let prioritySampler
 
   beforeEach(() => {
+    prioritySampler = {
+      setPriority: sinon.stub()
+    }
+
     span = {
+      _prioritySampler: prioritySampler,
       context: sinon.stub().returns({
         _tags: {}
       }),
@@ -227,7 +234,7 @@ describe('reporter', () => {
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}',
         'network.client.ip': '8.8.8.8'
       })
-      expect(span.keep).to.have.been.calledOnceWithExactly(SAMPLING_MECHANISM_APPSEC)
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
     })
 
     it('should not add manual.keep when rate limit is reached', (done) => {
@@ -238,20 +245,20 @@ describe('reporter', () => {
       expect(Reporter.reportAttack('', params)).to.not.be.false
       expect(Reporter.reportAttack('', params)).to.not.be.false
 
-      expect(span.keep).to.have.callCount(3)
+      expect(prioritySampler.setPriority).to.have.callCount(3)
 
       Reporter.setRateLimit(1)
 
       expect(Reporter.reportAttack('', params)).to.not.be.false
       expect(addTags.getCall(3).firstArg).to.have.property('appsec.event').that.equals('true')
-      expect(span.keep).to.have.callCount(4)
+      expect(prioritySampler.setPriority).to.have.callCount(4)
       expect(Reporter.reportAttack('', params)).to.not.be.false
       expect(addTags.getCall(4).firstArg).to.have.property('appsec.event').that.equals('true')
-      expect(span.keep).to.have.callCount(4)
+      expect(prioritySampler.setPriority).to.have.callCount(4)
 
       setTimeout(() => {
         expect(Reporter.reportAttack('', params)).to.not.be.false
-        expect(span.keep).to.have.callCount(5)
+        expect(prioritySampler.setPriority).to.have.callCount(5)
         done()
       }, 1020)
     })
@@ -268,7 +275,7 @@ describe('reporter', () => {
         '_dd.appsec.json': '{"triggers":[]}',
         'network.client.ip': '8.8.8.8'
       })
-      expect(span.keep).to.have.been.calledOnceWithExactly(SAMPLING_MECHANISM_APPSEC)
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
     })
 
     it('should merge attacks json', () => {
@@ -284,7 +291,7 @@ describe('reporter', () => {
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
         'network.client.ip': '8.8.8.8'
       })
-      expect(span.keep).to.have.been.calledOnceWithExactly(SAMPLING_MECHANISM_APPSEC)
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
     })
 
     it('should call standalone sample', () => {
@@ -301,7 +308,7 @@ describe('reporter', () => {
         'network.client.ip': '8.8.8.8'
       })
 
-      expect(span.keep).to.have.been.calledOnceWithExactly(SAMPLING_MECHANISM_APPSEC)
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
 
       expect(sample).to.have.been.calledOnceWithExactly(span)
     })
@@ -652,7 +659,7 @@ describe('reporter', () => {
 
       Reporter.finishRequest(req, wafContext, {})
 
-      expect(span.keep).to.have.been.calledOnceWithExactly(SAMPLING_MECHANISM_APPSEC)
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
     })
   })
 })

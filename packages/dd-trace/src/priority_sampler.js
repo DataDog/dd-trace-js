@@ -213,6 +213,10 @@ class PrioritySampler {
       if (rule.match(span)) return rule
     }
   }
+
+  static keepTrace (span, mechanism) {
+    span?._prioritySampler?.setPriority(span, USER_KEEP, mechanism)
+  }
 }
 
 module.exports = PrioritySampler

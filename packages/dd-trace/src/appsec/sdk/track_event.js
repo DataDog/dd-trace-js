@@ -6,6 +6,7 @@ const { setUserTags } = require('./set_user')
 const standalone = require('../standalone')
 const waf = require('../waf')
 const { SAMPLING_MECHANISM_APPSEC } = require('../../constants')
+const { keepTrace } = require('../../priority_sampler')
 
 function trackUserLoginSuccessEvent (tracer, user, metadata) {
   // TODO: better user check here and in _setUser() ?
@@ -55,7 +56,7 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode) {
     return
   }
 
-  rootSpan.keep(SAMPLING_MECHANISM_APPSEC)
+  keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
 
   const tags = {
     [`appsec.events.${eventName}.track`]: 'true'

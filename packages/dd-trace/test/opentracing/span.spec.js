@@ -407,19 +407,4 @@ describe('Span', () => {
       expect(processor.process).to.have.been.calledOnce
     })
   })
-
-  describe('keep', () => {
-    it('should set priority using configured prioritySampler', () => {
-      const prioritySampler = {
-        setPriority: sinon.stub()
-      }
-
-      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
-
-      const mechanism = 42
-      span.keep(mechanism)
-
-      expect(prioritySampler.setPriority).to.have.been.calledOnceWith(span, USER_KEEP, mechanism)
-    })
-  })
 })
