@@ -345,6 +345,7 @@ describe('Plugin', () => {
         let dsmTopic
         let sub
         let consume
+
         beforeEach(() => {
           return agent.load('google-cloud-pubsub', {
             dsmEnabled: true
@@ -369,6 +370,7 @@ describe('Plugin', () => {
 
         describe('should set a DSM checkpoint', () => {
           let setDataStreamsContextSpy
+
           beforeEach(() => {
             setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
           })
@@ -407,6 +409,7 @@ describe('Plugin', () => {
 
         describe('it should set a message payload size', () => {
           let recordCheckpointSpy
+
           beforeEach(() => {
             recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
           })
