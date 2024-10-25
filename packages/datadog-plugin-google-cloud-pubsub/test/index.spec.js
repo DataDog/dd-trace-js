@@ -13,17 +13,18 @@ const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/
 // The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
 const TIMEOUT = 30000
 
+const dsmFullTopic = 'projects/test-project-42764574591eb894/topics/dsm-topic'
 const dsmTopicName = 'dsm-topic'
 const expectedProducerHash = computePathwayHash(
   'test',
   'tester',
-  ['direction:out', 'topic:' + dsmTopicName, 'type:pub/sub'],
+  ['direction:out', 'topic:' + dsmFullTopic, 'type:google-pubsub'],
   ENTRY_PARENT_HASH
 )
 const expectedConsumerHash = computePathwayHash(
   'test',
   'tester',
-  ['direction:in', 'topic:' + dsmTopicName, 'type:pub/sub'],
+  ['direction:in', 'topic:' + dsmFullTopic, 'type:google-pubsub'],
   expectedProducerHash
 )
 

@@ -29,9 +29,8 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
       this.tracer.inject(span, 'text_map', msg.attributes)
       if (this.config.dsmEnabled) {
         const payloadSize = getHeadersSize(msg)
-        const topicName = topic.split('/').pop()
         const dataStreamsContext = this.tracer
-          .setCheckpoint(['direction:out', `topic:${topicName}`, 'type:pub/sub'], span, payloadSize)
+          .setCheckpoint(['direction:out', `topic:${topic}`, 'type:google-pubsub'], span, payloadSize)
         DsmPathwayCodec.encode(dataStreamsContext, msg.attributes)
       }
     }

@@ -26,10 +26,9 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     })
     if (this.config.dsmEnabled && message?.attributes) {
       const payloadSize = getMessageSize(message)
-      const topicName = topic.split('/').pop()
       this.tracer.decodeDataStreamsContext(message.attributes)
       this.tracer
-        .setCheckpoint(['direction:in', `topic:${topicName}`, 'type:pub/sub'], span, payloadSize)
+        .setCheckpoint(['direction:in', `topic:${topic}`, 'type:google-pubsub'], span, payloadSize)
     }
   }
 
