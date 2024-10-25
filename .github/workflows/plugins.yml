@@ -885,9 +885,11 @@ jobs:
     env:
       PG_TEST_NATIVE: 'true'
       PLUGINS: pg
-      SERVICES: postgres
     steps:
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/node/22
+      - uses: ./.github/actions/node/setup
+      - uses: ./.github/actions/install
       - run: if yarn services; then exit -1; else exit 0; fi
 
   promise:
