@@ -98,6 +98,19 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@v3
 
+  # TODO When next job fails, update postgres job to node/latest
+  postgres-fail-on-support:
+    runs-on: ubuntu-latest
+    env:
+      PG_TEST_NATIVE: 'true'
+      PLUGINS: pg
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/node/setup
+      - uses: ./.github/actions/install
+      - uses: ./.github/actions/node/latest
+      - run: if yarn services; then exit -1; else exit 0; fi
+
   mysql:
     runs-on: ubuntu-latest
     services:

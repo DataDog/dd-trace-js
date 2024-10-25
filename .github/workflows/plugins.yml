@@ -880,19 +880,13 @@ jobs:
       - uses: codecov/codecov-action@v3
       - if: always()
         uses: ./.github/actions/testagent/logs
+
+# TODO When next job fails, update postgres job to node/latest
   postgres-fail-on-support:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:9.5
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
     env:
       PG_TEST_NATIVE: 'true'
       PLUGINS: pg
-      SERVICES: postgres
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
