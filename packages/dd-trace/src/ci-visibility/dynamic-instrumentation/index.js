@@ -7,8 +7,6 @@ const log = require('../log')
 
 const probeIdToResolvePromise = new Map()
 
-let testVisDynamicInstrumentation = null
-
 class TestVisDynamicInstrumentation {
   constructor () {
     this.worker = null
@@ -60,10 +58,4 @@ class TestVisDynamicInstrumentation {
   }
 }
 
-module.exports = (config) => {
-  if (!testVisDynamicInstrumentation) {
-    testVisDynamicInstrumentation = new TestVisDynamicInstrumentation(config)
-  }
-
-  return testVisDynamicInstrumentation
-}
+module.exports = new TestVisDynamicInstrumentation()
