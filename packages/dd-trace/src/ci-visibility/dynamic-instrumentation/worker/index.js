@@ -1,7 +1,7 @@
 const { parentPort } = require('worker_threads')
-// TODO: move session to common place?
+// TODO: move session to common place
 const session = require('../../../debugger/devtools_client/session')
-// TODO: move getLocalStateForCallFrame to common place?
+// TODO: move getLocalStateForCallFrame to common place
 const { getLocalStateForCallFrame } = require('../../../debugger/devtools_client/snapshot')
 const log = require('../../log')
 
@@ -10,8 +10,8 @@ let sessionStarted = false
 const scriptIds = []
 const scriptUrls = new Map()
 
-const probes = new Map()
-const breakpoints = new Map()
+const breakpointIdToSnapshotId = new Map()
+const breakpointIdToProbe = new Map()
 
 function findScriptFromPartialPath (path) {
   return scriptIds
@@ -26,21 +26,20 @@ session.on('Debugger.scriptParsed', ({ params }) => {
   }
 })
 
-session.on('Debugger.paused', async ({ params }) => {
-  const { hitBreakpoints: [hitBreakpoint], callFrames } = params
+session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint], callFrames } }) => {
+  const probe = breakpointIdToProbe.get(hitBreakpoint)
+  if (!probe) {
+    return session.post('Debugger.resume')
+  }
 
-  const probe = breakpoints.get(hitBreakpoint)
-  const probeId = probes.get(hitBreakpoint)
-
-  const stack = callFrames.map(({ functionName, location: { scriptId, lineNumber, columnNumber } }) => {
-    let fileName = scriptUrls.get(scriptId)
+  const stack = callFrames.map((frame) => {
+    let fileName = scriptUrls.get(frame.location.scriptId)
     if (fileName.startsWith('file://')) fileName = fileName.substr(7) // TODO: This might not be required
-
     return {
       fileName,
-      function: functionName,
-      lineNumber: lineNumber + 1,
-      columnNumber: columnNumber + 1
+      function: frame.functionName,
+      lineNumber: frame.location.lineNumber + 1, // Beware! lineNumber is zero-indexed
+      columnNumber: frame.location.columnNumber + 1 // Beware! columnNumber is zero-indexed
     }
   })
 
@@ -48,12 +47,10 @@ session.on('Debugger.paused', async ({ params }) => {
 
   await session.post('Debugger.resume')
 
-  if (!probe) {
-    return
-  }
+  const snapshotId = breakpointIdToSnapshotId.get(hitBreakpoint)
 
   const snapshot = {
-    id: probe.snapshotId,
+    id: snapshotId,
     timestamp: Date.now(),
     probe: {
       id: probe.probeId,
@@ -71,18 +68,17 @@ session.on('Debugger.paused', async ({ params }) => {
     }
   }
 
-  parentPort.postMessage({ probe, snapshot, id: probeId })
+  parentPort.postMessage({ snapshot })
 })
 
+// TODO: add option to remove breakpoint
 parentPort.on('message', async ({ snapshotId, probe: { id: probeId, file, line } }) => {
-  // only message at the moment is a line probe
-  // TODO: add option to remove breakpoint
-  await addBreakpoint({ probeId, file, line, snapshotId })
+  await addBreakpoint(snapshotId, { probeId, file, line })
 })
 
-async function addBreakpoint (probe) {
+async function addBreakpoint (snapshotId, probe) {
   if (!sessionStarted) await start()
-  const { file, line, probeId } = probe
+  const { file, line } = probe
 
   probe.location = { file, lines: [String(line)] }
 
@@ -100,9 +96,8 @@ async function addBreakpoint (probe) {
     }
   })
 
-  probes.set(breakpointId, probeId)
-
-  breakpoints.set(breakpointId, probe)
+  breakpointIdToProbe.set(breakpointId, probe)
+  breakpointIdToSnapshotId.set(breakpointId, snapshotId)
 }
 
 function start () {
