@@ -356,6 +356,43 @@ describe('exporters/agent', function () {
         waitForResponse
       ])
     })
+
+    it('should not retry on 4xx errors', async function () {
+      const exporter = newAgentExporter({ url, logger: { debug: () => {}, error: () => {} } })
+      const start = new Date()
+      const end = new Date()
+      const tags = { foo: 'bar' }
+
+      const [wall, space] = await Promise.all([
+        createProfile(['wall', 'microseconds']),
+        createProfile(['space', 'bytes'])
+      ])
+
+      const profiles = {
+        wall,
+        space
+      }
+
+      let tries = 0
+      const json = JSON.stringify({ error: 'some error' })
+      app.post('/profiling/v1/input', upload.any(), (_, res) => {
+        tries++
+        const data = Buffer.from(json)
+        res.writeHead(400, {
+          'content-type': 'application/json',
+          'content-length': data.length
+        })
+        res.end(data)
+      })
+
+      try {
+        await exporter.export({ profiles, start, end, tags })
+        throw new Error('should have thrown')
+      } catch (err) {
+        expect(err.message).to.equal('HTTP Error 400')
+      }
+      expect(tries).to.equal(1)
+    })
   })
 
   describe('using ipv6', () => {
