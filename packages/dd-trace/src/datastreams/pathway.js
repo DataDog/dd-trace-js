@@ -21,6 +21,7 @@ function shaHash (checkpointString) {
 }
 
 function computeHash (service, env, edgeTags, parentHash) {
+  edgeTags.sort()
   const hashableEdgeTags = edgeTags.filter(item => item !== 'manual_checkpoint:true')
 
   const key = `${service}${env}` + hashableEdgeTags.join('') + parentHash.toString()
