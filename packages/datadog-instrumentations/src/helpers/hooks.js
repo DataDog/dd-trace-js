@@ -51,6 +51,7 @@ module.exports = {
   'generic-pool': () => require('../generic-pool'),
   graphql: () => require('../graphql'),
   grpc: () => require('../grpc'),
+  handlebars: () => require('../handlebars'),
   hapi: () => require('../hapi'),
   http: () => require('../http'),
   http2: () => require('../http2'),
