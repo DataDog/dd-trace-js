@@ -5,6 +5,13 @@ const agent = require('../../dd-trace/test/plugins/agent')
 describe('Plugin', () => {
   describe('http', () => {
     describe('Code Origin for Spans', () => {
+      before(() => {
+        // Needed when this spec file run together with other spec files, in which case the agent config is not
+        // re-loaded unless the existing agent is wiped first. And we need the agent config to be re-loaded in order to
+        // enable Code Origin for Spans.
+        agent.wipe()
+      })
+
       beforeEach(async () => {
         return agent.load('http', { server: false }, { codeOriginForSpans: { enabled: true } })
       })
