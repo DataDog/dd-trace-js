@@ -303,7 +303,7 @@ describe('exporters/agent', function () {
         /^Adding wall profile to agent export:( [0-9a-f]{2})+$/,
         /^Adding space profile to agent export:( [0-9a-f]{2})+$/,
         /^Submitting profiler agent report attempt #1 to:/i,
-        /^Error from the agent: HTTP Error 400$/,
+        /^Error from the agent: HTTP Error 500$/,
         /^Submitting profiler agent report attempt #2 to:/i,
         /^Agent export response: ([0-9a-f]{2}( |$))*/
       ]
@@ -344,7 +344,7 @@ describe('exporters/agent', function () {
           return
         }
         const data = Buffer.from(json)
-        res.writeHead(400, {
+        res.writeHead(500, {
           'content-type': 'application/json',
           'content-length': data.length
         })
@@ -355,6 +355,43 @@ describe('exporters/agent', function () {
         exporter.export({ profiles, start, end, tags }),
         waitForResponse
       ])
+    })
+
+    it('should not retry on 4xx errors', async function () {
+      const exporter = newAgentExporter({ url, logger: { debug: () => {}, error: () => {} } })
+      const start = new Date()
+      const end = new Date()
+      const tags = { foo: 'bar' }
+
+      const [wall, space] = await Promise.all([
+        createProfile(['wall', 'microseconds']),
+        createProfile(['space', 'bytes'])
+      ])
+
+      const profiles = {
+        wall,
+        space
+      }
+
+      let tries = 0
+      const json = JSON.stringify({ error: 'some error' })
+      app.post('/profiling/v1/input', upload.any(), (_, res) => {
+        tries++
+        const data = Buffer.from(json)
+        res.writeHead(400, {
+          'content-type': 'application/json',
+          'content-length': data.length
+        })
+        res.end(data)
+      })
+
+      try {
+        await exporter.export({ profiles, start, end, tags })
+        throw new Error('should have thrown')
+      } catch (err) {
+        expect(err.message).to.equal('HTTP Error 400')
+      }
+      expect(tries).to.equal(1)
     })
   })
 
