@@ -29,7 +29,7 @@ function getCanForwardDebuggerLogs (err, agentInfo) {
   if (err) {
     return false
   }
-  return agentInfo.endpoints.some(endpoint => endpoint === AGENT_DEBUGGER_INPUT)
+  return !err && agentInfo.endpoints.some(endpoint => endpoint === AGENT_DEBUGGER_INPUT)
 }
 
 class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
