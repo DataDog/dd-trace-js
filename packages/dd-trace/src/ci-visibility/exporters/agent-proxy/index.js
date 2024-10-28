@@ -26,9 +26,6 @@ function getLatestEvpProxyVersion (err, agentInfo) {
 }
 
 function getCanForwardDebuggerLogs (err, agentInfo) {
-  if (err) {
-    return false
-  }
   return !err && agentInfo.endpoints.some(endpoint => endpoint === AGENT_DEBUGGER_INPUT)
 }
 

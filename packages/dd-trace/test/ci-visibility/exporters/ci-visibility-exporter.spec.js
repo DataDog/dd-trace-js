@@ -851,8 +851,34 @@ describe('CI Visibility Exporter', () => {
           flush: sinon.spy(),
           setUrl: sinon.spy()
         }
-        const log = { message: 'log' }
+        const diLog = {
+          message: 'log',
+          debugger: {
+            snapshot: {
+              id: '1234',
+              timestamp: 1234567890,
+              probe: {
+                id: '54321',
+                version: '1',
+                location: {
+                  file: 'example.js',
+                  lines: ['1']
+                }
+              },
+              stack: [
+                {
+                  fileName: 'example.js',
+                  function: 'sum',
+                  lineNumber: 1
+                }
+              ],
+              language: 'javascript'
+            }
+          }
+        }
         const ciVisibilityExporter = new CiVisibilityExporter({
+          env: 'ci',
+          version: '1.0.0',
           port,
           isTestDynamicInstrumentationEnabled: true,
           service: 'my-service'
@@ -860,12 +886,24 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._logsWriter = writer
         ciVisibilityExporter._canForwardLogs = true
-        ciVisibilityExporter.exportDiLogs({}, log)
+        ciVisibilityExporter.exportDiLogs(
+          {
+            'git.repository_url': 'https://github.com/datadog/dd-trace-js.git',
+            'git.commit.sha': '1234'
+          },
+          diLog
+        )
         expect(ciVisibilityExporter._logsWriter.append).to.be.calledWith(sinon.match({
-          message: 'log',
+          ddtags: 'git.repository_url:https://github.com/datadog/dd-trace-js.git,git.commit.sha:1234',
           level: 'error',
           ddsource: 'dd_debugger',
-          service: 'my-service'
+          service: 'my-service',
+          dd: {
+            service: 'my-service',
+            env: 'ci',
+            version: '1.0.0'
+          },
+          ...diLog
         }))
       })
     })
