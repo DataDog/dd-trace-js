@@ -331,6 +331,8 @@ describe('Config', () => {
       { name: 'isIntelligentTestRunnerEnabled', value: false, origin: 'default' },
       { name: 'isManualApiEnabled', value: false, origin: 'default' },
       { name: 'ciVisibilityTestSessionName', value: '', origin: 'default' },
+      { name: 'ciVisAgentlessLogSubmissionEnabled', value: false, origin: 'default' },
+      { name: 'isTestDynamicInstrumentationEnabled', value: false, origin: 'default' },
       { name: 'logInjection', value: false, origin: 'default' },
       { name: 'lookup', value: undefined, origin: 'default' },
       { name: 'openAiLogsEnabled', value: false, origin: 'default' },
@@ -1875,6 +1877,8 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
       delete process.env.DD_TEST_SESSION_NAME
       delete process.env.JEST_WORKER_ID
+      delete process.env.DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED
+      delete process.env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED
       options = {}
     })
     context('ci visibility mode is enabled', () => {
@@ -1962,6 +1966,24 @@ describe('Config', () => {
         process.env.DD_TEST_SESSION_NAME = 'my-test-session'
         const config = new Config(options)
         expect(config).to.have.property('ciVisibilityTestSessionName', 'my-test-session')
+      })
+      it('should not enable agentless log submission by default', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('ciVisAgentlessLogSubmissionEnabled', false)
+      })
+      it('should enable agentless log submission if DD_AGENTLESS_LOG_SUBMISSION_ENABLED is true', () => {
+        process.env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED = 'true'
+        const config = new Config(options)
+        expect(config).to.have.property('ciVisAgentlessLogSubmissionEnabled', true)
+      })
+      it('should not set isTestDynamicInstrumentationEnabled by default', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('isTestDynamicInstrumentationEnabled', false)
+      })
+      it('should set isTestDynamicInstrumentationEnabled if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is passed', () => {
+        process.env.DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+        const config = new Config(options)
+        expect(config).to.have.property('isTestDynamicInstrumentationEnabled', true)
       })
     })
     context('ci visibility mode is not enabled', () => {
