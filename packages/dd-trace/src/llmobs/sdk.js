@@ -8,8 +8,8 @@ const {
 } = require('./util')
 const { isTrue } = require('../util')
 
-// storage - context management
-const { storage } = require('../../../datadog-core')
+const { AsyncLocalStorage } = require('async_hooks')
+const storage = new AsyncLocalStorage()
 
 const Span = require('../opentracing/span')
 
@@ -101,53 +101,14 @@ class LLMObs extends NoopLLMObs {
     } = this._extractOptions(options)
 
     if (fn.length > 1) {
-      return this._tracer.trace(name, spanOptions, (span, cb) => {
-        const oldStore = storage.getStore()
-        const parentLLMObsSpan = oldStore?.llmobsSpan
-        if (this.enabled) storage.enterWith({ ...oldStore, llmobsSpan: span })
-
-        this._tagger.setLLMObsSpanTags(span, kind, {
-          ...llmobsOptions,
-          parentLLMObsSpan
-        })
-
-        return fn(span, err => {
-          if (this.enabled) storage.enterWith(oldStore)
-          cb(err)
-        })
-      })
+      return this._tracer.trace(name, spanOptions, (span, cb) =>
+        this._activate(span, { kind, options: llmobsOptions }, () => fn(span, cb))
+      )
     }
 
-    return this._tracer.trace(name, spanOptions, span => {
-      const oldStore = storage.getStore()
-      const parentLLMObsSpan = oldStore?.llmobsSpan
-      if (this.enabled) storage.enterWith({ ...oldStore, llmobsSpan: span })
-
-      this._tagger.setLLMObsSpanTags(span, kind, {
-        ...llmobsOptions,
-        parentLLMObsSpan
-      })
-
-      try {
-        const result = fn(span)
-
-        if (result && typeof result.then === 'function') {
-          return result.then(value => {
-            if (this.enabled) storage.enterWith(oldStore)
-            return value
-          }).catch(err => {
-            if (this.enabled) storage.enterWith(oldStore)
-            throw err
-          })
-        }
-
-        if (this.enabled) storage.enterWith(oldStore)
-        return result
-      } catch (e) {
-        if (this.enabled) storage.enterWith(oldStore)
-        throw e
-      }
-    })
+    return this._tracer.trace(name, spanOptions, span =>
+      this._activate(span, { kind, options: llmobsOptions }, () => fn(span))
+    )
   }
 
   wrap (options = {}, fn) {
@@ -173,45 +134,29 @@ class LLMObs extends NoopLLMObs {
 
     function wrapped () {
       const span = llmobs._tracer.scope().active()
-      const oldStore = storage.getStore()
-      const parentLLMObsSpan = oldStore?.llmobsSpan
-      if (llmobs.enabled) storage.enterWith({ ...oldStore, llmobsSpan: span })
 
-      llmobs._tagger.setLLMObsSpanTags(span, kind, {
-        ...llmobsOptions,
-        parentLLMObsSpan
+      const result = llmobs._activate(span, { kind, options: llmobsOptions }, () => {
+        if (!['llm', 'embedding'].includes(kind)) {
+          llmobs.annotate(span, { inputData: getFunctionArguments(fn, arguments) })
+        }
+
+        return fn.apply(this, arguments)
       })
 
-      if (!['llm', 'embedding'].includes(kind)) {
-        llmobs.annotate(span, { inputData: getFunctionArguments(fn, arguments) })
+      if (result && typeof result.then === 'function') {
+        return result.then(value => {
+          if (value && !['llm', 'retrieval'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
+            llmobs.annotate(span, { outputData: value })
+          }
+          return value
+        })
       }
 
-      try {
-        const result = fn.apply(this, arguments)
-
-        if (result && typeof result.then === 'function') {
-          return result.then(value => {
-            if (value && !['llm', 'retrieval'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
-              llmobs.annotate(span, { outputData: value })
-            }
-            if (llmobs.enabled) storage.enterWith(oldStore)
-            return value
-          }).catch(err => {
-            if (llmobs.enabled) storage.enterWith(oldStore)
-            throw err
-          })
-        }
-
-        if (result && !['llm', 'retrieval'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
-          llmobs.annotate(span, { outputData: result })
-          if (llmobs.enabled) storage.enterWith(oldStore)
-        }
-
-        return result
-      } catch (e) {
-        if (llmobs.enabled) storage.enterWith(oldStore)
-        throw e
+      if (result && !['llm', 'retrieval'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
+        llmobs.annotate(span, { outputData: result })
       }
+
+      return result
     }
 
     return this._tracer.wrap(name, spanOptions, wrapped)
@@ -390,7 +335,24 @@ class LLMObs extends NoopLLMObs {
 
   _active () {
     const store = storage.getStore()
-    return store?.llmobsSpan
+    return store?.span
+  }
+
+  _activate (span, { kind, options } = {}, fn) {
+    const parent = this._active()
+    if (this.enabled) storage.enterWith({ span })
+
+    this._tagger.registerLLMObsSpan(span, {
+      ...options,
+      parent,
+      kind
+    })
+
+    try {
+      return fn()
+    } finally {
+      if (this.enabled) storage.enterWith({ span: parent })
+    }
   }
 
   _extractOptions (options) {
