@@ -191,7 +191,7 @@ class LLMObs extends NoopLLMObs {
 
         if (result && typeof result.then === 'function') {
           return result.then(value => {
-            if (value && kind !== 'retrieval' && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
+            if (value && !['llm', 'retrieval'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
               llmobs.annotate(span, { outputData: value })
             }
             if (llmobs.enabled) storage.enterWith(oldStore)
