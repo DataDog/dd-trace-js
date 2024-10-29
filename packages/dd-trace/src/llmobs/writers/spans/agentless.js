@@ -1,6 +1,6 @@
 'use strict'
 
-const { AGENTLESS_SPANS_ENDPOINT } = require('../../constants')
+const { AGENTLESS_SPANS_ENDPOINT } = require('../../constants/writers')
 const LLMObsBaseSpanWriter = require('./base')
 
 class LLMObsAgentlessSpanWriter extends LLMObsBaseSpanWriter {

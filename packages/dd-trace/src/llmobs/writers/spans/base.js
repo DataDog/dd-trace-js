@@ -1,11 +1,8 @@
 'use strict'
 
-const {
-  EVP_EVENT_SIZE_LIMIT,
-  EVP_PAYLOAD_SIZE_LIMIT,
-  DROPPED_VALUE_TEXT,
-  DROPPED_IO_COLLECTION_ERROR
-} = require('../../constants')
+const { EVP_EVENT_SIZE_LIMIT, EVP_PAYLOAD_SIZE_LIMIT } = require('../../constants/writers')
+const { DROPPED_VALUE_TEXT } = require('../../constants/text')
+const { DROPPED_IO_COLLECTION_ERROR } = require('../../constants/tags')
 const BaseWriter = require('../base')
 const logger = require('../../../log')
 

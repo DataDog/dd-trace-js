@@ -1,6 +1,6 @@
 'use strict'
 
-const { AGENTLESS_EVALULATIONS_ENDPOINT } = require('../constants')
+const { AGENTLESS_EVALULATIONS_ENDPOINT } = require('../constants/writers')
 const BaseWriter = require('./base')
 
 class LLMObsEvalMetricsWriter extends BaseWriter {

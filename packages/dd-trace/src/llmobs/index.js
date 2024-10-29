@@ -1,17 +1,17 @@
 'use strict'
 
 const log = require('../log')
-const { PROPAGATED_PARENT_ID_KEY } = require('./constants')
+const { PROPAGATED_PARENT_ID_KEY } = require('./constants/tags')
 const { storage } = require('../../../datadog-core')
 
 const LLMObsSpanProcessor = require('./span_processor')
 
-const {
-  injectCh,
-  spanProcessCh,
-  evalMetricAppendCh,
-  flushCh
-} = require('./channels')
+const { channel } = require('dc-polyfill')
+const spanProcessCh = channel('dd-trace:span:process')
+const evalMetricAppendCh = channel('llmobs:eval-metric:append')
+const flushCh = channel('llmobs:writers:flush')
+const injectCh = channel('dd-trace:span:inject')
+
 const LLMObsAgentlessSpanWriter = require('./writers/spans/agentless')
 const LLMObsAgentProxySpanWriter = require('./writers/spans/agentProxy')
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')

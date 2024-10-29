@@ -23,7 +23,7 @@ const {
   INPUT_TOKENS_METRIC_KEY,
   OUTPUT_TOKENS_METRIC_KEY,
   TOTAL_TOKENS_METRIC_KEY
-} = require('./constants')
+} = require('./constants/tags')
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations

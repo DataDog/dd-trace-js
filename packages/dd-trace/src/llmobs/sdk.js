@@ -1,6 +1,6 @@
 'use strict'
 
-const { SPAN_KIND, OUTPUT_VALUE } = require('./constants')
+const { SPAN_KIND, OUTPUT_VALUE } = require('./constants/tags')
 
 const {
   getFunctionArguments,
@@ -19,7 +19,9 @@ const logger = require('../log')
 const LLMObsTagger = require('./tagger')
 
 // communicating with writer
-const { flushCh, evalMetricAppendCh } = require('./channels')
+const { channel } = require('dc-polyfill')
+const evalMetricAppendCh = channel('llmobs:eval-metric:append')
+const flushCh = channel('llmobs:writers:flush')
 const NoopLLMObs = require('./noop')
 
 class LLMObs extends NoopLLMObs {

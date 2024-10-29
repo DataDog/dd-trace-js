@@ -16,9 +16,9 @@ const {
   TAGS,
   PARENT_ID_KEY,
   SESSION_ID,
-  NAME,
-  UNSERIALIZABLE_VALUE_TEXT
-} = require('./constants')
+  NAME
+} = require('./constants/tags')
+const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 
 const {
   ERROR_MESSAGE,

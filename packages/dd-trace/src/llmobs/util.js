@@ -1,6 +1,6 @@
 'use strict'
 
-const { SPAN_KINDS } = require('./constants')
+const { SPAN_KINDS } = require('./constants/tags')
 
 function encodeUnicode (str) {
   if (!str) return str

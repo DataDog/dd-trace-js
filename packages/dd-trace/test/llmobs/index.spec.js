@@ -1,12 +1,13 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
-const {
-  injectCh,
-  evalMetricAppendCh,
-  spanProcessCh,
-  flushCh
-} = require('../../src/llmobs/channels')
+
+const { channel } = require('dc-polyfill')
+const spanProcessCh = channel('dd-trace:span:process')
+const evalMetricAppendCh = channel('llmobs:eval-metric:append')
+const flushCh = channel('llmobs:writers:flush')
+const injectCh = channel('dd-trace:span:inject')
+
 const LLMObsEvalMetricsWriter = require('../../src/llmobs/writers/evaluations')
 
 const config = {
