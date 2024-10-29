@@ -20,8 +20,7 @@ describe('sdk', () => {
     tracer.init({
       service: 'service',
       llmobs: {
-        mlApp: 'mlApp',
-        apiKey: 'test'
+        mlApp: 'mlApp'
       }
     })
     llmobs = tracer.llmobs
@@ -93,7 +92,6 @@ describe('sdk', () => {
 
       expect(disabledLLMObs.enabled).to.be.true
       expect(disabledLLMObs._config.llmobs.mlApp).to.equal('mlApp')
-      expect(disabledLLMObs._config.llmobs.apiKey).to.be.undefined
       expect(disabledLLMObs._config.llmobs.agentlessEnabled).to.be.false
 
       expect(llmobsModule.enable).to.have.been.called

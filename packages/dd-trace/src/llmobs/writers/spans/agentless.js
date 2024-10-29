@@ -10,7 +10,7 @@ class LLMObsAgentlessSpanWriter extends LLMObsBaseSpanWriter {
       endpoint: AGENTLESS_SPANS_ENDPOINT
     })
 
-    this._headers['DD-API-KEY'] = config.llmobs?.apiKey || config.apiKey
+    this._headers['DD-API-KEY'] = config.apiKey
   }
 }
 

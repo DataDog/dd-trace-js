@@ -41,8 +41,7 @@ describe('end to end sdk integration tests', () => {
     tracer = require('../../../../dd-trace')
     tracer.init({
       llmobs: {
-        mlApp: 'test',
-        apiKey: 'test'
+        mlApp: 'test'
       }
     })
 
@@ -53,8 +52,7 @@ describe('end to end sdk integration tests', () => {
     llmobs = tracer.llmobs
     if (!llmobs.enabled) {
       llmobs.enable({
-        mlApp: 'test',
-        apiKey: 'test'
+        mlApp: 'test'
       })
     }
 

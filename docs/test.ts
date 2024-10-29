@@ -539,7 +539,6 @@ const otelTraceState: opentelemetry.TraceState = spanContext.traceState!
 
 // -- LLM Observability --
 const llmobsEnableOptions = {
-  apiKey: 'dd-api-key',
   mlApp: 'mlApp',
   agentlessEnabled: true
 }
@@ -551,7 +550,6 @@ const enabled = llmobs.enabled
 
 // manually enable
 llmobs.enable({
-  apiKey: 'dd-api-key',
   mlApp: 'mlApp',
   agentlessEnabled: true
 })

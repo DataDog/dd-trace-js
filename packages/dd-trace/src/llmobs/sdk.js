@@ -45,14 +45,13 @@ class LLMObs extends NoopLLMObs {
 
     logger.debug('Enabling LLMObs')
 
-    const { mlApp, agentlessEnabled, apiKey } = options
+    const { mlApp, agentlessEnabled } = options
 
     const { DD_LLMOBS_ENABLED } = process.env
 
     const llmobsConfig = {
       mlApp,
-      agentlessEnabled,
-      apiKey
+      agentlessEnabled
     }
 
     const enabled = DD_LLMOBS_ENABLED == null || isTrue(DD_LLMOBS_ENABLED)
@@ -250,7 +249,7 @@ class LLMObs extends NoopLLMObs {
   submitEvaluation (llmobsSpanContext, options = {}) {
     if (!this.enabled) return
 
-    if (!this._config.llmobs.apiKey && !this._config.apiKey) {
+    if (!this._config.apiKey) {
       throw new Error(
         'DD_API_KEY is required for sending evaluation metrics. Evaluation metric data will not be sent.\n' +
         'Ensure this configuration is set before running your application.'

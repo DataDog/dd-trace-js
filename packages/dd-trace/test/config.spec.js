@@ -268,7 +268,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('installSignature.type', null)
     expect(config).to.have.nested.property('llmobs.mlApp', undefined)
     expect(config).to.have.nested.property('llmobs.agentlessEnabled', false)
-    expect(config).to.have.nested.property('llmobs.apiKey', undefined)
     expect(config).to.have.nested.property('llmobs.enabled', false)
 
     expect(updateConfig).to.be.calledOnce
@@ -335,7 +334,6 @@ describe('Config', () => {
       { name: 'isIntelligentTestRunnerEnabled', value: false, origin: 'default' },
       { name: 'isManualApiEnabled', value: false, origin: 'default' },
       { name: 'llmobs.agentlessEnabled', value: false, origin: 'default' },
-      { name: 'llmobs.apiKey', value: undefined, origin: 'default' },
       { name: 'llmobs.mlApp', value: undefined, origin: 'default' },
       { name: 'ciVisibilityTestSessionName', value: '', origin: 'default' },
       { name: 'logInjection', value: false, origin: 'default' },
@@ -912,7 +910,6 @@ describe('Config', () => {
     })
     expect(config).to.have.nested.property('llmobs.mlApp', 'myMlApp')
     expect(config).to.have.nested.property('llmobs.agentlessEnabled', true)
-    expect(config).to.have.nested.property('llmobs.apiKey', 'myApiKey')
 
     expect(updateConfig).to.be.calledOnce
 
@@ -962,8 +959,7 @@ describe('Config', () => {
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'code' },
       { name: 'version', value: '0.1.0', origin: 'code' },
       { name: 'llmobs.mlApp', value: 'myMlApp', origin: 'code' },
-      { name: 'llmobs.agentlessEnabled', value: true, origin: 'code' },
-      { name: 'llmobs.apiKey', value: 'myApiKey', origin: 'code' }
+      { name: 'llmobs.agentlessEnabled', value: true, origin: 'code' }
     ])
   })
 
