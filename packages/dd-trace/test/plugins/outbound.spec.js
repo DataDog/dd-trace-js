@@ -5,6 +5,7 @@ require('../setup/tap')
 const { expect } = require('chai')
 const { getNextLineNumber } = require('./helpers')
 const OutboundPlugin = require('../../src/plugins/outbound')
+const parseTags = require('../../../datadog-core/src/utils/src/parse-tags')
 
 describe('OuboundPlugin', () => {
   describe('peer service decision', () => {
@@ -205,24 +206,3 @@ describe('OuboundPlugin', () => {
     })
   })
 })
-
-function parseTags (tags) {
-  const parsedTags = {}
-  for (const [tag, value] of Object.entries(tags)) {
-    const keys = tag.split('.')
-    let current = parsedTags
-    let depth = 0
-    for (const key of keys) {
-      if (!current[key]) {
-        if (depth === keys.length - 1) {
-          current[key] = value
-          break
-        }
-        current[key] = keys[depth + 1]?.match(/^\d+$/) ? [] : {}
-      }
-      current = current[key]
-      depth++
-    }
-  }
-  return parsedTags
-}
