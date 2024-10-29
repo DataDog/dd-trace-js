@@ -1,6 +1,6 @@
 'use strict'
 
-const { collectionSizeSym } = require('./symbols')
+const { collectionSizeSym, fieldCountSym } = require('./symbols')
 const session = require('../session')
 
 const LEAF_SUBTYPES = new Set(['date', 'regexp'])
@@ -30,6 +30,11 @@ async function getObject (objectId, opts, depth = 0, collection = false) {
       result.splice(opts.maxCollectionSize)
       result[collectionSizeSym] = size
     }
+  } else if (result.length > opts.maxFieldCount) {
+    // Trim the number of properties on the object if there's too many.
+    const size = result.length
+    result.splice(opts.maxFieldCount)
+    result[fieldCountSym] = size
   } else if (privateProperties) {
     result.push(...privateProperties)
   }
