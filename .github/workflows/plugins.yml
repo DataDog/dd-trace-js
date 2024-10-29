@@ -484,6 +484,17 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
 
+  url:
+    strategy:
+      matrix:
+        node-version: ['18', '20', 'latest']
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: url
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
+
   http2:
     runs-on: ubuntu-latest
     env:
@@ -578,7 +589,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
-  
+
   mariadb:
     runs-on: ubuntu-latest
     services:
