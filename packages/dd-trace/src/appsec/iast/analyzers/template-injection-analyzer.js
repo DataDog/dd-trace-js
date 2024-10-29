@@ -10,6 +10,7 @@ class TemplateInjectionAnalyzer extends InjectionAnalyzer {
 
   onConfigure () {
     this.addSub('datadog:handlebars:compile:start', ({ source }) => this.analyze(source))
+    this.addSub('datadog:pug:compile:start', ({ source }) => this.analyze(source))
   }
 }
 

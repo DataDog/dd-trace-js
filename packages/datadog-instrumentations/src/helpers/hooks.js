@@ -105,6 +105,7 @@ module.exports = {
   'promise-js': () => require('../promise-js'),
   promise: () => require('../promise'),
   protobufjs: () => require('../protobufjs'),
+  pug: () => require('../pug'),
   q: () => require('../q'),
   qs: () => require('../qs'),
   redis: () => require('../redis'),

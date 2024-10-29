@@ -3,19 +3,20 @@
 const shimmer = require('../../datadog-shimmer')
 const { channel, addHook } = require('./helpers/instrument')
 
-const handlebarsReadCh = channel('datadog:handlebars:compile:start')
+const pugReadCh = channel('datadog:pug:compile:start')
 
 function wrapCompile (compile) {
   return function wrappedCompile (source) {
-    if (handlebarsReadCh.hasSubscribers) {
-      handlebarsReadCh.publish({ source })
+    if (pugReadCh.hasSubscribers) {
+      pugReadCh.publish({ source })
     }
     return compile.apply(this, arguments)
   }
 }
 
-addHook({ name: 'handlebars', file: 'dist/cjs/handlebars/compiler/compiler.js', versions: ['>=4.0.0'] }, compiler => {
+addHook({ name: 'pug', versions: ['>=2.0.4'] }, compiler => {
   shimmer.wrap(compiler, 'compile', wrapCompile)
-  shimmer.wrap(compiler, 'precompile', wrapCompile)
+  shimmer.wrap(compiler, 'compileClient', wrapCompile)
+  shimmer.wrap(compiler, 'compileClientWithDependenciesTracked', wrapCompile)
   return compiler
 })

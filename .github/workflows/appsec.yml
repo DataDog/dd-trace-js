@@ -122,7 +122,7 @@ jobs:
   express:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: express|body-parser|cookie-parser|multer|handlebars
+      PLUGINS: express|body-parser|cookie-parser|multer|handlebars|pug
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup

@@ -5,12 +5,12 @@ const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 
-describe('template-injection-analyzer with handlebars', () => {
-  withVersions('handlebars', 'handlebars', version => {
+describe('template-injection-analyzer with pug', () => {
+  withVersions('pug', 'pug', version => {
     let lib, source
     before(() => {
-      lib = require(`../../../../../../versions/handlebars@${version}`).get()
-      source = '<p>{{name}}</p>'
+      lib = require(`../../../../../../versions/pug@${version}`).get()
+      source = 'string of pug'
     })
 
     describe('compile', () => {
@@ -31,18 +31,34 @@ describe('template-injection-analyzer with handlebars', () => {
         })
     })
 
-    describe('precompile', () => {
+    describe('compileClient', () => {
       prepareTestServerForIast('template injection analyzer',
         (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
           testThatRequestHasVulnerability(() => {
             const store = storage.getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const command = newTaintedString(iastContext, source, 'param', 'Request')
-            lib.precompile(command)
+            lib.compileClient(command)
           }, 'TEMPLATE_INJECTION')
 
           testThatRequestHasNoVulnerability(() => {
-            lib.precompile(source)
+            lib.compileClient(source)
+          }, 'TEMPLATE_INJECTION')
+        })
+    })
+
+    describe('compileClientWithDependenciesTracked', () => {
+      prepareTestServerForIast('template injection analyzer',
+        (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
+          testThatRequestHasVulnerability(() => {
+            const store = storage.getStore()
+            const iastContext = iastContextFunctions.getIastContext(store)
+            const command = newTaintedString(iastContext, source, 'param', 'Request')
+            lib.compileClientWithDependenciesTracked(command, {})
+          }, 'TEMPLATE_INJECTION')
+
+          testThatRequestHasNoVulnerability(() => {
+            lib.compileClient(source)
           }, 'TEMPLATE_INJECTION')
         })
     })
