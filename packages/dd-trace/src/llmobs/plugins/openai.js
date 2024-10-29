@@ -3,8 +3,8 @@
 const LLMObsPlugin = require('./base')
 
 class OpenAiLLMObsPlugin extends LLMObsPlugin {
-  static get prefix () {
-    return 'tracing:apm:openai:request'
+  getName () {
+    return 'openai'
   }
 
   getLLMObsSPanRegisterOptions (ctx) {

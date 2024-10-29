@@ -3,15 +3,22 @@
 const log = require('../../log')
 const { storage } = require('../storage')
 
-const TracingPlugin = require('../../plugins/tracing')
+// const TracingPlugin = require('../../plugins/tracing')
+const Plugin = require('../../plugins/plugin')
 const LLMObsTagger = require('../tagger')
 
-class LLMObsPlugin extends TracingPlugin {
+// we make this a `Plugin` so we don't have to worry about `finish` being called
+class LLMObsPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
     this._tagger = new LLMObsTagger(this._tracerConfig, true)
+
+    this.addSub(`tracing:apm:${this.getName()}:request:start`, ctx => this.start(ctx))
+    this.addSub(`tracing:apm:${this.getName()}:request:asyncEnd`, ctx => this.asyncEnd(ctx))
   }
+
+  getName () {}
 
   setLLMObsTags (ctx) {
     throw new Error('setLLMObsTags must be implemented by the subclass')
