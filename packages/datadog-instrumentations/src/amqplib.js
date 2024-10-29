@@ -28,6 +28,9 @@ addHook({ name: 'amqplib', file: 'lib/defs.js', versions: [MIN_VERSION] }, defs 
 addHook({ name: 'amqplib', file: 'lib/channel_model.js', versions: [MIN_VERSION] }, x => {
   shimmer.wrap(x.Channel.prototype, 'get', getMessage => function (queue, options) {
     return getMessage.apply(this, arguments).then(message => {
+      if (message === null) {
+        return message
+      }
       startCh.publish({ method: 'basic.get', message, fields: message.fields, queue })
       // finish right away
       finishCh.publish()
@@ -39,6 +42,9 @@ addHook({ name: 'amqplib', file: 'lib/channel_model.js', versions: [MIN_VERSION]
       return consume.apply(this, arguments)
     }
     arguments[1] = (message, ...args) => {
+      if (message === null) {
+        return callback(message, ...args)
+      }
       startCh.publish({ method: 'basic.deliver', message, fields: message.fields, queue })
       const result = callback(message, ...args)
       finishCh.publish()
@@ -70,6 +76,9 @@ addHook({ name: 'amqplib', file: 'lib/callback_model.js', versions: [MIN_VERSION
       return consume.apply(this, arguments)
     }
     arguments[1] = (message, ...args) => {
+      if (message === null) {
+        return callback(message, ...args)
+      }
       startCh.publish({ method: 'basic.deliver', message, fields: message.fields, queue })
       const result = callback(message, ...args)
       finishCh.publish()
