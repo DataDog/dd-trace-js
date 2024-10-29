@@ -1,14 +1,14 @@
 const { parentPort } = require('worker_threads')
-// TODO: move session to common place
+// TODO: move debugger/devtools_client/session to common place
 const session = require('../../../debugger/devtools_client/session')
-// TODO: move getLocalStateForCallFrame to common place
+// TODO: move debugger/devtools_client/snapshot to common place
 const { getLocalStateForCallFrame } = require('../../../debugger/devtools_client/snapshot')
-// TODO: move findScriptFromPartialPath to common place
+// TODO: move debugger/devtools_client/state to common place
 const {
   findScriptFromPartialPath,
   getStackFromCallFrames
 } = require('../../../debugger/devtools_client/state')
-const log = require('../../log')
+const log = require('../../../log')
 
 let sessionStarted = false
 

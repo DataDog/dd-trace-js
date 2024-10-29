@@ -3,7 +3,7 @@
 const { join } = require('path')
 const { Worker } = require('worker_threads')
 const { randomUUID } = require('crypto')
-const log = require('../log')
+const log = require('../../log')
 
 const probeIdToResolvePromise = new Map()
 
