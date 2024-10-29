@@ -1,7 +1,7 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.13.1"
+    "rules_version": "1.13.2"
   },
   "rules": [
     {
@@ -6335,7 +6335,6 @@
     {
       "id": "rasp-934-100",
       "name": "Server-side request forgery exploit",
-      "enabled": false,
       "tags": {
         "type": "ssrf",
         "category": "vulnerability_trigger",
@@ -6384,7 +6383,6 @@
     {
       "id": "rasp-942-100",
       "name": "SQL injection exploit",
-      "enabled": false,
       "tags": {
         "type": "sql_injection",
         "category": "vulnerability_trigger",
@@ -6424,7 +6422,7 @@
               }
             ]
           },
-          "operator": "sqli_detector"
+          "operator": "sqli_detector@v2"
         }
       ],
       "transformers": [],
