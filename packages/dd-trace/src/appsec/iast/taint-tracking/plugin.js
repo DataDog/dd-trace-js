@@ -26,15 +26,22 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   }
 
   onConfigure () {
+    const onRequestBody = ({ req }) => {
+      const iastContext = getIastContext(storage.getStore())
+      if (iastContext && iastContext.body !== req.body) {
+        this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
+        iastContext.body = req.body
+      }
+    }
+
     this.addSub(
       { channelName: 'datadog:body-parser:read:finish', tag: HTTP_REQUEST_BODY },
-      ({ req }) => {
-        const iastContext = getIastContext(storage.getStore())
-        if (iastContext && iastContext.body !== req.body) {
-          this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
-          iastContext.body = req.body
-        }
-      }
+      onRequestBody
+    )
+
+    this.addSub(
+      { channelName: 'datadog:multer:read:finish', tag: HTTP_REQUEST_BODY },
+      onRequestBody
     )
 
     this.addSub(
