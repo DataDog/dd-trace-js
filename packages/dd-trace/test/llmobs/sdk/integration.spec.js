@@ -38,7 +38,6 @@ describe('end to end sdk integration tests', () => {
   }
 
   before(() => {
-    delete require.cache[require.resolve('../../../../../package.json')]
     tracer = require('../../../../dd-trace')
     tracer.init({
       llmobs: {
@@ -47,9 +46,17 @@ describe('end to end sdk integration tests', () => {
       }
     })
 
+    // another test suite may have disabled LLMObs
+    // to clear the intervals and unsubscribe
+    // in that case, the `init` call above won't have re-enabled it
+    // we'll re-enable it here
     llmobs = tracer.llmobs
-
-    // console.log(tracer._tracer._processor.process)
+    if (!llmobs.enabled) {
+      llmobs.enable({
+        mlApp: 'test',
+        apiKey: 'test'
+      })
+    }
 
     sinon.spy(tracer._tracer._processor, 'process')
     sinon.stub(AgentProxyWriter.prototype, 'append')
