@@ -322,7 +322,7 @@ class MochaPlugin extends CiPlugin {
             line
           }
           onHitProbePromise.then(({ snapshot }) => {
-            this.tracer._exporter.exportLogs(this.testEnvironmentMetadata, {
+            this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
               debugger: { snapshot },
               dd: {
                 trace_id: this.retriedTestIds.traceId,
