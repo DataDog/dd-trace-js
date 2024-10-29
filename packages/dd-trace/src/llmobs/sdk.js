@@ -8,8 +8,7 @@ const {
 } = require('./util')
 const { isTrue } = require('../util')
 
-const { AsyncLocalStorage } = require('async_hooks')
-const storage = new AsyncLocalStorage()
+const { storage } = require('./storage')
 
 const Span = require('../opentracing/span')
 

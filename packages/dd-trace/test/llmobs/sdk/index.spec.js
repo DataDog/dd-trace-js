@@ -10,6 +10,9 @@ const LLMObsSpanProcessor = require('../../../src/llmobs/span_processor')
 
 const tracerVersion = require('../../../../../package.json').version
 
+const { channel } = require('dc-polyfill')
+const injectCh = channel('dd-trace:span:inject')
+
 describe('sdk', () => {
   let LLMObsSDK
   let llmobs
@@ -1003,6 +1006,22 @@ describe('sdk', () => {
       LLMObsEvalMetricsWriter.prototype.flush.throws(new Error('boom'))
 
       expect(() => llmobs.flush()).to.not.throw()
+    })
+  })
+
+  describe('distributed', () => {
+    it('adds the current llmobs span id to the injection context', () => {
+      const carrier = { 'x-datadog-tags': '' }
+      let parentId
+      llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, span => {
+        parentId = span.context().toSpanId()
+
+        // simulate injection from http integration or from tracer
+        // something that triggers the text_map injection
+        injectCh.publish({ carrier })
+      })
+
+      expect(carrier['x-datadog-tags']).to.equal(`,_dd.p.llmobs_parent_id=${parentId}`)
     })
   })
 })

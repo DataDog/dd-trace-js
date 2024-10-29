@@ -43,7 +43,7 @@ describe('module', () => {
       '../log': logger,
       './writers/spans/agentless': LLMObsAgentlessSpanWriter,
       './writers/spans/agentProxy': LLMObsAgentProxySpanWriter,
-      '../../../datadog-core': {
+      './storage': {
         storage: {
           getStore () {
             return store
@@ -73,7 +73,7 @@ describe('module', () => {
   describe('handle llmobs info injection', () => {
     it('injects LLMObs parent ID when there is a parent LLMObs span', () => {
       llmobsModule.enable(config)
-      store.llmobsSpan = {
+      store.span = {
         context () {
           return {
             toSpanId () {
