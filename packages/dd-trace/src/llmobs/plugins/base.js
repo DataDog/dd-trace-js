@@ -3,7 +3,6 @@
 const log = require('../../log')
 const { storage } = require('../storage')
 
-// const TracingPlugin = require('../../plugins/tracing')
 const Plugin = require('../../plugins/plugin')
 const LLMObsTagger = require('../tagger')
 
