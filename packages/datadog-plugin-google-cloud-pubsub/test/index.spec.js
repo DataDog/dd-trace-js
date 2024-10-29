@@ -6,27 +6,12 @@ const id = require('../../dd-trace/src/id')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 
 // The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
 const TIMEOUT = 30000
-
-const dsmFullTopic = 'projects/test-project-42764574591eb894/topics/dsm-topic'
 const dsmTopicName = 'dsm-topic'
-const expectedProducerHash = computePathwayHash(
-  'test',
-  'tester',
-  ['direction:out', 'topic:' + dsmFullTopic, 'type:google-pubsub'],
-  ENTRY_PARENT_HASH
-)
-const expectedConsumerHash = computePathwayHash(
-  'test',
-  'tester',
-  ['direction:in', 'topic:' + dsmFullTopic, 'type:google-pubsub'],
-  expectedProducerHash
-)
 
 describe('Plugin', () => {
   let tracer
@@ -53,6 +38,8 @@ describe('Plugin', () => {
       let resource
       let v1
       let gax
+      let expectedProducerHash
+      let expectedConsumerHash
 
       describe('without configuration', () => {
         beforeEach(() => {
@@ -353,7 +340,7 @@ describe('Plugin', () => {
           })
         })
 
-        beforeEach(async () => {
+        before(async () => {
           const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
           resource = `projects/${project}/topics/${dsmTopicName}`
@@ -367,43 +354,58 @@ describe('Plugin', () => {
           consume = function (cb) {
             sub.on('message', cb)
           }
+
+          const dsmFullTopic = `projects/${project}/topics/${dsmTopicName}`
+
+          expectedProducerHash = computePathwayHash(
+            'test',
+            'tester',
+            ['direction:out', 'topic:' + dsmFullTopic, 'type:google-pubsub'],
+            ENTRY_PARENT_HASH
+          )
+          expectedConsumerHash = computePathwayHash(
+            'test',
+            'tester',
+            ['direction:in', 'topic:' + dsmFullTopic, 'type:google-pubsub'],
+            expectedProducerHash
+          )
         })
 
         describe('should set a DSM checkpoint', () => {
-          let setDataStreamsContextSpy
-
-          beforeEach(() => {
-            setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
-          })
-
-          afterEach(() => {
-            setDataStreamsContextSpy.restore()
-          })
-
           it('on produce', async () => {
             await publish(dsmTopic, { data: Buffer.from('DSM produce checkpoint') })
 
-            let testPassed
-            for (const checkpointCall of setDataStreamsContextSpy.args) {
-              if (checkpointCall[0].hash === expectedProducerHash) {
-                testPassed = true
-                break
-              }
-            }
-            expect(testPassed).to.equal(true)
+            agent.expectPipelineStats(dsmStats => {
+              let statsPointsReceived = 0
+              // we should have 1 dsm stats points
+              dsmStats.forEach((timeStatsBucket) => {
+                if (timeStatsBucket && timeStatsBucket.Stats) {
+                  timeStatsBucket.Stats.forEach((statsBuckets) => {
+                    statsPointsReceived += statsBuckets.Stats.length
+                  })
+                }
+              })
+              expect(statsPointsReceived).to.be.at.least(1)
+              expect(agent.dsmStatsExist(agent, expectedProducerHash.readBigUInt64BE(0).toString())).to.equal(true)
+            }, { timeoutMs: TIMEOUT })
           })
 
           it('on consume', async () => {
             await publish(dsmTopic, { data: Buffer.from('DSM consume checkpoint') })
             await consume(async () => {
-              let testPassed
-              for (const checkpointCall of setDataStreamsContextSpy.args) {
-                if (checkpointCall[0].hash === expectedConsumerHash) {
-                  testPassed = true
-                  break
-                }
-              }
-              expect(testPassed).to.equal(true)
+              agent.expectPipelineStats(dsmStats => {
+                let statsPointsReceived = 0
+                // we should have 2 dsm stats points
+                dsmStats.forEach((timeStatsBucket) => {
+                  if (timeStatsBucket && timeStatsBucket.Stats) {
+                    timeStatsBucket.Stats.forEach((statsBuckets) => {
+                      statsPointsReceived += statsBuckets.Stats.length
+                    })
+                  }
+                })
+                expect(statsPointsReceived).to.be.at.least(2)
+                expect(agent.dsmStatsExist(agent, expectedConsumerHash.readBigUInt64BE(0).toString())).to.equal(true)
+              }, { timeoutMs: TIMEOUT })
             })
           })
         })
