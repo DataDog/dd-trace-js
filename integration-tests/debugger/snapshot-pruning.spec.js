@@ -1,7 +1,9 @@
 'use strict'
 
 const { assert } = require('chai')
-const { setup } = require('./utils')
+const { setup, getBreakpointInfo } = require('./utils')
+
+const { line } = getBreakpointInfo()
 
 describe('Dynamic Instrumentation', function () {
   const t = setup()
@@ -15,7 +17,7 @@ describe('Dynamic Instrumentation', function () {
           assert.isBelow(Buffer.byteLength(JSON.stringify(payload)), 1024 * 1024) // 1MB
           assert.deepEqual(payload['debugger.snapshot'].captures, {
             lines: {
-              17: {
+              [line]: {
                 locals: {
                   notCapturedReason: 'Snapshot was too large',
                   size: 6
