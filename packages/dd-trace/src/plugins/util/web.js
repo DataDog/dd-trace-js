@@ -32,6 +32,12 @@ const HTTP2_HEADER_AUTHORITY = ':authority'
 const HTTP2_HEADER_SCHEME = ':scheme'
 const HTTP2_HEADER_PATH = ':path'
 
+const AWS_API_GATEWAY_HEADER_START_TIME_MS = 'x-dd-apigw-request-time'
+const AWS_API_GATEWAY_HEADER_PATH = 'x-dd-apigw-path'
+const AWS_API_GATEWAY_HEADER_HTTPMETHOD = 'x-dd-apigw-httpmethod'
+const AWS_API_GATEWAY_HEADER_DOMAIN = 'x-dd-apigw-domain-name'
+const AWS_API_GATEWAY_HEADER_STAGE = 'x-dd-apigw-stage'
+
 const contexts = new WeakMap()
 const ends = new WeakMap()
 
@@ -97,7 +103,7 @@ const web = {
       context.span.context()._name = name
       span = context.span
     } else {
-      span = web.startChildSpan(tracer, name, req.headers)
+      span = web.startChildSpan(tracer, name, req)
     }
 
     context.tracer = tracer
@@ -253,8 +259,32 @@ const web = {
   },
 
   // Extract the parent span from the headers and start a new span as its child
-  startChildSpan (tracer, name, headers) {
-    const childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
+  startChildSpan (tracer, name, req) {
+    const headers = req.headers
+    const context = contexts.get(req)
+    let childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
+
+    function extractAWSGatewaySpan (headers, childOf) {
+      if (!headers) {
+        // pass
+        return null
+      }
+      // if (!(AWS_API_GATEWAY_HEADER_START_TIME_MS in headers)) {
+      //   // pass
+      //   return null
+      // }
+      const service = 'AWS API-Gateway'
+      const span = tracer.startSpan('aws.apigateway',
+        { tags: { service }, childOf, startTime: headers[AWS_API_GATEWAY_HEADER_START_TIME_MS] }
+      )
+      return span
+    }
+    const apiGatewaySpan = extractAWSGatewaySpan(headers, childOf)
+    if (apiGatewaySpan) {
+      tracer.scope().activate(apiGatewaySpan)
+      context.apiGatewaySpan = apiGatewaySpan
+      childOf = apiGatewaySpan
+    }
     const span = tracer.startSpan(name, { childOf })
 
     return span
@@ -308,6 +338,17 @@ const web = {
     context.finished = true
   },
 
+  finishAPIGatewaySpan (context) {
+    const { req, res } = context
+
+    if (context.apiGatewayFinished && !req.stream) return
+
+    context.config.hooks.request(context.apiGatewaySpan, req, res)
+
+    context.apiGatewaySpan.finish()
+    context.apiGatewayFinished = true
+  },
+
   finishAll (context) {
     for (const beforeEnd of context.beforeEnd) {
       beforeEnd()
@@ -316,6 +357,8 @@ const web = {
     web.finishMiddleware(context)
 
     web.finishSpan(context)
+
+    web.finishAPIGatewaySpan(context)
   },
 
   obfuscateQs (config, url) {
@@ -426,10 +469,17 @@ function reactivate (req, fn) {
 }
 
 function addRequestTags (context, spanType) {
-  const { req, span, config } = context
+  const { req, span, apiGatewaySpan, config } = context
   const url = extractURL(req)
 
   span.addTags({
+    [HTTP_URL]: web.obfuscateQs(config, url),
+    [HTTP_METHOD]: req.method,
+    [SPAN_KIND]: SERVER,
+    [SPAN_TYPE]: spanType,
+    [HTTP_USERAGENT]: req.headers['user-agent']
+  })
+  apiGatewaySpan?.addTags({
     [HTTP_URL]: web.obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
@@ -443,6 +493,7 @@ function addRequestTags (context, spanType) {
 
     if (clientIp) {
       span.setTag(HTTP_CLIENT_IP, clientIp)
+      apiGatewaySpan?.setTag(HTTP_CLIENT_IP, clientIp)
     }
   }
 
@@ -450,13 +501,17 @@ function addRequestTags (context, spanType) {
 }
 
 function addResponseTags (context) {
-  const { req, res, paths, span } = context
+  const { req, res, paths, span, apiGatewaySpan } = context
 
   if (paths.length > 0) {
     span.setTag(HTTP_ROUTE, paths.join(''))
+    apiGatewaySpan?.setTag(HTTP_ROUTE, paths.join(''))
   }
 
   span.addTags({
+    [HTTP_STATUS_CODE]: res.statusCode
+  })
+  apiGatewaySpan?.addTags({
     [HTTP_STATUS_CODE]: res.statusCode
   })
 
@@ -477,7 +532,7 @@ function addResourceTag (context) {
 }
 
 function addHeaders (context) {
-  const { req, res, config, span } = context
+  const { req, res, config, span, apiGatewaySpan } = context
 
   config.headers.forEach(([key, tag]) => {
     const reqHeader = req.headers[key]
@@ -485,10 +540,12 @@ function addHeaders (context) {
 
     if (reqHeader) {
       span.setTag(tag || `${HTTP_REQUEST_HEADERS}.${key}`, reqHeader)
+      apiGatewaySpan?.setTag(tag || `${HTTP_REQUEST_HEADERS}.${key}`, reqHeader)
     }
 
     if (resHeader) {
       span.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
+      apiGatewaySpan?.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
     }
   })
 }
