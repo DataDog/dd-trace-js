@@ -188,6 +188,46 @@ module.exports = class FakeAgent extends EventEmitter {
 
     return resultPromise
   }
+
+  assertLlmObsPayloadReceived (fn, timeout, expectedMessageCount = 1, resolveAtFirstSuccess) {
+    timeout = timeout || 30000
+    let resultResolve
+    let resultReject
+    let msgCount = 0
+    const errors = []
+
+    const timeoutObj = setTimeout(() => {
+      const errorsMsg = errors.length === 0 ? '' : `, additionally:\n${errors.map(e => e.stack).join('\n')}\n===\n`
+      resultReject(new Error(`timeout${errorsMsg}`, { cause: { errors } }))
+    }, timeout)
+
+    const resultPromise = new Promise((resolve, reject) => {
+      resultResolve = () => {
+        clearTimeout(timeoutObj)
+        resolve()
+      }
+      resultReject = (e) => {
+        clearTimeout(timeoutObj)
+        reject(e)
+      }
+    })
+
+    const messageHandler = msg => {
+      try {
+        msgCount += 1
+        fn(msg)
+        if (resolveAtFirstSuccess || msgCount === expectedMessageCount) {
+          resultResolve()
+          this.removeListener('llmobs', messageHandler)
+        }
+      } catch (e) {
+        errors.push(e)
+      }
+    }
+    this.on('llmobs', messageHandler)
+
+    return resultPromise
+  }
 }
 
 function buildExpressServer (agent) {
@@ -310,6 +350,14 @@ function buildExpressServer (agent) {
   app.post('/telemetry/proxy/api/v2/apmtelemetry', (req, res) => {
     res.status(200).send()
     agent.emit('telemetry', {
+      headers: req.headers,
+      payload: req.body
+    })
+  })
+
+  app.post('/evp_proxy/v2/api/v2/llmobs', (req, res) => {
+    res.status(200).send()
+    agent.emit('llmobs', {
       headers: req.headers,
       payload: req.body
     })
