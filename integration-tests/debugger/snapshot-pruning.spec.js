@@ -13,10 +13,28 @@ describe('Dynamic Instrumentation', function () {
       it('should prune snapshot if payload is too large', function (done) {
         t.agent.on('debugger-input', ({ payload }) => {
           assert.isBelow(Buffer.byteLength(JSON.stringify(payload)), 1024 * 1024) // 1MB
+          assert.deepEqual(payload['debugger.snapshot'].captures, {
+            lines: {
+              17: {
+                locals: {
+                  notCapturedReason: 'Snapshot was too large',
+                  size: 6
+                }
+              }
+            }
+          })
           done()
         })
 
-        t.agent.addRemoteConfig(t.generateRemoteConfig({ captureSnapshot: true }))
+        t.agent.addRemoteConfig(t.generateRemoteConfig({
+          captureSnapshot: true,
+          capture: {
+            // ensure we get a large snapshot
+            maxCollectionSize: Number.MAX_SAFE_INTEGER,
+            maxFieldCount: Number.MAX_SAFE_INTEGER,
+            maxLength: Number.MAX_SAFE_INTEGER
+          }
+        }))
       })
     })
   })

@@ -43,7 +43,11 @@ function send (message, logger, snapshot, cb) {
 
   if (Buffer.byteLength(json) > MAX_PAYLOAD_SIZE) {
     // TODO: This is a very crude way to handle large payloads. Proper pruning will be implemented later (DEBUG-2624)
-    delete payload['debugger.snapshot']
+    const line = Object.values(payload['debugger.snapshot'].captures.lines)[0]
+    line.locals = {
+      notCapturedReason: 'Snapshot was too large',
+      size: Object.keys(line.locals).length
+    }
     json = JSON.stringify(payload)
   }
 
