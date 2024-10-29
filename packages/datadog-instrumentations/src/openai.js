@@ -3,8 +3,12 @@
 const { addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const tracingChannel = require('dc-polyfill').tracingChannel
-const ch = tracingChannel('apm:openai:request')
+const dc = require('dc-polyfill')
+const ch = dc.tracingChannel('apm:openai:request')
+
+// this will tell the span to finish
+// this is so all subscribers/plugins can use the span before it is finished/processed
+const finishCh = dc.channel('tracing:apm:openai:request:finish')
 
 const V4_PACKAGE_SHIMS = [
   {
@@ -117,7 +121,7 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
         apiKey: this.configuration.apiKey
       }
 
-      return ch.tracePromise(fn, ctx, this, ...arguments)
+      return ch.tracePromise(fn, ctx, this, ...arguments).finally(() => finishCh.publish(ctx))
     })
   }
 
@@ -354,6 +358,7 @@ function finish (ctx, response, error) {
 
   ctx.result = response
   ch.asyncEnd.publish(ctx)
+  finishCh.publish(ctx)
 }
 
 function getOption (args, option, defaultValue) {
