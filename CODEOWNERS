@@ -55,6 +55,8 @@
 
 /packages/dd-trace/src/llmobs/ @DataDog/ml-observability
 /packages/dd-trace/test/llmobs/ @DataDog/ml-observability
+/packages/datadog-plugin-openai/ @DataDog/ml-observability
+/packages/datadog-instrumentations/src/openai.js @DataDog/ml-observability
 
 # CI
 /.github/workflows/appsec.yml @DataDog/asm-js
