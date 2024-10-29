@@ -10,6 +10,9 @@ const { SpanStatsProcessor } = require('./span_stats')
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
+const { channel } = require('dc-polyfill')
+const spanProcessCh = channel('dd-trace:span:process')
+
 class SpanProcessor {
   constructor (exporter, prioritySampler, config) {
     this._exporter = exporter
@@ -45,6 +48,8 @@ class SpanProcessor {
           const formattedSpan = format(span)
           this._stats.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
+
+          spanProcessCh.publish({ span })
         } else {
           active.push(span)
         }
