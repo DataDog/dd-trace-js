@@ -56,6 +56,8 @@ describe('end to end sdk integration tests', () => {
       })
     }
 
+    tracer._tracer._config.apiKey = 'test'
+
     sinon.spy(tracer._tracer._processor, 'process')
     sinon.stub(AgentProxyWriter.prototype, 'append')
     sinon.stub(EvalMetricsWriter.prototype, 'append')
