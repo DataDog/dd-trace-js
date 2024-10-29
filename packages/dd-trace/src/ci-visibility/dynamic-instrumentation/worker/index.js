@@ -4,7 +4,10 @@ const session = require('../../../debugger/devtools_client/session')
 // TODO: move getLocalStateForCallFrame to common place
 const { getLocalStateForCallFrame } = require('../../../debugger/devtools_client/snapshot')
 // TODO: move findScriptFromPartialPath to common place
-const { findScriptFromPartialPath, getScriptUrlFromId } = require('../../../debugger/devtools_client/state')
+const {
+  findScriptFromPartialPath,
+  getStackFromCallFrames
+} = require('../../../debugger/devtools_client/state')
 
 let sessionStarted = false
 const breakpointIdToSnapshotId = new Map()
@@ -16,16 +19,7 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
     return session.post('Debugger.resume')
   }
 
-  const stack = callFrames.map((frame) => {
-    let fileName = getScriptUrlFromId(frame.location.scriptId)
-    if (fileName.startsWith('file://')) fileName = fileName.substr(7) // TODO: This might not be required
-    return {
-      fileName,
-      function: frame.functionName,
-      lineNumber: frame.location.lineNumber + 1, // Beware! lineNumber is zero-indexed
-      columnNumber: frame.location.columnNumber + 1 // Beware! columnNumber is zero-indexed
-    }
-  })
+  const stack = getStackFromCallFrames(callFrames)
 
   const getLocalState = await getLocalStateForCallFrame(callFrames[0])
   await session.post('Debugger.resume')
