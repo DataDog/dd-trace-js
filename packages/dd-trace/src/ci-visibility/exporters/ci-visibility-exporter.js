@@ -302,13 +302,28 @@ class CiVisibilityExporter extends AgentInfoExporter {
     if (!this._isInitialized) {
       return done()
     }
-    this._writer.flush(() => {
-      if (this._coverageWriter) {
-        this._coverageWriter.flush(done)
-      } else {
+
+    // TODO: safe to do them at once? Or do we want to do them one by one?
+    const writers = [
+      this._writer,
+      this._coverageWriter,
+      this._logsWriter
+    ].filter(writer => writer)
+
+    let remaining = writers.length
+
+    if (remaining === 0) {
+      return done()
+    }
+
+    const onFlushComplete = () => {
+      remaining -= 1
+      if (remaining === 0) {
         done()
       }
-    })
+    }
+
+    writers.forEach(writer => writer.flush(onFlushComplete))
   }
 
   exportUncodedCoverages () {

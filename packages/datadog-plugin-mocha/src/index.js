@@ -47,6 +47,27 @@ const {
 const id = require('../../dd-trace/src/id')
 const log = require('../../dd-trace/src/log')
 
+// TODO: separate in util
+function getFileAndLineNumberFromError (error) {
+  // Split the stack trace into individual lines
+  const stackLines = error.stack.split('\n')
+
+  // The top frame is usually the second line
+  const topFrame = stackLines[1]
+
+  // Regular expression to match the file path, line number, and column number
+  const regex = /\s*at\s+(?:.*\()?(.+):(\d+):(\d+)\)?/
+  const match = topFrame.match(regex)
+
+  if (match) {
+    const filePath = match[1]
+    const lineNumber = match[2]
+    const columnNumber = match[3]
+
+    return [filePath, lineNumber, columnNumber]
+  }
+}
+
 function getTestSuiteLevelVisibilityTags (testSuiteSpan) {
   const testSuiteSpanContext = testSuiteSpan.context()
   const suiteTags = {
@@ -186,6 +207,18 @@ class MochaPlugin extends CiPlugin {
       const span = this.startTestSpan(testInfo)
 
       this.enter(span, store)
+
+      if (this.debuggerParameters) { // there is a breakpoint
+        const spanContext = span.context()
+        const spanId = spanContext.toSpanId()
+        const traceId = spanContext.toTraceId()
+        this.retriedTestIds = {
+          spanId,
+          traceId
+        }
+        // we probably need a map, as there are sync issues here
+        // onHitProbePromise might not sync correctly with test start / end
+      }
     })
 
     this.addSub('ci:mocha:worker:finish', () => {
@@ -237,12 +270,35 @@ class MochaPlugin extends CiPlugin {
           span.setTag(TEST_STATUS, 'skip')
         } else {
           span.setTag(TEST_STATUS, 'fail')
+          // big problems with sync here!
+          if (this.debuggerParameters) {
+            // good news: the logs export does not need to be synced with test event
+            // export, so as long as we have the trace and span id we're good, even
+            // if the test finishes before we handle the debuggerPromise
+            const {
+              snapshotId,
+              file,
+              line
+            } = this.debuggerParameters
+            span.setTag('error.debug_info_captured', 'true')
+            span.setTag('_dd.debug.error.0.snapshot_id', snapshotId)
+            // TODO: we need to figure out if the error is the same as the one we added a line probe to
+            span.setTag('_dd.debug.error.0.file', file)
+            span.setTag('_dd.debug.error.0.line', line)
+
+            // do we need to remove it?
+            this.debuggerParameters = null
+          }
+
           span.setTag('error', err)
         }
       }
     })
 
+    // An test has failed and it's about to be retried.
+    // At this moment we start Dynamic Instrumentation
     this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, err }) => {
+      // retrying test because it failed, so we're going to activate DI
       const store = storage.getStore()
       const span = store?.span
       if (span) {
@@ -252,6 +308,28 @@ class MochaPlugin extends CiPlugin {
         }
         if (err) {
           span.setTag('error', err)
+          // TODO: only do this if ATR + DI is configured
+          const [file, line] = getFileAndLineNumberFromError(err)
+          // TODO: we need to figure out what to do with sync issues: mocha will not
+          // wait for this promise
+          // TODO: what if the probe is not hit?
+          // TODO: could we use directly the client instead of this.di?
+          const [snapshotId, onHitProbePromise] = this.di.activateDebugger({ file, line })
+
+          this.debuggerParameters = {
+            snapshotId,
+            file,
+            line
+          }
+          onHitProbePromise.then(({ snapshot }) => {
+            this.tracer._exporter.exportLogs(this.testEnvironmentMetadata, {
+              debugger: { snapshot },
+              dd: {
+                trace_id: this.retriedTestIds.traceId,
+                span_id: this.retriedTestIds.spanId
+              }
+            })
+          })
         }
 
         const spanTags = span.context()._tags

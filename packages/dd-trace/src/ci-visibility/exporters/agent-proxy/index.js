@@ -88,10 +88,11 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
         })
         // coverages will never be used, so we discard them
         this._coverageBuffer = []
+        // TODO: logs will never be used, so we discard them?
       }
       this._resolveCanUseCiVisProtocol(isEvpCompatible)
       this.exportUncodedTraces()
-      this.exportUncodedCoverages()
+      this.exportUncodedCoverages() // TODO: do this for logs
       this._isGzipCompatible = isGzipCompatible
     })
   }

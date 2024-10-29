@@ -117,6 +117,12 @@ class Tracer extends NoopProxy {
         }
       }
 
+      // TODO: gate with config.isTestDynamicInstrumentationEnabled
+      if (config.isCiVisibility) {
+        const testVisibilityDynamicInstrumentation = require('./ci-visibility/dynamic-instrumentation')
+        testVisibilityDynamicInstrumentation.start()
+      }
+
       if (config.isGCPFunction || config.isAzureFunction) {
         require('./serverless').maybeStartServerlessMiniAgent(config)
       }
