@@ -3,28 +3,17 @@ const { parentPort } = require('worker_threads')
 const session = require('../../../debugger/devtools_client/session')
 // TODO: move getLocalStateForCallFrame to common place
 const { getLocalStateForCallFrame } = require('../../../debugger/devtools_client/snapshot')
+// TODO: move findScriptFromPartialPath to common place
+const {
+  findScriptFromPartialPath,
+  getStackFromCallFrames
+} = require('../../../debugger/devtools_client/state')
 const log = require('../../log')
 
 let sessionStarted = false
 
-const scriptIds = []
-const scriptUrls = new Map()
-
 const breakpointIdToSnapshotId = new Map()
 const breakpointIdToProbe = new Map()
-
-function findScriptFromPartialPath (path) {
-  return scriptIds
-    .filter(([url]) => url.endsWith(path))
-    .sort(([a], [b]) => a.length - b.length)[0]
-}
-
-session.on('Debugger.scriptParsed', ({ params }) => {
-  scriptUrls.set(params.scriptId, params.url)
-  if (params.url.startsWith('file:')) {
-    scriptIds.push([params.url, params.scriptId])
-  }
-})
 
 session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint], callFrames } }) => {
   const probe = breakpointIdToProbe.get(hitBreakpoint)
@@ -32,16 +21,7 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
     return session.post('Debugger.resume')
   }
 
-  const stack = callFrames.map((frame) => {
-    let fileName = scriptUrls.get(frame.location.scriptId)
-    if (fileName.startsWith('file://')) fileName = fileName.substr(7) // TODO: This might not be required
-    return {
-      fileName,
-      function: frame.functionName,
-      lineNumber: frame.location.lineNumber + 1, // Beware! lineNumber is zero-indexed
-      columnNumber: frame.location.columnNumber + 1 // Beware! columnNumber is zero-indexed
-    }
-  })
+  const stack = getStackFromCallFrames(callFrames)
 
   const getLocalState = await getLocalStateForCallFrame(callFrames[0])
 
