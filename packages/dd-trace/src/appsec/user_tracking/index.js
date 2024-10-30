@@ -5,8 +5,7 @@ const log = require('../../log')
 
 const SDK_EVENT_REGEX = /^_dd\.appsec\.events\.users\.[\W\w+]+\.sdk$/i
 
-// The user ID generated must be consistent and repeatable meaning that, for a given framework, the same field must always be used. 
-const USER_ID_FIELDS = ['id', '_id', 'email', 'username', 'login', 'user']
+const USER_ID_FIELDS = ['id', '_id', 'email', 'username', 'login', 'user'] // The user ID generated must be consistent and repeatable meaning that, for a given framework, the same field must always be used. 
 
 let collectionMode
 
@@ -31,8 +30,8 @@ function setCollectionMode (mode, overwrite = true) {
     default:
       collectionMode = 'disabled'
   }
+  /* eslint-enable no-fallthrough */
 }
-/* eslint-enable no-fallthrough */
 
 function isSdkCalled (rootSpan) {
   const tags = rootSpan?.context()?._tags
@@ -46,6 +45,8 @@ function getUserId (user) {
   for (const field of USER_ID_FIELDS) {
     let id = user[field]
     if (id) {
+      id = id.toString()
+
       if (collectionMode === 'anon') {
         id = obfuscateId(id)
       }
