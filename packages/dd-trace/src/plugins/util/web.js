@@ -289,12 +289,15 @@ const web = {
         return null
       }
 
+      console.log('Received the following web request')
+      console.log(headers)
+
       const awsContext = extractAPIGatewayContext(headers)
 
       console.log('Extracted the following AWS context')
       console.log(awsContext)
 
-      if (!context) {
+      if (!awsContext) {
         return null
       }
 
