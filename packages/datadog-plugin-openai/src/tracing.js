@@ -205,6 +205,9 @@ class OpenAiTracingPlugin extends TracingPlugin {
     const span = store?.span
     if (!span) return
 
+    const finishTime = span._getTime()
+    ctx.finishTime = finishTime
+
     const error = !!span.context()._tags.error
 
     let headers, body, method, path
@@ -260,7 +263,9 @@ class OpenAiTracingPlugin extends TracingPlugin {
   finish (ctx) {
     const store = ctx.currentStore
     const span = store?.span
-    span?.finish()
+
+    const finishTime = ctx.finishTime
+    span?.finish(finishTime)
   }
 
   sendMetrics (headers, body, endpoint, duration, error, spanTags) {
