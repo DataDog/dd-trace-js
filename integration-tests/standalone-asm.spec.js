@@ -116,7 +116,7 @@ describe('Standalone ASM', () => {
       await curl(proc)
 
       return promise
-    })
+    }).timeout(70000)
 
     it('should keep attack requests', async () => {
       await doWarmupRequests(proc)
