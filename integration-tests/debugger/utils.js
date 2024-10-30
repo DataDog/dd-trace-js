@@ -108,9 +108,8 @@ function getBreakpointInfo (stackIndex = 0) {
   // First, get the filename of file that called this function
   const testFile = new Error().stack
     .split('\n')[stackIndex + 2] // +2 to skip this function + the first line, which is the error message
-    .split(' (')[1]
-    .slice(0, -1)
-    .split(':')[0]
+    .split(' (')[1] // Remove everything before the filename
+    .split(':')[0] // Remove everything after the filename
 
   // Then, find the corresponding file in which the breakpoint exists
   const filename = basename(testFile).replace('.spec', '')
@@ -118,7 +117,7 @@ function getBreakpointInfo (stackIndex = 0) {
   // Finally, find the line number of the breakpoint
   const line = readFileSync(join(__dirname, 'target-app', filename), 'utf8')
     .split('\n')
-    .findIndex(line => line.includes('// BREAKPOINT')) + 1
+    .findIndex(line => line.endsWith('// BREAKPOINT')) + 1
 
   return { file: `debugger/target-app/${filename}`, line }
 }
