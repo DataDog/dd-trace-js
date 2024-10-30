@@ -9,6 +9,8 @@ const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../../plugins/util/tags'
 
 module.exports = send
 
+const MAX_PAYLOAD_SIZE = 1024 * 1024 // 1MB
+
 const ddsource = 'dd_debugger'
 const hostname = getHostname()
 const service = config.service
@@ -37,5 +39,17 @@ function send (message, logger, snapshot, cb) {
     'debugger.snapshot': snapshot
   }
 
-  request(JSON.stringify(payload), opts, cb)
+  let json = JSON.stringify(payload)
+
+  if (Buffer.byteLength(json) > MAX_PAYLOAD_SIZE) {
+    // TODO: This is a very crude way to handle large payloads. Proper pruning will be implemented later (DEBUG-2624)
+    const line = Object.values(payload['debugger.snapshot'].captures.lines)[0]
+    line.locals = {
+      notCapturedReason: 'Snapshot was too large',
+      size: Object.keys(line.locals).length
+    }
+    json = JSON.stringify(payload)
+  }
+
+  request(json, opts, cb)
 }
