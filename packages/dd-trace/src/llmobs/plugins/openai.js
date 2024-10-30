@@ -46,12 +46,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
 
     if (!error) {
-      const metrics = this._setMetrics(response)
+      const metrics = this._extractMetrics(response)
       this._tagger.tagMetrics(span, metrics)
     }
   }
 
-  _setMetrics (response) {
+  _extractMetrics (response) {
     const metrics = {}
     const tokenUsage = response.usage
 
