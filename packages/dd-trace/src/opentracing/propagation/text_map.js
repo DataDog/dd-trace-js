@@ -128,10 +128,10 @@ class TextMapPropagator {
       let counter = 1
       for (const [key, value] of Object.entries(spanContext._baggageItems)) {
         baggage += `${this._encodeOtelBaggageKey(String(key).trim())}=${encodeURIComponent(String(value).trim())},`
-        if (counter == this._config.baggageMaxItems || counter > this._config.baggageMaxItems) break
+        if (counter === this._config.baggageMaxItems || counter > this._config.baggageMaxItems) break
         counter += 1
       }
-      baggage = baggage.slice(0, baggage.length-1)
+      baggage = baggage.slice(0, baggage.length - 1)
       let buf = Buffer.from(baggage)
       if (buf.length > this._config.baggageMaxBytes) {
         const originalBaggages = baggage.split(',')
@@ -145,10 +145,6 @@ class TextMapPropagator {
       }
       if (baggage) carrier.baggage = baggage
     }
-  }
-
-  _chopBaggageItemNumberToBeUnder(limit) {
-    
   }
 
   _injectTags (spanContext, carrier) {

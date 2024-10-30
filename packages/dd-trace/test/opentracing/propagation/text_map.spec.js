@@ -126,7 +126,7 @@ describe('TextMapPropagator', () => {
     it('should drop excess baggage items when the resulting baggage header contains many bytes', () => {
       const carrier = {}
       const baggageItems = {
-        raccoon: 'chunky', 
+        raccoon: 'chunky',
         foo: Buffer.alloc(config.baggageMaxBytes).toString()
       }
       const spanContext = createContext({ baggageItems })
