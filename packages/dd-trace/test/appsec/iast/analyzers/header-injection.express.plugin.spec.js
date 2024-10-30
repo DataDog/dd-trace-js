@@ -226,7 +226,7 @@ describe('Header injection vulnerability', () => {
           testDescription: 'should have HEADER_INJECTION vulnerability when ' +
             'the header is "access-control-allow-origin" and the origin is not a header',
           fn: (req, res) => {
-            setHeaderFunction('set-cookie', req.body.test, res)
+            setHeaderFunction('access-control-allow-origin', req.body.test, res)
           },
           vulnerability: 'HEADER_INJECTION',
           makeRequest: (done, config) => {
