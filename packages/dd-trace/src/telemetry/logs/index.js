@@ -35,18 +35,19 @@ function onLog (log) {
 }
 
 function onErrorLog (msg) {
-  if (msg instanceof Error) {
-    onLog({
-      level: 'ERROR',
-      message: msg.message,
-      stack_trace: msg.stack
-    })
-  } else if (typeof msg === 'string') {
-    onLog({
-      level: 'ERROR',
-      message: msg
-    })
+  const { message, cause } = msg
+  if (!message && !cause) return
+
+  const telLog = {
+    level: 'ERROR',
+    message: message || 'Generic Error' // all the telemetry logs should have a message
   }
+
+  if (cause) {
+    telLog.stack_trace = cause.stack
+  }
+
+  onLog(telLog)
 }
 
 function start (config) {

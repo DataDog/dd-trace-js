@@ -1,6 +1,6 @@
 'use strict'
 
-const log = require('../../log')
+const logWriter = require('../../log/writer')
 const { calculateDDBasePath } = require('../../util')
 
 const logs = new Map()
@@ -54,9 +54,9 @@ function sanitize (logEntry) {
     return null
   }
 
-  if (!isDDCode) {
-    logEntry.message = 'omitted'
-  }
+  // if (!isDDCode) {
+  //   logEntry.message = 'omitted'
+  // }
 
   return logEntry
 }
@@ -82,7 +82,7 @@ const logCollector = {
         return true
       }
     } catch (e) {
-      log.error(`Unable to add log to logCollector: ${e.message}`)
+      logWriter.error('Unable to add log to logCollector: %s', e.message)
     }
     return false
   },

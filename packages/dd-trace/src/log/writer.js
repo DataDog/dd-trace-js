@@ -2,6 +2,7 @@
 
 const { storage } = require('../../../datadog-core')
 const { LogChannel } = require('./channels')
+const { Log } = require('./log')
 const defaultLogger = {
   debug: msg => console.debug(msg), /* eslint-disable-line no-console */
   info: msg => console.info(msg), /* eslint-disable-line no-console */
@@ -22,7 +23,7 @@ function withNoop (fn) {
 }
 
 function unsubscribeAll () {
-  logChannel.unsubscribe({ debug, info, warn, error })
+  logChannel.unsubscribe({ debug, info, warn, error: onError })
 }
 
 function toggleSubscription (enable, level) {
@@ -30,7 +31,7 @@ function toggleSubscription (enable, level) {
 
   if (enable) {
     logChannel = new LogChannel(level)
-    logChannel.subscribe({ debug, info, warn, error })
+    logChannel.subscribe({ debug, info, warn, error: onError })
   }
 }
 
@@ -51,18 +52,26 @@ function reset () {
   toggleSubscription(false)
 }
 
-function error (err) {
-  if (typeof err !== 'object' || !err) {
-    err = String(err)
-  } else if (!err.stack) {
-    err = String(err.message || err)
+function getErrorLog (err) {
+  if (err?.delegate && typeof err.delegate === 'function') {
+    const result = err.delegate()
+    return Array.isArray(result) ? Log.parse(...result) : Log.parse(result)
+  } else {
+    return err
   }
+}
 
-  if (typeof err === 'string') {
-    err = new Error(err)
-  }
+function onError (err) {
+  const { formatted, cause } = getErrorLog(err)
 
-  withNoop(() => logger.error(err))
+  // calling twice logger.error() because Error cause is only available in nodejs v16.9.0
+  // TODO: replace it with Error(message, { cause }) when cause has broad support
+  if (formatted) withNoop(() => logger.error(new Error(formatted)))
+  if (cause) withNoop(() => logger.error(cause))
+}
+
+function error (...args) {
+  onError(Log.parse(...args))
 }
 
 function warn (message) {

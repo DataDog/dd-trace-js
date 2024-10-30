@@ -4,6 +4,7 @@ const coalesce = require('koalas')
 const { isTrue } = require('../util')
 const { debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
+const { Log } = require('./log')
 
 const memoize = func => {
   const cache = {}
@@ -52,7 +53,7 @@ const log = {
   reset () {
     logWriter.reset()
     this._deprecate = memoize((code, message) => {
-      errorChannel.publish(message)
+      errorChannel.publish(Log.parse(message))
       return true
     })
 
@@ -80,9 +81,9 @@ const log = {
     return this
   },
 
-  error (err) {
+  error (...args) {
     if (errorChannel.hasSubscribers) {
-      errorChannel.publish(processMsg(err))
+      errorChannel.publish(Log.parse(...args))
     }
     return this
   },

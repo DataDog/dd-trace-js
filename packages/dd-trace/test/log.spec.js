@@ -160,6 +160,7 @@ describe('log', () => {
         expect(console.error.firstCall.args[0]).to.have.property('message', 'error')
       })
 
+      // NOTE: There is no usage for this case. should we continue supporting it?
       it('should convert empty values to errors', () => {
         log.error()
 
@@ -190,6 +191,34 @@ describe('log', () => {
         expect(console.error).to.have.been.called
         expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
         expect(console.error.firstCall.args[0]).to.have.property('message', 'error')
+      })
+
+      it('should allow a message + Error', () => {
+        log.error('this is an error', new Error('cause'))
+
+        expect(console.error).to.have.been.called
+        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
+        expect(console.error.firstCall.args[0]).to.have.property('message', 'this is an error')
+        expect(console.error.secondCall.args[0]).to.be.instanceof(Error)
+        expect(console.error.secondCall.args[0]).to.have.property('message', 'cause')
+      })
+
+      it('should allow a templated message', () => {
+        log.error('this is an error of type: %s code: %i', 'ERR', 42)
+
+        expect(console.error).to.have.been.called
+        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
+        expect(console.error.firstCall.args[0]).to.have.property('message', 'this is an error of type: ERR code: 42')
+      })
+
+      it('should allow a templated message + Error', () => {
+        log.error('this is an error of type: %s code: %i', 'ERR', 42, new Error('cause'))
+
+        expect(console.error).to.have.been.called
+        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
+        expect(console.error.firstCall.args[0]).to.have.property('message', 'this is an error of type: ERR code: 42')
+        expect(console.error.secondCall.args[0]).to.be.instanceof(Error)
+        expect(console.error.secondCall.args[0]).to.have.property('message', 'cause')
       })
     })
 
