@@ -5,33 +5,34 @@ const { channel } = require('./helpers/instrument')
 
 const passportVerifyChannel = channel('datadog:passport:verify:finish')
 
-function wrapVerifiedAndPublish (username, password, verified, type) {
-  if (!passportVerifyChannel.hasSubscribers) {
-    return verified
-  }
+function wrapVerifiedAndPublish (username, verified) {
+  return shimmer.wrapFunction(verified, function wrapVerify (verified) {
+    return function wrappedVerified (err, user) {
+      // if there is an error, it's neither an auth success nor a failure
+      if (!err) {
+        passportVerifyChannel.publish({ success: !!user, login: username, user })
+      }
 
-  // eslint-disable-next-line n/handle-callback-err
-  return shimmer.wrapFunction(verified, verified => function (err, user, info) {
-    if (err) return // an error from the database doesn't mean either success or failure
-
-    passportVerifyChannel.publish({ login: username, user, abortController })
-
-    return verified.apply(this, arguments)
+      return verified.apply(this, arguments)
+    }
   })
 }
 
 function wrapVerify (verify) {
   return function wrappedVerify (req, username, password, verified) {
-    let index = 3
+    if (passportVerifyChannel.hasSubscribers) {
+      // verify can be called with or without req
+      let verifiedIndex = 3
+      if (!this._passReqToCallback) {
+        verifiedIndex = 2
+        username = req
+        verified = password
+      }
 
-    if (!this._passReqToCallback) {
-      index = 2
-      username = req
-      password = username
-      verified = password
+      // replace the callback with our own wrapper to get the result
+      arguments[verifiedIndex] = wrapVerifiedAndPublish(username, verified)
+      // if we ever need the type of strategy, we can get it from this.name
     }
-
-    arguments[index] = wrapVerifiedAndPublish(username, password, verified, this.name)
 
     return verify.apply(this, arguments)
   }
