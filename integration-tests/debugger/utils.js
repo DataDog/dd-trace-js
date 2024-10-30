@@ -13,12 +13,13 @@ const pollInterval = 1
 
 module.exports = {
   pollInterval,
-  setup
+  setup,
+  getBreakpointInfo
 }
 
 function setup () {
   let sandbox, cwd, appPort, proc
-  const breakpoint = getBreakpointInfo()
+  const breakpoint = getBreakpointInfo(1) // `1` to disregard the `setup` function
   const t = {
     breakpoint,
     axios: null,
@@ -103,11 +104,21 @@ function setup () {
   return t
 }
 
-function getBreakpointInfo () {
-  const testFile = new Error().stack.split('\n')[3].split(' (')[1].slice(0, -1).split(':')[0] // filename of caller
+function getBreakpointInfo (stackIndex = 0) {
+  // First, get the filename of file that called this function
+  const testFile = new Error().stack
+    .split('\n')[stackIndex + 2] // +2 to skip this function + the first line, which is the error message
+    .split(' (')[1]
+    .slice(0, -1)
+    .split(':')[0]
+
+  // Then, find the corresponding file in which the breakpoint exists
   const filename = basename(testFile).replace('.spec', '')
+
+  // Finally, find the line number of the breakpoint
   const line = readFileSync(join(__dirname, 'target-app', filename), 'utf8')
     .split('\n')
     .findIndex(line => line.includes('// BREAKPOINT')) + 1
+
   return { file: `debugger/target-app/${filename}`, line }
 }
