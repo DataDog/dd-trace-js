@@ -46,14 +46,15 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
 
     if (!error) {
-      const metrics = this._setMetrics(span, response)
+      const metrics = this._setMetrics(response)
       this._tagger.tagMetrics(span, metrics)
     }
   }
 
-  _setMetrics (span, response) {
+  _setMetrics (response) {
     const metrics = {}
     const tokenUsage = response.usage
+
     if (tokenUsage) {
       const inputTokens = tokenUsage.prompt_tokens
       if (inputTokens) metrics.inputTokens = inputTokens
@@ -63,20 +64,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
       const totalTokens = tokenUsage.total_toksn || (inputTokens + outputTokens)
       if (totalTokens) metrics.totalTokens = totalTokens
-
-      return metrics
     }
-
-    const inputTokens = span.context()._tags['openai.response.usage.prompt_tokens']
-    const outputTokens = span.context()._tags['openai.response.usage.completion_tokens']
-    const totalTokens = span.context()._tags['openai.response.usage.total_tokens'] || (inputTokens + outputTokens)
-    if (!inputTokens || !outputTokens) {
-      return metrics
-    }
-
-    if (inputTokens) metrics.inputTokens = inputTokens
-    if (outputTokens) metrics.outputTokens = outputTokens
-    if (totalTokens) metrics.totalTokens = totalTokens
 
     return metrics
   }
