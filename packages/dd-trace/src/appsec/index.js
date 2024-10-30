@@ -25,7 +25,7 @@ const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { isBlocked, block, setTemplates, getBlockingAction } = require('./blocking')
-const { setCollectionMode, trackLogin } = require('./user_tracking')
+const UserTracking = require('./user_tracking')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
 const rasp = require('./rasp')
@@ -54,8 +54,11 @@ function enable (_config) {
 
     apiSecuritySampler.configure(_config.appsec)
 
+    UserTracking.setCollectionMode(_config.appsec.eventTracking.mode, false)
+
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
+    passportVerify.subscribe(onPassportVerify) // possible optimization: only subscribe if collection mode is enabled
     bodyParser.subscribe(onRequestBodyParsed)
     nextBodyParsed.subscribe(onRequestBodyParsed)
     nextQueryParsed.subscribe(onRequestQueryParsed)
@@ -64,11 +67,6 @@ function enable (_config) {
     responseBody.subscribe(onResponseBody)
     responseWriteHead.subscribe(onResponseWriteHead)
     responseSetHeader.subscribe(onResponseSetHeader)
-
-    if (_config.appsec.eventTracking.enabled) {
-      setCollectionMode(_config.appsec.eventTracking.mode)
-      passportVerify.subscribe(onPassportVerify)
-    }
 
     isEnabled = true
     config = _config
@@ -222,7 +220,7 @@ function onPassportVerify ({ login, user, success }) {
     return
   }
 
-  trackLogin(login, user, success, rootSpan)
+  UserTracking.trackLogin(login, user, success, rootSpan)
 }
 
 const responseAnalyzedSet = new WeakSet()
