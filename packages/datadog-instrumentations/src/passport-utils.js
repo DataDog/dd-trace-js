@@ -12,26 +12,48 @@ function wrapVerifiedAndPublish (username, password, verified, type) {
 
   // eslint-disable-next-line n/handle-callback-err
   return shimmer.wrapFunction(verified, verified => function (err, user, info) {
-    const credentials = { type, username }
-    passportVerifyChannel.publish({ credentials, user })
+    if (err) return // an error from the database doesn't mean either success or failure
+
+    passportVerifyChannel.publish({ login: username, user, abortController })
+
     return verified.apply(this, arguments)
   })
 }
 
-function wrapVerify (verify, passReq, type) {
-  if (passReq) {
-    return function (req, username, password, verified) {
-      arguments[3] = wrapVerifiedAndPublish(username, password, verified, type)
-      return verify.apply(this, arguments)
+function wrapVerify (verify) {
+  return function wrappedVerify (req, username, password, verified) {
+    let index = 3
+
+    if (!this._passReqToCallback) {
+      index = 2
+      username = req
+      password = username
+      verified = password
     }
-  } else {
-    return function (username, password, verified) {
-      arguments[2] = wrapVerifiedAndPublish(username, password, verified, type)
-      return verify.apply(this, arguments)
-    }
+
+    arguments[index] = wrapVerifiedAndPublish(username, password, verified, this.name)
+
+    return verify.apply(this, arguments)
   }
 }
 
+function wrapStrategy (Strategy) {
+  return function wrappedStrategy () {
+    // verify function can be either the first or second argument
+    if (typeof arguments[0] === 'function') {
+      arguments[0] = wrapVerify(arguments[0])
+    } else {
+      arguments[1] = wrapVerify(arguments[1])
+    }
+
+    return Strategy.apply(this, arguments)
+  }
+}
+
+function strategyHook (Strategy) {
+  return shimmer.wrapFunction(Strategy, wrapStrategy)
+}
+
 module.exports = {
-  wrapVerify
+  strategyHook
 }
