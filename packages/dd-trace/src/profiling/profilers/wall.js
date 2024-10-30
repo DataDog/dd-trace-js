@@ -301,7 +301,8 @@ class NativeWallProfiler {
 
     const labels = { ...getThreadLabels() }
 
-    const { context: { ref: { spanId, rootSpanId, webTags, endpoint } }, timestamp } = context
+    const { context: { ref }, timestamp } = context
+    const { spanId, rootSpanId, webTags, endpoint } = ref ?? {}
 
     if (this._timelineEnabled) {
       // Incoming timestamps are in microseconds, we emit nanos.
