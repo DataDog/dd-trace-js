@@ -10,7 +10,11 @@ function wrapVerifiedAndPublish (username, verified) {
     return function wrappedVerified (err, user) {
       // if there is an error, it's neither an auth success nor a failure
       if (!err) {
-        passportVerifyChannel.publish({ login: username, user, success: !!user })
+        const abortController = new AbortController()
+
+        passportVerifyChannel.publish({ login: username, user, success: !!user, abortController })
+
+        if (abortController.signal.aborted) return
       }
 
       return verified.apply(this, arguments)
