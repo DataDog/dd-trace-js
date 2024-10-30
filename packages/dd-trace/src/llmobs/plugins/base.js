@@ -3,18 +3,15 @@
 const log = require('../../log')
 const { storage } = require('../storage')
 
-const Plugin = require('../../plugins/plugin')
+const TracingPlugin = require('../../plugins/tracing')
 const LLMObsTagger = require('../tagger')
 
 // we make this a `Plugin` so we don't have to worry about `finish` being called
-class LLMObsPlugin extends Plugin {
+class LLMObsPlugin extends TracingPlugin {
   constructor (...args) {
     super(...args)
 
     this._tagger = new LLMObsTagger(this._tracerConfig, true)
-
-    this.addSub(`tracing:apm:${this.getName()}:request:start`, ctx => this.start(ctx))
-    this.addSub(`tracing:apm:${this.getName()}:request:asyncEnd`, ctx => this.asyncEnd(ctx))
   }
 
   getName () {}
