@@ -264,22 +264,60 @@ const web = {
     const context = contexts.get(req)
     let childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
 
-    function extractAWSGatewaySpan (headers, childOf) {
-      if (!headers) {
-        // pass
-        return null
-      }
-      // if (!(AWS_API_GATEWAY_HEADER_START_TIME_MS in headers)) {
-      //   // pass
-      //   return null
-      // }
-      const service = 'AWS API-Gateway'
-      const span = tracer.startSpan('aws.apigateway',
-        { tags: { service }, childOf, startTime: headers[AWS_API_GATEWAY_HEADER_START_TIME_MS] }
-      )
+    function setAWSGatewaySpanTags (span, headers) {
       return span
     }
-    const apiGatewaySpan = extractAWSGatewaySpan(headers, childOf)
+
+    function extractAPIGatewayContext (headers) {
+      if (!(AWS_API_GATEWAY_HEADER_START_TIME_MS in headers)) {
+        return null
+      }
+
+      return {
+        requestTime: headers[AWS_API_GATEWAY_HEADER_START_TIME_MS]
+          ? parseInt(headers[AWS_API_GATEWAY_HEADER_START_TIME_MS], 10)
+          : null,
+        method: headers[AWS_API_GATEWAY_HEADER_HTTPMETHOD],
+        path: headers[AWS_API_GATEWAY_HEADER_PATH],
+        stage: headers[AWS_API_GATEWAY_HEADER_STAGE],
+        domainName: headers[AWS_API_GATEWAY_HEADER_DOMAIN]
+      }
+    }
+
+    function createAPIGatewaySpan (headers, childOf) {
+      if (!headers) {
+        return null
+      }
+
+      const awsContext = extractAPIGatewayContext(headers)
+
+      if (!context) {
+        return null
+      }
+
+      const span = tracer.startSpan(
+        'aws.apigateway',
+        {
+          childOf,
+          type: 'web',
+          startTime: awsContext.requestTime,
+          tags: {
+            service: awsContext.domainName || this.serviceName(),
+            component: 'aws-apigateway',
+            'span.kind': 'internal',
+            'http.method': awsContext.method,
+            'http.url': awsContext.domainName + awsContext.path,
+            'http.route': awsContext.path,
+            stage: awsContext.stage
+          }
+        }
+      )
+
+      addResourceTag({ req: awsContext, span })
+      setAWSGatewaySpanTags(span, headers)
+      return span
+    }
+    const apiGatewaySpan = createAPIGatewaySpan(headers, childOf)
     if (apiGatewaySpan) {
       tracer.scope().activate(apiGatewaySpan)
       context.apiGatewaySpan = apiGatewaySpan
@@ -479,13 +517,6 @@ function addRequestTags (context, spanType) {
     [SPAN_TYPE]: spanType,
     [HTTP_USERAGENT]: req.headers['user-agent']
   })
-  apiGatewaySpan?.addTags({
-    [HTTP_URL]: web.obfuscateQs(config, url),
-    [HTTP_METHOD]: req.method,
-    [SPAN_KIND]: SERVER,
-    [SPAN_TYPE]: spanType,
-    [HTTP_USERAGENT]: req.headers['user-agent']
-  })
 
   // if client ip has already been set by appsec, no need to run it again
   if (config.clientIpEnabled && !span.context()._tags.hasOwnProperty(HTTP_CLIENT_IP)) {
@@ -505,7 +536,6 @@ function addResponseTags (context) {
 
   if (paths.length > 0) {
     span.setTag(HTTP_ROUTE, paths.join(''))
-    apiGatewaySpan?.setTag(HTTP_ROUTE, paths.join(''))
   }
 
   span.addTags({
