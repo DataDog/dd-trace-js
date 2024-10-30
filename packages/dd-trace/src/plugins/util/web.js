@@ -291,9 +291,14 @@ const web = {
 
       const awsContext = extractAPIGatewayContext(headers)
 
+      console.log('Extracted the following AWS context')
+      console.log(awsContext)
+
       if (!context) {
         return null
       }
+
+      console.log('Creating API Gateway span')
 
       const span = tracer.startSpan(
         'aws.apigateway',
@@ -315,6 +320,9 @@ const web = {
 
       addResourceTag({ req: awsContext, span })
       setAWSGatewaySpanTags(span, headers)
+
+      console.log('Created API Gateway span')
+      console.log(span)
       return span
     }
     const apiGatewaySpan = createAPIGatewaySpan(headers, childOf)
