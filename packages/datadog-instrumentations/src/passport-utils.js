@@ -10,7 +10,7 @@ function wrapVerifiedAndPublish (username, verified) {
     return function wrappedVerified (err, user) {
       // if there is an error, it's neither an auth success nor a failure
       if (!err) {
-        passportVerifyChannel.publish({ success: !!user, login: username, user })
+        passportVerifyChannel.publish({ login: username, user, success: !!user })
       }
 
       return verified.apply(this, arguments)
