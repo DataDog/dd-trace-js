@@ -59,6 +59,16 @@ describe('TextMapPropagator', () => {
       }
     })
 
+    it('should not crash without spanContext', () => {
+      const carrier = {}
+      propagator.inject(null, carrier)
+    })
+
+    it('should not crash without carrier', () => {
+      const spanContext = createContext()
+      propagator.inject(spanContext, null)
+    })
+
     it('should inject the span context into the carrier', () => {
       const carrier = {}
       const spanContext = createContext()
@@ -575,6 +585,12 @@ describe('TextMapPropagator', () => {
 
       expect(first._traceId.toString(16)).to.equal(traceId)
       expect(first._spanId.toString(16)).to.equal(spanId)
+    })
+
+    it('should not crash with invalid traceparent', () => {
+      textMap.traceparent = 'invalid'
+
+      propagator.extract(textMap)
     })
 
     it('should always extract tracestate from tracecontext when trace IDs match', () => {

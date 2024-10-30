@@ -53,6 +53,8 @@ class TextMapPropagator {
   }
 
   inject (spanContext, carrier) {
+    if (!spanContext || !carrier) return
+
     this._injectBaggageItems(spanContext, carrier)
     this._injectDatadog(spanContext, carrier)
     this._injectB3MultipleHeaders(spanContext, carrier)
@@ -424,7 +426,7 @@ class TextMapPropagator {
       return null
     }
     const matches = headerValue.trim().match(traceparentExpr)
-    if (matches.length) {
+    if (matches?.length) {
       const [version, traceId, spanId, flags, tail] = matches.slice(1)
       const traceparent = { version }
       const tracestate = TraceState.fromString(carrier.tracestate)

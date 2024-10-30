@@ -31,7 +31,6 @@ jobs:
     uses: DataDog/system-tests/.github/workflows/compute-workflow-parameters.yml@main
     with:
       library: nodejs
-      scenarios: CROSSED_TRACING_LIBRARIES
       scenarios_groups: essentials
 
   system-tests:
