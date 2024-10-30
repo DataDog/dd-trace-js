@@ -5,7 +5,7 @@ const Activation = require('../activation')
 const RemoteConfigManager = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
 const apiSecuritySampler = require('../api_security_sampler')
-const { setCollectionMode } = require('../passport')
+const { setCollectionMode } = require('../user_tracking')
 
 let rc
 
@@ -29,9 +29,7 @@ function enable (config, appsec) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
     }
 
-    if (config.appsec.eventTracking?.enabled) {
-      rc.updateCapabilities(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
-    }
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
 
     rc.setProductHandler('ASM_FEATURES', (action, rcConfig) => {
       if (!rcConfig) return
@@ -42,7 +40,7 @@ function enable (config, appsec) {
 
       apiSecuritySampler.setRequestSampling(rcConfig.api_security?.request_sample_rate)
 
-      if (config.appsec.eventTracking?.enabled && typeof rcConfig.auto_user_instrum?.mode === 'string') {
+      if (typeof rcConfig.auto_user_instrum?.mode === 'string') {
         if (action === 'apply' || action === 'modify') {
           setCollectionMode(rcConfig.auto_user_instrum.mode)
         } else {
