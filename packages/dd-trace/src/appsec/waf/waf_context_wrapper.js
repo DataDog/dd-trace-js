@@ -93,7 +93,7 @@ class WAFContextWrapper {
         Reporter.reportAttack(JSON.stringify(result.events))
       }
 
-      Reporter.reportSchemas(result.derivatives)
+      Reporter.reportDerivatives(result.derivatives)
 
       if (wafRunFinished.hasSubscribers) {
         wafRunFinished.publish({ payload })

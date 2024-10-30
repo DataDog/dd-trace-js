@@ -1,7 +1,7 @@
 'use strict'
 
 const { workerData: { rcPort } } = require('node:worker_threads')
-const { getScript, probes, breakpoints } = require('./state')
+const { findScriptFromPartialPath, probes, breakpoints } = require('./state')
 const session = require('./session')
 const { ackReceived, ackInstalled, ackError } = require('./status')
 const log = require('../../log')
@@ -92,7 +92,7 @@ async function processMsg (action, probe) {
         await addBreakpoint(probe)
         break
       case 'modify':
-        // TODO: Can we modify in place?
+        // TODO: Modify existing probe instead of removing it (DEBUG-2817)
         await removeBreakpoint(probe)
         await addBreakpoint(probe)
         break
@@ -114,13 +114,13 @@ async function addBreakpoint (probe) {
   const line = Number(probe.where.lines[0]) // Tracer doesn't support multiple-line breakpoints
 
   // Optimize for sending data to /debugger/v1/input endpoint
-  probe.location = { file, lines: [line] }
+  probe.location = { file, lines: [String(line)] }
   delete probe.where
 
   // TODO: Inbetween `await session.post('Debugger.enable')` and here, the scripts are parsed and cached.
   // Maybe there's a race condition here or maybe we're guraenteed that `await session.post('Debugger.enable')` will
   // not continue untill all scripts have been parsed?
-  const script = getScript(file)
+  const script = findScriptFromPartialPath(file)
   if (!script) throw new Error(`No loaded script found for ${file} (probe: ${probe.id}, version: ${probe.version})`)
   const [path, scriptId] = script
 

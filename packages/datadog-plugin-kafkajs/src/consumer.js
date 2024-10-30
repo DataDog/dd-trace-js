@@ -2,7 +2,6 @@
 
 const dc = require('dc-polyfill')
 const { getMessageSize } = require('../../dd-trace/src/datastreams/processor')
-const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 
 const afterStartCh = dc.channel('dd-trace:kafkajs:consumer:afterStart')
@@ -63,7 +62,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
     }
   }
 
-  start ({ topic, partition, message, groupId }) {
+  start ({ topic, partition, message, groupId, clusterId }) {
     const childOf = extract(this.tracer, message.headers)
     const span = this.startSpan({
       childOf,
@@ -72,17 +71,21 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       meta: {
         component: 'kafkajs',
         'kafka.topic': topic,
-        'kafka.message.offset': message.offset
+        'kafka.message.offset': message.offset,
+        'kafka.cluster_id': clusterId
       },
       metrics: {
         'kafka.partition': partition
       }
     })
-    if (this.config.dsmEnabled && message?.headers && DsmPathwayCodec.contextExists(message.headers)) {
+    if (this.config.dsmEnabled && message?.headers) {
       const payloadSize = getMessageSize(message)
       this.tracer.decodeDataStreamsContext(message.headers)
-      this.tracer
-        .setCheckpoint(['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka'], span, payloadSize)
+      const edgeTags = ['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka']
+      if (clusterId) {
+        edgeTags.push(`kafka_cluster_id:${clusterId}`)
+      }
+      this.tracer.setCheckpoint(edgeTags, span, payloadSize)
     }
 
     if (afterStartCh.hasSubscribers) {

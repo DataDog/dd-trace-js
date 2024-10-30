@@ -9,6 +9,9 @@ const { DataStreamsWriter } = require('./writer')
 const { computePathwayHash } = require('./pathway')
 const { types } = require('util')
 const { PATHWAY_HASH } = require('../../../../ext/tags')
+const { SchemaBuilder } = require('./schemas/schema_builder')
+const { SchemaSampler } = require('./schemas/schema_sampler')
+const log = require('../log')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
@@ -194,6 +197,7 @@ class DataStreamsProcessor {
     this.version = version || ''
     this.sequence = 0
     this.flushInterval = flushInterval
+    this._schemaSamplers = {}
 
     if (this.enabled) {
       this.timer = setInterval(this.onInterval.bind(this), flushInterval)
@@ -269,6 +273,11 @@ class DataStreamsProcessor {
         closestOppositeDirectionHash = parentHash
         closestOppositeDirectionEdgeStart = edgeStartNs
       }
+      log.debug(
+        () => `Setting DSM Checkpoint from extracted parent context with hash: ${parentHash} and edge tags: ${edgeTags}`
+      )
+    } else {
+      log.debug(() => 'Setting DSM Checkpoint with empty parent context.')
     }
     const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash)
     const edgeLatencyNs = nowNs - edgeStartNs
@@ -351,6 +360,32 @@ class DataStreamsProcessor {
 
   setUrl (url) {
     this.writer.setUrl(url)
+  }
+
+  trySampleSchema (topic) {
+    const nowMs = Date.now()
+
+    if (!this._schemaSamplers[topic]) {
+      this._schemaSamplers[topic] = new SchemaSampler()
+    }
+
+    const sampler = this._schemaSamplers[topic]
+    return sampler.trySample(nowMs)
+  }
+
+  canSampleSchema (topic) {
+    const nowMs = Date.now()
+
+    if (!this._schemaSamplers[topic]) {
+      this._schemaSamplers[topic] = new SchemaSampler()
+    }
+
+    const sampler = this._schemaSamplers[topic]
+    return sampler.canSample(nowMs)
+  }
+
+  getSchema (schemaName, iterator) {
+    return SchemaBuilder.getSchema(schemaName, iterator)
   }
 }
 

@@ -30,7 +30,7 @@ describe('sequelize', () => {
         // close agent
         after(() => {
           appsec.disable()
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         // init database

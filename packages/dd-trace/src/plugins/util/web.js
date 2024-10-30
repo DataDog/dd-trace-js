@@ -36,6 +36,8 @@ const contexts = new WeakMap()
 const ends = new WeakMap()
 
 const web = {
+  TYPE: WEB,
+
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
     const headers = getHeadersToRecord(config)
@@ -103,7 +105,7 @@ const web = {
     context.res = res
 
     this.setConfig(req, config)
-    addRequestTags(context)
+    addRequestTags(context, this.TYPE)
 
     return span
   },
@@ -296,7 +298,7 @@ const web = {
 
     if (context.finished && !req.stream) return
 
-    addRequestTags(context)
+    addRequestTags(context, this.TYPE)
     addResponseTags(context)
 
     context.config.hooks.request(context.span, req, res)
@@ -423,7 +425,7 @@ function reactivate (req, fn) {
     : fn()
 }
 
-function addRequestTags (context) {
+function addRequestTags (context, spanType) {
   const { req, span, config } = context
   const url = extractURL(req)
 
@@ -431,7 +433,7 @@ function addRequestTags (context) {
     [HTTP_URL]: web.obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
-    [SPAN_TYPE]: WEB,
+    [SPAN_TYPE]: spanType,
     [HTTP_USERAGENT]: req.headers['user-agent']
   })
 

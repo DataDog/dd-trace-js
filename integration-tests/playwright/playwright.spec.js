@@ -26,6 +26,7 @@ const {
   TEST_SESSION_NAME,
   TEST_LEVEL_EVENT_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
 const NUM_RETRIES_EFD = 3
@@ -118,6 +119,7 @@ versions.forEach((version) => {
               }
               assert.isTrue(testSuiteEvent.content.meta[TEST_SOURCE_FILE].endsWith('-test.js'))
               assert.equal(testSuiteEvent.content.metrics[TEST_SOURCE_START], 1)
+              assert.exists(testSuiteEvent.content.metrics[DD_HOST_CPU_COUNT])
             })
 
             assert.includeMembers(testEvents.map(test => test.content.resource), [
@@ -145,6 +147,7 @@ versions.forEach((version) => {
               assert.propertyVal(testEvent.content.meta, 'test.customtag2', 'customvalue2')
               // Adds the browser used
               assert.propertyVal(testEvent.content.meta, TEST_CONFIGURATION_BROWSER_NAME, 'chromium')
+              assert.exists(testEvent.content.metrics[DD_HOST_CPU_COUNT])
             })
 
             stepEvents.forEach(stepEvent => {
@@ -168,7 +171,7 @@ versions.forEach((version) => {
                 ...envVars,
                 PW_BASE_URL: `http://localhost:${webAppPort}`,
                 DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-                DD_SESSION_NAME: 'my-test-session'
+                DD_TEST_SESSION_NAME: 'my-test-session'
               },
               stdio: 'pipe'
             }

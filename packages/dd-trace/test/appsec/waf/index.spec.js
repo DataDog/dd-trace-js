@@ -27,7 +27,11 @@ describe('WAF Manager', () => {
     DDWAF.prototype.constructor.version = sinon.stub()
     DDWAF.prototype.dispose = sinon.stub()
     DDWAF.prototype.createContext = sinon.stub()
-    DDWAF.prototype.update = sinon.stub()
+    DDWAF.prototype.update = sinon.stub().callsFake(function (newRules) {
+      if (newRules?.metadata?.rules_version) {
+        this.diagnostics.ruleset_version = newRules?.metadata?.rules_version
+      }
+    })
     DDWAF.prototype.diagnostics = {
       ruleset_version: '1.0.0',
       rules: {
@@ -48,7 +52,7 @@ describe('WAF Manager', () => {
     sinon.stub(Reporter, 'reportMetrics')
     sinon.stub(Reporter, 'reportAttack')
     sinon.stub(Reporter, 'reportWafUpdate')
-    sinon.stub(Reporter, 'reportSchemas')
+    sinon.stub(Reporter, 'reportDerivatives')
 
     webContext = {}
     sinon.stub(web, 'getContext').returns(webContext)
@@ -77,7 +81,6 @@ describe('WAF Manager', () => {
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.loaded', 1)
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.error_count', 0)
       expect(Reporter.metricsQueue.set).not.to.been.calledWith('_dd.appsec.event_rules.errors')
-      expect(Reporter.metricsQueue.set).to.been.calledWithExactly('manual.keep', 'true')
     })
 
     it('should set init metrics with errors', () => {
@@ -100,7 +103,6 @@ describe('WAF Manager', () => {
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.error_count', 2)
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.errors',
         '{"error_1":["invalid_1"],"error_2":["invalid_2","invalid_3"]}')
-      expect(Reporter.metricsQueue.set).to.been.calledWithExactly('manual.keep', 'true')
     })
   })
 
@@ -177,10 +179,14 @@ describe('WAF Manager', () => {
       waf.update(rules)
 
       expect(DDWAF.prototype.update).to.be.calledOnceWithExactly(rules)
+      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '1.0.0')
     })
 
     it('should call Reporter.reportWafUpdate', () => {
       const rules = {
+        metadata: {
+          rules_version: '4.2.0'
+        },
         rules_data: [
           {
             id: 'blocked_users',
@@ -197,8 +203,7 @@ describe('WAF Manager', () => {
 
       waf.update(rules)
 
-      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion,
-        DDWAF.prototype.diagnostics.ruleset_version)
+      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '4.2.0')
     })
   })
 
@@ -404,7 +409,29 @@ describe('WAF Manager', () => {
         ddwafContext.run.returns(result)
 
         wafContextWrapper.run(params)
-        expect(Reporter.reportSchemas).to.be.calledOnceWithExactly(result.derivatives)
+        expect(Reporter.reportDerivatives).to.be.calledOnceWithExactly(result.derivatives)
+      })
+
+      it('should report fingerprints when ddwafContext returns fingerprints in results derivatives', () => {
+        const result = {
+          totalRuntime: 1,
+          durationExt: 1,
+          derivatives: {
+            '_dd.appsec.s.req.body': [8],
+            '_dd.appsec.fp.http.endpoint': 'http-post-abcdefgh-12345678-abcdefgh',
+            '_dd.appsec.fp.http.network': 'net-1-0100000000',
+            '_dd.appsec.fp.http.headers': 'hdr-0110000110-abcdefgh-5-12345678'
+          }
+        }
+
+        ddwafContext.run.returns(result)
+
+        wafContextWrapper.run({
+          persistent: {
+            'server.request.body': 'foo'
+          }
+        })
+        sinon.assert.calledOnceWithExactly(Reporter.reportDerivatives, result.derivatives)
       })
     })
   })

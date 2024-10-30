@@ -358,6 +358,7 @@ function assertUUID (actual, msg = 'not a valid UUID') {
 
 module.exports = {
   FakeAgent,
+  hookFile,
   assertObjectContains,
   assertUUID,
   spawnProc,

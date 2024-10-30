@@ -6,6 +6,7 @@ const log = require('../log')
 
 let worker = null
 let configChannel = null
+let ackId = 0
 
 const { NODE_OPTIONS, ...env } = process.env
 
@@ -24,13 +25,19 @@ function start (config, rc) {
   configChannel = new MessageChannel()
 
   rc.setProductHandler('LIVE_DEBUGGING', (action, conf, id, ack) => {
-    const ackId = `${id}-${conf.version}`
-    rcAckCallbacks.set(ackId, ack)
+    rcAckCallbacks.set(++ackId, ack)
     rcChannel.port2.postMessage({ action, conf, ackId })
   })
 
   rcChannel.port2.on('message', ({ ackId, error }) => {
-    rcAckCallbacks.get(ackId)(error)
+    const ack = rcAckCallbacks.get(ackId)
+    if (ack === undefined) {
+      // This should never happen, but just in case something changes in the future, we should guard against it
+      log.error(`Received an unknown ackId: ${ackId}`)
+      if (error) log.error(error)
+      return
+    }
+    ack(error)
     rcAckCallbacks.delete(ackId)
   })
   rcChannel.port2.on('messageerror', (err) => log.error(err))

@@ -7,13 +7,17 @@ const {
   getTestSuitePath,
   getTestSuiteCommonTags,
   getTestSessionName,
+  getIsFaultyEarlyFlakeDetection,
   TEST_SOURCE_FILE,
   TEST_IS_RETRY,
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_CODE_OWNERS,
   TEST_LEVEL_EVENT_TYPES,
   TEST_SESSION_NAME,
-  TEST_SOURCE_START
+  TEST_SOURCE_START,
+  TEST_IS_NEW,
+  TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -37,7 +41,26 @@ class VitestPlugin extends CiPlugin {
 
     this.taskToFinishTime = new WeakMap()
 
-    this.addSub('ci:vitest:test:start', ({ testName, testSuiteAbsolutePath, isRetry }) => {
+    this.addSub('ci:vitest:test:is-new', ({ knownTests, testSuiteAbsolutePath, testName, onDone }) => {
+      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const testsForThisTestSuite = knownTests[testSuite] || []
+      onDone(!testsForThisTestSuite.includes(testName))
+    })
+
+    this.addSub('ci:vitest:is-early-flake-detection-faulty', ({
+      knownTests,
+      testFilepaths,
+      onDone
+    }) => {
+      const isFaulty = getIsFaultyEarlyFlakeDetection(
+        testFilepaths.map(testFilepath => getTestSuitePath(testFilepath, this.repositoryRoot)),
+        knownTests,
+        this.libraryConfig.earlyFlakeDetectionFaultyThreshold
+      )
+      onDone(isFaulty)
+    })
+
+    this.addSub('ci:vitest:test:start', ({ testName, testSuiteAbsolutePath, isRetry, isNew }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const store = storage.getStore()
 
@@ -46,6 +69,9 @@ class VitestPlugin extends CiPlugin {
       }
       if (isRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
+      }
+      if (isNew) {
+        extraTags[TEST_IS_NEW] = 'true'
       }
 
       const span = this.startTestSpan(
@@ -195,7 +221,14 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:session:finish', ({ status, onFinish, error, testCodeCoverageLinesTotal }) => {
+    this.addSub('ci:vitest:session:finish', ({
+      status,
+      error,
+      testCodeCoverageLinesTotal,
+      isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
+      onFinish
+    }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
       if (error) {
@@ -205,6 +238,12 @@ class VitestPlugin extends CiPlugin {
       if (testCodeCoverageLinesTotal) {
         this.testModuleSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
         this.testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
+      }
+      if (isEarlyFlakeDetectionEnabled) {
+        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
+      }
+      if (isEarlyFlakeDetectionFaulty) {
+        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
       }
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
