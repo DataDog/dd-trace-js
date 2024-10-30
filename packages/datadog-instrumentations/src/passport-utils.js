@@ -24,9 +24,9 @@ function wrapVerify (verify) {
       // replace the callback with our own wrapper to get the result
       // if we ever need the type of strategy, we can get it from this.name
       if (this._passReqToCallback) {
-        arguments[3] = wrapVerifiedAndPublish(username, verified)
+        arguments[3] = wrapVerifiedAndPublish(arguments[1], arguments[3])
       } else {
-        arguments[2] = wrapVerifiedAndPublish(req, password) // shifted args
+        arguments[2] = wrapVerifiedAndPublish(arguments[0], arguments[2])
       }
     }
 
