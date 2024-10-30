@@ -25,7 +25,7 @@ const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { isBlocked, block, setTemplates, getBlockingAction } = require('./blocking')
-const { setCollectionMode, passportTrackEvent } = require('./passport')
+const { setCollectionMode, trackLogin } = require('./user_tracking')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
 const rasp = require('./rasp')
@@ -213,7 +213,7 @@ function onResponseBody ({ req, body }) {
   }, req)
 }
 
-function onPassportVerify ({ credentials, user }) {
+function onPassportVerify ({ login, user, success }) {
   const store = storage.getStore()
   const rootSpan = store?.req && web.root(store.req)
 
@@ -222,7 +222,7 @@ function onPassportVerify ({ credentials, user }) {
     return
   }
 
-  passportTrackEvent(credentials, user, rootSpan)
+  trackLogin(login, user, success, rootSpan)
 }
 
 const responseAnalyzedSet = new WeakSet()
