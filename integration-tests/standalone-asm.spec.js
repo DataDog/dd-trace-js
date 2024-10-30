@@ -10,6 +10,7 @@ const {
   curlAndAssertMessage,
   curl
 } = require('./helpers')
+const { USER_KEEP, AUTO_REJECT, AUTO_KEEP } = require('../ext/priority')
 
 describe('Standalone ASM', () => {
   let sandbox, cwd, startupTestFile, agent, proc, env
@@ -43,22 +44,18 @@ describe('Standalone ASM', () => {
       await agent.stop()
     })
 
-    function assertKeep (payload, manual = true) {
+    function assertKeep (payload) {
       const { meta, metrics } = payload
-      if (manual) {
-        assert.propertyVal(meta, 'manual.keep', 'true')
-      } else {
-        assert.notProperty(meta, 'manual.keep')
-      }
+
       assert.propertyVal(meta, '_dd.p.appsec', '1')
 
-      assert.propertyVal(metrics, '_sampling_priority_v1', 2)
+      assert.propertyVal(metrics, '_sampling_priority_v1', USER_KEEP)
       assert.propertyVal(metrics, '_dd.apm.enabled', 0)
     }
 
     function assertDrop (payload) {
       const { metrics } = payload
-      assert.propertyVal(metrics, '_sampling_priority_v1', 0)
+      assert.propertyVal(metrics, '_sampling_priority_v1', AUTO_REJECT)
       assert.propertyVal(metrics, '_dd.apm.enabled', 0)
       assert.notProperty(metrics, '_dd.p.appsec')
     }
@@ -103,7 +100,7 @@ describe('Standalone ASM', () => {
         assert.notProperty(meta, 'manual.keep')
         assert.notProperty(meta, '_dd.p.appsec')
 
-        assert.propertyVal(metrics, '_sampling_priority_v1', 0)
+        assert.propertyVal(metrics, '_sampling_priority_v1', AUTO_KEEP)
         assert.propertyVal(metrics, '_dd.apm.enabled', 0)
 
         assertDrop(payload[2][0])
@@ -213,7 +210,7 @@ describe('Standalone ASM', () => {
 
             const innerReq = payload.find(p => p[0].resource === 'GET /down')
             assert.notStrictEqual(innerReq, undefined)
-            assertKeep(innerReq[0], false)
+            assertKeep(innerReq[0])
           }, undefined, undefined, true)
         })
 

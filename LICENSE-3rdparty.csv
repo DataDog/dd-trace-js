@@ -30,6 +30,7 @@ require,retry,MIT,Copyright 2011 Tim Koschützki Felix Geisendörfer
 require,rfdc,MIT,Copyright 2019 David Mark Clements
 require,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
 require,shell-quote,mit,Copyright (c) 2013 James Halliday
+dev,@apollo/server,MIT,Copyright (c) 2016-2020 Apollo Graph, Inc. (Formerly Meteor Development Group, Inc.)
 dev,@types/node,MIT,Copyright Authors
 dev,autocannon,MIT,Copyright 2016 Matteo Collina
 dev,aws-sdk,Apache 2.0,Copyright 2012-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.

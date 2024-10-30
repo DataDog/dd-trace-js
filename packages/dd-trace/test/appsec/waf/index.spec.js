@@ -27,7 +27,11 @@ describe('WAF Manager', () => {
     DDWAF.prototype.constructor.version = sinon.stub()
     DDWAF.prototype.dispose = sinon.stub()
     DDWAF.prototype.createContext = sinon.stub()
-    DDWAF.prototype.update = sinon.stub()
+    DDWAF.prototype.update = sinon.stub().callsFake(function (newRules) {
+      if (newRules?.metadata?.rules_version) {
+        this.diagnostics.ruleset_version = newRules?.metadata?.rules_version
+      }
+    })
     DDWAF.prototype.diagnostics = {
       ruleset_version: '1.0.0',
       rules: {
@@ -77,7 +81,6 @@ describe('WAF Manager', () => {
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.loaded', 1)
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.error_count', 0)
       expect(Reporter.metricsQueue.set).not.to.been.calledWith('_dd.appsec.event_rules.errors')
-      expect(Reporter.metricsQueue.set).to.been.calledWithExactly('manual.keep', 'true')
     })
 
     it('should set init metrics with errors', () => {
@@ -100,7 +103,6 @@ describe('WAF Manager', () => {
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.error_count', 2)
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.errors',
         '{"error_1":["invalid_1"],"error_2":["invalid_2","invalid_3"]}')
-      expect(Reporter.metricsQueue.set).to.been.calledWithExactly('manual.keep', 'true')
     })
   })
 
@@ -177,10 +179,14 @@ describe('WAF Manager', () => {
       waf.update(rules)
 
       expect(DDWAF.prototype.update).to.be.calledOnceWithExactly(rules)
+      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '1.0.0')
     })
 
     it('should call Reporter.reportWafUpdate', () => {
       const rules = {
+        metadata: {
+          rules_version: '4.2.0'
+        },
         rules_data: [
           {
             id: 'blocked_users',
@@ -197,8 +203,7 @@ describe('WAF Manager', () => {
 
       waf.update(rules)
 
-      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion,
-        DDWAF.prototype.diagnostics.ruleset_version)
+      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '4.2.0')
     })
   })
 

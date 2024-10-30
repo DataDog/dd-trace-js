@@ -1,5 +1,6 @@
 'use strict'
 
+const { collectionSizeSym, fieldCountSym } = require('./symbols')
 const session = require('../session')
 
 const LEAF_SUBTYPES = new Set(['date', 'regexp'])
@@ -14,22 +15,38 @@ module.exports = {
 // each lookup will just finish in its own time and traverse the child nodes when the event loop allows it.
 // Alternatively, use `Promise.all` or something like that, but the code would probably be more complex.
 
-async function getObject (objectId, maxDepth, depth = 0) {
+async function getObject (objectId, opts, depth = 0, collection = false) {
   const { result, privateProperties } = await session.post('Runtime.getProperties', {
     objectId,
     ownProperties: true // exclude inherited properties
   })
 
-  if (privateProperties) result.push(...privateProperties)
+  if (collection) {
+    // Trim the collection if it's too large.
+    // Collections doesn't contain private properties, so the code in this block doesn't have to deal with it.
+    removeNonEnumerableProperties(result) // remove the `length` property
+    const size = result.length
+    if (size > opts.maxCollectionSize) {
+      result.splice(opts.maxCollectionSize)
+      result[collectionSizeSym] = size
+    }
+  } else if (result.length > opts.maxFieldCount) {
+    // Trim the number of properties on the object if there's too many.
+    const size = result.length
+    result.splice(opts.maxFieldCount)
+    result[fieldCountSym] = size
+  } else if (privateProperties) {
+    result.push(...privateProperties)
+  }
 
-  return traverseGetPropertiesResult(result, maxDepth, depth)
+  return traverseGetPropertiesResult(result, opts, depth)
 }
 
-async function traverseGetPropertiesResult (props, maxDepth, depth) {
+async function traverseGetPropertiesResult (props, opts, depth) {
   // TODO: Decide if we should filter out non-enumerable properties or not:
   // props = props.filter((e) => e.enumerable)
 
-  if (depth >= maxDepth) return props
+  if (depth >= opts.maxReferenceDepth) return props
 
   for (const prop of props) {
     if (prop.value === undefined) continue
@@ -37,33 +54,33 @@ async function traverseGetPropertiesResult (props, maxDepth, depth) {
     if (type === 'object') {
       if (objectId === undefined) continue // if `subtype` is "null"
       if (LEAF_SUBTYPES.has(subtype)) continue // don't waste time with these subtypes
-      prop.value.properties = await getObjectProperties(subtype, objectId, maxDepth, depth)
+      prop.value.properties = await getObjectProperties(subtype, objectId, opts, depth)
     } else if (type === 'function') {
-      prop.value.properties = await getFunctionProperties(objectId, maxDepth, depth + 1)
+      prop.value.properties = await getFunctionProperties(objectId, opts, depth + 1)
     }
   }
 
   return props
 }
 
-async function getObjectProperties (subtype, objectId, maxDepth, depth) {
+async function getObjectProperties (subtype, objectId, opts, depth) {
   if (ITERABLE_SUBTYPES.has(subtype)) {
-    return getIterable(objectId, maxDepth, depth)
+    return getIterable(objectId, opts, depth)
   } else if (subtype === 'promise') {
-    return getInternalProperties(objectId, maxDepth, depth)
+    return getInternalProperties(objectId, opts, depth)
   } else if (subtype === 'proxy') {
-    return getProxy(objectId, maxDepth, depth)
+    return getProxy(objectId, opts, depth)
   } else if (subtype === 'arraybuffer') {
-    return getArrayBuffer(objectId, maxDepth, depth)
+    return getArrayBuffer(objectId, opts, depth)
   } else {
-    return getObject(objectId, maxDepth, depth + 1)
+    return getObject(objectId, opts, depth + 1, subtype === 'array' || subtype === 'typedarray')
   }
 }
 
 // TODO: The following extra information from `internalProperties` might be relevant to include for functions:
 // - Bound function: `[[TargetFunction]]`, `[[BoundThis]]` and `[[BoundArgs]]`
 // - Non-bound function: `[[FunctionLocation]]`, and `[[Scopes]]`
-async function getFunctionProperties (objectId, maxDepth, depth) {
+async function getFunctionProperties (objectId, opts, depth) {
   let { result } = await session.post('Runtime.getProperties', {
     objectId,
     ownProperties: true // exclude inherited properties
@@ -72,10 +89,12 @@ async function getFunctionProperties (objectId, maxDepth, depth) {
   // For legacy reasons (I assume) functions has a `prototype` property besides the internal `[[Prototype]]`
   result = result.filter(({ name }) => name !== 'prototype')
 
-  return traverseGetPropertiesResult(result, maxDepth, depth)
+  return traverseGetPropertiesResult(result, opts, depth)
 }
 
-async function getIterable (objectId, maxDepth, depth) {
+async function getIterable (objectId, opts, depth) {
+  // TODO: If the iterable has any properties defined on the object directly, instead of in its collection, they will
+  // exist in the return value below in the `result` property. We currently do not collect these.
   const { internalProperties } = await session.post('Runtime.getProperties', {
     objectId,
     ownProperties: true // exclude inherited properties
@@ -93,10 +112,17 @@ async function getIterable (objectId, maxDepth, depth) {
     ownProperties: true // exclude inherited properties
   })
 
-  return traverseGetPropertiesResult(result, maxDepth, depth)
+  removeNonEnumerableProperties(result) // remove the `length` property
+  const size = result.length
+  if (size > opts.maxCollectionSize) {
+    result.splice(opts.maxCollectionSize)
+    result[collectionSizeSym] = size
+  }
+
+  return traverseGetPropertiesResult(result, opts, depth)
 }
 
-async function getInternalProperties (objectId, maxDepth, depth) {
+async function getInternalProperties (objectId, opts, depth) {
   const { internalProperties } = await session.post('Runtime.getProperties', {
     objectId,
     ownProperties: true // exclude inherited properties
@@ -105,10 +131,10 @@ async function getInternalProperties (objectId, maxDepth, depth) {
   // We want all internal properties except the prototype
   const props = internalProperties.filter(({ name }) => name !== '[[Prototype]]')
 
-  return traverseGetPropertiesResult(props, maxDepth, depth)
+  return traverseGetPropertiesResult(props, opts, depth)
 }
 
-async function getProxy (objectId, maxDepth, depth) {
+async function getProxy (objectId, opts, depth) {
   const { internalProperties } = await session.post('Runtime.getProperties', {
     objectId,
     ownProperties: true // exclude inherited properties
@@ -127,14 +153,14 @@ async function getProxy (objectId, maxDepth, depth) {
     ownProperties: true // exclude inherited properties
   })
 
-  return traverseGetPropertiesResult(result, maxDepth, depth)
+  return traverseGetPropertiesResult(result, opts, depth)
 }
 
 // Support for ArrayBuffer is a bit trickly because the internal structure stored in `internalProperties` is not
 // documented and is not straight forward. E.g. ArrayBuffer(3) will internally contain both Int8Array(3) and
 // UInt8Array(3), whereas ArrayBuffer(8) internally contains both Int8Array(8), Uint8Array(8), Int16Array(4), and
 // Int32Array(2) - all representing the same data in different ways.
-async function getArrayBuffer (objectId, maxDepth, depth) {
+async function getArrayBuffer (objectId, opts, depth) {
   const { internalProperties } = await session.post('Runtime.getProperties', {
     objectId,
     ownProperties: true // exclude inherited properties
@@ -149,5 +175,13 @@ async function getArrayBuffer (objectId, maxDepth, depth) {
     ownProperties: true // exclude inherited properties
   })
 
-  return traverseGetPropertiesResult(result, maxDepth, depth)
+  return traverseGetPropertiesResult(result, opts, depth)
+}
+
+function removeNonEnumerableProperties (props) {
+  for (let i = 0; i < props.length; i++) {
+    if (props[i].enumerable === false) {
+      props.splice(i--, 1)
+    }
+  }
 }
