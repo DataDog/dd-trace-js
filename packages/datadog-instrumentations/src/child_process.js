@@ -75,6 +75,20 @@ function normalizeArgs (args, shell) {
   return childProcessInfo
 }
 
+function createContextFromChildProcessInfo (childProcessInfo) {
+  const context = {
+    command: childProcessInfo.command,
+    file: childProcessInfo.file,
+    shell: childProcessInfo.shell
+  }
+
+  if (childProcessInfo.fileArgs) {
+    context.fileArgs = childProcessInfo.fileArgs
+  }
+
+  return context
+}
+
 function wrapChildProcessSyncMethod (returnError, shell = false) {
   return function wrapMethod (childProcessMethod) {
     return function () {
@@ -86,14 +100,7 @@ function wrapChildProcessSyncMethod (returnError, shell = false) {
 
       const innerResource = new AsyncResource('bound-anonymous-fn')
       return innerResource.runInAsyncScope(() => {
-        const context = {
-          command: childProcessInfo.command,
-          file: childProcessInfo.file,
-          shell: childProcessInfo.shell
-        }
-        if (childProcessInfo.fileArgs) {
-          context.fileArgs = childProcessInfo.fileArgs
-        }
+        const context = createContextFromChildProcessInfo(childProcessInfo)
         const abortController = new AbortController()
 
         childProcessChannel.start.publish({ ...context, abortController })
@@ -130,14 +137,7 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
 
     const childProcessInfo = normalizeArgs(arguments, shell)
 
-    const context = {
-      command: childProcessInfo.command,
-      file: childProcessInfo.file,
-      shell: childProcessInfo.shell
-    }
-    if (childProcessInfo.fileArgs) {
-      context.fileArgs = childProcessInfo.fileArgs
-    }
+    const context = createContextFromChildProcessInfo(childProcessInfo)
 
     const { start, end, asyncStart, asyncEnd, error } = childProcessChannel
     const abortController = new AbortController()
@@ -199,16 +199,8 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
 
       const innerResource = new AsyncResource('bound-anonymous-fn')
       return innerResource.runInAsyncScope(() => {
+        const context = createContextFromChildProcessInfo(childProcessInfo)
         const abortController = new AbortController()
-        const { command, file, shell, fileArgs } = childProcessInfo
-        const context = {
-          command,
-          file,
-          shell
-        }
-        if (fileArgs) {
-          context.fileArgs = fileArgs
-        }
 
         childProcessChannel.start.publish({ ...context, abortController })
 
