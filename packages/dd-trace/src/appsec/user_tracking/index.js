@@ -3,8 +3,7 @@
 const crypto = require('crypto')
 const log = require('../../log')
 
-const SDK_USER_EVENT_PATTERN = '^_dd\\.appsec\\.events\\.users\\.[\\W\\w+]+\\.sdk$'
-const regexSdkEvent = new RegExp(SDK_USER_EVENT_PATTERN, 'i')
+const SDK_EVENT_REGEX = /^_dd\.appsec\.events\.users\.[\W\w+]+\.sdk$/i
 
 // The user ID generated must be consistent and repeatable meaning that, for a given framework, the same field must always be used. 
 const USER_ID_FIELDS = ['id', '_id', 'email', 'username', 'login', 'user']
@@ -15,34 +14,32 @@ function setCollectionMode (mode, overwrite = true) {
   // don't overwrite if already set, only used in appsec/index.js to not overwrite RC values
   if (!overwrite && collectionMode) return
 
+  /* eslint-disable no-fallthrough */
   switch (mode) {
-    case 'extended':
-      log.warn('Using deprecated value') // eslint-ignore-line no-fallthrough
-    case 'ident':
-    case 'identification':
-      collectionMode = 'ident'
-      break
     case 'safe':
-      log.warn('Using deprecated value') // eslint-ignore-line no-fallthrough
+      log.warn('Using deprecated value "safe" in config.appsec.eventTracking.mode')
     case 'anon':
     case 'anonymization':
       collectionMode = 'anon'
+      break
+    case 'extended':
+      log.warn('Using deprecated value "extended" in config.appsec.eventTracking.mode')
+    case 'ident':
+    case 'identification':
+      collectionMode = 'ident'
       break
     default:
       collectionMode = 'disabled'
   }
 }
+/* eslint-enable no-fallthrough */
 
 function isSdkCalled (rootSpan) {
-  const tags = rootSpan && rootSpan.context() && rootSpan.context()._tags
+  const tags = rootSpan?.context()?._tags
 
-  let called = false
+  if (tags === null || typeof tags !== 'object') return false
 
-  if (tags !== null && typeof tags === 'object') {
-    called = Object.entries(tags).some(([key, value]) => regexSdkEvent.test(key) && value === 'true')
-  }
-
-  return called
+  return Object.entries(tags).some(([key, value]) => SDK_EVENT_REGEX.test(key) && value === 'true')
 }
 
 function getUserId (user) {
@@ -56,7 +53,7 @@ function getUserId (user) {
       return id
     }
   }
-} ù
+}
 
 function obfuscateId (id) {
   return 'anon_' + crypto.createHash('sha256').update(id).digest().toString('hex', 0, 16).toLowerCase()
