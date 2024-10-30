@@ -284,33 +284,6 @@ class Config {
       options.appsec = {}
     }
 
-    // TODO: remove in next major
-    const DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING_ENABLED = coalesce(
-      options.appsec.eventTracking?.enabled,
-      process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING_ENABLED &&
-      isTrue(process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING_ENABLED),
-      true
-    )
-
-    // little util for retrocompatibility, delete in next major
-    function convertEventTrackingMode (mode) {
-      if (typeof mode !== 'string') return mode
-
-      mode = mode.toLowerCase()
-
-      if (mode === 'extended') return 'ident'
-      if (mode === 'safe') return 'anon'
-
-      return mode
-    }
-
-    const DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE = coalesce(
-      convertEventTrackingMode(options.appsec.eventTracking?.mode),
-      process.env.DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
-      convertEventTrackingMode(process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING), // TODO: make it deprecated
-      'ident'
-    ).toLowerCase()
-
     const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
       process.env.DD_INSTRUMENTATION_INSTALL_ID,
       null
@@ -346,13 +319,6 @@ class Config {
 
     // TODO: refactor
     this.apiKey = DD_API_KEY
-    this.appsec = {
-      eventTracking: {
-        enabled: DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING_ENABLED &&
-          ['anon', 'ident'].includes(DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE),
-        mode: DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE
-      }
-    }
 
     // sent in telemetry event app-started
     this.installSignature = {
@@ -483,8 +449,7 @@ class Config {
     this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
     this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
     this._setValue(defaults, 'appsec.enabled', undefined)
-    //this._setValue(defaults, 'appsec.eventTracking.enabled', true)
-    //this._setValue(defaults, 'appsec.eventTracking.mode', 'safe')
+    this._setValue(defaults, 'appsec.eventTracking.mode', 'ident')
     this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultWafObfuscatorKeyRegex)
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
     this._setValue(defaults, 'appsec.rasp.enabled', true)
@@ -1286,6 +1251,18 @@ function setHiddenProperty (obj, name, value) {
     writable: true
   })
   return obj[name]
+}
+
+// little util for retrocompatibility, delete in next major
+function convertEventsTrackingMode (mode) {
+  if (typeof mode !== 'string') return mode
+
+  mode = mode.toLowerCase()
+
+  if (mode === 'extended') return 'ident'
+  if (mode === 'safe') return 'anon'
+
+  return mode
 }
 
 module.exports = Config
