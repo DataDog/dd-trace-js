@@ -3,8 +3,8 @@
 const { addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const tracingChannel = require('dc-polyfill').tracingChannel
-const ch = tracingChannel('apm:openai:request')
+const dc = require('dc-polyfill')
+const ch = dc.tracingChannel('apm:openai:request')
 
 const V4_PACKAGE_SHIMS = [
   {
