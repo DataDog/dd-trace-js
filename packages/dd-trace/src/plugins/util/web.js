@@ -98,7 +98,6 @@ const web = {
     const context = this.patch(req)
 
     console.log('received a web request')
-    console.log(req)
     console.log(req.headers)
 
     let span
