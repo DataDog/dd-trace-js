@@ -21,17 +21,13 @@ function wrapVerifiedAndPublish (username, verified) {
 function wrapVerify (verify) {
   return function wrappedVerify (req, username, password, verified) {
     if (passportVerifyChannel.hasSubscribers) {
-      // verify can be called with or without req
-      let verifiedIndex = 3
-      if (!this._passReqToCallback) {
-        verifiedIndex = 2
-        username = req
-        verified = password
-      }
-
       // replace the callback with our own wrapper to get the result
-      arguments[verifiedIndex] = wrapVerifiedAndPublish(username, verified)
       // if we ever need the type of strategy, we can get it from this.name
+      if (this._passReqToCallback) {
+        arguments[3] = wrapVerifiedAndPublish(username, verified)
+      } else {
+        arguments[2] = wrapVerifiedAndPublish(req, password) // shifted args
+      }
     }
 
     return verify.apply(this, arguments)
