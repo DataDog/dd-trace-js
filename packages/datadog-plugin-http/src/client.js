@@ -71,6 +71,15 @@ class HttpClientPlugin extends ClientPlugin {
     return message.currentStore
   }
 
+  // Feedback from customers so far suggests that injecting headers into S3 requests
+  // using the AWS SDK v2 library fail with the following:
+  //   The request signature we calculated does not match the signature you provided.
+  //   Check your AWS Secret Access Key and signing method.
+  //   Consult the service documentation for details
+  // @see https://github.com/DataDog/dd-trace-js/pull/4717
+  // @see APMS-13713, APMS-13694
+  // That said we still don't have 100% confidence which combination of SDK and services errors.
+  // I suspect LocalStack isn't emulating the error condition properly.
   shouldInjectTraceHeaders (options, uri) {
     if (hasAmazonSignature(options) && !this.config.enablePropagationWithAmazonHeaders) {
       return false
