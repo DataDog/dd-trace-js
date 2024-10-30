@@ -18,6 +18,9 @@ class Http2ServerPlugin extends ServerPlugin {
 
   start ({ req, res }) {
     const store = storage.getStore()
+    console.log('starting web span from server http2 integration')
+    console.log(req)
+    console.log(req.headers)
     const span = web.startSpan(
       this.tracer,
       {

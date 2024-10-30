@@ -23,6 +23,9 @@ class HttpServerPlugin extends ServerPlugin {
 
   start ({ req, res, abortController }) {
     const store = storage.getStore()
+    console.log('starting web span from server http integration')
+    console.log(req)
+    console.log(req.headers)
     const span = web.startSpan(
       this.tracer,
       {
