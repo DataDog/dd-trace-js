@@ -50,7 +50,7 @@ function trackCustomEvent (tracer, eventName, metadata) {
   trackEvent(eventName, metadata, 'trackCustomEvent', getRootSpan(tracer), 'sdk')
 }
 
-function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode) {
+function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode, abortController) {
   if (!rootSpan) {
     log.warn(`Root span not available in ${sdkMethodName}`)
     return
@@ -74,6 +74,25 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode) {
     for (const metadataKey of Object.keys(fields)) {
       tags[`appsec.events.${eventName}.${metadataKey}`] = '' + fields[metadataKey]
     }
+  }
+
+  const persistent = {
+
+  }
+
+  if (user.id) {
+    persistent[addresses.USER_ID] = user.id
+  }
+
+  if (user.login) {
+    persistent[addresses.USER_LOGIN] = user.login
+  }
+
+  // call WAF
+  const results = waf.run({ persistent })
+
+  if (abortController) {
+    Blocking.handleResults(results)
   }
 
   rootSpan.addTags(tags)
