@@ -42,7 +42,6 @@ function enable (config, appsec) {
 
       apiSecuritySampler.setRequestSampling(rcConfig.api_security?.request_sample_rate)
 
-      // TODO: does local config take precedence?
       if (config.appsec.eventTracking?.enabled && typeof rcConfig.auto_user_instrum?.mode === 'string') {
         if (action === 'apply' || action === 'modify') {
           setCollectionMode(rcConfig.auto_user_instrum.mode)

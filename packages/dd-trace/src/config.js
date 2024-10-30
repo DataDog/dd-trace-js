@@ -284,6 +284,7 @@ class Config {
       options.appsec = {}
     }
 
+    // TODO: remove in next major
     const DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING_ENABLED = coalesce(
       options.appsec.eventTracking?.enabled,
       process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING_ENABLED &&
@@ -482,8 +483,8 @@ class Config {
     this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
     this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
     this._setValue(defaults, 'appsec.enabled', undefined)
-    this._setValue(defaults, 'appsec.eventTracking.enabled', true)
-    this._setValue(defaults, 'appsec.eventTracking.mode', 'safe')
+    //this._setValue(defaults, 'appsec.eventTracking.enabled', true)
+    //this._setValue(defaults, 'appsec.eventTracking.mode', 'safe')
     this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultWafObfuscatorKeyRegex)
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
     this._setValue(defaults, 'appsec.rasp.enabled', true)
@@ -711,11 +712,11 @@ class Config {
     this._setValue(env, 'appsec.blockedTemplateJson', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON))
     this._envUnprocessed['appsec.blockedTemplateJson'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
     this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
-    if (DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING) {
-      this._setValue(env, 'appsec.eventTracking.enabled',
-        ['extended', 'safe'].includes(DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING.toLowerCase()))
-      this._setValue(env, 'appsec.eventTracking.mode', DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING.toLowerCase())
-    }
+    // if (DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING) {
+    //   this._setValue(env, 'appsec.eventTracking.enabled',
+    //     ['extended', 'safe'].includes(DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING.toLowerCase()))
+    //   this._setValue(env, 'appsec.eventTracking.mode', DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING.toLowerCase())
+    // }
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setBoolean(env, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
@@ -878,12 +879,12 @@ class Config {
     this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(options.appsec.blockedTemplateJson))
     this._optsUnprocessed['appsec.blockedTemplateJson'] = options.appsec.blockedTemplateJson
     this._setBoolean(opts, 'appsec.enabled', options.appsec.enabled)
-    let eventTracking = options.appsec.eventTracking?.mode
-    if (eventTracking) {
-      eventTracking = eventTracking.toLowerCase()
-      this._setValue(opts, 'appsec.eventTracking.enabled', ['extended', 'safe'].includes(eventTracking))
-      this._setValue(opts, 'appsec.eventTracking.mode', eventTracking)
-    }
+    // let eventTracking = options.appsec.eventTracking?.mode
+    // if (eventTracking) {
+    //   eventTracking = eventTracking.toLowerCase()
+    //   this._setValue(opts, 'appsec.eventTracking.enabled', ['extended', 'safe'].includes(eventTracking))
+    //   this._setValue(opts, 'appsec.eventTracking.mode', eventTracking)
+    // }
     this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
     this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
     this._setBoolean(opts, 'appsec.rasp.enabled', options.appsec.rasp?.enabled)

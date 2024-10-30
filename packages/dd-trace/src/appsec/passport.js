@@ -3,29 +3,15 @@
 const log = require('../log')
 const { trackEvent } = require('./sdk/track_event')
 const { setUserTags } = require('./sdk/set_user')
-
-const UUID_PATTERN = '^[0-9A-F]{8}-[0-9A-F]{4}-[1-5][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$'
-const regexUsername = new RegExp(UUID_PATTERN, 'i')
+const crypto = require('crypto')
 
 const SDK_USER_EVENT_PATTERN = '^_dd\\.appsec\\.events\\.users\\.[\\W\\w+]+\\.sdk$'
 const regexSdkEvent = new RegExp(SDK_USER_EVENT_PATTERN, 'i')
 
-let collectionMode
+// The user ID generated must be consistent and repeatable meaning that, for a given framework, the same field must always be used. 
+const USER_ID_FIELDS = ['id', '_id', 'email', 'username', 'login', 'user']
 
-function setCollectionMode (mode) {
-  switch (mode) {
-    case 'ident':
-    case 'identification':
-      collectionMode = 'ident'
-      break
-    case 'anon':
-    case 'anonymization':
-      collectionMode = 'anon'
-      break
-    default:
-      collectionMode = null // disabled
-  }
-}
+
 
 function isSdkCalled (tags) {
   let called = false
@@ -37,89 +23,97 @@ function isSdkCalled (tags) {
   return called
 }
 
+function obfuscateId (id) {
+  return 'anon_' + crypto.createHash('sha256').update(id).digest().toString('hex', 0, 16).toLowerCase()
+}
+
 // delete this function later if we know it's always credential.username
 function getLogin (credentials) {
   const type = credentials && credentials.type
   let login
   if (type === 'local' || type === 'http') {
     login = credentials.username
+
+    if (collectionMode === 'anon') {
+      login = obfuscateId(login)
+    }
   }
 
   return login
 }
 
-function parseUser (login, passportUser, mode) {
-  const user = {
-    'usr.id': login
-  }
-
-  if (!user['usr.id']) {
-    return user
-  }
-
-  if (passportUser) {
-    // Guess id
-    if (passportUser.id) {
-      user['usr.id'] = passportUser.id
-    } else if (passportUser._id) {
-      user['usr.id'] = passportUser._id
-    }
-
-    if (mode === 'extended') {
-      if (login) {
-        user['usr.login'] = login
+function getUserId (passportUser) {
+  for (const field of USER_ID_FIELDS) {
+    let id = passportUser[field]
+    if (id) {
+      if (collectionMode === 'anon') {
+        id = obfuscateId(id)
       }
 
-      if (passportUser.email) {
-        user['usr.email'] = passportUser.email
-      }
-
-      // Guess username
-      if (passportUser.username) {
-        user['usr.username'] = passportUser.username
-      } else if (passportUser.name) {
-        user['usr.username'] = passportUser.name
-      }
+      return id
     }
   }
-
-  if (mode === 'safe') {
-    // Remove PII in safe mode
-    if (!regexUsername.test(user['usr.id'])) {
-      user['usr.id'] = ''
-    }
-  }
-
-  return user
 }
 
-function passportTrackEvent (credentials, passportUser, rootSpan, mode) {
+// TODO passpoort-jwt ?
+
+// TODO: SDK always has precendence ?
+// Whenever relevant, the user ID must be collected by the libraries as part of the root span, using the tag usr.id.
+// Whenever relevant, the user login must be collected by the libraries as part of the root span, using the tag usr.login.
+
+
+/*
+These modes only impact automated user ID and login collection, either for business logic events or for authenticated user tracking, and should be disregarded when the collection is performed through the various SDKs. 
+
+
+In the disabled mode, as the name suggests, libraries should not collect user ID or user login. Effectively, this means that libraries shouldn’t send automated business logic events, specifically login and signup events, nor should they automatically track authenticated requests.
+*/
+
+function passportTrackEvent (credentials, passportUser, rootSpan) {
+  if (!collectionMode) return
+
   const tags = rootSpan && rootSpan.context() && rootSpan.context()._tags
+
+  // TODO: what if sdk is called after automated user
 
   if (isSdkCalled(tags)) {
     // Don't overwrite tags set by SDK callings
     return
   }
-  const user = parseUser(getLogin(credentials), passportUser, mode)
 
-  if (user['usr.id'] === undefined) {
-    log.warn('No user ID found in authentication instrumentation')
-    return
-  }
-
+  // If a passportUser object is published then the login succeded
   if (passportUser) {
-    // If a passportUser object is published then the login succeded
-    const userTags = {}
-    Object.entries(user).forEach(([k, v]) => {
-      const attr = k.split('.', 2)[1]
-      userTags[attr] = v
-    })
+    const userId = getUserId(passportUser)
 
-    setUserTags(userTags, rootSpan)
-    trackEvent('users.login.success', null, 'passportTrackEvent', rootSpan, mode)
+    if (userId === undefined) {
+      log.warn('No user ID found in authentication instrumentation')
+      //  telemetry counter: 'appsec.instrum.user_auth.missing_user_id' 
+      return
+    }
+
+    setUserTags({ id: userId }, rootSpan)
+
+    trackEvent('users.login.success', null, 'passportTrackEvent', rootSpan, collectionMode)
+
+    // call WAF ephemeral
   } else {
-    trackEvent('users.login.failure', user, 'passportTrackEvent', rootSpan, mode)
+    const login = getLogin(credentials)
+
+    if (!login) {
+      return // idk
+    }
+
+    trackEvent('users.login.failure', { 'usr.id': login, login }, 'passportTrackEvent', rootSpan, collectionMode)
   }
+}
+
+function passportTrackUser (session) {
+  if (!collectionMode) return
+
+  const userId = getUserId(session.passport.user)
+
+  // call WAF ephemeral
+
 }
 
 module.exports = {
