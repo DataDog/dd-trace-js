@@ -8,6 +8,7 @@ const {
   findScriptFromPartialPath,
   getStackFromCallFrames
 } = require('../../../debugger/devtools_client/state')
+const { BREAKPOINT_HIT, BREAKPOINT_SET } = require('../messages')
 const log = require('../../../log')
 
 let sessionStarted = false
@@ -48,12 +49,13 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
     }
   }
 
-  parentPort.postMessage({ snapshot })
+  parentPort.postMessage({ type: BREAKPOINT_HIT, snapshot })
 })
 
 // TODO: add option to remove breakpoint
 parentPort.on('message', async ({ snapshotId, probe: { id: probeId, file, line } }) => {
   await addBreakpoint(snapshotId, { probeId, file, line })
+  parentPort.postMessage({ type: BREAKPOINT_SET, probeId })
 })
 
 async function addBreakpoint (snapshotId, probe) {

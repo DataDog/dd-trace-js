@@ -8,10 +8,18 @@ const path = require('path')
 const { assert } = require('chai')
 
 describe('test visibility with dynamic instrumentation', () => {
-  it('can grab local variables', (done) => {
-    const child = fork(path.join(__dirname, 'target-app', 'test-visibility-dynamic-instrumentation-script.js'))
+  let childProcess
 
-    child.on('message', ({ snapshot: { language, stack, probe, captures }, snapshotId }) => {
+  afterEach(() => {
+    if (childProcess) {
+      childProcess.kill()
+    }
+  })
+
+  it('can grab local variables', (done) => {
+    childProcess = fork(path.join(__dirname, 'target-app', 'test-visibility-dynamic-instrumentation-script.js'))
+
+    childProcess.on('message', ({ snapshot: { language, stack, probe, captures }, snapshotId }) => {
       assert.exists(snapshotId)
       assert.exists(probe)
       assert.exists(stack)
@@ -19,7 +27,7 @@ describe('test visibility with dynamic instrumentation', () => {
 
       assert.deepEqual(captures, {
         lines: {
-          8: {
+          9: {
             locals: {
               a: { type: 'number', value: '1' },
               b: { type: 'number', value: '2' },
