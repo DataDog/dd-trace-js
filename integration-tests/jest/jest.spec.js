@@ -32,8 +32,10 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_SOURCE_START,
   TEST_CODE_OWNERS,
-  TEST_SESSION_NAME
+  TEST_SESSION_NAME,
+  TEST_LEVEL_EVENT_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
 const testFile = 'ci-visibility/run-jest.js'
@@ -134,6 +136,14 @@ describe('jest CommonJS', () => {
         receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       }
       receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
+        const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+        metadataDicts.forEach(metadata => {
+          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+            assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+          }
+        })
+
         const events = payloads.flatMap(({ payload }) => payload.events)
         const sessionEventContent = events.find(event => event.type === 'test_session_end').content
         const moduleEventContent = events.find(event => event.type === 'test_module_end').content
@@ -150,23 +160,23 @@ describe('jest CommonJS', () => {
         )
         assert.equal(suites.length, 2)
         assert.exists(sessionEventContent)
-        assert.equal(sessionEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
         assert.exists(moduleEventContent)
-        assert.equal(moduleEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
 
         assert.include(testOutput, expectedStdout)
 
         tests.forEach(testEvent => {
-          assert.equal(testEvent.meta[TEST_SESSION_NAME], 'my-test-session')
           assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
           assert.exists(testEvent.metrics[TEST_SOURCE_START])
           // Can read DD_TAGS
           assert.propertyVal(testEvent.meta, 'test.customtag', 'customvalue')
           assert.propertyVal(testEvent.meta, 'test.customtag2', 'customvalue2')
+          assert.exists(testEvent.metrics[DD_HOST_CPU_COUNT])
         })
 
         suites.forEach(testSuite => {
-          assert.equal(testSuite.meta[TEST_SESSION_NAME], 'my-test-session')
+          assert.isTrue(testSuite.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'))
+          assert.equal(testSuite.metrics[TEST_SOURCE_START], 1)
+          assert.exists(testSuite.metrics[DD_HOST_CPU_COUNT])
         })
 
         done()
@@ -177,7 +187,7 @@ describe('jest CommonJS', () => {
         env: {
           ...envVars,
           DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-          DD_SESSION_NAME: 'my-test-session'
+          DD_TEST_SESSION_NAME: 'my-test-session'
         },
         stdio: 'pipe'
       })
@@ -253,9 +263,11 @@ describe('jest CommonJS', () => {
         const events = payloads.flatMap(({ payload }) => payload.events)
 
         const test = events.find(event => event.type === 'test').content
+        const testSuite = events.find(event => event.type === 'test_suite_end').content
         // The test is in a subproject
         assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
         assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+        assert.equal(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
       })
 
     childProcess = exec(
@@ -435,27 +447,25 @@ describe('jest CommonJS', () => {
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
           RUN_IN_PARALLEL: true,
-          DD_SESSION_NAME: 'my-test-session'
+          DD_TEST_SESSION_NAME: 'my-test-session'
         },
         stdio: 'pipe'
       })
 
       receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000).then(eventsRequests => {
+        const metadataDicts = eventsRequests.flatMap(({ payload }) => payload.metadata)
+
+        // it propagates test session name to the test and test suite events in parallel mode
+        metadataDicts.forEach(metadata => {
+          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+            assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+          }
+        })
+
         const events = eventsRequests.map(({ payload }) => payload)
           .flatMap(({ events }) => events)
         const eventTypes = events.map(event => event.type)
-
         assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
-        const tests = events.filter(event => event.type === 'test').map(event => event.content)
-        const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
-
-        // it propagates test session name to the test and test suite events in parallel mode
-        tests.forEach(testEvent => {
-          assert.equal(testEvent.meta[TEST_SESSION_NAME], 'my-test-session')
-        })
-        testSuites.forEach(testSuite => {
-          assert.equal(testSuite.meta[TEST_SESSION_NAME], 'my-test-session')
-        })
 
         done()
       }).catch(done)

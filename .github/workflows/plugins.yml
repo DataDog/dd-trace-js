@@ -96,7 +96,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
 
-  amqp10: # TODO: move rhea to its own job
+  amqp10:
     runs-on: ubuntu-latest
     services:
       qpid:
@@ -107,7 +107,7 @@ jobs:
         ports:
           - 5673:5672
     env:
-      PLUGINS: amqp10|rhea
+      PLUGINS: amqp10
       SERVICES: qpid
       DD_DATA_STREAMS_ENABLED: true
     steps:
@@ -136,10 +136,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test-and-upstream
 
+  avsc:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: avsc
+      DD_DATA_STREAMS_ENABLED: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test-and-upstream
+
   aws-sdk:
     strategy:
       matrix:
-        node-version: ['18', '22.6']
+        node-version: ['18', 'latest']
     runs-on: ubuntu-latest
     services:
       localstack:
@@ -196,10 +205,26 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/upstream
 
+  azure-functions:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: azure-functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
+
   bluebird:
     runs-on: ubuntu-latest
     env:
       PLUGINS: bluebird
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
+
+  body-parser:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: body-parser
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
@@ -242,10 +267,22 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
+  cookie-parser:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: cookie-parser
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
+
   couchbase:
     strategy:
       matrix:
-        range: ['^2.6.12', '^3.0.7', '>=4.2.0']
+        node-version: [16]
+        range: ['^2.6.12', '^3.0.7', '>=4.0.0 <4.2.0']
+        include:
+          - node-version: 18
+            range: '>=4.2.0'
     runs-on: ubuntu-latest
     services:
       couchbase:
@@ -262,8 +299,11 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - uses: ./.github/actions/install
-      - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: yarn config set ignore-engines true
+      - run: yarn test:plugins:ci --ignore-engines
       - uses: codecov/codecov-action@v3
 
   connect:
@@ -342,7 +382,22 @@ jobs:
   express:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: express|body-parser|cookie-parser
+      PLUGINS: express
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
+
+  express-mongo-sanitize:
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: circleci/mongo
+        ports:
+          - 27017:27017
+    env:
+      PLUGINS: express-mongo-sanitize
+      PACKAGE_NAMES: express-mongo-sanitize
+      SERVICES: mongo
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
@@ -412,7 +467,7 @@ jobs:
   http:
     strategy:
       matrix:
-        node-version: ['18', '20', '22.6']
+        node-version: ['18', '20', 'latest']
     runs-on: ubuntu-latest
     env:
       PLUGINS: http
@@ -523,6 +578,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
+  
+  mariadb:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mariadb:10.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: 'db'
+        ports:
+          - 3306:3306
+    env:
+      PLUGINS: mariadb
+      SERVICES: mariadb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
 
   memcached:
     runs-on: ubuntu-latest
@@ -617,8 +689,25 @@ jobs:
         ports:
           - 3306:3306
     env:
-      PLUGINS: mysql|mysql2|mariadb # TODO: move mysql2 to its own job
+      PLUGINS: mysql
       SERVICES: mysql
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
+
+  mysql2:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mariadb:10.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: 'db'
+        ports:
+          - 3306:3306
+    env:
+      PLUGINS: mysql2
+      SERVICES: mysql2
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
@@ -648,7 +737,8 @@ jobs:
       matrix:
         version:
           - 18
-          - 22.6
+          - latest
+        range: ['9.5.0', '11.1.4', '13.2.0', '14.2.6']
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
@@ -795,6 +885,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
 
+  protobufjs:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: protobufjs
+      DD_DATA_STREAMS_ENABLED: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test-and-upstream
+
   q:
     runs-on: ubuntu-latest
     env:
@@ -825,6 +924,24 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
 
+  rhea:
+    runs-on: ubuntu-latest
+    services:
+      qpid:
+        image: scholzj/qpid-cpp:1.38.0
+        env:
+          QPIDD_ADMIN_USERNAME: admin
+          QPIDD_ADMIN_PASSWORD: admin
+        ports:
+          - 5673:5672
+    env:
+      PLUGINS: rhea
+      SERVICES: qpid
+      DD_DATA_STREAMS_ENABLED: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test-and-upstream
+
   router:
     runs-on: ubuntu-latest
     env:
@@ -852,7 +969,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mssql:
-        image: mcr.microsoft.com/mssql/server:2017-latest-ubuntu
+        image: mcr.microsoft.com/mssql/server:2019-latest
         env:
           ACCEPT_EULA: 'Y'
           SA_PASSWORD: DD_HUNTER2

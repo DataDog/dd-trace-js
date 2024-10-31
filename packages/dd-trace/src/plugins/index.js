@@ -3,6 +3,7 @@
 module.exports = {
   get '@apollo/gateway' () { return require('../../../datadog-plugin-apollo/src') },
   get '@aws-sdk/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
+  get '@azure/functions' () { return require('../../../datadog-plugin-azure-functions/src') },
   get '@cucumber/cucumber' () { return require('../../../datadog-plugin-cucumber/src') },
   get '@playwright/test' () { return require('../../../datadog-plugin-playwright/src') },
   get '@elastic/elasticsearch' () { return require('../../../datadog-plugin-elasticsearch/src') },
@@ -22,6 +23,7 @@ module.exports = {
   get aerospike () { return require('../../../datadog-plugin-aerospike/src') },
   get amqp10 () { return require('../../../datadog-plugin-amqp10/src') },
   get amqplib () { return require('../../../datadog-plugin-amqplib/src') },
+  get avsc () { return require('../../../datadog-plugin-avsc/src') },
   get 'aws-sdk' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get bunyan () { return require('../../../datadog-plugin-bunyan/src') },
   get 'cassandra-driver' () { return require('../../../datadog-plugin-cassandra-driver/src') },
@@ -77,6 +79,7 @@ module.exports = {
   get pino () { return require('../../../datadog-plugin-pino/src') },
   get 'pino-pretty' () { return require('../../../datadog-plugin-pino/src') },
   get playwright () { return require('../../../datadog-plugin-playwright/src') },
+  get protobufjs () { return require('../../../datadog-plugin-protobufjs/src') },
   get redis () { return require('../../../datadog-plugin-redis/src') },
   get restify () { return require('../../../datadog-plugin-restify/src') },
   get rhea () { return require('../../../datadog-plugin-rhea/src') },

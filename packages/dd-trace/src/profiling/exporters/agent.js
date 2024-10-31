@@ -195,11 +195,13 @@ class AgentExporter {
         })
 
         sendRequest(options, form, (err, response) => {
-          if (operation.retry(err)) {
-            this._logger.error(`Error from the agent: ${err.message}`)
-            return
-          } else if (err) {
-            reject(new Error('Profiler agent export back-off period expired'))
+          if (err) {
+            const { status } = err
+            if ((typeof status !== 'number' || status >= 500 || status === 429) && operation.retry(err)) {
+              this._logger.error(`Error from the agent: ${err.message}`)
+            } else {
+              reject(err)
+            }
             return
           }
 

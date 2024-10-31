@@ -404,7 +404,7 @@ addHook({
 
 addHook({
   name: '@jest/test-sequencer',
-  versions: ['>=24.8.0']
+  versions: ['>=28']
 }, (sequencerPackage, frameworkVersion) => {
   shimmer.wrap(sequencerPackage.default.prototype, 'shard', shard => function () {
     const shardedTests = shard.apply(this, arguments)
@@ -648,6 +648,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
       testSuiteStartCh.publish({
         testSuite: environment.testSuite,
         testEnvironmentOptions: environment.testEnvironmentOptions,
+        testSourceFile: environment.testSourceFile,
         displayName: environment.displayName,
         frameworkVersion: jestVersion
       })
@@ -849,7 +850,8 @@ addHook({
 }, jestConfigSyncWrapper)
 
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = [
-  'selenium-webdriver'
+  'selenium-webdriver',
+  'winston'
 ]
 
 function shouldBypassJestRequireEngine (moduleName) {

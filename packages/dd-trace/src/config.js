@@ -3,7 +3,7 @@
 const fs = require('fs')
 const os = require('os')
 const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
-const URL = require('url').URL
+const { URL } = require('url')
 const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
@@ -17,7 +17,7 @@ const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
 const { getIsGCPFunction, getIsAzureFunction } = require('./serverless')
-const { ORIGIN_KEY } = require('./constants')
+const { ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
@@ -449,8 +449,7 @@ class Config {
     this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
     this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
     this._setValue(defaults, 'appsec.enabled', undefined)
-    this._setValue(defaults, 'appsec.eventTracking.enabled', true)
-    this._setValue(defaults, 'appsec.eventTracking.mode', 'safe')
+    this._setValue(defaults, 'appsec.eventTracking.mode', 'ident')
     this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultWafObfuscatorKeyRegex)
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
     this._setValue(defaults, 'appsec.rasp.enabled', true)
@@ -464,10 +463,12 @@ class Config {
     this._setValue(defaults, 'appsec.wafTimeout', 5e3) // µs
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
+    this._setValue(defaults, 'codeOriginForSpans.enabled', false)
     this._setValue(defaults, 'dbmPropagationMode', 'disabled')
     this._setValue(defaults, 'dogstatsd.hostname', '127.0.0.1')
     this._setValue(defaults, 'dogstatsd.port', '8125')
     this._setValue(defaults, 'dsmEnabled', false)
+    this._setValue(defaults, 'dynamicInstrumentationEnabled', false)
     this._setValue(defaults, 'env', undefined)
     this._setValue(defaults, 'experimental.enableGetRumData', false)
     this._setValue(defaults, 'experimental.exporter', undefined)
@@ -475,8 +476,11 @@ class Config {
     this._setValue(defaults, 'flushInterval', 2000)
     this._setValue(defaults, 'flushMinSpans', 1000)
     this._setValue(defaults, 'gitMetadataEnabled', true)
+    this._setValue(defaults, 'grpc.client.error.statuses', GRPC_CLIENT_ERROR_STATUSES)
+    this._setValue(defaults, 'grpc.server.error.statuses', GRPC_SERVER_ERROR_STATUSES)
     this._setValue(defaults, 'headerTags', [])
     this._setValue(defaults, 'hostname', '127.0.0.1')
+    this._setValue(defaults, 'iast.cookieFilterPattern', '.{32,}')
     this._setValue(defaults, 'iast.deduplicationEnabled', true)
     this._setValue(defaults, 'iast.enabled', false)
     this._setValue(defaults, 'iast.maxConcurrentRequests', 2)
@@ -496,7 +500,12 @@ class Config {
     this._setValue(defaults, 'isGitUploadEnabled', false)
     this._setValue(defaults, 'isIntelligentTestRunnerEnabled', false)
     this._setValue(defaults, 'isManualApiEnabled', false)
-    this._setValue(defaults, 'ciVisibilitySessionName', '')
+    this._setValue(defaults, 'llmobs.agentlessEnabled', false)
+    this._setValue(defaults, 'llmobs.enabled', false)
+    this._setValue(defaults, 'llmobs.mlApp', undefined)
+    this._setValue(defaults, 'ciVisibilityTestSessionName', '')
+    this._setValue(defaults, 'ciVisAgentlessLogSubmissionEnabled', false)
+    this._setValue(defaults, 'isTestDynamicInstrumentationEnabled', false)
     this._setValue(defaults, 'logInjection', false)
     this._setValue(defaults, 'lookup', undefined)
     this._setValue(defaults, 'memcachedCommandEnabled', false)
@@ -516,7 +525,7 @@ class Config {
     this._setValue(defaults, 'reportHostname', false)
     this._setValue(defaults, 'runtimeMetrics', false)
     this._setValue(defaults, 'sampleRate', undefined)
-    this._setValue(defaults, 'sampler.rateLimit', undefined)
+    this._setValue(defaults, 'sampler.rateLimit', 100)
     this._setValue(defaults, 'sampler.rules', [])
     this._setValue(defaults, 'sampler.spanSamplingRules', [])
     this._setValue(defaults, 'scope', undefined)
@@ -535,8 +544,9 @@ class Config {
     this._setValue(defaults, 'telemetry.dependencyCollection', true)
     this._setValue(defaults, 'telemetry.enabled', true)
     this._setValue(defaults, 'telemetry.heartbeatInterval', 60000)
-    this._setValue(defaults, 'telemetry.logCollection', true)
+    this._setValue(defaults, 'telemetry.logCollection', false)
     this._setValue(defaults, 'telemetry.metrics', true)
+    this._setValue(defaults, 'traceEnabled', true)
     this._setValue(defaults, 'traceId128BitGenerationEnabled', true)
     this._setValue(defaults, 'traceId128BitLoggingEnabled', false)
     this._setValue(defaults, 'tracePropagationExtractFirst', false)
@@ -557,6 +567,7 @@ class Config {
       DD_API_SECURITY_REQUEST_SAMPLE_RATE,
       DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
       DD_APPSEC_ENABLED,
+      DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
       DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON,
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
@@ -570,15 +581,20 @@ class Config {
       DD_APPSEC_RASP_ENABLED,
       DD_APPSEC_TRACE_RATE_LIMIT,
       DD_APPSEC_WAF_TIMEOUT,
+      DD_CODE_ORIGIN_FOR_SPANS_ENABLED,
       DD_DATA_STREAMS_ENABLED,
       DD_DBM_PROPAGATION_MODE,
       DD_DOGSTATSD_HOSTNAME,
       DD_DOGSTATSD_PORT,
+      DD_DYNAMIC_INSTRUMENTATION_ENABLED,
       DD_ENV,
       DD_EXPERIMENTAL_API_SECURITY_ENABLED,
       DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,
       DD_EXPERIMENTAL_PROFILING_ENABLED,
+      DD_GRPC_CLIENT_ERROR_STATUSES,
+      DD_GRPC_SERVER_ERROR_STATUSES,
       JEST_WORKER_ID,
+      DD_IAST_COOKIE_FILTER_PATTERN,
       DD_IAST_DEDUPLICATION_ENABLED,
       DD_IAST_ENABLED,
       DD_IAST_MAX_CONCURRENT_REQUESTS,
@@ -592,6 +608,9 @@ class Config {
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
+      DD_LLMOBS_AGENTLESS_ENABLED,
+      DD_LLMOBS_ENABLED,
+      DD_LLMOBS_ML_APP,
       DD_OPENAI_LOGS_ENABLED,
       DD_OPENAI_SPAN_CHAR_LIMIT,
       DD_PROFILING_ENABLED,
@@ -620,6 +639,7 @@ class Config {
       DD_TRACE_AGENT_PROTOCOL_VERSION,
       DD_TRACE_CLIENT_IP_ENABLED,
       DD_TRACE_CLIENT_IP_HEADER,
+      DD_TRACE_ENABLED,
       DD_TRACE_EXPERIMENTAL_EXPORTER,
       DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
       DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
@@ -676,11 +696,10 @@ class Config {
     this._setValue(env, 'appsec.blockedTemplateJson', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON))
     this._envUnprocessed['appsec.blockedTemplateJson'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
     this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
-    if (DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING) {
-      this._setValue(env, 'appsec.eventTracking.enabled',
-        ['extended', 'safe'].includes(DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING.toLowerCase()))
-      this._setValue(env, 'appsec.eventTracking.mode', DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING.toLowerCase())
-    }
+    this._setString(env, 'appsec.eventTracking.mode', coalesce(
+      DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
+      DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING // TODO: remove in next major
+    ))
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setBoolean(env, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
@@ -699,11 +718,14 @@ class Config {
     this._envUnprocessed['appsec.wafTimeout'] = DD_APPSEC_WAF_TIMEOUT
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
+    this._setBoolean(env, 'codeOriginForSpans.enabled', DD_CODE_ORIGIN_FOR_SPANS_ENABLED)
     this._setString(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
     this._setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOSTNAME)
     this._setString(env, 'dogstatsd.port', DD_DOGSTATSD_PORT)
     this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
+    this._setBoolean(env, 'dynamicInstrumentationEnabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
     this._setString(env, 'env', DD_ENV || tags.env)
+    this._setBoolean(env, 'traceEnabled', DD_TRACE_ENABLED)
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     this._setString(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
     this._setBoolean(env, 'experimental.runtimeId', DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED)
@@ -711,8 +733,11 @@ class Config {
     this._setValue(env, 'flushMinSpans', maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS))
     this._envUnprocessed.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this._setBoolean(env, 'gitMetadataEnabled', DD_TRACE_GIT_METADATA_ENABLED)
+    this._setIntegerRangeSet(env, 'grpc.client.error.statuses', DD_GRPC_CLIENT_ERROR_STATUSES)
+    this._setIntegerRangeSet(env, 'grpc.server.error.statuses', DD_GRPC_SERVER_ERROR_STATUSES)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
     this._setString(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
+    this._setString(env, 'iast.cookieFilterPattern', DD_IAST_COOKIE_FILTER_PATTERN)
     this._setBoolean(env, 'iast.deduplicationEnabled', DD_IAST_DEDUPLICATION_ENABLED)
     this._setBoolean(env, 'iast.enabled', DD_IAST_ENABLED)
     this._setValue(env, 'iast.maxConcurrentRequests', maybeInt(DD_IAST_MAX_CONCURRENT_REQUESTS))
@@ -731,6 +756,9 @@ class Config {
     this._setArray(env, 'injectionEnabled', DD_INJECTION_ENABLED)
     this._setBoolean(env, 'isAzureFunction', getIsAzureFunction())
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
+    this._setBoolean(env, 'llmobs.agentlessEnabled', DD_LLMOBS_AGENTLESS_ENABLED)
+    this._setBoolean(env, 'llmobs.enabled', DD_LLMOBS_ENABLED)
+    this._setString(env, 'llmobs.mlApp', DD_LLMOBS_ML_APP)
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this._setBoolean(env, 'memcachedCommandEnabled', DD_TRACE_MEMCACHED_COMMAND_ENABLED)
@@ -842,12 +870,7 @@ class Config {
     this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(options.appsec.blockedTemplateJson))
     this._optsUnprocessed['appsec.blockedTemplateJson'] = options.appsec.blockedTemplateJson
     this._setBoolean(opts, 'appsec.enabled', options.appsec.enabled)
-    let eventTracking = options.appsec.eventTracking?.mode
-    if (eventTracking) {
-      eventTracking = eventTracking.toLowerCase()
-      this._setValue(opts, 'appsec.eventTracking.enabled', ['extended', 'safe'].includes(eventTracking))
-      this._setValue(opts, 'appsec.eventTracking.mode', eventTracking)
-    }
+    this._setString(opts, 'appsec.eventTracking.mode', options.appsec.eventTracking?.mode)
     this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
     this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
     this._setBoolean(opts, 'appsec.rasp.enabled', options.appsec.rasp?.enabled)
@@ -864,23 +887,25 @@ class Config {
     this._optsUnprocessed['appsec.wafTimeout'] = options.appsec.wafTimeout
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
     this._setString(opts, 'clientIpHeader', options.clientIpHeader)
+    this._setBoolean(opts, 'codeOriginForSpans.enabled', options.codeOriginForSpans?.enabled)
     this._setString(opts, 'dbmPropagationMode', options.dbmPropagationMode)
     if (options.dogstatsd) {
       this._setString(opts, 'dogstatsd.hostname', options.dogstatsd.hostname)
       this._setString(opts, 'dogstatsd.port', options.dogstatsd.port)
     }
     this._setBoolean(opts, 'dsmEnabled', options.dsmEnabled)
+    this._setBoolean(opts, 'dynamicInstrumentationEnabled', options.experimental?.dynamicInstrumentationEnabled)
     this._setString(opts, 'env', options.env || tags.env)
-    this._setBoolean(opts, 'experimental.enableGetRumData',
-      options.experimental && options.experimental.enableGetRumData)
-    this._setString(opts, 'experimental.exporter', options.experimental && options.experimental.exporter)
-    this._setBoolean(opts, 'experimental.runtimeId', options.experimental && options.experimental.runtimeId)
+    this._setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
+    this._setString(opts, 'experimental.exporter', options.experimental?.exporter)
+    this._setBoolean(opts, 'experimental.runtimeId', options.experimental?.runtimeId)
     this._setValue(opts, 'flushInterval', maybeInt(options.flushInterval))
     this._optsUnprocessed.flushInterval = options.flushInterval
     this._setValue(opts, 'flushMinSpans', maybeInt(options.flushMinSpans))
     this._optsUnprocessed.flushMinSpans = options.flushMinSpans
     this._setArray(opts, 'headerTags', options.headerTags)
     this._setString(opts, 'hostname', options.hostname)
+    this._setString(opts, 'iast.cookieFilterPattern', options.iast?.cookieFilterPattern)
     this._setBoolean(opts, 'iast.deduplicationEnabled', options.iast && options.iast.deduplicationEnabled)
     this._setBoolean(opts, 'iast.enabled',
       options.iast && (options.iast === true || options.iast.enabled === true))
@@ -899,6 +924,8 @@ class Config {
     }
     this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
+    this._setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)
+    this._setString(opts, 'llmobs.mlApp', options.llmobs?.mlApp)
     this._setBoolean(opts, 'logInjection', options.logInjection)
     this._setString(opts, 'lookup', options.lookup)
     this._setBoolean(opts, 'openAiLogsEnabled', options.openAiLogsEnabled)
@@ -934,6 +961,15 @@ class Config {
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
     this._setString(opts, 'version', options.version || tags.version)
+
+    // For LLMObs, we want the environment variable to take precedence over the options.
+    // This is reliant on environment config being set before options.
+    // This is to make sure the origins of each value are tracked appropriately for telemetry.
+    // We'll only set `llmobs.enabled` on the opts when it's not set on the environment, and options.llmobs is provided.
+    const llmobsEnabledEnv = this._env['llmobs.enabled']
+    if (llmobsEnabledEnv == null && options.llmobs) {
+      this._setBoolean(opts, 'llmobs.enabled', !!options.llmobs)
+    }
   }
 
   _isCiVisibility () {
@@ -1000,10 +1036,10 @@ class Config {
   }
 
   _isCiVisibilityManualApiEnabled () {
-    return isTrue(coalesce(
+    return coalesce(
       process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED,
-      false
-    ))
+      true
+    )
   }
 
   _isTraceStatsComputationEnabled () {
@@ -1032,7 +1068,9 @@ class Config {
       DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
       DD_CIVISIBILITY_FLAKY_RETRY_ENABLED,
       DD_CIVISIBILITY_FLAKY_RETRY_COUNT,
-      DD_SESSION_NAME
+      DD_TEST_SESSION_NAME,
+      DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
+      DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED
     } = process.env
 
     if (DD_CIVISIBILITY_AGENTLESS_URL) {
@@ -1047,8 +1085,10 @@ class Config {
         coalesce(DD_CIVISIBILITY_FLAKY_RETRY_ENABLED, true))
       this._setValue(calc, 'flakyTestRetriesCount', coalesce(maybeInt(DD_CIVISIBILITY_FLAKY_RETRY_COUNT), 5))
       this._setBoolean(calc, 'isIntelligentTestRunnerEnabled', isTrue(this._isCiVisibilityItrEnabled()))
-      this._setBoolean(calc, 'isManualApiEnabled', this._isCiVisibilityManualApiEnabled())
-      this._setString(calc, 'ciVisibilitySessionName', DD_SESSION_NAME)
+      this._setBoolean(calc, 'isManualApiEnabled', !isFalse(this._isCiVisibilityManualApiEnabled()))
+      this._setString(calc, 'ciVisibilityTestSessionName', DD_TEST_SESSION_NAME)
+      this._setBoolean(calc, 'ciVisAgentlessLogSubmissionEnabled', isTrue(DD_AGENTLESS_LOG_SUBMISSION_ENABLED))
+      this._setBoolean(calc, 'isTestDynamicInstrumentationEnabled', isTrue(DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED))
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())
     this._setBoolean(calc, 'isGitUploadEnabled',
@@ -1067,6 +1107,13 @@ class Config {
     if (defaultPropagationStyle.length > 2) {
       calc['tracePropagationStyle.inject'] = calc['tracePropagationStyle.inject'] || defaultPropagationStyle
       calc['tracePropagationStyle.extract'] = calc['tracePropagationStyle.extract'] || defaultPropagationStyle
+    }
+
+    const iastEnabled = coalesce(this._options['iast.enabled'], this._env['iast.enabled'])
+    const profilingEnabled = coalesce(this._options['profiling.enabled'], this._env['profiling.enabled'])
+    const injectionIncludesProfiler = (this._env.injectionEnabled || []).includes('profiler')
+    if (iastEnabled || ['auto', 'true'].includes(profilingEnabled) || injectionIncludesProfiler) {
+      this._setBoolean(calc, 'telemetry.logCollection', true)
     }
   }
 
@@ -1134,12 +1181,36 @@ class Config {
     }
 
     if (typeof value === 'string') {
-      value = value.split(',')
+      value = value.split(',').map(item => {
+        // Trim each item and remove whitespace around the colon
+        const [key, val] = item.split(':').map(part => part.trim())
+        return val !== undefined ? `${key}:${val}` : key
+      })
     }
 
     if (Array.isArray(value)) {
       this._setValue(obj, name, value)
     }
+  }
+
+  _setIntegerRangeSet (obj, name, value) {
+    if (value == null) {
+      return this._setValue(obj, name, null)
+    }
+    value = value.split(',')
+    const result = []
+
+    value.forEach(val => {
+      if (val.includes('-')) {
+        const [start, end] = val.split('-').map(Number)
+        for (let i = start; i <= end; i++) {
+          result.push(i)
+        }
+      } else {
+        result.push(Number(val))
+      }
+    })
+    this._setValue(obj, name, result)
   }
 
   _setSamplingRule (obj, name, value) {

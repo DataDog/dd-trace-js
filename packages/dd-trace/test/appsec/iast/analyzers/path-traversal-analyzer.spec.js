@@ -45,6 +45,14 @@ const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/inje
 })
 
 describe('path-traversal-analyzer', () => {
+  before(() => {
+    pathTraversalAnalyzer.enable()
+  })
+
+  after(() => {
+    pathTraversalAnalyzer.disable()
+  })
+
   it('Analyzer should be subscribed to proper channel', () => {
     expect(pathTraversalAnalyzer._subscriptions).to.have.lengthOf(1)
     expect(pathTraversalAnalyzer._subscriptions[0]._channel.name).to.equals('apm:fs:operation:start')

@@ -28,13 +28,16 @@ const {
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
   TEST_SOURCE_FILE,
+  TEST_SOURCE_START,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_SUITE,
   TEST_CODE_OWNERS,
-  TEST_SESSION_NAME
+  TEST_SESSION_NAME,
+  TEST_LEVEL_EVENT_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { NODE_MAJOR } = require('../../version')
 
@@ -226,6 +229,13 @@ moduleTypes.forEach(({
     it('can run and report tests', (done) => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+          metadataDicts.forEach(metadata => {
+            for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+              assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+            }
+          })
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSessionEvent = events.find(event => event.type === 'test_session_end')
@@ -236,14 +246,12 @@ moduleTypes.forEach(({
           const { content: testSessionEventContent } = testSessionEvent
           const { content: testModuleEventContent } = testModuleEvent
 
-          assert.equal(testSessionEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
           assert.exists(testSessionEventContent.test_session_id)
           assert.exists(testSessionEventContent.meta[TEST_COMMAND])
           assert.exists(testSessionEventContent.meta[TEST_TOOLCHAIN])
           assert.equal(testSessionEventContent.resource.startsWith('test_session.'), true)
           assert.equal(testSessionEventContent.meta[TEST_STATUS], 'fail')
 
-          assert.equal(testModuleEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
           assert.exists(testModuleEventContent.test_session_id)
           assert.exists(testModuleEventContent.test_module_id)
           assert.exists(testModuleEventContent.meta[TEST_COMMAND])
@@ -269,17 +277,20 @@ moduleTypes.forEach(({
           testSuiteEvents.forEach(({
             content: {
               meta,
+              metrics,
               test_suite_id: testSuiteId,
               test_module_id: testModuleId,
               test_session_id: testSessionId
             }
           }) => {
-            assert.equal(meta[TEST_SESSION_NAME], 'my-test-session')
             assert.exists(meta[TEST_COMMAND])
             assert.exists(meta[TEST_MODULE])
             assert.exists(testSuiteId)
             assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
             assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+            assert.isTrue(meta[TEST_SOURCE_FILE].startsWith('cypress/e2e/'))
+            assert.equal(metrics[TEST_SOURCE_START], 1)
+            assert.exists(metrics[DD_HOST_CPU_COUNT])
           })
 
           assert.includeMembers(testEvents.map(test => test.content.resource), [
@@ -297,12 +308,12 @@ moduleTypes.forEach(({
           testEvents.forEach(({
             content: {
               meta,
+              metrics,
               test_suite_id: testSuiteId,
               test_module_id: testModuleId,
               test_session_id: testSessionId
             }
           }) => {
-            assert.equal(meta[TEST_SESSION_NAME], 'my-test-session')
             assert.exists(meta[TEST_COMMAND])
             assert.exists(meta[TEST_MODULE])
             assert.exists(testSuiteId)
@@ -312,6 +323,7 @@ moduleTypes.forEach(({
             // Can read DD_TAGS
             assert.propertyVal(meta, 'test.customtag', 'customvalue')
             assert.propertyVal(meta, 'test.customtag2', 'customvalue2')
+            assert.exists(metrics[DD_HOST_CPU_COUNT])
           })
         }, 25000)
 
@@ -328,7 +340,7 @@ moduleTypes.forEach(({
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-            DD_SESSION_NAME: 'my-test-session'
+            DD_TEST_SESSION_NAME: 'my-test-session'
           },
           stdio: 'pipe'
         }
@@ -1417,9 +1429,11 @@ moduleTypes.forEach(({
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const test = events.find(event => event.type === 'test').content
+          const testSuite = events.find(event => event.type === 'test_suite_end').content
           // The test is in a subproject
           assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
           assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          assert.equal(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
         }, 25000)
 
       childProcess = exec(

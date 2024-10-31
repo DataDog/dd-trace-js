@@ -108,6 +108,18 @@ class PrioritySampler {
     }
   }
 
+  setPriority (span, samplingPriority, mechanism = SAMPLING_MECHANISM_MANUAL) {
+    if (!span || !this.validate(samplingPriority)) return
+
+    const context = this._getContext(span)
+
+    context._sampling.priority = samplingPriority
+    context._sampling.mechanism = mechanism
+
+    const root = context._trace.started[0]
+    this._addDecisionMaker(root)
+  }
+
   _getContext (span) {
     return typeof span.context === 'function' ? span.context() : span
   }
@@ -200,6 +212,10 @@ class PrioritySampler {
     for (const rule of this._rules) {
       if (rule.match(span)) return rule
     }
+  }
+
+  static keepTrace (span, mechanism) {
+    span?._prioritySampler?.setPriority(span, USER_KEEP, mechanism)
   }
 }
 

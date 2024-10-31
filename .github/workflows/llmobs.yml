@@ -1,0 +1,49 @@
+name: LLMObs
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: '0 4 * * *'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - uses: ./.github/actions/install
+      - uses: ./.github/actions/node/18
+      - run: yarn test:llmobs:sdk:ci
+      - uses: ./.github/actions/node/20
+      - run: yarn test:llmobs:sdk:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:llmobs:sdk:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v3
+
+  openai:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: openai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - uses: ./.github/actions/install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:llmobs:plugins:ci
+        shell: bash
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:llmobs:plugins:ci
+        shell: bash
+      - uses: codecov/codecov-action@v3
+      - if: always()
+        uses: ./.github/actions/testagent/logs

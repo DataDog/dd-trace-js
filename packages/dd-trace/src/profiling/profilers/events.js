@@ -1,11 +1,7 @@
 const { performance, constants, PerformanceObserver } = require('perf_hooks')
-const { END_TIMESTAMP_LABEL } = require('./shared')
-const semver = require('semver')
+const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL } = require('./shared')
 const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
 const pprof = require('@datadog/pprof/')
-
-// Format of perf_hooks events changed with Node 16, we need to be mindful of it.
-const node16 = semver.gte(process.version, '16.0.0')
 
 // perf_hooks uses millis, with fractional part representing nanos. We emit nanos into the pprof file.
 const MS_TO_NS = 1000000
@@ -48,7 +44,7 @@ class GCDecorator {
   }
 
   decorateSample (sampleInput, item) {
-    const { kind, flags } = node16 ? item.detail : item
+    const { kind, flags } = item.detail
     sampleInput.label.push(this.kindLabels[kind])
     const reasonLabel = this.getReasonLabel(flags)
     if (reasonLabel) {
@@ -140,12 +136,9 @@ class NetDecorator {
 // Keys correspond to PerformanceEntry.entryType, values are constructor
 // functions for type-specific decorators.
 const decoratorTypes = {
-  gc: GCDecorator
-}
-// Needs at least node 16 for DNS and Net
-if (node16) {
-  decoratorTypes.dns = DNSDecorator
-  decoratorTypes.net = NetDecorator
+  gc: GCDecorator,
+  dns: DNSDecorator,
+  net: NetDecorator
 }
 
 // Translates performance entries into pprof samples.
@@ -168,10 +161,12 @@ class EventSerializer {
     this.locationId = [location.id]
 
     this.timestampLabelKey = this.stringTable.dedup(END_TIMESTAMP_LABEL)
+    this.spanIdKey = this.stringTable.dedup(SPAN_ID_LABEL)
+    this.rootSpanIdKey = this.stringTable.dedup(LOCAL_ROOT_SPAN_ID_LABEL)
   }
 
   addEvent (item) {
-    const { entryType, startTime, duration } = item
+    const { entryType, startTime, duration, _ddSpanId, _ddRootSpanId } = item
     let decorator = this.decorators[entryType]
     if (!decorator) {
       const DecoratorCtor = decoratorTypes[entryType]
@@ -186,13 +181,21 @@ class EventSerializer {
       }
     }
     const endTime = startTime + duration
+    const label = [
+      decorator.eventTypeLabel,
+      new Label({ key: this.timestampLabelKey, num: dateOffset + BigInt(Math.round(endTime * MS_TO_NS)) })
+    ]
+    if (_ddSpanId) {
+      label.push(labelFromStr(this.stringTable, this.spanIdKey, _ddSpanId))
+    }
+    if (_ddRootSpanId) {
+      label.push(labelFromStr(this.stringTable, this.rootSpanIdKey, _ddRootSpanId))
+    }
+
     const sampleInput = {
       value: [Math.round(duration * MS_TO_NS)],
       locationId: this.locationId,
-      label: [
-        decorator.eventTypeLabel,
-        new Label({ key: this.timestampLabelKey, num: dateOffset + BigInt(Math.round(endTime * MS_TO_NS)) })
-      ]
+      label
     }
     decorator.decorateSample(sampleInput, item)
     this.samples.push(new Sample(sampleInput))
@@ -219,48 +222,121 @@ class EventSerializer {
 }
 
 /**
- * This class generates pprof files with timeline events sourced from Node.js
- * performance measurement APIs.
+ * Class that sources timeline events through Node.js performance measurement APIs.
  */
-class EventsProfiler {
-  constructor (options = {}) {
-    this.type = 'events'
-    this._flushIntervalNanos = (options.flushInterval || 60000) * 1e6 // 60 sec
-    this._observer = undefined
-    this.eventSerializer = new EventSerializer()
+class NodeApiEventSource {
+  constructor (eventHandler, entryTypes) {
+    this.eventHandler = eventHandler
+    this.observer = undefined
+    this.entryTypes = entryTypes || Object.keys(decoratorTypes)
   }
 
   start () {
     // if already started, do nothing
-    if (this._observer) return
+    if (this.observer) return
 
     function add (items) {
       for (const item of items.getEntries()) {
-        this.eventSerializer.addEvent(item)
+        this.eventHandler(item)
       }
     }
-    this._observer = new PerformanceObserver(add.bind(this))
-    this._observer.observe({ entryTypes: Object.keys(decoratorTypes) })
+
+    this.observer = new PerformanceObserver(add.bind(this))
+    this.observer.observe({ entryTypes: this.entryTypes })
   }
 
   stop () {
-    if (this._observer) {
-      this._observer.disconnect()
-      this._observer = undefined
+    if (this.observer) {
+      this.observer.disconnect()
+      this.observer = undefined
     }
+  }
+}
+
+class DatadogInstrumentationEventSource {
+  constructor (eventHandler) {
+    this.plugins = ['dns_lookup', 'dns_lookupservice', 'dns_resolve', 'dns_reverse', 'net'].map(m => {
+      const Plugin = require(`./event_plugins/${m}`)
+      return new Plugin(eventHandler)
+    })
+
+    this.started = false
+  }
+
+  start () {
+    if (!this.started) {
+      this.plugins.forEach(p => p.configure({ enabled: true }))
+      this.started = true
+    }
+  }
+
+  stop () {
+    if (this.started) {
+      this.plugins.forEach(p => p.configure({ enabled: false }))
+      this.started = false
+    }
+  }
+}
+
+class CompositeEventSource {
+  constructor (sources) {
+    this.sources = sources
+  }
+
+  start () {
+    this.sources.forEach(s => s.start())
+  }
+
+  stop () {
+    this.sources.forEach(s => s.stop())
+  }
+}
+
+/**
+ * This class generates pprof files with timeline events. It combines an event
+ * source with an event serializer.
+ */
+class EventsProfiler {
+  constructor (options = {}) {
+    this.type = 'events'
+    this.eventSerializer = new EventSerializer()
+
+    const eventHandler = event => {
+      this.eventSerializer.addEvent(event)
+    }
+
+    if (options.codeHotspotsEnabled) {
+      // Use Datadog instrumentation to collect events with span IDs. Still use
+      // Node API for GC events.
+      this.eventSource = new CompositeEventSource([
+        new DatadogInstrumentationEventSource(eventHandler),
+        new NodeApiEventSource(eventHandler, ['gc'])
+      ])
+    } else {
+      // Use Node API instrumentation to collect events without span IDs
+      this.eventSource = new NodeApiEventSource(eventHandler)
+    }
+  }
+
+  start () {
+    this.eventSource.start()
+  }
+
+  stop () {
+    this.eventSource.stop()
   }
 
   profile (restart, startDate, endDate) {
     if (!restart) {
       this.stop()
     }
-    const profile = this.eventSerializer.createProfile(startDate, endDate)
+    const thatEventSerializer = this.eventSerializer
     this.eventSerializer = new EventSerializer()
-    return profile
+    return () => thatEventSerializer.createProfile(startDate, endDate)
   }
 
   encode (profile) {
-    return pprof.encode(profile)
+    return pprof.encode(profile())
   }
 }
 

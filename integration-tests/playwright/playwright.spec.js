@@ -23,8 +23,10 @@ const {
   TEST_EARLY_FLAKE_ENABLED,
   TEST_SUITE,
   TEST_CODE_OWNERS,
-  TEST_SESSION_NAME
+  TEST_SESSION_NAME,
+  TEST_LEVEL_EVENT_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
 const NUM_RETRIES_EFD = 3
@@ -72,6 +74,14 @@ versions.forEach((version) => {
           const reportUrl = reportMethod === 'agentless' ? '/api/v2/citestcycle' : '/evp_proxy/v2/api/v2/citestcycle'
 
           receiver.gatherPayloadsMaxTimeout(({ url }) => url === reportUrl, payloads => {
+            const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+            metadataDicts.forEach(metadata => {
+              for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+                assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+              }
+            })
+
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSessionEvent = events.find(event => event.type === 'test_session_end')
@@ -81,10 +91,8 @@ versions.forEach((version) => {
 
             const stepEvents = events.filter(event => event.type === 'span')
 
-            assert.equal(testSessionEvent.content.meta[TEST_SESSION_NAME], 'my-test-session')
             assert.include(testSessionEvent.content.resource, 'test_session.playwright test')
             assert.equal(testSessionEvent.content.meta[TEST_STATUS], 'fail')
-            assert.equal(testModuleEvent.content.meta[TEST_SESSION_NAME], 'my-test-session')
             assert.include(testModuleEvent.content.resource, 'test_module.playwright test')
             assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'fail')
             assert.equal(testSessionEvent.content.meta[TEST_TYPE], 'browser')
@@ -106,10 +114,12 @@ versions.forEach((version) => {
             ])
 
             testSuiteEvents.forEach(testSuiteEvent => {
-              assert.equal(testSuiteEvent.content.meta[TEST_SESSION_NAME], 'my-test-session')
               if (testSuiteEvent.content.meta[TEST_STATUS] === 'fail') {
                 assert.exists(testSuiteEvent.content.meta[ERROR_MESSAGE])
               }
+              assert.isTrue(testSuiteEvent.content.meta[TEST_SOURCE_FILE].endsWith('-test.js'))
+              assert.equal(testSuiteEvent.content.metrics[TEST_SOURCE_START], 1)
+              assert.exists(testSuiteEvent.content.metrics[DD_HOST_CPU_COUNT])
             })
 
             assert.includeMembers(testEvents.map(test => test.content.resource), [
@@ -128,7 +138,6 @@ versions.forEach((version) => {
             ])
 
             testEvents.forEach(testEvent => {
-              assert.equal(testEvent.content.meta[TEST_SESSION_NAME], 'my-test-session')
               assert.exists(testEvent.content.metrics[TEST_SOURCE_START])
               assert.equal(
                 testEvent.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/playwright-tests/'), true
@@ -138,6 +147,7 @@ versions.forEach((version) => {
               assert.propertyVal(testEvent.content.meta, 'test.customtag2', 'customvalue2')
               // Adds the browser used
               assert.propertyVal(testEvent.content.meta, TEST_CONFIGURATION_BROWSER_NAME, 'chromium')
+              assert.exists(testEvent.content.metrics[DD_HOST_CPU_COUNT])
             })
 
             stepEvents.forEach(stepEvent => {
@@ -161,7 +171,7 @@ versions.forEach((version) => {
                 ...envVars,
                 PW_BASE_URL: `http://localhost:${webAppPort}`,
                 DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-                DD_SESSION_NAME: 'my-test-session'
+                DD_TEST_SESSION_NAME: 'my-test-session'
               },
               stdio: 'pipe'
             }
@@ -674,9 +684,11 @@ versions.forEach((version) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const test = events.find(event => event.type === 'test').content
+          const testSuite = events.find(event => event.type === 'test_suite_end').content
           // The test is in a subproject
           assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
           assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          assert.equal(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
         })
 
       childProcess = exec(

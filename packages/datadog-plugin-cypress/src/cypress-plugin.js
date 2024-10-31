@@ -30,7 +30,8 @@ const {
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   getTestSessionName,
-  TEST_SESSION_NAME
+  TEST_SESSION_NAME,
+  TEST_LEVEL_EVENT_TYPES
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -247,16 +248,26 @@ class CypressPlugin {
     return this.libraryConfigurationPromise
   }
 
-  getTestSuiteSpan (suite) {
+  getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
     const testSuiteSpanMetadata =
-      getTestSuiteCommonTags(this.command, this.frameworkVersion, suite, TEST_FRAMEWORK_NAME)
+      getTestSuiteCommonTags(this.command, this.frameworkVersion, testSuite, TEST_FRAMEWORK_NAME)
+
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
+
+    if (testSuiteAbsolutePath) {
+      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      testSuiteSpanMetadata[TEST_SOURCE_FILE] = testSourceFile
+      testSuiteSpanMetadata[TEST_SOURCE_START] = 1
+      const codeOwners = this.getTestCodeOwners({ testSuite, testSourceFile })
+      if (codeOwners) {
+        testSuiteSpanMetadata[TEST_CODE_OWNERS] = codeOwners
+      }
+    }
 
     return this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
       childOf: this.testModuleSpan,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
-        [TEST_SESSION_NAME]: this.testSessionName,
         ...this.testEnvironmentMetadata,
         ...testSuiteSpanMetadata
       }
@@ -267,8 +278,7 @@ class CypressPlugin {
     const testSuiteTags = {
       [TEST_COMMAND]: this.command,
       [TEST_COMMAND]: this.command,
-      [TEST_MODULE]: TEST_FRAMEWORK_NAME,
-      [TEST_SESSION_NAME]: this.testSessionName
+      [TEST_MODULE]: TEST_FRAMEWORK_NAME
     }
     if (this.testSuiteSpan) {
       testSuiteTags[TEST_SUITE_ID] = this.testSuiteSpan.context().toSpanId()
@@ -392,13 +402,22 @@ class CypressPlugin {
       testSessionSpanMetadata[TEST_EARLY_FLAKE_ENABLED] = 'true'
     }
 
-    this.testSessionName = getTestSessionName(this.tracer._tracer._config, this.command, this.testEnvironmentMetadata)
+    const testSessionName = getTestSessionName(this.tracer._tracer._config, this.command, this.testEnvironmentMetadata)
+
+    if (this.tracer._tracer._exporter?.setMetadataTags) {
+      const metadataTags = {}
+      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+        metadataTags[testLevel] = {
+          [TEST_SESSION_NAME]: testSessionName
+        }
+      }
+      this.tracer._tracer._exporter.setMetadataTags(metadataTags)
+    }
 
     this.testSessionSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
       childOf,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
-        [TEST_SESSION_NAME]: this.testSessionName,
         ...this.testEnvironmentMetadata,
         ...testSessionSpanMetadata
       }
@@ -409,7 +428,6 @@ class CypressPlugin {
       childOf: this.testSessionSpan,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
-        [TEST_SESSION_NAME]: this.testSessionName,
         ...this.testEnvironmentMetadata,
         ...testModuleSpanMetadata
       }
@@ -482,7 +500,10 @@ class CypressPlugin {
       // dd:testSuiteStart hasn't been triggered for whatever reason
       // We will create the test suite span on the spot if that's the case
       log.warn('There was an error creating the test suite event.')
-      this.testSuiteSpan = this.getTestSuiteSpan(spec.relative)
+      this.testSuiteSpan = this.getTestSuiteSpan({
+        testSuite: spec.relative,
+        testSuiteAbsolutePath: spec.absolute
+      })
     }
 
     // Get tests that didn't go through `dd:afterEach`
@@ -593,7 +614,7 @@ class CypressPlugin {
 
   getTasks () {
     return {
-      'dd:testSuiteStart': (testSuite) => {
+      'dd:testSuiteStart': ({ testSuite, testSuiteAbsolutePath }) => {
         const suitePayload = {
           isEarlyFlakeDetectionEnabled: this.isEarlyFlakeDetectionEnabled,
           knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
@@ -603,7 +624,7 @@ class CypressPlugin {
         if (this.testSuiteSpan) {
           return suitePayload
         }
-        this.testSuiteSpan = this.getTestSuiteSpan(testSuite)
+        this.testSuiteSpan = this.getTestSuiteSpan({ testSuite, testSuiteAbsolutePath })
         return suitePayload
       },
       'dd:beforeEach': (test) => {

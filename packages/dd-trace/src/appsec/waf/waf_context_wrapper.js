@@ -4,6 +4,7 @@ const log = require('../../log')
 const Reporter = require('../reporter')
 const addresses = require('../addresses')
 const { getBlockingAction } = require('../blocking')
+const { wafRunFinished } = require('../channels')
 
 // TODO: remove once ephemeral addresses are implemented
 const preventDuplicateAddresses = new Set([
@@ -92,7 +93,11 @@ class WAFContextWrapper {
         Reporter.reportAttack(JSON.stringify(result.events))
       }
 
-      Reporter.reportSchemas(result.derivatives)
+      Reporter.reportDerivatives(result.derivatives)
+
+      if (wafRunFinished.hasSubscribers) {
+        wafRunFinished.publish({ payload })
+      }
 
       return result.actions
     } catch (err) {

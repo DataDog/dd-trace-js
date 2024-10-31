@@ -99,6 +99,13 @@ const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
 const EFD_STRING = "Retried by Datadog's Early Flake Detection"
 const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
 
+const TEST_LEVEL_EVENT_TYPES = [
+  'test',
+  'test_suite_end',
+  'test_module_end',
+  'test_session_end'
+]
+
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
@@ -161,7 +168,6 @@ module.exports = {
   mergeCoverage,
   fromCoverageMapToCoverage,
   getTestLineStart,
-  getCallSites,
   removeInvalidMetadata,
   parseAnnotations,
   EFD_STRING,
@@ -173,7 +179,9 @@ module.exports = {
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
   TEST_BROWSER_VERSION,
-  getTestSessionName
+  getTestSessionName,
+  TEST_LEVEL_EVENT_TYPES,
+  getNumFromKnownTests
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -549,26 +557,6 @@ function getTestLineStart (err, testSuitePath) {
   }
 }
 
-// From https://github.com/felixge/node-stack-trace/blob/ba06dcdb50d465cd440d84a563836e293b360427/index.js#L1
-function getCallSites () {
-  const oldLimit = Error.stackTraceLimit
-  Error.stackTraceLimit = Infinity
-
-  const dummy = {}
-
-  const v8Handler = Error.prepareStackTrace
-  Error.prepareStackTrace = function (_, v8StackTrace) {
-    return v8StackTrace
-  }
-  Error.captureStackTrace(dummy)
-
-  const v8StackTrace = dummy.stack
-  Error.prepareStackTrace = v8Handler
-  Error.stackTraceLimit = oldLimit
-
-  return v8StackTrace
-}
-
 /**
  * Gets an object of test tags from an Playwright annotations array.
  * @param {Object[]} annotations - Annotations from a Playwright test.
@@ -623,11 +611,29 @@ function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faulty
 }
 
 function getTestSessionName (config, testCommand, envTags) {
-  if (config.ciVisibilitySessionName) {
-    return config.ciVisibilitySessionName
+  if (config.ciVisibilityTestSessionName) {
+    return config.ciVisibilityTestSessionName
   }
   if (envTags[CI_JOB_NAME]) {
     return `${envTags[CI_JOB_NAME]}-${testCommand}`
   }
   return testCommand
+}
+
+// Calculate the number of a tests from the known tests response, which has a shape like:
+// { testModule1: { testSuite1: [test1, test2, test3] }, testModule2: { testSuite2: [test4, test5] } }
+function getNumFromKnownTests (knownTests) {
+  if (!knownTests) {
+    return 0
+  }
+
+  let totalNumTests = 0
+
+  for (const testModule of Object.values(knownTests)) {
+    for (const testSuite of Object.values(testModule)) {
+      totalNumTests += testSuite.length
+    }
+  }
+
+  return totalNumTests
 }
