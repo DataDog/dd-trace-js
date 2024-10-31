@@ -280,12 +280,12 @@ function getOnFailHandler (isMain) {
 }
 
 function getOnTestRetryHandler () {
-  return function (test) {
+  return function (test, err) {
     const asyncResource = getTestAsyncResource(test)
     if (asyncResource) {
       const isFirstAttempt = test._currentRetry === 0
       asyncResource.runInAsyncScope(() => {
-        testRetryCh.publish(isFirstAttempt)
+        testRetryCh.publish({ isFirstAttempt, err })
       })
     }
     const key = getTestToArKey(test)

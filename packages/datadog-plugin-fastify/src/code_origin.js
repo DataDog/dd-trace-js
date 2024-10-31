@@ -1,6 +1,6 @@
 'use strict'
 
-const { entryTag } = require('../../datadog-code-origin')
+const { entryTags } = require('../../datadog-code-origin')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const web = require('../../dd-trace/src/plugins/util/web')
 
@@ -23,7 +23,7 @@ class FastifyCodeOriginForSpansPlugin extends Plugin {
 
     this.addSub('apm:fastify:route:added', ({ routeOptions, onRoute }) => {
       if (!routeOptions.config) routeOptions.config = {}
-      routeOptions.config[kCodeOriginForSpansTagsSym] = entryTag(onRoute)
+      routeOptions.config[kCodeOriginForSpansTagsSym] = entryTags(onRoute)
     })
   }
 }
