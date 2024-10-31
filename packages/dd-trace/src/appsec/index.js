@@ -181,17 +181,7 @@ function incomingHttpEndTranslator ({ req, res }) {
 }
 
 function onPassportDeserializeUser ({ user, abordController }) {
-  // if (!collectionMode) return
-
-  // if (collectionMode === 'anon') user.id = hashUser(user.id)
-
-  // don't override if already set by "sdk" but still add the _dd.appsec.usr.id
-
-  rootSpan.addTags({
-    'usr.id': user.id,
-    '_dd.appsec.usr.id': user.id, // always AND only send when automated
-    '_dd.appsec.user.collection_mode': collectionMode
-  })
+  UserTracking.trackUser(user, abortController)
 }
 
 function onPassportVerify ({ login, user, success }) {
