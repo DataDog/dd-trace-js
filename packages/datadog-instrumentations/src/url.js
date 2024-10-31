@@ -29,10 +29,9 @@ addHook({ name: names }, function (url) {
     const originalDescriptor = Object.getOwnPropertyDescriptor(URLPrototype, property)
 
     if (originalDescriptor?.get) {
-      const newDescriptor = {
-        ...originalDescriptor,
-        get: function () {
-          const result = originalDescriptor.get.apply(this, arguments)
+      const newDescriptor = shimmer.wrap(originalDescriptor, 'get', function (originalGet) {
+        return function get () {
+          const result = originalGet.apply(this, arguments)
           if (!urlGetterChannel.hasSubscribers) return result
 
           const context = { urlObject: this, result, property }
@@ -40,7 +39,7 @@ addHook({ name: names }, function (url) {
 
           return context.result
         }
-      }
+      })
 
       Object.defineProperty(URLPrototype, property, newDescriptor)
     }
