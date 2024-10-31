@@ -129,12 +129,15 @@ function passportTrackEvent (credentials, passportUser, rootSpan) {
 
 
 function trackUser (user, abortController) {
-    // if (!collectionMode) return
+  if (!collectionMode || collectionMode === 'disabled') return
 
-  // if (collectionMode === 'anon') user.id = hashUser(user.id)
+  const userId = getUserId(user)
+
+  if (!userId) {
+
+  }
 
   // don't override if already set by "sdk" but still add the _dd.appsec.usr.id
-
   rootSpan.addTags({
     'usr.id': user.id,
     '_dd.appsec.usr.id': user.id, // always AND only send when automated
