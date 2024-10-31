@@ -6,15 +6,13 @@ const log = require('../log')
 const { AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
 
 const MAX_SIZE = 4096
-const DEFAULT_DELAY = 30 // 30s
 
 let enabled
 let sampledRequests
 
 function configure ({ apiSecurity }) {
   enabled = apiSecurity.enabled
-  const delay = apiSecurity.sampleDelay || DEFAULT_DELAY
-  sampledRequests = new TTLCache({ max: MAX_SIZE, ttl: delay * 1000 })
+  sampledRequests = new TTLCache({ max: MAX_SIZE, ttl: apiSecurity.sampleDelay * 1000 })
 }
 
 function disable () {
@@ -40,18 +38,12 @@ function sampleRequest (req, res, force = false) {
   }
 
   if (force) {
-    return sample(req, res)
+    const key = computeKey(req, res)
+    if (!key || sampledRequests.has(key)) return false
+    sampledRequests.set(key)
+    return true
   }
 
-  return true
-}
-
-function sample (req, res) {
-  const key = computeKey(req, res)
-  if (!key) return false
-  if (sampledRequests.has(key)) return false
-
-  sampledRequests.set(key)
   return true
 }
 

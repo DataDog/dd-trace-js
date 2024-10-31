@@ -26,7 +26,7 @@ describe('API Security Sampler', () => {
       '../plugins/util/web': webStub
     })
 
-    apiSecuritySampler.configure({ apiSecurity: { enabled: true } })
+    apiSecuritySampler.configure({ apiSecurity: { enabled: true, sampleDelay: 30 } })
 
     span = {
       context: sinon.stub().returns({
