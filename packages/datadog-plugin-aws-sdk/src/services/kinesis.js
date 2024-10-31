@@ -113,11 +113,11 @@ class Kinesis extends BaseAwsSdkPlugin {
     response.Records.forEach(record => {
       const parsedAttributes = JSON.parse(Buffer.from(record.Data).toString())
 
-      if (
-        parsedAttributes?._datadog && streamName
-      ) {
+      if (streamName) {
         const payloadSize = getSizeOrZero(record.Data)
-        this.tracer.decodeDataStreamsContext(parsedAttributes._datadog)
+        if (parsedAttributes?._datadog) {
+          this.tracer.decodeDataStreamsContext(parsedAttributes._datadog)
+        }
         this.tracer
           .setCheckpoint(['direction:in', `topic:${streamName}`, 'type:kinesis'], span, payloadSize)
       }
