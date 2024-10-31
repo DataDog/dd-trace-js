@@ -10,12 +10,12 @@ const instrumentedGetters = ['host', 'origin', 'hostname']
 
 addHook({ name: names }, function (url) {
   shimmer.wrap(url, 'parse', (parse) => {
-    return function wrappedParse () {
+    return function wrappedParse (input) {
       const parsedValue = parse.apply(this, arguments)
       if (!parseFinishedChannel.hasSubscribers) return parsedValue
 
       parseFinishedChannel.publish({
-        input: arguments[0],
+        input,
         parsed: parsedValue,
         isURL: false
       })
@@ -48,14 +48,14 @@ addHook({ name: names }, function (url) {
 
   shimmer.wrap(url, 'URL', (URL) => {
     return class extends URL {
-      constructor () {
+      constructor (input, base) {
         super(...arguments)
 
         if (!parseFinishedChannel.hasSubscribers) return
 
         parseFinishedChannel.publish({
-          input: arguments[0],
-          base: arguments[1],
+          input,
+          base,
           parsed: this,
           isURL: true
         })
@@ -65,13 +65,13 @@ addHook({ name: names }, function (url) {
 
   if (url.URL.parse) {
     shimmer.wrap(url.URL, 'parse', (parse) => {
-      return function wrappedParse () {
+      return function wrappedParse (input, base) {
         const parsedValue = parse.apply(this, arguments)
         if (!parseFinishedChannel.hasSubscribers) return parsedValue
 
         parseFinishedChannel.publish({
-          input: arguments[0],
-          base: arguments[1],
+          input,
+          base,
           parsed: parsedValue,
           isURL: true
         })

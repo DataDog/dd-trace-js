@@ -484,17 +484,6 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
 
-  url:
-    strategy:
-      matrix:
-        node-version: ['18', '20', 'latest']
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: url
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/plugins/test
-
   http2:
     runs-on: ubuntu-latest
     env:
@@ -1006,6 +995,14 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGINS: undici
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
+
+  url:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: url
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
