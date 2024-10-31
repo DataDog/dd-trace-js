@@ -1,5 +1,7 @@
 'use strict'
 
+const { truncate } = require('../util')
+
 function getStartTags (ctx) {
   const tags = {}
 
@@ -14,7 +16,7 @@ function getStartTags (ctx) {
       const content = input.content
       const role = input.role || input.constructor.name
       tags[`langchain.request.inputs.${idx}.role`] = role
-      tags[`langchain.request.inputs.${idx}.content`] = content
+      tags[`langchain.request.inputs.${idx}.content`] = truncate(content)
     }
   }
 
@@ -29,6 +31,7 @@ function getEndTags (ctx) {
 
   for (const idx in outputs) {
     const output = outputs[idx]
+    tags[`langchain.response.outputs.${idx}`] = truncate(output) // TODO: this might need a JSON.stringify()
   }
 
   return tags

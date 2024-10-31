@@ -34,12 +34,16 @@ addHook({ name: '@langchain/core', filePattern: 'dist/runnables/base.*', version
 
 addHook({ name: '@langchain/core', filePattern: 'dist/language_models/chat_model.*', versions: ['>=0.1'] }, exports => {
   const BaseChatModel = exports.BaseChatModel
-  shimmer.wrap(BaseChatModel.prototype, 'invoke', invoke => wrapLangChainPromise(invoke, 'chat_model', 'chat'))
+  shimmer.wrap(
+    BaseChatModel.prototype,
+    'generate',
+    generate => wrapLangChainPromise(generate, 'chat_model', 'chat_model')
+  )
   return exports
 })
 
 addHook({ name: '@langchain/core', filePattern: 'dist/language_models/llm.*', versions: ['>=0.1'] }, exports => {
   const BaseLLM = exports.BaseLLM
-  shimmer.wrap(BaseLLM.prototype, 'invoke', invoke => wrapLangChainPromise(invoke, 'llm', 'llm'))
+  shimmer.wrap(BaseLLM.prototype, 'generate', generate => wrapLangChainPromise(generate, 'llm', 'llm'))
   return exports
 })

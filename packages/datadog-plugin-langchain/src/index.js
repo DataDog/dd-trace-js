@@ -6,6 +6,11 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 const handlers = require('./handlers')
 
+const API_KEY = 'langchain.request.api_key'
+const MODEL = 'langchain.request.model'
+const PROVIDER = 'langchain.request.provider'
+const TYPE = 'langchain.request.type'
+
 class LangChainPlugin extends TracingPlugin {
   static get id () { return 'langchain' }
   static get operation () { return 'invoke' }
@@ -17,8 +22,18 @@ class LangChainPlugin extends TracingPlugin {
   bindStart (ctx) {
     const { resource, type } = ctx
 
-    const tagsHandler = handlers[type] || handlers.default
-    const tags = tagsHandler().getStartTags(ctx)
+    const instance = ctx.instance
+    const apiKey = extractApiKey(instance)
+    const provider = extractProvider(instance)
+    const model = extractModel(instance)
+
+    const tagsHandler = getTagsHandler(type)
+    const tags = tagsHandler().getStartTags(ctx, provider) || []
+
+    if (apiKey) tags[API_KEY] = apiKey
+    if (provider) tags[PROVIDER] = provider
+    if (model) tags[MODEL] = model
+    if (type) tags[TYPE] = type
 
     const span = this.startSpan('langchain.request', {
       service: this.config.service,
@@ -39,7 +54,50 @@ class LangChainPlugin extends TracingPlugin {
   asyncEnd (ctx) {
     const span = ctx.currentStore.span
 
+    const { type } = ctx
+
+    const tagsHandler = getTagsHandler(type)
+    const tags = tagsHandler().getEndTags(ctx) || {}
+
+    span.addTags(tags)
+
     span.finish()
+  }
+}
+
+function getTagsHandler (type) {
+  return handlers[type] || handlers.default
+}
+
+function extractApiKey (instance) {
+  const key = Object.keys(instance)
+    .filter(key => key.includes('apiKey') || key.includes('apiToken')) // TODO: double check this
+    .find(key => {
+      let apiKey = instance[key]
+      if (!apiKey) return false
+      if (apiKey.getSecretValue && typeof apiKey.getSecretValue === 'function') {
+        apiKey = apiKey.getSecretValue()
+      }
+
+      if (typeof apiKey !== 'string') return false
+
+      return true
+    })
+
+  const apiKey = instance[key]
+  if (!apiKey || apiKey.length < 4) return ''
+  return `...${apiKey.slice(-4)}`
+}
+
+function extractProvider (instance) {
+  // TODO: we might just be able to do `instance._llmType()`
+  return typeof instance._llmType === 'function' && instance._llmType().split('-')[0]
+}
+
+function extractModel (instance) {
+  for (const attr of ['model', 'modelName', 'modelId', 'modelKey', 'repoId']) {
+    const modelName = instance[attr]
+    if (modelName) return modelName
   }
 }
 

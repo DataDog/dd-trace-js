@@ -2,7 +2,7 @@
 
 module.exports = {
   chain: () => require('./chain'),
-  chat: () => require('./chat'),
+  chat_model: () => require('./chat_model'),
   llm: () => require('./llm'),
   default: () => {
     return {
