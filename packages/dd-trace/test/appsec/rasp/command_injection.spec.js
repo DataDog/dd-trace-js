@@ -131,7 +131,8 @@ describe('RASP - command_injection.js', () => {
       const ctx = {
         fileArgs: ['arg0']
       }
-      datadogCore.storage.getStore.returns({})
+      const req = {}
+      datadogCore.storage.getStore.returns({ req })
 
       start.publish(ctx)
 
