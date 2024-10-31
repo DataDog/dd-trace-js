@@ -18,9 +18,12 @@ koa-passport
 function wrapDone (done) {
   // eslint-disable-next-line n/handle-callback-err
   return function wrappedDone (err, user) {
-    console.log('USER DESERIALIZE', user)
     if (user) {
-      // channel.publish({ req, user })
+      const abortController = new AbortController()
+      
+      channel.publish({ req, user, abortController })
+
+      if (abortController.signal.aborted) return
     }
 
     return done.apply(this, arguments)
@@ -62,7 +65,6 @@ addHook({
 
       return function wrappedMiddleware (req, res, next) {
         return middleware(req, res, function wrappedNext (err) {
-          strategy
           console.log('NEW', req.user)
           if (req.user?.name === 'bitch') {
 
