@@ -15,7 +15,8 @@ describe('RASP - command_injection - integration', () => {
     sandbox = await createSandbox(
       ['express'],
       false,
-      [path.join(__dirname, 'resources')])
+      [path.join(__dirname, 'resources')]
+    )
 
     appPort = await getPort()
     cwd = sandbox.folder
