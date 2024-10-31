@@ -20,6 +20,8 @@ function wrapDone (done) {
   return function wrappedDone (err, user) {
     if (user) {
       const abortController = new AbortController()
+
+      // express-session middleware sets req.sessionID, it's required to use passport sessions anyway so might as well use it ?
       
       channel.publish({ req, user, abortController })
 
