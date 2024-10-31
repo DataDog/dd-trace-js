@@ -6,8 +6,6 @@ const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
 
-// These test are here and not in the integration tests
-// because they require postgres instance
 describe('RASP - command_injection - integration', () => {
   let axios, sandbox, cwd, appPort, appFile, agent, proc
 
