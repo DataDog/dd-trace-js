@@ -54,7 +54,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'DataDog/system-tests'
-          ref: 'piotr-wolski/update-node-js-test'
       - name: Checkout dd-trace-js
         uses: actions/checkout@v4
         with:
