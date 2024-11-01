@@ -45,7 +45,7 @@ const diffCmd = [
 const [lastMajor, lastMinor, lastPatch] = require('../../package.json').version.split('.').map(Number)
 const lineDiff = capture(`${diffCmd} v${releaseLine}.x master`)
 const newVersion = lineDiff.includes('SEMVER-MINOR')
-  ? `${releaseLine}.${lastMinor + 1}.${lastPatch}`
+  ? `${releaseLine}.${lastMinor + 1}.0`
   : `${releaseLine}.${lastMinor}.${lastPatch + 1}`
 
 // Checkout new branch and output new changes.
