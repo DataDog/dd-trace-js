@@ -21,14 +21,14 @@ class LangChainPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const { resource, type } = ctx
+    const handler = getHandler(type)
 
     const instance = ctx.instance
-    const apiKey = extractApiKey(instance)
-    const provider = extractProvider(instance)
+    const apiKey = handler.extractApiKey?.(ctx) || extractApiKey(instance)
+    const provider = handler.extractProvider?.(ctx) || extractProvider(instance)
     const model = extractModel(instance)
 
-    const tagsHandler = getTagsHandler(type)
-    const tags = tagsHandler().getStartTags(ctx, provider) || []
+    const tags = handler.getStartTags(ctx, provider) || []
 
     if (apiKey) tags[API_KEY] = apiKey
     if (provider) tags[PROVIDER] = provider
@@ -56,8 +56,8 @@ class LangChainPlugin extends TracingPlugin {
 
     const { type } = ctx
 
-    const tagsHandler = getTagsHandler(type)
-    const tags = tagsHandler().getEndTags(ctx) || {}
+    const handler = getHandler(type)
+    const tags = handler.getEndTags(ctx) || {}
 
     span.addTags(tags)
 
@@ -65,8 +65,9 @@ class LangChainPlugin extends TracingPlugin {
   }
 }
 
-function getTagsHandler (type) {
-  return handlers[type] || handlers.default
+function getHandler (type) {
+  const handlerGetter = handlers[type] || handlers.default
+  return handlerGetter()
 }
 
 function extractApiKey (instance) {
