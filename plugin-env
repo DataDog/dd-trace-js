@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+args=("$@")
+plugin_name=${args[0]}
+
+YELLOW='\033[33m'
+RESET='\033[0m' # No Color
+
+if [ -z "$plugin_name" ]; then
+  echo "Usage: ./plugin-env <plugin_name>"
+  echo "  <plugin_name> is the name of the dd-trace plugin to enter the dev environment for."
+  echo ""
+  echo "  It can be one of the following:"
+  node - << EOF
+    const fs=require('fs');
+    const yaml = require('yaml');
+    const pluginsData = fs.readFileSync('.github/workflows/plugins.yml', 'utf8');
+    const env=Object.keys(yaml.parse(pluginsData).jobs);
+    console.log(...env);
+EOF
+  exit 1
+fi
+
+if ! hash node 2>/dev/null; then
+  echo "Node.js is not installed. Please install Node.js before running this script."
+  echo "You can use nvm to install Node.js. See https://nvm.sh for more information."
+  echo "For best results, use the latest version of Node.js."
+  exit 1
+fi
+
+if ! hash yarn 2>/dev/null; then
+  echo "yarn@1.x is not installed. Please install yarn@1.x before running this script."
+  echo "You can install yarn by running 'npm install -g yarn'."
+  exit 1
+fi
+
+read -r PLUGINS SERVICES <<<$(node - << EOF
+const fs=require('fs');
+const yaml = require('yaml');
+const pluginsData = fs.readFileSync('.github/workflows/plugins.yml', 'utf8');
+const { PLUGINS, SERVICES } = yaml.parse(pluginsData).jobs['$plugin_name'].env;
+console.log(PLUGINS || '', SERVICES || '')
+EOF
+)
+
+export PLUGINS
+export SERVICES
+
+if [ -z "$SERVICES" ]; then
+  echo "The plugin '$plugin_name' does not have any services defined. Nothing to do here."
+else
+  if ! hash docker 2>/dev/null; then
+    echo "Docker is not installed. Please install Docker before running this script."
+    echo "You can install Docker by following the instructions at https://docs.docker.com/get-docker/."
+    exit 1
+  fi
+  if (! docker stats --no-stream >/dev/null); then
+    echo "The docker daemon is not running. Please start Docker before running this script."
+    exit 1
+  fi
+  if [ -z `docker ps -q --no-trunc | grep $(docker-compose ps -q $SERVICES)` ]; then
+    teardown=1
+    docker compose up -d $SERVICES
+  fi
+fi
+
+yarn services
+
+echo -e $YELLOW
+echo -e "You are now in a sub-shell (i.e. a dev environment) for the dd-trace plugin '$plugin_name'."
+echo -e "The following environment variables set:${RESET}"
+echo -e "\tPLUGINS=$PLUGINS"
+echo -e "\tSERVICES=$SERVICES"
+echo -e "${YELLOW}The ${RESET}versions${YELLOW} directory has been populated, and any ${RESET}\$SERVICES${YELLOW} have been brought up if not already running."
+echo -e "You can now run the plugin's tests with:"
+echo -e "\t${RESET}yarn test:plugins"
+echo -e "${YELLOW}To exit this shell, type 'exit' or do Ctrl+D."
+echo -e $RESET
+
+$SHELL
+
+if [ -n "$teardown" ]; then
+  docker compose stop $SERVICES
+fi
+
+echo -e $YELLOW
+echo "Exited the sub-shell for the dd-trace plugin '$plugin_name'."
+if [ -n "$teardown" ]; then
+  echo "Also stopped any services that were started."
+fi
+echo "You're now back in the main shell."
+echo -e $RESET
