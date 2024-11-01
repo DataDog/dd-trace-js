@@ -46,7 +46,7 @@ const [lastMajor, lastMinor, lastPatch] = require('../../package.json').version.
 const lineDiff = capture(`${diffCmd} v${releaseLine}.x master`)
 const newVersion = lineDiff.includes('SEMVER-MINOR')
   ? `${releaseLine}.${lastMinor + 1}.${lastPatch}`
-  : `${releaseLine}.${lastMinor + 1}.${lastPatch + 1}`
+  : `${releaseLine}.${lastMinor}.${lastPatch + 1}`
 
 // Checkout new branch and output new changes.
 run(`git checkout v${newVersion}-proposal || git checkout -b v${newVersion}-proposal`)
