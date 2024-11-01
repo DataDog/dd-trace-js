@@ -137,11 +137,18 @@ function trackUser (user, abortController) {
 
   }
 
-  // don't override if already set by "sdk" but still add the _dd.appsec.usr.id
+  // don't override tags if already set by "sdk" but still add the _dd.appsec.usr.id
   rootSpan.addTags({
-    'usr.id': user.id,
-    '_dd.appsec.usr.id': user.id, // always AND only send when automated
-    '_dd.appsec.user.collection_mode': collectionMode
+    'usr.id': userId,
+    '_dd.appsec.usr.id': userId, // always AND only send when automated
+    '_dd.appsec.user.collection_mode': collectionMode // short or long form ?
+  })
+
+  // If the user monitoring SDK has already resulted in a call to libddwaf before any automated instrumentation or collection method has been executed, no extra call should be made.
+  const results = waf.run({
+    persistent: {
+      [USER_ID]: userID
+    }
   })
 }
 
