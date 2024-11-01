@@ -4,7 +4,9 @@ const shimmer = require('../../datadog-shimmer')
 const { addHook } = require('./helpers/instrument')
 
 /* TODO: test with:
-passport-jwt
+passport-jwt JWTs
+  can be used both for login events, or as a session, that complicates things it think
+  maybe instrument this lib directly, and ofc only send the events after it was verified
 @nestjs/passport
 pasport-local
 passport-oauth2
@@ -22,8 +24,8 @@ function wrapDone (done) {
       const abortController = new AbortController()
 
       // express-session middleware sets req.sessionID, it's required to use passport sessions anyway so might as well use it ?
-      
-      channel.publish({ req, user, abortController })
+      // what if session IDs are using rolling sessions or always changing or something idk ?
+      channel.publish({ req, user, sessionId: req.sessionID, abortController })
 
       if (abortController.signal.aborted) return
     }

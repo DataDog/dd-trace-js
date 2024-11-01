@@ -180,8 +180,16 @@ function incomingHttpEndTranslator ({ req, res }) {
   Reporter.finishRequest(req, res)
 }
 
-function onPassportDeserializeUser ({ user, abordController }) {
+function onPassportDeserializeUser ({ req, user, sessionId, abordController }) {
   UserTracking.trackUser(user, abortController)
+
+  if (sessionId && typeof sessionId === 'string') {
+    const results = waf.run({
+      persistent: {
+        'usr.session_id': sessionId
+      }
+    })
+  }
 }
 
 function onPassportVerify ({ login, user, success }) {
