@@ -260,7 +260,12 @@ const web = {
     let childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
 
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
-    childOf = createInferredProxySpan(headers, childOf, tracer, context)
+    if (tracer._config.managedServicesEnabled) {
+      const result = createInferredProxySpan(headers, childOf, tracer, context)
+      if (result) {
+        childOf = result
+      }
+    }
 
     const span = tracer.startSpan(name, { childOf })
 
