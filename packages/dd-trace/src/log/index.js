@@ -19,10 +19,6 @@ const memoize = func => {
   return memoized
 }
 
-function processMsg (msg) {
-  return typeof msg === 'function' ? msg() : msg
-}
-
 const config = {
   enabled: false,
   logger: undefined,
@@ -60,23 +56,23 @@ const log = {
     return this
   },
 
-  debug (message) {
+  debug (...args) {
     if (debugChannel.hasSubscribers) {
-      debugChannel.publish(processMsg(message))
+      debugChannel.publish(Log.parse(...args))
     }
     return this
   },
 
-  info (message) {
+  info (...args) {
     if (infoChannel.hasSubscribers) {
-      infoChannel.publish(processMsg(message))
+      infoChannel.publish(Log.parse(...args))
     }
     return this
   },
 
-  warn (message) {
+  warn (...args) {
     if (warnChannel.hasSubscribers) {
-      warnChannel.publish(processMsg(message))
+      warnChannel.publish(Log.parse(...args))
     }
     return this
   },

@@ -23,7 +23,7 @@ function withNoop (fn) {
 }
 
 function unsubscribeAll () {
-  logChannel.unsubscribe({ debug, info, warn, error: onError })
+  logChannel.unsubscribe({ debug: onDebug, info: onInfo, warn: onWarn, error: onError })
 }
 
 function toggleSubscription (enable, level) {
@@ -31,7 +31,7 @@ function toggleSubscription (enable, level) {
 
   if (enable) {
     logChannel = new LogChannel(level)
-    logChannel.subscribe({ debug, info, warn, error: onError })
+    logChannel.subscribe({ debug: onDebug, info: onInfo, warn: onWarn, error: onError })
   }
 }
 
@@ -70,22 +70,44 @@ function onError (err) {
   if (cause) withNoop(() => logger.error(cause))
 }
 
+function onWarn (log) {
+  const { formatted, cause } = getErrorLog(log)
+  if (formatted) withNoop(() => logger.warn(formatted))
+  if (cause) withNoop(() => logger.warn(cause))
+}
+
+function onInfo (log) {
+  const { formatted, cause } = getErrorLog(log)
+  if (formatted) withNoop(() => logger.info(formatted))
+  if (cause) withNoop(() => logger.info(cause))
+}
+
+function onDebug (log) {
+  const { formatted, cause } = getErrorLog(log)
+  if (formatted) withNoop(() => logger.debug(formatted))
+  if (cause) withNoop(() => logger.debug(cause))
+}
+
 function error (...args) {
   onError(Log.parse(...args))
 }
 
-function warn (message) {
-  if (!logger.warn) return debug(message)
-  withNoop(() => logger.warn(message))
+function warn (...args) {
+  const log = Log.parse(...args)
+  if (!logger.warn) return onDebug(log)
+
+  onWarn(log)
 }
 
-function info (message) {
-  if (!logger.info) return debug(message)
-  withNoop(() => logger.info(message))
+function info (...args) {
+  const log = Log.parse(...args)
+  if (!logger.info) return onDebug(log)
+
+  onInfo(log)
 }
 
-function debug (message) {
-  withNoop(() => logger.debug(message))
+function debug (...args) {
+  onDebug(Log.parse(...args))
 }
 
 module.exports = { use, toggle, reset, error, warn, info, debug }
