@@ -10,6 +10,7 @@ function wrapCompile (compile) {
     if (pugReadCh.hasSubscribers) {
       pugReadCh.publish({ source })
     }
+
     return compile.apply(this, arguments)
   }
 }
@@ -18,5 +19,6 @@ addHook({ name: 'pug', versions: ['>=2.0.4'] }, compiler => {
   shimmer.wrap(compiler, 'compile', wrapCompile)
   shimmer.wrap(compiler, 'compileClient', wrapCompile)
   shimmer.wrap(compiler, 'compileClientWithDependenciesTracked', wrapCompile)
+
   return compiler
 })

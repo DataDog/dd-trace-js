@@ -5,13 +5,13 @@ const vulnerabilities = require('../../vulnerabilities')
 
 const { contains, intersects, remove } = require('./range-utils')
 
-const injectionSensitiveAnalyzer = require('./sensitive-analyzers/injection-sensitive-analyzer')
 const commandSensitiveAnalyzer = require('./sensitive-analyzers/command-sensitive-analyzer')
 const hardcodedPasswordAnalyzer = require('./sensitive-analyzers/hardcoded-password-analyzer')
 const headerSensitiveAnalyzer = require('./sensitive-analyzers/header-sensitive-analyzer')
 const jsonSensitiveAnalyzer = require('./sensitive-analyzers/json-sensitive-analyzer')
 const ldapSensitiveAnalyzer = require('./sensitive-analyzers/ldap-sensitive-analyzer')
 const sqlSensitiveAnalyzer = require('./sensitive-analyzers/sql-sensitive-analyzer')
+const taintedRangeBasedSensitiveAnalyzer = require('./sensitive-analyzers/tainted-range-based-sensitive-analyzer')
 const urlSensitiveAnalyzer = require('./sensitive-analyzers/url-sensitive-analyzer')
 
 const { DEFAULT_IAST_REDACTION_NAME_PATTERN, DEFAULT_IAST_REDACTION_VALUE_PATTERN } = require('./sensitive-regex')
@@ -24,8 +24,8 @@ class SensitiveHandler {
     this._valuePattern = new RegExp(DEFAULT_IAST_REDACTION_VALUE_PATTERN, 'gmi')
 
     this._sensitiveAnalyzers = new Map()
-    this._sensitiveAnalyzers.set(vulnerabilities.CODE_INJECTION, injectionSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.TEMPLATE_INJECTION, injectionSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.CODE_INJECTION, taintedRangeBasedSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.TEMPLATE_INJECTION, taintedRangeBasedSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.COMMAND_INJECTION, commandSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.NOSQL_MONGODB_INJECTION, jsonSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.LDAP_INJECTION, ldapSensitiveAnalyzer)

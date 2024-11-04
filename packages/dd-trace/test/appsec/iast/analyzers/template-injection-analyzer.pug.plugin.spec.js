@@ -19,9 +19,8 @@ describe('template-injection-analyzer with pug', () => {
           testThatRequestHasVulnerability(() => {
             const store = storage.getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
-            const command = newTaintedString(iastContext, source, 'param', 'Request')
-            const template = lib.compile(command)
-            template()
+            const template = newTaintedString(iastContext, source, 'param', 'Request')
+            lib.compile(template)
           }, 'TEMPLATE_INJECTION')
 
           testThatRequestHasNoVulnerability(() => {
@@ -37,8 +36,8 @@ describe('template-injection-analyzer with pug', () => {
           testThatRequestHasVulnerability(() => {
             const store = storage.getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
-            const command = newTaintedString(iastContext, source, 'param', 'Request')
-            lib.compileClient(command)
+            const template = newTaintedString(iastContext, source, 'param', 'Request')
+            lib.compileClient(template)
           }, 'TEMPLATE_INJECTION')
 
           testThatRequestHasNoVulnerability(() => {
@@ -53,8 +52,8 @@ describe('template-injection-analyzer with pug', () => {
           testThatRequestHasVulnerability(() => {
             const store = storage.getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
-            const command = newTaintedString(iastContext, source, 'param', 'Request')
-            lib.compileClientWithDependenciesTracked(command, {})
+            const template = newTaintedString(iastContext, source, 'param', 'Request')
+            lib.compileClientWithDependenciesTracked(template, {})
           }, 'TEMPLATE_INJECTION')
 
           testThatRequestHasNoVulnerability(() => {

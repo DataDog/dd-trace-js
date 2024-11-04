@@ -10,6 +10,7 @@ function wrapCompile (compile) {
     if (handlebarsReadCh.hasSubscribers) {
       handlebarsReadCh.publish({ source })
     }
+
     return compile.apply(this, arguments)
   }
 }
@@ -17,5 +18,6 @@ function wrapCompile (compile) {
 addHook({ name: 'handlebars', file: 'dist/cjs/handlebars/compiler/compiler.js', versions: ['>=4.0.0'] }, compiler => {
   shimmer.wrap(compiler, 'compile', wrapCompile)
   shimmer.wrap(compiler, 'precompile', wrapCompile)
+
   return compiler
 })
