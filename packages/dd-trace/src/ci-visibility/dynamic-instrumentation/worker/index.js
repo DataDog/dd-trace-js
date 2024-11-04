@@ -1,3 +1,5 @@
+'use strict'
+
 const { workerData: { breakpointSetChannel, breakpointHitChannel } } = require('worker_threads')
 // TODO: move debugger/devtools_client/session to common place
 const session = require('../../../debugger/devtools_client/session')
