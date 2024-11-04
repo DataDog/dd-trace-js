@@ -8,6 +8,10 @@ const path = require('path')
 const { assert } = require('chai')
 
 describe('test visibility with dynamic instrumentation', () => {
+  // Dynamic Instrumentation - Test Visibility not currently supported for windows
+  if (process.platform === 'win32') {
+    return
+  }
   let childProcess
 
   afterEach(() => {
@@ -17,11 +21,6 @@ describe('test visibility with dynamic instrumentation', () => {
   })
 
   it('can grab local variables', (done) => {
-    // Dynamic Instrumentation - Test Visibility not currently supported for windows
-    if (process.platform === 'win32') {
-      done()
-      return
-    }
     childProcess = fork(path.join(__dirname, 'target-app', 'test-visibility-dynamic-instrumentation-script.js'))
 
     childProcess.on('message', ({ snapshot: { language, stack, probe, captures }, snapshotId }) => {
