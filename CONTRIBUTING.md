@@ -72,12 +72,18 @@ Eventually we plan to look into putting these permission-required tests behind a
 
 ## Development Requirements
 
-Since this project supports multiple Node versions, using a version
-manager such as [nvm](https://github.com/creationix/nvm) is recommended.
+Since this project supports multiple Node.js versions, using a version manager
+such as [nvm](https://github.com/creationix/nvm) is recommended. If you're
+unsure which version of Node.js to use, just use the latest version, which
+should always work.
 
-We use [yarn](https://yarnpkg.com/) for its workspace functionality, so make sure to install that as well.
+We use [yarn](https://yarnpkg.com/) 1.x for its workspace functionality, so make sure to install that as well. The easist way to install yarn 1.x with with npm:
 
-To install dependencies once you have Node and yarn installed, run:
+```sh  
+$ npm install -g yarn
+```
+
+To install dependencies once you have Node and yarn installed, run this in the project directory:
 
 ```sh
 $ yarn
@@ -91,23 +97,42 @@ $ yarn
 The `pg-native` package requires `pg_config` to be in your `$PATH` to be able to install.
 Please refer to [the "Install" section](https://github.com/brianc/node-postgres/tree/master/packages/pg-native#install) of the `pg-native` documentation for how to ensure your environment is configured correctly.
 
-### Setup
+### Plugin Tests
 
-Before running _plugin_ tests, the data stores need to be running.
-The easiest way to start all of them is to use the provided
-docker-compose configuration:
-
-```sh
-$ docker-compose up -d -V --remove-orphans --force-recreate
-$ yarn services
-```
+Before running _plugin_ tests, the supporting docker containers need to be running. You _can_ attempt to start all of them using docker-compose, but that's a drain on your system, and not all the images will even run at all on AMD64 devices.
 
 > **Note**
 > The `aerospike`, `couchbase`, `grpc` and `oracledb` instrumentations rely on
 > native modules that do not compile on ARM64 devices (for example M1/M2 Mac)
 > - their tests cannot be run locally on these devices.
 
-### Unit Tests
+Instead, you can follow this procedure for the plugin you want to run tests for:
+
+1. Check the CI config in `.github/workflows/plugins.yml` to see what the appropriate values for the `SERVICES` and `PLUGINS` environment variables are for the plugin you're trying to test (noting that not all plugins require `SERVICES`). For example, for the `amqplib` plugin, the `SERVICES` value is `rabbitmq`, and the `PLUGINS` value is `amqplib`.
+2. Run the appropriate docker-compose command to start the required services. For example, for the `amqplib` plugin, you would run: `docker compose up -d rabbitmq`.
+3. Run `yarn services`, with the environment variables set above. This will install any versions of the library to be tested against into the `versions` directory, and check that the appropriate services are running prior to running the test.
+4. Now, you can run `yarn test:plugins` with the environment variables set above to run the tests for the plugin you're interested in.
+
+To wrap that all up into a simple few lines of shell commands, here is all of the above, for the `amqplib` plugin:
+
+```sh
+# These are exported for simplicity, but you can also just set them inline.
+export SERVICES="rabbitmq" # retrieved from .github/workflows/plugins.yml
+export PLUGINS="amqplib" # retrieved from .github/workflows/plugins.yml
+
+docker compose up -d $SERVICES
+yarn services
+
+yarn test:plugins # This one actually runs the tests. Can be run many times.
+```
+
+You can also run the tests for multiple plugins at once by separating them with a pipe (`|`) delimiter. For example, to run the tests for the `amqplib` and `bluebird` plugins:
+
+```sh
+PLUGINS="amqplib|bluebird" yarn test:plugins
+```
+
+### Other Unit Tests
 
 There are several types of unit tests, for various types of components. The
 following commands may be useful:
@@ -124,17 +149,6 @@ $ yarn test:instrumentations
 Several other components have test commands as well. See `package.json` for
 details.
 
-To test _plugins_ (i.e. components in `packages/datadog-plugin-XXXX`
-directories, set the `PLUGINS` environment variable to the plugin you're
-interested in, and use `yarn test:plugins`. If you need to test multiple
-plugins you may separate then with a pipe (`|`) delimiter. Here's an
-example testing the `express` and `bluebird` plugins:
-
-```sh
-PLUGINS="express|bluebird" yarn test:plugins
-```
-
-
 ### Linting
 
 We use [ESLint](https://eslint.org) to make sure that new code
@@ -145,6 +159,9 @@ To run the linter, use:
 ```sh
 $ yarn lint
 ```
+
+This also checks that the `LICENSE-3rdparty.csv` file is up-to-date, and checks
+dependencies for vulnerabilities.
 
 
 ### Benchmarks
