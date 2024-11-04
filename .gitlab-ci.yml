@@ -15,35 +15,11 @@ variables:
   AGENT_REPO_PRODUCT_NAME: auto_inject-node
   SYSTEM_TESTS_LIBRARY: nodejs
 
-#onboarding_tests_installer:
-#  parallel:
-#    matrix:
-#      - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs,test-app-nodejs-container]
-#        SCENARIO: [ INSTALLER_AUTO_INJECTION, SIMPLE_AUTO_INJECTION_PROFILING ]
-
 onboarding_tests_installer:
-  extends: .base_job_onboarding
-  stage: shared-pipeline
-  needs: [ oci-internal-test-ecr-publish ]
-  rules:
-    - if: $SKIP_SHARED_PIPELINE == "true"
-      when: never
-    - when: on_success
-  variables:
-    DD_INSTALLER_LIBRARY_VERSION: pipeline-${CI_PIPELINE_ID}
-    SCENARIO: SIMPLE_INSTALLER_AUTO_INJECTION
   parallel:
     matrix:
       - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs,test-app-nodejs-container]
         SCENARIO: [ SIMPLE_INSTALLER_AUTO_INJECTION, SIMPLE_AUTO_INJECTION_PROFILING ]
-  script:
-    - export TEST_LIBRARY="$SYSTEM_TESTS_LIBRARY"
-    - git clone https://git@github.com/DataDog/system-tests.git system-tests
-    - cd system-tests
-    #TODO remove this line when the branch is merged
-    - git checkout robertomonteromiguel/onboarding_enable_ga_vms_v2
-    - ./build.sh -i runner # TODO replace with prebuilt image eventually
-    - timeout 2700s ./run.sh $SCENARIO --vm-weblog ${ONBOARDING_FILTER_WEBLOG} --vm-env prod --vm-library ${TEST_LIBRARY} --vm-provider aws --vm-default-vms All
 
 onboarding_tests_k8s_injection:
   variables:
