@@ -1,6 +1,6 @@
 'use strict'
 
-const logWriter = require('../../log/writer')
+const log = require('../../log')
 const { calculateDDBasePath } = require('../../util')
 
 const logs = new Map()
@@ -48,15 +48,10 @@ function sanitize (logEntry) {
     .map(line => line.replace(ddBasePath, ''))
 
   logEntry.stack_trace = stackLines.join(EOL)
-  if (logEntry.stack_trace === '') {
-    // If entire stack was removed, we'd just have a message saying "omitted"
-    // in which case we'd rather not log it at all.
+  if (logEntry.stack_trace === '' && !logEntry.message) {
+    // If entire stack was removed and there is no message we'd rather not log it at all.
     return null
   }
-
-  // if (!isDDCode) {
-  //   logEntry.message = 'omitted'
-  // }
 
   return logEntry
 }
@@ -82,7 +77,7 @@ const logCollector = {
         return true
       }
     } catch (e) {
-      logWriter.error('Unable to add log to logCollector: %s', e.message)
+      log.error('Unable to add log to logCollector: %s', e.message)
     }
     return false
   },

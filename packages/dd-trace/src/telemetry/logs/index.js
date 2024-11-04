@@ -40,7 +40,9 @@ function onErrorLog (msg) {
 
   const telLog = {
     level: 'ERROR',
-    message: message || 'Generic Error' // all the telemetry logs should have a message
+
+    // existing log.error(err) without message will be reported as 'Generic Error'
+    message: message || 'Generic Error'
   }
 
   if (cause) {
