@@ -4,7 +4,7 @@
   "main": "typedoc.js",
   "scripts": {
     "build": "typedoc ../index.d.ts && ./add-redirects.sh",
-    "pretest": "tsc -p . && tsc test",
+    "pretest": "tsc -p tsconfig.json && tsc --types node test",
     "test": "node test"
   },
   "license": "BSD-3-Clause",
