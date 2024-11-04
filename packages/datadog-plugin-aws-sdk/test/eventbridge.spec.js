@@ -27,6 +27,7 @@ describe('EventBridge', () => {
             _traceFlags: {
               sampled: 1
             },
+            _baggageItems: {},
             'x-datadog-trace-id': traceId,
             'x-datadog-parent-id': parentId,
             'x-datadog-sampling-priority': '1',
