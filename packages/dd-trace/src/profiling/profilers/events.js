@@ -292,17 +292,65 @@ class CompositeEventSource {
   }
 }
 
+class PoissonPointProcessSamplingStrategy {
+  constructor (options) {
+    // options.samplingInterval comes in microseconds, we need millis
+    this.samplingIntervalMillis = (options.samplingInterval ?? 1e6 / 99) / 1000
+
+    this.nextSamplingInstant = performance.now()
+    this.setNextSamplingInstant()
+  }
+
+  shouldSample (event) {
+    const endTime = event.startTime + event.duration
+    while (endTime >= this.nextSamplingInstant) {
+      this.setNextSamplingInstant()
+    }
+    // An event is sampled if it started before, and ended on or after a sampling instant. The above
+    // while loop will ensure that the ending invariant is always true for the current sampling
+    // instant so we don't have to test for it below. Across calls, the invariant also holds as long
+    // as the events arrive in endTime order. This is true for events coming from
+    // DatadogInstrumentationEventSource; they will be ordered by endTime by virtue of this method
+    // being invoked synchronously with the plugins' finish() handler which evaluates
+    // performance.now(). OTOH, events coming from NodeAPIEventSource (GC in typical setup) might be
+    // somewhat delayed as they are queued by Node, so they can arrive out of order with regard to
+    // events coming from the non-queued source. By omitting the endTime check, we will pass through
+    // some short events that started and ended before the current sampling instant. OTOH, if we
+    // were to check for this.currentSamplingInstant <= endTime, we would discard some long events
+    // that also ended before the current sampling instant. We'd rather err on the side of including
+    // some short events than excluding some long events.
+    return event.startTime < this.currentSamplingInstant
+  }
+
+  setNextSamplingInstant () {
+    this.currentSamplingInstant = this.nextSamplingInstant
+    this.nextSamplingInstant =
+      this.currentSamplingInstant - Math.log(1 - Math.random()) * this.samplingIntervalMillis
+  }
+}
+
+class SampleEverythingStrategy {
+  shouldSample () {
+    return true
+  }
+}
+
 /**
  * This class generates pprof files with timeline events. It combines an event
- * source with an event serializer.
+ * source with a sampling strategy and an event serializer.
  */
 class EventsProfiler {
   constructor (options = {}) {
     this.type = 'events'
     this.eventSerializer = new EventSerializer()
+    this.samplingStrategy = options.timelineSamplingEnabled
+      ? new PoissonPointProcessSamplingStrategy(options)
+      : new SampleEverythingStrategy()
 
     const eventHandler = event => {
-      this.eventSerializer.addEvent(event)
+      if (this.samplingStrategy.shouldSample(event)) {
+        this.eventSerializer.addEvent(event)
+      }
     }
 
     if (options.codeHotspotsEnabled) {
