@@ -123,26 +123,19 @@ class TextMapPropagator {
       })
     }
     if (this._hasPropagationStyle('inject', 'baggage')) {
-      if (this._config.baggageMaxItems < 1) return
       let baggage = ''
-      let counter = 1
+      let itemCounter = 0
+      let byteCounter = 0
+
       for (const [key, value] of Object.entries(spanContext._baggageItems)) {
-        baggage += `${this._encodeOtelBaggageKey(String(key).trim())}=${encodeURIComponent(String(value).trim())},`
-        if (counter === this._config.baggageMaxItems || counter > this._config.baggageMaxItems) break
-        counter += 1
+          let item = `${this._encodeOtelBaggageKey(String(key).trim())}=${encodeURIComponent(String(value).trim())},`
+          itemCounter += 1
+          byteCounter += item.length
+          if (itemCounter > this._config.baggageMaxItems || byteCounter > this._config.baggageMaxBytes) break
+          baggage += item
       }
+
       baggage = baggage.slice(0, baggage.length - 1)
-      let buf = Buffer.from(baggage)
-      if (buf.length > this._config.baggageMaxBytes) {
-        const originalBaggages = baggage.split(',')
-        buf = buf.subarray(0, this._config.baggageMaxBytes)
-        const truncatedBaggages = buf.toString('utf8').split(',')
-        const lastPairIndex = truncatedBaggages.length - 1
-        if (truncatedBaggages[lastPairIndex] !== originalBaggages[lastPairIndex]) {
-          truncatedBaggages.splice(lastPairIndex, 1)
-        }
-        baggage = truncatedBaggages.slice(0, this._config.baggageMaxItems).join(',')
-      }
       if (baggage) carrier.baggage = baggage
     }
   }
