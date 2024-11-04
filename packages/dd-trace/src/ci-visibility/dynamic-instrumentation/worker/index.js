@@ -1,4 +1,4 @@
-const { parentPort } = require('worker_threads')
+const { workerData: { breakpointSetChannel, breakpointHitChannel } } = require('worker_threads')
 // TODO: move debugger/devtools_client/session to common place
 const session = require('../../../debugger/devtools_client/session')
 // TODO: move debugger/devtools_client/snapshot to common place
@@ -8,7 +8,6 @@ const {
   findScriptFromPartialPath,
   getStackFromCallFrames
 } = require('../../../debugger/devtools_client/state')
-const { BREAKPOINT_HIT, BREAKPOINT_SET } = require('../messages')
 const log = require('../../../log')
 
 let sessionStarted = false
@@ -49,13 +48,13 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
     }
   }
 
-  parentPort.postMessage({ type: BREAKPOINT_HIT, snapshot })
+  breakpointHitChannel.postMessage({ snapshot })
 })
 
 // TODO: add option to remove breakpoint
-parentPort.on('message', async ({ snapshotId, probe: { id: probeId, file, line } }) => {
+breakpointSetChannel.on('message', async ({ snapshotId, probe: { id: probeId, file, line } }) => {
   await addBreakpoint(snapshotId, { probeId, file, line })
-  parentPort.postMessage({ type: BREAKPOINT_SET, probeId })
+  breakpointSetChannel.postMessage({ probeId })
 })
 
 async function addBreakpoint (snapshotId, probe) {

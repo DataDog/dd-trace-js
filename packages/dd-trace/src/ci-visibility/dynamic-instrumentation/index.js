@@ -4,7 +4,6 @@ const { join } = require('path')
 const { Worker } = require('worker_threads')
 const { randomUUID } = require('crypto')
 const log = require('../../log')
-const { BREAKPOINT_HIT, BREAKPOINT_SET } = require('./messages')
 
 const probeIdToResolveBreakpointSet = new Map()
 const probeIdToResolveBreakpointHit = new Map()
@@ -15,6 +14,8 @@ class TestVisDynamicInstrumentation {
     this._readyPromise = new Promise(resolve => {
       this._onReady = resolve
     })
+    this.breakpointSetChannel = new MessageChannel()
+    this.breakpointHitChannel = new MessageChannel()
   }
 
   // Return 3 elements:
@@ -25,7 +26,7 @@ class TestVisDynamicInstrumentation {
     const snapshotId = randomUUID()
     const probeId = randomUUID()
 
-    this.worker.postMessage({
+    this.breakpointSetChannel.port2.postMessage({
       snapshotId,
       probe: { id: probeId, file, line }
     })
@@ -56,7 +57,12 @@ class TestVisDynamicInstrumentation {
       join(__dirname, 'worker', 'index.js'),
       {
         execArgv: [],
-        env: envWithoutNodeOptions
+        env: envWithoutNodeOptions,
+        workerData: {
+          breakpointSetChannel: this.breakpointSetChannel.port1,
+          breakpointHitChannel: this.breakpointHitChannel.port1
+        },
+        transferList: [this.breakpointSetChannel.port1, this.breakpointHitChannel.port1]
       }
     )
     this.worker.on('online', () => {
@@ -67,25 +73,24 @@ class TestVisDynamicInstrumentation {
     // Allow the parent to exit even if the worker is still running
     this.worker.unref()
 
-    this.worker.on('message', (message) => {
-      const { type } = message
-      if (type === BREAKPOINT_SET) {
-        const { probeId } = message
-        const resolve = probeIdToResolveBreakpointSet.get(probeId)
-        if (resolve) {
-          resolve()
-          probeIdToResolveBreakpointSet.delete(probeId)
-        }
-      } else if (type === BREAKPOINT_HIT) {
-        const { snapshot } = message
-        const { probe: { id: probeId } } = snapshot
-        const resolve = probeIdToResolveBreakpointHit.get(probeId)
-        if (resolve) {
-          resolve({ snapshot })
-          probeIdToResolveBreakpointHit.delete(probeId)
-        }
+    this.breakpointSetChannel.port2.on('message', (message) => {
+      const { probeId } = message
+      const resolve = probeIdToResolveBreakpointSet.get(probeId)
+      if (resolve) {
+        resolve()
+        probeIdToResolveBreakpointSet.delete(probeId)
       }
-    }).unref() // We also need to unref this message handler
+    }).unref()
+
+    this.breakpointHitChannel.port2.on('message', (message) => {
+      const { snapshot } = message
+      const { probe: { id: probeId } } = snapshot
+      const resolve = probeIdToResolveBreakpointHit.get(probeId)
+      if (resolve) {
+        resolve({ snapshot })
+        probeIdToResolveBreakpointHit.delete(probeId)
+      }
+    }).unref()
   }
 }
 
