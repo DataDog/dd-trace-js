@@ -17,7 +17,6 @@ const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
 const logger = require('../../../src/log')
 const { Profile } = require('pprof-format')
-const semver = require('semver')
 const version = require('../../../../../package.json').version
 
 const RUNTIME_ID = 'a1b2c3d4-a1b2-a1b2-a1b2-a1b2c3d4e5f6'
@@ -25,10 +24,6 @@ const ENV = 'test-env'
 const HOST = 'test-host'
 const SERVICE = 'test-service'
 const APP_VERSION = '1.2.3'
-
-if (!semver.satisfies(process.version, '>=10.12')) {
-  describe = describe.skip // eslint-disable-line no-global-assign
-}
 
 function wait (ms) {
   return new Promise((resolve, reject) => {

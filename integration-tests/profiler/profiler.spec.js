@@ -13,7 +13,6 @@ const fsync = require('fs')
 const net = require('net')
 const zlib = require('zlib')
 const { Profile } = require('pprof-format')
-const semver = require('semver')
 
 const DEFAULT_PROFILE_TYPES = ['wall', 'space']
 if (process.platform !== 'win32') {
@@ -315,61 +314,59 @@ describe('profiler', () => {
       assert.equal(endpoints.size, 3, encoded)
     })
 
-    if (semver.gte(process.version, '16.0.0')) {
-      it('dns timeline events work', async () => {
-        const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', 'dns')
-        assert.sameDeepMembers(dnsEvents, [
-          { name: 'lookup', host: 'example.org' },
-          { name: 'lookup', host: 'example.com' },
-          { name: 'lookup', host: 'datadoghq.com' },
-          { name: 'queryA', host: 'datadoghq.com' },
-          { name: 'lookupService', address: '13.224.103.60', port: 80 }
-        ])
-      })
+    it('dns timeline events work', async () => {
+      const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', 'dns')
+      assert.sameDeepMembers(dnsEvents, [
+        { name: 'lookup', host: 'example.org' },
+        { name: 'lookup', host: 'example.com' },
+        { name: 'lookup', host: 'datadoghq.com' },
+        { name: 'queryA', host: 'datadoghq.com' },
+        { name: 'lookupService', address: '13.224.103.60', port: 80 }
+      ])
+    })
 
-      it('net timeline events work', async () => {
-        // Simple server that writes a constant message to the socket.
-        const msg = 'cya later!\n'
-        function createServer () {
-          const server = net.createServer((socket) => {
-            socket.end(msg, 'utf8')
-          }).on('error', (err) => {
-            throw err
-          })
-          return server
-        }
-        // Create two instances of the server
-        const server1 = createServer()
+    it('net timeline events work', async () => {
+      // Simple server that writes a constant message to the socket.
+      const msg = 'cya later!\n'
+      function createServer () {
+        const server = net.createServer((socket) => {
+          socket.end(msg, 'utf8')
+        }).on('error', (err) => {
+          throw err
+        })
+        return server
+      }
+      // Create two instances of the server
+      const server1 = createServer()
+      try {
+        const server2 = createServer()
         try {
-          const server2 = createServer()
-          try {
-            // Have the servers listen on ephemeral ports
-            const p = new Promise(resolve => {
-              server1.listen(0, () => {
-                server2.listen(0, async () => {
-                  resolve([server1.address().port, server2.address().port])
-                })
+          // Have the servers listen on ephemeral ports
+          const p = new Promise(resolve => {
+            server1.listen(0, () => {
+              server2.listen(0, async () => {
+                resolve([server1.address().port, server2.address().port])
               })
             })
-            const [port1, port2] = await p
-            const args = [String(port1), String(port2), msg]
-            // Invoke the profiled program, passing it the ports of the servers and
-            // the expected message.
-            const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', 'net', args)
-            // The profiled program should have two TCP connection events to the two
-            // servers.
-            assert.sameDeepMembers(events, [
-              { name: 'connect', host: '127.0.0.1', port: port1 },
-              { name: 'connect', host: '127.0.0.1', port: port2 }
-            ])
-          } finally {
-            server2.close()
-          }
+          })
+          const [port1, port2] = await p
+          const args = [String(port1), String(port2), msg]
+          // Invoke the profiled program, passing it the ports of the servers and
+          // the expected message.
+          const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', 'net', args)
+          // The profiled program should have two TCP connection events to the two
+          // servers.
+          assert.sameDeepMembers(events, [
+            { name: 'connect', host: '127.0.0.1', port: port1 },
+            { name: 'connect', host: '127.0.0.1', port: port2 }
+          ])
         } finally {
-          server1.close()
+          server2.close()
         }
-      })
-    }
+      } finally {
+        server1.close()
+      }
+    })
   }
 
   context('shutdown', () => {
