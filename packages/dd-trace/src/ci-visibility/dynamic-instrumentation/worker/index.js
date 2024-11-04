@@ -20,6 +20,7 @@ const breakpointIdToProbe = new Map()
 session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint], callFrames } }) => {
   const probe = breakpointIdToProbe.get(hitBreakpoint)
   if (!probe) {
+    log.warn(`No probe found for breakpoint ${hitBreakpoint}`)
     return session.post('Debugger.resume')
   }
 
