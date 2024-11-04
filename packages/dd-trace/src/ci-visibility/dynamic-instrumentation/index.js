@@ -1,5 +1,5 @@
 const { join } = require('path')
-const { Worker } = require('worker_threads')
+const { Worker, MessageChannel } = require('worker_threads')
 const { randomUUID } = require('crypto')
 
 /**
@@ -13,6 +13,8 @@ class TestVisDynamicInstrumentation {
   constructor (config) {
     this.worker = null
     this.config = config // do I need config?
+    this.breakpointSetChannel = new MessageChannel()
+    this.breakpointHitChannel = new MessageChannel()
   }
 
   // Return a promise that's resolved when the breakpoint is hit
@@ -27,9 +29,9 @@ class TestVisDynamicInstrumentation {
       new Promise(resolve => {
         const probeId = randomUUID()
         messages.set(probeId, resolve)
-        this.worker.postMessage({
-          snapshotId,
-          probe: { id: probeId, file, line }
+
+        this.breakpointSetChannel.port2.postMessage({
+          snapshotId, probe: { id: probeId, file, line }
         })
       })
     ]
@@ -46,14 +48,20 @@ class TestVisDynamicInstrumentation {
       join(__dirname, 'worker', 'index.js'),
       {
         execArgv: [],
-        env: envWithoutNodeOptions
+        env: envWithoutNodeOptions,
+        workerData: {
+          breakpointSetChannel: this.breakpointSetChannel.port1,
+          breakpointHitChannel: this.breakpointHitChannel.port1
+        },
+        transferList: [this.breakpointSetChannel.port1, this.breakpointHitChannel.port1]
       }
     )
 
-    // Allow the parent to exit even if the worker is still running
-    this.worker.unref()
+    this.breakpointSetChannel.port2.on('message', () => {
+      console.log('PARENT: breakpoint set')
+    }).unref()
 
-    this.worker.on('message', ({ snapshot }) => {
+    this.breakpointHitChannel.port2.on('message', ({ snapshot }) => {
       const { probe: { id: probeId } } = snapshot
       const resolve = messages.get(probeId)
       if (resolve) {
@@ -61,6 +69,9 @@ class TestVisDynamicInstrumentation {
         messages.delete(probeId)
       }
     }).unref()
+
+    // Allow the parent to exit even if the worker is still running
+    this.worker.unref()
   }
 }
 

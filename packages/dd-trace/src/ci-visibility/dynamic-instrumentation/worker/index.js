@@ -1,4 +1,10 @@
-const { parentPort } = require('worker_threads')
+const {
+  workerData: {
+    breakpointSetChannel,
+    breakpointHitChannel
+  }
+} = require('worker_threads')
+
 // TODO: move session to common place
 const session = require('../../../debugger/devtools_client/session')
 // TODO: move getLocalStateForCallFrame to common place
@@ -45,11 +51,12 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
     }
   }
 
-  parentPort.postMessage({ snapshot })
+  breakpointHitChannel.postMessage({ snapshot })
 })
 
 // TODO: add option to remove breakpoint
-parentPort.on('message', async ({ snapshotId, probe: { id: probeId, file, line } }) => {
+breakpointSetChannel.on('message', async ({ snapshotId, probe: { id: probeId, file, line } }) => {
+  console.log('Received message from breakpointSetChannel')
   await addBreakpoint(snapshotId, { probeId, file, line })
 })
 
@@ -75,6 +82,8 @@ async function addBreakpoint (snapshotId, probe) {
 
   breakpointIdToProbe.set(breakpointId, probe)
   breakpointIdToSnapshotId.set(breakpointId, snapshotId)
+
+  breakpointSetChannel.postMessage({ breakpointId })
 }
 
 function start () {
