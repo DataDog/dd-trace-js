@@ -92,17 +92,12 @@ const web = {
   startSpan (tracer, config, req, res, name) {
     const context = this.patch(req)
 
-    console.log('received a web request')
-    console.log(req.headers)
-
     let span
 
     if (context.span) {
-      console.log('found span')
       context.span.context()._name = name
       span = context.span
     } else {
-      console.log('create child span')
       span = web.startChildSpan(tracer, name, req)
     }
 

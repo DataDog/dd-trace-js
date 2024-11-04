@@ -22,19 +22,11 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
     return null
   }
 
-  console.log('Received the following web request')
-  console.log(headers)
-
   const proxyContext = extractInferredProxyContext(headers)
-
-  console.log('Extracted the following proxy context')
-  console.log(proxyContext)
 
   if (!proxyContext) {
     return null
   }
-
-  console.log('Creating Inferred Proxy span')
 
   const span = tracer.startSpan(
     proxySpanNames[proxyContext.proxyName],
@@ -49,7 +41,8 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
         [HTTP_METHOD]: proxyContext.method,
         [HTTP_URL]: proxyContext.domainName + proxyContext.path,
         [HTTP_ROUTE]: proxyContext.path,
-        stage: proxyContext.stage
+        stage: proxyContext.stage,
+        type: 'web'
       }
     }
   )
@@ -58,14 +51,13 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
   context.inferredProxySpan = span
   childOf = span
 
-  setInferredProxySpanTags(span, headers)
+  setInferredProxySpanTags(span, proxyContext)
 
-  console.log('Created API Gateway span')
   return childOf
 }
 
-function setInferredProxySpanTags (span, awsContext) {
-  span.setTag(RESOURCE_NAME, `${awsContext.method} ${awsContext.path}`)
+function setInferredProxySpanTags (span, proxyContext) {
+  span.setTag(RESOURCE_NAME, `${proxyContext.method} ${proxyContext.path}`)
   return span
 }
 
