@@ -288,9 +288,10 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
     before((done) => {
       const express = require(`../../../../../versions/express@${expressVersion}`).get()
       const bodyParser = require('../../../../../versions/body-parser').get()
+
       const expressApp = express()
 
-      if (loadMiddlewares) loadMiddlewares(expressApp)
+      if (loadMiddlewares) loadMiddlewares(expressApp, listener)
 
       expressApp.use(bodyParser.json())
       try {

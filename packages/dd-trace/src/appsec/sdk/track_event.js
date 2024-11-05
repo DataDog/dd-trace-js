@@ -2,10 +2,11 @@
 
 const log = require('../../log')
 const { getRootSpan } = require('./utils')
-const { MANUAL_KEEP } = require('../../../../../ext/tags')
 const { setUserTags } = require('./set_user')
 const standalone = require('../standalone')
 const waf = require('../waf')
+const { SAMPLING_MECHANISM_APPSEC } = require('../../constants')
+const { keepTrace } = require('../../priority_sampler')
 
 function trackUserLoginSuccessEvent (tracer, user, metadata) {
   // TODO: better user check here and in _setUser() ?
@@ -55,9 +56,10 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode) {
     return
   }
 
+  keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
+
   const tags = {
-    [`appsec.events.${eventName}.track`]: 'true',
-    [MANUAL_KEEP]: 'true'
+    [`appsec.events.${eventName}.track`]: 'true'
   }
 
   if (mode === 'sdk') {

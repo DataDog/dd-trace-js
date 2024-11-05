@@ -13,8 +13,9 @@ const {
   getRequestMetrics
 } = require('./telemetry')
 const zlib = require('zlib')
-const { MANUAL_KEEP } = require('../../../../ext/tags')
 const standalone = require('./standalone')
+const { SAMPLING_MECHANISM_APPSEC } = require('../constants')
+const { keepTrace } = require('../priority_sampler')
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
@@ -96,8 +97,6 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
     metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(diagnosticsRules.errors))
   }
 
-  metricsQueue.set(MANUAL_KEEP, 'true')
-
   incrementWafInitMetric(wafVersion, rulesVersion)
 }
 
@@ -129,7 +128,7 @@ function reportAttack (attackData) {
   }
 
   if (limiter.isAllowed()) {
-    newTags[MANUAL_KEEP] = 'true'
+    keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
 
     standalone.sample(rootSpan)
   }
@@ -183,6 +182,8 @@ function finishRequest (req, res) {
 
   if (metricsQueue.size) {
     rootSpan.addTags(Object.fromEntries(metricsQueue))
+
+    keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
 
     standalone.sample(rootSpan)
 
