@@ -128,11 +128,11 @@ class TextMapPropagator {
       let byteCounter = 0
 
       for (const [key, value] of Object.entries(spanContext._baggageItems)) {
-          let item = `${this._encodeOtelBaggageKey(String(key).trim())}=${encodeURIComponent(String(value).trim())},`
-          itemCounter += 1
-          byteCounter += item.length
-          if (itemCounter > this._config.baggageMaxItems || byteCounter > this._config.baggageMaxBytes) break
-          baggage += item
+        const item = `${this._encodeOtelBaggageKey(String(key).trim())}=${encodeURIComponent(String(value).trim())},`
+        itemCounter += 1
+        byteCounter += item.length
+        if (itemCounter > this._config.baggageMaxItems || byteCounter > this._config.baggageMaxBytes) break
+        baggage += item
       }
 
       baggage = baggage.slice(0, baggage.length - 1)
