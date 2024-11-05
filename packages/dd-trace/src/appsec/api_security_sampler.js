@@ -22,7 +22,9 @@ function disable () {
 
 function sampleRequest (req, res, force = false) {
   if (!enabled) return false
-  if (isSampled(req, res)) return false
+
+  const key = computeKey(req, res)
+  if (!key || isSampled(key)) return false
 
   const rootSpan = web.root(req)
   if (!rootSpan) return false
@@ -38,19 +40,13 @@ function sampleRequest (req, res, force = false) {
   }
 
   if (force) {
-    const key = computeKey(req, res)
-    if (!key || sampledRequests.has(key)) return false
     sampledRequests.set(key)
-    return true
   }
 
   return true
 }
 
-function isSampled (req, res) {
-  const key = computeKey(req, res)
-  if (!key) return false
-
+function isSampled (key) {
   return sampledRequests.has(key)
 }
 
@@ -75,5 +71,6 @@ module.exports = {
   configure,
   disable,
   sampleRequest,
-  isSampled
+  isSampled,
+  computeKey
 }

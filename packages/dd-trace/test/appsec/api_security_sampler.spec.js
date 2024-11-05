@@ -80,8 +80,8 @@ describe('API Security Sampler', () => {
     clock.tick(25000)
 
     assert.isFalse(apiSecuritySampler.sampleRequest(req, res, true))
-
-    assert.isTrue(apiSecuritySampler.isSampled(req, res))
+    const key = apiSecuritySampler.computeKey(req, res)
+    assert.isTrue(apiSecuritySampler.isSampled(key))
   })
 
   it('should sample after 30 seconds', () => {
@@ -98,10 +98,14 @@ describe('API Security Sampler', () => {
       webStub.getContext.returns({ paths: [path] })
       assert.isTrue(apiSecuritySampler.sampleRequest(req, res, true))
     }
+
     webStub.getContext.returns({ paths: ['/test0'] })
-    assert.isFalse(apiSecuritySampler.isSampled(req, res))
+    const key1 = apiSecuritySampler.computeKey(req, res)
+    assert.isFalse(apiSecuritySampler.isSampled(key1))
+
     webStub.getContext.returns({ paths: ['/test4096'] })
-    assert.isTrue(apiSecuritySampler.isSampled(req, res))
+    const key2 = apiSecuritySampler.computeKey(req, res)
+    assert.isTrue(apiSecuritySampler.isSampled(key2))
   })
 
   it('should set enabled to false and clear the cache', () => {
@@ -117,8 +121,11 @@ describe('API Security Sampler', () => {
     const postReq = { method: 'POST' }
     assert.isTrue(apiSecuritySampler.sampleRequest(getReq, res, true))
     assert.isTrue(apiSecuritySampler.sampleRequest(postReq, res, true))
-    assert.isTrue(apiSecuritySampler.isSampled(getReq, res))
-    assert.isTrue(apiSecuritySampler.isSampled(postReq, res))
+
+    const key1 = apiSecuritySampler.computeKey(getReq, res)
+    assert.isTrue(apiSecuritySampler.isSampled(key1))
+    const key2 = apiSecuritySampler.computeKey(postReq, res)
+    assert.isTrue(apiSecuritySampler.isSampled(key2))
   })
 
   it('should create different keys for different status codes', () => {
@@ -127,8 +134,11 @@ describe('API Security Sampler', () => {
 
     assert.isTrue(apiSecuritySampler.sampleRequest(req, res200, true))
     assert.isTrue(apiSecuritySampler.sampleRequest(req, res404, true))
-    assert.isTrue(apiSecuritySampler.isSampled(req, res200))
-    assert.isTrue(apiSecuritySampler.isSampled(req, res404))
+
+    const key1 = apiSecuritySampler.computeKey(req, res200)
+    assert.isTrue(apiSecuritySampler.isSampled(key1))
+    const key2 = apiSecuritySampler.computeKey(req, res404)
+    assert.isTrue(apiSecuritySampler.isSampled(key2))
   })
 
   it('should not sample when method or statusCode is not available', () => {
