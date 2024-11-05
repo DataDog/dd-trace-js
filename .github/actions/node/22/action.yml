@@ -1,7 +1,7 @@
-name: Node Latest
+name: Node 22
 runs:
   using: composite
   steps:
     - uses: actions/setup-node@v3
       with:
-        node-version: 'latest'
+        node-version: '22'
