@@ -1,6 +1,6 @@
 'use strict'
 
-const LRUCache = require('lru-cache')
+const TTLSet = require('ttl-set')
 const config = require('./config')
 const JSONBuffer = require('./json-buffer')
 const request = require('../../exporters/common/request')
@@ -18,13 +18,7 @@ const ddsource = 'dd_debugger'
 const service = config.service
 const runtimeId = config.runtimeId
 
-const cache = new LRUCache({
-  ttl: 1000 * 60 * 60, // 1 hour
-  // Unfortunate requirement when using LRUCache:
-  // It will emit a warning unless `ttlAutopurge`, `max`, or `maxSize` is set when using `ttl`.
-  // TODO: Consider alternative as this is NOT performant :(
-  ttlAutopurge: true
-})
+const cache = new TTLSet(60 * 60 * 1000) // 1 hour
 
 const jsonBuffer = new JSONBuffer({ size: config.maxTotalPayloadSize, timeout: 1000, onFlush })
 
@@ -112,5 +106,5 @@ function onlyUniqueUpdates (type, id, version, fn) {
   const key = `${type}-${id}-${version}`
   if (cache.has(key)) return
   fn()
-  cache.set(key)
+  cache.add(key)
 }
