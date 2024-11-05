@@ -29,6 +29,7 @@ function wrapLangChainPromise (fn, module, type, namespace = []) {
 addHook({ name: '@langchain/core', file: 'dist/runnables/base.cjs', versions: ['>=0.1'] }, exports => {
   const RunnableSequence = exports.RunnableSequence
   shimmer.wrap(RunnableSequence.prototype, 'invoke', invoke => wrapLangChainPromise(invoke, 'base', 'chain'))
+  shimmer.wrap(RunnableSequence.prototype, 'batch', batch => wrapLangChainPromise(batch, 'base', 'chain'))
   return exports
 })
 
