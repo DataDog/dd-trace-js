@@ -10,13 +10,15 @@ function getStartTags (ctx) {
 
   for (const idx in inputs) {
     const input = inputs[idx]
-    if (typeof input === 'string') {
-      tags[`langchain.request.inputs.${idx}`] = input
+    if (typeof input !== 'object') {
+      tags[`langchain.request.inputs.${idx}`] = truncate(input)
     } else {
-      const content = input.content
-      const role = input.role || input.constructor.name
-      tags[`langchain.request.inputs.${idx}.role`] = role
-      tags[`langchain.request.inputs.${idx}.content`] = truncate(content)
+      for (const [key, value] of Object.entries(input)) {
+        // these are mappings to the python client names, ie lc_kwargs
+        // only present on BaseMessage types
+        if (key.includes('lc')) continue
+        tags[`langchain.request.inputs.${idx}.${key}`] = truncate(value)
+      }
     }
   }
 

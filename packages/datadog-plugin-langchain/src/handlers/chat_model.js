@@ -74,7 +74,7 @@ function getEndTags (ctx) {
             `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.tool_calls.${toolCallIndex}.id`
           ] = toolCall.id
           tags[
-            `l${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.tool_calls.${toolCallIndex}.name`
+            `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.tool_calls.${toolCallIndex}.name`
           ] = toolCall.name
 
           const args = toolCall.args || {}

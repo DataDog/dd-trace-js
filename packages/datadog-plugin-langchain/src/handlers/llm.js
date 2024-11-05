@@ -23,6 +23,8 @@ function getStartTags (ctx, provider) {
       tags[`langchain.request.${provider}.parameters.${param}`] = val
     }
   }
+
+  return tags
 }
 
 function getEndTags (ctx) {
@@ -31,7 +33,7 @@ function getEndTags (ctx) {
   const tags = {}
 
   for (const completionIdx in result.generations) {
-    const completion = result.completions[completionIdx]
+    const completion = result.generations[completionIdx]
     tags[`langchain.response.completions.${completionIdx}.text`] = completion[0].text || ''
 
     if (completion && completion[0].generationInfo) {
