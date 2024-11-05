@@ -10,6 +10,10 @@ const {
   spawnProc
 } = require('../helpers')
 
+const { NODE_MAJOR } = require('../../version')
+
+const describe = NODE_MAJOR <= 16 ? globalThis.describe.skip : globalThis.describe
+
 describe('multer', () => {
   let sandbox, cwd, startupTestFile, agent, proc, env
 

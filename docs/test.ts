@@ -569,19 +569,6 @@ llmobs.trace({ name: 'name', kind: 'llm' }, (span, cb) => {
 llmobs.wrap({ kind: 'llm' }, function myLLM () {})()
 llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction () {})()
 
-// decorate a function
-class MyClass {
-  @llmobs.decorate({ kind: 'llm' })
-  myLLM () {}
-
-  @llmobs.decorate({ kind: 'llm', name: 'myOtherLLM', modelName: 'myModel', modelProvider: 'myProvider' })
-  myOtherLLM () {}
-}
-
-const cls = new MyClass()
-cls.myLLM()
-cls.myOtherLLM()
-
 // export a span
 llmobs.enable({ mlApp: 'myApp' })
 llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {

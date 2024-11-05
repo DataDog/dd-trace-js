@@ -2,12 +2,12 @@
 # yarn lockfile v1
 
 
-"@azure/functions@^4.0.0":
-  version "4.5.1"
-  resolved "https://registry.yarnpkg.com/@azure/functions/-/functions-4.5.1.tgz#70d1a99d335af87579a55d3c149ef1ae77da0a66"
-  integrity sha512-ikiw1IrM2W9NlQM3XazcX+4Sq3XAjZi4eeG22B5InKC2x5i7MatGF2S/Gn1ACZ+fEInwu+Ru9J8DlnBv1/hIvg==
+"@azure/functions@^4.6.0":
+  version "4.6.0"
+  resolved "https://registry.yarnpkg.com/@azure/functions/-/functions-4.6.0.tgz#eee9ca945b8a2f2d0748c28006e057178cd5f8c9"
+  integrity sha512-vGq9jXlgrJ3KaI8bepgfpk26zVY8vFZsQukF85qjjKTAR90eFOOBNaa+mc/0ViDY2lcdrU2fL/o1pQyZUtTDsw==
   dependencies:
-    cookie "^0.6.0"
+    cookie "^0.7.0"
     long "^4.0.0"
     undici "^5.13.0"
 
@@ -92,10 +92,10 @@ color-name@~1.1.4:
   resolved "https://registry.yarnpkg.com/color-name/-/color-name-1.1.4.tgz#c2a09a87acbde69543de6f63fa3995c826c536a2"
   integrity sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==
 
-cookie@^0.6.0:
-  version "0.6.0"
-  resolved "https://registry.yarnpkg.com/cookie/-/cookie-0.6.0.tgz#2798b04b071b0ecbff0dbb62a505a8efa4e19051"
-  integrity sha512-U71cyTamuh1CRNCfpGY6to28lxvNwPG4Guz/EVjgf3Jmzv0vlDp1atT9eS5dDjMYHucpHbWns6Lwf3BKz6svdw==
+cookie@^0.7.0:
+  version "0.7.2"
+  resolved "https://registry.yarnpkg.com/cookie/-/cookie-0.7.2.tgz#556369c472a2ba910f2979891b526b3436237ed7"
+  integrity sha512-yki5XnKuf750l50uGTllt6kKILY4nQ1eNIQatoXEByZ5dWgnKqbnqmTrBE5B4N7lrMJKQ2ytWMiTO2o0v6Ew/w==
 
 debug@4, debug@^4.1.1:
   version "4.3.7"
