@@ -44,8 +44,8 @@ class LangChainPlugin extends TracingPlugin {
         ...tags
       }
     }, false)
-    const store = storage.getStore() || {}
 
+    const store = storage.getStore() || {}
     ctx.currentStore = { ...store, span }
 
     return ctx.currentStore
@@ -72,20 +72,15 @@ function getHandler (type) {
 
 function extractApiKey (instance) {
   const key = Object.keys(instance)
-    .filter(key => key.includes('apiKey') || key.includes('apiToken')) // TODO: double check this
     .find(key => {
-      let apiKey = instance[key]
-      if (!apiKey) return false
-      if (apiKey.getSecretValue && typeof apiKey.getSecretValue === 'function') {
-        apiKey = apiKey.getSecretValue()
-      }
-
-      if (typeof apiKey !== 'string') return false
-
-      return true
+      const lower = key.toLowerCase()
+      return lower.includes('apikey') || lower.includes('apitoken')
     })
 
-  const apiKey = instance[key]
+  let apiKey = instance[key]
+  if (apiKey?.secretValue && typeof apiKey.secretValue === 'function') {
+    apiKey = apiKey.secretValue()
+  }
   if (!apiKey || apiKey.length < 4) return ''
   return `...${apiKey.slice(-4)}`
 }
