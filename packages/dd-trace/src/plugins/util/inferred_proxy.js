@@ -93,8 +93,11 @@ function finishInferredProxySpan (context) {
 
   context.config.hooks.request(context.inferredProxySpan, req, res)
 
-  context.inferredProxySpan.finish()
-  context.inferredProxySpanFinished = true
+  // Only close the inferred span if one was created
+  if (context.inferredProxySpan) {
+    context.inferredProxySpan.finish()
+    context.inferredProxySpanFinished = true
+  }
 }
 
 module.exports = {
