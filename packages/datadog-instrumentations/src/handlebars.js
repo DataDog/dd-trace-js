@@ -16,13 +16,13 @@ function wrapCompile (compile) {
   }
 }
 
-function wrapRegisterPartial (handlebarsEnvironment) {
-  return function wrappedCompile (name, partial) {
+function wrapRegisterPartial (registerPartial) {
+  return function wrappedRegisterPartial (name, partial) {
     if (handlebarsRegisterPartialCh.hasSubscribers) {
       handlebarsRegisterPartialCh.publish({ partial })
     }
 
-    return handlebarsEnvironment.apply(this, arguments)
+    return registerPartial.apply(this, arguments)
   }
 }
 

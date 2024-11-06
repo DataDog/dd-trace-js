@@ -75,5 +75,26 @@ describe('template-injection-analyzer with pug', () => {
           }, 'TEMPLATE_INJECTION')
         })
     })
+
+    describe('render', () => {
+      prepareTestServerForIast('template injection analyzer',
+        (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
+          let lib
+          beforeEach(() => {
+            lib = require(`../../../../../../versions/pug@${version}`).get()
+          })
+
+          testThatRequestHasVulnerability(() => {
+            const store = storage.getStore()
+            const iastContext = iastContextFunctions.getIastContext(store)
+            const str = newTaintedString(iastContext, source, 'param', 'Request')
+            lib.render(str)
+          }, 'TEMPLATE_INJECTION')
+
+          testThatRequestHasNoVulnerability(() => {
+            lib.render(source)
+          }, 'TEMPLATE_INJECTION')
+        })
+    })
   })
 })
