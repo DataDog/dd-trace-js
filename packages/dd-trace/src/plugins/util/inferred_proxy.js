@@ -1,3 +1,4 @@
+const log = require('../../log')
 const tags = require('../../../../../ext/tags')
 
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -32,7 +33,7 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
     return null
   }
 
-  console.log('Starting inferred Proxy span')
+  log.debug('Starting inferred Proxy span')
 
   const span = tracer.startSpan(
     proxySpanNames[proxyContext.proxyName],
@@ -57,7 +58,7 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
   context.inferredProxySpan = span
   childOf = span
 
-  console.log('Ending inferred Proxy span')
+  log.debug('Ending inferred Proxy span')
 
   setInferredProxySpanTags(span, proxyContext)
 
