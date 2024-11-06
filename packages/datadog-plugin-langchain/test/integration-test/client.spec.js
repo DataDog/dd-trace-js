@@ -9,6 +9,7 @@ const {
 const { assert } = require('chai')
 
 // there is currently an issue with langchain + esm loader hooks from IITM
+// https://github.com/nodejs/import-in-the-middle/issues/163
 describe.skip('esm', () => {
   let agent
   let proc
