@@ -21,8 +21,13 @@ describe('Inferred Proxy Spans', function () {
 
       const server = new http.Server(async (req, res) => {
         controller && await controller(req, res)
-        res.writeHead(200)
-        res.end(JSON.stringify({ message: 'OK' }))
+        if (req.url === '/error') {
+          res.statusCode = 500
+          res.end(JSON.stringify({ message: 'ERROR' }))
+        } else {
+          res.writeHead(200)
+          res.end(JSON.stringify({ message: 'OK' }))
+        }
       })
 
       appListener = server.listen(port, 'localhost')
@@ -43,7 +48,7 @@ describe('Inferred Proxy Spans', function () {
     'x-dd-proxy-stage': 'dev'
   }
 
-  it('should create a parent span and a child span', async () => {
+  it('should create a parent span and a child span for a 200', async () => {
     await axios.get(`http://localhost:${port}/`, {
       headers: inferredHeaders
     })
@@ -80,4 +85,22 @@ describe('Inferred Proxy Spans', function () {
       expect(spans[1].meta).to.have.property('span.kind', 'server')
     }).then().catch()
   })
+
+  it('should create a parent span and a child span for a 500', async () => {
+
+    await axios.get(`http://localhost:${port}/error`, {
+      headers: inferredHeaders,
+      validateStatus: function (status) {
+        return status == 500
+      }
+    })
+
+    await agent.use(traces => {
+      const spans = traces[1]
+      // TODO: figure out why this test only creates one http.request
+      expect(spans.length).to.be.equal(2)
+    })
+
+  })
+
 })
