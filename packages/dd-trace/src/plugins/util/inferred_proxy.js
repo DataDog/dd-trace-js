@@ -20,6 +20,7 @@ const proxySpanNames = {
 
 function createInferredProxySpan (headers, childOf, tracer, context) {
   if (!headers) {
+    console.log('Inferred Span: Not creating logs')
     return null
   }
 
@@ -88,11 +89,13 @@ function extractInferredProxyContext (headers) {
 }
 
 function finishInferredProxySpan (context) {
-  const { req, res } = context
+  const { req } = context
+
+  if (!context.inferredProxySpan) return
 
   if (context.inferredProxySpanFinished && !req.stream) return
 
-  context.config.hooks.request(context.inferredProxySpan, req, res)
+  // context.config.hooks.request(context.inferredProxySpan, req, res)
 
   // Only close the inferred span if one was created
   if (context.inferredProxySpan) {
