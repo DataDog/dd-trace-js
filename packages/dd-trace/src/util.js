@@ -69,10 +69,15 @@ function calculateDDBasePath (dirname) {
   return dirSteps.slice(0, packagesIndex + 1).join(path.sep) + path.sep
 }
 
+function hasOwn (object, prop) {
+  return Object.prototype.hasOwnProperty.call(object, prop)
+}
+
 module.exports = {
   isTrue,
   isFalse,
   isError,
   globMatch,
-  calculateDDBasePath
+  calculateDDBasePath,
+  hasOwn
 }

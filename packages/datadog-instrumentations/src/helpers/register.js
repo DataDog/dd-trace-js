@@ -6,8 +6,13 @@ const semver = require('semver')
 const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
+const checkRequireCache = require('../check_require_cache')
+const telemetry = require('../../../dd-trace/src/telemetry/init-telemetry')
 
-const { DD_TRACE_DISABLED_INSTRUMENTATIONS = '' } = process.env
+const {
+  DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
+  DD_TRACE_DEBUG = ''
+} = process.env
 
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
@@ -17,6 +22,15 @@ const disabledInstrumentations = new Set(
   DD_TRACE_DISABLED_INSTRUMENTATIONS ? DD_TRACE_DISABLED_INSTRUMENTATIONS.split(',') : []
 )
 
+// Check for DD_TRACE_<INTEGRATION>_ENABLED environment variables
+for (const [key, value] of Object.entries(process.env)) {
+  const match = key.match(/^DD_TRACE_(.+)_ENABLED$/)
+  if (match && (value.toLowerCase() === 'false' || value === '0')) {
+    const integration = match[1].toLowerCase()
+    disabledInstrumentations.add(integration)
+  }
+}
+
 const loadChannel = channel('dd-trace:instrumentation:load')
 
 // Globals
@@ -24,24 +38,49 @@ if (!disabledInstrumentations.has('fetch')) {
   require('../fetch')
 }
 
-const HOOK_SYMBOL = Symbol('hookExportsMap')
-// TODO: make this more efficient
+if (!disabledInstrumentations.has('process')) {
+  require('../process')
+}
 
+const HOOK_SYMBOL = Symbol('hookExportsMap')
+
+if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
+  checkRequireCache.checkForRequiredModules()
+  setImmediate(checkRequireCache.checkForPotentialConflicts)
+}
+
+const seenCombo = new Set()
+
+// TODO: make this more efficient
 for (const packageName of names) {
   if (disabledInstrumentations.has(packageName)) continue
 
-  Hook([packageName], (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
+  const hookOptions = {}
+
+  let hook = hooks[packageName]
+
+  if (typeof hook === 'object') {
+    hookOptions.internals = hook.esmFirst
+    hook = hook.fn
+  }
+
+  Hook([packageName], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
 
     // This executes the integration file thus adding its entries to `instrumentations`
-    hooks[packageName]()
+    hook()
 
     if (!instrumentations[packageName]) {
       return moduleExports
     }
 
-    for (const { name, file, versions, hook } of instrumentations[packageName]) {
+    const namesAndSuccesses = {}
+    for (const { name, file, versions, hook, filePattern } of instrumentations[packageName]) {
+      let fullFilePattern = filePattern
       const fullFilename = filename(name, file)
+      if (fullFilePattern) {
+        fullFilePattern = filename(name, fullFilePattern)
+      }
 
       // Create a WeakMap associated with the hook function so that patches on the same moduleExport only happens once
       // for example by instrumenting both dns and node:dns double the spans would be created
@@ -49,13 +88,33 @@ for (const packageName of names) {
       if (!hook[HOOK_SYMBOL]) {
         hook[HOOK_SYMBOL] = new WeakMap()
       }
+      let matchesFile = false
 
-      if (moduleName === fullFilename) {
-        const version = moduleVersion || getVersion(moduleBaseDir)
+      matchesFile = moduleName === fullFilename
+
+      if (fullFilePattern) {
+        // Some libraries include a hash in their filenames when installed,
+        // so our instrumentation has to include a '.*' to match them for more than a single version.
+        matchesFile = matchesFile || new RegExp(fullFilePattern).test(moduleName)
+      }
+
+      if (matchesFile) {
+        let version = moduleVersion
+        try {
+          version = version || getVersion(moduleBaseDir)
+        } catch (e) {
+          log.error(`Error getting version for "${name}": ${e.message}`)
+          log.error(e)
+          continue
+        }
+        if (typeof namesAndSuccesses[`${name}@${version}`] === 'undefined') {
+          namesAndSuccesses[`${name}@${version}`] = false
+        }
 
         if (matchVersion(version, versions)) {
           // Check if the hook already has a set moduleExport
           if (hook[HOOK_SYMBOL].has(moduleExports)) {
+            namesAndSuccesses[`${name}@${version}`] = true
             return moduleExports
           }
 
@@ -67,9 +126,28 @@ for (const packageName of names) {
             // Set the moduleExports in the hooks weakmap
             hook[HOOK_SYMBOL].set(moduleExports, name)
           } catch (e) {
-            log.error(e)
+            log.info('Error during ddtrace instrumentation of application, aborting.')
+            log.info(e)
+            telemetry('error', [
+              `error_type:${e.constructor.name}`,
+              `integration:${name}`,
+              `integration_version:${version}`
+            ])
           }
+          namesAndSuccesses[`${name}@${version}`] = true
         }
+      }
+    }
+    for (const nameVersion of Object.keys(namesAndSuccesses)) {
+      const [name, version] = nameVersion.split('@')
+      const success = namesAndSuccesses[nameVersion]
+      if (!success && !seenCombo.has(nameVersion)) {
+        telemetry('abort.integration', [
+          `integration:${name}`,
+          `integration_version:${version}`
+        ])
+        log.info(`Found incompatible integration version: ${nameVersion}`)
+        seenCombo.add(nameVersion)
       }
     }
 

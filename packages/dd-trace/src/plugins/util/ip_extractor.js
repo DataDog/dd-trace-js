@@ -1,6 +1,6 @@
 'use strict'
 
-const BlockList = require('./ip_blocklist')
+const { BlockList } = require('net')
 const net = require('net')
 
 const ipHeaderList = [

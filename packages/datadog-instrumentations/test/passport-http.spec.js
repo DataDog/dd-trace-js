@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const getPort = require('get-port')
 const axios = require('axios')
 const dc = require('dc-polyfill')
 
@@ -13,6 +12,7 @@ withVersions('passport-http', 'passport-http', version => {
     before(() => {
       return agent.load(['express', 'passport', 'passport-http'], { client: false })
     })
+
     before((done) => {
       const express = require('../../../versions/express').get()
       const passport = require('../../../versions/passport').get()
@@ -70,13 +70,12 @@ withVersions('passport-http', 'passport-http', version => {
         subscriberStub(arguments[0])
       })
 
-      getPort().then(newPort => {
-        port = newPort
-        server = app.listen(port, () => {
-          done()
-        })
+      server = app.listen(0, () => {
+        port = server.address().port
+        done()
       })
     })
+
     beforeEach(() => {
       subscriberStub = sinon.stub()
     })

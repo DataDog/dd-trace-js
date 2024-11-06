@@ -6,6 +6,19 @@ function insertStr (str) {
   return `pre_${str}_suf`
 }
 
+function templateLiteralEndingWithNumberParams (str) {
+  const num1 = 1
+  const num2 = 2
+  return `${str}Literal${num1}${num2}`
+}
+
+function templateLiteralWithTaintedAtTheEnd (str) {
+  const num1 = 1
+  const num2 = 2
+  const hello = 'world'
+  return `Literal${num1}${num2}-${hello}-${str}`
+}
+
 function appendStr (str) {
   let pre = 'pre_'
   pre += str
@@ -52,6 +65,14 @@ function sliceStr (str) {
   return str.slice(1, 4)
 }
 
+function toLowerCaseStr (str) {
+  return str.toLowerCase()
+}
+
+function toUpperCaseStr (str) {
+  return str.toUpperCase()
+}
+
 function replaceStr (str) {
   return str.replace('ls', 'sl')
 }
@@ -64,21 +85,41 @@ function jsonParseStr (str) {
   return JSON.parse(str)
 }
 
+function arrayJoin (str) {
+  return [str, str].join(str)
+}
+
+function arrayInVariableJoin (str) {
+  const testArr = [str, str]
+  return testArr.join(',')
+}
+
+function arrayProtoJoin (str) {
+  return Array.prototype.join.call([str, str], ',')
+}
+
 module.exports = {
-  concatSuffix,
-  insertStr,
   appendStr,
-  trimStr,
-  trimStartStr,
+  arrayInVariableJoin,
+  arrayJoin,
+  arrayProtoJoin,
+  concatProtoStr,
+  concatStr,
+  concatSuffix,
+  concatTaintedStr,
+  insertStr,
+  jsonParseStr,
+  replaceRegexStr,
+  replaceStr,
+  sliceStr,
+  substrStr,
+  substringStr,
+  templateLiteralEndingWithNumberParams,
+  templateLiteralWithTaintedAtTheEnd,
+  toLowerCaseStr,
+  toUpperCaseStr,
   trimEndStr,
   trimProtoStr,
-  concatStr,
-  concatTaintedStr,
-  concatProtoStr,
-  substringStr,
-  substrStr,
-  sliceStr,
-  replaceStr,
-  replaceRegexStr,
-  jsonParseStr
+  trimStartStr,
+  trimStr
 }

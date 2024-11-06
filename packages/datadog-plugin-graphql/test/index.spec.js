@@ -7,15 +7,20 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const axios = require('axios')
 const http = require('http')
-const getPort = require('get-port')
 const dc = require('dc-polyfill')
 const plugin = require('../src')
+
+const { performance } = require('perf_hooks')
 
 describe('Plugin', () => {
   let tracer
   let graphql
   let schema
   let sort
+
+  let markFast
+  let markSlow
+  let markSync
 
   function buildSchema () {
     const Human = new graphql.GraphQLObjectType({
@@ -79,6 +84,31 @@ describe('Plugin', () => {
           }))),
           resolve (obj, args) {
             return [{}, {}, {}]
+          }
+        },
+        fastAsyncField: {
+          type: graphql.GraphQLString,
+          resolve (obj, args) {
+            return new Promise((resolve) => {
+              markFast = performance.now()
+              resolve('fast field')
+            })
+          }
+        },
+        slowAsyncField: {
+          type: graphql.GraphQLString,
+          resolve (obj, args) {
+            return new Promise((resolve) => {
+              markSlow = performance.now()
+              resolve('slow field')
+            })
+          }
+        },
+        syncField: {
+          type: graphql.GraphQLString,
+          resolve (obj, args) {
+            markSync = performance.now()
+            return 'sync field'
           }
         }
       }
@@ -200,12 +230,14 @@ describe('Plugin', () => {
                 const yoga = graphqlYoga.createYoga({ schema })
 
                 server = http.createServer(yoga)
-
-                getPort().then(newPort => {
-                  port = newPort
-                  server.listen(port)
-                })
               })
+          })
+
+          before(done => {
+            server.listen(0, () => {
+              port = server.address().port
+              done()
+            })
           })
 
           after(() => {
@@ -378,6 +410,73 @@ describe('Plugin', () => {
             .catch(done)
 
           graphql.graphql({ schema, source }).catch(done)
+        })
+
+        it('should instrument each field resolver duration independently', done => {
+          const source = `
+            {
+              human {
+                fastAsyncField
+                slowAsyncField
+                syncField
+              }
+            }
+          `
+
+          let foundFastFieldSpan = false
+          let foundSlowFieldSpan = false
+          let foundSyncFieldSpan = false
+
+          let fastAsyncTime
+          let slowAsyncTime
+          let syncTime
+
+          const processTraces = (traces) => {
+            try {
+              for (const trace of traces) {
+                for (const span of trace) {
+                  if (span.name !== 'graphql.resolve') {
+                    continue
+                  }
+
+                  if (span.resource === 'fastAsyncField:String') {
+                    expect(fastAsyncTime).to.be.lessThan(slowAsyncTime)
+                    foundFastFieldSpan = true
+                  } else if (span.resource === 'slowAsyncField:String') {
+                    expect(slowAsyncTime).to.be.lessThan(syncTime)
+                    foundSlowFieldSpan = true
+                  } else if (span.resource === 'syncField:String') {
+                    expect(syncTime).to.be.greaterThan(slowAsyncTime)
+                    foundSyncFieldSpan = true
+                  }
+
+                  if (foundFastFieldSpan && foundSlowFieldSpan && foundSyncFieldSpan) {
+                    agent.unsubscribe(processTraces)
+                    done()
+                    return
+                  }
+                }
+              }
+            } catch (e) {
+              agent.unsubscribe(processTraces)
+              done(e)
+            }
+          }
+
+          agent.subscribe(processTraces)
+
+          const markStart = performance.now()
+
+          graphql.graphql({ schema, source })
+            .then((result) => {
+              fastAsyncTime = markFast - markStart
+              slowAsyncTime = markSlow - markStart
+              syncTime = markSync - markStart
+            })
+            .catch((e) => {
+              agent.unsubscribe(processTraces)
+              done(e)
+            })
         })
 
         it('should instrument nested field resolvers', done => {

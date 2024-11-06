@@ -17,7 +17,6 @@ const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
 const logger = require('../../../src/log')
 const { Profile } = require('pprof-format')
-const semver = require('semver')
 const version = require('../../../../../package.json').version
 
 const RUNTIME_ID = 'a1b2c3d4-a1b2-a1b2-a1b2-a1b2c3d4e5f6'
@@ -25,10 +24,6 @@ const ENV = 'test-env'
 const HOST = 'test-host'
 const SERVICE = 'test-service'
 const APP_VERSION = '1.2.3'
-
-if (!semver.satisfies(process.version, '>=10.12')) {
-  describe = describe.skip // eslint-disable-line no-global-assign
-}
 
 function wait (ms) {
   return new Promise((resolve, reject) => {
@@ -81,7 +76,6 @@ describe('exporters/agent', function () {
     expect(req.files[0]).to.have.property('size', req.files[0].buffer.length)
 
     const event = JSON.parse(req.files[0].buffer.toString())
-    process._rawDebug(JSON.stringify(event))
     expect(event).to.have.property('attachments')
     expect(event.attachments).to.have.lengthOf(2)
     expect(event.attachments[0]).to.equal('wall.pprof')
@@ -115,7 +109,10 @@ describe('exporters/agent', function () {
     expect(event.info.platform).to.have.property('kernel_release', os.release())
     expect(event.info.platform).to.have.property('kernel_version', os.version())
     expect(event.info).to.have.property('profiler')
-    expect(Object.keys(event.info.profiler)).to.have.length(1)
+    expect(Object.keys(event.info.profiler)).to.have.length(3)
+    expect(event.info.profiler).to.have.property('activation', 'unknown')
+    expect(event.info.profiler).to.have.property('ssi')
+    expect(event.info.profiler.ssi).to.have.property('mechanism', 'none')
     expect(event.info.profiler).to.have.property('version', version)
     expect(event.info).to.have.property('runtime')
     expect(Object.keys(event.info.runtime)).to.have.length(2)
@@ -267,7 +264,7 @@ describe('exporters/agent', function () {
       try {
         await exporter.export({ profiles, start, end, tags })
       } catch (err) {
-        expect(err.message).to.match(/^Profiler agent export back-off period expired$/)
+        expect(err.message).to.match(/^HTTP Error 500$/)
         failed = true
       }
       expect(failed).to.be.true
@@ -301,7 +298,7 @@ describe('exporters/agent', function () {
         /^Adding wall profile to agent export:( [0-9a-f]{2})+$/,
         /^Adding space profile to agent export:( [0-9a-f]{2})+$/,
         /^Submitting profiler agent report attempt #1 to:/i,
-        /^Error from the agent: HTTP Error 400$/,
+        /^Error from the agent: HTTP Error 500$/,
         /^Submitting profiler agent report attempt #2 to:/i,
         /^Agent export response: ([0-9a-f]{2}( |$))*/
       ]
@@ -342,7 +339,7 @@ describe('exporters/agent', function () {
           return
         }
         const data = Buffer.from(json)
-        res.writeHead(400, {
+        res.writeHead(500, {
           'content-type': 'application/json',
           'content-length': data.length
         })
@@ -353,6 +350,43 @@ describe('exporters/agent', function () {
         exporter.export({ profiles, start, end, tags }),
         waitForResponse
       ])
+    })
+
+    it('should not retry on 4xx errors', async function () {
+      const exporter = newAgentExporter({ url, logger: { debug: () => {}, error: () => {} } })
+      const start = new Date()
+      const end = new Date()
+      const tags = { foo: 'bar' }
+
+      const [wall, space] = await Promise.all([
+        createProfile(['wall', 'microseconds']),
+        createProfile(['space', 'bytes'])
+      ])
+
+      const profiles = {
+        wall,
+        space
+      }
+
+      let tries = 0
+      const json = JSON.stringify({ error: 'some error' })
+      app.post('/profiling/v1/input', upload.any(), (_, res) => {
+        tries++
+        const data = Buffer.from(json)
+        res.writeHead(400, {
+          'content-type': 'application/json',
+          'content-length': data.length
+        })
+        res.end(data)
+      })
+
+      try {
+        await exporter.export({ profiles, start, end, tags })
+        throw new Error('should have thrown')
+      } catch (err) {
+        expect(err.message).to.equal('HTTP Error 400')
+      }
+      expect(tries).to.equal(1)
     })
   })
 

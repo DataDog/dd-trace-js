@@ -126,7 +126,9 @@ class SpanStatsProcessor {
     port,
     url,
     env,
-    tags
+    tags,
+    appsec,
+    version
   } = {}) {
     this.exporter = new SpanStatsExporter({
       hostname,
@@ -138,12 +140,13 @@ class SpanStatsProcessor {
     this.bucketSizeNs = interval * 1e9
     this.buckets = new TimeBuckets()
     this.hostname = os.hostname()
-    this.enabled = enabled
+    this.enabled = enabled && !appsec?.standalone?.enabled
     this.env = env
     this.tags = tags || {}
     this.sequence = 0
+    this.version = version
 
-    if (enabled) {
+    if (this.enabled) {
       this.timer = setInterval(this.onInterval.bind(this), interval * 1e3)
       this.timer.unref()
     }
@@ -156,7 +159,7 @@ class SpanStatsProcessor {
     this.exporter.export({
       Hostname: this.hostname,
       Env: this.env,
-      Version: version,
+      Version: this.version || version,
       Stats: serialized,
       Lang: 'javascript',
       TracerVersion: pkg.version,

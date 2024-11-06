@@ -3,7 +3,7 @@
 const { createWrapRouterMethod } = require('./router')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
-const { AbortController } = require('node-abort-controller')
+const tracingChannel = require('dc-polyfill').tracingChannel
 
 const handleChannel = channel('apm:express:request:handle')
 
@@ -36,6 +36,27 @@ function wrapResponseJson (json) {
   }
 }
 
+const responseRenderChannel = tracingChannel('datadog:express:response:render')
+
+function wrapResponseRender (render) {
+  return function wrappedRender (view, options, callback) {
+    if (!responseRenderChannel.start.hasSubscribers) {
+      return render.apply(this, arguments)
+    }
+
+    return responseRenderChannel.traceSync(
+      render,
+      {
+        req: this.req,
+        view,
+        options
+      },
+      this,
+      ...arguments
+    )
+  }
+}
+
 addHook({ name: 'express', versions: ['>=4'] }, express => {
   shimmer.wrap(express.application, 'handle', wrapHandle)
   shimmer.wrap(express.Router, 'use', wrapRouterMethod)
@@ -43,6 +64,7 @@ addHook({ name: 'express', versions: ['>=4'] }, express => {
 
   shimmer.wrap(express.response, 'json', wrapResponseJson)
   shimmer.wrap(express.response, 'jsonp', wrapResponseJson)
+  shimmer.wrap(express.response, 'render', wrapResponseRender)
 
   return express
 })
@@ -50,7 +72,7 @@ addHook({ name: 'express', versions: ['>=4'] }, express => {
 const queryParserReadCh = channel('datadog:query:read:finish')
 
 function publishQueryParsedAndNext (req, res, next) {
-  return function () {
+  return shimmer.wrapFunction(next, next => function () {
     if (queryParserReadCh.hasSubscribers && req) {
       const abortController = new AbortController()
       const query = req.query
@@ -61,7 +83,7 @@ function publishQueryParsedAndNext (req, res, next) {
     }
 
     return next.apply(this, arguments)
-  }
+  })
 }
 
 addHook({
@@ -69,10 +91,10 @@ addHook({
   versions: ['>=4'],
   file: 'lib/middleware/query.js'
 }, query => {
-  return shimmer.wrap(query, function () {
+  return shimmer.wrapFunction(query, query => function () {
     const queryMiddleware = query.apply(this, arguments)
 
-    return shimmer.wrap(queryMiddleware, function (req, res, next) {
+    return shimmer.wrapFunction(queryMiddleware, queryMiddleware => function (req, res, next) {
       arguments[2] = publishQueryParsedAndNext(req, res, next)
       return queryMiddleware.apply(this, arguments)
     })
@@ -80,11 +102,21 @@ addHook({
 })
 
 const processParamsStartCh = channel('datadog:express:process_params:start')
-const wrapProcessParamsMethod = (requestPositionInArguments) => {
-  return (original) => {
-    return function () {
+function wrapProcessParamsMethod (requestPositionInArguments) {
+  return function wrapProcessParams (original) {
+    return function wrappedProcessParams () {
       if (processParamsStartCh.hasSubscribers) {
-        processParamsStartCh.publish({ req: arguments[requestPositionInArguments] })
+        const req = arguments[requestPositionInArguments]
+        const abortController = new AbortController()
+
+        processParamsStartCh.publish({
+          req,
+          res: req?.res,
+          abortController,
+          params: req?.params
+        })
+
+        if (abortController.signal.aborted) return
       }
 
       return original.apply(this, arguments)

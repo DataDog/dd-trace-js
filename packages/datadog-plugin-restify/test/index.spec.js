@@ -2,7 +2,6 @@
 
 const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
-const getPort = require('get-port')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -30,12 +29,15 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => agent.load(['restify', 'find-my-way', 'http'], [{}, {}, { client: false }]))
+
         after(() => agent.close({ ritmReset: false }))
 
         it('should do automatic instrumentation', done => {
           const server = restify.createServer()
 
-          getPort().then(port => {
+          appListener = server.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'restify.request')
@@ -51,11 +53,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`)
-                .catch(() => {})
-            })
+            axios
+              .get(`http://localhost:${port}/user`)
+              .catch(() => {})
           })
         })
 
@@ -67,7 +67,9 @@ describe('Plugin', () => {
             return next()
           })
 
-          getPort().then(port => {
+          appListener = server.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 expect(traces[0][0]).to.have.property('resource', 'GET /user/:id')
@@ -77,11 +79,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user/123`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user/123`)
+              .catch(done)
           })
         })
 
@@ -96,7 +96,9 @@ describe('Plugin', () => {
             }
           )
 
-          getPort().then(port => {
+          appListener = server.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 expect(traces[0][0]).to.have.property('resource', 'GET /user/:id')
@@ -106,11 +108,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user/123`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user/123`)
+              .catch(done)
           })
         })
 
@@ -135,7 +135,9 @@ describe('Plugin', () => {
             }
           )
 
-          getPort().then(port => {
+          appListener = server.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 expect(warningSpy).to.not.have.been.called
@@ -143,11 +145,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user/123`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user/123`)
+              .catch(done)
           })
         })
 
@@ -184,12 +184,12 @@ describe('Plugin', () => {
             next()
           })
 
-          getPort().then(port => {
-            appListener = server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`)
-                .catch(done)
-            })
+          appListener = server.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            axios
+              .get(`http://localhost:${port}/user`)
+              .catch(done)
           })
         })
 
@@ -201,7 +201,9 @@ describe('Plugin', () => {
             return next()
           }])
 
-          getPort().then(port => {
+          appListener = server.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 expect(traces[0][0]).to.have.property('resource', 'GET /user/:id')
@@ -211,11 +213,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user/123`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user/123`)
+              .catch(done)
           })
         })
 
@@ -239,12 +239,12 @@ describe('Plugin', () => {
             res.end()
           })
 
-          getPort().then(port => {
-            appListener = server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`)
-                .catch(done)
-            })
+          appListener = server.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            axios
+              .get(`http://localhost:${port}/user`)
+              .catch(done)
           })
         })
 
@@ -264,7 +264,9 @@ describe('Plugin', () => {
             throw new Error('uncaught')
           }])
 
-          getPort().then(port => {
+          appListener = server.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 expect(traces[0][0]).to.have.property('resource', 'GET /error')
@@ -276,13 +278,11 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/error`, {
-                  validateStatus: status => status === 599
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/error`, {
+                validateStatus: status => status === 599
+              })
+              .catch(done)
           })
         })
       })

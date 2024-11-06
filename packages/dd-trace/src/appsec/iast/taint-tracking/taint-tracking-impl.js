@@ -10,6 +10,7 @@ const { isDebugAllowed } = require('../telemetry/verbosity')
 const { taintObject } = require('./operations-taint-object')
 
 const mathRandomCallCh = dc.channel('datadog:random:call')
+const evalCallCh = dc.channel('datadog:eval:call')
 
 const JSON_VALUE = 'json.value'
 
@@ -18,6 +19,8 @@ function noop (res) { return res }
 // Otherwise you may end up rewriting a method and not providing its rewritten implementation
 const TaintTrackingNoop = {
   concat: noop,
+  eval: noop,
+  join: noop,
   parse: noop,
   plusOperator: noop,
   random: noop,
@@ -25,6 +28,8 @@ const TaintTrackingNoop = {
   slice: noop,
   substr: noop,
   substring: noop,
+  stringCase: noop,
+  tplOperator: noop,
   trim: noop,
   trimEnd: noop
 }
@@ -113,6 +118,27 @@ function csiMethodsOverrides (getContext) {
       return res
     },
 
+    tplOperator: function (res, ...rest) {
+      try {
+        const iastContext = getContext()
+        const transactionId = getTransactionId(iastContext)
+        if (transactionId) {
+          return TaintedUtils.concat(transactionId, res, ...rest)
+        }
+      } catch (e) {
+        iastLog.error('Error invoking CSI tplOperator')
+          .errorAndPublish(e)
+      }
+      return res
+    },
+
+    stringCase: getCsiFn(
+      (transactionId, res, target) => TaintedUtils.stringCase(transactionId, res, target),
+      getContext,
+      String.prototype.toLowerCase,
+      String.prototype.toUpperCase
+    ),
+
     trim: getCsiFn(
       (transactionId, res, target) => TaintedUtils.trim(transactionId, res, target),
       getContext,
@@ -124,6 +150,15 @@ function csiMethodsOverrides (getContext) {
       if (mathRandomCallCh.hasSubscribers) {
         mathRandomCallCh.publish({ fn })
       }
+      return res
+    },
+
+    eval: function (res, fn, target, script) {
+      // eslint-disable-next-line no-eval
+      if (evalCallCh.hasSubscribers && fn === globalThis.eval) {
+        evalCallCh.publish({ script })
+      }
+
       return res
     },
 
@@ -141,6 +176,22 @@ function csiMethodsOverrides (getContext) {
               const range = ranges.find(range => range.iinfo?.type)
               res = taintObject(iastContext, res, range?.iinfo.type || JSON_VALUE)
             }
+          }
+        } catch (e) {
+          iastLog.error(e)
+        }
+      }
+
+      return res
+    },
+
+    join: function (res, fn, target, separator) {
+      if (fn === Array.prototype.join) {
+        try {
+          const iastContext = getContext()
+          const transactionId = getTransactionId(iastContext)
+          if (transactionId) {
+            res = TaintedUtils.arrayJoin(transactionId, res, target, separator)
           }
         } catch (e) {
           iastLog.error(e)
@@ -176,7 +227,36 @@ function getTaintTrackingNoop () {
   return getTaintTrackingImpl(null, true)
 }
 
+const lodashFns = {
+  join: TaintedUtils.arrayJoin,
+  toLower: TaintedUtils.stringCase,
+  toUpper: TaintedUtils.stringCase,
+  trim: TaintedUtils.trim,
+  trimEnd: TaintedUtils.trimEnd,
+  trimStart: TaintedUtils.trim
+
+}
+
+function getLodashTaintedUtilFn (lodashFn) {
+  return lodashFns[lodashFn] || ((transactionId, result) => result)
+}
+
+function lodashTaintTrackingHandler (message) {
+  try {
+    if (!message.result) return
+    const context = getContextDefault()
+    const transactionId = getTransactionId(context)
+    if (transactionId) {
+      message.result = getLodashTaintedUtilFn(message.operation)(transactionId, message.result, ...message.arguments)
+    }
+  } catch (e) {
+    iastLog.error(`Error invoking CSI lodash ${message.operation}`)
+      .errorAndPublish(e)
+  }
+}
+
 module.exports = {
   getTaintTrackingImpl,
-  getTaintTrackingNoop
+  getTaintTrackingNoop,
+  lodashTaintTrackingHandler
 }

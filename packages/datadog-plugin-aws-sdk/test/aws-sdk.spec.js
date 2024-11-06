@@ -114,6 +114,28 @@ describe('Plugin', () => {
           s3.listBuckets({}, e => e && done(e))
         })
 
+        // different versions of aws-sdk use different casings and different AWS headers
+        it('should include tracing headers and not cause a 403 error', (done) => {
+          const HttpClientPlugin = require('../../datadog-plugin-http/src/client.js')
+          const spy = sinon.spy(HttpClientPlugin.prototype, 'bindStart')
+          agent.use(traces => {
+            const headers = new Set(
+              Object.keys(spy.firstCall.firstArg.args.options.headers)
+                .map(x => x.toLowerCase())
+            )
+            spy.restore()
+
+            expect(headers).to.include('authorization')
+            expect(headers).to.include('x-amz-date')
+            expect(headers).to.include('x-datadog-trace-id')
+            expect(headers).to.include('x-datadog-parent-id')
+            expect(headers).to.include('x-datadog-sampling-priority')
+            expect(headers).to.include('x-datadog-tags')
+          }).then(done, done)
+
+          s3.listBuckets({}, e => e && done(e))
+        })
+
         it('should mark error responses', (done) => {
           let error
 
@@ -312,6 +334,65 @@ describe('Plugin', () => {
               done(e)
             }
           }, 250)
+        })
+      })
+
+      describe('with programmatic batchPropagationEnabled configuration', () => {
+        before(() => {
+          return agent.load(['aws-sdk'], [{
+            service: 'test',
+            batchPropagationEnabled: true,
+            kinesis: {
+              batchPropagationEnabled: false
+            },
+            sns: false,
+            sqs: {
+              batchPropagationEnabled: false
+            }
+          }])
+        })
+
+        before(() => {
+          tracer = require('../../dd-trace')
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        it('should be configurable on a per-service basis', () => {
+          const { kinesis, sns, sqs } = tracer._pluginManager._pluginsByName['aws-sdk'].services
+
+          expect(kinesis.config.batchPropagationEnabled).to.equal(false)
+          expect(sns.config.batchPropagationEnabled).to.equal(true)
+          expect(sns.config.enabled).to.equal(false)
+          expect(sqs.config.batchPropagationEnabled).to.equal(false)
+        })
+      })
+
+      describe('with env variable _BATCH_PROPAGATION_ENABLED configuration', () => {
+        before(() => {
+          process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED = true
+          process.env.DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED = false
+          process.env.DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED = true
+
+          return agent.load(['aws-sdk'])
+        })
+
+        before(() => {
+          tracer = require('../../dd-trace')
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        it('should be configurable on a per-service basis', () => {
+          const { kinesis, sns, sqs } = tracer._pluginManager._pluginsByName['aws-sdk'].services
+
+          expect(kinesis.config.batchPropagationEnabled).to.equal(false)
+          expect(sns.config.batchPropagationEnabled).to.equal(true)
+          expect(sqs.config.batchPropagationEnabled).to.equal(true)
         })
       })
     })

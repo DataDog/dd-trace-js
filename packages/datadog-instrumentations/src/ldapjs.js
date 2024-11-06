@@ -61,7 +61,7 @@ addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
       let filter
       if (isString(options)) {
         filter = options
-      } else if (typeof options === 'object' && options.filter) {
+      } else if (options !== null && typeof options === 'object' && options.filter) {
         if (isString(options.filter)) {
           filter = options.filter
         }
@@ -77,8 +77,8 @@ addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
     if (callbackIndex > -1) {
       const callback = arguments[callbackIndex]
       // eslint-disable-next-line n/handle-callback-err
-      arguments[callbackIndex] = shimmer.wrap(callback, function (err, corkedEmitter) {
-        if (typeof corkedEmitter === 'object' && typeof corkedEmitter.on === 'function') {
+      arguments[callbackIndex] = shimmer.wrapFunction(callback, callback => function (err, corkedEmitter) {
+        if (corkedEmitter !== null && typeof corkedEmitter === 'object' && typeof corkedEmitter.on === 'function') {
           wrapEmitter(corkedEmitter)
         }
         callback.apply(this, arguments)

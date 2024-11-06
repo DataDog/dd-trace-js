@@ -42,7 +42,9 @@ describe('OTel Span Context', () => {
     const context = new SpanContext({
       traceId
     })
-    expect(context.traceId).to.equal(traceId.toString(16))
+    // normalize to 128 bit since that is what otel expects
+    const normalizedTraceId = traceId.toString(16).padStart(32, '0')
+    expect(context.traceId).to.equal(normalizedTraceId)
   })
 
   it('should get span id as hex', () => {

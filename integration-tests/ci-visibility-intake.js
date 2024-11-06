@@ -208,6 +208,15 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
+    app.post('/api/v2/logs', express.json(), (req, res) => {
+      res.status(200).send('OK')
+      this.emit('message', {
+        headers: req.headers,
+        url: req.url,
+        logMessage: req.body
+      })
+    })
+
     return new Promise((resolve, reject) => {
       const timeoutObj = setTimeout(() => {
         reject(new Error('Intake timed out starting up'))

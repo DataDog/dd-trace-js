@@ -43,6 +43,8 @@ class VulnerabilityFormatter {
     const valueParts = []
     let fromIndex = 0
 
+    if (evidence.value == null) return { valueParts }
+
     if (typeof evidence.value === 'object' && evidence.rangesToApply) {
       const { value, ranges } = stringifyWithRanges(evidence.value, evidence.rangesToApply)
       evidence.value = value
@@ -69,7 +71,7 @@ class VulnerabilityFormatter {
   }
 
   formatEvidence (type, evidence, sourcesIndexes, sources) {
-    if (typeof evidence.value === 'undefined') {
+    if (evidence.value === undefined) {
       return undefined
     }
 

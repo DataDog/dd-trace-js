@@ -26,7 +26,11 @@ function loadInst (plugin) {
     loadInstFile(`${plugin}/server.js`, instrumentations)
     loadInstFile(`${plugin}/client.js`, instrumentations)
   } catch (e) {
-    loadInstFile(`${plugin}.js`, instrumentations)
+    try {
+      loadInstFile(`${plugin}/main.js`, instrumentations)
+    } catch (e) {
+      loadInstFile(`${plugin}.js`, instrumentations)
+    }
   }
 
   return instrumentations
@@ -81,7 +85,8 @@ function withNamingSchema (
 
         const { opName, serviceName } = expected[versionName]
 
-        it('should conform to the naming schema', () => {
+        it('should conform to the naming schema', function () {
+          this.timeout(10000)
           return new Promise((resolve, reject) => {
             agent
               .use(traces => {
@@ -143,10 +148,12 @@ function withNamingSchema (
 function withPeerService (tracer, pluginName, spanGenerationFn, service, serviceSource, opts = {}) {
   describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), () => {
     let computePeerServiceSpy
+
     beforeEach(() => {
       const plugin = tracer()._pluginManager._pluginsByName[pluginName]
       computePeerServiceSpy = sinon.stub(plugin._tracerConfig, 'spanComputePeerService').value(true)
     })
+
     afterEach(() => {
       computePeerServiceSpy.restore()
     })
@@ -186,6 +193,12 @@ function withVersions (plugin, modules, range, cb) {
   }
 
   modules.forEach(moduleName => {
+    if (process.env.PACKAGE_NAMES) {
+      const packages = process.env.PACKAGE_NAMES.split(',')
+
+      if (!packages.includes(moduleName)) return
+    }
+
     const testVersions = new Map()
 
     instrumentations
@@ -197,10 +210,14 @@ function withVersions (plugin, modules, range, cb) {
         versions
           .filter(version => !process.env.RANGE || semver.subset(version, process.env.RANGE))
           .forEach(version => {
-            const min = semver.coerce(version).version
+            if (version !== '*') {
+              const min = semver.coerce(version).version
+
+              testVersions.set(min, { range: version, test: min })
+            }
+
             const max = require(`../../../../versions/${moduleName}@${version}`).version()
 
-            testVersions.set(min, { range: version, test: min })
             testVersions.set(max, { range: version, test: version })
           })
       })
@@ -234,7 +251,7 @@ function withVersions (plugin, modules, range, cb) {
             require('module').Module._initPaths()
           })
 
-          cb(v.test, moduleName)
+          cb(v.test, moduleName, v.version)
 
           after(() => {
             process.env.NODE_PATH = nodePath

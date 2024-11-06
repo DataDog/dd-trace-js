@@ -7,11 +7,15 @@ const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const {
   incrementWafInitMetric,
   updateWafRequestsMetricTags,
+  updateRaspRequestsMetricTags,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,
   getRequestMetrics
 } = require('./telemetry')
 const zlib = require('zlib')
+const standalone = require('./standalone')
+const { SAMPLING_MECHANISM_APPSEC } = require('../constants')
+const { keepTrace } = require('../priority_sampler')
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
@@ -26,19 +30,17 @@ const contentHeaderList = [
   'content-language'
 ]
 
-const REQUEST_HEADERS_MAP = mapHeaderAndTags([
+const EVENT_HEADERS_MAP = mapHeaderAndTags([
   ...ipHeaderList,
   'forwarded',
   'via',
   ...contentHeaderList,
   'host',
-  'user-agent',
-  'accept',
   'accept-encoding',
   'accept-language'
 ], 'http.request.headers.')
 
-const IDENTIFICATION_HEADERS_MAP = mapHeaderAndTags([
+const identificationHeaders = [
   'x-amzn-trace-id',
   'cloudfront-viewer-ja3-fingerprint',
   'cf-ray',
@@ -47,6 +49,14 @@ const IDENTIFICATION_HEADERS_MAP = mapHeaderAndTags([
   'x-sigsci-requestid',
   'x-sigsci-tags',
   'akamai-user-risk'
+]
+
+// these request headers are always collected - it breaks the expected spec orders
+const REQUEST_HEADERS_MAP = mapHeaderAndTags([
+  'content-type',
+  'user-agent',
+  'accept',
+  ...identificationHeaders
 ], 'http.request.headers.')
 
 const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, 'http.response.headers.')
@@ -87,12 +97,10 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
     metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(diagnosticsRules.errors))
   }
 
-  metricsQueue.set('manual.keep', 'true')
-
   incrementWafInitMetric(wafVersion, rulesVersion)
 }
 
-function reportMetrics (metrics) {
+function reportMetrics (metrics, raspRuleType) {
   const store = storage.getStore()
   const rootSpan = store?.req && web.root(store.req)
   if (!rootSpan) return
@@ -100,8 +108,11 @@ function reportMetrics (metrics) {
   if (metrics.rulesVersion) {
     rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
   }
-
-  updateWafRequestsMetricTags(metrics, store.req)
+  if (raspRuleType) {
+    updateRaspRequestsMetricTags(metrics, store.req, raspRuleType)
+  } else {
+    updateWafRequestsMetricTags(metrics, store.req)
+  }
 }
 
 function reportAttack (attackData) {
@@ -112,12 +123,14 @@ function reportAttack (attackData) {
 
   const currentTags = rootSpan.context()._tags
 
-  const newTags = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
-
-  newTags['appsec.event'] = 'true'
+  const newTags = {
+    'appsec.event': 'true'
+  }
 
   if (limiter.isAllowed()) {
-    newTags['manual.keep'] = 'true' // TODO: figure out how to keep appsec traces with sampling revamp
+    keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
+
+    standalone.sample(rootSpan)
   }
 
   // TODO: maybe add this to format.js later (to take decision as late as possible)
@@ -134,17 +147,16 @@ function reportAttack (attackData) {
     newTags['_dd.appsec.json'] = '{"triggers":' + attackData + '}'
   }
 
-  const ua = newTags['http.request.headers.user-agent']
-  if (ua) {
-    newTags['http.useragent'] = ua
-  }
-
   newTags['network.client.ip'] = req.socket.remoteAddress
 
   rootSpan.addTags(newTags)
 }
 
-function reportSchemas (derivatives) {
+function isFingerprintDerivative (derivative) {
+  return derivative.startsWith('_dd.appsec.fp')
+}
+
+function reportDerivatives (derivatives) {
   if (!derivatives) return
 
   const req = storage.getStore()?.req
@@ -153,9 +165,12 @@ function reportSchemas (derivatives) {
   if (!rootSpan) return
 
   const tags = {}
-  for (const [address, value] of Object.entries(derivatives)) {
-    const gzippedValue = zlib.gzipSync(JSON.stringify(value))
-    tags[address] = gzippedValue.toString('base64')
+  for (let [tag, value] of Object.entries(derivatives)) {
+    if (!isFingerprintDerivative(tag)) {
+      const gzippedValue = zlib.gzipSync(JSON.stringify(value))
+      value = gzippedValue.toString('base64')
+    }
+    tags[tag] = value
   }
 
   rootSpan.addTags(tags)
@@ -167,6 +182,10 @@ function finishRequest (req, res) {
 
   if (metricsQueue.size) {
     rootSpan.addTags(Object.fromEntries(metricsQueue))
+
+    keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
+
+    standalone.sample(rootSpan)
 
     metricsQueue.clear()
   }
@@ -180,20 +199,49 @@ function finishRequest (req, res) {
     rootSpan.setTag('_dd.appsec.waf.duration_ext', metrics.durationExt)
   }
 
+  if (metrics?.raspDuration) {
+    rootSpan.setTag('_dd.appsec.rasp.duration', metrics.raspDuration)
+  }
+
+  if (metrics?.raspDurationExt) {
+    rootSpan.setTag('_dd.appsec.rasp.duration_ext', metrics.raspDurationExt)
+  }
+
+  if (metrics?.raspEvalCount) {
+    rootSpan.setTag('_dd.appsec.rasp.rule.eval', metrics.raspEvalCount)
+  }
+
   incrementWafRequestsMetric(req)
 
   // collect some headers even when no attack is detected
-  rootSpan.addTags(filterHeaders(req.headers, IDENTIFICATION_HEADERS_MAP))
+  const mandatoryTags = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
+  rootSpan.addTags(mandatoryTags)
 
-  if (!rootSpan.context()._tags['appsec.event']) return
+  const tags = rootSpan.context()._tags
+  if (!shouldCollectEventHeaders(tags)) return
 
   const newTags = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_MAP)
+  Object.assign(newTags, filterHeaders(req.headers, EVENT_HEADERS_MAP))
 
-  if (req.route && typeof req.route.path === 'string') {
+  if (tags['appsec.event'] === 'true' && typeof req.route?.path === 'string') {
     newTags['http.endpoint'] = req.route.path
   }
 
   rootSpan.addTags(newTags)
+}
+
+function shouldCollectEventHeaders (tags = {}) {
+  if (tags['appsec.event'] === 'true') {
+    return true
+  }
+
+  for (const tagName of Object.keys(tags)) {
+    if (tagName.startsWith('appsec.events.')) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function setRateLimit (rateLimit) {
@@ -208,7 +256,7 @@ module.exports = {
   reportMetrics,
   reportAttack,
   reportWafUpdate: incrementWafUpdatesMetric,
-  reportSchemas,
+  reportDerivatives,
   finishRequest,
   setRateLimit,
   mapHeaderAndTags

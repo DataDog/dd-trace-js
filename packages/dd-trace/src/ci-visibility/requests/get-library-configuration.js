@@ -7,8 +7,7 @@ const {
   TELEMETRY_GIT_REQUESTS_SETTINGS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_MS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS,
-  TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE,
-  getErrorTypeFromStatusCode
+  TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE
 } = require('../telemetry')
 
 const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES = 2
@@ -81,8 +80,7 @@ function getLibraryConfiguration ({
   request(data, options, (err, res, statusCode) => {
     distributionMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_MS, {}, Date.now() - startTime)
     if (err) {
-      const errorType = getErrorTypeFromStatusCode(statusCode)
-      incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS, { errorType })
+      incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS, { statusCode })
       done(err)
     } else {
       try {
@@ -93,7 +91,8 @@ function getLibraryConfiguration ({
               tests_skipping: isSuitesSkippingEnabled,
               itr_enabled: isItrEnabled,
               require_git: requireGit,
-              early_flake_detection: earlyFlakeDetectionConfig
+              early_flake_detection: earlyFlakeDetectionConfig,
+              flaky_test_retries_enabled: isFlakyTestRetriesEnabled
             }
           }
         } = JSON.parse(res)
@@ -107,7 +106,8 @@ function getLibraryConfiguration ({
           earlyFlakeDetectionNumRetries:
             earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES,
           earlyFlakeDetectionFaultyThreshold:
-            earlyFlakeDetectionConfig?.faulty_session_threshold ?? DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD
+            earlyFlakeDetectionConfig?.faulty_session_threshold ?? DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD,
+          isFlakyTestRetriesEnabled
         }
 
         log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)

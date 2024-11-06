@@ -40,7 +40,7 @@ function wrapMiddleware (middleware) {
 function wrapFn (fn) {
   if (Array.isArray(fn)) return wrapMiddleware(fn)
 
-  return function (req, res, next) {
+  return shimmer.wrapFunction(fn, fn => function (req, res, next) {
     if (typeof next === 'function') {
       arguments[2] = wrapNext(req, next)
     }
@@ -51,7 +51,7 @@ function wrapFn (fn) {
 
     try {
       const result = fn.apply(this, arguments)
-      if (result && typeof result === 'object' && typeof result.then === 'function') {
+      if (result !== null && typeof result === 'object' && typeof result.then === 'function') {
         return result.then(function () {
           nextChannel.publish({ req })
           finishChannel.publish({ req })
@@ -72,16 +72,16 @@ function wrapFn (fn) {
     } finally {
       exitChannel.publish({ req })
     }
-  }
+  })
 }
 
 function wrapNext (req, next) {
-  return function () {
+  return shimmer.wrapFunction(next, next => function () {
     nextChannel.publish({ req })
     finishChannel.publish({ req })
 
     next.apply(this, arguments)
-  }
+  })
 }
 
 addHook({ name: 'restify', versions: ['>=3'], file: 'lib/server.js' }, Server => {

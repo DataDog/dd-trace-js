@@ -3,6 +3,8 @@
 const log = require('../../log')
 const Reporter = require('../reporter')
 const addresses = require('../addresses')
+const { getBlockingAction } = require('../blocking')
+const { wafRunFinished } = require('../channels')
 
 // TODO: remove once ephemeral addresses are implemented
 const preventDuplicateAddresses = new Set([
@@ -10,42 +12,56 @@ const preventDuplicateAddresses = new Set([
 ])
 
 class WAFContextWrapper {
-  constructor (ddwafContext, wafTimeout, wafVersion, rulesVersion) {
+  constructor (ddwafContext, wafTimeout, wafVersion, rulesVersion, knownAddresses) {
     this.ddwafContext = ddwafContext
     this.wafTimeout = wafTimeout
     this.wafVersion = wafVersion
     this.rulesVersion = rulesVersion
     this.addressesToSkip = new Set()
+    this.knownAddresses = knownAddresses
   }
 
-  run ({ persistent, ephemeral }) {
+  run ({ persistent, ephemeral }, raspRuleType) {
+    if (this.ddwafContext.disposed) {
+      log.warn('Calling run on a disposed context')
+      return
+    }
+
     const payload = {}
     let payloadHasData = false
-    const inputs = {}
     const newAddressesToSkip = new Set(this.addressesToSkip)
 
-    if (persistent && typeof persistent === 'object') {
-      // TODO: possible optimization: only send params that haven't already been sent with same value to this wafContext
+    if (persistent !== null && typeof persistent === 'object') {
+      const persistentInputs = {}
+
       for (const key of Object.keys(persistent)) {
-        // TODO: requiredAddresses is no longer used due to processor addresses are not included in the list. Check on
-        // future versions when the actual addresses are included in the 'loaded' section inside diagnostics.
-        if (!this.addressesToSkip.has(key)) {
-          inputs[key] = persistent[key]
+        if (!this.addressesToSkip.has(key) && this.knownAddresses.has(key)) {
+          persistentInputs[key] = persistent[key]
           if (preventDuplicateAddresses.has(key)) {
             newAddressesToSkip.add(key)
           }
         }
       }
+
+      if (Object.keys(persistentInputs).length) {
+        payload.persistent = persistentInputs
+        payloadHasData = true
+      }
     }
 
-    if (Object.keys(inputs).length) {
-      payload.persistent = inputs
-      payloadHasData = true
-    }
+    if (ephemeral !== null && typeof ephemeral === 'object') {
+      const ephemeralInputs = {}
 
-    if (ephemeral && Object.keys(ephemeral).length) {
-      payload.ephemeral = ephemeral
-      payloadHasData = true
+      for (const key of Object.keys(ephemeral)) {
+        if (this.knownAddresses.has(key)) {
+          ephemeralInputs[key] = ephemeral[key]
+        }
+      }
+
+      if (Object.keys(ephemeralInputs).length) {
+        payload.ephemeral = ephemeralInputs
+        payloadHasData = true
+      }
     }
 
     if (!payloadHasData) return
@@ -60,7 +76,8 @@ class WAFContextWrapper {
       this.addressesToSkip = newAddressesToSkip
 
       const ruleTriggered = !!result.events?.length
-      const blockTriggered = result.actions?.includes('block')
+
+      const blockTriggered = !!getBlockingAction(result.actions)
 
       Reporter.reportMetrics({
         duration: result.totalRuntime / 1e3,
@@ -70,13 +87,17 @@ class WAFContextWrapper {
         blockTriggered,
         wafVersion: this.wafVersion,
         wafTimeout: result.timeout
-      })
+      }, raspRuleType)
 
       if (ruleTriggered) {
         Reporter.reportAttack(JSON.stringify(result.events))
       }
 
-      Reporter.reportSchemas(result.derivatives)
+      Reporter.reportDerivatives(result.derivatives)
+
+      if (wafRunFinished.hasSubscribers) {
+        wafRunFinished.publish({ payload })
+      }
 
       return result.actions
     } catch (err) {

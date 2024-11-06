@@ -14,6 +14,7 @@ const { oomExportStrategies, snapshotKinds } = require('./constants')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
+const { getAzureTagsFromMetadata, getAzureAppMetadata } = require('../azure_metadata')
 
 class Config {
   constructor (options = {}) {
@@ -23,7 +24,6 @@ class Config {
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_CPU_ENABLED,
       DD_PROFILING_DEBUG_SOURCE_MAPS,
-      DD_PROFILING_ENABLED,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
       DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_EXPERIMENTAL_CPU_ENABLED,
@@ -49,7 +49,6 @@ class Config {
       DD_VERSION
     } = process.env
 
-    const enabled = isTrue(coalesce(options.enabled, DD_PROFILING_ENABLED, true))
     const env = coalesce(options.env, DD_ENV)
     const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
@@ -64,7 +63,6 @@ class Config {
     const pprofPrefix = coalesce(options.pprofPrefix,
       DD_PROFILING_PPROF_PREFIX, '')
 
-    this.enabled = enabled
     this.service = service
     this.env = env
     this.host = host
@@ -74,7 +72,8 @@ class Config {
     this.tags = Object.assign(
       tagger.parse(DD_TAGS),
       tagger.parse(options.tags),
-      tagger.parse({ env, host, service, version, functionname })
+      tagger.parse({ env, host, service, version, functionname }),
+      getAzureTagsFromMetadata(getAzureAppMetadata())
     )
 
     // Add source code integration tags if available
@@ -100,6 +99,11 @@ class Config {
     const samplingContextsAvailable = process.platform !== 'win32'
     function checkOptionAllowed (option, description, condition) {
       if (option && !condition) {
+        // injection hardening: all of these can only happen if user explicitly
+        // sets an environment variable to its non-default value on the platform.
+        // In practical terms, it'd require someone explicitly turning on OOM
+        // monitoring, code hotspots, endpoint profiling, or CPU profiling on
+        // Windows, where it is not supported.
         throw new Error(`${description} not supported on ${process.platform}.`)
       }
     }
@@ -128,6 +132,8 @@ class Config {
       port
     })))
 
+    this.libraryInjected = options.libraryInjected
+    this.activation = options.activation
     this.exporters = ensureExporters(options.exporters || [
       new AgentExporter(this)
     ], this)

@@ -19,7 +19,8 @@ const {
   GIT_COMMIT_AUTHOR_NAME,
   GIT_COMMIT_MESSAGE,
   CI_WORKSPACE_PATH,
-  CI_PIPELINE_URL
+  CI_PIPELINE_URL,
+  CI_JOB_NAME
 } = require('./tags')
 const id = require('../../id')
 
@@ -27,6 +28,9 @@ const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../
 const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { version: ddTraceVersion } = require('../../../../../package.json')
+
+// session tags
+const TEST_SESSION_NAME = 'test_session.name'
 
 const TEST_FRAMEWORK = 'test.framework'
 const TEST_FRAMEWORK_VERSION = 'test.framework_version'
@@ -62,6 +66,7 @@ const JEST_TEST_RUNNER = 'test.jest.test_runner'
 const JEST_DISPLAY_NAME = 'test.jest.display_name'
 
 const CUCUMBER_IS_PARALLEL = 'test.cucumber.is_parallel'
+const MOCHA_IS_PARALLEL = 'test.mocha.is_parallel'
 
 const TEST_ITR_TESTS_SKIPPED = '_dd.ci.itr.tests_skipped'
 const TEST_ITR_SKIPPING_ENABLED = 'test.itr.tests_skipping.enabled'
@@ -87,17 +92,29 @@ const JEST_WORKER_COVERAGE_PAYLOAD_CODE = 61
 // cucumber worker variables
 const CUCUMBER_WORKER_TRACE_PAYLOAD_CODE = 70
 
+// mocha worker variables
+const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
+
 // Early flake detection util strings
 const EFD_STRING = "Retried by Datadog's Early Flake Detection"
 const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
 
+const TEST_LEVEL_EVENT_TYPES = [
+  'test',
+  'test_suite_end',
+  'test_module_end',
+  'test_session_end'
+]
+
 module.exports = {
   TEST_CODE_OWNERS,
+  TEST_SESSION_NAME,
   TEST_FRAMEWORK,
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
   JEST_DISPLAY_NAME,
   CUCUMBER_IS_PARALLEL,
+  MOCHA_IS_PARALLEL,
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
@@ -111,6 +128,7 @@ module.exports = {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
+  MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
   TEST_CONFIGURATION_BROWSER_NAME,
@@ -150,7 +168,6 @@ module.exports = {
   mergeCoverage,
   fromCoverageMapToCoverage,
   getTestLineStart,
-  getCallSites,
   removeInvalidMetadata,
   parseAnnotations,
   EFD_STRING,
@@ -161,7 +178,10 @@ module.exports = {
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
-  TEST_BROWSER_VERSION
+  TEST_BROWSER_VERSION,
+  getTestSessionName,
+  TEST_LEVEL_EVENT_TYPES,
+  getNumFromKnownTests
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -537,26 +557,6 @@ function getTestLineStart (err, testSuitePath) {
   }
 }
 
-// From https://github.com/felixge/node-stack-trace/blob/ba06dcdb50d465cd440d84a563836e293b360427/index.js#L1
-function getCallSites () {
-  const oldLimit = Error.stackTraceLimit
-  Error.stackTraceLimit = Infinity
-
-  const dummy = {}
-
-  const v8Handler = Error.prepareStackTrace
-  Error.prepareStackTrace = function (_, v8StackTrace) {
-    return v8StackTrace
-  }
-  Error.captureStackTrace(dummy)
-
-  const v8StackTrace = dummy.stack
-  Error.prepareStackTrace = v8Handler
-  Error.stackTraceLimit = oldLimit
-
-  return v8StackTrace
-}
-
 /**
  * Gets an object of test tags from an Playwright annotations array.
  * @param {Object[]} annotations - Annotations from a Playwright test.
@@ -608,4 +608,32 @@ function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faulty
     newSuites > faultyThresholdPercentage &&
     newSuitesPercentage > faultyThresholdPercentage
   )
+}
+
+function getTestSessionName (config, testCommand, envTags) {
+  if (config.ciVisibilityTestSessionName) {
+    return config.ciVisibilityTestSessionName
+  }
+  if (envTags[CI_JOB_NAME]) {
+    return `${envTags[CI_JOB_NAME]}-${testCommand}`
+  }
+  return testCommand
+}
+
+// Calculate the number of a tests from the known tests response, which has a shape like:
+// { testModule1: { testSuite1: [test1, test2, test3] }, testModule2: { testSuite2: [test4, test5] } }
+function getNumFromKnownTests (knownTests) {
+  if (!knownTests) {
+    return 0
+  }
+
+  let totalNumTests = 0
+
+  for (const testModule of Object.values(knownTests)) {
+    for (const testSuite of Object.values(testModule)) {
+      totalNumTests += testSuite.length
+    }
+  }
+
+  return totalNumTests
 }

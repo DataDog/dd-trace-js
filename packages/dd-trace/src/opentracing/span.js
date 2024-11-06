@@ -67,6 +67,8 @@ class DatadogSpan {
     this._store = storage.getStore()
     this._duration = undefined
 
+    this._events = []
+
     // For internal use only. You probably want `context()._name`.
     // This name property is not updated when the span name changes.
     // This is necessary for span count metrics.
@@ -97,7 +99,10 @@ class DatadogSpan {
       unfinishedRegistry.register(this, operationName, this)
     }
     spanleak.addSpan(this, operationName)
-    startCh.publish(this)
+
+    if (startCh.hasSubscribers) {
+      startCh.publish({ span: this, fields })
+    }
   }
 
   toString () {
@@ -140,6 +145,18 @@ class DatadogSpan {
     return this._spanContext._baggageItems[key]
   }
 
+  getAllBaggageItems () {
+    return JSON.stringify(this._spanContext._baggageItems)
+  }
+
+  removeBaggageItem (key) {
+    delete this._spanContext._baggageItems[key]
+  }
+
+  removeAllBaggageItems () {
+    this._spanContext._baggageItems = {}
+  }
+
   setTag (key, value) {
     this._addTags({ [key]: value })
     return this
@@ -161,6 +178,19 @@ class DatadogSpan {
       context: context._ddContext ? context._ddContext : context,
       attributes: this._sanitizeAttributes(attributes)
     })
+  }
+
+  addEvent (name, attributesOrStartTime, startTime) {
+    const event = { name }
+    if (attributesOrStartTime) {
+      if (typeof attributesOrStartTime === 'object') {
+        event.attributes = this._sanitizeEventAttributes(attributesOrStartTime)
+      } else {
+        startTime = attributesOrStartTime
+      }
+    }
+    event.startTime = startTime || this._getTime()
+    this._events.push(event)
   }
 
   finish (finishTime) {
@@ -221,7 +251,30 @@ class DatadogSpan {
       const [key, value] = entry
       addArrayOrScalarAttributes(key, value)
     })
+    return sanitizedAttributes
+  }
 
+  _sanitizeEventAttributes (attributes = {}) {
+    const sanitizedAttributes = {}
+
+    for (const key in attributes) {
+      const value = attributes[key]
+      if (Array.isArray(value)) {
+        const newArray = []
+        for (const subkey in value) {
+          if (ALLOWED.includes(typeof value[subkey])) {
+            newArray.push(value[subkey])
+          } else {
+            log.warn('Dropping span event attribute. It is not of an allowed type')
+          }
+        }
+        sanitizedAttributes[key] = newArray
+      } else if (ALLOWED.includes(typeof value)) {
+        sanitizedAttributes[key] = value
+      } else {
+        log.warn('Dropping span event attribute. It is not of an allowed type')
+      }
+    }
     return sanitizedAttributes
   }
 

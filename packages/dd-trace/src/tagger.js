@@ -1,6 +1,10 @@
 'use strict'
 
+const constants = require('./constants')
 const log = require('./log')
+const ERROR_MESSAGE = constants.ERROR_MESSAGE
+const ERROR_STACK = constants.ERROR_STACK
+const ERROR_TYPE = constants.ERROR_TYPE
 
 const otelTagMap = {
   'deployment.environment': 'env',
@@ -14,7 +18,6 @@ function add (carrier, keyValuePairs, parseOtelTags = false) {
   if (Array.isArray(keyValuePairs)) {
     return keyValuePairs.forEach(tags => add(carrier, tags))
   }
-
   try {
     if (typeof keyValuePairs === 'string') {
       const segments = keyValuePairs.split(',')
@@ -32,6 +35,12 @@ function add (carrier, keyValuePairs, parseOtelTags = false) {
         carrier[key.trim()] = value.trim()
       }
     } else {
+      // HACK: to ensure otel.recordException does not influence trace.error
+      if (ERROR_MESSAGE in keyValuePairs || ERROR_STACK in keyValuePairs || ERROR_TYPE in keyValuePairs) {
+        if (!('doNotSetTraceError' in keyValuePairs)) {
+          carrier.setTraceError = true
+        }
+      }
       Object.assign(carrier, keyValuePairs)
     }
   } catch (e) {

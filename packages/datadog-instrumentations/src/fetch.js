@@ -8,5 +8,5 @@ if (globalThis.fetch) {
   const ch = tracingChannel('apm:fetch:request')
   const wrapFetch = createWrapFetch(globalThis.Request, ch)
 
-  globalThis.fetch = shimmer.wrap(fetch, wrapFetch(fetch))
+  globalThis.fetch = shimmer.wrapFunction(fetch, fetch => wrapFetch(fetch))
 }

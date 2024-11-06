@@ -53,7 +53,7 @@ function computeRetries (uploadTimeout) {
 }
 
 class AgentExporter {
-  constructor ({ url, logger, uploadTimeout, env, host, service, version } = {}) {
+  constructor ({ url, logger, uploadTimeout, env, host, service, version, libraryInjected, activation } = {}) {
     this._url = url
     this._logger = logger
 
@@ -65,6 +65,8 @@ class AgentExporter {
     this._host = host
     this._service = service
     this._appVersion = version
+    this._libraryInjected = !!libraryInjected
+    this._activation = activation || 'unknown'
   }
 
   export ({ profiles, start, end, tags }) {
@@ -105,6 +107,10 @@ class AgentExporter {
           kernel_version: os.version()
         },
         profiler: {
+          activation: this._activation,
+          ssi: {
+            mechanism: this._libraryInjected ? 'injected_agent' : 'none'
+          },
           version
         },
         runtime: {
@@ -189,11 +195,13 @@ class AgentExporter {
         })
 
         sendRequest(options, form, (err, response) => {
-          if (operation.retry(err)) {
-            this._logger.error(`Error from the agent: ${err.message}`)
-            return
-          } else if (err) {
-            reject(new Error('Profiler agent export back-off period expired'))
+          if (err) {
+            const { status } = err
+            if ((typeof status !== 'number' || status >= 500 || status === 429) && operation.retry(err)) {
+              this._logger.error(`Error from the agent: ${err.message}`)
+            } else {
+              reject(err)
+            }
             return
           }
 

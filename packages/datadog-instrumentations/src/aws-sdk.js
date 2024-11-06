@@ -20,7 +20,8 @@ function wrapRequest (send) {
 
     return innerAr.runInAsyncScope(() => {
       this.on('complete', innerAr.bind(response => {
-        channel(`apm:aws:request:complete:${channelSuffix}`).publish({ response })
+        const cbExists = typeof cb === 'function'
+        channel(`apm:aws:request:complete:${channelSuffix}`).publish({ response, cbExists })
       }))
 
       startCh.publish({
@@ -74,7 +75,7 @@ function wrapSmithySend (send) {
       })
 
       if (typeof cb === 'function') {
-        args[args.length - 1] = function (err, result) {
+        args[args.length - 1] = shimmer.wrapFunction(cb, cb => function (err, result) {
           const message = getMessage(request, err, result)
 
           completeChannel.publish(message)
@@ -88,7 +89,7 @@ function wrapSmithySend (send) {
               responseFinishChannel.publish(message.response.error)
             }
           })
-        }
+        })
       } else { // always a promise
         return send.call(this, command, ...args)
           .then(
@@ -112,7 +113,7 @@ function wrapSmithySend (send) {
 
 function wrapCb (cb, serviceName, request, ar) {
   // eslint-disable-next-line n/handle-callback-err
-  return function wrappedCb (err, response) {
+  return shimmer.wrapFunction(cb, cb => function wrappedCb (err, response) {
     const obj = { request, response }
     return ar.runInAsyncScope(() => {
       channel(`apm:aws:response:start:${serviceName}`).publish(obj)
@@ -140,7 +141,7 @@ function wrapCb (cb, serviceName, request, ar) {
         throw e
       }
     })
-  }
+  })
 }
 
 function getMessage (request, error, result) {

@@ -47,6 +47,18 @@
       "versions": [">=3"]
     }
   ],
+  "body-parser": [
+    {
+      "name": "express",
+      "versions": ["^4"]
+    }
+  ],
+  "cookie-parser": [
+    {
+      "name": "express",
+      "versions": ["^4"]
+    }
+  ],
   "cypress": [
     {
       "name": "cypress",
@@ -55,12 +67,24 @@
   ],
   "express": [
     {
+      "name": "axios",
+      "versions": [">=1.0.0"]
+    },
+    {
       "name": "loopback",
       "versions": [">=2.38.1"]
     },
     {
       "name": "cookie-parser",
       "versions": [">=1.4.6"]
+    },
+    {
+      "name": "request",
+      "versions": ["2.88.2"]
+    },
+    {
+      "name": "multer",
+      "versions": ["^1.4.4-lts.1"]
     }
   ],
   "express-mongo-sanitize": [
@@ -89,6 +113,16 @@
     {
       "name": "mongodb",
       "versions": ["5", ">=6"]
+    }
+  ],
+  "mysql2": [
+    {
+      "name": "mysql2",
+      "versions": ["1.3.3"]
+    },
+    {
+      "name": "express",
+      "versions": [">=4"]
     }
   ],
   "fastify": [
@@ -247,6 +281,12 @@
       "versions": [">=2"]
     }
   ],
+  "lodash": [
+    {
+      "name": "lodash",
+      "versions": [">=4"]
+    }
+  ],
   "mariadb": [
     {
       "name": "mariadb",
@@ -256,7 +296,7 @@
   "mocha": [
     {
       "name": "mocha",
-      "versions": [">=5.2.0"]
+      "versions": [">=5.2.0", ">=8.0.0"]
     },
     {
       "name": "mocha-each",
@@ -321,12 +361,20 @@
      {
        "name": "express",
        "versions": [">=4.16.2"]
+     },
+     {
+       "name": "body-parser",
+       "versions": ["1.20.1"]
      }
   ],
   "pg": [
     {
       "name": "pg-native",
       "versions": ["3.0.0"]
+    },
+    {
+      "name": "express",
+      "versions": [">=4"]
     }
   ],
   "pino": [
@@ -350,6 +398,12 @@
     {
       "name": "redis",
       "versions": ["^4"]
+    }
+  ],
+  "rhea": [
+    {
+      "name": "amqp10",
+      "versions": ["^3"]
     }
   ],
   "sequelize": [

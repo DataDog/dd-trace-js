@@ -4,7 +4,8 @@ const Writer = require('./writer')
 const {
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
-  CUCUMBER_WORKER_TRACE_PAYLOAD_CODE
+  CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
+  MOCHA_WORKER_TRACE_PAYLOAD_CODE
 } = require('../../../plugins/util/test')
 
 function getInterprocessTraceCode () {
@@ -13,6 +14,9 @@ function getInterprocessTraceCode () {
   }
   if (process.env.CUCUMBER_WORKER_ID) {
     return CUCUMBER_WORKER_TRACE_PAYLOAD_CODE
+  }
+  if (process.env.MOCHA_WORKER_ID) {
+    return MOCHA_WORKER_TRACE_PAYLOAD_CODE
   }
   return null
 }

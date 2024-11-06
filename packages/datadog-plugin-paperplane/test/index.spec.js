@@ -1,7 +1,6 @@
 'use strict'
 
 const axios = require('axios')
-const getPort = require('get-port')
 const semver = require('semver')
 
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -76,7 +75,9 @@ describe('Plugin', () => {
 
           server = http.createServer(mount({ app, cry, logger }))
 
-          getPort().then(port => {
+          server.listen(0, 'localhost', () => {
+            const port = server.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -94,11 +95,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`)
+              .catch(done)
           })
         })
 
@@ -113,7 +112,9 @@ describe('Plugin', () => {
 
           server = http.createServer(mount({ app, cry, logger }))
 
-          getPort().then(port => {
+          server.listen(0, 'localhost', () => {
+            const port = server.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -123,11 +124,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user/1`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user/1`)
+              .catch(done)
           })
         })
 
@@ -155,7 +154,9 @@ describe('Plugin', () => {
 
           server = http.createServer(mount({ app, cry, logger }))
 
-          getPort().then(port => {
+          server.listen(0, 'localhost', () => {
+            const port = server.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -165,11 +166,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user/123`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user/123`)
+              .catch(done)
           })
         })
 
@@ -191,7 +190,9 @@ describe('Plugin', () => {
 
           server = http.createServer(mount({ app, cry, logger }))
 
-          getPort().then(port => {
+          server.listen(0, 'localhost', () => {
+            const port = server.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -201,11 +202,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user/123`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user/123`)
+              .catch(done)
           })
         })
 
@@ -220,7 +219,9 @@ describe('Plugin', () => {
 
           server = http.createServer(mount({ app, cry, logger }))
 
-          getPort().then(port => {
+          server.listen(0, 'localhost', () => {
+            const port = server.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -230,13 +231,11 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/app`, {
-                  validateStatus: status => status === 500
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/app`, {
+                validateStatus: status => status === 500
+              })
+              .catch(done)
           })
         })
 
@@ -247,7 +246,9 @@ describe('Plugin', () => {
 
           server = http.createServer(mount({ app, cry, logger }))
 
-          getPort().then(port => {
+          server.listen(0, 'localhost', () => {
+            const port = server.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -257,11 +258,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/app`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/app`)
+              .catch(done)
           })
         })
 
@@ -280,7 +279,9 @@ describe('Plugin', () => {
 
           server = http.createServer(mount({ app, cry, logger }))
 
-          getPort().then(port => {
+          server.listen(0, 'localhost', () => {
+            const port = server.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -290,10 +291,8 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            server.listen(port, 'localhost', () => {
-              axios.get(`http://localhost:${port}/app/user/123`)
-                .catch(done)
-            })
+            axios.get(`http://localhost:${port}/app/user/123`)
+              .catch(done)
           })
         })
 
@@ -308,7 +307,9 @@ describe('Plugin', () => {
 
           server = http.createServer(mount({ app, cry, logger }))
 
-          getPort().then(port => {
+          server.listen(0, 'localhost', () => {
+            const port = server.address().port
+
             agent.use(traces => {
               const spans = sort(traces[0])
 
@@ -318,17 +319,15 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  headers: {
-                    'x-datadog-trace-id': '1234',
-                    'x-datadog-parent-id': '5678',
-                    'ot-baggage-foo': 'bar'
-                  }
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`, {
+                headers: {
+                  'x-datadog-trace-id': '1234',
+                  'x-datadog-parent-id': '5678',
+                  'ot-baggage-foo': 'bar'
+                }
+              })
+              .catch(done)
           })
         })
 
@@ -343,7 +342,9 @@ describe('Plugin', () => {
 
           server = http.createServer(mount({ app, cry, logger }))
 
-          getPort().then(port => {
+          server.listen(0, 'localhost', () => {
+            const port = server.address().port
+
             agent.use(traces => {
               const spans = sort(traces[0])
 
@@ -355,13 +356,11 @@ describe('Plugin', () => {
               done()
             })
 
-            server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 500
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`, {
+                validateStatus: status => status === 500
+              })
+              .catch(done)
           })
         })
 
@@ -376,7 +375,9 @@ describe('Plugin', () => {
 
           server = http.createServer(mount({ app, cry, logger }))
 
-          getPort().then(port => {
+          server.listen(0, 'localhost', () => {
+            const port = server.address().port
+
             agent.use(traces => {
               const spans = sort(traces[0])
 
@@ -388,13 +389,11 @@ describe('Plugin', () => {
               done()
             })
 
-            server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 400
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`, {
+                validateStatus: status => status === 400
+              })
+              .catch(done)
           })
         })
 
@@ -405,7 +404,9 @@ describe('Plugin', () => {
 
           server = http.createServer(mount({ app, cry, logger }))
 
-          getPort().then(port => {
+          server.listen(0, 'localhost', () => {
+            const port = server.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -417,13 +418,11 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 500
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`, {
+                validateStatus: status => status === 500
+              })
+              .catch(done)
           })
         })
 
@@ -477,7 +476,9 @@ describe('Plugin', () => {
 
           server = http.createServer(mount({ app, cry, logger }))
 
-          getPort().then(port => {
+          server.listen(0, 'localhost', () => {
+            const port = server.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -487,11 +488,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`)
+              .catch(done)
           })
         })
 
@@ -506,7 +505,9 @@ describe('Plugin', () => {
 
           server = http.createServer(mount({ app, cry, logger }))
 
-          getPort().then(port => {
+          server.listen(0, 'localhost', () => {
+            const port = server.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -516,13 +517,11 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 400
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`, {
+                validateStatus: status => status === 400
+              })
+              .catch(done)
           })
         })
 
@@ -537,7 +536,9 @@ describe('Plugin', () => {
 
           server = http.createServer(mount({ app, cry, logger }))
 
-          getPort().then(port => {
+          server.listen(0, 'localhost', () => {
+            const port = server.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -547,13 +548,11 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  headers: { 'User-Agent': 'test' }
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`, {
+                headers: { 'User-Agent': 'test' }
+              })
+              .catch(done)
           })
         })
 

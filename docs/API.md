@@ -24,9 +24,11 @@ tracer.use('pg', {
 <h5 id="amqplib"></h5>
 <h5 id="amqplib-tags"></h5>
 <h5 id="amqplib-config"></h5>
+<h5 id="avsc"></h5>
 <h5 id="aws-sdk"></h5>
 <h5 id="aws-sdk-tags"></h5>
 <h5 id="aws-sdk-config"></h5>
+<h5 id="azure-functions"></h5>
 <h5 id="bunyan"></h5>
 <h5 id="couchbase"></h5>
 <h5 id="cucumber"></h5>
@@ -87,6 +89,7 @@ tracer.use('pg', {
 <h5 id="pg"></h5>
 <h5 id="pg-tags"></h5>
 <h5 id="pg-config"></h5>
+<h5 id="protobufjs"></h5>
 <h5 id="redis"></h5>
 <h5 id="redis-tags"></h5>
 <h5 id="redis-config"></h5>
@@ -94,13 +97,16 @@ tracer.use('pg', {
 <h5 id="restify-tags"></h5>
 <h5 id="restify-config"></h5>
 <h5 id="tedious"></h5>
+<h5 id="undici"></h5>
 <h5 id="when"></h5>
 <h5 id="winston"></h5>
 <h3 id="integrations-list">Available Plugins</h3>
 
 * [amqp10](./interfaces/export_.plugins.amqp10.html)
 * [amqplib](./interfaces/export_.plugins.amqplib.html)
+* [avsc](./interfaces/export_.plugins.avsc.html)
 * [aws-sdk](./interfaces/export_.plugins.aws_sdk.html)
+* [azure-functions](./interfaces/export_.plugins.azure_functions.html)
 * [bluebird](./interfaces/export_.plugins.bluebird.html)
 * [couchbase](./interfaces/export_.plugins.couchbase.html)
 * [cucumber](./interfaces/export_.plugins.cucumber.html)
@@ -141,11 +147,13 @@ tracer.use('pg', {
 * [pg](./interfaces/export_.plugins.pg.html)
 * [promise](./interfaces/export_.plugins.promise.html)
 * [promise-js](./interfaces/export_.plugins.promise_js.html)
+* [protobufjs](./interfaces/export_.plugins.protobufjs.html)
 * [q](./interfaces/export_.plugins.q.html)
 * [redis](./interfaces/export_.plugins.redis.html)
 * [restify](./interfaces/export_.plugins.restify.html)
 * [router](./interfaces/export_.plugins.router.html)
 * [tedious](./interfaces/export_.plugins.tedious.html)
+* [undici](./interfaces/export_.plugins.undici.html)
 * [when](./interfaces/export_.plugins.when.html)
 * [winston](./interfaces/export_.plugins.winston.html)
 
@@ -373,7 +381,7 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 
 <h3 id="custom-logging">Custom Logging</h3>
 
-By default, logging from this library is disabled. In order to get debugging information and errors sent to logs, the `debug` options should be set to `true` in the [init()](./interfaces/tracer.html#init) method.
+By default, logging from this library is disabled. In order to get debugging information and errors sent to logs, the `DD_TRACE_DEBUG` env var should be set to `true`.
 
 The tracer will then log debug information to `console.log()` and errors to `console.error()`. This behavior can be changed by passing a custom logger to the tracer. The logger should contain a `debug()` and `error()` methods that can handle messages and errors, respectively.
 
@@ -386,14 +394,15 @@ const logger = bunyan.createLogger({
   level: 'trace'
 })
 
+process.env.DD_TRACE_DEBUG = 'true'
+
 const tracer = require('dd-trace').init({
   logger: {
     error: err => logger.error(err),
     warn: message => logger.warn(message),
     info: message => logger.info(message),
     debug: message => logger.trace(message),
-  },
-  debug: true
+  }
 })
 ```
 

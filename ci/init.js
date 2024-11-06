@@ -4,6 +4,7 @@ const { isTrue } = require('../packages/dd-trace/src/util')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
 const isCucumberWorker = !!process.env.CUCUMBER_WORKER_ID
+const isMochaWorker = !!process.env.MOCHA_WORKER_ID
 
 const options = {
   startupLogs: false,
@@ -41,6 +42,12 @@ if (isJestWorker) {
 if (isCucumberWorker) {
   options.experimental = {
     exporter: 'cucumber_worker'
+  }
+}
+
+if (isMochaWorker) {
+  options.experimental = {
+    exporter: 'mocha_worker'
   }
 }
 

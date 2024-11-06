@@ -5,6 +5,7 @@ require('../../setup/tap')
 const { calculateDDBasePath } = require('../../../src/util')
 
 const ddBasePath = calculateDDBasePath(__dirname)
+const EOL = '\n'
 
 describe('telemetry log collector', () => {
   const logCollector = require('../../../src/telemetry/logs/log-collector')
@@ -40,6 +41,46 @@ describe('telemetry log collector', () => {
       expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: `stack 1\n${ddFrame}` })).to.be.true
       expect(logCollector.add({ message: 'Error 1', level: 'WARN', stack_trace: `stack 1\n${ddFrame}` })).to.be.true
       expect(logCollector.add({ message: 'Error 1', level: 'DEBUG', stack_trace: `stack 1\n${ddFrame}` })).to.be.true
+    })
+
+    it('should include original message and dd frames', () => {
+      const ddFrame = `at T (${ddBasePath}packages/dd-trace/test/telemetry/logs/log_collector.spec.js:29:21)`
+      const stack = new Error('Error 1')
+        .stack.replace(`Error 1${EOL}`, `Error 1${EOL}${ddFrame}${EOL}`)
+
+      const ddFrames = stack
+        .split(EOL)
+        .filter(line => line.includes(ddBasePath))
+        .map(line => line.replace(ddBasePath, ''))
+        .join(EOL)
+
+      expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: stack })).to.be.true
+
+      expect(logCollector.hasEntry({
+        message: 'Error 1',
+        level: 'ERROR',
+        stack_trace: `Error: Error 1${EOL}${ddFrames}`
+      })).to.be.true
+    })
+
+    it('should not include original message if first frame is not a dd frame', () => {
+      const thirdPartyFrame = `at callFn (/this/is/not/a/dd/frame/runnable.js:366:21)
+        at T (${ddBasePath}packages/dd-trace/test/telemetry/logs/log_collector.spec.js:29:21)`
+      const stack = new Error('Error 1')
+        .stack.replace(`Error 1${EOL}`, `Error 1${EOL}${thirdPartyFrame}${EOL}`)
+
+      const ddFrames = stack
+        .split(EOL)
+        .filter(line => line.includes(ddBasePath))
+        .map(line => line.replace(ddBasePath, ''))
+        .join(EOL)
+
+      expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: stack })).to.be.true
+      expect(logCollector.hasEntry({
+        message: 'omitted',
+        level: 'ERROR',
+        stack_trace: ddFrames
+      })).to.be.true
     })
   })
 

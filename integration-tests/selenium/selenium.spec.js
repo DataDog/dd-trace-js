@@ -84,7 +84,7 @@ versionRange.forEach(version => {
               const seleniumTest = events.find(event => event.type === 'test').content
               assert.include(seleniumTest.meta, {
                 [TEST_BROWSER_DRIVER]: 'selenium',
-                [TEST_BROWSER_NAME]: 'chrome-headless-shell',
+                [TEST_BROWSER_NAME]: 'chrome',
                 [TEST_TYPE]: 'browser',
                 [TEST_IS_RUM_ACTIVE]: 'true'
               })
@@ -111,6 +111,35 @@ versionRange.forEach(version => {
             }).catch(done)
           })
         })
+      })
+    })
+
+    it('does not crash when used outside a known test framework', (done) => {
+      let testOutput = ''
+      childProcess = exec(
+        'node ./ci-visibility/test/selenium-no-framework.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            WEB_APP_URL: `http://localhost:${webAppPort}`,
+            TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', (code) => {
+        assert.equal(code, 0)
+        assert.notInclude(testOutput, 'InvalidArgumentError')
+        done()
+      })
+
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', (chunk) => {
+        testOutput += chunk.toString()
       })
     })
   })

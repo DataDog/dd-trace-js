@@ -158,6 +158,7 @@ describe('GraphQL', () => {
   describe('block response', () => {
     const req = {}
     const res = {}
+
     beforeEach(() => {
       sinon.stub(storage, 'getStore').returns({ req, res })
 
@@ -213,10 +214,21 @@ describe('GraphQL', () => {
         user: [{ id: '1234' }]
       }
 
+      const blockParameters = {
+        status_code: '401',
+        type: 'auto',
+        grpc_status_code: '10'
+      }
+
+      const rootSpan = { setTag: sinon.stub() }
+
       const abortController = context.abortController
 
-      sinon.stub(waf, 'run').returns(['block'])
-      sinon.stub(web, 'root').returns({})
+      sinon.stub(waf, 'run').returns({
+        block_request: blockParameters
+      })
+
+      sinon.stub(web, 'root').returns(rootSpan)
 
       startGraphqlResolve.publish({ context, resolverInfo })
 
@@ -231,7 +243,9 @@ describe('GraphQL', () => {
       const abortData = {}
       apolloChannel.asyncEnd.publish({ abortController, abortData })
 
-      expect(blocking.getBlockingData).to.have.been.calledOnceWithExactly(req, 'graphql', {})
+      expect(blocking.getBlockingData).to.have.been.calledOnceWithExactly(req, 'graphql', blockParameters)
+
+      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
     })
   })
 })

@@ -15,6 +15,12 @@ function maybeSourceMap (sourceMap, SourceMapper, debug) {
   ], debug)
 }
 
+function logError (logger, err) {
+  if (logger) {
+    logger.error(err)
+  }
+}
+
 class Profiler extends EventEmitter {
   constructor () {
     super()
@@ -28,18 +34,19 @@ class Profiler extends EventEmitter {
 
   start (options) {
     return this._start(options).catch((err) => {
-      if (options.logger) {
-        options.logger.error(err)
-      }
+      logError(options.logger, err)
       return false
     })
+  }
+
+  _logError (err) {
+    logError(this._logger, err)
   }
 
   async _start (options) {
     if (this._enabled) return true
 
     const config = this._config = new Config(options)
-    if (!config.enabled) return false
 
     this._logger = config.logger
     this._enabled = true
@@ -53,7 +60,7 @@ class Profiler extends EventEmitter {
       setLogger(config.logger)
 
       mapper = await maybeSourceMap(config.sourceMap, SourceMapper, config.debugSourceMaps)
-      if (config.SourceMap && config.debugSourceMaps) {
+      if (config.sourceMap && config.debugSourceMaps) {
         this._logger.debug(() => {
           return mapper.infoMap.size === 0
             ? 'Found no source maps'
@@ -61,7 +68,7 @@ class Profiler extends EventEmitter {
         })
       }
     } catch (err) {
-      this._logger.error(err)
+      this._logError(err)
     }
 
     try {
@@ -78,7 +85,7 @@ class Profiler extends EventEmitter {
       this._capture(this._timeoutInterval, start)
       return true
     } catch (e) {
-      this._logger.error(e)
+      this._logError(e)
       this._stop()
       return false
     }
@@ -139,6 +146,10 @@ class Profiler extends EventEmitter {
     const encodedProfiles = {}
 
     try {
+      if (Object.keys(this._config.profilers).length === 0) {
+        throw new Error('No profile types configured.')
+      }
+
       // collect profiles synchronously so that profilers can be safely stopped asynchronously
       for (const profiler of this._config.profilers) {
         const profile = profiler.profile(restart, startDate, endDate)
@@ -149,40 +160,46 @@ class Profiler extends EventEmitter {
         profiles.push({ profiler, profile })
       }
 
-      // encode and export asynchronously
-      for (const { profiler, profile } of profiles) {
-        encodedProfiles[profiler.type] = await profiler.encode(profile)
-        this._logger.debug(() => {
-          const profileJson = JSON.stringify(profile, (key, value) => {
-            return typeof value === 'bigint' ? value.toString() : value
-          })
-          return `Collected ${profiler.type} profile: ` + profileJson
-        })
-      }
-
       if (restart) {
         this._capture(this._timeoutInterval, endDate)
       }
-      await this._submit(encodedProfiles, startDate, endDate, snapshotKind)
-      profileSubmittedChannel.publish()
-      this._logger.debug('Submitted profiles')
+
+      // encode and export asynchronously
+      for (const { profiler, profile } of profiles) {
+        try {
+          encodedProfiles[profiler.type] = await profiler.encode(profile)
+          this._logger.debug(() => {
+            const profileJson = JSON.stringify(profile, (key, value) => {
+              return typeof value === 'bigint' ? value.toString() : value
+            })
+            return `Collected ${profiler.type} profile: ` + profileJson
+          })
+        } catch (err) {
+          // If encoding one of the profile types fails, we should still try to
+          // encode and submit the other profile types.
+          this._logError(err)
+        }
+      }
+
+      if (Object.keys(encodedProfiles).length > 0) {
+        await this._submit(encodedProfiles, startDate, endDate, snapshotKind)
+        profileSubmittedChannel.publish()
+        this._logger.debug('Submitted profiles')
+      }
     } catch (err) {
-      this._logger.error(err)
+      this._logError(err)
       this._stop()
     }
   }
 
   _submit (profiles, start, end, snapshotKind) {
-    if (!Object.keys(profiles).length) {
-      return Promise.reject(new Error('No profiles to submit'))
-    }
     const { tags } = this._config
     const tasks = []
 
     tags.snapshot = snapshotKind
     for (const exporter of this._config.exporters) {
       const task = exporter.export({ profiles, start, end, tags })
-        .catch(err => this._logger.error(err))
+        .catch(err => this._logError(err))
 
       tasks.push(task)
     }
