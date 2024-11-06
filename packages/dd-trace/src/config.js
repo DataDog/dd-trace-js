@@ -462,6 +462,9 @@ class Config {
     this._setValue(defaults, 'appsec.stackTrace.maxDepth', 32)
     this._setValue(defaults, 'appsec.stackTrace.maxStackTraces', 2)
     this._setValue(defaults, 'appsec.wafTimeout', 5e3) // µs
+    this._setValue(defaults, 'baggageMaxBytes', 8192)
+    this._setValue(defaults, 'baggageMaxItems', 64)
+    this._setValue(defaults, 'ciVisibilityTestSessionName', '')
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
     this._setValue(defaults, 'codeOriginForSpans.enabled', false)
@@ -501,8 +504,12 @@ class Config {
     this._setValue(defaults, 'isGitUploadEnabled', false)
     this._setValue(defaults, 'isIntelligentTestRunnerEnabled', false)
     this._setValue(defaults, 'isManualApiEnabled', false)
+    this._setValue(defaults, 'llmobs.agentlessEnabled', false)
+    this._setValue(defaults, 'llmobs.enabled', false)
+    this._setValue(defaults, 'llmobs.mlApp', undefined)
     this._setValue(defaults, 'ciVisibilityTestSessionName', '')
     this._setValue(defaults, 'ciVisAgentlessLogSubmissionEnabled', false)
+    this._setValue(defaults, 'legacyBaggageEnabled', true)
     this._setValue(defaults, 'isTestDynamicInstrumentationEnabled', false)
     this._setValue(defaults, 'logInjection', false)
     this._setValue(defaults, 'lookup', undefined)
@@ -549,8 +556,8 @@ class Config {
     this._setValue(defaults, 'traceId128BitGenerationEnabled', true)
     this._setValue(defaults, 'traceId128BitLoggingEnabled', false)
     this._setValue(defaults, 'tracePropagationExtractFirst', false)
-    this._setValue(defaults, 'tracePropagationStyle.inject', ['datadog', 'tracecontext'])
-    this._setValue(defaults, 'tracePropagationStyle.extract', ['datadog', 'tracecontext'])
+    this._setValue(defaults, 'tracePropagationStyle.inject', ['datadog', 'tracecontext', 'baggage'])
+    this._setValue(defaults, 'tracePropagationStyle.extract', ['datadog', 'tracecontext', 'baggage'])
     this._setValue(defaults, 'tracePropagationStyle.otelPropagators', false)
     this._setValue(defaults, 'tracing', true)
     this._setValue(defaults, 'url', undefined)
@@ -606,6 +613,9 @@ class Config {
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
+      DD_LLMOBS_AGENTLESS_ENABLED,
+      DD_LLMOBS_ENABLED,
+      DD_LLMOBS_ML_APP,
       DD_OPENAI_LOGS_ENABLED,
       DD_OPENAI_SPAN_CHAR_LIMIT,
       DD_PROFILING_ENABLED,
@@ -632,6 +642,8 @@ class Config {
       DD_TRACE_AGENT_HOSTNAME,
       DD_TRACE_AGENT_PORT,
       DD_TRACE_AGENT_PROTOCOL_VERSION,
+      DD_TRACE_BAGGAGE_MAX_BYTES,
+      DD_TRACE_BAGGAGE_MAX_ITEMS,
       DD_TRACE_CLIENT_IP_ENABLED,
       DD_TRACE_CLIENT_IP_HEADER,
       DD_TRACE_ENABLED,
@@ -641,6 +653,7 @@ class Config {
       DD_TRACE_GIT_METADATA_ENABLED,
       DD_TRACE_GLOBAL_TAGS,
       DD_TRACE_HEADER_TAGS,
+      DD_TRACE_LEGACY_BAGGAGE_ENABLED,
       DD_TRACE_MEMCACHED_COMMAND_ENABLED,
       DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       DD_TRACE_PARTIAL_FLUSH_MIN_SPANS,
@@ -713,6 +726,8 @@ class Config {
     this._envUnprocessed['appsec.stackTrace.maxStackTraces'] = DD_APPSEC_MAX_STACK_TRACES
     this._setValue(env, 'appsec.wafTimeout', maybeInt(DD_APPSEC_WAF_TIMEOUT))
     this._envUnprocessed['appsec.wafTimeout'] = DD_APPSEC_WAF_TIMEOUT
+    this._setValue(env, 'baggageMaxBytes', DD_TRACE_BAGGAGE_MAX_BYTES)
+    this._setValue(env, 'baggageMaxItems', DD_TRACE_BAGGAGE_MAX_ITEMS)
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
     this._setBoolean(env, 'codeOriginForSpans.enabled', DD_CODE_ORIGIN_FOR_SPANS_ENABLED)
@@ -753,6 +768,10 @@ class Config {
     this._setArray(env, 'injectionEnabled', DD_INJECTION_ENABLED)
     this._setBoolean(env, 'isAzureFunction', getIsAzureFunction())
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
+    this._setBoolean(env, 'legacyBaggageEnabled', DD_TRACE_LEGACY_BAGGAGE_ENABLED)
+    this._setBoolean(env, 'llmobs.agentlessEnabled', DD_LLMOBS_AGENTLESS_ENABLED)
+    this._setBoolean(env, 'llmobs.enabled', DD_LLMOBS_ENABLED)
+    this._setString(env, 'llmobs.mlApp', DD_LLMOBS_ML_APP)
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this._setBoolean(env, 'memcachedCommandEnabled', DD_TRACE_MEMCACHED_COMMAND_ENABLED)
@@ -887,6 +906,8 @@ class Config {
     this._optsUnprocessed['appsec.wafTimeout'] = options.appsec.wafTimeout
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
     this._setString(opts, 'clientIpHeader', options.clientIpHeader)
+    this._setValue(opts, 'baggageMaxBytes', options.baggageMaxBytes)
+    this._setValue(opts, 'baggageMaxItems', options.baggageMaxItems)
     this._setBoolean(opts, 'codeOriginForSpans.enabled', options.codeOriginForSpans?.enabled)
     this._setString(opts, 'dbmPropagationMode', options.dbmPropagationMode)
     if (options.dogstatsd) {
@@ -924,6 +945,9 @@ class Config {
     }
     this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
+    this._setBoolean(opts, 'legacyBaggageEnabled', options.legacyBaggageEnabled)
+    this._setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)
+    this._setString(opts, 'llmobs.mlApp', options.llmobs?.mlApp)
     this._setBoolean(opts, 'logInjection', options.logInjection)
     this._setString(opts, 'lookup', options.lookup)
     this._setBoolean(opts, 'openAiLogsEnabled', options.openAiLogsEnabled)
@@ -960,6 +984,15 @@ class Config {
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
     this._setString(opts, 'version', options.version || tags.version)
     this._setBoolean(opts, 'managedServicesEnabled', options.managedServicesEnabled)
+
+    // For LLMObs, we want the environment variable to take precedence over the options.
+    // This is reliant on environment config being set before options.
+    // This is to make sure the origins of each value are tracked appropriately for telemetry.
+    // We'll only set `llmobs.enabled` on the opts when it's not set on the environment, and options.llmobs is provided.
+    const llmobsEnabledEnv = this._env['llmobs.enabled']
+    if (llmobsEnabledEnv == null && options.llmobs) {
+      this._setBoolean(opts, 'llmobs.enabled', !!options.llmobs)
+    }
   }
 
   _isCiVisibility () {

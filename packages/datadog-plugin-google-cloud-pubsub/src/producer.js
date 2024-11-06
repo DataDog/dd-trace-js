@@ -1,6 +1,8 @@
 'use strict'
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
+const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
+const { getHeadersSize } = require('../../dd-trace/src/datastreams/processor')
 
 class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
   static get id () { return 'google-cloud-pubsub' }
@@ -25,6 +27,12 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
         msg.attributes = {}
       }
       this.tracer.inject(span, 'text_map', msg.attributes)
+      if (this.config.dsmEnabled) {
+        const payloadSize = getHeadersSize(msg)
+        const dataStreamsContext = this.tracer
+          .setCheckpoint(['direction:out', `topic:${topic}`, 'type:google-pubsub'], span, payloadSize)
+        DsmPathwayCodec.encode(dataStreamsContext, msg.attributes)
+      }
     }
   }
 }
