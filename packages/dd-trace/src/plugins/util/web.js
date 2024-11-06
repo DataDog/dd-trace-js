@@ -496,9 +496,9 @@ function mirrorErrorStatusOnToSpan (req, inferredSpan) {
   const context = contexts.get(req)
   const span = context.span
 
-  if (span.context()._tags.error) {
-    inferredSpan._spanContext._tags.error = span.context()._tags.error
-  }
+  // if (span.context()._tags.error) {
+  //   inferredSpan._spanContext._tags.error = span.context()._tags.error
+  // }
 }
 
 function addResourceTag (context) {
