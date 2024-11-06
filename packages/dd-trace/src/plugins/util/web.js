@@ -486,6 +486,19 @@ function addResponseTags (context) {
   })
 
   web.addStatusError(req, res.statusCode)
+
+  mirrorErrorStatusOnToSpan(req, inferredProxySpan)
+}
+
+// Given a span, add an error status if the http status code is an error
+// This is primarily used for inferred spans to copy the web span's error status
+function mirrorErrorStatusOnToSpan (req, inferredSpan) {
+  const context = contexts.get(req)
+  const span = context.span
+
+  if (span.context()._tags.error) {
+    inferredSpan._spanContext._tags.error = span.context()._tags.error
+  }
 }
 
 function addResourceTag (context) {
