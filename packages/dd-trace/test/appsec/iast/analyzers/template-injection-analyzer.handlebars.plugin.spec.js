@@ -7,15 +7,19 @@ const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking
 
 describe('template-injection-analyzer with handlebars', () => {
   withVersions('handlebars', 'handlebars', version => {
-    let lib, source
+    let source
     before(() => {
-      lib = require(`../../../../../../versions/handlebars@${version}`).get()
       source = '<p>{{name}}</p>'
     })
 
     describe('compile', () => {
       prepareTestServerForIast('template injection analyzer',
         (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
+          let lib
+          beforeEach(() => {
+            lib = require(`../../../../../../versions/handlebars@${version}`).get()
+          })
+
           testThatRequestHasVulnerability(() => {
             const store = storage.getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
@@ -24,8 +28,7 @@ describe('template-injection-analyzer with handlebars', () => {
           }, 'TEMPLATE_INJECTION')
 
           testThatRequestHasNoVulnerability(() => {
-            const template = lib.compile(source)
-            template()
+            lib.compile(source)
           }, 'TEMPLATE_INJECTION')
         })
     })
@@ -33,6 +36,11 @@ describe('template-injection-analyzer with handlebars', () => {
     describe('precompile', () => {
       prepareTestServerForIast('template injection analyzer',
         (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
+          let lib
+          beforeEach(() => {
+            lib = require(`../../../../../../versions/handlebars@${version}`).get()
+          })
+
           testThatRequestHasVulnerability(() => {
             const store = storage.getStore()
             const iastContext = iastContextFunctions.getIastContext(store)

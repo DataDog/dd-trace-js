@@ -3,12 +3,12 @@
 const shimmer = require('../../datadog-shimmer')
 const { channel, addHook } = require('./helpers/instrument')
 
-const handlebarsReadCh = channel('datadog:handlebars:compile:start')
+const handlebarsCompileCh = channel('datadog:handlebars:compile:start')
 
 function wrapCompile (compile) {
   return function wrappedCompile (source) {
-    if (handlebarsReadCh.hasSubscribers) {
-      handlebarsReadCh.publish({ source })
+    if (handlebarsCompileCh.hasSubscribers) {
+      handlebarsCompileCh.publish({ source })
     }
 
     return compile.apply(this, arguments)

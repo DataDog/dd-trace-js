@@ -7,15 +7,19 @@ const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking
 
 describe('template-injection-analyzer with pug', () => {
   withVersions('pug', 'pug', version => {
-    let lib, source
+    let source
     before(() => {
-      lib = require(`../../../../../../versions/pug@${version}`).get()
       source = 'string of pug'
     })
 
     describe('compile', () => {
       prepareTestServerForIast('template injection analyzer',
         (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
+          let lib
+          beforeEach(() => {
+            lib = require(`../../../../../../versions/pug@${version}`).get()
+          })
+
           testThatRequestHasVulnerability(() => {
             const store = storage.getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
@@ -33,6 +37,11 @@ describe('template-injection-analyzer with pug', () => {
     describe('compileClient', () => {
       prepareTestServerForIast('template injection analyzer',
         (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
+          let lib
+          beforeEach(() => {
+            lib = require(`../../../../../../versions/pug@${version}`).get()
+          })
+
           testThatRequestHasVulnerability(() => {
             const store = storage.getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
@@ -49,6 +58,11 @@ describe('template-injection-analyzer with pug', () => {
     describe('compileClientWithDependenciesTracked', () => {
       prepareTestServerForIast('template injection analyzer',
         (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
+          let lib
+          beforeEach(() => {
+            lib = require(`../../../../../../versions/pug@${version}`).get()
+          })
+
           testThatRequestHasVulnerability(() => {
             const store = storage.getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
