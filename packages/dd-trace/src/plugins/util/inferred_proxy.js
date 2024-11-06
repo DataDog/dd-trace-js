@@ -24,7 +24,7 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
     return null
   }
 
-  if (!tracer._config.managedServicesEnabled) {
+  if (!tracer._config?.managedServicesEnabled) {
     return null
   }
 
