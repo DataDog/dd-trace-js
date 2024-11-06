@@ -112,7 +112,6 @@ function createWrapRouterMethod (name) {
       path: pattern instanceof RegExp ? `(${pattern})` : pattern,
       test: layer => {
         const matchers = layerMatchers.get(layer)
-
         return !isFastStar(layer, matchers) &&
           !isFastSlash(layer, matchers) &&
           cachedPathToRegExp(pattern).test(layer.path)
@@ -131,6 +130,14 @@ function createWrapRouterMethod (name) {
   function isFastSlash (layer, matchers) {
     if (layer.regexp.fast_slash !== undefined) {
       return layer.regexp.fast_slash
+    }
+
+    return matchers.some(matcher => matcher.path === '/')
+  }
+
+  function isSlash (layer, matchers) {
+    if (layer.hasOwnProperty('slash') && layer.slash !== undefined) {
+      return layer.slash
     }
 
     return matchers.some(matcher => matcher.path === '/')
@@ -170,7 +177,7 @@ function createWrapRouterMethod (name) {
 
 const wrapRouterMethod = createWrapRouterMethod('router')
 
-addHook({ name: 'router', versions: ['>=1'] }, Router => {
+addHook({ name: 'router', versions: ['>=1 <2.0.0'] }, Router => {
   shimmer.wrap(Router.prototype, 'use', wrapRouterMethod)
   shimmer.wrap(Router.prototype, 'route', wrapRouterMethod)
 
