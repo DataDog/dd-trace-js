@@ -53,5 +53,27 @@ describe('template-injection-analyzer with handlebars', () => {
           }, 'TEMPLATE_INJECTION')
         })
     })
+
+    describe('registerPartial', () => {
+      prepareTestServerForIast('template injection analyzer',
+        (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
+          let lib
+          beforeEach(() => {
+            lib = require(`../../../../../../versions/handlebars@${version}`).get()
+          })
+
+          testThatRequestHasVulnerability(() => {
+            const store = storage.getStore()
+            const iastContext = iastContextFunctions.getIastContext(store)
+            const partial = newTaintedString(iastContext, source, 'param', 'Request')
+
+            lib.registerPartial('vulnerablePartial', partial)
+          }, 'TEMPLATE_INJECTION')
+
+          testThatRequestHasNoVulnerability(() => {
+            lib.registerPartial('vulnerablePartial', source)
+          }, 'TEMPLATE_INJECTION')
+        })
+    })
   })
 })
