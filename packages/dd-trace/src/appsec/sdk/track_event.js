@@ -41,6 +41,26 @@ function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
   trackEvent('users.login.failure', fields, 'trackUserLoginFailureEvent', getRootSpan(tracer), 'sdk')
 }
 
+function trackUserSignupEvent (tracer, userId, metadata) {
+  const rootSpan = getRootSpan(tracer)
+  if (!rootSpan) {
+    log.warn('Root span not available in trackUserSignupEvent')
+    return
+  }
+
+  if (!userId || typeof userId !== 'string') {
+    log.warn('Invalid userId provided to trackUserSignupEvent')
+    return
+  }
+
+  const fields = {
+    'usr.id': userId,
+    ...metadata
+  }
+
+  trackEvent('users.signup', fields, 'trackUserSignupEvent', rootSpan, 'sdk')
+}
+
 function trackCustomEvent (tracer, eventName, metadata) {
   if (!eventName || typeof eventName !== 'string') {
     log.warn('Invalid eventName provided to trackCustomEvent')
@@ -99,7 +119,7 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode, abortCont
 
   standalone.sample(rootSpan)
 
-  if (['users.login.success', 'users.login.failure'].includes(eventName)) {
+  if (['users.login.success', 'users.login.failure', 'users.signup'].includes(eventName)) {
     waf.run({ persistent: { [`server.business_logic.${eventName}`]: null } })
   }
 }
@@ -107,6 +127,7 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode, abortCont
 module.exports = {
   trackUserLoginSuccessEvent,
   trackUserLoginFailureEvent,
+  trackUserSignupEvent,
   trackCustomEvent,
   trackEvent
 }
