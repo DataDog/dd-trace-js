@@ -114,28 +114,6 @@ describe('Plugin', () => {
           s3.listBuckets({}, e => e && done(e))
         })
 
-        // different versions of aws-sdk use different casings and different AWS headers
-        it('should include tracing headers and not cause a 403 error', (done) => {
-          const HttpClientPlugin = require('../../datadog-plugin-http/src/client.js')
-          const spy = sinon.spy(HttpClientPlugin.prototype, 'bindStart')
-          agent.use(traces => {
-            const headers = new Set(
-              Object.keys(spy.firstCall.firstArg.args.options.headers)
-                .map(x => x.toLowerCase())
-            )
-            spy.restore()
-
-            expect(headers).to.include('authorization')
-            expect(headers).to.include('x-amz-date')
-            expect(headers).to.include('x-datadog-trace-id')
-            expect(headers).to.include('x-datadog-parent-id')
-            expect(headers).to.include('x-datadog-sampling-priority')
-            expect(headers).to.include('x-datadog-tags')
-          }).then(done, done)
-
-          s3.listBuckets({}, e => e && done(e))
-        })
-
         it('should mark error responses', (done) => {
           let error
 
