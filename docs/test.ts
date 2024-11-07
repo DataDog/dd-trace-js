@@ -323,6 +323,9 @@ tracer.use('http', {
 tracer.use('http', {
   client: httpClientOptions
 });
+tracer.use('http', {
+  enablePropagationWithAmazonHeaders: true
+});
 tracer.use('http2');
 tracer.use('http2', {
   server: http2ServerOptions

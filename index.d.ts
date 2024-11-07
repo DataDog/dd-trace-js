@@ -1037,6 +1037,14 @@ declare namespace tracer {
        * @default code => code < 500
        */
       validateStatus?: (code: number) => boolean;
+
+      /**
+       * Enable injection of tracing headers into requests signed with AWS IAM headers.
+       * Disable this if you get AWS signature errors (HTTP 403).
+       *
+       * @default false
+       */
+      enablePropagationWithAmazonHeaders?: boolean;
     }
 
     /** @hidden */
