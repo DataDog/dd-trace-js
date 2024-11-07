@@ -282,12 +282,19 @@ const web = {
   // Validate a request's status code and then add error tags if necessary
   addStatusError (req, statusCode) {
     const context = contexts.get(req)
-    const span = context.span
-    const error = context.error
-    const hasExistingError = span.context()._tags.error || span.context()._tags[ERROR_MESSAGE]
+    const { span, inferredProxySpan, error } = context
 
-    if (!hasExistingError && !context.config.validateStatus(statusCode)) {
+    const spanHasExistingError = span.context()._tags.error || span.context()._tags[ERROR_MESSAGE]
+    const inferredSpanHasExistingError = inferredProxySpan?.context()._tags.error ||
+    inferredProxySpan?.context()._tags[ERROR_MESSAGE]
+
+    const isValidStatusCode = context.config.validateStatus(statusCode)
+
+    if (!spanHasExistingError && !isValidStatusCode) {
       span.setTag(ERROR, error || true)
+    }
+    if (inferredProxySpan && !inferredSpanHasExistingError && !isValidStatusCode) {
+      inferredProxySpan.setTag(ERROR, error || true)
     }
   },
 
@@ -486,19 +493,6 @@ function addResponseTags (context) {
   })
 
   web.addStatusError(req, res.statusCode)
-
-  mirrorErrorStatusOnToSpan(req, inferredProxySpan)
-}
-
-// Given a span, add an error status if the http status code is an error
-// This is primarily used for inferred spans to copy the web span's error status
-function mirrorErrorStatusOnToSpan (req, inferredSpan) {
-  const context = contexts.get(req)
-  const span = context.span
-
-  // if (span.context()._tags.error) {
-  //   inferredSpan._spanContext._tags.error = span.context()._tags.error
-  // }
 }
 
 function addResourceTag (context) {
