@@ -1,97 +1,99 @@
 'use strict'
 
-const { truncate } = require('../util')
+const LangChainHandler = require('./default')
 
 const COMPLETIONS = 'langchain.response.completions'
 
-function getStartTags (ctx, provider) {
-  const tags = {}
+class LangChainChatModelHandler extends LangChainHandler {
+  getSpanStartTags (ctx, provider) {
+    const tags = {}
 
-  const inputs = ctx.args?.[0]
+    const inputs = ctx.args?.[0]
 
-  for (const messageSetIndex in inputs) {
-    const messageSet = inputs[messageSetIndex]
+    for (const messageSetIndex in inputs) {
+      const messageSet = inputs[messageSetIndex]
 
-    for (const messageIndex in messageSet) {
-      const message = messageSet[messageIndex]
-      tags[`langchain.request.messages.${messageSetIndex}.${messageIndex}.content`] = message.content || ''
-      tags[`langchain.request.messages.${messageSetIndex}.${messageIndex}.message_type`] = message.constructor.name
-    }
-  }
-
-  const instance = ctx.instance
-  const identifyingParams = (typeof instance._identifyingParams === 'function' && instance._identifyingParams()) || {}
-  for (const [param, val] of Object.entries(identifyingParams)) {
-    if (param.toLowerCase().includes('apikey') || param.toLowerCase().includes('apitoken')) continue
-    if (typeof val === 'object') {
-      for (const [key, value] of Object.entries(val)) {
-        tags[`langchain.request.${provider}.parameters.${param}.${key}`] = value
+      for (const messageIndex in messageSet) {
+        const message = messageSet[messageIndex]
+        if (this.isPromptCompletionSampled()) {
+          tags[`langchain.request.messages.${messageSetIndex}.${messageIndex}.content`] =
+            this.truncate(message.content) || ''
+        }
+        tags[`langchain.request.messages.${messageSetIndex}.${messageIndex}.message_type`] = message.constructor.name
       }
-    } else {
-      tags[`langchain.request.${provider}.parameters.${param}`] = val
     }
+
+    const instance = ctx.instance
+    const identifyingParams = (typeof instance._identifyingParams === 'function' && instance._identifyingParams()) || {}
+    for (const [param, val] of Object.entries(identifyingParams)) {
+      if (param.toLowerCase().includes('apikey') || param.toLowerCase().includes('apitoken')) continue
+      if (typeof val === 'object') {
+        for (const [key, value] of Object.entries(val)) {
+          tags[`langchain.request.${provider}.parameters.${param}.${key}`] = value
+        }
+      } else {
+        tags[`langchain.request.${provider}.parameters.${param}`] = val
+      }
+    }
+
+    return tags
   }
 
-  return tags
-}
+  getSpanEndTags (ctx) {
+    const { result } = ctx
 
-function getEndTags (ctx) {
-  const { result } = ctx
+    const tags = {}
 
-  const tags = {}
+    // TODO: do we need token tagging
 
-  // TODO: do we need token tagging
+    for (const messageSetIdx in result.generations) {
+      const messageSet = result.generations[messageSetIdx]
 
-  for (const messageSetIdx in result.generations) {
-    const messageSet = result.generations[messageSetIdx]
+      for (const chatCompletionIdx in messageSet) {
+        const chatCompletion = messageSet[chatCompletionIdx]
 
-    for (const chatCompletionIdx in messageSet) {
-      const chatCompletion = messageSet[chatCompletionIdx]
+        const text = chatCompletion.text
+        const message = chatCompletion.message
+        let toolCalls = message.tool_calls
 
-      const text = chatCompletion.text
-      const message = chatCompletion.message
-      let toolCalls = message.tool_calls
-
-      if (text) {
-        tags[
+        if (text && this.isPromptCompletionSampled()) {
+          tags[
           `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.content`
-        ] = truncate(text)
-      }
-
-      tags[
-        `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.message_type`
-      ] = message.constructor.name
-
-      if (toolCalls) {
-        if (!Array.isArray(toolCalls)) {
-          toolCalls = [toolCalls]
+          ] = this.truncate(text)
         }
 
-        for (const toolCallIndex in toolCalls) {
-          const toolCall = toolCalls[toolCallIndex]
+        tags[
+        `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.message_type`
+        ] = message.constructor.name
 
-          tags[
-            `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.tool_calls.${toolCallIndex}.id`
-          ] = toolCall.id
-          tags[
-            `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.tool_calls.${toolCallIndex}.name`
-          ] = toolCall.name
+        if (toolCalls) {
+          if (!Array.isArray(toolCalls)) {
+            toolCalls = [toolCalls]
+          }
 
-          const args = toolCall.args || {}
-          for (const [name, value] of Object.entries(args)) {
+          for (const toolCallIndex in toolCalls) {
+            const toolCall = toolCalls[toolCallIndex]
+
             tags[
+            `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.tool_calls.${toolCallIndex}.id`
+            ] = toolCall.id
+            tags[
+            `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.tool_calls.${toolCallIndex}.name`
+            ] = toolCall.name
+
+            const args = toolCall.args || {}
+            for (const [name, value] of Object.entries(args)) {
+              tags[
               `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.tool_calls.${toolCallIndex}.args.${name}`
-            ] = truncate(value)
+              ] = this.truncate(value)
+            }
           }
         }
       }
     }
+
+    return tags
   }
-
-  return tags
 }
 
-module.exports = {
-  getStartTags,
-  getEndTags
-}
+module.exports = LangChainChatModelHandler

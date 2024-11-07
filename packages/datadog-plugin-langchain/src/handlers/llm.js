@@ -1,52 +1,55 @@
 'use strict'
 
-const { truncate } = require('../util')
+const LangChainHandler = require('./default')
 
-function getStartTags (ctx, provider) {
-  const tags = {}
+class LangChainLLMHandler extends LangChainHandler {
+  getSpanStartTags (ctx, provider) {
+    const tags = {}
 
-  const prompts = ctx.args?.[0]
-  for (const promptIdx in prompts) {
-    const prompt = prompts[promptIdx]
-    tags[`langchain.request.prompts.${promptIdx}.content`] = truncate(prompt) || ''
-  }
+    const prompts = ctx.args?.[0]
+    for (const promptIdx in prompts) {
+      if (!this.isPromptCompletionSampled()) continue
 
-  const instance = ctx.instance
-  const identifyingParams = (typeof instance._identifyingParams === 'function' && instance._identifyingParams()) || {}
-  for (const [param, val] of Object.entries(identifyingParams)) {
-    if (param.toLowerCase().includes('apikey') || param.toLowerCase().includes('apitoken')) continue
-    if (typeof val === 'object') {
-      for (const [key, value] of Object.entries(val)) {
-        tags[`langchain.request.${provider}.parameters.${param}.${key}`] = value
+      const prompt = prompts[promptIdx]
+      tags[`langchain.request.prompts.${promptIdx}.content`] = this.truncate(prompt) || ''
+    }
+
+    const instance = ctx.instance
+    const identifyingParams = (typeof instance._identifyingParams === 'function' && instance._identifyingParams()) || {}
+    for (const [param, val] of Object.entries(identifyingParams)) {
+      if (param.toLowerCase().includes('apikey') || param.toLowerCase().includes('apitoken')) continue
+      if (typeof val === 'object') {
+        for (const [key, value] of Object.entries(val)) {
+          tags[`langchain.request.${provider}.parameters.${param}.${key}`] = value
+        }
+      } else {
+        tags[`langchain.request.${provider}.parameters.${param}`] = val
       }
-    } else {
-      tags[`langchain.request.${provider}.parameters.${param}`] = val
     }
+
+    return tags
   }
 
-  return tags
-}
+  getSpanEndTags (ctx) {
+    const { result } = ctx
 
-function getEndTags (ctx) {
-  const { result } = ctx
+    const tags = {}
 
-  const tags = {}
+    for (const completionIdx in result.generations) {
+      const completion = result.generations[completionIdx]
+      if (this.isPromptCompletionSampled()) {
+        tags[`langchain.response.completions.${completionIdx}.text`] = this.truncate(completion[0].text) || ''
+      }
 
-  for (const completionIdx in result.generations) {
-    const completion = result.generations[completionIdx]
-    tags[`langchain.response.completions.${completionIdx}.text`] = completion[0].text || ''
-
-    if (completion && completion[0].generationInfo) {
-      const generationInfo = completion[0].generationInfo
-      tags[`langchain.response.completions.${completionIdx}.finish_reason`] = generationInfo.finishReason
-      tags[`langchain.response.completions.${completionIdx}.logprobs`] = generationInfo.logprobs
+      if (completion && completion[0].generationInfo) {
+        const generationInfo = completion[0].generationInfo
+        tags[`langchain.response.completions.${completionIdx}.finish_reason`] = generationInfo.finishReason
+        tags[`langchain.response.completions.${completionIdx}.logprobs`] = generationInfo.logprobs
+      }
     }
+
+    return tags
   }
-
-  return tags
 }
 
-module.exports = {
-  getStartTags,
-  getEndTags
-}
+module.exports = LangChainLLMHandler

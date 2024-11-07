@@ -4,12 +4,16 @@ const { MEASURED } = require('../../../ext/tags')
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
-const handlers = require('./handlers')
-
 const API_KEY = 'langchain.request.api_key'
 const MODEL = 'langchain.request.model'
 const PROVIDER = 'langchain.request.provider'
 const TYPE = 'langchain.request.type'
+
+const LangChainHandler = require('./handlers/default')
+const LangChainChatModelHandler = require('./handlers/chat_model')
+const LangChainLLMHandler = require('./handlers/llm')
+const LangChainChainHandler = require('./handlers/chain')
+const LangChainEmbeddingHandler = require('./handlers/embedding')
 
 class LangChainPlugin extends TracingPlugin {
   static get id () { return 'langchain' }
@@ -19,16 +23,29 @@ class LangChainPlugin extends TracingPlugin {
     return 'tracing:apm:langchain:invoke'
   }
 
+  constructor () {
+    super(...arguments)
+
+    const langchainConfig = this._tracerConfig.langchain || {}
+    this.handlers = {
+      chain: new LangChainChainHandler(langchainConfig),
+      chat_model: new LangChainChatModelHandler(langchainConfig),
+      llm: new LangChainLLMHandler(langchainConfig),
+      embedding: new LangChainEmbeddingHandler(langchainConfig),
+      default: new LangChainHandler(langchainConfig)
+    }
+  }
+
   bindStart (ctx) {
     const { resource, type } = ctx
-    const handler = getHandler(type)
+    const handler = this.handlers[type]
 
     const instance = ctx.instance
-    const apiKey = handler.extractApiKey?.(ctx) || extractApiKey(instance)
-    const provider = handler.extractProvider?.(ctx) || extractProvider(instance)
-    const model = extractModel(instance)
+    const apiKey = handler.extractApiKey(instance)
+    const provider = handler.extractProvider(instance)
+    const model = handler.extractModel(instance)
 
-    const tags = handler.getStartTags(ctx, provider) || []
+    const tags = handler.getSpanStartTags(ctx, provider) || []
 
     if (apiKey) tags[API_KEY] = apiKey
     if (provider) tags[PROVIDER] = provider
@@ -56,44 +73,16 @@ class LangChainPlugin extends TracingPlugin {
 
     const { type } = ctx
 
-    const handler = getHandler(type)
-    const tags = handler.getEndTags(ctx) || {}
+    const handler = this.handlers[type]
+    const tags = handler.getSpanEndTags(ctx) || {}
 
     span.addTags(tags)
 
     span.finish()
   }
-}
 
-function getHandler (type) {
-  const handlerGetter = handlers[type] || handlers.default
-  return handlerGetter()
-}
-
-function extractApiKey (instance) {
-  const key = Object.keys(instance)
-    .find(key => {
-      const lower = key.toLowerCase()
-      return lower.includes('apikey') || lower.includes('apitoken')
-    })
-
-  let apiKey = instance[key]
-  if (apiKey?.secretValue && typeof apiKey.secretValue === 'function') {
-    apiKey = apiKey.secretValue()
-  }
-  if (!apiKey || apiKey.length < 4) return ''
-  return `...${apiKey.slice(-4)}`
-}
-
-function extractProvider (instance) {
-  // TODO: we might just be able to do `instance._llmType()`
-  return typeof instance._llmType === 'function' && instance._llmType().split('-')[0]
-}
-
-function extractModel (instance) {
-  for (const attr of ['model', 'modelName', 'modelId', 'modelKey', 'repoId']) {
-    const modelName = instance[attr]
-    if (modelName) return modelName
+  getHandler (type) {
+    return this.handlers[type] || this.handlers.default
   }
 }
 
