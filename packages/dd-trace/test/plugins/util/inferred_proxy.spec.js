@@ -1,6 +1,6 @@
 'use strict'
 
-require('../setup/tap')
+require('../../setup/tap')
 
 const getPort = require('get-port')
 const { expect } = require('chai')
