@@ -1,6 +1,5 @@
 'use strict'
 
-const { truncate } = require('../util')
 const LangChainHandler = require('./default')
 
 class LangChainEmbeddingHandler extends LangChainHandler {
@@ -11,13 +10,17 @@ class LangChainEmbeddingHandler extends LangChainHandler {
 
     if (typeof inputTexts === 'string') {
       // embed query
-      tags['langchain.request.inputs.0.text'] = truncate(inputTexts)
+      if (this.isPromptCompletionSampled()) {
+        tags['langchain.request.inputs.0.text'] = this.truncate(inputTexts)
+      }
       tags['langchain.request.input_counts'] = 1
     } else {
       // embed documents
-      for (const idx in inputTexts) {
-        const inputText = inputTexts[idx]
-        tags[`langchain.request.inputs.${idx}.text`] = truncate(inputText)
+      if (this.isPromptCompletionSampled()) {
+        for (const idx in inputTexts) {
+          const inputText = inputTexts[idx]
+          tags[`langchain.request.inputs.${idx}.text`] = this.truncate(inputText)
+        }
       }
       tags['langchain.request.input_counts'] = inputTexts.length
     }
