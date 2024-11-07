@@ -298,6 +298,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SQLI, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_LFI, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SHI, true)
 
         expect(rc.setProductHandler).to.have.been.calledWith('ASM_DATA')
         expect(rc.setProductHandler).to.have.been.calledWith('ASM_DD')
@@ -340,6 +342,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SQLI, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_LFI, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SHI, true)
 
         expect(rc.setProductHandler).to.have.been.calledWith('ASM_DATA')
         expect(rc.setProductHandler).to.have.been.calledWith('ASM_DD')
@@ -384,6 +388,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SQLI, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_LFI, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SHI, true)
       })
 
       it('should not activate rasp capabilities if rasp is disabled', () => {
@@ -423,6 +429,8 @@ describe('Remote Config index', () => {
           .to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_RASP_SQLI)
         expect(rc.updateCapabilities)
           .to.not.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_LFI)
+        expect(rc.updateCapabilities)
+          .to.not.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SHI)
       })
     })
 
@@ -462,6 +470,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SQLI, false)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_LFI, false)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SHI, false)
 
         expect(rc.removeProductHandler).to.have.been.calledWith('ASM_DATA')
         expect(rc.removeProductHandler).to.have.been.calledWith('ASM_DD')

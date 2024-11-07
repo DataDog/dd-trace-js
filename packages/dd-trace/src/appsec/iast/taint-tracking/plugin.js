@@ -23,6 +23,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   constructor () {
     super()
     this._type = 'taint-tracking'
+    this._taintedURLs = new WeakMap()
   }
 
   onConfigure () {
@@ -87,6 +88,46 @@ class TaintTrackingPlugin extends SourceIastPlugin {
         }
       }
     )
+
+    const urlResultTaintedProperties = ['host', 'origin', 'hostname']
+    this.addSub(
+      { channelName: 'datadog:url:parse:finish' },
+      ({ input, base, parsed, isURL }) => {
+        const iastContext = getIastContext(storage.getStore())
+        let ranges
+
+        if (base) {
+          ranges = getRanges(iastContext, base)
+        } else {
+          ranges = getRanges(iastContext, input)
+        }
+
+        if (ranges?.length) {
+          if (isURL) {
+            this._taintedURLs.set(parsed, ranges[0])
+          } else {
+            urlResultTaintedProperties.forEach(param => {
+              this._taintTrackingHandler(ranges[0].iinfo.type, parsed, param, iastContext)
+            })
+          }
+        }
+      }
+    )
+
+    this.addSub(
+      { channelName: 'datadog:url:getter:finish' },
+      (context) => {
+        if (!urlResultTaintedProperties.includes(context.property)) return
+
+        const origRange = this._taintedURLs.get(context.urlObject)
+        if (!origRange) return
+
+        const iastContext = getIastContext(storage.getStore())
+        if (!iastContext) return
+
+        context.result =
+          newTaintedString(iastContext, context.result, origRange.iinfo.parameterName, origRange.iinfo.type)
+      })
 
     // this is a special case to increment INSTRUMENTED_SOURCE metric for header
     this.addInstrumentedSource('http', [HTTP_REQUEST_HEADER_VALUE, HTTP_REQUEST_HEADER_NAME])

@@ -586,7 +586,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
-  
+
   mariadb:
     runs-on: ubuntu-latest
     services:
@@ -1003,6 +1003,14 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGINS: undici
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
+
+  url:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: url
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test

@@ -5,6 +5,7 @@
   "main": "index.js",
   "typings": "index.d.ts",
   "scripts": {
+    "env": "bash ./plugin-env",
     "preinstall": "node scripts/preinstall.js",
     "bench": "node benchmark",
     "bench:profiler": "node benchmark/profiler",

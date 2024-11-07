@@ -29,5 +29,6 @@ module.exports = {
   mysql2OuterQueryStart: dc.channel('datadog:mysql2:outerquery:start'),
   wafRunFinished: dc.channel('datadog:waf:run:finish'),
   fsOperationStart: dc.channel('apm:fs:operation:start'),
-  expressMiddlewareError: dc.channel('apm:express:middleware:error')
+  expressMiddlewareError: dc.channel('apm:express:middleware:error'),
+  childProcessExecutionTracingChannel: dc.tracingChannel('datadog:child_process:execution')
 }

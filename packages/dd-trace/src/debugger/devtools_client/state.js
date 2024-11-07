@@ -32,8 +32,17 @@ module.exports = {
       .sort(([a], [b]) => a.length - b.length)[0]
   },
 
-  getScriptUrlFromId (id) {
-    return scriptUrls.get(id)
+  getStackFromCallFrames (callFrames) {
+    return callFrames.map((frame) => {
+      let fileName = scriptUrls.get(frame.location.scriptId)
+      if (fileName.startsWith('file://')) fileName = fileName.substr(7) // TODO: This might not be required
+      return {
+        fileName,
+        function: frame.functionName,
+        lineNumber: frame.location.lineNumber + 1, // Beware! lineNumber is zero-indexed
+        columnNumber: frame.location.columnNumber + 1 // Beware! columnNumber is zero-indexed
+      }
+    })
   }
 }
 
