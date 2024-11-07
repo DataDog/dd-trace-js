@@ -692,6 +692,23 @@ describe('TextMapPropagator', () => {
       }
     })
 
+    it('should create span links when traces have inconsistent traceids', () => {
+      // Add a traceparent header and it will prioritize it
+      const traceId = '1111aaaa2222bbbb3333cccc4444dddd'
+      const spanId = '5555eeee6666ffff'
+      textMap.traceparent = `00-${traceId}-${spanId}-01`
+
+      config.tracePropagationStyle.extract = ['tracecontext', 'datadog']
+
+      const first = propagator.extract(textMap)
+
+      expect(first.spanLinks.length).to.equal(1)
+      expect(first.spanLinks[0].context.toTraceId()).to.equal(textMap['x-datadog-trace-id'])
+      expect(first.spanLinks[0].context.toSpanId()).to.equal(textMap['x-datadog-parent-id'])
+      expect(first.spanLinks[0].attributes.reason).to.equal('terminated_context')
+      expect(first.spanLinks[0].attributes.context_headers).to.equal('datadog')
+    })
+
     describe('with B3 propagation as multiple headers', () => {
       beforeEach(() => {
         config.tracePropagationStyle.extract = ['b3multi']
