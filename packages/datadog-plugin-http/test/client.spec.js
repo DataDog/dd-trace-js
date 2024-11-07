@@ -446,6 +446,116 @@ describe('Plugin', () => {
           })
         })
 
+        it('should skip injecting if the Authorization header contains an AWS signature', done => {
+          const app = express()
+
+          app.get('/', (req, res) => {
+            try {
+              expect(req.get('x-datadog-trace-id')).to.be.undefined
+              expect(req.get('x-datadog-parent-id')).to.be.undefined
+
+              res.status(200).send()
+
+              done()
+            } catch (e) {
+              done(e)
+            }
+          })
+
+          appListener = server(app, port => {
+            const req = http.request({
+              port,
+              headers: {
+                Authorization: 'AWS4-HMAC-SHA256 ...'
+              }
+            })
+
+            req.end()
+          })
+        })
+
+        it('should skip injecting if one of the Authorization headers contains an AWS signature', done => {
+          const app = express()
+
+          app.get('/', (req, res) => {
+            try {
+              expect(req.get('x-datadog-trace-id')).to.be.undefined
+              expect(req.get('x-datadog-parent-id')).to.be.undefined
+
+              res.status(200).send()
+
+              done()
+            } catch (e) {
+              done(e)
+            }
+          })
+
+          appListener = server(app, port => {
+            const req = http.request({
+              port,
+              headers: {
+                Authorization: ['AWS4-HMAC-SHA256 ...']
+              }
+            })
+
+            req.end()
+          })
+        })
+
+        it('should skip injecting if the X-Amz-Signature header is set', done => {
+          const app = express()
+
+          app.get('/', (req, res) => {
+            try {
+              expect(req.get('x-datadog-trace-id')).to.be.undefined
+              expect(req.get('x-datadog-parent-id')).to.be.undefined
+
+              res.status(200).send()
+
+              done()
+            } catch (e) {
+              done(e)
+            }
+          })
+
+          appListener = server(app, port => {
+            const req = http.request({
+              port,
+              headers: {
+                'X-Amz-Signature': 'abc123'
+              }
+            })
+
+            req.end()
+          })
+        })
+
+        it('should skip injecting if the X-Amz-Signature query param is set', done => {
+          const app = express()
+
+          app.get('/', (req, res) => {
+            try {
+              expect(req.get('x-datadog-trace-id')).to.be.undefined
+              expect(req.get('x-datadog-parent-id')).to.be.undefined
+
+              res.status(200).send()
+
+              done()
+            } catch (e) {
+              done(e)
+            }
+          })
+
+          appListener = server(app, port => {
+            const req = http.request({
+              port,
+              path: '/?X-Amz-Signature=abc123'
+            })
+
+            req.end()
+          })
+        })
+
         it('should run the callback in the parent context', done => {
           const app = express()
 
@@ -976,6 +1086,50 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             const req = http.request(`${protocol}://localhost:${port}/user`, res => {
               res.on('data', () => {})
+            })
+
+            req.end()
+          })
+        })
+      })
+
+      describe('with config enablePropagationWithAmazonHeaders enabled', () => {
+        let config
+
+        beforeEach(() => {
+          config = {
+            enablePropagationWithAmazonHeaders: true
+          }
+
+          return agent.load('http', config)
+            .then(() => {
+              http = require(pluginToBeLoaded)
+              express = require('express')
+            })
+        })
+
+        it('should inject tracing header into AWS signed request', done => {
+          const app = express()
+
+          app.get('/', (req, res) => {
+            try {
+              expect(req.get('x-datadog-trace-id')).to.be.a('string')
+              expect(req.get('x-datadog-parent-id')).to.be.a('string')
+
+              res.status(200).send()
+
+              done()
+            } catch (e) {
+              done(e)
+            }
+          })
+
+          appListener = server(app, port => {
+            const req = http.request({
+              port,
+              headers: {
+                Authorization: 'AWS4-HMAC-SHA256 ...'
+              }
             })
 
             req.end()
