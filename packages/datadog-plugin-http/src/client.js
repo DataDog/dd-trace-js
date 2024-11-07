@@ -58,7 +58,7 @@ class HttpClientPlugin extends ClientPlugin {
       span._spanContext._trace.record = false
     }
 
-    if (this.config.propagationFilter(uri)) {
+    if (this.shouldInjectTraceHeaders(options, uri)) {
       this.tracer.inject(span, HTTP_HEADERS, options.headers)
     }
 
@@ -69,6 +69,18 @@ class HttpClientPlugin extends ClientPlugin {
     message.currentStore = { ...store, span }
 
     return message.currentStore
+  }
+
+  shouldInjectTraceHeaders (options, uri) {
+    if (hasAmazonSignature(options) && !this.config.enablePropagationWithAmazonHeaders) {
+      return false
+    }
+
+    if (!this.config.propagationFilter(uri)) {
+      return false
+    }
+
+    return true
   }
 
   bindAsyncStart ({ parentStore }) {
@@ -200,6 +212,31 @@ function getHooks (config) {
   return { request }
 }
 
+function hasAmazonSignature (options) {
+  if (!options) {
+    return false
+  }
+
+  if (options.headers) {
+    const headers = Object.keys(options.headers)
+      .reduce((prev, next) => Object.assign(prev, {
+        [next.toLowerCase()]: options.headers[next]
+      }), {})
+
+    if (headers['x-amz-signature']) {
+      return true
+    }
+
+    if ([].concat(headers.authorization).some(startsWith('AWS4-HMAC-SHA256'))) {
+      return true
+    }
+  }
+
+  const search = options.search || options.path
+
+  return search && search.toLowerCase().indexOf('x-amz-signature=') !== -1
+}
+
 function extractSessionDetails (options) {
   if (typeof options === 'string') {
     return new URL(options).host
@@ -209,6 +246,10 @@ function extractSessionDetails (options) {
   const port = options.port
 
   return { host, port }
+}
+
+function startsWith (searchString) {
+  return value => String(value).startsWith(searchString)
 }
 
 module.exports = HttpClientPlugin
