@@ -495,6 +495,7 @@ function addResponseTags (context) {
     [HTTP_STATUS_CODE]: res.statusCode
   })
 
+  log.debug('Trying to add web status error if it exists within addResponseTags')
   web.addStatusError(req, res.statusCode)
 }
 

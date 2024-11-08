@@ -60,7 +60,7 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
   context.inferredProxySpan = span
   childOf = span
 
-  log.debug('Ending inferred Proxy span')
+  log.debug('Setting inferred proxy Span Tags createInferredProxySpan')
 
   setInferredProxySpanTags(span, proxyContext)
 
@@ -68,6 +68,7 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
 }
 
 function setInferredProxySpanTags (span, proxyContext) {
+  log.debug('Setting inferred proxy Span Tags setInferredProxySpanTags')
   span.setTag(RESOURCE_NAME, `${proxyContext.method} ${proxyContext.path}`)
   span.setTag('_inferred_span', '1')
   return span
@@ -98,6 +99,8 @@ function finishInferredProxySpan (context) {
   if (context.inferredProxySpanFinished && !req.stream) return
 
   // context.config.hooks.request(context.inferredProxySpan, req, res)
+
+  log.debug('Finishing web inferred span within finishInferredProxySpan')
 
   // Only close the inferred span if one was created
   if (context.inferredProxySpan) {
