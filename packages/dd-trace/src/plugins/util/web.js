@@ -267,7 +267,7 @@ const web = {
 
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
     if (tracer._config?.managedServicesEnabled) {
-      console.log('Checking if we can create an inferred proxy child span given headers exist.')
+      log.debug('Checking if we can create an inferred proxy child span given headers exist.')
       const result = createInferredProxySpan(headers, childOf, tracer, context)
       if (result) {
         childOf = result
@@ -293,7 +293,10 @@ const web = {
     if (!spanHasExistingError && !isValidStatusCode) {
       span.setTag(ERROR, error || true)
     }
+
+    log.debug('Checking if we should add the error tag to inferred span if it exists')
     if (inferredProxySpan && !inferredSpanHasExistingError && !isValidStatusCode) {
+      log.debug('Adding error tag to inferred span.')
       inferredProxySpan.setTag(ERROR, error || true)
     }
   },

@@ -20,7 +20,8 @@ const proxySpanNames = {
 
 function createInferredProxySpan (headers, childOf, tracer, context) {
   if (!headers) {
-    console.log('Inferred Span: Not creating logs')
+    // console.log('Inferred Span: Not creating logs')
+    log.debug('No headers to extract for inferred proxy span.')
     return null
   }
 
@@ -68,6 +69,7 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
 
 function setInferredProxySpanTags (span, proxyContext) {
   span.setTag(RESOURCE_NAME, `${proxyContext.method} ${proxyContext.path}`)
+  span.setTag('_inferred_span', '1')
   return span
 }
 
