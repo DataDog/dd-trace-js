@@ -141,7 +141,8 @@ describe('Header injection vulnerability', () => {
           })
 
           testThatRequestHasNoVulnerability({
-            testDescription: 'should not have HEADER_INJECTION vulnerability when the header is "Sec-WebSocket-Location"',
+            testDescription: 'should not have HEADER_INJECTION vulnerability ' +
+              'when the header is "Sec-WebSocket-Location"',
             fn: (req, res) => {
               setHeaderFunction('Sec-WebSocket-Location', req.body.test, res)
             },
