@@ -330,13 +330,13 @@ class TextMapPropagator {
           context = this._resolveTraceContextConflicts(
             this._extractTraceparentContext(carrier), context, carrier)
         }
-        if (extractedContext.toTraceId(true) !== context.toTraceId(true)) {
-          // let flags = extractedContext._sampling.priority > 0 ? 1 : 0
+        if (extractedContext._traceId && extractedContext._parentId &&
+           extractedContext.toTraceId(true) !== context.toTraceId(true)) {
           const link = {
             context: extractedContext,
             attributes: { reason: 'terminated_context', context_headers: extractor }
           }
-          context.spanLinks.push(link)
+          context._links.push(link)
         }
       }
 
