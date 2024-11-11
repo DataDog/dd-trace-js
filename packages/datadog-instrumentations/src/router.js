@@ -120,7 +120,7 @@ function createWrapRouterMethod (name) {
   }
 
   function isFastStar (layer, matchers) {
-    if (layer.regexp.fast_star !== undefined) {
+    if (layer.regexp?.hasOwnProperty('fast_star') && layer.regexp.fast_star !== undefined) {
       return layer.regexp.fast_star
     }
 
@@ -128,7 +128,7 @@ function createWrapRouterMethod (name) {
   }
 
   function isFastSlash (layer, matchers) {
-    if (layer.regexp.fast_slash !== undefined) {
+    if (layer.regexp?.hasOwnProperty('fast_slash') && layer.regexp.fast_slash !== undefined) {
       return layer.regexp.fast_slash
     }
 
@@ -177,7 +177,7 @@ function createWrapRouterMethod (name) {
 
 const wrapRouterMethod = createWrapRouterMethod('router')
 
-addHook({ name: 'router', versions: ['>=1 <2.0.0'] }, Router => {
+addHook({ name: 'router', versions: ['>=1'] }, Router => {
   shimmer.wrap(Router.prototype, 'use', wrapRouterMethod)
   shimmer.wrap(Router.prototype, 'route', wrapRouterMethod)
 
