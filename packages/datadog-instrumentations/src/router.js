@@ -114,7 +114,6 @@ function createWrapRouterMethod (name) {
         const matchers = layerMatchers.get(layer)
         return !isFastStar(layer, matchers) &&
           !isFastSlash(layer, matchers) &&
-          !isSlash(layer, matchers) &&
           cachedPathToRegExp(pattern).test(layer.path)
       }
     }))
@@ -131,15 +130,6 @@ function createWrapRouterMethod (name) {
   function isFastSlash (layer, matchers) {
     if (layer.regexp?.hasOwnProperty('fast_slash') && layer.regexp.fast_slash !== undefined) {
       return layer.regexp.fast_slash
-    }
-
-    return matchers.some(matcher => matcher.path === '/')
-  }
-
-  // Router 2.x has a slash under layer instead of regexp https://github.com/pillarjs/router/pull/117
-  function isSlash (layer, matchers) {
-    if (layer.hasOwnProperty('slash') && layer.slash !== undefined) {
-      return layer.slash
     }
 
     return matchers.some(matcher => matcher.path === '/')
