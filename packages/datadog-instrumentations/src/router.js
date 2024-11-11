@@ -114,6 +114,7 @@ function createWrapRouterMethod (name) {
         const matchers = layerMatchers.get(layer)
         return !isFastStar(layer, matchers) &&
           !isFastSlash(layer, matchers) &&
+          !isSlash(layer, matchers) &&
           cachedPathToRegExp(pattern).test(layer.path)
       }
     }))
