@@ -12,6 +12,7 @@ describe('Inferred Proxy Spans', function () {
   let appListener
   let controller
   let port
+  let tracer
 
   // tap was throwing timeout errors when trying to use hooks like `before`, so instead we just use this function
   // and call before the test starts
@@ -19,6 +20,7 @@ describe('Inferred Proxy Spans', function () {
     process.env.DD_SERVICE = 'aws-server'
 
     port = await getPort()
+    tracer = require('../../../../dd-trace')
 
     await agent.load(['http'], null, options)
 
