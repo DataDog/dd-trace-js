@@ -14,12 +14,12 @@ const success = msg => console.log(`\x1b[32m${msg}\x1b[0m`)
 const error = msg => console.log(`\x1b[31m${msg}\x1b[0m`)
 const whisper = msg => console.log(`\x1b[90m${msg}\x1b[0m`)
 
-const currentBranch = capture('git rev-parse --abbrev-ref HEAD')
+const currentBranch = capture('git branch --show-current')
 const releaseLine = process.argv[2]
 
 // Validate release line argument.
 if (!releaseLine || releaseLine === 'help' || releaseLine === '--help') {
-  log('Usage: node scripts/release/prepare <release-line> [release-type]')
+  log('Usage: node scripts/release/proposal <release-line> [release-type]')
   process.exit(0)
 } else if (!releaseLine?.match(/^\d+$/)) {
   error('Invalid release line. Must be a whole number.')
@@ -76,7 +76,7 @@ if (proposalDiff) {
 }
 
 // Update package.json with new version.
-run(`yarn version --no-git-tag-version --new-version ${newVersion}`)
+run(`npm version --git-tag-version=false ${newVersion}`)
 run(`git commit -uno -m v${newVersion} package.json || exit 0`)
 
 ready()
