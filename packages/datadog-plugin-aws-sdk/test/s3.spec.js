@@ -4,6 +4,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const axios = require('axios')
 const { rawExpectedSchema } = require('./s3-naming')
+const { SPAN_LINK_KIND, S3_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/span_pointers')
 
 const bucketName = 's3-bucket-name-test'
 
@@ -36,16 +37,15 @@ describe('Plugin', () => {
 
         before(done => {
           AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
+          s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:4566', s3ForcePathStyle: true, region: 'us-east-1' })
 
-          s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:4567', s3ForcePathStyle: true, region: 'us-east-1' })
+          // Fix for LocationConstraint issue - only for SDK v2
+          if (s3ClientName === 'aws-sdk') {
+            s3.api.globalEndpoint = '127.0.0.1'
+          }
+
           s3.createBucket({ Bucket: bucketName }, (err) => {
             if (err) return done(err)
-            done()
-          })
-        })
-
-        after(done => {
-          s3.deleteBucket({ Bucket: bucketName }, () => {
             done()
           })
         })
@@ -73,6 +73,68 @@ describe('Plugin', () => {
           }, (err) => err && done(err)),
           rawExpectedSchema.outbound
         )
+
+        describe('span pointers', () => {
+          it('should add span pointer for putObject operation', (done) => {
+            agent.use(traces => {
+              try {
+                const span = traces[0][0]
+                const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
+
+                expect(links).to.have.lengthOf(1)
+                expect(links[0].attributes).to.deep.equal({
+                  'ptr.kind': S3_PTR_KIND,
+                  'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
+                  'link.kind': SPAN_LINK_KIND,
+                  'ptr.hash': '6d1a2fe194c6579187408f827f942be3'
+                })
+                done()
+              } catch (error) {
+                done(error)
+              }
+            }).catch(done)
+
+            s3.putObject({
+              Bucket: bucketName,
+              Key: 'test-key',
+              Body: 'test body'
+            }, (err) => {
+              if (err) {
+                done(err)
+              }
+            })
+          })
+
+          it('should add span pointer for copyObject operation', (done) => {
+            agent.use(traces => {
+              try {
+                const span = traces[0][0]
+                const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
+
+                expect(links).to.have.lengthOf(1)
+                expect(links[0].attributes).to.deep.equal({
+                  'ptr.kind': S3_PTR_KIND,
+                  'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
+                  'link.kind': SPAN_LINK_KIND,
+                  'ptr.hash': '1542053ce6d393c424b1374bac1fc0c5'
+                })
+                done()
+              } catch (error) {
+                done(error)
+              }
+            }).catch(done)
+
+            s3.copyObject({
+              Bucket: bucketName,
+              Key: 'new-key',
+              CopySource: `${bucketName}/test-key`
+            }, (err) => {
+              if (err) {
+                done(err)
+              }
+            })
+          })
+        })
 
         it('should allow disabling a specific span kind of a service', (done) => {
           let total = 0
