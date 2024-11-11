@@ -13,12 +13,14 @@ describe('Inferred Proxy Spans', function () {
   let controller
   let port
 
-  beforeEach(async () => {
+  // tap was throwing timeout errors when trying to use hooks like `before`, so instead we just use this function
+  // and call before the test starts
+  const loadTest = async function (options) {
     process.env.DD_SERVICE = 'aws-server'
 
     port = await getPort()
 
-    await agent.load(['http'])
+    await agent.load(['http'], null, options)
 
     http = require('http')
 
@@ -34,12 +36,13 @@ describe('Inferred Proxy Spans', function () {
     })
 
     appListener = server.listen(port, '127.0.0.1')
-  })
+  }
 
-  afterEach(() => {
+  // test cleanup function
+  const cleanupTest = function () {
     appListener && appListener.close()
-    return agent.close({ ritmReset: false })
-  })
+    agent.close({ ritmReset: false })
+  }
 
   const inferredHeaders = {
     'x-dd-proxy': 'aws-apigateway',
@@ -52,6 +55,8 @@ describe('Inferred Proxy Spans', function () {
 
   describe('without configuration', () => {
     it('should create a parent span and a child span for a 200', async () => {
+      await loadTest({})
+
       await axios.get(`http://127.0.0.1:${port}/`, {
         headers: inferredHeaders
       })
@@ -94,10 +99,12 @@ describe('Inferred Proxy Spans', function () {
             continue
           }
         }
-      }).then().catch()
+      }).then(cleanupTest).catch(cleanupTest)
     })
 
     it('should create a parent span and a child span for an error', async () => {
+      await loadTest({})
+
       await axios.get(`http://127.0.0.1:${port}/error`, {
         headers: inferredHeaders,
         validateStatus: function (status) {
@@ -145,10 +152,12 @@ describe('Inferred Proxy Spans', function () {
             continue
           }
         }
-      }).then().catch()
+      }).then(cleanupTest).catch(cleanupTest)
     })
 
     it('should not create an API Gateway span if all necessary headers are missing', async () => {
+      await loadTest({})
+
       await axios.get(`http://127.0.0.1:${port}/no-aws-headers`, {
         headers: {}
       })
@@ -175,10 +184,12 @@ describe('Inferred Proxy Spans', function () {
             continue
           }
         }
-      }).then().catch()
+      }).then(cleanupTest).catch(cleanupTest)
     })
 
     it('should not create an API Gateway span if missing the proxy system header', async () => {
+      await loadTest({})
+
       // remove x-dd-proxy from headers
       const { 'x-dd-proxy': _, ...newHeaders } = inferredHeaders
 
@@ -208,45 +219,41 @@ describe('Inferred Proxy Spans', function () {
             continue
           }
         }
-      }).then().catch()
+      }).then(cleanupTest).catch(cleanupTest)
     })
+  })
 
-    describe('with configuration', function () {
-      before(() => {
-        return agent.load(null, null, { inferredProxyServicesEnabled: false })
+  describe('with configuration', function () {
+    it('should not create a span when configured to be off', async () => {
+      await loadTest({ inferredProxyServicesEnabled: false })
+
+      await axios.get(`http://127.0.0.1:${port}/configured-off`, {
+        headers: inferredHeaders
       })
 
-      after(() => agent.reset({ ritmReset: true }))
+      await agent.use(traces => {
+        for (const trace of traces) {
+          try {
+            const spans = trace
 
-      it('should not create a span when configured to be off', async () => {
-        await axios.get(`http://127.0.0.1:${port}/configured-off`, {
-          headers: inferredHeaders
-        })
+            expect(spans.length).to.be.equal(1)
 
-        await agent.use(traces => {
-          for (const trace of traces) {
-            try {
-              const spans = trace
-
-              expect(spans.length).to.be.equal(1)
-
-              expect(spans[0]).to.have.property('name', 'web.request')
-              expect(spans[0]).to.have.property('service', 'aws-server')
-              expect(spans[0]).to.have.property('type', 'web')
-              expect(spans[0]).to.have.property('resource', 'GET')
-              expect(spans[0].meta).to.have.property('component', 'http')
-              expect(spans[0].meta).to.have.property('span.kind', 'server')
-              expect(spans[0].meta).to.have.property('http.url', `http://127.0.0.1:${port}/configured-off`)
-              expect(spans[0].meta).to.have.property('http.method', 'GET')
-              expect(spans[0].meta).to.have.property('http.status_code', '200')
-              expect(spans[0].meta).to.have.property('span.kind', 'server')
-              break
-            } catch {
-              continue
-            }
+            expect(spans[0]).to.have.property('name', 'web.request')
+            expect(spans[0]).to.have.property('service', 'aws-server')
+            expect(spans[0]).to.have.property('type', 'web')
+            expect(spans[0]).to.have.property('resource', 'GET')
+            expect(spans[0].meta).to.have.property('component', 'http')
+            expect(spans[0].meta).to.have.property('span.kind', 'server')
+            expect(spans[0].meta).to.have.property('http.url', `http://127.0.0.1:${port}/configured-off`)
+            expect(spans[0].meta).to.have.property('http.method', 'GET')
+            expect(spans[0].meta).to.have.property('http.status_code', '200')
+            expect(spans[0].meta).to.have.property('span.kind', 'server')
+            break
+          } catch {
+            continue
           }
-        }).then().catch()
-      })
+        }
+      }).then(cleanupTest).catch(cleanupTest)
     })
   })
 })
