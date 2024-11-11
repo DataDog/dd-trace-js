@@ -1,6 +1,6 @@
 'use strict'
 
-// require('../../setup/tap')
+require('../../setup/tap')
 
 const agent = require('../agent')
 const getPort = require('get-port')
