@@ -43,7 +43,11 @@ describe('Inferred Proxy Spans', function () {
   // test cleanup function
   const cleanupTest = function () {
     appListener && appListener.close()
-    // agent.close({ ritmReset: false })
+    try {
+      agent.close({ ritmReset: false })
+    } catch {
+      // pass
+    }
   }
 
   const inferredHeaders = {
