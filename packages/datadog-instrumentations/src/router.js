@@ -136,6 +136,7 @@ function createWrapRouterMethod (name) {
     return matchers.some(matcher => matcher.path === '/')
   }
 
+  // Router 2.x has a slash under layer instead of regexp https://github.com/pillarjs/router/pull/117
   function isSlash (layer, matchers) {
     if (layer.hasOwnProperty('slash') && layer.slash !== undefined) {
       return layer.slash
