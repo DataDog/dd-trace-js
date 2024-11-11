@@ -326,7 +326,6 @@ class TextMapPropagator {
         }
       } else {
         // If extractor is tracecontext, add tracecontext specific information to the context
-        console.log('extractedContext in extractSpanContext', extractedContext)
         if (extractor === 'tracecontext') {
           context = this._resolveTraceContextConflicts(
             this._extractTraceparentContext(carrier), context, carrier)
