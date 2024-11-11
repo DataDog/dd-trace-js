@@ -38,7 +38,7 @@ describe('Inferred Proxy Spans', function () {
 
   afterEach(() => {
     appListener && appListener.close()
-    agent.close()
+    return agent.close({ ritmReset: false })
   })
 
   const inferredHeaders = {
