@@ -148,7 +148,7 @@ describe('Inferred Proxy Spans', function () {
       }).then().catch()
     })
 
-    it('should not create an API Gateway span if all necessary headers are', async () => {
+    it('should not create an API Gateway span if all necessary headers are missing', async () => {
       await axios.get(`http://127.0.0.1:${port}/no-aws-headers`, {
         headers: {}
       })
