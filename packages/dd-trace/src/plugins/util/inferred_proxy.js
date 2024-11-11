@@ -26,7 +26,7 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
     return null
   }
 
-  if (!tracer._config?.managedServicesEnabled) {
+  if (!tracer._config?.inferredProxyServicesEnabled) {
     return null
   }
 
@@ -47,7 +47,7 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
       type: 'web',
       startTime: proxyContext.requestTime,
       tags: {
-        service: proxyContext.domainName || this.serviceName(),
+        service: proxyContext.domainName || tracer._config.service,
         component: proxySpanInfo.component,
         [SPAN_KIND]: 'internal',
         [HTTP_METHOD]: proxyContext.method,

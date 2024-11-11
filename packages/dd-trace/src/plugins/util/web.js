@@ -260,10 +260,10 @@ const web = {
     let childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
 
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
-    if (tracer._config?.managedServicesEnabled) {
-      const result = createInferredProxySpan(headers, childOf, tracer, context)
-      if (result) {
-        childOf = result
+    if (tracer._config?.inferredProxyServicesEnabled) {
+      const proxySpan = createInferredProxySpan(headers, childOf, tracer, context)
+      if (proxySpan) {
+        childOf = proxySpan
       }
     }
 
@@ -278,8 +278,8 @@ const web = {
     const { span, inferredProxySpan, error } = context
 
     const spanHasExistingError = span.context()._tags.error || span.context()._tags[ERROR_MESSAGE]
-    const inferredSpanHasExistingError = inferredProxySpan?.context()._tags.error ||
-    inferredProxySpan?.context()._tags[ERROR_MESSAGE]
+    const inferredSpanContext = inferredProxySpan?.context()
+    const inferredSpanHasExistingError = inferredSpanContext?._tags.error || inferredSpanContext._tags[ERROR_MESSAGE]
 
     const isValidStatusCode = context.config.validateStatus(statusCode)
 

@@ -213,7 +213,7 @@ describe('Inferred Proxy Spans', function () {
 
     describe('with configuration', function () {
       before(() => {
-        return agent.load(null, null, { managedServicesEnabled: false })
+        return agent.load(null, null, { inferredProxyServicesEnabled: false })
       })
 
       after(() => agent.reset({ ritmReset: true }))
