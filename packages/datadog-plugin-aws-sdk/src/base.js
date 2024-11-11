@@ -93,12 +93,19 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         this.responseExtractDSMContext(operation, params, response.data ?? response, span)
       }
       this.addResponseTags(span, response)
+      if (this.serviceIdentifier === 's3') {
+        this.addSpanPointer(span, response)
+      }
       this.finish(span, response, response.error)
     })
   }
 
   requestInject (span, request) {
     // implemented by subclasses, or not
+  }
+
+  addSpanPointer (span, response) {
+    // Optionally implemented by subclasses, for services where we're unable to inject trace context
   }
 
   operationFromRequest (request) {
