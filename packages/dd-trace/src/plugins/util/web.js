@@ -279,7 +279,7 @@ const web = {
 
     const spanHasExistingError = span.context()._tags.error || span.context()._tags[ERROR_MESSAGE]
     const inferredSpanContext = inferredProxySpan?.context()
-    const inferredSpanHasExistingError = inferredSpanContext?._tags.error || inferredSpanContext._tags[ERROR_MESSAGE]
+    const inferredSpanHasExistingError = inferredSpanContext?._tags.error || inferredSpanContext?._tags[ERROR_MESSAGE]
 
     const isValidStatusCode = context.config.validateStatus(statusCode)
 
