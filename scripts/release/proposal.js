@@ -114,7 +114,7 @@ function capture (cmd) {
 
 // Write release notes to a file that can be copied to the GitHub release.
 function ready () {
-  const notesDir = path.join(__dirname, '..', '..', '.github', 'notes')
+  const notesDir = path.join(__dirname, '..', '..', '.github', 'release_notes')
   const notesFile = path.join(notesDir, `${newVersion}.md`)
   const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x master`)
 
@@ -122,7 +122,7 @@ function ready () {
   fs.writeFileSync(notesFile, lineDiff)
 
   success('Release proposal is ready.')
-  success(`Changelog at .github/notes/${newVersion}.md`)
+  success(`Changelog at .github/release_notes/${newVersion}.md`)
 
   process.exit(0)
 }
