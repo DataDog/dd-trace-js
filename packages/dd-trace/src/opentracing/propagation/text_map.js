@@ -326,11 +326,12 @@ class TextMapPropagator {
         }
       } else {
         // If extractor is tracecontext, add tracecontext specific information to the context
+        console.log('extractedContext in extractSpanContext', extractedContext)
         if (extractor === 'tracecontext') {
           context = this._resolveTraceContextConflicts(
             this._extractTraceparentContext(carrier), context, carrier)
         }
-        if (extractedContext._traceId && extractedContext._parentId &&
+        if (extractedContext._traceId && extractedContext._spanId &&
            extractedContext.toTraceId(true) !== context.toTraceId(true)) {
           const link = {
             context: extractedContext,
