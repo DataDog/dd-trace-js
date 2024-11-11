@@ -43,7 +43,7 @@ describe('Inferred Proxy Spans', function () {
 
   const inferredHeaders = {
     'x-dd-proxy': 'aws-apigateway',
-    'x-dd-proxy-request-time': '1729780025473',
+    'x-dd-proxy-request-time-ms': '1729780025473',
     'x-dd-proxy-path': '/test',
     'x-dd-proxy-httpmethod': 'GET',
     'x-dd-proxy-domain-name': 'example.com',
