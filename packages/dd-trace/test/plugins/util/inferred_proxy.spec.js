@@ -42,7 +42,7 @@ describe('Inferred Proxy Spans', function () {
   })
 
   const inferredHeaders = {
-    'x-dd-proxy-name': 'aws-apigateway',
+    'x-dd-proxy': 'aws-apigateway',
     'x-dd-proxy-request-time': '1729780025473',
     'x-dd-proxy-path': '/test',
     'x-dd-proxy-httpmethod': 'GET',
@@ -175,9 +175,40 @@ describe('Inferred Proxy Spans', function () {
             continue
           }
         }
-      }).then(
-        console.log('Tested passed!')
-      ).catch()
+      }).then().catch()
+    })
+
+    it('should not create an API Gateway span if missing the proxy system header', async () => {
+      // remove x-dd-proxy from headers
+      const { 'x-dd-proxy': _, ...newHeaders } = inferredHeaders
+
+      await axios.get(`http://127.0.0.1:${port}/a-few-aws-headers`, {
+        headers: newHeaders
+      })
+
+      await agent.use(traces => {
+        for (const trace of traces) {
+          try {
+            const spans = trace
+            expect(spans.length).to.be.equal(1)
+
+            expect(spans[0]).to.have.property('name', 'web.request')
+            expect(spans[0]).to.have.property('service', 'aws-server')
+            expect(spans[0]).to.have.property('type', 'web')
+            expect(spans[0]).to.have.property('resource', 'GET')
+            expect(spans[0].meta).to.have.property('component', 'http')
+            expect(spans[0].meta).to.have.property('span.kind', 'server')
+            expect(spans[0].meta).to.have.property('http.url', `http://127.0.0.1:${port}/a-few-aws-headers`)
+            expect(spans[0].meta).to.have.property('http.method', 'GET')
+            expect(spans[0].meta).to.have.property('http.status_code', '200')
+            expect(spans[0].meta).to.have.property('span.kind', 'server')
+            expect(spans[0].error).to.be.equal(0)
+            break
+          } catch {
+            continue
+          }
+        }
+      }).then().catch()
     })
 
     describe('with configuration', function () {

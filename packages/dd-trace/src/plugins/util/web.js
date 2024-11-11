@@ -92,15 +92,12 @@ const web = {
   startSpan (tracer, config, req, res, name) {
     const context = this.patch(req)
 
-    log.debug('Starting Web Span')
-
     let span
 
     if (context.span) {
       context.span.context()._name = name
       span = context.span
     } else {
-      log.debug('Starting child Span')
       span = web.startChildSpan(tracer, name, req)
     }
 
@@ -262,12 +259,8 @@ const web = {
     const context = contexts.get(req)
     let childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
 
-    log.debug('Starting web child span with the following headers')
-    log.debug(headers)
-
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
     if (tracer._config?.managedServicesEnabled) {
-      log.debug('Checking if we can create an inferred proxy child span given headers exist.')
       const result = createInferredProxySpan(headers, childOf, tracer, context)
       if (result) {
         childOf = result
@@ -294,9 +287,7 @@ const web = {
       span.setTag(ERROR, error || true)
     }
 
-    log.debug('Checking if we should add the error tag to inferred span if it exists')
     if (inferredProxySpan && !inferredSpanHasExistingError && !isValidStatusCode) {
-      log.debug('Adding error tag to inferred span.')
       inferredProxySpan.setTag(ERROR, error || true)
     }
   },
@@ -495,7 +486,6 @@ function addResponseTags (context) {
     [HTTP_STATUS_CODE]: res.statusCode
   })
 
-  log.debug('Trying to add web status error if it exists within addResponseTags')
   web.addStatusError(req, res.statusCode)
 }
 

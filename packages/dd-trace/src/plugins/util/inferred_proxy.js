@@ -7,21 +7,22 @@ const SPAN_KIND = tags.SPAN_KIND
 const HTTP_URL = tags.HTTP_URL
 const HTTP_METHOD = tags.HTTP_METHOD
 
-const PROXY_HEADER_NAME = 'x-dd-proxy-name'
-const PROXY_HEADER_START_TIME_MS = 'x-dd-proxy-request-time'
+const PROXY_HEADER_SYSTEM = 'x-dd-proxy'
+const PROXY_HEADER_START_TIME_MS = 'x-dd-proxy-request-time-ms'
 const PROXY_HEADER_PATH = 'x-dd-proxy-path'
 const PROXY_HEADER_HTTPMETHOD = 'x-dd-proxy-httpmethod'
 const PROXY_HEADER_DOMAIN = 'x-dd-proxy-domain-name'
 const PROXY_HEADER_STAGE = 'x-dd-proxy-stage'
 
-const proxySpanNames = {
-  'aws-apigateway': 'aws.apigateway'
+const supportedProxies = {
+  'aws-apigateway': {
+    spanName: 'aws.apigateway',
+    component: 'aws-apigateway'
+  }
 }
 
 function createInferredProxySpan (headers, childOf, tracer, context) {
   if (!headers) {
-    // console.log('Inferred Span: Not creating logs')
-    log.debug('No headers to extract for inferred proxy span.')
     return null
   }
 
@@ -35,17 +36,19 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
     return null
   }
 
-  log.debug('Starting inferred Proxy span')
+  const proxySpanInfo = supportedProxies[proxyContext.proxySystemName]
+
+  log.debug(`Successfully extracted inferred span info ${proxyContext} for proxy: ${proxyContext.proxySystemName}`)
 
   const span = tracer.startSpan(
-    proxySpanNames[proxyContext.proxyName],
+    proxySpanInfo.spanName,
     {
       childOf,
       type: 'web',
       startTime: proxyContext.requestTime,
       tags: {
         service: proxyContext.domainName || this.serviceName(),
-        component: proxyContext.proxyName,
+        component: proxySpanInfo.component,
         [SPAN_KIND]: 'internal',
         [HTTP_METHOD]: proxyContext.method,
         [HTTP_URL]: proxyContext.domainName + proxyContext.path,
@@ -60,7 +63,7 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
   context.inferredProxySpan = span
   childOf = span
 
-  log.debug('Setting inferred proxy Span Tags createInferredProxySpan')
+  log.debug('Successfully created inferred proxy span.')
 
   setInferredProxySpanTags(span, proxyContext)
 
@@ -68,7 +71,6 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
 }
 
 function setInferredProxySpanTags (span, proxyContext) {
-  log.debug('Setting inferred proxy Span Tags setInferredProxySpanTags')
   span.setTag(RESOURCE_NAME, `${proxyContext.method} ${proxyContext.path}`)
   span.setTag('_inferred_span', '1')
   return span
@@ -76,6 +78,11 @@ function setInferredProxySpanTags (span, proxyContext) {
 
 function extractInferredProxyContext (headers) {
   if (!(PROXY_HEADER_START_TIME_MS in headers)) {
+    return null
+  }
+
+  if (!(PROXY_HEADER_SYSTEM in headers && headers[PROXY_HEADER_SYSTEM] in supportedProxies)) {
+    log.debug(`Received headers to create inferred proxy span but headers include an unsupported proxy type ${headers}`)
     return null
   }
 
@@ -87,7 +94,7 @@ function extractInferredProxyContext (headers) {
     path: headers[PROXY_HEADER_PATH],
     stage: headers[PROXY_HEADER_STAGE],
     domainName: headers[PROXY_HEADER_DOMAIN],
-    proxyName: headers[PROXY_HEADER_NAME]
+    proxySystemName: headers[PROXY_HEADER_SYSTEM]
   }
 }
 
@@ -98,9 +105,7 @@ function finishInferredProxySpan (context) {
 
   if (context.inferredProxySpanFinished && !req.stream) return
 
-  // context.config.hooks.request(context.inferredProxySpan, req, res)
-
-  log.debug('Finishing web inferred span within finishInferredProxySpan')
+  // context.config.hooks.request(context.inferredProxySpan, req, res) # TODO: Do we need this??
 
   // Only close the inferred span if one was created
   if (context.inferredProxySpan) {
