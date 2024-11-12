@@ -1154,7 +1154,6 @@ describe('Config', () => {
     process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_JSON_PATH // json and html here
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'disabled'
     process.env.DD_API_SECURITY_ENABLED = 'false'
-    process.env.DD_API_SECURITY_SAMPLE_DELAY = '10'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
     process.env.DD_IAST_COOKIE_FILTER_PATTERN = '.*'
@@ -1298,7 +1297,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
-    expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 10)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
@@ -1398,8 +1396,7 @@ describe('Config', () => {
         mode: 'disabled'
       },
       apiSecurity: {
-        enabled: true,
-        sampleDelay: 30
+        enabled: true
       },
       sca: {
         enabled: null

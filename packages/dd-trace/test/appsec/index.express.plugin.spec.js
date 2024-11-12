@@ -309,7 +309,7 @@ withVersions('express', 'express', version => {
 
     describe('with sample delay 10', () => {
       beforeEach(() => {
-        config.appsec.apiSecurity.sampleDelay = 1.0
+        config.appsec.apiSecurity.sampleDelay = 10
         appsec.enable(config)
       })
 
