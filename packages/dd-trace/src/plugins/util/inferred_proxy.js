@@ -4,6 +4,7 @@ const tags = require('../../../../../ext/tags')
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const HTTP_ROUTE = tags.HTTP_ROUTE
 const SPAN_KIND = tags.SPAN_KIND
+const SPAN_TYPE = tags.SPAN_TYPE
 const HTTP_URL = tags.HTTP_URL
 const HTTP_METHOD = tags.HTTP_METHOD
 
@@ -50,11 +51,11 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
         service: proxyContext.domainName || tracer._config.service,
         component: proxySpanInfo.component,
         [SPAN_KIND]: 'internal',
+        [SPAN_TYPE]: 'web',
         [HTTP_METHOD]: proxyContext.method,
         [HTTP_URL]: proxyContext.domainName + proxyContext.path,
         [HTTP_ROUTE]: proxyContext.path,
-        stage: proxyContext.stage,
-        type: 'web'
+        stage: proxyContext.stage
       }
     }
   )

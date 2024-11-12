@@ -125,7 +125,7 @@ describe('Inferred Proxy Spans', function () {
             expect(spans[0]).to.have.property('name', 'aws.apigateway')
             expect(spans[0]).to.have.property('service', 'example.com')
             expect(spans[0]).to.have.property('resource', 'GET /test')
-            expect(spans[0].meta).to.have.property('type', 'web')
+            expect(spans[0]).to.have.property('type', 'web')
             expect(spans[0].meta).to.have.property('http.url', 'example.com/test')
             expect(spans[0].meta).to.have.property('http.method', 'GET')
             expect(spans[0].meta).to.have.property('http.status_code', '500')
