@@ -1396,7 +1396,8 @@ describe('Config', () => {
         mode: 'disabled'
       },
       apiSecurity: {
-        enabled: true
+        enabled: true,
+        sampleDelay: 30
       },
       sca: {
         enabled: null
