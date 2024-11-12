@@ -84,8 +84,6 @@ describe('Inferred Proxy Spans', function () {
             expect(spans[0].meta).to.have.property('span.kind', 'internal')
             expect(spans[0].meta).to.have.property('component', 'aws-apigateway')
             expect(spans[0].meta).to.have.property('_dd.inferred_span', '1')
-
-            // TODO: Fix this and ensure start time is correct
             expect(spans[0].start.toString()).to.be.equal('1729780025472999936')
 
             expect(spans[0].span_id.toString()).to.be.equal(spans[1].parent_id.toString())
@@ -122,7 +120,6 @@ describe('Inferred Proxy Spans', function () {
         for (const trace of traces) {
           try {
             const spans = trace
-            // TODO: figure out why this test only creates one http.request
             expect(spans.length).to.be.equal(2)
 
             expect(spans[0]).to.have.property('name', 'aws.apigateway')
@@ -135,10 +132,7 @@ describe('Inferred Proxy Spans', function () {
             expect(spans[0].meta).to.have.property('http.route', '/test')
             expect(spans[0].meta).to.have.property('span.kind', 'internal')
             expect(spans[0].meta).to.have.property('component', 'aws-apigateway')
-            // TODO ensure we add error here too
             expect(spans[0].error).to.be.equal(1)
-
-            // TODO: Fix this and ensure start time is correct
             expect(spans[0].start.toString()).to.be.equal('1729780025472999936')
             expect(spans[0].span_id.toString()).to.be.equal(spans[1].parent_id.toString())
 
