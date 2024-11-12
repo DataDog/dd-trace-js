@@ -1,4 +1,6 @@
-/* eslint-disable */
+'use strict'
+
+/* eslint-disable no-var */
 
 var NODE_MAJOR = require('./version').NODE_MAJOR
 
