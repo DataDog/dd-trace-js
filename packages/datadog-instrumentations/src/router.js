@@ -120,7 +120,7 @@ function createWrapRouterMethod (name) {
   }
 
   function isFastStar (layer, matchers) {
-    if (layer.regexp?.hasOwnProperty('fast_star') && layer.regexp.fast_star !== undefined) {
+    if (layer.regexp?.fast_star !== undefined) {
       return layer.regexp.fast_star
     }
 
@@ -128,7 +128,7 @@ function createWrapRouterMethod (name) {
   }
 
   function isFastSlash (layer, matchers) {
-    if (layer.regexp?.hasOwnProperty('fast_slash') && layer.regexp.fast_slash !== undefined) {
+    if (layer.regexp?.fast_slash !== undefined) {
       return layer.regexp.fast_slash
     }
 
