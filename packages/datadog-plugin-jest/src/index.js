@@ -27,7 +27,8 @@ const {
   DI_ERROR_DEBUG_INFO_CAPTURED,
   DI_DEBUG_ERROR_SNAPSHOT_ID,
   DI_DEBUG_ERROR_FILE,
-  DI_DEBUG_ERROR_LINE
+  DI_DEBUG_ERROR_LINE,
+  getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -377,13 +378,13 @@ class JestPlugin extends CiPlugin {
       snapshotId,
       setProbePromise,
       hitProbePromise
-    ] = this.di.addLineProbe({ file, line: line - 1 }) // TODO: why -1?????
+    ] = this.di.addLineProbe({ file, line: line - 1 }) // TODO: why -1????? -> make sure this is right
 
     probe.setProbePromise = setProbePromise
 
     this.debuggerParameters = {
       snapshotId,
-      file,
+      file: getTestSuitePath(file, this.repositoryRoot),
       line
     }
 

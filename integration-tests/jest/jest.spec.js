@@ -33,7 +33,11 @@ const {
   TEST_SOURCE_START,
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
-  TEST_LEVEL_EVENT_TYPES
+  TEST_LEVEL_EVENT_TYPES,
+  DI_ERROR_DEBUG_INFO_CAPTURED,
+  DI_DEBUG_ERROR_FILE,
+  DI_DEBUG_ERROR_SNAPSHOT_ID,
+  DI_DEBUG_ERROR_LINE
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -2354,6 +2358,62 @@ describe('jest CommonJS', () => {
 
       childProcess.on('exit', () => {
         eventsPromise.then(() => done()).catch(done)
+      })
+    })
+  })
+
+  context.only('dynamic instrumentation', () => {
+    it.only('runs retries with dynamic instrumentation', (done) => {
+      let snapshotIdByTest, snapshotIdByLog
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          debugger
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+          assert.equal(retriedTests.length, 1)
+          const [retriedTest] = retriedTests
+
+          assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+          assert.propertyVal(
+            retriedTest.meta,
+            DI_DEBUG_ERROR_FILE,
+            'ci-visibility/dynamic-instrumentation/dependency.js'
+          )
+          assert.exists(retriedTest.metrics[DI_DEBUG_ERROR_LINE]) // SHOULD THIS BE A NUMBER??
+          assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
+
+          snapshotIdByTest = retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID]
+        })
+
+      const logsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+          debugger
+
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-',
+            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.stdout.pipe(process.stdout)
+      childProcess.stderr.pipe(process.stderr)
+
+      childProcess.on('exit', () => {
+        Promise.all([eventsPromise, logsPromise]).then(() => {
+          done()
+        }).catch(done)
       })
     })
   })
