@@ -272,17 +272,18 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
       }
       if (event.name === 'test_done') {
-        const setProbePromise = {}
-        const numRetries = this.global[RETRY_TIMES]
-        const numTestExecutions = event.test?.invocations
+        const probe = {}
         const asyncResource = asyncResources.get(event.test)
         asyncResource.runInAsyncScope(() => {
           let status = 'pass'
           if (event.test.errors && event.test.errors.length) {
             status = 'fail'
-            const err = formatJestError(event.test.errors[0])
+            const numRetries = this.global[RETRY_TIMES]
+            const numTestExecutions = event.test?.invocations
             const willBeRetried = numRetries > 0 && numTestExecutions - 1 < numRetries
-            testErrCh.publish({ err, willBeRetried, setProbePromise })
+
+            const err = formatJestError(event.test.errors[0])
+            testErrCh.publish({ err, willBeRetried, probe })
           }
           testRunFinishCh.publish({
             status,
@@ -304,8 +305,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             }
           }
         })
-        if (setProbePromise.onSetProbePromise) {
-          await setProbePromise.onSetProbePromise
+        if (probe.setProbePromise) {
+          await probe.setProbePromise
         }
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
@@ -869,7 +870,6 @@ addHook({
   name: 'jest-runtime',
   versions: ['>=24.8.0']
 }, (runtimePackage) => {
-  debugger
   const Runtime = runtimePackage.default ? runtimePackage.default : runtimePackage
 
   shimmer.wrap(Runtime.prototype, 'requireModuleOrMock', requireModuleOrMock => function (from, moduleName) {

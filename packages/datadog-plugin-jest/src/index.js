@@ -22,7 +22,12 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   JEST_DISPLAY_NAME,
   TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_DRIVER
+  TEST_BROWSER_DRIVER,
+  getFileAndLineNumberFromError,
+  DI_ERROR_DEBUG_INFO_CAPTURED,
+  DI_DEBUG_ERROR_SNAPSHOT_ID,
+  DI_DEBUG_ERROR_FILE,
+  DI_DEBUG_ERROR_LINE
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -42,27 +47,6 @@ const isJestWorker = !!process.env.JEST_WORKER_ID
 
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
-
-// TODO: separate in util
-function getFileAndLineNumberFromError (error) {
-  // Split the stack trace into individual lines
-  const stackLines = error.stack.split('\n')
-
-  // The top frame is usually the second line
-  const topFrame = stackLines[1]
-
-  // Regular expression to match the file path, line number, and column number
-  const regex = /\s*at\s+(?:.*\()?(.+):(\d+):(\d+)\)?/
-  const match = topFrame.match(regex)
-
-  if (match) {
-    const filePath = match[1]
-    const lineNumber = Number(match[2])
-    const columnNumber = Number(match[3])
-
-    return [filePath, lineNumber, columnNumber]
-  }
-}
 
 class JestPlugin extends CiPlugin {
   static get id () {
@@ -323,20 +307,22 @@ class JestPlugin extends CiPlugin {
 
       this.enter(span, store)
 
+      // If we have a debugger probe, we need to add the snapshot id to the span
       if (this.debuggerParameters) {
         const spanContext = span.context()
-        const spanId = spanContext.toSpanId()
-        const traceId = spanContext.toTraceId()
+
         this.retriedTestIds = {
-          spanId,
-          traceId
+          spanId: spanContext.toSpanId(),
+          traceId: spanContext.toTraceId()
         }
         const { snapshotId, file, line } = this.debuggerParameters
-        span.setTag('error.debug_info_captured', 'true')
-        span.setTag('_dd.debug.error.0.snapshot_id', snapshotId)
-        // TODO: we need to figure out if the error is the same as the one we added a line probe to
-        span.setTag('_dd.debug.error.0.file', file)
-        span.setTag('_dd.debug.error.0.line', line)
+        // TODO: what happens if the probe is not hit?
+        span.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+        span.setTag(DI_DEBUG_ERROR_SNAPSHOT_ID, snapshotId)
+        span.setTag(DI_DEBUG_ERROR_FILE, file)
+        span.setTag(DI_DEBUG_ERROR_LINE, line)
+
+        this.debuggerParameters = null
       }
     })
 
@@ -363,7 +349,7 @@ class JestPlugin extends CiPlugin {
       finishAllTraceSpans(span)
     })
 
-    this.addSub('ci:jest:test:err', ({ err, willBeRetried, setProbePromise }) => {
+    this.addSub('ci:jest:test:err', ({ err, willBeRetried, probe }) => {
       if (err) {
         const store = storage.getStore()
         if (store && store.span) {
@@ -372,29 +358,7 @@ class JestPlugin extends CiPlugin {
           span.setTag('error', err)
         }
         if (willBeRetried && this.di) {
-          const [file, line] = getFileAndLineNumberFromError(err)
-          const [
-            snapshotId,
-            onSetProbePromise,
-            onHitProbePromise
-          ] = this.di.addLineProbe({ file, line: line - 1 }) // why -1?????
-          setProbePromise.onSetProbePromise = onSetProbePromise
-
-          this.debuggerParameters = {
-            snapshotId,
-            file,
-            line
-          }
-
-          onHitProbePromise.then(({ snapshot }) => {
-            this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
-              debugger: { snapshot },
-              dd: {
-                trace_id: this.retriedTestIds.traceId,
-                span_id: this.retriedTestIds.spanId
-              }
-            })
-          })
+          this.addDiProbe(err, probe)
         }
       }
     })
@@ -403,6 +367,34 @@ class JestPlugin extends CiPlugin {
       const span = this.startTestSpan(test)
       span.setTag(TEST_STATUS, 'skip')
       span.finish()
+    })
+  }
+
+  // TODO: If the test finishes and the probe is not hit, we should remove the breakpoint
+  addDiProbe (err, probe) {
+    const [file, line] = getFileAndLineNumberFromError(err)
+    const [
+      snapshotId,
+      setProbePromise,
+      hitProbePromise
+    ] = this.di.addLineProbe({ file, line: line - 1 }) // TODO: why -1?????
+
+    probe.setProbePromise = setProbePromise
+
+    this.debuggerParameters = {
+      snapshotId,
+      file,
+      line
+    }
+
+    hitProbePromise.then(({ snapshot }) => {
+      this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
+        debugger: { snapshot },
+        dd: {
+          trace_id: this.retriedTestIds.traceId,
+          span_id: this.retriedTestIds.spanId
+        }
+      })
     })
   }
 
