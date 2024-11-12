@@ -83,6 +83,7 @@ describe('Inferred Proxy Spans', function () {
             expect(spans[0].meta).to.have.property('http.route', '/test')
             expect(spans[0].meta).to.have.property('span.kind', 'internal')
             expect(spans[0].meta).to.have.property('component', 'aws-apigateway')
+            expect(spans[0].meta).to.have.property('_dd.inferred_span', '1')
 
             // TODO: Fix this and ensure start time is correct
             expect(spans[0].start.toString()).to.be.equal('1729780025472999936')
