@@ -65,7 +65,7 @@ if (NODE_MAJOR >= 12) {
     var tracer = require('.')
     tracer.init()
     module.exports = tracer
-    telemetry('complete', ['injection_forced:' + forced && initBailout ? 'true' : 'false'])
+    telemetry('complete', ['injection_forced:' + (forced && initBailout ? 'true' : 'false')])
     log.info('Application instrumentation bootstrapping complete')
   }
 }
