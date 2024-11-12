@@ -513,7 +513,7 @@ class Config {
     this._setValue(defaults, 'isTestDynamicInstrumentationEnabled', false)
     this._setValue(defaults, 'logInjection', false)
     this._setValue(defaults, 'lookup', undefined)
-    this._setValue(defaults, 'inferredProxyServicesEnabled', true)
+    this._setValue(defaults, 'inferredProxyServicesEnabled', false)
     this._setValue(defaults, 'memcachedCommandEnabled', false)
     this._setValue(defaults, 'openAiLogsEnabled', false)
     this._setValue(defaults, 'openaiSpanCharLimit', 128)

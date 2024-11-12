@@ -17,6 +17,7 @@ describe('Inferred Proxy Spans', function () {
   // and call before the test starts
   const loadTest = async function (options) {
     process.env.DD_SERVICE = 'aws-server'
+    process.env.DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED = 'true'
 
     port = await getPort()
     require('../../../../dd-trace')
