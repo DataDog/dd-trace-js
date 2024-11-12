@@ -1,6 +1,7 @@
 'use strict'
 
 const session = require('./session')
+const { MAX_SNAPSHOTS_PER_SECOND_PER_PROBE, MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE } = require('./defaults')
 const { findScriptFromPartialPath, probes, breakpoints } = require('./state')
 const log = require('../../log')
 
@@ -20,6 +21,13 @@ async function addBreakpoint (probe) {
   // Optimize for sending data to /debugger/v1/input endpoint
   probe.location = { file, lines: [String(line)] }
   delete probe.where
+
+  // Optimize for fast calculations when probe is hit
+  const snapshotsPerSecond = probe.sampling.snapshotsPerSecond ?? (probe.captureSnapshot
+    ? MAX_SNAPSHOTS_PER_SECOND_PER_PROBE
+    : MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE)
+  probe.sampling.nsBetweenSampling = BigInt(1 / snapshotsPerSecond * 1e9)
+  probe.lastCaptureNs = 0n
 
   // TODO: Inbetween `await session.post('Debugger.enable')` and here, the scripts are parsed and cached.
   // Maybe there's a race condition here or maybe we're guraenteed that `await session.post('Debugger.enable')` will
