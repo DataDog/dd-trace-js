@@ -1,5 +1,3 @@
-'use strict'
-
 /* eslint-disable */
 
 const { NODE_MAJOR } = require('./version')
