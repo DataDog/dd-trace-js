@@ -112,7 +112,6 @@ function createWrapRouterMethod (name) {
       path: pattern instanceof RegExp ? `(${pattern})` : pattern,
       test: layer => {
         const matchers = layerMatchers.get(layer)
-
         return !isFastStar(layer, matchers) &&
           !isFastSlash(layer, matchers) &&
           cachedPathToRegExp(pattern).test(layer.path)
@@ -121,7 +120,7 @@ function createWrapRouterMethod (name) {
   }
 
   function isFastStar (layer, matchers) {
-    if (layer.regexp.fast_star !== undefined) {
+    if (layer.regexp?.fast_star !== undefined) {
       return layer.regexp.fast_star
     }
 
@@ -129,7 +128,7 @@ function createWrapRouterMethod (name) {
   }
 
   function isFastSlash (layer, matchers) {
-    if (layer.regexp.fast_slash !== undefined) {
+    if (layer.regexp?.fast_slash !== undefined) {
       return layer.regexp.fast_slash
     }
 
