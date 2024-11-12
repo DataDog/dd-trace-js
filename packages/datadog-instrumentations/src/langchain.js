@@ -28,45 +28,50 @@ function wrapLangChainPromise (fn, type, namespace = []) {
   }
 }
 
-// specifying filePattern: {path}/.*js will match against ESM .js files and CommonJS .cjs files
-// langchain compiles both from their TypeScript source, so we need to match both
-addHook({ name: '@langchain/core', filePattern: 'dist/runnables/base.*js', versions: ['>=0.1'] }, exports => {
-  const RunnableSequence = exports.RunnableSequence
-  shimmer.wrap(RunnableSequence.prototype, 'invoke', invoke => wrapLangChainPromise(invoke, 'chain'))
-  shimmer.wrap(RunnableSequence.prototype, 'batch', batch => wrapLangChainPromise(batch, 'chain'))
-  return exports
-})
+// langchain compiles into ESM and CommonJS, with ESM being the default and landing in the `.js` files
+// however, CommonJS ends up in `cjs` files, and are required under the hood with `.cjs` files
+// we patch each separately and explicitly to match against exports only once, and not rely on file regex matching
+const extensions = ['js', 'cjs']
 
-addHook({
-  name: '@langchain/core',
-  filePattern: 'dist/language_models/chat_models.*js',
-  versions: ['>=0.1']
-}, exports => {
-  const BaseChatModel = exports.BaseChatModel
-  shimmer.wrap(
-    BaseChatModel.prototype,
-    'generate',
-    generate => wrapLangChainPromise(generate, 'chat_model')
-  )
-  return exports
-})
+for (const extension of extensions) {
+  addHook({ name: '@langchain/core', file: `dist/runnables/base.${extension}`, versions: ['>=0.1'] }, exports => {
+    const RunnableSequence = exports.RunnableSequence
+    shimmer.wrap(RunnableSequence.prototype, 'invoke', invoke => wrapLangChainPromise(invoke, 'chain'))
+    shimmer.wrap(RunnableSequence.prototype, 'batch', batch => wrapLangChainPromise(batch, 'chain'))
+    return exports
+  })
 
-addHook({ name: '@langchain/core', filePattern: 'dist/language_models/llms.*js', versions: ['>=0.1'] }, exports => {
-  const BaseLLM = exports.BaseLLM
-  shimmer.wrap(BaseLLM.prototype, 'generate', generate => wrapLangChainPromise(generate, 'llm'))
-  return exports
-})
+  addHook({
+    name: '@langchain/core',
+    file: `dist/language_models/chat_models.${extension}`,
+    versions: ['>=0.1']
+  }, exports => {
+    const BaseChatModel = exports.BaseChatModel
+    shimmer.wrap(
+      BaseChatModel.prototype,
+      'generate',
+      generate => wrapLangChainPromise(generate, 'chat_model')
+    )
+    return exports
+  })
 
-addHook({ name: '@langchain/openai', filePattern: 'dist/embeddings.*js', versions: ['>=0.1'] }, exports => {
-  const OpenAIEmbeddings = exports.OpenAIEmbeddings
+  addHook({ name: '@langchain/core', file: `dist/language_models/llms.${extension}`, versions: ['>=0.1'] }, exports => {
+    const BaseLLM = exports.BaseLLM
+    shimmer.wrap(BaseLLM.prototype, 'generate', generate => wrapLangChainPromise(generate, 'llm'))
+    return exports
+  })
 
-  // OpenAI (and Embeddings in general) do not define an lc_namespace
-  const namespace = ['langchain', 'embeddings', 'openai']
-  shimmer.wrap(OpenAIEmbeddings.prototype, 'embedDocuments', embedDocuments =>
-    wrapLangChainPromise(embedDocuments, 'embedding', namespace)
-  )
-  shimmer.wrap(OpenAIEmbeddings.prototype, 'embedQuery', embedQuery =>
-    wrapLangChainPromise(embedQuery, 'embedding', namespace)
-  )
-  return exports
-})
+  addHook({ name: '@langchain/openai', file: `dist/embeddings.${extension}`, versions: ['>=0.1'] }, exports => {
+    const OpenAIEmbeddings = exports.OpenAIEmbeddings
+
+    // OpenAI (and Embeddings in general) do not define an lc_namespace
+    const namespace = ['langchain', 'embeddings', 'openai']
+    shimmer.wrap(OpenAIEmbeddings.prototype, 'embedDocuments', embedDocuments =>
+      wrapLangChainPromise(embedDocuments, 'embedding', namespace)
+    )
+    shimmer.wrap(OpenAIEmbeddings.prototype, 'embedQuery', embedQuery =>
+      wrapLangChainPromise(embedQuery, 'embedding', namespace)
+    )
+    return exports
+  })
+}

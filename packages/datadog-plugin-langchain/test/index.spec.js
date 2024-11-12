@@ -82,6 +82,7 @@ describe('Plugin', () => {
             const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct' })
             const checkTraces = agent
               .use(traces => {
+                expect(traces[0].length).to.equal(1)
                 const span = traces[0][0]
 
                 expect(span.meta).to.not.have.property('langchain.request.prompts.0.content')
@@ -119,6 +120,7 @@ describe('Plugin', () => {
             const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct' })
             const checkTraces = agent
               .use(traces => {
+                expect(traces[0].length).to.equal(1)
                 const span = traces[0][0]
 
                 expect(span.meta).to.have.property('langchain.request.prompts.0.content', 'what ...')
@@ -153,6 +155,7 @@ describe('Plugin', () => {
           const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct' })
           const checkTraces = agent
             .use(traces => {
+              expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
               expect(span).to.have.property('name', 'langchain.request')
@@ -199,6 +202,7 @@ describe('Plugin', () => {
 
           const checkTraces = agent
             .use(traces => {
+              expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
               expect(span.meta).to.have.property('langchain.request.prompts.0.content', 'what is 2 + 2?')
@@ -242,6 +246,7 @@ describe('Plugin', () => {
 
           const checkTraces = agent
             .use(traces => {
+              expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
               expect(span.metrics).to.have.property('langchain.request.openai.parameters.n', 2)
@@ -286,6 +291,7 @@ describe('Plugin', () => {
 
           const checkTraces = agent
             .use(traces => {
+              expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
               expect(span).to.have.property('name', 'langchain.request')
@@ -336,6 +342,7 @@ describe('Plugin', () => {
 
           const checkTraces = agent
             .use(traces => {
+              expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
               expect(span.meta).to.have.property(
@@ -384,6 +391,7 @@ describe('Plugin', () => {
 
           const checkTraces = agent
             .use(traces => {
+              expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
               expect(span.meta).to.have.property(
@@ -439,6 +447,7 @@ describe('Plugin', () => {
 
           const checkTraces = agent
             .use(traces => {
+              expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
               expect(span.meta).to.have.property(
@@ -503,6 +512,7 @@ describe('Plugin', () => {
 
           const checkTraces = agent
             .use(traces => {
+              expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
               expect(span).to.have.property('name', 'langchain.request')
@@ -745,6 +755,7 @@ describe('Plugin', () => {
 
             const checkTraces = agent
               .use(traces => {
+                expect(traces[0].length).to.equal(1)
                 const span = traces[0][0]
 
                 expect(span).to.have.property('name', 'langchain.request')
@@ -788,6 +799,7 @@ describe('Plugin', () => {
 
             const checkTraces = agent
               .use(traces => {
+                expect(traces[0].length).to.equal(1)
                 const span = traces[0][0]
 
                 expect(span.meta).to.have.property('langchain.request.inputs.0.text', 'Hello, world!')
