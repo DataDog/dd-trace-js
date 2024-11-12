@@ -1,6 +1,6 @@
 /* eslint-disable */
 
-const { NODE_MAJOR } = require('./version')
+const NODE_MAJOR = require('./version').NODE_MAJOR
 
 // We use several things that are not supported by older versions of Node:
 // - AsyncLocalStorage
@@ -14,7 +14,7 @@ if (NODE_MAJOR >= 12) {
   const Module = require('module')
   const semver = require('semver')
   const log = require('./packages/dd-trace/src/log')
-  const { isTrue } = require('./packages/dd-trace/src/util')
+  const isTrue = require('./packages/dd-trace/src/util').isTrue
   const telemetry = require('./packages/dd-trace/src/telemetry/init-telemetry')
 
   let initBailout = false
@@ -42,7 +42,7 @@ if (NODE_MAJOR >= 12) {
     // If we're running via single-step install, and the runtime doesn't match
     // the engines field in package.json, then we should not initialize the tracer.
     if (!clobberBailout) {
-      const { engines } = require('./package.json')
+      const engines = require('./package.json').engines
       const version = process.versions.node
       if (!semver.satisfies(version, engines.node)) {
         initBailout = true
