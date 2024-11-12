@@ -1,5 +1,18 @@
 'use strict'
 
+const { NODE_MAJOR } = require('./version')
+
+// We use several things that are not supported by older versions of Node:
+// - AsyncLocalStorage
+// - The `semver` module
+// - dc-polyfill
+// - Mocha (for testing)
+// and probably others.
+// TODO: Remove all these dependencies so that we can report telemetry.
+if (NODE_MAJOR < 12) {
+  process.exit(0)
+}
+
 const path = require('path')
 const Module = require('module')
 const semver = require('semver')
