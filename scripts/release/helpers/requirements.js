@@ -4,8 +4,6 @@
 
 const { capture, fatal } = require('./terminal')
 
-const requiredScopes = ['public_repo', 'read:org']
-
 // Check that the `git` CLI is installed.
 function checkGit () {
   try {
@@ -63,7 +61,7 @@ function checkGitHubScopes () {
   const url = 'https://api.github.com'
   const headers = [
     'Accept: application/vnd.github.v3+json',
-    `Authorization: Bearer ${process.env.GITHUB_OKEN}`,
+    `Authorization: Bearer ${process.env.GITHUB_TOKEN || process.env.GH_TOKEN}`,
     'X-GitHub-Api-Version: 2022-11-28'
   ].map(h => `-H "${h}"`).join(' ')
 
@@ -74,10 +72,10 @@ function checkGitHubScopes () {
   const link = 'https://github.com/settings/tokens'
 
   for (const req of required) {
-    if (!scopes.includes[req]) {
+    if (!scopes.includes(req)) {
       fatal(
         `Missing "${req}" scope for GITHUB_TOKEN.`,
-        `Please visit ${link} and make sure the following scopes are enabled: ${requiredScopes}.`
+        `Please visit ${link} and make sure the following scopes are enabled: ${required.join(' ,')}.`
       )
     }
   }

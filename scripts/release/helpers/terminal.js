@@ -36,9 +36,9 @@ function prompt (question) {
 
 // Ask whether to continue and otherwise exit the process.
 function checkpoint (question) {
-  const answer = prompt(`${question} [Y/n]`)
+  const answer = prompt(`${question} [Y/n]`).trim()
 
-  if (answer?.toLowerCase() !== 'y') {
+  if (answer && answer.toLowerCase() !== 'y') {
     process.exit(0)
   }
 }

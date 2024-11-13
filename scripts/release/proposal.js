@@ -45,8 +45,9 @@ const gitHubDir = path.normalize(path.join(__dirname, '..', '..', '.github'))
 const notesDir = path.join(gitHubDir, 'release_notes')
 const notesFile = path.join(notesDir, `${newVersion}.md`)
 
-// Checkout new branch and output new changes.
-run(`git checkout v${newVersion}-proposal && git pull || git checkout -b v${newVersion}-proposal`)
+// Checkout new or existing branch.
+run(`git checkout v${newVersion}-proposal || git checkout -b v${newVersion}-proposal`)
+run(`git remote show origin | grep v${newVersion} && git pull || exit 0`)
 
 // Get the hashes of the last version and the commits to add.
 const lastCommit = capture('git log -1 --pretty=%B').trim()
@@ -75,7 +76,7 @@ if (proposalDiff) {
 
 // Update package.json with new version.
 // TODO: Write to /tmp instead.
-run(`npm version --git-tag-version=false ${newVersion}`)
+run(`npm version --allow-same-version --git-tag-version=false ${newVersion}`)
 run(`git commit -uno -m v${newVersion} package.json || exit 0`)
 
 // Write release notes to a file that can be copied to the GitHub release.
