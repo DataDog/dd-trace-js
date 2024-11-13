@@ -8,7 +8,8 @@ const {
 } = require('./util')
 const { isTrue } = require('../util')
 
-const { storage } = require('./storage')
+const { storage } = require('../../../datadog-core')
+const llmobsStorage = storage('llmobs')
 
 const Span = require('../opentracing/span')
 
@@ -334,13 +335,13 @@ class LLMObs extends NoopLLMObs {
   }
 
   _active () {
-    const store = storage.getStore()
+    const store = llmobsStorage.getStore()
     return store?.span
   }
 
   _activate (span, { kind, options } = {}, fn) {
     const parent = this._active()
-    if (this.enabled) storage.enterWith({ span })
+    if (this.enabled) llmobsStorage.enterWith({ span })
 
     this._tagger.registerLLMObsSpan(span, {
       ...options,
@@ -351,7 +352,7 @@ class LLMObs extends NoopLLMObs {
     try {
       return fn()
     } finally {
-      if (this.enabled) storage.enterWith({ span: parent })
+      if (this.enabled) llmobsStorage.enterWith({ span: parent })
     }
   }
 

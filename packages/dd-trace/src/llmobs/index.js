@@ -2,7 +2,8 @@
 
 const log = require('../log')
 const { PROPAGATED_PARENT_ID_KEY } = require('./constants/tags')
-const { storage } = require('./storage')
+const { storage } = require('../../../datadog-core')
+const llmobsStorage = storage('llmobs')
 
 const LLMObsSpanProcessor = require('./span_processor')
 
@@ -63,7 +64,7 @@ function disable () {
 // since LLMObs traces can extend between services and be the same trace,
 // we need to propogate the parent id.
 function handleLLMObsParentIdInjection ({ carrier }) {
-  const parent = storage.getStore()?.span
+  const parent = llmobsStorage.getStore()?.span
   if (!parent) return
 
   const parentId = parent?.context().toSpanId()

@@ -43,10 +43,12 @@ describe('module', () => {
       '../log': logger,
       './writers/spans/agentless': LLMObsAgentlessSpanWriter,
       './writers/spans/agentProxy': LLMObsAgentProxySpanWriter,
-      './storage': {
-        storage: {
-          getStore () {
-            return store
+      '../../../datadog-core': {
+        storage: function () {
+          return {
+            getStore () {
+              return store
+            }
           }
         }
       }
