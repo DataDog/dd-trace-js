@@ -374,11 +374,12 @@ class JestPlugin extends CiPlugin {
   // TODO: If the test finishes and the probe is not hit, we should remove the breakpoint
   addDiProbe (err, probe) {
     const [file, line] = getFileAndLineNumberFromError(err)
+
     const [
       snapshotId,
       setProbePromise,
       hitProbePromise
-    ] = this.di.addLineProbe({ file, line: line - 1 }) // TODO: why -1????? -> make sure this is right
+    ] = this.di.addLineProbe({ file, line })
 
     probe.setProbePromise = setProbePromise
 

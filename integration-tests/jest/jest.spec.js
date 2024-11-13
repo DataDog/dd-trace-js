@@ -2362,13 +2362,23 @@ describe('jest CommonJS', () => {
     })
   })
 
-  context.only('dynamic instrumentation', () => {
-    it.only('runs retries with dynamic instrumentation', (done) => {
+  context('dynamic instrumentation', () => {
+    it('runs retries with dynamic instrumentation', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false
+        }
+        // di_enabled: true // TODO
+      })
       let snapshotIdByTest, snapshotIdByLog
+      let spanIdByTest, spanIdByLog, traceIdByTest, traceIdByLog
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          debugger
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
@@ -2386,22 +2396,52 @@ describe('jest CommonJS', () => {
           assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
 
           snapshotIdByTest = retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID]
+          spanIdByTest = retriedTest.span_id.toString()
+          traceIdByTest = retriedTest.trace_id.toString()
         })
 
       const logsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-          debugger
-
+          const [{ logMessage: [diLog] }] = payloads
+          assert.deepInclude(diLog, {
+            ddsource: 'dd_debugger',
+            level: 'error'
+          })
+          assert.equal(diLog.debugger.snapshot.language, 'javascript')
+          assert.deepInclude(diLog.debugger.snapshot.captures.lines, {
+            5: {
+              locals: {
+                a: {
+                  type: 'number',
+                  value: '11'
+                },
+                b: {
+                  type: 'number',
+                  value: '3'
+                },
+                localVariable: {
+                  type: 'number',
+                  value: '2'
+                }
+              }
+            }
+          })
+          spanIdByLog = diLog.dd.span_id
+          traceIdByLog = diLog.dd.trace_id
+          snapshotIdByLog = diLog.debugger.snapshot.id
         })
 
-      childProcess = exec(
-        runTestsWithCoverageCommand,
+      childProcess = exec(runTestsWithCoverageCommand,
         {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'dynamic-instrumentation/test-',
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
+            // TODO: working with code coverage is going to be difficult, as the vm.runInContext
+            // uses the code _after_ transpilation, but the error stack trace will be the original code.
+            // How does jest does this? Maybe we can try to extract the original stack, without the source mapping
+            DISABLE_CODE_COVERAGE: '1'
           },
           stdio: 'inherit'
         }
@@ -2412,6 +2452,9 @@ describe('jest CommonJS', () => {
 
       childProcess.on('exit', () => {
         Promise.all([eventsPromise, logsPromise]).then(() => {
+          assert.equal(snapshotIdByTest, snapshotIdByLog)
+          assert.equal(spanIdByTest, spanIdByLog)
+          assert.equal(traceIdByTest, traceIdByLog)
           done()
         }).catch(done)
       })
