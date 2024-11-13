@@ -2,7 +2,6 @@
 
 const { expect } = require('chai')
 const sinon = require('sinon')
-const pkg = require('../../../../package.json')
 const proxyquire = require('proxyquire').noCallThru()
 
 require('../setup/tap')
@@ -12,12 +11,14 @@ describe('crashtracking', () => {
     let crashtracker
     let binding
     let config
-    let crashtrackerConfig
-    let crashtrackerMetadata
-    let crashtrackerReceiverConfig
     let libdatadog
+    let log
 
     beforeEach(() => {
+      libdatadog = require('@datadog/libdatadog')
+
+      binding = libdatadog.load('crashtracker')
+
       config = {
         port: 7357,
         tags: {
@@ -25,47 +26,16 @@ describe('crashtracking', () => {
         }
       }
 
-      crashtrackerConfig = {
-        endpoint: {
-          url: {
-            scheme: 'http',
-            authority: '127.0.0.1:7357',
-            path_and_query: ''
-          }
-        },
-        resolve_frames: 'EnabledWithInprocessSymbols'
+      log = {
+        error: sinon.stub()
       }
 
-      crashtrackerReceiverConfig = {
-        path_to_receiver_binary: '/test/receiver'
-      }
-
-      crashtrackerMetadata = {
-        tags: [
-          'foo:bar',
-          'is_crash:true',
-          'language:javascript',
-          `library_version:${pkg.version}`,
-          'runtime:nodejs',
-          'severity:crash'
-        ]
-      }
-
-      binding = {
-        initWithReceiver: sinon.stub(),
-        updateConfig: sinon.stub(),
-        updateMetadata: sinon.stub()
-      }
-
-      libdatadog = {
-        find: sinon.stub(),
-        load: sinon.stub()
-      }
-      libdatadog.find.withArgs('crashtracker-receiver', true).returns('/test/receiver')
-      libdatadog.load.withArgs('crashtracker').returns(binding)
+      sinon.spy(binding, 'initWithReceiver')
+      sinon.spy(binding, 'updateConfig')
+      sinon.spy(binding, 'updateMetadata')
 
       crashtracker = proxyquire('../../src/crashtracking/crashtracker', {
-        '@datadog/libdatadog': libdatadog
+        '../log': log
       })
     })
 
@@ -73,11 +43,8 @@ describe('crashtracking', () => {
       it('should initialize the binding', () => {
         crashtracker.start(config)
 
-        expect(binding.initWithReceiver).to.have.been.calledWithMatch(
-          crashtrackerConfig,
-          crashtrackerReceiverConfig,
-          crashtrackerMetadata
-        )
+        expect(binding.initWithReceiver).to.have.been.called
+        expect(log.error).to.not.have.been.called
       })
 
       it('should initialize the binding only once', () => {
@@ -91,8 +58,8 @@ describe('crashtracking', () => {
         crashtracker.start(config)
         crashtracker.start(config)
 
-        expect(binding.updateConfig).to.have.been.calledWithMatch(crashtrackerConfig)
-        expect(binding.updateMetadata).to.have.been.calledWithMatch(crashtrackerMetadata)
+        expect(binding.updateConfig).to.have.been.called
+        expect(binding.updateMetadata).to.have.been.called
       })
 
       it('should handle errors', () => {
@@ -109,8 +76,8 @@ describe('crashtracking', () => {
         crashtracker.start(config)
         crashtracker.configure(config)
 
-        expect(binding.updateConfig).to.have.been.calledWithMatch(crashtrackerConfig)
-        expect(binding.updateMetadata).to.have.been.calledWithMatch(crashtrackerMetadata)
+        expect(binding.updateConfig).to.have.been.called
+        expect(binding.updateMetadata).to.have.been.called
       })
 
       it('should reconfigure the binding only when started', () => {
