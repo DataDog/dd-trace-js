@@ -36,7 +36,7 @@ class DatadogSpanContext {
         ? this._trace.tags[TRACE_ID_128] + this._traceId.toString(16).padStart(16, '0')
         : this._traceId.toString(16).padStart(32, '0')
     }
-    if (!this._traceId) return 'unavailable'
+    if (this._traceId === undefined) return 'unavailable'
     return this._traceId.toString(10)
   }
 
@@ -44,7 +44,7 @@ class DatadogSpanContext {
     if (get128bitId) {
       return this._spanId.toString(16).padStart(16, '0')
     }
-    if (!this._spanId) return 'unavailable'
+    if (this._spanId === undefined) return 'unavailable'
     return this._spanId.toString(10)
   }
 
