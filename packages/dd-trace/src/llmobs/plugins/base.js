@@ -1,8 +1,8 @@
 'use strict'
 
 const log = require('../../log')
-const { storage } = require('../../../../datadog-core')
-const llmobsStorage = storage('llmobs')
+const core = require('../../../../datadog-core')
+const storage = core.storage('llmobs')
 
 const TracingPlugin = require('../../plugins/tracing')
 const LLMObsTagger = require('../tagger')
@@ -26,7 +26,7 @@ class LLMObsPlugin extends TracingPlugin {
   }
 
   start (ctx) {
-    const oldStore = llmobsStorage.getStore()
+    const oldStore = storage.getStore()
     const parent = oldStore?.span
     const span = ctx.currentStore?.span
 
