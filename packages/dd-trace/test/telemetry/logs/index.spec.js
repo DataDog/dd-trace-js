@@ -145,7 +145,7 @@ describe('telemetry logs', () => {
         errorLog.publish({ cause: error })
 
         expect(logCollectorAdd)
-          .to.be.calledOnceWith(match({ message: 'Generic Error', level: 'ERROR', stack_trace: stack }))
+          .to.be.calledOnceWith(match({ message: `${error.name}: Generic Error`, level: 'ERROR', stack_trace: stack }))
       })
 
       it('should be called when an error string is published to datadog:log:error', () => {
