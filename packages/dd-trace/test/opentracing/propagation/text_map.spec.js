@@ -702,11 +702,11 @@ describe('TextMapPropagator', () => {
 
       const first = propagator.extract(textMap)
 
-      expect(first.spanLinks.length).to.equal(1)
-      expect(first.spanLinks[0].context.toTraceId()).to.equal(textMap['x-datadog-trace-id'])
-      expect(first.spanLinks[0].context.toSpanId()).to.equal(textMap['x-datadog-parent-id'])
-      expect(first.spanLinks[0].attributes.reason).to.equal('terminated_context')
-      expect(first.spanLinks[0].attributes.context_headers).to.equal('datadog')
+      expect(first._links.length).to.equal(1)
+      expect(first._links[0].context.toTraceId()).to.equal(textMap['x-datadog-trace-id'])
+      expect(first._links[0].context.toSpanId()).to.equal(textMap['x-datadog-parent-id'])
+      expect(first._links[0].attributes.reason).to.equal('terminated_context')
+      expect(first._links[0].attributes.context_headers).to.equal('datadog')
     })
 
     describe('with B3 propagation as multiple headers', () => {

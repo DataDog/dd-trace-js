@@ -258,6 +258,7 @@ const web = {
     const headers = req.headers
     const context = contexts.get(req)
     let childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
+    const links = childOf ? childOf._links : []
 
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
     if (tracer._config?.inferredProxyServicesEnabled) {
@@ -267,7 +268,7 @@ const web = {
       }
     }
 
-    const span = tracer.startSpan(name, { childOf, extractedLinks: childOf._links })
+    const span = tracer.startSpan(name, { childOf, extractedLinks: links })
 
     return span
   },
