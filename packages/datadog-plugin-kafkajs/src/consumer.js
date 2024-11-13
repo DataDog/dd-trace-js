@@ -76,7 +76,8 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       },
       metrics: {
         'kafka.partition': partition
-      }
+      },
+      extractedLinks: childOf._links
     })
     if (this.config.dsmEnabled && message?.headers) {
       const payloadSize = getMessageSize(message)

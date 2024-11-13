@@ -191,7 +191,8 @@ class VitestPlugin extends CiPlugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
-        }
+        },
+        extractedLinks: testSessionSpanContext._links
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       const store = storage.getStore()

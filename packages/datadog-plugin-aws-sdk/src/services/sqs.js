@@ -33,7 +33,8 @@ class Sqs extends BaseAwsSdkPlugin {
             {},
             this.requestTags.get(request) || {},
             { 'span.kind': 'server' }
-          )
+          ),
+          extractedLinks: contextExtraction.datadogContext._links
         }
         parsedMessageAttributes = contextExtraction.parsedAttributes
         span = plugin.tracer.startSpan('aws.response', options)

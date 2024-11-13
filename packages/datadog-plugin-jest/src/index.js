@@ -219,7 +219,8 @@ class JestPlugin extends CiPlugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
-        }
+        },
+        extractedLinks: testSessionSpanContext._links
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (_ddTestCodeCoverageEnabled) {

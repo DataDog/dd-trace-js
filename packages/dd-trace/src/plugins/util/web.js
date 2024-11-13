@@ -255,7 +255,7 @@ const web = {
   // Extract the parent span from the headers and start a new span as its child
   startChildSpan (tracer, name, headers) {
     const childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
-    const span = tracer.startSpan(name, { childOf })
+    const span = tracer.startSpan(name, { childOf, extractedLinks: childOf._links })
 
     return span
   },
