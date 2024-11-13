@@ -10,9 +10,17 @@ const MAX_SIZE = 4096
 let enabled
 let sampledRequests
 
+class NoopTTLCache {
+  clear () { }
+  set (key) { return undefined }
+  has (key) { return false }
+}
+
 function configure ({ apiSecurity }) {
   enabled = apiSecurity.enabled
-  sampledRequests = new TTLCache({ max: MAX_SIZE, ttl: apiSecurity.sampleDelay * 1000 })
+  sampledRequests = apiSecurity.sampleDelay === 0
+    ? new NoopTTLCache()
+    : new TTLCache({ max: MAX_SIZE, ttl: apiSecurity.sampleDelay * 1000 })
 }
 
 function disable () {
