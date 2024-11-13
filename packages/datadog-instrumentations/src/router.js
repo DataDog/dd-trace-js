@@ -25,6 +25,7 @@ function createWrapRouterMethod (name) {
       const lastIndex = arguments.length - 1
       const name = original._name || original.name
       const req = arguments[arguments.length > 3 ? 1 : 0]
+      wrapParams(req)
       const next = arguments[lastIndex]
 
       if (typeof next === 'function') {
@@ -167,11 +168,36 @@ function createWrapRouterMethod (name) {
   return wrapMethod
 }
 
+const processParamsStartCh = channel('datadog:express:process_params:start')
+function wrapParams (req) {
+  let params
+  Object.defineProperty(req, 'params', {
+    get () { return params },
+    set (val) {
+      params = val
+      if (val && processParamsStartCh.hasSubscribers) {
+        const abortController = new AbortController()
+
+        processParamsStartCh.publish({
+          req,
+          res: req?.res,
+          abortController,
+          params: req?.params
+        })
+      }
+    }
+  })
+}
+
 const wrapRouterMethod = createWrapRouterMethod('router')
+const wrapExpressRouterMethod = createWrapRouterMethod('express')
 
 addHook({ name: 'router', versions: ['>=1'] }, Router => {
   shimmer.wrap(Router.prototype, 'use', wrapRouterMethod)
   shimmer.wrap(Router.prototype, 'route', wrapRouterMethod)
+
+  shimmer.wrap(Router.prototype, 'use', wrapExpressRouterMethod)
+  shimmer.wrap(Router.prototype, 'route', wrapExpressRouterMethod)
 
   return Router
 })
