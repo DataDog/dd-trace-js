@@ -37,11 +37,12 @@ const diffCmd = [
 
 // Determine the new version and release notes location.
 const [lastMajor, lastMinor, lastPatch] = require('../../package.json').version.split('.').map(Number)
-const lineDiff = capture(`${diffCmd} v${releaseLine}.x master`)
+const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x master`)
 const newVersion = lineDiff.includes('SEMVER-MINOR')
   ? `${releaseLine}.${lastMinor + 1}.0`
   : `${releaseLine}.${lastMinor}.${lastPatch + 1}`
-const notesDir = path.join(__dirname, '..', '..', '.github', 'release_notes')
+const gitHubDir = path.normalize(path.join(__dirname, '..', '..', '.github'))
+const notesDir = path.join(gitHubDir, 'release_notes')
 const notesFile = path.join(notesDir, `${newVersion}.md`)
 
 // Checkout new branch and output new changes.
@@ -77,7 +78,9 @@ if (proposalDiff) {
 run(`npm version --git-tag-version=false ${newVersion}`)
 run(`git commit -uno -m v${newVersion} package.json || exit 0`)
 
-writeNotes()
+// Write release notes to a file that can be copied to the GitHub release.
+fs.mkdirSync(notesDir, { recursive: true })
+fs.writeFileSync(notesFile, lineDiff)
 
 success('Release proposal is ready.')
 success(`Changelog at .github/release_notes/${newVersion}.md`)
@@ -113,12 +116,4 @@ function isActivePatch () {
   }
 
   return false
-}
-
-// Write release notes to a file that can be copied to the GitHub release.
-function writeNotes () {
-  const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x master`)
-
-  fs.mkdirSync(notesDir, { recursive: true })
-  fs.writeFileSync(notesFile, lineDiff)
 }
