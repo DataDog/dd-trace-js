@@ -328,7 +328,7 @@ class TextMapPropagator {
           spanContext = this._extractB3MultiContext(carrier)
           break
         default:
-          log.warn(`Unknown propagation style: ${extractor}`)
+          if (extractor !== 'baggage') log.warn(`Unknown propagation style: ${extractor}`)
       }
 
       if (this._config.tracePropagationStyle.extract.includes('baggage') && carrier.baggage) {
