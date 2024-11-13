@@ -180,6 +180,14 @@ class DatadogSpan {
     })
   }
 
+  addSpanPointer (attributes) {
+    const zeroContext = new SpanContext({
+      traceId: id('0'),
+      spanId: id('0')
+    })
+    this.addLink(zeroContext, attributes)
+  }
+
   addEvent (name, attributesOrStartTime, startTime) {
     const event = { name }
     if (attributesOrStartTime) {

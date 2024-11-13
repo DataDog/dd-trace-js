@@ -14,6 +14,7 @@ const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 
 const SpanContext = require('./span_context')
+const id = require('../id')
 
 // The one built into OTel rounds so we lose sub-millisecond precision.
 function hrTimeToMilliseconds (time) {
@@ -215,6 +216,14 @@ class Span {
     const ddSpanContext = context._ddContext
     this._ddSpan.addLink(ddSpanContext, attributes)
     return this
+  }
+
+  addSpanPointer (attributes) {
+    const zeroContext = new SpanContext({
+      traceId: id('0'),
+      spanId: id('0')
+    })
+    return this.addLink(zeroContext, attributes)
   }
 
   setStatus ({ code, message }) {

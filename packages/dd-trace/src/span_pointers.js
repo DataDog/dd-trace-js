@@ -1,15 +1,8 @@
 const crypto = require('crypto')
-const SpanContext = require('../../dd-trace/src/opentracing/span_context')
-const id = require('../../dd-trace/src/id')
+const log = require('./log')
 
 const SPAN_LINK_KIND = 'span-pointer'
 const S3_PTR_KIND = 'aws.s3.object'
-
-// Span context with ids of 0 is used for span pointers
-const ZERO_CONTEXT = new SpanContext({
-  traceId: id('0'),
-  spanId: id('0')
-})
 
 const SPAN_POINTER_DIRECTION = Object.freeze({
   UPSTREAM: 'u',
@@ -26,6 +19,7 @@ const SPAN_POINTER_DIRECTION = Object.freeze({
  */
 function generateS3PointerHash (bucketName, objectKey, eTag) {
   if (!bucketName || !objectKey || !eTag) {
+    log.debug('Unable to calculate span pointer hash because of missing parameters.')
     return null
   }
 
@@ -38,7 +32,6 @@ function generateS3PointerHash (bucketName, objectKey, eTag) {
 }
 
 module.exports = {
-  ZERO_CONTEXT,
   SPAN_LINK_KIND,
   S3_PTR_KIND,
   SPAN_POINTER_DIRECTION,

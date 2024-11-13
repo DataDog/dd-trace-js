@@ -4,7 +4,6 @@ const BaseAwsSdkPlugin = require('../base')
 const {
   SPAN_LINK_KIND,
   S3_PTR_KIND,
-  ZERO_CONTEXT,
   generateS3PointerHash
 } = require('../../../dd-trace/src/span_pointers')
 const { SPAN_POINTER_DIRECTION } = require('../../../dd-trace/src/span_pointers')
@@ -49,7 +48,7 @@ class S3 extends BaseAwsSdkPlugin {
         'ptr.hash': pointerHash,
         'link.kind': SPAN_LINK_KIND
       }
-      span.addLink(ZERO_CONTEXT, attributes)
+      span.addSpanPointer(attributes)
     }
   }
 }
