@@ -35,6 +35,8 @@ class LangChainLLMHandler extends LangChainLanguageModelHandler {
 
     const tags = {}
 
+    this.extractTokenMetrics(ctx.currentStore?.span, result)
+
     for (const completionIdx in result.generations) {
       const completion = result.generations[completionIdx]
       if (this.isPromptCompletionSampled()) {

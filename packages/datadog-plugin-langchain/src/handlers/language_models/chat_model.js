@@ -44,7 +44,7 @@ class LangChainChatModelHandler extends LangChainLanguageModelHandler {
 
     const tags = {}
 
-    // TODO: do we need token tagging
+    this.extractTokenMetrics(ctx.currentStore?.span, result)
 
     for (const messageSetIdx in result.generations) {
       const messageSet = result.generations[messageSetIdx]

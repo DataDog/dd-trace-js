@@ -170,7 +170,9 @@ describe('Plugin', () => {
               expect(span.meta).to.have.property('langchain.response.completions.0.text', 'The answer is 4')
               expect(span.meta).to.have.property('langchain.response.completions.0.finish_reason', 'length')
 
-              // TODO check metrics as well
+              expect(span.metrics).to.have.property('langchain.tokens.input_tokens', 8)
+              expect(span.metrics).to.have.property('langchain.tokens.output_tokens', 12)
+              expect(span.metrics).to.have.property('langchain.tokens.total_tokens', 20)
             })
 
           const result = await llm.generate(['what is 2 + 2?'])
@@ -309,6 +311,10 @@ describe('Plugin', () => {
                 'langchain.response.completions.0.0.content', 'Hello! How can I assist you today?'
               )
               expect(span.meta).to.have.property('langchain.response.completions.0.0.message_type', 'AIMessage')
+
+              expect(span.metrics).to.have.property('langchain.tokens.input_tokens', 37)
+              expect(span.metrics).to.have.property('langchain.tokens.output_tokens', 10)
+              expect(span.metrics).to.have.property('langchain.tokens.total_tokens', 47)
             })
 
           const chatModel = new langchainOpenai.ChatOpenAI({ model: 'gpt-4' })

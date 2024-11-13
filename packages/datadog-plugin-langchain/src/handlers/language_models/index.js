@@ -1,5 +1,6 @@
 'use strict'
 
+const { getTokensFromLlmOutput } = require('../../tokens')
 const LangChainHandler = require('../default')
 
 class LangChainLanguageModelHandler extends LangChainHandler {
@@ -26,6 +27,20 @@ class LangChainLanguageModelHandler extends LangChainHandler {
     for (const attr of ['model', 'modelName', 'modelId', 'modelKey', 'repoId']) {
       const modelName = instance[attr]
       if (modelName) return modelName
+    }
+  }
+
+  extractTokenMetrics (span, result) {
+    if (!span || !result) return
+
+    // we do not tag token metrics for non-openai providers
+    const provider = span.context()._tags['langchain.request.provider']
+    if (provider !== 'openai') return
+
+    const tokens = getTokensFromLlmOutput(result)
+
+    for (const [tokenKey, tokenCount] of Object.entries(tokens)) {
+      span.setTag(`langchain.tokens.${tokenKey}_tokens`, tokenCount)
     }
   }
 }
