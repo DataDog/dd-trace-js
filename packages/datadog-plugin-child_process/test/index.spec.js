@@ -85,7 +85,8 @@ describe('Child process plugin', () => {
               'span.type': 'system',
               'cmd.shell': 'ls -l'
             },
-            integrationName: 'system'
+            integrationName: 'system',
+            links: undefined
           }
         )
       })
@@ -110,7 +111,8 @@ describe('Child process plugin', () => {
               'cmd.exec': JSON.stringify(['echo', arg, '']),
               'cmd.truncated': 'true'
             },
-            integrationName: 'system'
+            integrationName: 'system',
+            links: undefined
           }
         )
       })
@@ -135,7 +137,8 @@ describe('Child process plugin', () => {
               'cmd.shell': 'ls -l /h ',
               'cmd.truncated': 'true'
             },
-            integrationName: 'system'
+            integrationName: 'system',
+            links: undefined
           }
         )
       })
@@ -161,7 +164,8 @@ describe('Child process plugin', () => {
               'cmd.exec': JSON.stringify(['ls', '-l', '', '']),
               'cmd.truncated': 'true'
             },
-            integrationName: 'system'
+            integrationName: 'system',
+            links: undefined
           }
         )
       })
@@ -187,7 +191,8 @@ describe('Child process plugin', () => {
               'cmd.shell': 'ls -l /home -t',
               'cmd.truncated': 'true'
             },
-            integrationName: 'system'
+            integrationName: 'system',
+            links: undefined
           }
         )
       })
