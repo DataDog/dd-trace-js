@@ -93,9 +93,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         this.responseExtractDSMContext(operation, params, response.data ?? response, span)
       }
       this.addResponseTags(span, response)
-      if (this.serviceIdentifier === 's3') {
-        this.addSpanPointer(span, response)
-      }
+      this.addSpanPointer(span, response)
       this.finish(span, response, response.error)
     })
   }
