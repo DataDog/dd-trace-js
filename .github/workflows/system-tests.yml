@@ -31,7 +31,7 @@ jobs:
     uses: DataDog/system-tests/.github/workflows/compute-workflow-parameters.yml@main
     with:
       library: nodejs
-#      scenarios: APPSEC_RASP,APPSEC_RUNTIME_ACTIVATION,REMOTE_CONFIG_MOCKED_BACKEND_ASM_DD
+      scenarios: APPSEC_RASP,APPSEC_RUNTIME_ACTIVATION,REMOTE_CONFIG_MOCKED_BACKEND_ASM_DD
       scenarios_groups: essentials
 
   system-tests:
