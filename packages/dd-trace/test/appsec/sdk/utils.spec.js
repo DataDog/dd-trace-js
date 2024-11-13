@@ -3,17 +3,16 @@
 const { assert } = require('chai')
 
 const { getRootSpan } = require('../../../src/appsec/sdk/utils')
-const Tracer = require('../../../src/proxy')
+const DatadogTracer = require('../../../src/tracer')
 const Config = require('../../../src/config')
 
 describe('Appsec SDK utils', () => {
   let tracer
 
   before(() => {
-    tracer = new Tracer(new Config({
+    tracer = new DatadogTracer(new Config({
       enabled: true
     }))
-    tracer.init()
   })
 
   describe('getRootSpan', () => {
