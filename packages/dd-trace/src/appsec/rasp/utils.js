@@ -12,8 +12,10 @@ if (abortOnUncaughtException) {
 }
 
 const RULE_TYPES = {
-  SSRF: 'ssrf',
-  SQL_INJECTION: 'sql_injection'
+  COMMAND_INJECTION: 'command_injection',
+  LFI: 'lfi',
+  SQL_INJECTION: 'sql_injection',
+  SSRF: 'ssrf'
 }
 
 class DatadogRaspAbortError extends Error {

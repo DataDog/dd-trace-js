@@ -15,7 +15,6 @@ require,import-in-the-middle,Apache license 2.0,Copyright 2021 Datadog Inc.
 require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 require,istanbul-lib-coverage,BSD-3-Clause,Copyright 2012-2015 Yahoo! Inc.
 require,jest-docblock,MIT,Copyright Meta Platforms, Inc. and affiliates.
-require,jsonpath-plus,MIT,Copyright (c) 2011-2019 Stefan Goessner, Subbu Allamaraju, Mike Brevoort, Robert Krahn, Brett Zamir, Richard Schneider
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
 require,limiter,MIT,Copyright 2011 John Hurliman
 require,lodash.sortby,MIT,Copyright JS Foundation and other contributors
@@ -31,6 +30,7 @@ require,retry,MIT,Copyright 2011 Tim Koschützki Felix Geisendörfer
 require,rfdc,MIT,Copyright 2019 David Mark Clements
 require,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
 require,shell-quote,mit,Copyright (c) 2013 James Halliday
+dev,@apollo/server,MIT,Copyright (c) 2016-2020 Apollo Graph, Inc. (Formerly Meteor Development Group, Inc.)
 dev,@types/node,MIT,Copyright Authors
 dev,autocannon,MIT,Copyright 2016 Matteo Collina
 dev,aws-sdk,Apache 2.0,Copyright 2012-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.

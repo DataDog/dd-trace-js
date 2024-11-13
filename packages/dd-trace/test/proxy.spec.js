@@ -132,7 +132,8 @@ describe('TracerProxy', () => {
       remoteConfig: {
         enabled: true
       },
-      configure: sinon.spy()
+      configure: sinon.spy(),
+      llmobs: {}
     }
     Config = sinon.stub().returns(config)
 

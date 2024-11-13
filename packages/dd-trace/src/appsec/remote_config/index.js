@@ -75,10 +75,15 @@ function enableWafUpdate (appsecConfig) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, true)
 
     if (appsecConfig.rasp?.enabled) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, true)
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SSRF, true)
+      rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_LFI, true)
+      rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SHI, true)
     }
 
     // TODO: delete noop handlers and kPreUpdate and replace with batched handlers
@@ -103,9 +108,14 @@ function disableWafUpdate () {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, false)
 
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SSRF, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_LFI, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SHI, false)
 
     rc.removeProductHandler('ASM_DATA')
     rc.removeProductHandler('ASM_DD')

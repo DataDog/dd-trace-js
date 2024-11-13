@@ -9,6 +9,7 @@ const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
 class Sqs extends BaseAwsSdkPlugin {
   static get id () { return 'sqs' }
   static get peerServicePrecursors () { return ['queuename'] }
+  static get isPayloadReporter () { return true }
 
   constructor (...args) {
     super(...args)
@@ -194,7 +195,7 @@ class Sqs extends BaseAwsSdkPlugin {
           parsedAttributes = this.parseDatadogAttributes(message.MessageAttributes._datadog)
         }
       }
-      if (parsedAttributes && DsmPathwayCodec.contextExists(parsedAttributes)) {
+      if (parsedAttributes) {
         const payloadSize = getHeadersSize({
           Body: message.Body,
           MessageAttributes: message.MessageAttributes

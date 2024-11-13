@@ -13,8 +13,9 @@ const {
   getRequestMetrics
 } = require('./telemetry')
 const zlib = require('zlib')
-const { MANUAL_KEEP } = require('../../../../ext/tags')
 const standalone = require('./standalone')
+const { SAMPLING_MECHANISM_APPSEC } = require('../constants')
+const { keepTrace } = require('../priority_sampler')
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
@@ -96,8 +97,6 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
     metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(diagnosticsRules.errors))
   }
 
-  metricsQueue.set(MANUAL_KEEP, 'true')
-
   incrementWafInitMetric(wafVersion, rulesVersion)
 }
 
@@ -129,7 +128,7 @@ function reportAttack (attackData) {
   }
 
   if (limiter.isAllowed()) {
-    newTags[MANUAL_KEEP] = 'true'
+    keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
 
     standalone.sample(rootSpan)
   }
@@ -153,7 +152,11 @@ function reportAttack (attackData) {
   rootSpan.addTags(newTags)
 }
 
-function reportSchemas (derivatives) {
+function isFingerprintDerivative (derivative) {
+  return derivative.startsWith('_dd.appsec.fp')
+}
+
+function reportDerivatives (derivatives) {
   if (!derivatives) return
 
   const req = storage.getStore()?.req
@@ -162,9 +165,12 @@ function reportSchemas (derivatives) {
   if (!rootSpan) return
 
   const tags = {}
-  for (const [address, value] of Object.entries(derivatives)) {
-    const gzippedValue = zlib.gzipSync(JSON.stringify(value))
-    tags[address] = gzippedValue.toString('base64')
+  for (let [tag, value] of Object.entries(derivatives)) {
+    if (!isFingerprintDerivative(tag)) {
+      const gzippedValue = zlib.gzipSync(JSON.stringify(value))
+      value = gzippedValue.toString('base64')
+    }
+    tags[tag] = value
   }
 
   rootSpan.addTags(tags)
@@ -176,6 +182,8 @@ function finishRequest (req, res) {
 
   if (metricsQueue.size) {
     rootSpan.addTags(Object.fromEntries(metricsQueue))
+
+    keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
 
     standalone.sample(rootSpan)
 
@@ -248,7 +256,7 @@ module.exports = {
   reportMetrics,
   reportAttack,
   reportWafUpdate: incrementWafUpdatesMetric,
-  reportSchemas,
+  reportDerivatives,
   finishRequest,
   setRateLimit,
   mapHeaderAndTags

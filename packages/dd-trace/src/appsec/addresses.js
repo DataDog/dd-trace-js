@@ -23,6 +23,13 @@ module.exports = {
   WAF_CONTEXT_PROCESSOR: 'waf.context.processor',
 
   HTTP_OUTGOING_URL: 'server.io.net.url',
+  FS_OPERATION_PATH: 'server.io.fs.file',
+
   DB_STATEMENT: 'server.db.statement',
-  DB_SYSTEM: 'server.db.system'
+  DB_SYSTEM: 'server.db.system',
+
+  SHELL_COMMAND: 'server.sys.shell.cmd',
+
+  LOGIN_SUCCESS: 'server.business_logic.users.login.success',
+  LOGIN_FAILURE: 'server.business_logic.users.login.failure'
 }

@@ -2,7 +2,8 @@
 
 const session = require('./session')
 
-const scripts = []
+const scriptIds = []
+const scriptUrls = new Map()
 
 module.exports = {
   probes: new Map(),
@@ -25,10 +26,23 @@ module.exports = {
    * @param {string} path
    * @returns {[string, string] | undefined}
    */
-  getScript (path) {
-    return scripts
+  findScriptFromPartialPath (path) {
+    return scriptIds
       .filter(([url]) => url.endsWith(path))
       .sort(([a], [b]) => a.length - b.length)[0]
+  },
+
+  getStackFromCallFrames (callFrames) {
+    return callFrames.map((frame) => {
+      let fileName = scriptUrls.get(frame.location.scriptId)
+      if (fileName.startsWith('file://')) fileName = fileName.substr(7) // TODO: This might not be required
+      return {
+        fileName,
+        function: frame.functionName,
+        lineNumber: frame.location.lineNumber + 1, // Beware! lineNumber is zero-indexed
+        columnNumber: frame.location.columnNumber + 1 // Beware! columnNumber is zero-indexed
+      }
+    })
   }
 }
 
@@ -41,7 +55,8 @@ module.exports = {
 // - `` - Not sure what this is, but should just be ignored
 // TODO: Event fired for all files, every time debugger is enabled. So when we disable it, we need to reset the state
 session.on('Debugger.scriptParsed', ({ params }) => {
+  scriptUrls.set(params.scriptId, params.url)
   if (params.url.startsWith('file:')) {
-    scripts.push([params.url, params.scriptId])
+    scriptIds.push([params.url, params.scriptId])
   }
 })

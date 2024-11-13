@@ -4,6 +4,9 @@ const proxyquire = require('proxyquire')
 const agent = require('../../plugins/agent')
 const axios = require('axios')
 const tracer = require('../../../../../index')
+const { LOGIN_SUCCESS, LOGIN_FAILURE } = require('../../../src/appsec/addresses')
+const { SAMPLING_MECHANISM_APPSEC } = require('../../../src/constants')
+const { USER_KEEP } = require('../../../../../ext/priority')
 
 describe('track_event', () => {
   describe('Internal API', () => {
@@ -14,14 +17,22 @@ describe('track_event', () => {
     let setUserTags
     let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent, trackEvent
     let sample
+    let waf
+    let prioritySampler
 
     beforeEach(() => {
       log = {
         warn: sinon.stub()
       }
 
+      prioritySampler = {
+        setPriority: sinon.stub()
+      }
+
       rootSpan = {
-        addTags: sinon.stub()
+        _prioritySampler: prioritySampler,
+        addTags: sinon.stub(),
+        keep: sinon.stub()
       }
 
       getRootSpan = sinon.stub().callsFake(() => rootSpan)
@@ -29,6 +40,10 @@ describe('track_event', () => {
       setUserTags = sinon.stub()
 
       sample = sinon.stub()
+
+      waf = {
+        run: sinon.spy()
+      }
 
       const trackEvents = proxyquire('../../../src/appsec/sdk/track_event', {
         '../../log': log,
@@ -40,13 +55,18 @@ describe('track_event', () => {
         },
         '../standalone': {
           sample
-        }
+        },
+        '../waf': waf
       })
 
       trackUserLoginSuccessEvent = trackEvents.trackUserLoginSuccessEvent
       trackUserLoginFailureEvent = trackEvents.trackUserLoginFailureEvent
       trackCustomEvent = trackEvents.trackCustomEvent
       trackEvent = trackEvents.trackEvent
+    })
+
+    afterEach(() => {
+      sinon.restore()
     })
 
     describe('trackUserLoginSuccessEvent', () => {
@@ -85,12 +105,13 @@ describe('track_event', () => {
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
           {
             'appsec.events.users.login.success.track': 'true',
-            'manual.keep': 'true',
             '_dd.appsec.events.users.login.success.sdk': 'true',
             'appsec.events.users.login.success.metakey1': 'metaValue1',
             'appsec.events.users.login.success.metakey2': 'metaValue2',
             'appsec.events.users.login.success.metakey3': 'metaValue3'
           })
+        expect(prioritySampler.setPriority)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
       })
 
       it('should call setUser and addTags without metadata', () => {
@@ -102,9 +123,20 @@ describe('track_event', () => {
         expect(setUserTags).to.have.been.calledOnceWithExactly(user, rootSpan)
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.users.login.success.track': 'true',
-          'manual.keep': 'true',
           '_dd.appsec.events.users.login.success.sdk': 'true'
         })
+        expect(prioritySampler.setPriority)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+      })
+
+      it('should call waf run with login success address', () => {
+        const user = { id: 'user_id' }
+
+        trackUserLoginSuccessEvent(tracer, user)
+        sinon.assert.calledOnceWithExactly(
+          waf.run,
+          { persistent: { [LOGIN_SUCCESS]: null } }
+        )
       })
     })
 
@@ -140,7 +172,6 @@ describe('track_event', () => {
         expect(setUserTags).to.not.have.been.called
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.users.login.failure.track': 'true',
-          'manual.keep': 'true',
           '_dd.appsec.events.users.login.failure.sdk': 'true',
           'appsec.events.users.login.failure.usr.id': 'user_id',
           'appsec.events.users.login.failure.usr.exists': 'true',
@@ -148,6 +179,8 @@ describe('track_event', () => {
           'appsec.events.users.login.failure.metakey2': 'metaValue2',
           'appsec.events.users.login.failure.metakey3': 'metaValue3'
         })
+        expect(prioritySampler.setPriority)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
       })
 
       it('should send false `usr.exists` property when the user does not exist', () => {
@@ -159,7 +192,6 @@ describe('track_event', () => {
         expect(setUserTags).to.not.have.been.called
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.users.login.failure.track': 'true',
-          'manual.keep': 'true',
           '_dd.appsec.events.users.login.failure.sdk': 'true',
           'appsec.events.users.login.failure.usr.id': 'user_id',
           'appsec.events.users.login.failure.usr.exists': 'false',
@@ -167,6 +199,8 @@ describe('track_event', () => {
           'appsec.events.users.login.failure.metakey2': 'metaValue2',
           'appsec.events.users.login.failure.metakey3': 'metaValue3'
         })
+        expect(prioritySampler.setPriority)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
       })
 
       it('should call addTags without metadata', () => {
@@ -176,11 +210,20 @@ describe('track_event', () => {
         expect(setUserTags).to.not.have.been.called
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.users.login.failure.track': 'true',
-          'manual.keep': 'true',
           '_dd.appsec.events.users.login.failure.sdk': 'true',
           'appsec.events.users.login.failure.usr.id': 'user_id',
           'appsec.events.users.login.failure.usr.exists': 'true'
         })
+        expect(prioritySampler.setPriority)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+      })
+
+      it('should call waf run with login failure address', () => {
+        trackUserLoginFailureEvent(tracer, 'user_id')
+        sinon.assert.calledOnceWithExactly(
+          waf.run,
+          { persistent: { [LOGIN_FAILURE]: null } }
+        )
       })
     })
 
@@ -212,11 +255,12 @@ describe('track_event', () => {
         expect(setUserTags).to.not.have.been.called
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.custom_event.track': 'true',
-          'manual.keep': 'true',
           '_dd.appsec.events.custom_event.sdk': 'true',
           'appsec.events.custom_event.metaKey1': 'metaValue1',
           'appsec.events.custom_event.metakey2': 'metaValue2'
         })
+        expect(prioritySampler.setPriority)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
       })
 
       it('should call addTags without metadata', () => {
@@ -226,9 +270,10 @@ describe('track_event', () => {
         expect(setUserTags).to.not.have.been.called
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.custom_event.track': 'true',
-          'manual.keep': 'true',
           '_dd.appsec.events.custom_event.sdk': 'true'
         })
+        expect(prioritySampler.setPriority)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
       })
     })
 
@@ -237,31 +282,34 @@ describe('track_event', () => {
         trackEvent('event', { metaKey1: 'metaValue1', metakey2: 'metaValue2' }, 'trackEvent', rootSpan, 'safe')
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.event.track': 'true',
-          'manual.keep': 'true',
           '_dd.appsec.events.event.auto.mode': 'safe',
           'appsec.events.event.metaKey1': 'metaValue1',
           'appsec.events.event.metakey2': 'metaValue2'
         })
+        expect(prioritySampler.setPriority)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
       })
 
       it('should call addTags with extended mode', () => {
         trackEvent('event', { metaKey1: 'metaValue1', metakey2: 'metaValue2' }, 'trackEvent', rootSpan, 'extended')
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.event.track': 'true',
-          'manual.keep': 'true',
           '_dd.appsec.events.event.auto.mode': 'extended',
           'appsec.events.event.metaKey1': 'metaValue1',
           'appsec.events.event.metakey2': 'metaValue2'
         })
+        expect(prioritySampler.setPriority)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
       })
 
       it('should call standalone sample', () => {
         trackEvent('event', undefined, 'trackEvent', rootSpan, undefined)
 
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-          'appsec.events.event.track': 'true',
-          'manual.keep': 'true'
+          'appsec.events.event.track': 'true'
         })
+        expect(prioritySampler.setPriority)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
         expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
       })
     })
@@ -310,7 +358,7 @@ describe('track_event', () => {
           expect(traces[0][0].meta).to.have.property('appsec.events.users.login.success.track', 'true')
           expect(traces[0][0].meta).to.have.property('usr.id', 'test_user_id')
           expect(traces[0][0].meta).to.have.property('appsec.events.users.login.success.metakey', 'metaValue')
-          expect(traces[0][0].meta).to.have.property('manual.keep', 'true')
+          expect(traces[0][0].metrics).to.have.property('_sampling_priority_v1', USER_KEEP)
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
@@ -348,7 +396,7 @@ describe('track_event', () => {
           expect(traces[0][0].meta).to.have.property('appsec.events.users.login.failure.usr.id', 'test_user_id')
           expect(traces[0][0].meta).to.have.property('appsec.events.users.login.failure.usr.exists', 'true')
           expect(traces[0][0].meta).to.have.property('appsec.events.users.login.failure.metakey', 'metaValue')
-          expect(traces[0][0].meta).to.have.property('manual.keep', 'true')
+          expect(traces[0][0].metrics).to.have.property('_sampling_priority_v1', USER_KEEP)
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
@@ -363,7 +411,7 @@ describe('track_event', () => {
           expect(traces[0][0].meta).to.have.property('appsec.events.users.login.failure.usr.id', 'test_user_id')
           expect(traces[0][0].meta).to.have.property('appsec.events.users.login.failure.usr.exists', 'false')
           expect(traces[0][0].meta).to.have.property('appsec.events.users.login.failure.metakey', 'metaValue')
-          expect(traces[0][0].meta).to.have.property('manual.keep', 'true')
+          expect(traces[0][0].metrics).to.have.property('_sampling_priority_v1', USER_KEEP)
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
@@ -399,7 +447,7 @@ describe('track_event', () => {
         agent.use(traces => {
           expect(traces[0][0].meta).to.have.property('appsec.events.my-custom-event.track', 'true')
           expect(traces[0][0].meta).to.have.property('appsec.events.my-custom-event.metakey', 'metaValue')
-          expect(traces[0][0].meta).to.have.property('manual.keep', 'true')
+          expect(traces[0][0].metrics).to.have.property('_sampling_priority_v1', USER_KEEP)
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
@@ -411,7 +459,7 @@ describe('track_event', () => {
           res.end()
         }
         agent.use(traces => {
-          expect(traces[0][0].meta).to.not.have.property('manual.keep', 'true')
+          expect(traces[0][0].metrics).to.not.have.property('_sampling_priority_v1', USER_KEEP)
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })

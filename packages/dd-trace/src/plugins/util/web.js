@@ -10,6 +10,7 @@ const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
 const { extractIp } = require('./ip_extractor')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
+const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -36,6 +37,8 @@ const contexts = new WeakMap()
 const ends = new WeakMap()
 
 const web = {
+  TYPE: WEB,
+
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
     const headers = getHeadersToRecord(config)
@@ -95,7 +98,7 @@ const web = {
       context.span.context()._name = name
       span = context.span
     } else {
-      span = web.startChildSpan(tracer, name, req.headers)
+      span = web.startChildSpan(tracer, name, req)
     }
 
     context.tracer = tracer
@@ -103,7 +106,7 @@ const web = {
     context.res = res
 
     this.setConfig(req, config)
-    addRequestTags(context)
+    addRequestTags(context, this.TYPE)
 
     return span
   },
@@ -251,8 +254,19 @@ const web = {
   },
 
   // Extract the parent span from the headers and start a new span as its child
-  startChildSpan (tracer, name, headers) {
-    const childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
+  startChildSpan (tracer, name, req) {
+    const headers = req.headers
+    const context = contexts.get(req)
+    let childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
+
+    // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
+    if (tracer._config?.inferredProxyServicesEnabled) {
+      const proxySpan = createInferredProxySpan(headers, childOf, tracer, context)
+      if (proxySpan) {
+        childOf = proxySpan
+      }
+    }
+
     const span = tracer.startSpan(name, { childOf })
 
     return span
@@ -261,12 +275,20 @@ const web = {
   // Validate a request's status code and then add error tags if necessary
   addStatusError (req, statusCode) {
     const context = contexts.get(req)
-    const span = context.span
-    const error = context.error
-    const hasExistingError = span.context()._tags.error || span.context()._tags[ERROR_MESSAGE]
+    const { span, inferredProxySpan, error } = context
 
-    if (!hasExistingError && !context.config.validateStatus(statusCode)) {
+    const spanHasExistingError = span.context()._tags.error || span.context()._tags[ERROR_MESSAGE]
+    const inferredSpanContext = inferredProxySpan?.context()
+    const inferredSpanHasExistingError = inferredSpanContext?._tags.error || inferredSpanContext?._tags[ERROR_MESSAGE]
+
+    const isValidStatusCode = context.config.validateStatus(statusCode)
+
+    if (!spanHasExistingError && !isValidStatusCode) {
       span.setTag(ERROR, error || true)
+    }
+
+    if (inferredProxySpan && !inferredSpanHasExistingError && !isValidStatusCode) {
+      inferredProxySpan.setTag(ERROR, error || true)
     }
   },
 
@@ -296,7 +318,7 @@ const web = {
 
     if (context.finished && !req.stream) return
 
-    addRequestTags(context)
+    addRequestTags(context, this.TYPE)
     addResponseTags(context)
 
     context.config.hooks.request(context.span, req, res)
@@ -314,6 +336,8 @@ const web = {
     web.finishMiddleware(context)
 
     web.finishSpan(context)
+
+    finishInferredProxySpan(context)
   },
 
   obfuscateQs (config, url) {
@@ -423,15 +447,15 @@ function reactivate (req, fn) {
     : fn()
 }
 
-function addRequestTags (context) {
-  const { req, span, config } = context
+function addRequestTags (context, spanType) {
+  const { req, span, inferredProxySpan, config } = context
   const url = extractURL(req)
 
   span.addTags({
     [HTTP_URL]: web.obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
-    [SPAN_TYPE]: WEB,
+    [SPAN_TYPE]: spanType,
     [HTTP_USERAGENT]: req.headers['user-agent']
   })
 
@@ -441,6 +465,7 @@ function addRequestTags (context) {
 
     if (clientIp) {
       span.setTag(HTTP_CLIENT_IP, clientIp)
+      inferredProxySpan?.setTag(HTTP_CLIENT_IP, clientIp)
     }
   }
 
@@ -448,13 +473,16 @@ function addRequestTags (context) {
 }
 
 function addResponseTags (context) {
-  const { req, res, paths, span } = context
+  const { req, res, paths, span, inferredProxySpan } = context
 
   if (paths.length > 0) {
     span.setTag(HTTP_ROUTE, paths.join(''))
   }
 
   span.addTags({
+    [HTTP_STATUS_CODE]: res.statusCode
+  })
+  inferredProxySpan?.addTags({
     [HTTP_STATUS_CODE]: res.statusCode
   })
 
@@ -475,7 +503,7 @@ function addResourceTag (context) {
 }
 
 function addHeaders (context) {
-  const { req, res, config, span } = context
+  const { req, res, config, span, inferredProxySpan } = context
 
   config.headers.forEach(([key, tag]) => {
     const reqHeader = req.headers[key]
@@ -483,10 +511,12 @@ function addHeaders (context) {
 
     if (reqHeader) {
       span.setTag(tag || `${HTTP_REQUEST_HEADERS}.${key}`, reqHeader)
+      inferredProxySpan?.setTag(tag || `${HTTP_REQUEST_HEADERS}.${key}`, reqHeader)
     }
 
     if (resHeader) {
       span.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
+      inferredProxySpan?.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
     }
   })
 }

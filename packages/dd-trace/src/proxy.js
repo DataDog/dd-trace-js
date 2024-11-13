@@ -16,6 +16,7 @@ const NoopDogStatsDClient = require('./noop/dogstatsd')
 const spanleak = require('./spanleak')
 const { SSIHeuristics } = require('./profiling/ssi-heuristics')
 const appsecStandalone = require('./appsec/standalone')
+const LLMObsSDK = require('./llmobs/sdk')
 
 class LazyModule {
   constructor (provider) {
@@ -46,7 +47,8 @@ class Tracer extends NoopProxy {
     // these requires must work with esm bundler
     this._modules = {
       appsec: new LazyModule(() => require('./appsec')),
-      iast: new LazyModule(() => require('./appsec/iast'))
+      iast: new LazyModule(() => require('./appsec/iast')),
+      llmobs: new LazyModule(() => require('./llmobs'))
     }
   }
 
@@ -167,6 +169,18 @@ class Tracer extends NoopProxy {
           this._testApiManualPlugin.configure({ ...config, enabled: true })
         }
       }
+      if (config.ciVisAgentlessLogSubmissionEnabled) {
+        if (process.env.DD_API_KEY) {
+          const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
+          const automaticLogPlugin = new LogSubmissionPlugin(this)
+          automaticLogPlugin.configure({ ...config, enabled: true })
+        } else {
+          log.warn(
+            'DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set, ' +
+            'but DD_API_KEY is undefined, so no automatic log submission will be performed.'
+          )
+        }
+      }
     } catch (e) {
       log.error(e)
     }
@@ -188,11 +202,15 @@ class Tracer extends NoopProxy {
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)
       }
+      if (config.llmobs.enabled) {
+        this._modules.llmobs.enable(config)
+      }
       if (!this._tracingInitialized) {
         const prioritySampler = appsecStandalone.configure(config)
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         this.appsec = new AppsecSdk(this._tracer, config)
+        this.llmobs = new LLMObsSDK(this._tracer, this._modules.llmobs, config)
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {
@@ -201,6 +219,7 @@ class Tracer extends NoopProxy {
     } else if (this._tracingInitialized) {
       this._modules.appsec.disable()
       this._modules.iast.disable()
+      this._modules.llmobs.disable()
     }
 
     if (this._tracingInitialized) {

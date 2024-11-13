@@ -5,6 +5,7 @@ require('./setup/tap')
 const { expect } = require('chai')
 const { readFileSync } = require('fs')
 const sinon = require('sinon')
+const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
 
 describe('Config', () => {
   let Config
@@ -216,20 +217,24 @@ describe('Config', () => {
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config.tags).to.have.property('service', 'node')
     expect(config).to.have.property('plugins', true)
+    expect(config).to.have.property('traceEnabled', true)
     expect(config).to.have.property('env', undefined)
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
     expect(config).to.have.property('logLevel', 'debug')
+    expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
     expect(config).to.have.property('dynamicInstrumentationEnabled', false)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
+    expect(config.grpc.client.error.statuses).to.deep.equal(GRPC_CLIENT_ERROR_STATUSES)
+    expect(config.grpc.server.error.statuses).to.deep.equal(GRPC_SERVER_ERROR_STATUSES)
     expect(config).to.have.property('spanComputePeerService', false)
     expect(config).to.have.property('spanRemoveIntegrationFromService', false)
     expect(config).to.have.property('instrumentation_config_id', undefined)
     expect(config).to.have.deep.property('serviceMapping', {})
-    expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog', 'tracecontext'])
-    expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog', 'tracecontext'])
+    expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog', 'tracecontext', 'baggage'])
+    expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog', 'tracecontext', 'baggage'])
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
@@ -262,6 +267,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('installSignature.id', null)
     expect(config).to.have.nested.property('installSignature.time', null)
     expect(config).to.have.nested.property('installSignature.type', null)
+    expect(config).to.have.nested.property('llmobs.mlApp', undefined)
+    expect(config).to.have.nested.property('llmobs.agentlessEnabled', false)
+    expect(config).to.have.nested.property('llmobs.enabled', false)
 
     expect(updateConfig).to.be.calledOnce
 
@@ -292,6 +300,7 @@ describe('Config', () => {
       { name: 'appsec.wafTimeout', value: 5e3, origin: 'default' },
       { name: 'clientIpEnabled', value: false, origin: 'default' },
       { name: 'clientIpHeader', value: null, origin: 'default' },
+      { name: 'codeOriginForSpans.enabled', value: false, origin: 'default' },
       { name: 'dbmPropagationMode', value: 'disabled', origin: 'default' },
       { name: 'dogstatsd.hostname', value: '127.0.0.1', origin: 'calculated' },
       { name: 'dogstatsd.port', value: '8125', origin: 'default' },
@@ -306,6 +315,7 @@ describe('Config', () => {
       { name: 'gitMetadataEnabled', value: true, origin: 'default' },
       { name: 'headerTags', value: [], origin: 'default' },
       { name: 'hostname', value: '127.0.0.1', origin: 'default' },
+      { name: 'iast.cookieFilterPattern', value: '.{32,}', origin: 'default' },
       { name: 'iast.deduplicationEnabled', value: true, origin: 'default' },
       { name: 'iast.enabled', value: false, origin: 'default' },
       { name: 'iast.maxConcurrentRequests', value: 2, origin: 'default' },
@@ -324,7 +334,11 @@ describe('Config', () => {
       { name: 'isGitUploadEnabled', value: false, origin: 'default' },
       { name: 'isIntelligentTestRunnerEnabled', value: false, origin: 'default' },
       { name: 'isManualApiEnabled', value: false, origin: 'default' },
+      { name: 'llmobs.agentlessEnabled', value: false, origin: 'default' },
+      { name: 'llmobs.mlApp', value: undefined, origin: 'default' },
       { name: 'ciVisibilityTestSessionName', value: '', origin: 'default' },
+      { name: 'ciVisAgentlessLogSubmissionEnabled', value: false, origin: 'default' },
+      { name: 'isTestDynamicInstrumentationEnabled', value: false, origin: 'default' },
       { name: 'logInjection', value: false, origin: 'default' },
       { name: 'lookup', value: undefined, origin: 'default' },
       { name: 'openAiLogsEnabled', value: false, origin: 'default' },
@@ -348,7 +362,8 @@ describe('Config', () => {
       { name: 'reportHostname', value: false, origin: 'default' },
       { name: 'runtimeMetrics', value: false, origin: 'default' },
       { name: 'sampleRate', value: undefined, origin: 'default' },
-      { name: 'sampler.rateLimit', value: undefined, origin: 'default' },
+      { name: 'sampler.rateLimit', value: 100, origin: 'default' },
+      { name: 'traceEnabled', value: true, origin: 'default' },
       { name: 'sampler.rules', value: [], origin: 'default' },
       { name: 'scope', value: undefined, origin: 'default' },
       { name: 'service', value: 'node', origin: 'default' },
@@ -411,6 +426,7 @@ describe('Config', () => {
   })
 
   it('should initialize from environment variables', () => {
+    process.env.DD_CODE_ORIGIN_FOR_SPANS_ENABLED = 'true'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
     process.env.DD_TRACE_AGENT_PORT = '6218'
     process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
@@ -477,6 +493,7 @@ describe('Config', () => {
     process.env.DD_IAST_REQUEST_SAMPLING = '40'
     process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
+    process.env.DD_IAST_COOKIE_FILTER_PATTERN = '.*'
     process.env.DD_IAST_DEDUPLICATION_ENABLED = false
     process.env.DD_IAST_REDACTION_ENABLED = false
     process.env.DD_IAST_REDACTION_NAME_PATTERN = 'REDACTION_NAME_PATTERN'
@@ -492,6 +509,11 @@ describe('Config', () => {
     process.env.DD_INSTRUMENTATION_INSTALL_TYPE = 'k8s_single_step'
     process.env.DD_INSTRUMENTATION_INSTALL_TIME = '1703188212'
     process.env.DD_INSTRUMENTATION_CONFIG_ID = 'abcdef123'
+    process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
+    process.env.DD_LLMOBS_ML_APP = 'myMlApp'
+    process.env.DD_TRACE_ENABLED = 'true'
+    process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '3,13,400-403'
+    process.env.DD_GRPC_SERVER_ERROR_STATUSES = '3,13,400-403'
 
     // required if we want to check updates to config.debug and config.logLevel which is fetched from logger
     reloadLoggerAndConfig()
@@ -510,11 +532,15 @@ describe('Config', () => {
     expect(config).to.have.property('clientIpEnabled', true)
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
     expect(config).to.have.nested.property('crashtracking.enabled', true)
+    expect(config.grpc.client.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
+    expect(config.grpc.server.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
+    expect(config).to.have.nested.property('codeOriginForSpans.enabled', true)
     expect(config).to.have.property('dynamicInstrumentationEnabled', true)
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
+    expect(config).to.have.property('traceEnabled', true)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanAttributeSchema', 'v1')
@@ -577,6 +603,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.requestSampling', 40)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 3)
     expect(config).to.have.nested.property('iast.maxContextOperations', 4)
+    expect(config).to.have.nested.property('iast.cookieFilterPattern', '.*')
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
@@ -587,6 +614,8 @@ describe('Config', () => {
       type: 'k8s_single_step',
       time: '1703188212'
     })
+    expect(config).to.have.nested.property('llmobs.mlApp', 'myMlApp')
+    expect(config).to.have.nested.property('llmobs.agentlessEnabled', true)
 
     expect(updateConfig).to.be.calledOnce
 
@@ -608,6 +637,7 @@ describe('Config', () => {
       { name: 'clientIpEnabled', value: true, origin: 'env_var' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'env_var' },
       { name: 'crashtracking.enabled', value: true, origin: 'env_var' },
+      { name: 'codeOriginForSpans.enabled', value: true, origin: 'env_var' },
       { name: 'dogstatsd.hostname', value: 'dsd-agent', origin: 'env_var' },
       { name: 'dogstatsd.port', value: '5218', origin: 'env_var' },
       { name: 'dynamicInstrumentationEnabled', value: true, origin: 'env_var' },
@@ -616,6 +646,7 @@ describe('Config', () => {
       { name: 'experimental.exporter', value: 'log', origin: 'env_var' },
       { name: 'experimental.runtimeId', value: true, origin: 'env_var' },
       { name: 'hostname', value: 'agent', origin: 'env_var' },
+      { name: 'iast.cookieFilterPattern', value: '.*', origin: 'env_var' },
       { name: 'iast.deduplicationEnabled', value: false, origin: 'env_var' },
       { name: 'iast.enabled', value: true, origin: 'env_var' },
       { name: 'iast.maxConcurrentRequests', value: '3', origin: 'env_var' },
@@ -651,7 +682,9 @@ describe('Config', () => {
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'env_var' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'env_var' },
       { name: 'tracing', value: false, origin: 'env_var' },
-      { name: 'version', value: '1.0.0', origin: 'env_var' }
+      { name: 'version', value: '1.0.0', origin: 'env_var' },
+      { name: 'llmobs.mlApp', value: 'myMlApp', origin: 'env_var' },
+      { name: 'llmobs.agentlessEnabled', value: true, origin: 'env_var' }
     ])
   })
 
@@ -754,6 +787,9 @@ describe('Config', () => {
       env: 'test',
       clientIpEnabled: true,
       clientIpHeader: 'x-true-client-ip',
+      codeOriginForSpans: {
+        enabled: false
+      },
       sampleRate: 0.5,
       rateLimit: 1000,
       samplingRules,
@@ -797,6 +833,7 @@ describe('Config', () => {
           requestSampling: 50,
           maxConcurrentRequests: 4,
           maxContextOperations: 5,
+          cookieFilterPattern: '.*',
           deduplicationEnabled: false,
           redactionEnabled: false,
           redactionNamePattern: 'REDACTION_NAME_PATTERN',
@@ -814,7 +851,12 @@ describe('Config', () => {
         pollInterval: 42
       },
       traceId128BitGenerationEnabled: true,
-      traceId128BitLoggingEnabled: true
+      traceId128BitLoggingEnabled: true,
+      llmobs: {
+        mlApp: 'myMlApp',
+        agentlessEnabled: true,
+        apiKey: 'myApiKey'
+      }
     })
 
     expect(config).to.have.property('protocolVersion', '0.5')
@@ -841,6 +883,7 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('plugins', false)
     expect(config).to.have.property('logLevel', logLevel)
+    expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanRemoveIntegrationFromService', true)
@@ -862,6 +905,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.requestSampling', 50)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 4)
     expect(config).to.have.nested.property('iast.maxContextOperations', 5)
+    expect(config).to.have.nested.property('iast.cookieFilterPattern', '.*')
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
@@ -887,6 +931,8 @@ describe('Config', () => {
       a: 'aa',
       b: 'bb'
     })
+    expect(config).to.have.nested.property('llmobs.mlApp', 'myMlApp')
+    expect(config).to.have.nested.property('llmobs.agentlessEnabled', true)
 
     expect(updateConfig).to.be.calledOnce
 
@@ -895,6 +941,7 @@ describe('Config', () => {
       { name: 'appsec.standalone.enabled', value: true, origin: 'code' },
       { name: 'clientIpEnabled', value: true, origin: 'code' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'code' },
+      { name: 'codeOriginForSpans.enabled', value: false, origin: 'code' },
       { name: 'dogstatsd.hostname', value: 'agent-dsd', origin: 'code' },
       { name: 'dogstatsd.port', value: '5218', origin: 'code' },
       { name: 'dynamicInstrumentationEnabled', value: true, origin: 'code' },
@@ -905,6 +952,7 @@ describe('Config', () => {
       { name: 'flushInterval', value: 5000, origin: 'code' },
       { name: 'flushMinSpans', value: 500, origin: 'code' },
       { name: 'hostname', value: 'agent', origin: 'code' },
+      { name: 'iast.cookieFilterPattern', value: '.*', origin: 'code' },
       { name: 'iast.deduplicationEnabled', value: false, origin: 'code' },
       { name: 'iast.enabled', value: true, origin: 'code' },
       { name: 'iast.maxConcurrentRequests', value: 4, origin: 'code' },
@@ -932,7 +980,9 @@ describe('Config', () => {
       { name: 'stats.enabled', value: false, origin: 'calculated' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'code' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'code' },
-      { name: 'version', value: '0.1.0', origin: 'code' }
+      { name: 'version', value: '0.1.0', origin: 'code' },
+      { name: 'llmobs.mlApp', value: 'myMlApp', origin: 'code' },
+      { name: 'llmobs.agentlessEnabled', value: true, origin: 'code' }
     ])
   })
 
@@ -999,6 +1049,32 @@ describe('Config', () => {
 
     expect(log.warn).to.have.been.calledWith('Unexpected input for config.spanAttributeSchema, picked default v0')
     expect(config).to.have.property('spanAttributeSchema', 'v0')
+  })
+
+  it('should parse integer range sets', () => {
+    process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '3,13,400-403'
+    process.env.DD_GRPC_SERVER_ERROR_STATUSES = '3,13,400-403'
+
+    let config = new Config()
+
+    expect(config.grpc.client.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
+    expect(config.grpc.server.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
+
+    process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '1'
+    process.env.DD_GRPC_SERVER_ERROR_STATUSES = '1'
+
+    config = new Config()
+
+    expect(config.grpc.client.error.statuses).to.deep.equal([1])
+    expect(config.grpc.server.error.statuses).to.deep.equal([1])
+
+    process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '2,10,13-15'
+    process.env.DD_GRPC_SERVER_ERROR_STATUSES = '2,10,13-15'
+
+    config = new Config()
+
+    expect(config.grpc.client.error.statuses).to.deep.equal([2, 10, 13, 14, 15])
+    expect(config.grpc.server.error.statuses).to.deep.equal([2, 10, 13, 14, 15])
   })
 
   context('peer service tagging', () => {
@@ -1102,10 +1178,13 @@ describe('Config', () => {
     process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE = 0.5
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
+    process.env.DD_IAST_COOKIE_FILTER_PATTERN = '.*'
     process.env.DD_IAST_REDACTION_NAME_PATTERN = 'name_pattern_to_be_overriden_by_options'
     process.env.DD_IAST_REDACTION_VALUE_PATTERN = 'value_pattern_to_be_overriden_by_options'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
+    process.env.DD_LLMOBS_ML_APP = 'myMlApp'
+    process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
 
     const config = new Config({
       protocolVersion: '0.5',
@@ -1176,14 +1255,22 @@ describe('Config', () => {
       },
       iast: {
         enabled: true,
+        cookieFilterPattern: '.{10,}',
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
         redactionValuePattern: 'REDACTION_VALUE_PATTERN'
       },
       remoteConfig: {
         pollInterval: 42
       },
+      codeOriginForSpans: {
+        enabled: false
+      },
       traceId128BitGenerationEnabled: false,
-      traceId128BitLoggingEnabled: false
+      traceId128BitLoggingEnabled: false,
+      llmobs: {
+        mlApp: 'myOtherMlApp',
+        agentlessEnabled: false
+      }
     })
 
     expect(config).to.have.property('protocolVersion', '0.5')
@@ -1198,6 +1285,7 @@ describe('Config', () => {
     expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('version', '1.0.0')
+    expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
     expect(config).to.have.property('dynamicInstrumentationEnabled', false)
     expect(config).to.have.property('env', 'development')
     expect(config).to.have.property('clientIpEnabled', true)
@@ -1239,9 +1327,12 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 2)
     expect(config).to.have.nested.property('iast.maxContextOperations', 2)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', true)
+    expect(config).to.have.nested.property('iast.cookieFilterPattern', '.{10,}')
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
     expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
+    expect(config).to.have.nested.property('llmobs.mlApp', 'myOtherMlApp')
+    expect(config).to.have.nested.property('llmobs.agentlessEnabled', false)
   })
 
   it('should give priority to non-experimental options', () => {
@@ -1272,6 +1363,7 @@ describe('Config', () => {
         requestSampling: 15,
         maxConcurrentRequests: 3,
         maxContextOperations: 4,
+        cookieFilterPattern: '.*',
         deduplicationEnabled: false,
         redactionEnabled: false,
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
@@ -1305,6 +1397,7 @@ describe('Config', () => {
           requestSampling: 25,
           maxConcurrentRequests: 6,
           maxContextOperations: 7,
+          cookieFilterPattern: '.{10,}',
           deduplicationEnabled: true,
           redactionEnabled: true,
           redactionNamePattern: 'IGNORED_REDACTION_NAME_PATTERN',
@@ -1353,6 +1446,7 @@ describe('Config', () => {
       requestSampling: 15,
       maxConcurrentRequests: 3,
       maxContextOperations: 4,
+      cookieFilterPattern: '.*',
       deduplicationEnabled: false,
       redactionEnabled: false,
       redactionNamePattern: 'REDACTION_NAME_PATTERN',
@@ -1627,7 +1721,7 @@ describe('Config', () => {
     }, true)
     expect(config).to.have.deep.nested.property('sampler', {
       spanSamplingRules: [],
-      rateLimit: undefined,
+      rateLimit: 100,
       rules: [
         {
           resource: '*',
@@ -1832,6 +1926,8 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
       delete process.env.DD_TEST_SESSION_NAME
       delete process.env.JEST_WORKER_ID
+      delete process.env.DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED
+      delete process.env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED
       options = {}
     })
     context('ci visibility mode is enabled', () => {
@@ -1856,14 +1952,14 @@ describe('Config', () => {
         const config = new Config(options)
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
       })
-      it('should disable manual testing API by default', () => {
-        const config = new Config(options)
-        expect(config).to.have.property('isManualApiEnabled', false)
-      })
-      it('should enable manual testing API if DD_CIVISIBILITY_MANUAL_API_ENABLED is passed', () => {
-        process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED = 'true'
+      it('should enable manual testing API by default', () => {
         const config = new Config(options)
         expect(config).to.have.property('isManualApiEnabled', true)
+      })
+      it('should disable manual testing API if DD_CIVISIBILITY_MANUAL_API_ENABLED is set to false', () => {
+        process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED = 'false'
+        const config = new Config(options)
+        expect(config).to.have.property('isManualApiEnabled', false)
       })
       it('should disable memcached command tagging by default', () => {
         const config = new Config(options)
@@ -1919,6 +2015,24 @@ describe('Config', () => {
         process.env.DD_TEST_SESSION_NAME = 'my-test-session'
         const config = new Config(options)
         expect(config).to.have.property('ciVisibilityTestSessionName', 'my-test-session')
+      })
+      it('should not enable agentless log submission by default', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('ciVisAgentlessLogSubmissionEnabled', false)
+      })
+      it('should enable agentless log submission if DD_AGENTLESS_LOG_SUBMISSION_ENABLED is true', () => {
+        process.env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED = 'true'
+        const config = new Config(options)
+        expect(config).to.have.property('ciVisAgentlessLogSubmissionEnabled', true)
+      })
+      it('should not set isTestDynamicInstrumentationEnabled by default', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('isTestDynamicInstrumentationEnabled', false)
+      })
+      it('should set isTestDynamicInstrumentationEnabled if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is passed', () => {
+        process.env.DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+        const config = new Config(options)
+        expect(config).to.have.property('isTestDynamicInstrumentationEnabled', true)
       })
     })
     context('ci visibility mode is not enabled', () => {
@@ -2008,6 +2122,61 @@ describe('Config', () => {
       const config = new Config({})
       expect(config).not.to.have.property('commitSHA')
       expect(config).not.to.have.property('repositoryUrl')
+    })
+  })
+
+  context('llmobs config', () => {
+    it('should disable llmobs by default', () => {
+      const config = new Config()
+      expect(config.llmobs.enabled).to.be.false
+
+      // check origin computation
+      expect(updateConfig.getCall(0).args[0]).to.deep.include({
+        name: 'llmobs.enabled', value: false, origin: 'default'
+      })
+    })
+
+    it('should enable llmobs if DD_LLMOBS_ENABLED is set to true', () => {
+      process.env.DD_LLMOBS_ENABLED = 'true'
+      const config = new Config()
+      expect(config.llmobs.enabled).to.be.true
+
+      // check origin computation
+      expect(updateConfig.getCall(0).args[0]).to.deep.include({
+        name: 'llmobs.enabled', value: true, origin: 'env_var'
+      })
+    })
+
+    it('should disable llmobs if DD_LLMOBS_ENABLED is set to false', () => {
+      process.env.DD_LLMOBS_ENABLED = 'false'
+      const config = new Config()
+      expect(config.llmobs.enabled).to.be.false
+
+      // check origin computation
+      expect(updateConfig.getCall(0).args[0]).to.deep.include({
+        name: 'llmobs.enabled', value: false, origin: 'env_var'
+      })
+    })
+
+    it('should enable llmobs with options and DD_LLMOBS_ENABLED is not set', () => {
+      const config = new Config({ llmobs: {} })
+      expect(config.llmobs.enabled).to.be.true
+
+      // check origin computation
+      expect(updateConfig.getCall(0).args[0]).to.deep.include({
+        name: 'llmobs.enabled', value: true, origin: 'code'
+      })
+    })
+
+    it('should have DD_LLMOBS_ENABLED take priority over options', () => {
+      process.env.DD_LLMOBS_ENABLED = 'false'
+      const config = new Config({ llmobs: {} })
+      expect(config.llmobs.enabled).to.be.false
+
+      // check origin computation
+      expect(updateConfig.getCall(0).args[0]).to.deep.include({
+        name: 'llmobs.enabled', value: false, origin: 'env_var'
+      })
     })
   })
 

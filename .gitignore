@@ -106,6 +106,7 @@ typings/
 
 # End of https://www.gitignore.io/api/node,macos,visualstudiocode
 
+.github/notes
 .next
 package-lock.json
 out
@@ -125,3 +126,4 @@ packages/dd-trace/test/appsec/next/*/package.json
 packages/dd-trace/test/appsec/next/*/node_modules
 packages/dd-trace/test/appsec/next/*/yarn.lock
 !packages/dd-trace/**/telemetry/logs
+packages/datadog-plugin-azure-functions/test/integration-test/fixtures/node_modules

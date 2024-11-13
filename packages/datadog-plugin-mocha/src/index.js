@@ -21,6 +21,7 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_SESSION_ID,
   TEST_MODULE_ID,
   TEST_MODULE,
@@ -241,13 +242,16 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:retry', (isFirstAttempt) => {
+    this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, err }) => {
       const store = storage.getStore()
       const span = store?.span
       if (span) {
         span.setTag(TEST_STATUS, 'fail')
         if (!isFirstAttempt) {
           span.setTag(TEST_IS_RETRY, 'true')
+        }
+        if (err) {
+          span.setTag('error', err)
         }
 
         const spanTags = span.context()._tags
@@ -280,6 +284,7 @@ class MochaPlugin extends CiPlugin {
       hasUnskippableSuites,
       error,
       isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
       isParallel
     }) => {
       if (this.testSessionSpan) {
@@ -313,6 +318,9 @@ class MochaPlugin extends CiPlugin {
 
         if (isEarlyFlakeDetectionEnabled) {
           this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
+        }
+        if (isEarlyFlakeDetectionFaulty) {
+          this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
         }
 
         this.testModuleSpan.finish()

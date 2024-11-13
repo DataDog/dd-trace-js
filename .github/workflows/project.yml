@@ -42,7 +42,21 @@ jobs:
         with:
           node-version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: node node_modules/.bin/mocha --colors --timeout 30000 -r packages/dd-trace/test/setup/core.js integration-tests/init.spec.js
+      - run: node node_modules/.bin/mocha --colors --timeout 30000 integration-tests/init.spec.js
+
+  integration-guardrails-unsupported:
+    strategy:
+      matrix:
+        version: ['0.8', '0.10', '0.12', '4', '6', '8', '10']
+    runs-on: ubuntu-latest
+    env:
+      DD_INJECTION_ENABLED: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.version }}
+      - run: node ./init
 
   integration-ci:
     strategy:
