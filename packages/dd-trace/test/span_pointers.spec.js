@@ -3,7 +3,6 @@
 require('./setup/tap')
 
 const {
-  ZERO_CONTEXT,
   SPAN_LINK_KIND,
   S3_PTR_KIND,
   SPAN_POINTER_DIRECTION,
@@ -11,13 +10,6 @@ const {
 } = require('../../dd-trace/src/span_pointers')
 
 describe('span_pointers', () => {
-  describe('ZERO_CONTEXT', () => {
-    it('should have trace and span IDs of 0', () => {
-      expect(ZERO_CONTEXT.toTraceId()).to.equal('0')
-      expect(ZERO_CONTEXT.toSpanId()).to.equal('0')
-    })
-  })
-
   // datadog-lambda-js imports these and will error if they are not found (moved or renamed)
   describe('constants', () => {
     it('should export the correct constant values', () => {

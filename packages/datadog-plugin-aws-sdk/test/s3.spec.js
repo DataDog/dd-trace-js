@@ -134,6 +134,76 @@ describe('Plugin', () => {
               }
             })
           })
+
+          it('should add span pointer for completeMultipartUpload operation', (done) => {
+            // Create 5MiB+ buffers for parts
+            const partSize = 5 * 1024 * 1024
+            const part1Data = Buffer.alloc(partSize, 'a')
+            const part2Data = Buffer.alloc(partSize, 'b')
+
+            // Start the multipart upload process
+            s3.createMultipartUpload({
+              Bucket: bucketName,
+              Key: 'multipart-test'
+            }, (err, multipartData) => {
+              if (err) return done(err)
+
+              // Upload both parts in parallel
+              Promise.all([
+                new Promise((resolve, reject) => {
+                  s3.uploadPart({
+                    Bucket: bucketName,
+                    Key: 'multipart-test',
+                    PartNumber: 1,
+                    UploadId: multipartData.UploadId,
+                    Body: part1Data
+                  }, (err, data) => err ? reject(err) : resolve({ PartNumber: 1, ETag: data.ETag }))
+                }),
+                new Promise((resolve, reject) => {
+                  s3.uploadPart({
+                    Bucket: bucketName,
+                    Key: 'multipart-test',
+                    PartNumber: 2,
+                    UploadId: multipartData.UploadId,
+                    Body: part2Data
+                  }, (err, data) => err ? reject(err) : resolve({ PartNumber: 2, ETag: data.ETag }))
+                })
+              ]).then(parts => {
+                // Now complete the multipart upload
+                const completeParams = {
+                  Bucket: bucketName,
+                  Key: 'multipart-test',
+                  UploadId: multipartData.UploadId,
+                  MultipartUpload: {
+                    Parts: parts
+                  }
+                }
+
+                s3.completeMultipartUpload(completeParams, (err) => {
+                  if (err) done(err)
+                  agent.use(traces => {
+                    const span = traces[0][0]
+                    const operation = span.meta?.['aws.operation']
+                    if (operation === 'completeMultipartUpload') {
+                      try {
+                        const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
+                        expect(links).to.have.lengthOf(1)
+                        expect(links[0].attributes).to.deep.equal({
+                          'ptr.kind': S3_PTR_KIND,
+                          'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
+                          'link.kind': SPAN_LINK_KIND,
+                          'ptr.hash': '422412aa6b472a7194f3e24f4b12b4a6'
+                        })
+                        done()
+                      } catch (error) {
+                        done(error)
+                      }
+                    }
+                  })
+                })
+              }).catch(done)
+            })
+          })
         })
 
         it('should allow disabling a specific span kind of a service', (done) => {
