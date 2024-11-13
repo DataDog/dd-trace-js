@@ -62,7 +62,8 @@ describe('Child process plugin', () => {
               'span.type': 'system',
               'cmd.exec': JSON.stringify(['ls', '-l'])
             },
-            integrationName: 'system'
+            integrationName: 'system',
+            links: undefined
           }
         )
       })
