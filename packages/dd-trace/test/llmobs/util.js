@@ -164,7 +164,7 @@ function expectedLLMObsTags ({
     `service:${service ?? ''}`,
     'source:integration',
     `ml_app:${tags.ml_app}`,
-    `dd-trace.version:${tracerVersion}`
+    `ddtrace.version:${tracerVersion}`
   ]
 
   if (sessionId) spanTags.push(`session_id:${sessionId}`)
