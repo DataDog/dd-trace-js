@@ -267,7 +267,7 @@ const web = {
       }
     }
 
-    const span = tracer.startSpan(name, { childOf, , extractedLinks: childOf._links })
+    const span = tracer.startSpan(name, { childOf, extractedLinks: childOf._links })
 
     return span
   },
