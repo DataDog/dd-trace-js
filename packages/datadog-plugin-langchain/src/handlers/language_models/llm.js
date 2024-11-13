@@ -1,8 +1,8 @@
 'use strict'
 
-const LangChainHandler = require('./default')
+const LangChainLanguageModelHandler = require('.')
 
-class LangChainLLMHandler extends LangChainHandler {
+class LangChainLLMHandler extends LangChainLanguageModelHandler {
   getSpanStartTags (ctx, provider) {
     const tags = {}
 

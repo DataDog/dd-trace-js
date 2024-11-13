@@ -1,10 +1,10 @@
 'use strict'
 
-const LangChainHandler = require('./default')
+const LangChainLanguageModelHandler = require('.')
 
 const COMPLETIONS = 'langchain.response.completions'
 
-class LangChainChatModelHandler extends LangChainHandler {
+class LangChainChatModelHandler extends LangChainLanguageModelHandler {
   getSpanStartTags (ctx, provider) {
     const tags = {}
 

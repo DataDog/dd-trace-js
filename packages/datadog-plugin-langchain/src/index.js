@@ -10,8 +10,8 @@ const PROVIDER = 'langchain.request.provider'
 const TYPE = 'langchain.request.type'
 
 const LangChainHandler = require('./handlers/default')
-const LangChainChatModelHandler = require('./handlers/chat_model')
-const LangChainLLMHandler = require('./handlers/llm')
+const LangChainChatModelHandler = require('./handlers/language_models/chat_model')
+const LangChainLLMHandler = require('./handlers/language_models/llm')
 const LangChainChainHandler = require('./handlers/chain')
 const LangChainEmbeddingHandler = require('./handlers/embedding')
 

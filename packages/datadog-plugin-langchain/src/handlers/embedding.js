@@ -34,14 +34,9 @@ class LangChainEmbeddingHandler extends LangChainHandler {
     const { result } = ctx
     if (!Array.isArray(result)) return
 
-    if (Array.isArray(result[0])) {
-      for (const idx in result) {
-        const output = result[idx]
-        tags[`langchain.response.outputs.${idx}.embedding_length`] = output.length
-      }
-    } else {
-      tags['langchain.response.outputs.embedding_length'] = result.length
-    }
+    tags['langchain.response.outputs.embedding_length'] = (
+      Array.isArray(result[0]) ? result[0] : result
+    ).length
 
     return tags
   }
@@ -54,6 +49,13 @@ class LangChainEmbeddingHandler extends LangChainHandler {
 
   extractProvider (instance) {
     return instance.constructor.name.split('Embeddings')[0].toLowerCase()
+  }
+
+  extractModel (instance) {
+    for (const attr of ['model', 'modelName', 'modelId', 'modelKey', 'repoId']) {
+      const modelName = instance[attr]
+      if (modelName) return modelName
+    }
   }
 }
 
