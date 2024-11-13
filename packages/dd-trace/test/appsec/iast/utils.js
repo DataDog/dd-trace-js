@@ -136,6 +136,7 @@ function endResponse (res, appResult) {
 function checkNoVulnerabilityInRequest (vulnerability, config, done, makeRequest) {
   agent
     .use(traces => {
+      if (traces[0][0].type !== 'web') throw new Error('Not a web span')
       // iastJson == undefiend is valid
       const iastJson = traces[0][0].meta['_dd.iast.json'] || ''
       expect(iastJson).to.not.include(`"${vulnerability}"`)
@@ -288,9 +289,10 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
     before((done) => {
       const express = require(`../../../../../versions/express@${expressVersion}`).get()
       const bodyParser = require('../../../../../versions/body-parser').get()
+
       const expressApp = express()
 
-      if (loadMiddlewares) loadMiddlewares(expressApp)
+      if (loadMiddlewares) loadMiddlewares(expressApp, listener)
 
       expressApp.use(bodyParser.json())
       try {

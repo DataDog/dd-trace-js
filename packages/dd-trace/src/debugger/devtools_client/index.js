@@ -5,7 +5,7 @@ const { breakpoints } = require('./state')
 const session = require('./session')
 const { getLocalStateForCallFrame } = require('./snapshot')
 const send = require('./send')
-const { getScriptUrlFromId } = require('./state')
+const { getStackFromCallFrames } = require('./state')
 const { ackEmitting, ackError } = require('./status')
 const { parentThreadId } = require('./config')
 const log = require('../../log')
@@ -23,13 +23,14 @@ session.on('Debugger.paused', async ({ params }) => {
   const timestamp = Date.now()
 
   let captureSnapshotForProbe = null
-  let maxReferenceDepth, maxCollectionSize, maxLength
+  let maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength
   const probes = params.hitBreakpoints.map((id) => {
     const probe = breakpoints.get(id)
     if (probe.captureSnapshot) {
       captureSnapshotForProbe = probe
       maxReferenceDepth = highestOrUndefined(probe.capture.maxReferenceDepth, maxReferenceDepth)
       maxCollectionSize = highestOrUndefined(probe.capture.maxCollectionSize, maxCollectionSize)
+      maxFieldCount = highestOrUndefined(probe.capture.maxFieldCount, maxFieldCount)
       maxLength = highestOrUndefined(probe.capture.maxLength, maxLength)
     }
     return probe
@@ -41,7 +42,7 @@ session.on('Debugger.paused', async ({ params }) => {
       // TODO: Create unique states for each affected probe based on that probes unique `capture` settings (DEBUG-2863)
       processLocalState = await getLocalStateForCallFrame(
         params.callFrames[0],
-        { maxReferenceDepth, maxCollectionSize, maxLength }
+        { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength }
       )
     } catch (err) {
       // TODO: This error is not tied to a specific probe, but to all probes with `captureSnapshot: true`.
@@ -65,16 +66,7 @@ session.on('Debugger.paused', async ({ params }) => {
     thread_name: threadName
   }
 
-  const stack = params.callFrames.map((frame) => {
-    let fileName = getScriptUrlFromId(frame.location.scriptId)
-    if (fileName.startsWith('file://')) fileName = fileName.substr(7) // TODO: This might not be required
-    return {
-      fileName,
-      function: frame.functionName,
-      lineNumber: frame.location.lineNumber + 1, // Beware! lineNumber is zero-indexed
-      columnNumber: frame.location.columnNumber + 1 // Beware! columnNumber is zero-indexed
-    }
-  })
+  const stack = getStackFromCallFrames(params.callFrames)
 
   // TODO: Send multiple probes in one HTTP request as an array (DEBUG-2848)
   for (const probe of probes) {

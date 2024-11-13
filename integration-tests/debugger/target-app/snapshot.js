@@ -11,10 +11,8 @@ const fastify = Fastify()
 fastify.get('/:name', function handler (request) {
   // eslint-disable-next-line no-unused-vars
   const { nil, undef, bool, num, bigint, str, lstr, sym, regex, arr, obj, emptyObj, fn, p } = getSomeData()
-  return { hello: request.params.name }
+  return { hello: request.params.name } // BREAKPOINT
 })
-
-// WARNING: Breakpoints present above this line - Any changes to the lines above might influence tests!
 
 fastify.listen({ port: process.env.APP_PORT }, (err) => {
   if (err) {

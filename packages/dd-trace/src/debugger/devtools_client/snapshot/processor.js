@@ -1,6 +1,6 @@
 'use strict'
 
-const { collectionSizeSym } = require('./symbols')
+const { collectionSizeSym, fieldCountSym } = require('./symbols')
 
 module.exports = {
   processRawState: processProperties
@@ -139,7 +139,18 @@ function toString (str, maxLength) {
 
 function toObject (type, props, maxLength) {
   if (props === undefined) return notCapturedDepth(type)
-  return { type, fields: processProperties(props, maxLength) }
+
+  const result = {
+    type,
+    fields: processProperties(props, maxLength)
+  }
+
+  if (fieldCountSym in props) {
+    result.notCapturedReason = 'fieldCount'
+    result.size = props[fieldCountSym]
+  }
+
+  return result
 }
 
 function toArray (type, elements, maxLength) {

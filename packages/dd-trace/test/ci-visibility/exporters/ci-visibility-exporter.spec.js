@@ -815,4 +815,97 @@ describe('CI Visibility Exporter', () => {
       })
     })
   })
+
+  describe('exportDiLogs', () => {
+    context('is not initialized', () => {
+      it('should do nothing', () => {
+        const log = { message: 'log' }
+        const ciVisibilityExporter = new CiVisibilityExporter({ port, isTestDynamicInstrumentationEnabled: true })
+        ciVisibilityExporter.exportDiLogs(log)
+        ciVisibilityExporter._export = sinon.spy()
+        expect(ciVisibilityExporter._export).not.to.be.called
+      })
+    })
+
+    context('is initialized but can not forward logs', () => {
+      it('should do nothing', () => {
+        const writer = {
+          append: sinon.spy(),
+          flush: sinon.spy(),
+          setUrl: sinon.spy()
+        }
+        const log = { message: 'log' }
+        const ciVisibilityExporter = new CiVisibilityExporter({ port, isTestDynamicInstrumentationEnabled: true })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._logsWriter = writer
+        ciVisibilityExporter._canForwardLogs = false
+        ciVisibilityExporter.exportDiLogs(log)
+        expect(ciVisibilityExporter._logsWriter.append).not.to.be.called
+      })
+    })
+
+    context('is initialized and can forward logs', () => {
+      it('should export formatted logs', () => {
+        const writer = {
+          append: sinon.spy(),
+          flush: sinon.spy(),
+          setUrl: sinon.spy()
+        }
+        const diLog = {
+          message: 'log',
+          debugger: {
+            snapshot: {
+              id: '1234',
+              timestamp: 1234567890,
+              probe: {
+                id: '54321',
+                version: '1',
+                location: {
+                  file: 'example.js',
+                  lines: ['1']
+                }
+              },
+              stack: [
+                {
+                  fileName: 'example.js',
+                  function: 'sum',
+                  lineNumber: 1
+                }
+              ],
+              language: 'javascript'
+            }
+          }
+        }
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          env: 'ci',
+          version: '1.0.0',
+          port,
+          isTestDynamicInstrumentationEnabled: true,
+          service: 'my-service'
+        })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._logsWriter = writer
+        ciVisibilityExporter._canForwardLogs = true
+        ciVisibilityExporter.exportDiLogs(
+          {
+            'git.repository_url': 'https://github.com/datadog/dd-trace-js.git',
+            'git.commit.sha': '1234'
+          },
+          diLog
+        )
+        expect(ciVisibilityExporter._logsWriter.append).to.be.calledWith(sinon.match({
+          ddtags: 'git.repository_url:https://github.com/datadog/dd-trace-js.git,git.commit.sha:1234',
+          level: 'error',
+          ddsource: 'dd_debugger',
+          service: 'my-service',
+          dd: {
+            service: 'my-service',
+            env: 'ci',
+            version: '1.0.0'
+          },
+          ...diLog
+        }))
+      })
+    })
+  })
 })
