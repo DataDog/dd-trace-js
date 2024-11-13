@@ -25,7 +25,7 @@ function createWrapRouterMethod (name) {
       const lastIndex = arguments.length - 1
       const name = original._name || original.name
       const req = arguments[arguments.length > 3 ? 1 : 0]
-      wrapParams(req)
+      // wrapParams(req)
       const next = arguments[lastIndex]
 
       if (typeof next === 'function') {
