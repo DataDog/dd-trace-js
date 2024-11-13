@@ -1,29 +1,23 @@
 'use strict'
 
-/* eslint-disable no-console */
-
 // TODO: Support major versions.
 
-const { execSync } = require('child_process')
 const fs = require('fs')
 const path = require('path')
+const { capture, checkpoint, exit, fatal, success, run } = require('./helpers/terminal')
+const { checkBranchDiff, checkGitHub, checkGit } = require('./helpers/requirements')
 
-// Helpers for colored output.
-const log = msg => console.log(msg)
-const success = msg => console.log(`\x1b[32m${msg}\x1b[0m`)
-const error = msg => console.log(`\x1b[31m${msg}\x1b[0m`)
-const whisper = msg => console.log(`\x1b[90m${msg}\x1b[0m`)
+checkGit()
+checkBranchDiff()
 
 const currentBranch = capture('git branch --show-current')
 const releaseLine = process.argv[2]
 
 // Validate release line argument.
 if (!releaseLine || releaseLine === 'help' || releaseLine === '--help') {
-  log('Usage: node scripts/release/proposal <release-line> [release-type]')
-  process.exit(0)
+  exit('Usage: node scripts/release/proposal <release-line> [release-type]')
 } else if (!releaseLine?.match(/^\d+$/)) {
-  error('Invalid release line. Must be a whole number.')
-  process.exit(1)
+  fatal('Invalid release line. Must be a whole number.')
 }
 
 // Make sure the release branch is up to date to prepare for new proposal.
@@ -41,15 +35,17 @@ const diffCmd = [
     : `--exclude-label=semver-major,dont-land-on-v${releaseLine}.x`
 ].join(' ')
 
-// Determine the new version.
+// Determine the new version and release notes location.
 const [lastMajor, lastMinor, lastPatch] = require('../../package.json').version.split('.').map(Number)
 const lineDiff = capture(`${diffCmd} v${releaseLine}.x master`)
 const newVersion = lineDiff.includes('SEMVER-MINOR')
   ? `${releaseLine}.${lastMinor + 1}.0`
   : `${releaseLine}.${lastMinor}.${lastPatch + 1}`
+const notesDir = path.join(__dirname, '..', '..', '.github', 'release_notes')
+const notesFile = path.join(notesDir, `${newVersion}.md`)
 
 // Checkout new branch and output new changes.
-run(`git checkout v${newVersion}-proposal || git checkout -b v${newVersion}-proposal`)
+run(`git checkout v${newVersion}-proposal && git pull || git checkout -b v${newVersion}-proposal`)
 
 // Get the hashes of the last version and the commits to add.
 const lastCommit = capture('git log -1 --pretty=%B').trim()
@@ -69,17 +65,38 @@ if (proposalDiff) {
   try {
     run(`echo "${proposalDiff}" | xargs git cherry-pick`)
   } catch (err) {
-    error('Cherry-pick failed. Resolve the conflicts and run `git cherry-pick --continue` to continue.')
-    error('When all conflicts have been resolved, run this script again.')
-    process.exit(1)
+    fatal(
+      'Cherry-pick failed. Resolve the conflicts and run `git cherry-pick --continue` to continue.',
+      'When all conflicts have been resolved, run this script again.'
+    )
   }
 }
 
 // Update package.json with new version.
+// TODO: Write to /tmp instead.
 run(`npm version --git-tag-version=false ${newVersion}`)
 run(`git commit -uno -m v${newVersion} package.json || exit 0`)
 
-ready()
+writeNotes()
+
+success('Release proposal is ready.')
+success(`Changelog at .github/release_notes/${newVersion}.md`)
+
+checkpoint('Push the release upstream and create/update PR?')
+
+checkGitHub()
+
+run('git push -u origin HEAD')
+
+try {
+  run(`gh pr create -d -B v${releaseLine}.x -t "v${newVersion} proposal" -F ${notesFile}`)
+} catch (e) {
+  // PR already exists so update instead.
+  // TODO: Keep existing non-release-notes PR description if there is one.
+  run(`gh pr edit -F "${notesFile}"`)
+}
+
+success('Release PR is ready.')
 
 // Check if current branch is already an active patch proposal branch to avoid
 // creating a new minor proposal branch if new minor commits are added to the
@@ -98,31 +115,10 @@ function isActivePatch () {
   return false
 }
 
-// Output a command to the terminal and execute it.
-function run (cmd) {
-  whisper(`> ${cmd}`)
-
-  const output = execSync(cmd, {}).toString()
-
-  log(output)
-}
-
-// Run a command and capture its output to return it to the caller.
-function capture (cmd) {
-  return execSync(cmd, {}).toString()
-}
-
 // Write release notes to a file that can be copied to the GitHub release.
-function ready () {
-  const notesDir = path.join(__dirname, '..', '..', '.github', 'release_notes')
-  const notesFile = path.join(notesDir, `${newVersion}.md`)
+function writeNotes () {
   const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x master`)
 
   fs.mkdirSync(notesDir, { recursive: true })
   fs.writeFileSync(notesFile, lineDiff)
-
-  success('Release proposal is ready.')
-  success(`Changelog at .github/release_notes/${newVersion}.md`)
-
-  process.exit(0)
 }
