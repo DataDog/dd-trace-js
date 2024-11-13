@@ -85,7 +85,7 @@ describe('span processor', () => {
           'service:',
           'source:integration',
           'ml_app:myApp',
-          'dd-trace.version:x.y.z',
+          'ddtrace.version:x.y.z',
           'error:0',
           'language:javascript'
         ],
