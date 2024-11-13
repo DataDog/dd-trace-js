@@ -33,7 +33,7 @@ class Log {
       if (typeof firstArg === 'string') {
         message = firstArg
       } else if (typeof firstArg === 'object') {
-        message = String(firstArg.message || firstArg)
+        message = String(firstArg.message ?? firstArg)
       } else if (typeof firstArg === 'function') {
         delegate = firstArg
       } else {
