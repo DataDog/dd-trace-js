@@ -30,7 +30,7 @@ describe('crashtracking', () => {
         error: sinon.stub()
       }
 
-      sinon.spy(binding, 'initWithReceiver')
+      sinon.spy(binding, 'init')
       sinon.spy(binding, 'updateConfig')
       sinon.spy(binding, 'updateMetadata')
 
@@ -39,11 +39,17 @@ describe('crashtracking', () => {
       })
     })
 
+    afterEach(() => {
+      binding.init.restore()
+      binding.updateConfig.restore()
+      binding.updateMetadata.restore()
+    })
+
     describe('start', () => {
       it('should initialize the binding', () => {
         crashtracker.start(config)
 
-        expect(binding.initWithReceiver).to.have.been.called
+        expect(binding.init).to.have.been.called
         expect(log.error).to.not.have.been.called
       })
 
@@ -51,7 +57,7 @@ describe('crashtracking', () => {
         crashtracker.start(config)
         crashtracker.start(config)
 
-        expect(binding.initWithReceiver).to.have.been.calledOnce
+        expect(binding.init).to.have.been.calledOnce
       })
 
       it('should reconfigure when started multiple times', () => {
@@ -63,9 +69,7 @@ describe('crashtracking', () => {
       })
 
       it('should handle errors', () => {
-        binding.initWithReceiver.throws(new Error('boom'))
-
-        crashtracker.start(config)
+        crashtracker.start(null)
 
         expect(() => crashtracker.start(config)).to.not.throw()
       })
@@ -88,11 +92,8 @@ describe('crashtracking', () => {
       })
 
       it('should handle errors', () => {
-        binding.updateConfig.throws(new Error('boom'))
-        binding.updateMetadata.throws(new Error('boom'))
-
         crashtracker.start(config)
-        crashtracker.configure(config)
+        crashtracker.configure(null)
 
         expect(() => crashtracker.configure(config)).to.not.throw()
       })

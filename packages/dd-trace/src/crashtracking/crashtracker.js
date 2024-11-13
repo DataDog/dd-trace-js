@@ -30,7 +30,7 @@ class Crashtracker {
     this._started = true
 
     try {
-      binding.initWithReceiver(
+      binding.init(
         this._getConfig(config),
         this._getReceiverConfig(config),
         this._getMetadata(config)
