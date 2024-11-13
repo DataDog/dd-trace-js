@@ -18,6 +18,8 @@ function getRootSpan (tracer) {
       if (!pContext._tags?._inferred_span) {
         span = parent
       }
+    } else {
+      break
     }
   }
 

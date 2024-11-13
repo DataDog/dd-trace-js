@@ -5,6 +5,7 @@ const { assert } = require('chai')
 const { getRootSpan } = require('../../../src/appsec/sdk/utils')
 const DatadogTracer = require('../../../src/tracer')
 const Config = require('../../../src/config')
+const id = require('../../../src/id')
 
 describe('Appsec SDK utils', () => {
   let tracer
@@ -26,6 +27,17 @@ describe('Appsec SDK utils', () => {
 
     it('should return root span of single child', () => {
       const childOf = tracer.startSpan('parent')
+
+      tracer.trace('child1', { childOf }, child1 => {
+        const root = getRootSpan(tracer)
+
+        assert.equal(childOf, root)
+      })
+    })
+
+    it('should return root span of single child from unknown parent', () => {
+      const childOf = tracer.startSpan('parent')
+      childOf.context()._parentId = id()
 
       tracer.trace('child1', { childOf }, child1 => {
         const root = getRootSpan(tracer)
