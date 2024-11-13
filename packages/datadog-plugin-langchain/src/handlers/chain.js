@@ -38,7 +38,9 @@ class LangChainChainHandler extends LangChainHandler {
 
     for (const idx in outputs) {
       const output = outputs[idx]
-      tags[`langchain.response.outputs.${idx}`] = this.truncate(output) // TODO: this might need a JSON.stringify()
+      tags[`langchain.response.outputs.${idx}`] = this.truncate(
+        typeof output === 'string' ? output : JSON.stringify(output)
+      )
     }
 
     return tags

@@ -735,6 +735,51 @@ describe('Plugin', () => {
 
           await checkTraces
         })
+
+        it('instruments a chain with a JSON output parser and tags it correctly', async function () {
+          if (!langchainOutputParsers.JsonOutputParser) this.skip()
+
+          stubCall({
+            ...openAiBaseChatInfo,
+            response: {
+              choices: [{
+                message: {
+                  role: 'assistant',
+                  content: '{\n  "name": "John",\n  "age": 30\n}',
+                  refusal: null
+                }
+              }]
+            }
+          })
+
+          const checkTraces = agent
+            .use(traces => {
+              const spans = traces[0]
+              expect(spans).to.have.length(2) // 1 chain + 1 chat model
+
+              const chainSpan = spans[0]
+
+              expect(chainSpan.meta).to.have.property('langchain.request.type', 'chain')
+              expect(chainSpan.meta).to.have.property(
+                'langchain.request.inputs.0', 'Generate a JSON object with name and age.'
+              )
+
+              expect(chainSpan.meta).to.have.property('langchain.response.outputs.0', '{"name":"John","age":30}')
+            })
+
+          const parser = new langchainOutputParsers.JsonOutputParser()
+          const model = new langchainOpenai.ChatOpenAI({ model: 'gpt-3.5-turbo' })
+
+          const chain = model.pipe(parser)
+
+          const response = await chain.invoke('Generate a JSON object with name and age.')
+          expect(response).to.deep.equal({
+            name: 'John',
+            age: 30
+          })
+
+          await checkTraces
+        })
       })
 
       describe('embeddings', () => {
@@ -806,8 +851,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('langchain.request.inputs.1.text', 'Goodbye, world!')
                 expect(span.metrics).to.have.property('langchain.request.input_counts', 2)
 
-                expect(span.metrics).to.have.property('langchain.response.outputs.0.embedding_length', 2)
-                expect(span.metrics).to.have.property('langchain.response.outputs.1.embedding_length', 2)
+                expect(span.metrics).to.have.property('langchain.response.outputs.embedding_length', 2)
               })
 
             const embeddings = new langchainOpenai.OpenAIEmbeddings()
