@@ -47,7 +47,8 @@ class Crashtracker {
 
     return {
       additional_files: [],
-      create_alt_stack: false,
+      create_alt_stack: true,
+      use_alt_stack: true,
       endpoint: {
         // TODO: Use the string directly when deserialization is fixed.
         url: {
@@ -59,9 +60,9 @@ class Crashtracker {
         },
         timeout_ms: 3000
       },
+      timeout_ms: 0,
       // TODO: Use `EnabledWithSymbolsInReceiver` instead for Linux when fixed.
-      resolve_frames: 'EnabledWithInprocessSymbols',
-      wait_for_receiver: false
+      resolve_frames: 'EnabledWithInprocessSymbols'
     }
   }
 
