@@ -1,7 +1,9 @@
 'use strict'
 
-const ddMatches = require('./package.json').version.match(/^(\d+)\.(\d+)\.(\d+)/)
-const nodeMatches = process.versions.node.match(/^(\d+)\.(\d+)\.(\d+)/)
+/* eslint-disable no-var */
+
+var ddMatches = require('./package.json').version.match(/^(\d+)\.(\d+)\.(\d+)/)
+var nodeMatches = process.versions.node.match(/^(\d+)\.(\d+)\.(\d+)/)
 
 module.exports = {
   DD_MAJOR: parseInt(ddMatches[1]),
