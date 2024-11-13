@@ -2392,7 +2392,7 @@ describe('jest CommonJS', () => {
             DI_DEBUG_ERROR_FILE,
             'ci-visibility/dynamic-instrumentation/dependency.js'
           )
-          assert.exists(retriedTest.metrics[DI_DEBUG_ERROR_LINE]) // SHOULD THIS BE A NUMBER??
+          assert.equal(retriedTest.metrics[DI_DEBUG_ERROR_LINE], 4)
           assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
 
           snapshotIdByTest = retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID]
@@ -2408,22 +2408,18 @@ describe('jest CommonJS', () => {
             level: 'error'
           })
           assert.equal(diLog.debugger.snapshot.language, 'javascript')
-          assert.deepInclude(diLog.debugger.snapshot.captures.lines, {
-            5: {
-              locals: {
-                a: {
-                  type: 'number',
-                  value: '11'
-                },
-                b: {
-                  type: 'number',
-                  value: '3'
-                },
-                localVariable: {
-                  type: 'number',
-                  value: '2'
-                }
-              }
+          assert.deepInclude(diLog.debugger.snapshot.captures.lines['4'].locals, {
+            a: {
+              type: 'number',
+              value: '11'
+            },
+            b: {
+              type: 'number',
+              value: '3'
+            },
+            localVariable: {
+              type: 'number',
+              value: '2'
             }
           })
           spanIdByLog = diLog.dd.span_id
@@ -2437,11 +2433,7 @@ describe('jest CommonJS', () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'dynamic-instrumentation/test-',
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
-            // TODO: working with code coverage is going to be difficult, as the vm.runInContext
-            // uses the code _after_ transpilation, but the error stack trace will be the original code.
-            // How does jest does this? Maybe we can try to extract the original stack, without the source mapping
-            DISABLE_CODE_COVERAGE: '1'
+            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
           },
           stdio: 'inherit'
         }

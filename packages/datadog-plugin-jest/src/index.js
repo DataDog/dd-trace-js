@@ -375,17 +375,19 @@ class JestPlugin extends CiPlugin {
   addDiProbe (err, probe) {
     const [file, line] = getFileAndLineNumberFromError(err)
 
+    const relativePath = getTestSuitePath(file, this.repositoryRoot)
+
     const [
       snapshotId,
       setProbePromise,
       hitProbePromise
-    ] = this.di.addLineProbe({ file, line })
+    ] = this.di.addLineProbe({ file: relativePath, line })
 
     probe.setProbePromise = setProbePromise
 
     this.debuggerParameters = {
       snapshotId,
-      file: getTestSuitePath(file, this.repositoryRoot),
+      file: relativePath,
       line
     }
 
