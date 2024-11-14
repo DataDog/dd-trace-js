@@ -12,14 +12,12 @@ function getRootSpan (tracer) {
     const parent = started.find(s => s.context()._spanId === parentId)
     const pContext = parent?.context()
 
-    if (pContext) {
-      parentId = pContext._parentId
+    if (!pContext) break
 
-      if (!pContext._tags?._inferred_span) {
-        span = parent
-      }
-    } else {
-      break
+    parentId = pContext._parentId
+
+    if (!pContext._tags?._inferred_span) {
+      span = parent
     }
   }
 
