@@ -9,7 +9,6 @@ class MoleculerServerPlugin extends ServerPlugin {
 
   start ({ action, ctx, broker }) {
     const followsFrom = this.tracer.extract('text_map', ctx.meta)
-
     this.startSpan(this.operationName(), {
       childOf: followsFrom || this.activeSpan,
       service: this.config.service || this.serviceName(),
@@ -20,7 +19,7 @@ class MoleculerServerPlugin extends ServerPlugin {
         'resource.name': action.name,
         ...moleculerTags(broker, ctx, this.config)
       },
-      extractedLinks: followsFrom._links
+      extractedLinks: followsFrom ? followsFrom._links : []
     })
   }
 }
