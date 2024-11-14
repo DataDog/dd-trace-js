@@ -26,7 +26,7 @@ function setUser (tracer, user) {
 
   setTags({
     'usr.id': userId,
-    '_dd.appsec.user.collection_mode': 'sdk/ident/anon'
+    '_dd.appsec.user.collection_mode': 'sdk'
   })
 
   /*

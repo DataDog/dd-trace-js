@@ -137,6 +137,8 @@ function trackUser (user, abortController) {
 
   }
 
+  // ANONYMISE user id if needed
+
   // don't override tags if already set by "sdk" but still add the _dd.appsec.usr.id
   rootSpan.addTags({
     'usr.id': userId,
