@@ -94,7 +94,7 @@ const storage = {
     },
     redis: redisConfig,
     tedious: {
-      opName: () => 'tedious.request',
+      opName: () => 'tedious.query',
       serviceName: ({ tracerService, pluginConfig, system }) =>
         pluginConfig.service || fromSystem(tracerService, system)
     }

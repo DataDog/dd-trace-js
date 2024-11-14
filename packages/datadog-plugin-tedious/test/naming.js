@@ -3,7 +3,7 @@ const { resolveNaming } = require('../../dd-trace/test/plugins/helpers')
 const rawExpectedSchema = {
   outbound: {
     v0: {
-      opName: 'tedious.request',
+      opName: 'tedious.query',
       serviceName: 'test-mssql'
     },
     v1: {

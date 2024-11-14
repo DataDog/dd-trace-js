@@ -8,9 +8,9 @@ const {
 const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'tedious', versions: ['>=1.0.0'] }, tedious => {
-  const startCh = channel('apm:tedious:request:start')
-  const finishCh = channel('apm:tedious:request:finish')
-  const errorCh = channel('apm:tedious:request:error')
+  const startCh = channel('apm:tedious:query:start')
+  const finishCh = channel('apm:tedious:query:finish')
+  const errorCh = channel('apm:tedious:query:error')
   shimmer.wrap(tedious.Connection.prototype, 'makeRequest', makeRequest => function (request) {
     if (!startCh.hasSubscribers) {
       return makeRequest.apply(this, arguments)
