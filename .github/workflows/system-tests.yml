@@ -28,11 +28,10 @@ jobs:
 
   get-essential-scenarios:
     name: Get parameters
-    uses: DataDog/system-tests/.github/workflows/compute-workflow-parameters.yml@main
+    uses: DataDog/system-tests/.github/workflows/compute-workflow-parameters.yml@ugaitz/appsec-rasp-scenario-group
     with:
       library: nodejs
-      scenarios: APPSEC_RASP,APPSEC_RUNTIME_ACTIVATION
-      scenarios_groups: essentials
+      scenarios_groups: essentials,appsec_rasp
 
   system-tests:
     runs-on: ${{ contains(fromJSON('["CROSSED_TRACING_LIBRARIES", "INTEGRATIONS"]'), matrix.scenario) && 'ubuntu-latest-16-cores' || 'ubuntu-latest' }}
