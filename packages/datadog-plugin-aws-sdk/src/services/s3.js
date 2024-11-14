@@ -33,12 +33,15 @@ class S3 extends BaseAwsSdkPlugin {
       return
     }
 
+    // AWS v2: https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/S3.html
+    // AWS v3: https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/client/s3/
     const bucketName = request?.params?.Bucket
     const objectKey = request?.params?.Key
-    // AWS v2 (all 3 operations): `response.data.ETag`
-    // AWS v3 (putObject & completeMultipartUpload): `response.ETag`
-    // AWS v3 (copyObject): `response.CopyObjectResult.ETag`
-    const eTag = response?.data?.ETag || response?.ETag || response?.CopyObjectResult?.ETag
+    const eTag =
+      response?.ETag || // v3 PutObject & CompleteMultipartUpload
+      response?.CopyObjectResult?.ETag || // v3 CopyObject
+      response?.data?.ETag || // v2 PutObject & CompleteMultipartUpload
+      response?.data?.CopyObjectResult?.ETag // v2 CopyObject
 
     const pointerHash = generateS3PointerHash(bucketName, objectKey, eTag)
     if (pointerHash) {
