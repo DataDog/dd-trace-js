@@ -4,6 +4,8 @@
 
 const { capture, fatal } = require('./terminal')
 
+const requiredScopes = ['public_repo', 'read:org']
+
 // Check that the `git` CLI is installed.
 function checkGit () {
   try {
@@ -34,13 +36,13 @@ function checkBranchDiff () {
 
 // Check that the `gh` CLI is installed and authenticated.
 function checkGitHub () {
-  if (!process.env.GITHUB_TOKEN) {
+  if (!process.env.GITHUB_TOKEN && !process.env.GH_TOKEN) {
     const link = 'https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic'
 
     fatal(
       'The GITHUB_TOKEN environment variable is missing.',
       `Please visit ${link} for instructions to generate a personal access token.`,
-      'The following scopes are required when generating the token: '
+      `The following scopes are required when generating the token: ${requiredScopes.join(', ')}`
     )
   }
 
@@ -68,14 +70,13 @@ function checkGitHubScopes () {
   const lines = capture(`curl -sS -I ${headers} ${url}`).trim().split(/\r?\n/g)
   const scopeLine = lines.find(line => line.startsWith('x-oauth-scopes:')) || ''
   const scopes = scopeLine.replace('x-oauth-scopes:', '').trim().split(', ')
-  const required = ['public_repo', 'read:org']
   const link = 'https://github.com/settings/tokens'
 
-  for (const req of required) {
+  for (const req of requiredScopes) {
     if (!scopes.includes(req)) {
       fatal(
         `Missing "${req}" scope for GITHUB_TOKEN.`,
-        `Please visit ${link} and make sure the following scopes are enabled: ${required.join(' ,')}.`
+        `Please visit ${link} and make sure the following scopes are enabled: ${requiredScopes.join(' ,')}.`
       )
     }
   }
