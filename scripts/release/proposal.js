@@ -75,11 +75,11 @@ if (proposalDiff) {
 }
 
 // Update package.json with new version.
-// TODO: Write to /tmp instead.
 run(`npm version --allow-same-version --git-tag-version=false ${newVersion}`)
 run(`git commit -uno -m v${newVersion} package.json || exit 0`)
 
 // Write release notes to a file that can be copied to the GitHub release.
+// TODO: Write to /tmp instead.
 fs.mkdirSync(notesDir, { recursive: true })
 fs.writeFileSync(notesFile, lineDiff)
 
