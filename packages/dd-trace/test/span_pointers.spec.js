@@ -41,14 +41,5 @@ describe('span_pointers', () => {
       const hash2 = generateS3PointerHash('bucket', 'key', '"etag"')
       expect(hash1).to.equal(hash2)
     })
-
-    it('should return null if any required parameter is missing', () => {
-      expect(generateS3PointerHash(null, 'key', 'etag')).to.be.null
-      expect(generateS3PointerHash('bucket', null, 'etag')).to.be.null
-      expect(generateS3PointerHash('bucket', 'key', null)).to.be.null
-      expect(generateS3PointerHash('', 'key', 'etag')).to.be.null
-      expect(generateS3PointerHash('bucket', '', 'etag')).to.be.null
-      expect(generateS3PointerHash('bucket', 'key', '')).to.be.null
-    })
   })
 })

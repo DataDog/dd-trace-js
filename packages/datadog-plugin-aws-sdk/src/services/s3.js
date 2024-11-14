@@ -7,6 +7,7 @@ const {
   generateS3PointerHash
 } = require('../../../dd-trace/src/span_pointers')
 const { SPAN_POINTER_DIRECTION } = require('../../../dd-trace/src/span_pointers')
+const log = require('../../../dd-trace/src/log')
 
 class S3 extends BaseAwsSdkPlugin {
   static get id () { return 's3' }
@@ -43,16 +44,19 @@ class S3 extends BaseAwsSdkPlugin {
       response?.data?.ETag || // v2 PutObject & CompleteMultipartUpload
       response?.data?.CopyObjectResult?.ETag // v2 CopyObject
 
-    const pointerHash = generateS3PointerHash(bucketName, objectKey, eTag)
-    if (pointerHash) {
-      const attributes = {
-        'ptr.kind': S3_PTR_KIND,
-        'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
-        'ptr.hash': pointerHash,
-        'link.kind': SPAN_LINK_KIND
-      }
-      span.addSpanPointer(attributes)
+    if (!bucketName || !objectKey || !eTag) {
+      log.debug('Unable to calculate span pointer hash because of missing parameters.')
+      return
     }
+
+    const pointerHash = generateS3PointerHash(bucketName, objectKey, eTag)
+    const attributes = {
+      'ptr.kind': S3_PTR_KIND,
+      'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
+      'ptr.hash': pointerHash,
+      'link.kind': SPAN_LINK_KIND
+    }
+    span.addSpanPointer(attributes)
   }
 }
 

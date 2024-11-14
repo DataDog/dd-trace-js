@@ -1,5 +1,4 @@
 const crypto = require('crypto')
-const log = require('./log')
 
 const SPAN_LINK_KIND = 'span-pointer'
 const S3_PTR_KIND = 'aws.s3.object'
@@ -15,14 +14,9 @@ const SPAN_POINTER_DIRECTION = Object.freeze({
  * @param {string} bucketName - The name of the S3 bucket containing the object
  * @param {string} objectKey - The full path/key of the object in the bucket
  * @param {string} eTag - The ETag value from S3, which may be wrapped in quotes
- * @returns {string|null} A hash uniquely identifying the S3 request, or null if missing parameters.
+ * @returns {string} A hash uniquely identifying the S3 request.
  */
 function generateS3PointerHash (bucketName, objectKey, eTag) {
-  if (!bucketName || !objectKey || !eTag) {
-    log.debug('Unable to calculate span pointer hash because of missing parameters.')
-    return null
-  }
-
   if (eTag.startsWith('"') && eTag.endsWith('"')) {
     eTag = eTag.slice(1, -1)
   }
