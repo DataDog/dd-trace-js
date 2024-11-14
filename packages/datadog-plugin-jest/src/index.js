@@ -28,7 +28,8 @@ const {
   DI_DEBUG_ERROR_SNAPSHOT_ID,
   DI_DEBUG_ERROR_FILE,
   DI_DEBUG_ERROR_LINE,
-  getTestSuitePath
+  getTestSuitePath,
+  TEST_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -45,6 +46,7 @@ const {
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
+const debuggerParameterPerTest = new Map()
 
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
@@ -308,22 +310,27 @@ class JestPlugin extends CiPlugin {
 
       this.enter(span, store)
 
+      const { name: testName } = test
+
+      const debuggerParameters = debuggerParameterPerTest.get(testName)
+
       // If we have a debugger probe, we need to add the snapshot id to the span
-      if (this.debuggerParameters) {
+      if (debuggerParameters) {
         const spanContext = span.context()
 
+        // TODO: handle race conditions with this.retriedTestIds
         this.retriedTestIds = {
           spanId: spanContext.toSpanId(),
           traceId: spanContext.toTraceId()
         }
-        const { snapshotId, file, line } = this.debuggerParameters
-        // TODO: what happens if the probe is not hit?
+        const { snapshotId, file, line } = debuggerParameters
+
+        // TODO: should these be added on test:end if and only if the probe is hit?
+        // Sync issues: `hitProbePromise` might be resolved after the test ends
         span.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
         span.setTag(DI_DEBUG_ERROR_SNAPSHOT_ID, snapshotId)
         span.setTag(DI_DEBUG_ERROR_FILE, file)
         span.setTag(DI_DEBUG_ERROR_LINE, line)
-
-        this.debuggerParameters = null
       }
     })
 
@@ -357,9 +364,12 @@ class JestPlugin extends CiPlugin {
           const span = store.span
           span.setTag(TEST_STATUS, 'fail')
           span.setTag('error', err)
-        }
-        if (willBeRetried && this.di) {
-          this.addDiProbe(err, probe)
+          if (willBeRetried && this.di) {
+            // if we use numTestExecutions, we have to remove the breakpoint after each execution
+            const testName = span.context()._tags[TEST_NAME]
+            const debuggerParameters = this.addDiProbe(err, probe)
+            debuggerParameterPerTest.set(testName, debuggerParameters)
+          }
         }
       }
     })
@@ -385,21 +395,23 @@ class JestPlugin extends CiPlugin {
 
     probe.setProbePromise = setProbePromise
 
-    this.debuggerParameters = {
+    hitProbePromise.then(({ snapshot }) => {
+      // TODO: handle race conditions for this.retriedTestIds
+      const { traceId, spanId } = this.retriedTestIds
+      this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
+        debugger: { snapshot },
+        dd: {
+          trace_id: traceId,
+          span_id: spanId
+        }
+      })
+    })
+
+    return {
       snapshotId,
       file: relativePath,
       line
     }
-
-    hitProbePromise.then(({ snapshot }) => {
-      this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
-        debugger: { snapshot },
-        dd: {
-          trace_id: this.retriedTestIds.traceId,
-          span_id: this.retriedTestIds.spanId
-        }
-      })
-    })
   }
 
   startTestSpan (test) {

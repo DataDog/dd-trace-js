@@ -2363,6 +2363,58 @@ describe('jest CommonJS', () => {
   })
 
   context('dynamic instrumentation', () => {
+    it('does not activate dynamic instrumentation if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false
+        }
+        // di_enabled: true // TODO
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+          assert.equal(retriedTests.length, 1)
+          const [retriedTest] = retriedTests
+
+          assert.notProperty(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
+          assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_FILE)
+          assert.notProperty(retriedTest.metrics, DI_DEBUG_ERROR_LINE)
+          assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_SNAPSHOT_ID)
+        })
+      const logsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+          if (payloads.length > 0) {
+            throw new Error('Unexpected logs')
+          }
+        }, 5000)
+
+      childProcess = exec(runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', (code) => {
+        Promise.all([eventsPromise, logsPromise]).then(() => {
+          assert.equal(code, 0)
+          done()
+        }).catch(done)
+      })
+    })
+
     it('runs retries with dynamic instrumentation', (done) => {
       receiver.setSettings({
         itr_enabled: false,
@@ -2398,6 +2450,10 @@ describe('jest CommonJS', () => {
           snapshotIdByTest = retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID]
           spanIdByTest = retriedTest.span_id.toString()
           traceIdByTest = retriedTest.trace_id.toString()
+
+          const notRetriedTest = tests.find(test => test.meta[TEST_NAME].includes('is not retried'))
+
+          assert.notProperty(notRetriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
         })
 
       const logsPromise = receiver
@@ -2432,15 +2488,12 @@ describe('jest CommonJS', () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'dynamic-instrumentation/test-',
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
             DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
           },
           stdio: 'inherit'
         }
       )
-
-      childProcess.stdout.pipe(process.stdout)
-      childProcess.stderr.pipe(process.stderr)
 
       childProcess.on('exit', () => {
         Promise.all([eventsPromise, logsPromise]).then(() => {
@@ -2450,6 +2503,71 @@ describe('jest CommonJS', () => {
           done()
         }).catch(done)
       })
+    })
+
+    it('does not crash if the retry does not hit the breakpoint', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false
+        }
+        // di_enabled: true // TODO
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+          assert.equal(retriedTests.length, 1)
+          const [retriedTest] = retriedTests
+
+          assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+          assert.propertyVal(
+            retriedTest.meta,
+            DI_DEBUG_ERROR_FILE,
+            'ci-visibility/dynamic-instrumentation/dependency.js'
+          )
+          assert.equal(retriedTest.metrics[DI_DEBUG_ERROR_LINE], 4)
+          assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
+        })
+      const logsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+          if (payloads.length > 0) {
+            throw new Error('Unexpected logs')
+          }
+        }, 5000)
+
+      childProcess = exec(runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-not-hit-breakpoint',
+            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', (code) => {
+        Promise.all([eventsPromise, logsPromise]).then(() => {
+          assert.equal(code, 0)
+          done()
+        }).catch(done)
+      })
+    })
+
+    it.skip('can run tests after hitting a breakpoint', (done) => {
+
+    })
+
+    it.skip('removes the breakpoint when the test finishes', (done) => {
+
     })
   })
 })
