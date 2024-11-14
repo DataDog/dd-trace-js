@@ -8,7 +8,6 @@ const ipHeaderList = [
   'x-real-ip',
   'true-client-ip',
   'x-client-ip',
-  'x-forwarded',
   'forwarded-for',
   'x-cluster-client-ip',
   'fastly-client-ip',
