@@ -112,7 +112,7 @@ describe('TextMapPropagator', () => {
       expect(carrier.baggage).to.be.equal('%22%2C%3B%5C%28%29%2F%3A%3C%3D%3E%3F%40%5B%5D%7B%7D%F0%9F%90%B6%C3%A9%E6%88%91=%22%2C%3B%5C%F0%9F%90%B6%C3%A9%E6%88%91')
     })
 
-    it('should not inject baggage items when there are too many pairs', () => {
+    it('should drop excess baggage items when there are too many pairs', () => {
       const carrier = {}
       const baggageItems = {}
       for (let i = 0; i < config.baggageMaxItems + 1; i++) {
@@ -121,10 +121,10 @@ describe('TextMapPropagator', () => {
       const spanContext = createContext({ baggageItems })
 
       propagator.inject(spanContext, carrier)
-      expect(carrier.baggage).to.be.undefined
+      expect(carrier.baggage.split(',').length).to.equal(config.baggageMaxItems)
     })
 
-    it('should not inject baggage items when the resulting baggage header contains many bytes', () => {
+    it('should drop excess baggage items when the resulting baggage header contains many bytes', () => {
       const carrier = {}
       const baggageItems = {
         raccoon: 'chunky',
@@ -133,7 +133,7 @@ describe('TextMapPropagator', () => {
       const spanContext = createContext({ baggageItems })
 
       propagator.inject(spanContext, carrier)
-      expect(carrier.baggage).to.be.undefined
+      expect(carrier.baggage).to.equal('raccoon=chunky')
     })
 
     it('should inject an existing sampling priority', () => {
