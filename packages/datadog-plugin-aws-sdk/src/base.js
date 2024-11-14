@@ -93,7 +93,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         this.responseExtractDSMContext(operation, params, response.data ?? response, span)
       }
       this.addResponseTags(span, response)
-      this.addSpanPointer(span, response)
+      this.addSpanPointers(span, response)
       this.finish(span, response, response.error)
     })
   }
@@ -102,7 +102,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     // implemented by subclasses, or not
   }
 
-  addSpanPointer (span, response) {
+  addSpanPointers (span, response) {
     // Optionally implemented by subclasses, for services where we're unable to inject trace context
   }
 

@@ -25,7 +25,7 @@ class S3 extends BaseAwsSdkPlugin {
     })
   }
 
-  addSpanPointer (span, response) {
+  addSpanPointers (span, response) {
     const request = response?.request
     const operationName = request?.operation
     if (!['putObject', 'copyObject', 'completeMultipartUpload'].includes(operationName)) {
