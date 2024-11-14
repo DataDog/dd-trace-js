@@ -90,7 +90,7 @@ checkpoint('Push the release upstream and create/update PR?')
 
 checkGitHub()
 
-run('git push -u origin HEAD')
+run('git push -f -u origin HEAD')
 
 try {
   run(`gh pr create -d -B v${releaseLine}.x -t "v${newVersion} proposal" -F ${notesFile}`)
