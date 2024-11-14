@@ -38,7 +38,8 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'kafka.produce'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await
+      spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
       await res
     }).timeout(20000)
