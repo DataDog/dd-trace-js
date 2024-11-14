@@ -10,7 +10,6 @@ const { checkBranchDiff, checkGitHub, checkGit } = require('./helpers/requiremen
 checkGit()
 checkBranchDiff()
 
-const currentBranch = capture('git branch --show-current')
 const releaseLine = process.argv[2]
 
 // Validate release line argument.
@@ -30,13 +29,11 @@ const diffCmd = [
   'branch-diff',
   '--user DataDog',
   '--repo dd-trace-js',
-  isActivePatch()
-    ? `--exclude-label=semver-major,semver-minor,dont-land-on-v${releaseLine}.x`
-    : `--exclude-label=semver-major,dont-land-on-v${releaseLine}.x`
+  `--exclude-label=semver-major,dont-land-on-v${releaseLine}.x`
 ].join(' ')
 
 // Determine the new version and release notes location.
-const [lastMajor, lastMinor, lastPatch] = require('../../package.json').version.split('.').map(Number)
+const [, lastMinor, lastPatch] = require('../../package.json').version.split('.').map(Number)
 const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x master`)
 const newVersion = lineDiff.includes('SEMVER-MINOR')
   ? `${releaseLine}.${lastMinor + 1}.0`
@@ -101,20 +98,3 @@ try {
 }
 
 success('Release PR is ready.')
-
-// Check if current branch is already an active patch proposal branch to avoid
-// creating a new minor proposal branch if new minor commits are added to the
-// main branch during a existing patch release.
-function isActivePatch () {
-  const currentMatch = currentBranch.match(/^(\d+)\.(\d+)\.(\d+)-proposal$/)
-
-  if (currentMatch) {
-    const [major, minor, patch] = currentMatch.slice(1).map(Number)
-
-    if (major === lastMajor && minor === lastMinor && patch > lastPatch) {
-      return true
-    }
-  }
-
-  return false
-}
