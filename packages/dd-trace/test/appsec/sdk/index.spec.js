@@ -3,7 +3,7 @@
 const proxyquire = require('proxyquire')
 
 describe('Appsec SDK', () => {
-  let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent
+  let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackUserSignupEvent, trackCustomEvent
   let checkUserAndSetUser, blockRequest, setUser, setTemplates
   let appsecSdk
   const tracer = {}
@@ -12,6 +12,7 @@ describe('Appsec SDK', () => {
   beforeEach(() => {
     trackUserLoginSuccessEvent = sinon.stub()
     trackUserLoginFailureEvent = sinon.stub()
+    trackUserSignupEvent = sinon.stub()
     trackCustomEvent = sinon.stub()
     checkUserAndSetUser = sinon.stub()
     blockRequest = sinon.stub()
@@ -19,7 +20,12 @@ describe('Appsec SDK', () => {
     setUser = sinon.stub()
 
     const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
-      './track_event': { trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent },
+      './track_event': {
+        trackUserLoginSuccessEvent,
+        trackUserLoginFailureEvent,
+        trackUserSignupEvent,
+        trackCustomEvent
+      },
       './user_blocking': { checkUserAndSetUser, blockRequest },
       '../blocking': { setTemplates },
       './set_user': { setUser }
@@ -47,6 +53,14 @@ describe('Appsec SDK', () => {
     appsecSdk.trackUserLoginFailureEvent(userId, exists, metadata)
 
     expect(trackUserLoginFailureEvent).to.have.been.calledOnceWithExactly(tracer, userId, exists, metadata)
+  })
+
+  it('trackUserSignupEvent should call internal function with proper params', () => {
+    const userId = 'user_id'
+    const metadata = { key: 'value' }
+    appsecSdk.trackUserSignupEvent(userId, metadata)
+
+    expect(trackUserSignupEvent).to.have.been.calledOnceWithExactly(tracer, userId, metadata)
   })
 
   it('trackCustomEvent should call internal function with proper params', () => {

@@ -32,5 +32,6 @@ module.exports = {
   DB_SYSTEM: 'server.db.system',
 
   LOGIN_SUCCESS: 'server.business_logic.users.login.success',
-  LOGIN_FAILURE: 'server.business_logic.users.login.failure'
+  LOGIN_FAILURE: 'server.business_logic.users.login.failure',
+  SIGNUP: 'server.business_logic.users.signup'
 }

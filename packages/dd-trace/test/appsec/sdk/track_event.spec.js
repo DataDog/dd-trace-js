@@ -4,7 +4,7 @@ const proxyquire = require('proxyquire')
 const agent = require('../../plugins/agent')
 const axios = require('axios')
 const tracer = require('../../../../../index')
-const { LOGIN_SUCCESS, LOGIN_FAILURE } = require('../../../src/appsec/addresses')
+const { LOGIN_SUCCESS, LOGIN_FAILURE, SIGNUP } = require('../../../src/appsec/addresses')
 const { SAMPLING_MECHANISM_APPSEC } = require('../../../src/constants')
 const { USER_KEEP } = require('../../../../../ext/priority')
 
@@ -15,7 +15,7 @@ describe('track_event', () => {
     let rootSpan
     let getRootSpan
     let setUserTags
-    let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent, trackEvent
+    let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackUserSignupEvent, trackCustomEvent, trackEvent
     let sample
     let waf
     let prioritySampler
@@ -61,6 +61,7 @@ describe('track_event', () => {
 
       trackUserLoginSuccessEvent = trackEvents.trackUserLoginSuccessEvent
       trackUserLoginFailureEvent = trackEvents.trackUserLoginFailureEvent
+      trackUserSignupEvent = trackEvents.trackUserSignupEvent
       trackCustomEvent = trackEvents.trackCustomEvent
       trackEvent = trackEvents.trackEvent
     })
@@ -223,6 +224,87 @@ describe('track_event', () => {
         sinon.assert.calledOnceWithExactly(
           waf.run,
           { persistent: { [LOGIN_FAILURE]: null } }
+        )
+      })
+    })
+
+    describe('trackUserSignupEvent', () => {
+      it('should log warning when passed invalid userId', () => {
+        trackUserSignupEvent(tracer, null)
+        trackUserSignupEvent(tracer, [])
+
+        expect(log.warn).to.have.been.calledTwice
+        expect(log.warn.firstCall)
+          .to.have.been.calledWithExactly('Invalid userId provided to trackUserSignupEvent')
+        expect(log.warn.secondCall)
+          .to.have.been.calledWithExactly('Invalid userId provided to trackUserSignupEvent')
+        expect(rootSpan.addTags).to.not.have.been.called
+      })
+
+      it('should log warning when root span is not available', () => {
+        rootSpan = undefined
+
+        trackUserSignupEvent(tracer, 'user_id')
+
+        expect(log.warn).to.have.been.calledOnceWithExactly('Root span not available in trackUserSignupEvent')
+      })
+
+      it('should call addTags with metadata', () => {
+        trackUserSignupEvent(tracer, 'user_id', {
+          metakey1: 'metaValue1', metakey2: 'metaValue2', metakey3: 'metaValue3'
+        })
+
+        expect(log.warn).to.not.have.been.called
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
+          'appsec.events.users.signup.track': 'true',
+          '_dd.appsec.events.users.signup.sdk': 'true',
+          'appsec.events.users.signup.usr.id': 'user_id',
+          'appsec.events.users.signup.metakey1': 'metaValue1',
+          'appsec.events.users.signup.metakey2': 'metaValue2',
+          'appsec.events.users.signup.metakey3': 'metaValue3'
+        })
+        expect(prioritySampler.setPriority)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+      })
+
+      it('should send false `usr.exists` property when the user does not exist', () => {
+        trackUserSignupEvent(tracer, 'user_id', {
+          metakey1: 'metaValue1', metakey2: 'metaValue2', metakey3: 'metaValue3'
+        })
+
+        expect(log.warn).to.not.have.been.called
+        expect(setUserTags).to.not.have.been.called
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
+          'appsec.events.users.signup.track': 'true',
+          '_dd.appsec.events.users.signup.sdk': 'true',
+          'appsec.events.users.signup.usr.id': 'user_id',
+          'appsec.events.users.signup.metakey1': 'metaValue1',
+          'appsec.events.users.signup.metakey2': 'metaValue2',
+          'appsec.events.users.signup.metakey3': 'metaValue3'
+        })
+        expect(prioritySampler.setPriority)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+      })
+
+      it('should call addTags without metadata', () => {
+        trackUserSignupEvent(tracer, 'user_id')
+
+        expect(log.warn).to.not.have.been.called
+        expect(setUserTags).to.not.have.been.called
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
+          'appsec.events.users.signup.track': 'true',
+          '_dd.appsec.events.users.signup.sdk': 'true',
+          'appsec.events.users.signup.usr.id': 'user_id'
+        })
+        expect(prioritySampler.setPriority)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+      })
+
+      it('should call waf run with signup address', () => {
+        trackUserSignupEvent(tracer, 'user_id')
+        sinon.assert.calledOnceWithExactly(
+          waf.run,
+          { persistent: { [SIGNUP]: null } }
         )
       })
     })

@@ -460,6 +460,9 @@ tracer.appsec.trackUserLoginFailureEvent('user_id', true, meta)
 tracer.appsec.trackUserLoginFailureEvent('user_id', false)
 tracer.appsec.trackUserLoginFailureEvent('user_id', false, meta)
 
+tracer.appsec.trackUserSignupEvent('user_id')
+tracer.appsec.trackUserSignupEvent('user_id', meta)
+
 tracer.appsec.trackCustomEvent('event_name')
 tracer.appsec.trackCustomEvent('event_name', meta)
 

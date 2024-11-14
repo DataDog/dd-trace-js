@@ -769,7 +769,7 @@ declare namespace tracer {
        */
       maxDepth?: number
     }
-    
+
     /**
      * Configuration enabling LLM Observability. Enablement is superceded by the DD_LLMOBS_ENABLED environment variable.
      */
@@ -887,6 +887,15 @@ declare namespace tracer {
      * @beta This method is in beta and could change in future versions.
      */
     trackUserLoginFailureEvent(userId: string, exists: boolean, metadata?: { [key: string]: string }): void
+
+    /**
+     * Links a signup event to the current trace.
+     * @param {string} userId The user id of the signed-up user
+     * @param {[key: string]: string} metadata Custom fields to link to the signup event.
+     *
+     * @beta This method is in beta and could change in future versions.
+     */
+    trackUserSignupEvent(userId: string, metadata?: { [key: string]: string }): void
 
     /**
      * Links a custom event to the current trace.
@@ -2238,7 +2247,7 @@ declare namespace tracer {
        * Disable LLM Observability tracing.
        */
       disable (): void,
-      
+
       /**
        * Instruments a function by automatically creating a span activated on its
        * scope.
@@ -2280,10 +2289,10 @@ declare namespace tracer {
       /**
        * Decorate a function in a javascript runtime that supports function decorators.
        * Note that this is **not** supported in the Node.js runtime, but is in TypeScript.
-       * 
+       *
        * In TypeScript, this decorator is only supported in contexts where general TypeScript
        * function decorators are supported.
-       * 
+       *
        * @param options Optional LLM Observability span options.
        */
       decorate (options: llmobs.LLMObsNamelessSpanOptions): any
@@ -2300,7 +2309,7 @@ declare namespace tracer {
       /**
        * Sets inputs, outputs, tags, metadata, and metrics as provided for a given LLM Observability span.
        * Note that with the exception of tags, this method will override any existing values for the provided fields.
-       * 
+       *
        * For example:
        * ```javascript
        * llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'gpt-4o', modelProvider: 'openai' }, () => {
@@ -2313,7 +2322,7 @@ declare namespace tracer {
        *  })
        * })
        * ```
-       * 
+       *
        * @param span The span to annotate (defaults to the current LLM Observability span if not provided)
        * @param options An object containing the inputs, outputs, tags, metadata, and metrics to set on the span.
        */
@@ -2489,14 +2498,14 @@ declare namespace tracer {
        * LLM Observability span kind. One of `agent`, `workflow`, `task`, `tool`, `retrieval`, `embedding`, or `llm`.
        */
       kind: llmobs.spanKind,
-  
+
       /**
        * The ID of the underlying user session. Required for tracking sessions.
        */
       sessionId?: string,
 
       /**
-       * The name of the ML application that the agent is orchestrating. 
+       * The name of the ML application that the agent is orchestrating.
        * If not provided, the default value will be set to mlApp provided during initalization, or `DD_LLMOBS_ML_APP`.
        */
       mlApp?: string,
