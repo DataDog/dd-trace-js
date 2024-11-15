@@ -15,6 +15,7 @@ module.exports = {
   PATH_TRAVERSAL_ANALYZER: require('./path-traversal-analyzer'),
   SQL_INJECTION_ANALYZER: require('./sql-injection-analyzer'),
   SSRF: require('./ssrf-analyzer'),
+  TEMPLATE_INJECTION_ANALYZER: require('./template-injection-analyzer'),
   UNVALIDATED_REDIRECT_ANALYZER: require('./unvalidated-redirect-analyzer'),
   WEAK_CIPHER_ANALYZER: require('./weak-cipher-analyzer'),
   WEAK_HASH_ANALYZER: require('./weak-hash-analyzer'),
