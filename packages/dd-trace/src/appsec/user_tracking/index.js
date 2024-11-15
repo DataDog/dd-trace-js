@@ -3,9 +3,8 @@
 const crypto = require('crypto')
 const log = require('../../log')
 
-const SDK_EVENT_REGEX = /^_dd\.appsec\.events\.users\.[\W\w+]+\.sdk$/i
-
-const USER_ID_FIELDS = ['id', '_id', 'email', 'username', 'login', 'user'] // The user ID generated must be consistent and repeatable meaning that, for a given framework, the same field must always be used. 
+// the official list doesn't include '_id', but it's common in MongoDB
+const USER_ID_FIELDS = ['id', '_id', 'email', 'username', 'login', 'user']
 
 let collectionMode
 
@@ -19,39 +18,44 @@ function setCollectionMode (mode, overwrite = true) {
       log.warn('Using deprecated value "safe" in config.appsec.eventTracking.mode')
     case 'anon':
     case 'anonymization':
-      collectionMode = 'anon'
+      collectionMode = 'anonymization'
       break
+
     case 'extended':
       log.warn('Using deprecated value "extended" in config.appsec.eventTracking.mode')
     case 'ident':
     case 'identification':
-      collectionMode = 'ident'
+      collectionMode = 'identification'
       break
+
     default:
       collectionMode = 'disabled'
   }
   /* eslint-enable no-fallthrough */
 }
 
-function isSdkCalled (rootSpan) {
-  const tags = rootSpan?.context()?._tags
-
-  if (tags === null || typeof tags !== 'object') return false
-
-  return Object.entries(tags).some(([key, value]) => SDK_EVENT_REGEX.test(key) && value === 'true')
+function obfuscateIfNeeded (str) {
+  if (collectionMode === 'anonymization') {
+    return 'anon_' + crypto.createHash('sha256').update(str).digest().toString('hex', 0, 16).toLowerCase()
+  } else {
+    return str
+  }
 }
 
 function getUserId (user) {
+  if (!user) return
+
   for (const field of USER_ID_FIELDS) {
     let id = user[field]
-    if (id) {
+    if (id && typeof id.toString === 'function') {
       id = id.toString()
 
-      if (collectionMode === 'anon') {
-        id = obfuscateId(id)
+      if (id.startsWith('[object ')) {
+        // probably not a usable ID ?
+        continue
       }
 
-      return id
+      return obfuscateIfNeeded(id)
     }
   }
 }

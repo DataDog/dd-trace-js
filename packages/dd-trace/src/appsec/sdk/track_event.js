@@ -7,6 +7,7 @@ const standalone = require('../standalone')
 const waf = require('../waf')
 const { SAMPLING_MECHANISM_APPSEC } = require('../../constants')
 const { keepTrace } = require('../../priority_sampler')
+const addresses = require('../addresses')
 
 function trackUserLoginSuccessEvent (tracer, user, metadata) {
   // TODO: better user check here and in _setUser() ?
@@ -23,7 +24,9 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
 
   setUserTags(user, rootSpan)
 
-  trackEvent('users.login.success', metadata, 'trackUserLoginSuccessEvent', rootSpan, 'sdk')
+  trackEvent('users.login.success', metadata, 'trackUserLoginSuccessEvent', rootSpan)
+
+  runWaf('users.login.success', user)
 }
 
 function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
@@ -38,7 +41,9 @@ function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
     ...metadata
   }
 
-  trackEvent('users.login.failure', fields, 'trackUserLoginFailureEvent', getRootSpan(tracer), 'sdk')
+  trackEvent('users.login.failure', fields, 'trackUserLoginFailureEvent', getRootSpan(tracer))
+
+  runWaf('users.login.failure', { login: userId })
 }
 
 function trackCustomEvent (tracer, eventName, metadata) {
@@ -47,10 +52,10 @@ function trackCustomEvent (tracer, eventName, metadata) {
     return
   }
 
-  trackEvent(eventName, metadata, 'trackCustomEvent', getRootSpan(tracer), 'sdk')
+  trackEvent(eventName, metadata, 'trackCustomEvent', getRootSpan(tracer))
 }
 
-function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode, abortController) {
+function trackEvent (eventName, fields, sdkMethodName, rootSpan) {
   if (!rootSpan) {
     log.warn(`Root span not available in ${sdkMethodName}`)
     return
@@ -59,15 +64,8 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode, abortCont
   keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
 
   const tags = {
-    [`appsec.events.${eventName}.track`]: 'true'
-  }
-
-  if (mode === 'sdk') {
-    tags[`_dd.appsec.events.${eventName}.sdk`] = 'true'
-  }
-
-  if (mode && mode !== 'sdk') {
-    tags[`_dd.appsec.events.${eventName}.auto.mode`] = mode
+    [`appsec.events.${eventName}.track`]: 'true',
+    [`_dd.appsec.events.${eventName}.sdk`]: 'true'
   }
 
   if (fields) {
@@ -76,32 +74,25 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode, abortCont
     }
   }
 
-  const persistent = {
-
-  }
-
-  if (user.id) {
-    persistent[addresses.USER_ID] = user.id
-  }
-
-  if (user.login) {
-    persistent[addresses.USER_LOGIN] = user.login
-  }
-
-  // call WAF
-  const results = waf.run({ persistent })
-
-  if (abortController) {
-    Blocking.handleResults(results)
-  }
-
   rootSpan.addTags(tags)
 
   standalone.sample(rootSpan)
+}
 
-  if (['users.login.success', 'users.login.failure'].includes(eventName)) {
-    waf.run({ persistent: { [`server.business_logic.${eventName}`]: null } })
+function runWaf (eventName, user) {
+  const persistent = {
+    [`server.business_logic.${eventName}`]: null
   }
+
+  if (user.id) {
+    persistent[addresses.USER_ID] = '' + user.id
+  }
+
+  if (user.login) {
+    persistent[addresses.USER_LOGIN] = '' + user.login
+  }
+
+  waf.run({ persistent })
 }
 
 module.exports = {
