@@ -16,6 +16,7 @@ jobs:
     permissions:
       id-token: write
       contents: write
+      pull-requests: read
     env:
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     outputs:
@@ -33,6 +34,7 @@ jobs:
       - run: |
           git tag v${{ fromJson(steps.pkg.outputs.json).version }}
           git push origin v${{ fromJson(steps.pkg.outputs.json).version }}
+      - run: node scripts/release/notes --latest
 
   docs:
     runs-on: ubuntu-latest
