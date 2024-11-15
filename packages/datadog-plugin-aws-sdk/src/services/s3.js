@@ -1,9 +1,9 @@
 'use strict'
 
 const BaseAwsSdkPlugin = require('../base')
-const { S3_PTR_KIND, generatePointerHash } = require('../../../dd-trace/src/span_pointers')
-const { SPAN_POINTER_DIRECTION } = require('../../../dd-trace/src/span_pointers')
 const log = require('../../../dd-trace/src/log')
+const { generatePointerHash } = require('../../../dd-trace/src/util')
+const { S3_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../../dd-trace/src/constants')
 
 class S3 extends BaseAwsSdkPlugin {
   static get id () { return 's3' }

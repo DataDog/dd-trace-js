@@ -4,7 +4,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const axios = require('axios')
 const { rawExpectedSchema } = require('./s3-naming')
-const { S3_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/span_pointers')
+const { S3_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/constants')
 
 const bucketName = 's3-bucket-name-test'
 
