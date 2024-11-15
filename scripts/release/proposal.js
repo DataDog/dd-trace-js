@@ -3,6 +3,7 @@
 // TODO: Support major versions.
 
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 const { capture, checkpoint, exit, fatal, success, run } = require('./helpers/terminal')
 const { checkBranchDiff, checkGitHub, checkGit } = require('./helpers/requirements')
@@ -38,8 +39,7 @@ const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x master`)
 const newVersion = lineDiff.includes('SEMVER-MINOR')
   ? `${releaseLine}.${lastMinor + 1}.0`
   : `${releaseLine}.${lastMinor}.${lastPatch + 1}`
-const gitHubDir = path.normalize(path.join(__dirname, '..', '..', '.github'))
-const notesDir = path.join(gitHubDir, 'release_notes')
+const notesDir = path.join(os.tmpdir(), 'release_notes')
 const notesFile = path.join(notesDir, `${newVersion}.md`)
 
 // Checkout new or existing branch.
@@ -76,12 +76,11 @@ run(`npm version --allow-same-version --git-tag-version=false ${newVersion}`)
 run(`git commit -uno -m v${newVersion} package.json || exit 0`)
 
 // Write release notes to a file that can be copied to the GitHub release.
-// TODO: Write to /tmp instead.
 fs.mkdirSync(notesDir, { recursive: true })
 fs.writeFileSync(notesFile, lineDiff)
 
 success('Release proposal is ready.')
-success(`Changelog at .github/release_notes/${newVersion}.md`)
+success(`Changelog at ${os.tmpdir()}/release_notes/${newVersion}.md`)
 
 // Stop and ask the user if they want to proceed with pushing everything upstream.
 checkpoint('Push the release upstream and create/update PR?')
