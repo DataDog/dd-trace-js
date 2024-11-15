@@ -329,27 +329,25 @@ describe('OTel Span', () => {
     const span = makeSpan('name')
     const { _links } = span._ddSpan
 
-    const attributes1 = {
+    span.addSpanPointer('pointer_kind', 'd', 'abc123')
+    expect(_links).to.have.lengthOf(1)
+    expect(_links[0].attributes).to.deep.equal({
       'ptr.kind': 'pointer_kind',
       'ptr.dir': 'd',
       'ptr.hash': 'abc123',
       'link.kind': 'span-pointer'
-    }
-    span.addSpanPointer(attributes1)
-    expect(_links).to.have.lengthOf(1)
-    expect(_links[0].attributes).to.deep.equal(attributes1)
+    })
     expect(_links[0].context.toTraceId()).to.equal('0')
     expect(_links[0].context.toSpanId()).to.equal('0')
 
-    const attributes2 = {
+    span.addSpanPointer('another_kind', 'd', '1234567')
+    expect(_links).to.have.lengthOf(2)
+    expect(_links[1].attributes).to.deep.equal({
       'ptr.kind': 'another_kind',
       'ptr.dir': 'd',
       'ptr.hash': '1234567',
       'link.kind': 'span-pointer'
-    }
-    span.addSpanPointer(attributes2)
-    expect(_links).to.have.lengthOf(2)
-    expect(_links[1].attributes).to.deep.equal(attributes2)
+    })
     expect(_links[1].context.toTraceId()).to.equal('0')
     expect(_links[1].context.toSpanId()).to.equal('0')
   })

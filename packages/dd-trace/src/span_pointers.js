@@ -1,6 +1,5 @@
 const crypto = require('crypto')
 
-const SPAN_LINK_POINTER_KIND = 'span-pointer'
 const S3_PTR_KIND = 'aws.s3.object'
 
 const SPAN_POINTER_DIRECTION = Object.freeze({
@@ -22,7 +21,6 @@ function generatePointerHash (components) {
 }
 
 module.exports = {
-  SPAN_LINK_POINTER_KIND,
   S3_PTR_KIND,
   SPAN_POINTER_DIRECTION,
   generatePointerHash

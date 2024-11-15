@@ -1,11 +1,7 @@
 'use strict'
 
 const BaseAwsSdkPlugin = require('../base')
-const {
-  SPAN_LINK_POINTER_KIND,
-  S3_PTR_KIND,
-  generatePointerHash
-} = require('../../../dd-trace/src/span_pointers')
+const { S3_PTR_KIND, generatePointerHash } = require('../../../dd-trace/src/span_pointers')
 const { SPAN_POINTER_DIRECTION } = require('../../../dd-trace/src/span_pointers')
 const log = require('../../../dd-trace/src/log')
 
@@ -54,13 +50,7 @@ class S3 extends BaseAwsSdkPlugin {
       eTag = eTag.slice(1, -1)
     }
     const pointerHash = generatePointerHash([bucketName, objectKey, eTag])
-    const attributes = {
-      'ptr.kind': S3_PTR_KIND,
-      'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
-      'ptr.hash': pointerHash,
-      'link.kind': SPAN_LINK_POINTER_KIND
-    }
-    span.addSpanPointer(attributes)
+    span.addSpanPointer(S3_PTR_KIND, SPAN_POINTER_DIRECTION.DOWNSTREAM, pointerHash)
   }
 }
 

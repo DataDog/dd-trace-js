@@ -307,28 +307,26 @@ describe('Span', () => {
 
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 
-      const attributes1 = {
+      span.addSpanPointer('pointer_kind', 'd', 'abc123')
+      expect(span._links).to.have.lengthOf(1)
+      expect(span._links[0].context.toTraceId()).to.equal('0')
+      expect(span._links[0].context.toSpanId()).to.equal('0')
+      expect(span._links[0].attributes).to.deep.equal({
         'ptr.kind': 'pointer_kind',
         'ptr.dir': 'd',
         'ptr.hash': 'abc123',
         'link.kind': 'span-pointer'
-      }
-      span.addSpanPointer(attributes1)
-      expect(span._links).to.have.lengthOf(1)
-      expect(span._links[0].context.toTraceId()).to.equal('0')
-      expect(span._links[0].context.toSpanId()).to.equal('0')
-      expect(span._links[0].attributes).to.deep.equal(attributes1)
+      })
     })
 
-    const attributes2 = {
+    span.addSpanPointer('another_kind', 'd', '1234567')
+    expect(span._links).to.have.lengthOf(2)
+    expect(span._links[1].attributes).to.deep.equal({
       'ptr.kind': 'another_kind',
       'ptr.dir': 'd',
       'ptr.hash': '1234567',
       'link.kind': 'span-pointer'
-    }
-    span.addSpanPointer(attributes2)
-    expect(span._links).to.have.lengthOf(2)
-    expect(span._links[1].attributes).to.deep.equal(attributes2)
+    })
     expect(span._links[1].context.toTraceId()).to.equal('0')
     expect(span._links[1].context.toSpanId()).to.equal('0')
   })

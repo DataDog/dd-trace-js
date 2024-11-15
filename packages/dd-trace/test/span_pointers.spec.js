@@ -3,7 +3,6 @@
 require('./setup/tap')
 
 const {
-  SPAN_LINK_POINTER_KIND,
   S3_PTR_KIND,
   SPAN_POINTER_DIRECTION,
   generatePointerHash
@@ -13,7 +12,6 @@ describe('span_pointers', () => {
   // datadog-lambda-js imports these and will error if they are not found (moved or renamed)
   describe('constants', () => {
     it('should export the correct constant values', () => {
-      expect(SPAN_LINK_POINTER_KIND).to.equal('span-pointer')
       expect(S3_PTR_KIND).to.equal('aws.s3.object')
       expect(SPAN_POINTER_DIRECTION.UPSTREAM).to.equal('u')
       expect(SPAN_POINTER_DIRECTION.DOWNSTREAM).to.equal('d')
