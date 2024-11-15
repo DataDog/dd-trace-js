@@ -245,7 +245,7 @@ describe('end to end sdk integration tests', () => {
         categorical_value: 'bar',
         ml_app: 'test',
         timestamp_ms: 1234567890,
-        tags: [`dd-trace.version:${tracerVersion}`, 'ml_app:test']
+        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:test']
       }
     ]
 
