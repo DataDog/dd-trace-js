@@ -13,7 +13,8 @@ describe('esm', () => {
   let proc
   let sandbox
 
-  withVersions('elasticsearch', ['@elastic/elasticsearch'], version => {
+  // excluding 8.16.0 for esm tests, because it is not working: https://github.com/elastic/elasticsearch-js/issues/2466
+  withVersions('elasticsearch', ['@elastic/elasticsearch'], '<8.16.0 || >8.16.0', version => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'@elastic/elasticsearch@${version}'`], false, [
