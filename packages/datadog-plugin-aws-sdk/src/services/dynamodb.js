@@ -57,23 +57,38 @@ class DynamoDb extends BaseAwsSdkPlugin {
 
     // Temporary logs
     console.log('[TRACER] operationName:', operationName)
-    // console.log('[TRACER] request params:', request?.params)
-    // console.log('[TRACER] response:', response)
-    // console.log('[TRACER] dynamoPrimaryKeyConfig:', DynamoDb.dynamoPrimaryKeyConfig)
+    console.log('operation equals:', operationName === 'transactWriteItems')
+    console.log('[TRACER] request params:', request?.params)
+    console.log('[TRACER] response:', response)
 
-    const tableName = request?.params.TableName
-    console.log('[TRACER] tableName:', tableName)
     const hashes = []
     switch (operationName) {
       case 'putItem': {
+        const tableName = request?.params.TableName
         const hash = calculatePutItemHash(tableName, request?.params.Item, DynamoDb.dynamoPrimaryKeyConfig)
         hashes.push(hash)
         break
       }
       case 'updateItem':
       case 'deleteItem': {
+        const tableName = request?.params.TableName
         const hash = calculateKeyBasedOperationsHash(tableName, request?.params.Key)
         hashes.push(hash)
+        break
+      }
+      case 'transactWriteItems': {
+        const transactItems = request?.params.TransactItems || []
+        for (const item of transactItems) {
+          console.log('[TRACER] item:', item)
+          if (item.Put) {
+            const hash = calculatePutItemHash(item.Put.TableName, item.Put.Item, DynamoDb.dynamoPrimaryKeyConfig)
+            hashes.push(hash)
+          } else if (item.Update || item.Delete) {
+            const operation = item.Update ? item.Update : item.Delete
+            const hash = calculateKeyBasedOperationsHash(operation.TableName, operation.Key)
+            hashes.push(hash)
+          }
+        }
         break
       }
       default: {
