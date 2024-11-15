@@ -4,7 +4,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const axios = require('axios')
 const { rawExpectedSchema } = require('./s3-naming')
-const { SPAN_LINK_KIND, S3_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/span_pointers')
+const { SPAN_LINK_POINTER_KIND, S3_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/span_pointers')
 
 const bucketName = 's3-bucket-name-test'
 
@@ -85,7 +85,7 @@ describe('Plugin', () => {
                 expect(links[0].attributes).to.deep.equal({
                   'ptr.kind': S3_PTR_KIND,
                   'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
-                  'link.kind': SPAN_LINK_KIND,
+                  'link.kind': SPAN_LINK_POINTER_KIND,
                   'ptr.hash': '6d1a2fe194c6579187408f827f942be3'
                 })
                 done()
@@ -115,7 +115,7 @@ describe('Plugin', () => {
                 expect(links[0].attributes).to.deep.equal({
                   'ptr.kind': S3_PTR_KIND,
                   'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
-                  'link.kind': SPAN_LINK_KIND,
+                  'link.kind': SPAN_LINK_POINTER_KIND,
                   'ptr.hash': '1542053ce6d393c424b1374bac1fc0c5'
                 })
                 done()
@@ -191,7 +191,7 @@ describe('Plugin', () => {
                         expect(links[0].attributes).to.deep.equal({
                           'ptr.kind': S3_PTR_KIND,
                           'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
-                          'link.kind': SPAN_LINK_KIND,
+                          'link.kind': SPAN_LINK_POINTER_KIND,
                           'ptr.hash': '422412aa6b472a7194f3e24f4b12b4a6'
                         })
                         done()

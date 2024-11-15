@@ -2,9 +2,9 @@
 
 const BaseAwsSdkPlugin = require('../base')
 const {
-  SPAN_LINK_KIND,
+  SPAN_LINK_POINTER_KIND,
   S3_PTR_KIND,
-  generateS3PointerHash
+  generatePointerHash
 } = require('../../../dd-trace/src/span_pointers')
 const { SPAN_POINTER_DIRECTION } = require('../../../dd-trace/src/span_pointers')
 const log = require('../../../dd-trace/src/log')
@@ -38,7 +38,7 @@ class S3 extends BaseAwsSdkPlugin {
     // AWS v3: https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/client/s3/
     const bucketName = request?.params?.Bucket
     const objectKey = request?.params?.Key
-    const eTag =
+    let eTag =
       response?.ETag || // v3 PutObject & CompleteMultipartUpload
       response?.CopyObjectResult?.ETag || // v3 CopyObject
       response?.data?.ETag || // v2 PutObject & CompleteMultipartUpload
@@ -49,12 +49,16 @@ class S3 extends BaseAwsSdkPlugin {
       return
     }
 
-    const pointerHash = generateS3PointerHash(bucketName, objectKey, eTag)
+    // https://github.com/DataDog/dd-span-pointer-rules/blob/main/AWS/S3/Object/README.md
+    if (eTag.startsWith('"') && eTag.endsWith('"')) {
+      eTag = eTag.slice(1, -1)
+    }
+    const pointerHash = generatePointerHash([bucketName, objectKey, eTag])
     const attributes = {
       'ptr.kind': S3_PTR_KIND,
       'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
       'ptr.hash': pointerHash,
-      'link.kind': SPAN_LINK_KIND
+      'link.kind': SPAN_LINK_POINTER_KIND
     }
     span.addSpanPointer(attributes)
   }

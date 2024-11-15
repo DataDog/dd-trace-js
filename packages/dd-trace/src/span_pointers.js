@@ -1,6 +1,6 @@
 const crypto = require('crypto')
 
-const SPAN_LINK_KIND = 'span-pointer'
+const SPAN_LINK_POINTER_KIND = 'span-pointer'
 const S3_PTR_KIND = 'aws.s3.object'
 
 const SPAN_POINTER_DIRECTION = Object.freeze({
@@ -9,25 +9,21 @@ const SPAN_POINTER_DIRECTION = Object.freeze({
 })
 
 /**
- * Generates a unique hash for an S3 object using its bucket name, key, and ETag
- * https://github.com/DataDog/dd-span-pointer-rules/blob/main/AWS/S3/Object/README.md
- * @param {string} bucketName - The name of the S3 bucket containing the object
- * @param {string} objectKey - The full path/key of the object in the bucket
- * @param {string} eTag - The ETag value from S3, which may be wrapped in quotes
- * @returns {string} A hash uniquely identifying the S3 request.
+ * Generates a unique hash from an array of strings by joining them with | before hashing.
+ * Used to uniquely identify AWS requests for span pointers.
+ * Expects S3 ETag to already have quotes removed!
+ * @param {string[]} components - Array of strings to hash
+ * @returns {string} A 32-character hash uniquely identifying the components
  */
-function generateS3PointerHash (bucketName, objectKey, eTag) {
-  if (eTag.startsWith('"') && eTag.endsWith('"')) {
-    eTag = eTag.slice(1, -1)
-  }
-  const dataToHash = `${bucketName}|${objectKey}|${eTag}`
+function generatePointerHash (components) {
+  const dataToHash = components.join('|')
   const hash = crypto.createHash('sha256').update(dataToHash).digest('hex')
   return hash.substring(0, 32)
 }
 
 module.exports = {
-  SPAN_LINK_KIND,
+  SPAN_LINK_POINTER_KIND,
   S3_PTR_KIND,
   SPAN_POINTER_DIRECTION,
-  generateS3PointerHash
+  generatePointerHash
 }
