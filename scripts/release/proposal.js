@@ -83,12 +83,14 @@ fs.writeFileSync(notesFile, lineDiff)
 success('Release proposal is ready.')
 success(`Changelog at .github/release_notes/${newVersion}.md`)
 
+// Stop and ask the user if they want to proceed with pushing everything upstream.
 checkpoint('Push the release upstream and create/update PR?')
 
 checkGitHub()
 
 run('git push -f -u origin HEAD')
 
+// Create or edit the PR. This will also automatically output a link to the PR.
 try {
   run(`gh pr create -d -B v${releaseLine}.x -t "v${newVersion} proposal" -F ${notesFile}`)
 } catch (e) {
