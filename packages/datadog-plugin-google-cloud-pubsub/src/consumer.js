@@ -23,7 +23,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       metrics: {
         'pubsub.ack': 0
       },
-      extractedLinks: childOf._links
+      extractedLinks: childOf?._links
     })
     if (this.config.dsmEnabled && message?.attributes) {
       const payloadSize = getMessageSize(message)

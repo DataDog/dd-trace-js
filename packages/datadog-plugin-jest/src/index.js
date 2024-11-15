@@ -220,7 +220,7 @@ class JestPlugin extends CiPlugin {
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
         },
-        extractedLinks: testSessionSpanContext._links
+        extractedLinks: testSessionSpanContext?._links
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (_ddTestCodeCoverageEnabled) {

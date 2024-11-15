@@ -29,7 +29,7 @@ class RheaConsumerPlugin extends ConsumerPlugin {
         'amqp.link.source.address': name,
         'amqp.link.role': 'receiver'
       },
-      extractedLinks: childOf._links
+      extractedLinks: childOf?._links
     })
 
     if (

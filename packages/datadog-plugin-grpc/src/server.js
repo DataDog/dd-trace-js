@@ -49,7 +49,7 @@ class GrpcServerPlugin extends ServerPlugin {
       metrics: {
         'grpc.status.code': 0
       },
-      extractedLinks: childOf ? childOf._links : []
+      extractedLinks: childOf?._links
     })
 
     addMetadataTags(span, metadata, metadataFilter, 'request')

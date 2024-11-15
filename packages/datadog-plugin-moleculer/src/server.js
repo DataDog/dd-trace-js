@@ -19,7 +19,7 @@ class MoleculerServerPlugin extends ServerPlugin {
         'resource.name': action.name,
         ...moleculerTags(broker, ctx, this.config)
       },
-      extractedLinks: followsFrom ? followsFrom._links : []
+      extractedLinks: followsFrom?._links
     })
   }
 }
