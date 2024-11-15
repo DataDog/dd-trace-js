@@ -24,7 +24,7 @@ if (!releaseLine || releaseLine === 'help' || releaseLine === '--help') {
 // The main branch is not automatically pulled to avoid inconsistencies between
 // release lines if new commits are added to it during a release.
 run(`git checkout v${releaseLine}.x`)
-run('git pull')
+run('git pull --ff-only')
 
 const diffCmd = [
   'branch-diff',
@@ -44,7 +44,15 @@ const notesFile = path.join(notesDir, `${newVersion}.md`)
 
 // Checkout new or existing branch.
 run(`git checkout v${newVersion}-proposal || git checkout -b v${newVersion}-proposal`)
-run(`git remote show origin | grep v${newVersion} && git pull || exit 0`)
+
+try {
+  // Pull latest changes in case the release was started by someone else.
+  run(`git remote show origin | grep v${newVersion} && git pull --ff-only`)
+} catch (e) {
+  // Either there is no remote to pull from or the local and remote branches
+  // have diverged. In both cases we ignore the error and will just use our
+  // changes.
+}
 
 // Get the hashes of the last version and the commits to add.
 const lastCommit = capture('git log -1 --pretty=%B').trim()
@@ -87,7 +95,7 @@ checkpoint('Push the release upstream and create/update PR?')
 
 checkGitHub()
 
-run('git push -f -u origin HEAD')
+run(`git push -f -u origin v${newVersion}-proposal`)
 
 // Create or edit the PR. This will also automatically output a link to the PR.
 try {
