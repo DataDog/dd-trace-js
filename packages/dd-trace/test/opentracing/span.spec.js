@@ -300,6 +300,39 @@ describe('Span', () => {
     })
   })
 
+  describe('span pointers', () => {
+    it('should add a span pointer with a zero context', () => {
+      // Override id stub for this test to return '0' when called with '0'
+      id.withArgs('0').returns('0')
+
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      const attributes1 = {
+        'ptr.kind': 'pointer_kind',
+        'ptr.dir': 'd',
+        'ptr.hash': 'abc123',
+        'link.kind': 'span-pointer'
+      }
+      span.addSpanPointer(attributes1)
+      expect(span._links).to.have.lengthOf(1)
+      expect(span._links[0].context.toTraceId()).to.equal('0')
+      expect(span._links[0].context.toSpanId()).to.equal('0')
+      expect(span._links[0].attributes).to.deep.equal(attributes1)
+    })
+
+    const attributes2 = {
+      'ptr.kind': 'another_kind',
+      'ptr.dir': 'd',
+      'ptr.hash': '1234567',
+      'link.kind': 'span-pointer'
+    }
+    span.addSpanPointer(attributes2)
+    expect(span._links).to.have.lengthOf(2)
+    expect(span._links[1].attributes).to.deep.equal(attributes2)
+    expect(span._links[1].context.toTraceId()).to.equal('0')
+    expect(span._links[1].context.toSpanId()).to.equal('0')
+  })
+
   describe('events', () => {
     it('should add span events', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
