@@ -57,7 +57,6 @@ class DynamoDb extends BaseAwsSdkPlugin {
 
     // Temporary logs
     console.log('[TRACER] operationName:', operationName)
-    console.log('operation equals:', operationName === 'transactWriteItems')
     console.log('[TRACER] request params:', request?.params)
     console.log('[TRACER] response:', response)
 
@@ -87,6 +86,24 @@ class DynamoDb extends BaseAwsSdkPlugin {
             const operation = item.Update ? item.Update : item.Delete
             const hash = calculateKeyBasedOperationsHash(operation.TableName, operation.Key)
             hashes.push(hash)
+          }
+        }
+        break
+      }
+      case 'batchWriteItem': {
+        const requestItems = request?.params.RequestItems || {}
+        console.log('[TRACER] requestItems:', requestItems)
+        for (const [tableName, operations] of Object.entries(requestItems)) {
+          console.log('[TRACER] tableName', tableName)
+          for (const operation of operations) {
+            console.log('[TRACER] operation:', operation)
+            if (operation.PutRequest) {
+              const hash = calculatePutItemHash(tableName, operation.PutRequest.Item, DynamoDb.dynamoPrimaryKeyConfig)
+              hashes.push(hash)
+            } else if (operation.DeleteRequest) {
+              const hash = calculateKeyBasedOperationsHash(tableName, operation.DeleteRequest.Key)
+              hashes.push(hash)
+            }
           }
         }
         break
