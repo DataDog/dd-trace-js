@@ -69,6 +69,24 @@ function dsmStatsExist (agent, expectedHash, expectedEdgeTags) {
   return hashFound
 }
 
+function dsmStatsExistWithParentHash (agent, expectedParentHash) {
+  const dsmStats = agent.getDsmStats()
+  let hashFound = false
+  if (dsmStats.length !== 0) {
+    for (const statsTimeBucket of dsmStats) {
+      for (const statsBucket of statsTimeBucket.Stats) {
+        for (const stats of statsBucket.Stats) {
+          if (stats.ParentHash.toString() === expectedParentHash) {
+            hashFound = true
+            return hashFound
+          }
+        }
+      }
+    }
+  }
+  return hashFound
+}
+
 function addEnvironmentVariablesToHeaders (headers) {
   // get all environment variables that start with "DD_"
   const ddEnvVars = new Map(
@@ -424,5 +442,6 @@ module.exports = {
   tracer,
   testedPlugins,
   getDsmStats,
-  dsmStatsExist
+  dsmStatsExist,
+  dsmStatsExistWithParentHash
 }
