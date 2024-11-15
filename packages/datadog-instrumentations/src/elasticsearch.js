@@ -13,7 +13,7 @@ addHook({ name: '@elastic/transport', file: 'lib/Transport.js', versions: ['>=8'
   return exports
 })
 
-addHook({ name: '@elastic/elasticsearch', file: 'lib/Transport.js', versions: ['>=5.6.16 <8', '>=8'] }, Transport => {
+addHook({ name: '@elastic/elasticsearch', file: 'lib/Transport.js', versions: ['>=5.6.16 <8', '>=8 <8.16.0'] }, Transport => {
   shimmer.wrap(Transport.prototype, 'request', createWrapRequest('elasticsearch'))
   shimmer.wrap(Transport.prototype, 'getConnection', createWrapGetConnection('elasticsearch'))
   return Transport
