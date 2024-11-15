@@ -1,7 +1,7 @@
 'use strict'
 
 const BaseAwsSdkPlugin = require('../base')
-const { generatePointerHash } = require('../../../dd-trace/src/span_pointers')
+const { calculatePutItemHash, calculateKeyBasedOperationsHash } = require('../util/dynamodb')
 const log = require('../../../dd-trace/src/log')
 
 class DynamoDb extends BaseAwsSdkPlugin {
@@ -55,58 +55,33 @@ class DynamoDb extends BaseAwsSdkPlugin {
     const request = response?.request
     const operationName = request?.operation
 
+    // Temporary logs
     console.log('[TRACER] operationName:', operationName)
-    console.log('[TRACER] request params:', request?.params)
-    console.log('[TRACER] response:', response)
-    console.log('[TRACER] dynamoPrimaryKeyConfig:', DynamoDb.dynamoPrimaryKeyConfig)
+    // console.log('[TRACER] request params:', request?.params)
+    // console.log('[TRACER] response:', response)
+    // console.log('[TRACER] dynamoPrimaryKeyConfig:', DynamoDb.dynamoPrimaryKeyConfig)
+
+    const tableName = request?.params.TableName
+    console.log('[TRACER] tableName:', tableName)
+    const hashes = []
     switch (operationName) {
       case 'putItem': {
-        // V3
-        const tableName = request?.params.TableName
-        const item = request?.params.Item // Get the item being inserted
-        const primaryKeySet = DynamoDb.dynamoPrimaryKeyConfig[tableName]
-        if (!primaryKeySet || !(primaryKeySet instanceof Set) || primaryKeySet.size === 0 || primaryKeySet.size > 2) {
-          console.log('Invalid dynamo primary key config.')
-          console.log('[TRACER] set type:', typeof primaryKeySet)
-        }
-
-        let primaryKey1Name = ''
-        let primaryKey1Value = ''
-        let primaryKey2Name = ''
-        let primaryKey2Value = ''
-
-        if (primaryKeySet.size === 1) {
-          // Single key table
-          primaryKey1Name = Array.from(primaryKeySet)[0]
-          primaryKey1Value = item[primaryKey1Name]?.S || ''
-        } else {
-          // Composite key table - sort lexicographically
-          const [key1, key2] = Array.from(primaryKeySet).sort()
-          primaryKey1Name = key1
-          primaryKey1Value = item[key1]?.S || ''
-          primaryKey2Name = key2
-          primaryKey2Value = item[key2]?.S || ''
-        }
-
-        const hash = generatePointerHash([
-          tableName,
-          primaryKey1Name,
-          primaryKey1Value,
-          primaryKey2Name,
-          primaryKey2Value
-        ])
-        console.log('[TRACER] tableName:', tableName)
-        console.log('[TRACER] partitionKeyName:', primaryKey1Name)
-        console.log('[TRACER] partitionKeyValue:', primaryKey1Value)
-        console.log('[TRACER] primaryKey2Name:', primaryKey2Name)
-        console.log('[TRACER] primaryKey2Value:', primaryKey2Value)
-        console.log('[TRACER] hash:', hash)
+        const hash = calculatePutItemHash(tableName, request?.params.Item, DynamoDb.dynamoPrimaryKeyConfig)
+        hashes.push(hash)
+        break
+      }
+      case 'updateItem':
+      case 'deleteItem': {
+        const hash = calculateKeyBasedOperationsHash(tableName, request?.params.Key)
+        hashes.push(hash)
         break
       }
       default: {
         console.log('Unsupported operation.')
       }
     }
+
+    console.log('[TRACER] hashes:', hashes)
   }
 
   static loadPrimaryKeyNamesForTables () {

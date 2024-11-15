@@ -11,7 +11,7 @@ const SPAN_POINTER_DIRECTION = Object.freeze({
  * Generates a unique hash from an array of strings by joining them with | before hashing.
  * Used to uniquely identify AWS requests for span pointers.
  * Expects S3 ETag to already have quotes removed!
- * @param {string[]} components - Array of strings to hash
+ * @param {any[]} components - Array of string, Uint8Array, and/or number to hash
  * @returns {string} A 32-character hash uniquely identifying the components
  */
 function generatePointerHash (components) {
