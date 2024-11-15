@@ -32,6 +32,7 @@ const contentHeaderList = [
 
 const EVENT_HEADERS_MAP = mapHeaderAndTags([
   ...ipHeaderList,
+  'x-forwarded',
   'forwarded',
   'via',
   ...contentHeaderList,
