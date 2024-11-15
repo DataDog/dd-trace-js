@@ -4,7 +4,7 @@ const Plugin = require('../../dd-trace/src/plugins/plugin')
 
 const objectMap = new WeakMap()
 
-class DdTraceApiPlugin extends Plugin {
+module.exports = class DdTraceApiPlugin extends Plugin {
   static get id () {
     return 'dd-trace-api'
   }
@@ -14,20 +14,36 @@ class DdTraceApiPlugin extends Plugin {
 
     const tracer = this._tracer
 
-    const handleEvent = (name, fn) => {
+    this.addSub('datadog-api:v1:tracerinit', ({ proxy }) => {
+      const proxyVal = proxy()
+      objectMap.set(proxyVal, tracer)
+    })
+
+    const handleEvent = (name) => {
       // For v1, APIs are 1:1 with their internal equivalents, so we can just
       // call the internal method directly. That's what we do here unless we
       // want to override. As the API evolves, this may change.
-      this.addSub(`datadog-api:v1:${name}`, ({ self, args, ret, dummy }) => {
-        if (!fn && name.includes(':')) {
+      this.addSub(`datadog-api:v1:${name}`, ({ self, args, ret, proxy }) => {
+        if (name.includes(':')) {
           name = name.split(':').pop()
         }
 
+        if (objectMap.has(self)) {
+          self = objectMap.get(self)
+        }
+
+        for (let i = 0; i < args.length; i++) {
+          if (objectMap.has(args[i])) {
+            args[i] = objectMap.get(args[i])
+          }
+        }
+
         try {
-          ret.value = fn ? fn(args, self) : self[name](...args)
-          if (dummy) {
-            objectMap.set(dummy, ret.value)
-            ret.value = dummy
+          ret.value = self[name](...args)
+          if (proxy) {
+            const proxyVal = proxy()
+            objectMap.set(proxyVal, ret.value)
+            ret.value = proxyVal
           }
         } catch (e) {
           ret.error = e
@@ -46,5 +62,10 @@ class DdTraceApiPlugin extends Plugin {
     handleEvent('getRumData')
     handleEvent('setUser')
     handleEvent('profilerStarted')
+    handleEvent('span:context')
+    handleEvent('span:setTag')
+    handleEvent('span:addTags')
+    handleEvent('span:finish')
+    handleEvent('span:addLink')
   }
 }
