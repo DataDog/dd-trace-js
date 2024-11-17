@@ -31,6 +31,10 @@
       "versions": [">=3"]
     },
     {
+      "name": "@aws-sdk/client-dynamodb",
+      "versions": [">=3"]
+    },
+    {
       "name": "@aws-sdk/client-sfn",
       "versions": [">=3"]
     },

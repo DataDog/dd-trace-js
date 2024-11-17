@@ -1,9 +1,11 @@
 'use strict'
 
 const BaseAwsSdkPlugin = require('../base')
-const { calculatePutItemHash, calculateKeyBasedOperationsHash } = require('../util/dynamodb')
+const { calculatePutItemHash, calculateHashWithKnownKeys } = require('../util/dynamodb')
 const log = require('../../../dd-trace/src/log')
 
+/* eslint-disable no-console */
+// TODO temp
 class DynamoDb extends BaseAwsSdkPlugin {
   static get id () { return 'dynamodb' }
   static get peerServicePrecursors () { return ['tablename'] }
@@ -65,14 +67,14 @@ class DynamoDb extends BaseAwsSdkPlugin {
       case 'putItem': {
         const tableName = request?.params.TableName
         const hash = calculatePutItemHash(tableName, request?.params.Item, DynamoDb.dynamoPrimaryKeyConfig)
-        hashes.push(hash)
+        if (hash) hashes.push(hash)
         break
       }
       case 'updateItem':
       case 'deleteItem': {
         const tableName = request?.params.TableName
-        const hash = calculateKeyBasedOperationsHash(tableName, request?.params.Key)
-        hashes.push(hash)
+        const hash = calculateHashWithKnownKeys(tableName, request?.params.Key)
+        if (hash) hashes.push(hash)
         break
       }
       case 'transactWriteItems': {
@@ -81,11 +83,11 @@ class DynamoDb extends BaseAwsSdkPlugin {
           console.log('[TRACER] item:', item)
           if (item.Put) {
             const hash = calculatePutItemHash(item.Put.TableName, item.Put.Item, DynamoDb.dynamoPrimaryKeyConfig)
-            hashes.push(hash)
+            if (hash) hashes.push(hash)
           } else if (item.Update || item.Delete) {
             const operation = item.Update ? item.Update : item.Delete
-            const hash = calculateKeyBasedOperationsHash(operation.TableName, operation.Key)
-            hashes.push(hash)
+            const hash = calculateHashWithKnownKeys(operation.TableName, operation.Key)
+            if (hash) hashes.push(hash)
           }
         }
         break
@@ -99,10 +101,10 @@ class DynamoDb extends BaseAwsSdkPlugin {
             console.log('[TRACER] operation:', operation)
             if (operation.PutRequest) {
               const hash = calculatePutItemHash(tableName, operation.PutRequest.Item, DynamoDb.dynamoPrimaryKeyConfig)
-              hashes.push(hash)
+              if (hash) hashes.push(hash)
             } else if (operation.DeleteRequest) {
-              const hash = calculateKeyBasedOperationsHash(tableName, operation.DeleteRequest.Key)
-              hashes.push(hash)
+              const hash = calculateHashWithKnownKeys(tableName, operation.DeleteRequest.Key)
+              if (hash) hashes.push(hash)
             }
           }
         }
@@ -118,6 +120,7 @@ class DynamoDb extends BaseAwsSdkPlugin {
 
   static loadPrimaryKeyNamesForTables () {
     // TODO exit early if env var not found
+    // TODO move to util file
     const encodedTablePrimaryKeys = process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS || '{}'
     console.log('[TRACER] env var:', encodedTablePrimaryKeys)
 
