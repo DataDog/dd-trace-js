@@ -22,11 +22,12 @@ const { checkBranchDiff, checkGitHub, checkGit } = require('./helpers/requiremen
 const releaseLine = params[0]
 
 // Validate release line argument.
-if (!releaseLine || releaseLine === 'help' || releaseLine === '--help') {
+if (!releaseLine || releaseLine === 'help' || flags.help) {
   log(
     'Usage: node scripts/release/proposal <release-line>\n',
     'Options:',
     '  --debug    Print raw commands and their outputs.',
+    '  --help     Show this help.',
     '  --minor    Force a minor release.',
     '  --patch    Force a patch release.'
   )
