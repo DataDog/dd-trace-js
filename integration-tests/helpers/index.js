@@ -140,6 +140,7 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
 
 async function createSandbox (dependencies = [], isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
+  const startTime = process.hrtime()
   /* To execute integration tests without a sandbox uncomment the next line
    * and do `yarn link && yarn link dd-trace` */
   // return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
@@ -155,11 +156,15 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   const addOptions = { cwd: folder, env: restOfEnv }
   await exec(`yarn pack --filename ${out}`, { env: restOfEnv }) // TODO: cache this
 
+  console.log('[time] Yarn pack', process.hrtime(startTime))
+
   try {
     await exec(addCommand, addOptions)
   } catch (e) { // retry in case of server error from registry
     await exec(addCommand, addOptions)
   }
+
+  console.log('[time] Yarn add', process.hrtime(startTime))
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
@@ -168,12 +173,17 @@ async function createSandbox (dependencies = [], isGitRepo = false,
       await exec(`cp -R ${path} ${folder}`)
     }
   }
+
+  console.log('[time] copy', process.hrtime(startTime))
+
   if (process.platform === 'win32') {
     // On Windows, we can only sync entire filesystem volume caches.
     await exec(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
   } else {
     await exec(`sync ${folder}`)
   }
+
+  console.log('[time] sync', process.hrtime(startTime))
 
   if (followUpCommand) {
     await exec(followUpCommand, { cwd: folder, env: restOfEnv })
