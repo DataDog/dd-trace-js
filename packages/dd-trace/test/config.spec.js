@@ -1526,6 +1526,13 @@ describe('Config', () => {
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
   })
 
+  it('should not transform the lookup parameter', () => {
+    const lookup = () => 'test'
+    const config = new Config({ lookup: lookup })
+
+    expect(config.lookup).to.equal(lookup)
+  })
+
   it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
 

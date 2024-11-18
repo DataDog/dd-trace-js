@@ -951,7 +951,7 @@ class Config {
     this._setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)
     this._setString(opts, 'llmobs.mlApp', options.llmobs?.mlApp)
     this._setBoolean(opts, 'logInjection', options.logInjection)
-    this._setString(opts, 'lookup', options.lookup)
+    this._setValue(opts, 'lookup', options.lookup)
     this._setBoolean(opts, 'openAiLogsEnabled', options.openAiLogsEnabled)
     this._setValue(opts, 'peerServiceMapping', options.peerServiceMapping)
     this._setBoolean(opts, 'plugins', options.plugins)
