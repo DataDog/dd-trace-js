@@ -82,6 +82,10 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
       return knexDialect.toUpperCase()
     }
   }
+
+  _rangesAreExpected () {
+    return true
+  }
 }
 
 module.exports = new SqlInjectionAnalyzer()
