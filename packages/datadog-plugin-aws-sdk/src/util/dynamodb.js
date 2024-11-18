@@ -11,10 +11,9 @@ const { generatePointerHash } = require('../../../dd-trace/src/util')
  * @example
  * encodeValue({ S: "user123" }) -> Buffer("user123")
  * encodeValue({ N: "42" }) -> Buffer("42")
- * encodeValue({ B: Buffer.from([1, 2, 3]) }) -> Buffer([1, 2, 3])
+ * encodeValue({ B: Buffer([1, 2, 3]) }) -> Buffer([1, 2, 3])
  */
 const encodeValue = (valueObject) => {
-  console.log('[TRACER] valueObject:', valueObject)
   if (!valueObject) {
     return Buffer.from('')
   }
@@ -22,14 +21,14 @@ const encodeValue = (valueObject) => {
   try {
     const type = Object.keys(valueObject)[0]
     const value = valueObject[type]
-    console.log(typeof value)
 
     switch (type) {
       case 'S':
+        return Buffer.from(value)
       case 'N':
-        return Buffer.from(value.toString()) // TODO test N, do we need toString()
+        return Buffer.from(value.toString())
       case 'B':
-        return value || Buffer.from('') // TODO test, is this right?
+        return value
       default:
         console.log('Unsupported DynamoDB type:', type)
         return Buffer.from('')
@@ -46,8 +45,8 @@ const encodeValue = (valueObject) => {
  *
  * @param {Set<string>|Object} keySet - Set of key names or object of key names/value pairs.
  * @param {Object} keyValuePairs - Object containing key/value pairs.
- * @returns {Array} [key1Name, key1Value, key2Name, key2Value]. key2 entries are empty strings in the single-key case.
- *
+ * @returns {Array|undefined} [key1Name, key1Value, key2Name, key2Value], or undefined if invalid input.
+ *                            key2 entries are empty strings in the single-key case.
  * @example
  * extractPrimaryKeys(new Set(['userId']), {userId: {S: "user123"}})
  * // Returns ["userId", Buffer("user123"), "", ""]
@@ -58,6 +57,10 @@ const extractPrimaryKeys = (keySet, keyValuePairs) => {
   const keyNames = keySet instanceof Set
     ? Array.from(keySet)
     : Object.keys(keySet)
+  if (keyNames.length === 0) {
+    console.log('Empty keySet provided to extractPrimaryKeys.')
+    return
+  }
 
   if (keyNames.length === 1) {
     return [keyNames[0], encodeValue(keyValuePairs[keyNames[0]]), '', '']
@@ -71,7 +74,6 @@ const extractPrimaryKeys = (keySet, keyValuePairs) => {
     ]
   }
 }
-// TODO integration test for binary and number cases
 
 /**
  * Calculates a hash for DynamoDB PutItem operations using table's configured primary keys.
@@ -80,7 +82,7 @@ const extractPrimaryKeys = (keySet, keyValuePairs) => {
  * @param {Object} item - Complete PutItem item parameter to be put.
  * @param {Object.<string, Set<string>>} primaryKeyConfig - Mapping of table names to Sets of primary key names
  *                                                         loaded from DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS.
- * @returns {string|undefined} Hash combining table name and primary key/value pairs, or undefined if invalid config.
+ * @returns {string|undefined} Hash combining table name and primary key/value pairs, or undefined if unable.
  *
  * @example
  * // With env var DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS='{"UserTable":["userId","timestamp"]}'
@@ -91,13 +93,16 @@ const extractPrimaryKeys = (keySet, keyValuePairs) => {
  * )
  */
 const calculatePutItemHash = (tableName, item, primaryKeyConfig) => {
+  if (!tableName || !item || !primaryKeyConfig) {
+    console.log('Unable to calculate hash because missing parameters')
+    return
+  }
   const primaryKeySet = primaryKeyConfig[tableName]
   if (!primaryKeySet || !(primaryKeySet instanceof Set) || primaryKeySet.size === 0 || primaryKeySet.size > 2) {
     console.log('Invalid dynamo primary key config:', primaryKeyConfig)
     return
   }
   const keyValues = extractPrimaryKeys(primaryKeySet, item)
-  console.log('[TRACER] keyValues:', keyValues)
   return generatePointerHash([tableName, ...keyValues])
 }
 
@@ -107,7 +112,7 @@ const calculatePutItemHash = (tableName, item, primaryKeyConfig) => {
  * @param {string} tableName - Name of the DynamoDB table.
  * @param {Object} keys - Object containing primary key/value attributes in DynamoDB format.
  *                       (e.g., { userId: { S: "123" }, sortKey: { N: "456" } })
- * @returns {string} Hash value combining table name and primary key/value pairs.
+ * @returns {string|undefined} Hash value combining table name and primary key/value pairs, or undefined if unable.
  *
  * @example
  * calculateKeyBasedOperationsHash(
@@ -116,6 +121,10 @@ const calculatePutItemHash = (tableName, item, primaryKeyConfig) => {
  * )
  */
 const calculateHashWithKnownKeys = (tableName, keys) => {
+  if (!tableName || !keys) {
+    console.log('Unable to calculate hash because missing parameters')
+    return
+  }
   const keyValues = extractPrimaryKeys(keys, keys)
   return generatePointerHash([tableName, ...keyValues])
 }

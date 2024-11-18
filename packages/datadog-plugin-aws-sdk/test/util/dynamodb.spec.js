@@ -1,4 +1,9 @@
-const { encodeValue, extractPrimaryKeys, calculateHashWithKnownKeys, calculatePutItemHash } = require('../../src/util/dynamodb')
+const {
+  encodeValue,
+  extractPrimaryKeys,
+  calculateHashWithKnownKeys,
+  calculatePutItemHash
+} = require('../../src/util/dynamodb')
 const { generatePointerHash } = require('../../../dd-trace/src/util')
 
 describe('encodeValue', () => {
@@ -9,10 +14,17 @@ describe('encodeValue', () => {
       expect(result).to.deep.equal(Buffer.from('hello world'))
     })
 
-    it('handles number (N) type correctly', () => {
+    it('handles number (N) as string type correctly', () => {
       const result = encodeValue({ N: '123.45' })
       expect(Buffer.isBuffer(result)).to.be.true
       expect(result).to.deep.equal(Buffer.from('123.45'))
+    })
+
+    it('handles number (N) as type string or number the same', () => {
+      const result1 = encodeValue({ N: 456.78 })
+      const result2 = encodeValue({ N: '456.78' })
+      expect(Buffer.isBuffer(result1)).to.be.true
+      expect(result1).to.deep.equal(result2)
     })
 
     it('handles binary (B) type correctly', () => {
@@ -44,6 +56,18 @@ describe('encodeValue', () => {
 
     it('returns empty buffer for malformed input', () => {
       const result = encodeValue({})
+      expect(Buffer.isBuffer(result)).to.be.true
+      expect(result.length).to.equal(0)
+    })
+
+    it('handles empty string values', () => {
+      const result = encodeValue({ S: '' })
+      expect(Buffer.isBuffer(result)).to.be.true
+      expect(result.length).to.equal(0)
+    })
+
+    it('handles empty buffer', () => {
+      const result = encodeValue({ B: Buffer.from([]) })
       expect(Buffer.isBuffer(result)).to.be.true
       expect(result.length).to.equal(0)
     })
@@ -128,6 +152,30 @@ describe('extractPrimaryKeys', () => {
       }
       const result = extractPrimaryKeys(keySet, item)
       expect(result).to.deep.equal(['timestamp', Buffer.from(''), 'userId', Buffer.from('user123')])
+    })
+
+    it('handles empty Set input', () => {
+      const result = extractPrimaryKeys(new Set([]), {})
+      expect(result).to.be.undefined
+    })
+
+    it('handles null values in item', () => {
+      const keySet = new Set(['key1', 'key2'])
+      const item = {
+        key1: null,
+        key2: { S: 'value2' }
+      }
+      const result = extractPrimaryKeys(keySet, item)
+      expect(result).to.deep.equal(['key1', Buffer.from(''), 'key2', Buffer.from('value2')])
+    })
+
+    it('handles undefined values in item', () => {
+      const keySet = new Set(['key1', 'key2'])
+      const item = {
+        key2: { S: 'value2' }
+      }
+      const result = extractPrimaryKeys(keySet, item)
+      expect(result).to.deep.equal(['key1', Buffer.from(''), 'key2', Buffer.from('value2')])
     })
   })
 })
@@ -256,6 +304,25 @@ describe('calculatePutItemHash', () => {
       const expectedHash = generatePointerHash([tableName, 'userId', Buffer.from(''), '', ''])
       expect(actualHash).to.equal(expectedHash)
     })
+
+    it('returns undefined for Set with more than 2 keys', () => {
+      const tableName = 'TestTable'
+      const item = { key1: { S: 'value1' }, key2: { S: 'value2' }, key3: { S: 'value3' } }
+      const keyConfig = { TestTable: new Set(['key1', 'key2', 'key3']) }
+
+      const result = calculatePutItemHash(tableName, item, keyConfig)
+      expect(result).to.be.undefined
+    })
+
+    it('returns undefined for empty keyConfig', () => {
+      const result = calculatePutItemHash('TestTable', {}, {})
+      expect(result).to.be.undefined
+    })
+
+    it('returns undefined for undefined keyConfig', () => {
+      const result = calculatePutItemHash('TestTable', {}, undefined)
+      expect(result).to.be.undefined
+    })
   })
 })
 
@@ -339,6 +406,27 @@ describe('calculateHashWithKnownKeys', () => {
       const keys = { userId: { INVALID: 'user123' } }
       const hash = calculateHashWithKnownKeys(tableName, keys)
       expect(hash).to.be.a('string')
+    })
+
+    it('handles null keys object', () => {
+      const hash = calculateHashWithKnownKeys('TestTable', null)
+      expect(hash).to.be.a('string')
+      expect(hash).to.equal(generatePointerHash(['TestTable', '', Buffer.from(''), '', '']))
+    })
+
+    it('handles undefined keys object', () => {
+      const hash = calculateHashWithKnownKeys('TestTable', undefined)
+      expect(hash).to.be.a('string')
+      expect(hash).to.equal(generatePointerHash(['TestTable', '', Buffer.from(''), '', '']))
+    })
+
+    it('handles mixed valid and invalid key types', () => {
+      const keys = {
+        validKey: { S: 'test' },
+        invalidKey: { INVALID: 'value' }
+      }
+      const hash = calculateHashWithKnownKeys('TestTable', keys)
+      expect(hash).to.equal(generatePointerHash(['TestTable', 'invalidKey', Buffer.from(''), 'validKey', Buffer.from('test')]))
     })
   })
 })
