@@ -1,7 +1,5 @@
 const { generatePointerHash } = require('../../../dd-trace/src/util')
-
-/* eslint-disable no-console */
-// TODO temp
+const log = require('../../../dd-trace/src/log')
 
 /**
  * Encodes a DynamoDB attribute value to Buffer for hashing.
@@ -30,11 +28,11 @@ const encodeValue = (valueObject) => {
       case 'B':
         return value
       default:
-        console.log('Unsupported DynamoDB type:', type)
+        log.debug(`Unknown DynamoDB value type: ${type}`)
         return Buffer.from('')
     }
   } catch (err) {
-    console.log('Unable to encode valueObject:', valueObject)
+    log.debug(`Unable to encode valueObject: ${valueObject}`)
     return Buffer.from('')
   }
 }
@@ -58,7 +56,7 @@ const extractPrimaryKeys = (keySet, keyValuePairs) => {
     ? Array.from(keySet)
     : Object.keys(keySet)
   if (keyNames.length === 0) {
-    console.log('Empty keySet provided to extractPrimaryKeys.')
+    log.debug('Empty keySet provided. Unable to calculate span pointer hash.')
     return
   }
 
@@ -94,14 +92,12 @@ const extractPrimaryKeys = (keySet, keyValuePairs) => {
  */
 const calculatePutItemHash = (tableName, item, primaryKeyConfig) => {
   if (!tableName || !item || !primaryKeyConfig) {
-    console.log('Unable to calculate hash because missing parameters')
+    log.debug('Unable to calculate hash because missing required parameters')
     return
   }
-  console.log('primaryKeyConfig:', primaryKeyConfig)
-  console.log('tableName:', tableName)
   const primaryKeySet = primaryKeyConfig[tableName]
   if (!primaryKeySet || !(primaryKeySet instanceof Set) || primaryKeySet.size === 0 || primaryKeySet.size > 2) {
-    console.log('Invalid dynamo primary key config:', primaryKeyConfig)
+    log.debug('Invalid dynamo primary key config:', primaryKeyConfig)
     return
   }
   const keyValues = extractPrimaryKeys(primaryKeySet, item)
@@ -126,7 +122,7 @@ const calculatePutItemHash = (tableName, item, primaryKeyConfig) => {
  */
 const calculateHashWithKnownKeys = (tableName, keys) => {
   if (!tableName || !keys) {
-    console.log('Unable to calculate hash because missing parameters')
+    log.debug('Unable to calculate hash because missing parameters')
     return
   }
   const keyValues = extractPrimaryKeys(keys, keys)

@@ -80,7 +80,7 @@ describe('Plugin', () => {
             process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = null
           })
 
-          function testSpanPointers({ expectedLength = 1, expectedHashes, operation }) {
+          function testSpanPointers ({ expectedLength = 1, expectedHashes, operation }) {
             return (done) => {
               agent.use(traces => {
                 try {

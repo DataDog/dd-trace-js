@@ -5,8 +5,6 @@ const { calculatePutItemHash, calculateHashWithKnownKeys } = require('../util/dy
 const log = require('../../../dd-trace/src/log')
 const { DYNAMODB_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../../dd-trace/src/constants')
 
-/* eslint-disable no-console */
-// TODO temp
 class DynamoDb extends BaseAwsSdkPlugin {
   static get id () { return 'dynamodb' }
   static get peerServicePrecursors () { return ['tablename'] }
@@ -57,7 +55,6 @@ class DynamoDb extends BaseAwsSdkPlugin {
   addSpanPointers (span, response) {
     const request = response?.request
     const operationName = request?.operation
-    console.log('addSpanPointers:', operationName)
 
     const hashes = []
     switch (operationName) {
@@ -67,7 +64,6 @@ class DynamoDb extends BaseAwsSdkPlugin {
           request?.params?.Item,
           DynamoDb.getPrimaryKeyConfig()
         )
-        console.log('[TEST] hash:', hash)
         if (hash) hashes.push(hash)
         break
       }
@@ -109,7 +105,6 @@ class DynamoDb extends BaseAwsSdkPlugin {
       }
     }
 
-    console.log('hashes:', hashes)
     for (const hash of hashes) {
       span.addSpanPointer(DYNAMODB_PTR_KIND, SPAN_POINTER_DIRECTION.DOWNSTREAM, hash)
     }
