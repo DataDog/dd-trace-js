@@ -2,14 +2,14 @@
 
 /* eslint-disable max-len */
 
-const { capture, fatal } = require('./terminal')
+const { capture, fatal, run } = require('./terminal')
 
 const requiredScopes = ['public_repo', 'read:org']
 
 // Check that the `git` CLI is installed.
 function checkGit () {
   try {
-    capture('git --version')
+    run('git --version')
   } catch (e) {
     fatal(
       'The "git" CLI could not be found.',
@@ -21,7 +21,7 @@ function checkGit () {
 // Check that the `branch-diff` CLI is installed.
 function checkBranchDiff () {
   try {
-    capture('branch-diff --version')
+    run('branch-diff --version')
   } catch (e) {
     const link = [
       'https://datadoghq.atlassian.net/wiki/spaces/DL/pages/3125511269/Node.js+Tracer+Release+Process',
@@ -47,7 +47,7 @@ function checkGitHub () {
   }
 
   try {
-    capture('gh --version')
+    run('gh --version')
   } catch (e) {
     fatal(
       'The "gh" CLI could not be found.',
