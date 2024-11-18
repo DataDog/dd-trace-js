@@ -444,7 +444,7 @@ class Config {
     const defaults = setHiddenProperty(this, '_defaults', {})
 
     this._setValue(defaults, 'appsec.apiSecurity.enabled', true)
-    this._setValue(defaults, 'appsec.apiSecurity.requestSampling', 0.1)
+    this._setValue(defaults, 'appsec.apiSecurity.sampleDelay', 30)
     this._setValue(defaults, 'appsec.blockedTemplateGraphql', undefined)
     this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
     this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
@@ -571,7 +571,7 @@ class Config {
       AWS_LAMBDA_FUNCTION_NAME,
       DD_AGENT_HOST,
       DD_API_SECURITY_ENABLED,
-      DD_API_SECURITY_REQUEST_SAMPLE_RATE,
+      DD_API_SECURITY_SAMPLE_DELAY,
       DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
       DD_APPSEC_ENABLED,
       DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON,
@@ -700,7 +700,7 @@ class Config {
       DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED),
       DD_EXPERIMENTAL_API_SECURITY_ENABLED && isTrue(DD_EXPERIMENTAL_API_SECURITY_ENABLED)
     ))
-    this._setUnit(env, 'appsec.apiSecurity.requestSampling', DD_API_SECURITY_REQUEST_SAMPLE_RATE)
+    this._setValue(env, 'appsec.apiSecurity.sampleDelay', maybeFloat(DD_API_SECURITY_SAMPLE_DELAY))
     this._setValue(env, 'appsec.blockedTemplateGraphql', maybeFile(DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON))
     this._setValue(env, 'appsec.blockedTemplateHtml', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML))
     this._envUnprocessed['appsec.blockedTemplateHtml'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML
@@ -880,7 +880,6 @@ class Config {
     tagger.add(tags, options.tags)
 
     this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec.apiSecurity?.enabled)
-    this._setUnit(opts, 'appsec.apiSecurity.requestSampling', options.appsec.apiSecurity?.requestSampling)
     this._setValue(opts, 'appsec.blockedTemplateGraphql', maybeFile(options.appsec.blockedTemplateGraphql))
     this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(options.appsec.blockedTemplateHtml))
     this._optsUnprocessed['appsec.blockedTemplateHtml'] = options.appsec.blockedTemplateHtml
