@@ -398,7 +398,7 @@ describe('calculateHashWithKnownKeys', () => {
     it('handles empty keys object', () => {
       const tableName = 'UserTable'
       const hash = calculateHashWithKnownKeys(tableName, {})
-      expect(hash).to.be.a('string')
+      expect(hash).to.be.undefined
     })
 
     it('handles invalid key types', () => {
@@ -410,14 +410,12 @@ describe('calculateHashWithKnownKeys', () => {
 
     it('handles null keys object', () => {
       const hash = calculateHashWithKnownKeys('TestTable', null)
-      expect(hash).to.be.a('string')
-      expect(hash).to.equal(generatePointerHash(['TestTable', '', Buffer.from(''), '', '']))
+      expect(hash).to.be.undefined
     })
 
     it('handles undefined keys object', () => {
       const hash = calculateHashWithKnownKeys('TestTable', undefined)
-      expect(hash).to.be.a('string')
-      expect(hash).to.equal(generatePointerHash(['TestTable', '', Buffer.from(''), '', '']))
+      expect(hash).to.be.undefined
     })
 
     it('handles mixed valid and invalid key types', () => {
@@ -426,7 +424,9 @@ describe('calculateHashWithKnownKeys', () => {
         invalidKey: { INVALID: 'value' }
       }
       const hash = calculateHashWithKnownKeys('TestTable', keys)
-      expect(hash).to.equal(generatePointerHash(['TestTable', 'invalidKey', Buffer.from(''), 'validKey', Buffer.from('test')]))
+      expect(hash).to.equal(
+        generatePointerHash(['TestTable', 'invalidKey', Buffer.from(''), 'validKey', Buffer.from('test')])
+      )
     })
   })
 })

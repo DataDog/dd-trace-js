@@ -97,13 +97,17 @@ const calculatePutItemHash = (tableName, item, primaryKeyConfig) => {
     console.log('Unable to calculate hash because missing parameters')
     return
   }
+  console.log('primaryKeyConfig:', primaryKeyConfig)
+  console.log('tableName:', tableName)
   const primaryKeySet = primaryKeyConfig[tableName]
   if (!primaryKeySet || !(primaryKeySet instanceof Set) || primaryKeySet.size === 0 || primaryKeySet.size > 2) {
     console.log('Invalid dynamo primary key config:', primaryKeyConfig)
     return
   }
   const keyValues = extractPrimaryKeys(primaryKeySet, item)
-  return generatePointerHash([tableName, ...keyValues])
+  if (keyValues) {
+    return generatePointerHash([tableName, ...keyValues])
+  }
 }
 
 /**
@@ -126,7 +130,9 @@ const calculateHashWithKnownKeys = (tableName, keys) => {
     return
   }
   const keyValues = extractPrimaryKeys(keys, keys)
-  return generatePointerHash([tableName, ...keyValues])
+  if (keyValues) {
+    return generatePointerHash([tableName, ...keyValues])
+  }
 }
 
 module.exports = {

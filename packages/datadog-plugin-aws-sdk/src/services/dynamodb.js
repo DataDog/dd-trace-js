@@ -3,6 +3,7 @@
 const BaseAwsSdkPlugin = require('../base')
 const { calculatePutItemHash, calculateHashWithKnownKeys } = require('../util/dynamodb')
 const log = require('../../../dd-trace/src/log')
+const { DYNAMODB_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../../dd-trace/src/constants')
 
 /* eslint-disable no-console */
 // TODO temp
@@ -56,33 +57,31 @@ class DynamoDb extends BaseAwsSdkPlugin {
   addSpanPointers (span, response) {
     const request = response?.request
     const operationName = request?.operation
-
-    // Temporary logs
-    console.log('[TRACER] operationName:', operationName)
-    console.log('[TRACER] request params:', request?.params)
-    console.log('[TRACER] response:', response)
+    console.log('addSpanPointers:', operationName)
 
     const hashes = []
     switch (operationName) {
       case 'putItem': {
-        const tableName = request?.params.TableName
-        const hash = calculatePutItemHash(tableName, request?.params.Item, DynamoDb.dynamoPrimaryKeyConfig)
+        const hash = calculatePutItemHash(
+          request?.params?.TableName,
+          request?.params?.Item,
+          DynamoDb.getPrimaryKeyConfig()
+        )
+        console.log('[TEST] hash:', hash)
         if (hash) hashes.push(hash)
         break
       }
       case 'updateItem':
       case 'deleteItem': {
-        const tableName = request?.params.TableName
-        const hash = calculateHashWithKnownKeys(tableName, request?.params.Key)
+        const hash = calculateHashWithKnownKeys(request?.params?.TableName, request?.params?.Key)
         if (hash) hashes.push(hash)
         break
       }
       case 'transactWriteItems': {
-        const transactItems = request?.params.TransactItems || []
+        const transactItems = request?.params?.TransactItems || []
         for (const item of transactItems) {
-          console.log('[TRACER] item:', item)
           if (item.Put) {
-            const hash = calculatePutItemHash(item.Put.TableName, item.Put.Item, DynamoDb.dynamoPrimaryKeyConfig)
+            const hash = calculatePutItemHash(item.Put.TableName, item.Put.Item, DynamoDb.getPrimaryKeyConfig())
             if (hash) hashes.push(hash)
           } else if (item.Update || item.Delete) {
             const operation = item.Update ? item.Update : item.Delete
@@ -94,15 +93,13 @@ class DynamoDb extends BaseAwsSdkPlugin {
       }
       case 'batchWriteItem': {
         const requestItems = request?.params.RequestItems || {}
-        console.log('[TRACER] requestItems:', requestItems)
         for (const [tableName, operations] of Object.entries(requestItems)) {
-          console.log('[TRACER] tableName', tableName)
+          if (!Array.isArray(operations)) continue
           for (const operation of operations) {
-            console.log('[TRACER] operation:', operation)
-            if (operation.PutRequest) {
-              const hash = calculatePutItemHash(tableName, operation.PutRequest.Item, DynamoDb.dynamoPrimaryKeyConfig)
+            if (operation?.PutRequest) {
+              const hash = calculatePutItemHash(tableName, operation.PutRequest.Item, DynamoDb.getPrimaryKeyConfig())
               if (hash) hashes.push(hash)
-            } else if (operation.DeleteRequest) {
+            } else if (operation?.DeleteRequest) {
               const hash = calculateHashWithKnownKeys(tableName, operation.DeleteRequest.Key)
               if (hash) hashes.push(hash)
             }
@@ -110,41 +107,51 @@ class DynamoDb extends BaseAwsSdkPlugin {
         }
         break
       }
-      default: {
-        console.log('Unsupported operation.')
-      }
     }
 
-    console.log('[TRACER] hashes:', hashes)
+    console.log('hashes:', hashes)
+    for (const hash of hashes) {
+      span.addSpanPointer(DYNAMODB_PTR_KIND, SPAN_POINTER_DIRECTION.DOWNSTREAM, hash)
+    }
   }
 
-  static loadPrimaryKeyNamesForTables () {
-    // TODO exit early if env var not found
-    // TODO move to util file
-    const encodedTablePrimaryKeys = process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS || '{}'
-    console.log('[TRACER] env var:', encodedTablePrimaryKeys)
+  /**
+   * Loads primary key config from the `DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS` env var.
+   * Only runs when needed, and warns when missing or invalid config.
+   * @returns {Object|null} Parsed config from env var or null if empty/missing/invalid config.
+   */
+  static getPrimaryKeyConfig () {
+    const config = DynamoDb.dynamoPrimaryKeyConfig || {}
 
-    const tablePrimaryKeys = {}
+    // Return cached config if valid
+    if (Object.keys(config).length > 0) {
+      return config
+    }
+
+    const primaryKeysEnvVar = process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS
+    if (!primaryKeysEnvVar) {
+      log.warn('Missing DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS env variable')
+      return null
+    }
+
     try {
-      const rawTablePrimaryKeys = JSON.parse(encodedTablePrimaryKeys)
+      const parsedConfig = JSON.parse(primaryKeysEnvVar)
 
-      for (const [table, primaryKeys] of Object.entries(rawTablePrimaryKeys)) {
-        if (typeof table === 'string' && Array.isArray(primaryKeys)) {
-          tablePrimaryKeys[table] = new Set(primaryKeys)
+      for (const [tableName, primaryKeys] of Object.entries(parsedConfig)) {
+        if (Array.isArray(primaryKeys) && primaryKeys.length > 0) {
+          config[tableName] = new Set(primaryKeys)
         } else {
-          log.warn(`Invalid primary key configuration for table: ${table}`)
+          log.warn(`Invalid primary key configuration for table: ${tableName}`)
         }
       }
+
+      DynamoDb.dynamoPrimaryKeyConfig = config
+      return config
     } catch (err) {
       log.warn('Failed to parse DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS:', err)
-      console.log('[TRACER] Failed to parse DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS:', err)
+      return null
     }
-
-    return tablePrimaryKeys
   }
 }
-
-// Initialize once when module is loaded
-DynamoDb.dynamoPrimaryKeyConfig = DynamoDb.loadPrimaryKeyNamesForTables()
 
 module.exports = DynamoDb
