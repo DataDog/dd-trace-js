@@ -168,38 +168,52 @@ function createWrapRouterMethod (name) {
   return wrapMethod
 }
 
-const processParamsStartCh = channel('datadog:express:process_params:start')
-function wrapParams (req) {
-  let params
-  Object.defineProperty(req, 'params', {
-    get () { return params },
-    set (val) {
-      params = val
-      if (val && processParamsStartCh.hasSubscribers) {
-        const abortController = new AbortController()
-
-        processParamsStartCh.publish({
-          req,
-          res: req?.res,
-          abortController,
-          params: req?.params
-        })
-      }
-    }
-  })
-}
-
 const wrapRouterMethod = createWrapRouterMethod('router')
-const wrapExpressRouterMethod = createWrapRouterMethod('express')
 
 addHook({ name: 'router', versions: ['>=1'] }, Router => {
   shimmer.wrap(Router.prototype, 'use', wrapRouterMethod)
   shimmer.wrap(Router.prototype, 'route', wrapRouterMethod)
 
-  shimmer.wrap(Router.prototype, 'use', wrapExpressRouterMethod)
-  shimmer.wrap(Router.prototype, 'route', wrapExpressRouterMethod)
-
   return Router
+})
+
+function createWrapLayerMethod () {
+  const processParamsStartCh = channel('datadog:express:process_params:start')
+  const queryParserReadCh = channel('datadog:query:read:finish')
+
+  return function wrapMethod (original) {
+    return function wrappedHandleRequest (req, res, next) {
+      if (processParamsStartCh.hasSubscribers) {
+        const abortController = new AbortController()
+
+        processParamsStartCh.publish({
+          req,
+          res,
+          abortController,
+          params: req?.params
+        })
+        if (abortController.signal.aborted) return
+      }
+
+      if (queryParserReadCh.hasSubscribers && req) {
+        const abortController = new AbortController()
+        const query = req.query
+
+        queryParserReadCh.publish({ req, res, query, abortController })
+
+        if (abortController.signal.aborted) return
+      }
+
+      return original.apply(this, arguments)
+    }
+  }
+}
+
+addHook({
+  name: 'router', file: 'lib/layer.js', versions: ['>=2']
+}, Layer => {
+  shimmer.wrap(Layer.prototype, 'handleRequest', createWrapLayerMethod())
+  return Layer
 })
 
 module.exports = { createWrapRouterMethod }

@@ -12,6 +12,7 @@ const {
   HTTP_REQUEST_HEADER_NAME,
   HTTP_REQUEST_PARAMETER,
   HTTP_REQUEST_PATH_PARAM,
+  HTTP_REQUEST_QUERY,
   HTTP_REQUEST_URI
 } = require('./source-types')
 const { EXECUTED_SOURCE } = require('../telemetry/iast-metric')
@@ -73,6 +74,15 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       ({ req }) => {
         if (req && req.params !== null && typeof req.params === 'object') {
           this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, req, 'params')
+        }
+      }
+    )
+
+    this.addSub(
+      { channelName: 'datadog:query:read:finish', tag: HTTP_REQUEST_QUERY },
+      ({ req }) => {
+        if (req && req.query !== null && typeof req.query === 'object') {
+          this._taintTrackingHandler(HTTP_REQUEST_QUERY, req, 'query')
         }
       }
     )

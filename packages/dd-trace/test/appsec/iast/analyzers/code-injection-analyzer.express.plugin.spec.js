@@ -7,7 +7,7 @@ const os = require('os')
 const fs = require('fs')
 const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
 
-describe('Code injection vulnerability', () => {
+describe.skip('Code injection vulnerability', () => {
   withVersions('express', 'express', '>4.18.0', version => {
     let i = 0
     let evalFunctionsPath

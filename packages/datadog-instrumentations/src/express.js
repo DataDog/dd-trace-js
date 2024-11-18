@@ -70,6 +70,8 @@ addHook({ name: 'express', versions: ['>=4 <5.0.0'] }, express => {
 })
 
 addHook({ name: 'express', versions: ['>=5.0.0'] }, express => {
+  shimmer.wrap(express.Router, 'use', wrapRouterMethod)
+  shimmer.wrap(express.Router, 'route', wrapRouterMethod)
   shimmer.wrap(express.application, 'handle', wrapHandle)
 
   shimmer.wrap(express.response, 'json', wrapResponseJson)
@@ -98,7 +100,7 @@ function publishQueryParsedAndNext (req, res, next) {
 
 addHook({
   name: 'express',
-  versions: ['>=4'],
+  versions: ['>=4 <5.0.0'],
   file: 'lib/middleware/query.js'
 }, query => {
   return shimmer.wrapFunction(query, query => function () {

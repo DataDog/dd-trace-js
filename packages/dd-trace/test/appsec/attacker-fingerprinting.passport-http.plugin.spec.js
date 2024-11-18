@@ -17,91 +17,93 @@ function assertFingerprintInTraces (traces) {
   assert.equal(span.meta['_dd.appsec.fp.http.endpoint'], 'http-post-7e93fba0--')
 }
 
-withVersions('passport-http', 'passport-http', version => {
-  describe('Attacker fingerprinting', () => {
-    let port, server, axios
+withVersions('express', 'express', expressVersion => {
+  withVersions('passport-http', 'passport-http', version => {
+    describe('Attacker fingerprinting', () => {
+      let port, server, axios
 
-    before(() => {
-      return agent.load(['express', 'http'], { client: false })
-    })
+      before(() => {
+        return agent.load(['express', 'http'], { client: false })
+      })
 
-    before(() => {
-      appsec.enable(new Config({
-        appsec: true
-      }))
-    })
+      before(() => {
+        appsec.enable(new Config({
+          appsec: true
+        }))
+      })
 
-    before((done) => {
-      const express = require('../../../../versions/express').get()
-      const bodyParser = require('../../../../versions/body-parser').get()
-      const passport = require('../../../../versions/passport').get()
-      const { BasicStrategy } = require(`../../../../versions/passport-http@${version}`).get()
+      before((done) => {
+        const express = require(`../../../../versions/express@${expressVersion}`).get()
+        const bodyParser = require('../../../../versions/body-parser').get()
+        const passport = require('../../../../versions/passport').get()
+        const { BasicStrategy } = require(`../../../../versions/passport-http@${version}`).get()
 
-      const app = express()
-      app.use(bodyParser.json())
-      app.use(passport.initialize())
+        const app = express()
+        app.use(bodyParser.json())
+        app.use(passport.initialize())
 
-      passport.use(new BasicStrategy(
-        function verify (username, password, done) {
-          if (username === 'success') {
-            done(null, {
-              id: 1234,
-              username
-            })
-          } else {
-            done(null, false)
+        passport.use(new BasicStrategy(
+          function verify (username, password, done) {
+            if (username === 'success') {
+              done(null, {
+                id: 1234,
+                username
+              })
+            } else {
+              done(null, false)
+            }
           }
-        }
-      ))
+        ))
 
-      app.post('/login', passport.authenticate('basic', { session: false }), function (req, res) {
-        res.end()
-      })
-
-      server = app.listen(port, () => {
-        port = server.address().port
-        axios = Axios.create({
-          baseURL: `http://localhost:${port}`
+        app.post('/login', passport.authenticate('basic', { session: false }), function (req, res) {
+          res.end()
         })
-        done()
+
+        server = app.listen(port, () => {
+          port = server.address().port
+          axios = Axios.create({
+            baseURL: `http://localhost:${port}`
+          })
+          done()
+        })
       })
-    })
 
-    after(() => {
-      server.close()
-      return agent.close({ ritmReset: false })
-    })
+      after(() => {
+        server.close()
+        return agent.close({ ritmReset: false })
+      })
 
-    after(() => {
-      appsec.disable()
-    })
+      after(() => {
+        appsec.disable()
+      })
 
-    it('should report http fingerprints on login fail', async () => {
-      try {
+      it('should report http fingerprints on login fail', async () => {
+        try {
+          await axios.post(
+            `http://localhost:${port}/login`, {}, {
+              auth: {
+                username: 'fail',
+                password: '1234'
+              }
+            }
+          )
+        } catch (e) {}
+
+        await agent.use(assertFingerprintInTraces)
+      })
+
+      it('should report http fingerprints on login successful', async () => {
         await axios.post(
           `http://localhost:${port}/login`, {}, {
             auth: {
-              username: 'fail',
+              username: 'success',
               password: '1234'
             }
           }
         )
-      } catch (e) {}
 
-      await agent.use(assertFingerprintInTraces)
-    })
-
-    it('should report http fingerprints on login successful', async () => {
-      await axios.post(
-        `http://localhost:${port}/login`, {}, {
-          auth: {
-            username: 'success',
-            password: '1234'
-          }
-        }
-      )
-
-      await agent.use(assertFingerprintInTraces)
+        await agent.use(assertFingerprintInTraces)
+      })
     })
   })
 })

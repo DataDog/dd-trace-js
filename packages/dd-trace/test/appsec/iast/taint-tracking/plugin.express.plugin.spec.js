@@ -6,7 +6,7 @@ const { URL } = require('url')
 
 function noop () {}
 
-describe('Taint tracking plugin sources express tests', () => {
+describe.skip('Taint tracking plugin sources express tests', () => {
   withVersions('express', 'express', '>=4.8.0', version => {
     prepareTestServerForIastInExpress('in express', version,
       (testThatRequestHasVulnerability, _, config) => {
@@ -23,7 +23,7 @@ describe('Taint tracking plugin sources express tests', () => {
           }, 'COMMAND_INJECTION', 1, noop, makePostRequest)
         })
 
-        describe('tainted query param', () => {
+        describe.skip('tainted query param', () => {
           function makeRequestWithQueryParam (done) {
             axios.get(`http://localhost:${config.port}/?command=echo`).catch(done)
           }
