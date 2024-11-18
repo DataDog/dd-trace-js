@@ -83,11 +83,6 @@ class LLMObsPlugin extends TracingPlugin {
 
     return parent
   }
-
-  spanHasError (span) {
-    const tags = span.context()._tags
-    return tags.error || tags['error.type']
-  }
 }
 
 module.exports = LLMObsPlugin
