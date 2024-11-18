@@ -282,8 +282,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             const numTestExecutions = event.test?.invocations
             const willBeRetried = numRetries > 0 && numTestExecutions - 1 < numRetries
 
-            const err = formatJestError(event.test.errors[0])
-            testErrCh.publish({ err, willBeRetried, probe, numTestExecutions })
+            const error = formatJestError(event.test.errors[0])
+            testErrCh.publish({ error, willBeRetried, probe, numTestExecutions })
           }
           testRunFinishCh.publish({
             status,

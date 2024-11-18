@@ -2561,13 +2561,5 @@ describe('jest CommonJS', () => {
         }).catch(done)
       })
     })
-
-    it.skip('can run tests after hitting a breakpoint', (done) => {
-
-    })
-
-    it.skip('removes the breakpoint when the test finishes', (done) => {
-
-    })
   })
 })

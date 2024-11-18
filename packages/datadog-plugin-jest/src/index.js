@@ -357,17 +357,17 @@ class JestPlugin extends CiPlugin {
       finishAllTraceSpans(span)
     })
 
-    this.addSub('ci:jest:test:err', ({ err, willBeRetried, probe }) => {
-      if (err) {
+    this.addSub('ci:jest:test:err', ({ error, willBeRetried, probe }) => {
+      if (error) {
         const store = storage.getStore()
         if (store && store.span) {
           const span = store.span
           span.setTag(TEST_STATUS, 'fail')
-          span.setTag('error', err)
+          span.setTag('error', error)
           if (willBeRetried && this.di) {
             // if we use numTestExecutions, we have to remove the breakpoint after each execution
             const testName = span.context()._tags[TEST_NAME]
-            const debuggerParameters = this.addDiProbe(err, probe)
+            const debuggerParameters = this.addDiProbe(error, probe)
             debuggerParameterPerTest.set(testName, debuggerParameters)
           }
         }
