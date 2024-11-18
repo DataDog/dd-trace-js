@@ -180,6 +180,20 @@ class DatadogSpan {
     })
   }
 
+  addSpanPointer (ptrKind, ptrDir, ptrHash) {
+    const zeroContext = new SpanContext({
+      traceId: id('0'),
+      spanId: id('0')
+    })
+    const attributes = {
+      'ptr.kind': ptrKind,
+      'ptr.dir': ptrDir,
+      'ptr.hash': ptrHash,
+      'link.kind': 'span-pointer'
+    }
+    this.addLink(zeroContext, attributes)
+  }
+
   addEvent (name, attributesOrStartTime, startTime) {
     const event = { name }
     if (attributesOrStartTime) {
