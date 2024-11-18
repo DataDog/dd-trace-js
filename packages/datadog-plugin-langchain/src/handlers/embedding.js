@@ -8,18 +8,19 @@ class LangChainEmbeddingHandler extends LangChainHandler {
 
     const inputTexts = ctx.args?.[0]
 
+    const sampled = this.isPromptCompletionSampled()
     if (typeof inputTexts === 'string') {
       // embed query
-      if (this.isPromptCompletionSampled()) {
-        tags['langchain.request.inputs.0.text'] = this.truncate(inputTexts)
+      if (sampled) {
+        tags['langchain.request.inputs.0.text'] = this.normalize(inputTexts)
       }
       tags['langchain.request.input_counts'] = 1
     } else {
       // embed documents
-      if (this.isPromptCompletionSampled()) {
+      if (sampled) {
         for (const idx in inputTexts) {
           const inputText = inputTexts[idx]
-          tags[`langchain.request.inputs.${idx}.text`] = this.truncate(inputText)
+          tags[`langchain.request.inputs.${idx}.text`] = this.normalize(inputText)
         }
       }
       tags['langchain.request.input_counts'] = inputTexts.length
@@ -43,7 +44,7 @@ class LangChainEmbeddingHandler extends LangChainHandler {
 
   extractApiKey (instance) {
     const apiKey = instance.clientConfig?.apiKey
-    if (!apiKey || apiKey.length < 4) return
+    if (!apiKey || apiKey.length < 4) return ''
     return `...${apiKey.slice(-4)}`
   }
 

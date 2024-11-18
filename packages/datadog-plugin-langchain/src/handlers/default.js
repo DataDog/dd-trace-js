@@ -28,7 +28,7 @@ class LangChainHandler {
   // no-op for default handler
   extractModel (instance) {}
 
-  truncate (text) {
+  normalize (text) {
     if (!text) return
     if (typeof text !== 'string' || !text || (typeof text === 'string' && text.length === 0)) return
 

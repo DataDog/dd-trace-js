@@ -17,7 +17,7 @@ class LangChainChatModelHandler extends LangChainLanguageModelHandler {
         const message = messageSet[messageIndex]
         if (this.isPromptCompletionSampled()) {
           tags[`langchain.request.messages.${messageSetIndex}.${messageIndex}.content`] =
-            this.truncate(message.content) || ''
+            this.normalize(message.content) || ''
         }
         tags[`langchain.request.messages.${messageSetIndex}.${messageIndex}.message_type`] = message.constructor.name
       }
@@ -59,7 +59,7 @@ class LangChainChatModelHandler extends LangChainLanguageModelHandler {
         if (text && this.isPromptCompletionSampled()) {
           tags[
           `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.content`
-          ] = this.truncate(text)
+          ] = this.normalize(text)
         }
 
         tags[
@@ -85,7 +85,7 @@ class LangChainChatModelHandler extends LangChainLanguageModelHandler {
             for (const [name, value] of Object.entries(args)) {
               tags[
               `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.tool_calls.${toolCallIndex}.args.${name}`
-              ] = this.truncate(value)
+              ] = this.normalize(value)
             }
           }
         }

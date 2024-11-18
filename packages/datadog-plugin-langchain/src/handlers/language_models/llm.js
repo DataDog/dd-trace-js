@@ -11,7 +11,7 @@ class LangChainLLMHandler extends LangChainLanguageModelHandler {
       if (!this.isPromptCompletionSampled()) continue
 
       const prompt = prompts[promptIdx]
-      tags[`langchain.request.prompts.${promptIdx}.content`] = this.truncate(prompt) || ''
+      tags[`langchain.request.prompts.${promptIdx}.content`] = this.normalize(prompt) || ''
     }
 
     const instance = ctx.instance
@@ -40,7 +40,7 @@ class LangChainLLMHandler extends LangChainLanguageModelHandler {
     for (const completionIdx in result.generations) {
       const completion = result.generations[completionIdx]
       if (this.isPromptCompletionSampled()) {
-        tags[`langchain.response.completions.${completionIdx}.text`] = this.truncate(completion[0].text) || ''
+        tags[`langchain.response.completions.${completionIdx}.text`] = this.normalize(completion[0].text) || ''
       }
 
       if (completion && completion[0].generationInfo) {
