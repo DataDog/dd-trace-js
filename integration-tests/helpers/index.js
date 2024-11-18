@@ -189,6 +189,8 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     await exec(followUpCommand, { cwd: folder, env: restOfEnv })
   }
 
+  console.log('[time] followUpCommand', process.hrtime(startTime))
+
   if (isGitRepo) {
     await exec('git init', { cwd: folder })
     fs.writeFileSync(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
@@ -200,6 +202,10 @@ async function createSandbox (dependencies = [], isGitRepo = false,
       { cwd: folder }
     )
   }
+
+  console.log('[time] isGitRepo', process.hrtime(startTime))
+
+  console.log('[time] ++ finish', process.hrtime(startTime))
 
   return {
     folder,
