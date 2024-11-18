@@ -12,7 +12,8 @@ const {
   HTTP_REQUEST_HEADER_NAME,
   HTTP_REQUEST_PARAMETER,
   HTTP_REQUEST_PATH_PARAM,
-  HTTP_REQUEST_URI
+  HTTP_REQUEST_URI,
+  SQL_ROW_VALUE
 } = require('./source-types')
 const { EXECUTED_SOURCE } = require('../telemetry/iast-metric')
 
@@ -71,6 +72,11 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.addSub(
       { channelName: 'datadog:cookie:parse:finish', tag: [HTTP_REQUEST_COOKIE_VALUE, HTTP_REQUEST_COOKIE_NAME] },
       ({ cookies }) => this._cookiesTaintTrackingHandler(cookies)
+    )
+
+    this.addSub(
+      { channelName: 'datadog:sequelize:query:finish', tag: SQL_ROW_VALUE },
+      ({ result }) => this._taintSequelizeResult(result)
     )
 
     this.addSub(
@@ -183,6 +189,30 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   taintRequest (req, iastContext) {
     this.taintHeaders(req.headers, iastContext)
     this.taintUrl(req, iastContext)
+  }
+
+  _taintSequelizeResult (result, iastContext = getIastContext(storage.getStore())) {
+    if (!iastContext) return result
+
+    const rowsToTaint = 1 // TODO fill this from config
+    if (Array.isArray(result)) {
+      for (let i = 0; i < result.length && i < rowsToTaint; i++) {
+        result[i] = this._taintSequelizeResult(result[i], iastContext)
+      }
+    } else if (result && typeof result === 'object') {
+      if (result.dataValues) {
+        result.dataValues = this._taintSequelizeResult(result.dataValues, iastContext)
+      } else {
+        Object.keys(result).forEach(key => {
+          result[key] = this._taintSequelizeResult(result[key], iastContext)
+        })
+      }
+    } else if (typeof result === 'string') {
+      result = newTaintedString(iastContext, result, SQL_ROW_VALUE, SQL_ROW_VALUE)
+      // console.log('tainting?', result, getRanges(iastContext, result))
+    }
+
+    return result
   }
 }
 
