@@ -159,9 +159,13 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   console.log('[time] Yarn pack', process.hrtime(startTime))
 
   try {
-    await exec(addCommand, addOptions)
+    const { stdout, stderr } = await exec(addCommand, addOptions)
+    console.log('[time] exec Yarn add stdout', stdout)
+    console.log('[time] exec Yarn add stderr', stderr)
   } catch (e) { // retry in case of server error from registry
-    await exec(addCommand, addOptions)
+    const { stdout, stderr } = await exec(addCommand, addOptions)
+    console.log('[time] retry Yarn add stdout', stdout)
+    console.log('[time] retry Yarn add stderr', stderr)
   }
 
   console.log('[time] Yarn add', process.hrtime(startTime))
