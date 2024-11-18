@@ -53,7 +53,7 @@ function reset () {
 }
 
 function getErrorLog (err) {
-  if (typeof err?.delegate === 'function') {
+  if (err && typeof err.delegate === 'function') {
     const result = err.delegate()
     return Array.isArray(result) ? Log.parse(...result) : Log.parse(result)
   } else {
