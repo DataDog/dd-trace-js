@@ -14,7 +14,7 @@ class Log {
     const { message, args } = this
 
     let formatted = message
-    if (message && args?.length) {
+    if (message && args && args.length) {
       formatted = format(message, ...args)
     }
     return formatted
@@ -33,7 +33,7 @@ class Log {
       if (typeof firstArg === 'string') {
         message = firstArg
       } else if (typeof firstArg === 'object') {
-        message = String(firstArg.message ?? firstArg)
+        message = String(firstArg.message || firstArg)
       } else if (typeof firstArg === 'function') {
         delegate = firstArg
       } else {
