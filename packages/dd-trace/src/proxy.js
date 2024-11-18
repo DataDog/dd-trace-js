@@ -59,6 +59,11 @@ class Tracer extends NoopProxy {
 
     try {
       const config = new Config(options) // TODO: support dynamic code config
+
+      if (config.crashtracking.enabled) {
+        require('./crashtracking').start(config)
+      }
+
       telemetry.start(config, this._pluginManager)
 
       if (config.dogstatsd) {

@@ -444,7 +444,7 @@ class Config {
     const defaults = setHiddenProperty(this, '_defaults', {})
 
     this._setValue(defaults, 'appsec.apiSecurity.enabled', true)
-    this._setValue(defaults, 'appsec.apiSecurity.requestSampling', 0.1)
+    this._setValue(defaults, 'appsec.apiSecurity.sampleDelay', 30)
     this._setValue(defaults, 'appsec.blockedTemplateGraphql', undefined)
     this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
     this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
@@ -467,6 +467,7 @@ class Config {
     this._setValue(defaults, 'ciVisibilityTestSessionName', '')
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
+    this._setValue(defaults, 'crashtracking.enabled', false)
     this._setValue(defaults, 'codeOriginForSpans.enabled', false)
     this._setValue(defaults, 'dbmPropagationMode', 'disabled')
     this._setValue(defaults, 'dogstatsd.hostname', '127.0.0.1')
@@ -513,6 +514,7 @@ class Config {
     this._setValue(defaults, 'isTestDynamicInstrumentationEnabled', false)
     this._setValue(defaults, 'logInjection', false)
     this._setValue(defaults, 'lookup', undefined)
+    this._setValue(defaults, 'inferredProxyServicesEnabled', false)
     this._setValue(defaults, 'memcachedCommandEnabled', false)
     this._setValue(defaults, 'openAiLogsEnabled', false)
     this._setValue(defaults, 'openaiSpanCharLimit', 128)
@@ -569,7 +571,7 @@ class Config {
       AWS_LAMBDA_FUNCTION_NAME,
       DD_AGENT_HOST,
       DD_API_SECURITY_ENABLED,
-      DD_API_SECURITY_REQUEST_SAMPLE_RATE,
+      DD_API_SECURITY_SAMPLE_DELAY,
       DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
       DD_APPSEC_ENABLED,
       DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON,
@@ -585,6 +587,7 @@ class Config {
       DD_APPSEC_RASP_ENABLED,
       DD_APPSEC_TRACE_RATE_LIMIT,
       DD_APPSEC_WAF_TIMEOUT,
+      DD_CRASHTRACKING_ENABLED,
       DD_CODE_ORIGIN_FOR_SPANS_ENABLED,
       DD_DATA_STREAMS_ENABLED,
       DD_DBM_PROPAGATION_MODE,
@@ -675,6 +678,7 @@ class Config {
       DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       DD_TRACING_ENABLED,
       DD_VERSION,
+      DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED,
       OTEL_METRICS_EXPORTER,
       OTEL_PROPAGATORS,
       OTEL_RESOURCE_ATTRIBUTES,
@@ -696,7 +700,7 @@ class Config {
       DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED),
       DD_EXPERIMENTAL_API_SECURITY_ENABLED && isTrue(DD_EXPERIMENTAL_API_SECURITY_ENABLED)
     ))
-    this._setUnit(env, 'appsec.apiSecurity.requestSampling', DD_API_SECURITY_REQUEST_SAMPLE_RATE)
+    this._setValue(env, 'appsec.apiSecurity.sampleDelay', maybeFloat(DD_API_SECURITY_SAMPLE_DELAY))
     this._setValue(env, 'appsec.blockedTemplateGraphql', maybeFile(DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON))
     this._setValue(env, 'appsec.blockedTemplateHtml', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML))
     this._envUnprocessed['appsec.blockedTemplateHtml'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML
@@ -728,6 +732,7 @@ class Config {
     this._setValue(env, 'baggageMaxItems', DD_TRACE_BAGGAGE_MAX_ITEMS)
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
+    this._setBoolean(env, 'crashtracking.enabled', DD_CRASHTRACKING_ENABLED)
     this._setBoolean(env, 'codeOriginForSpans.enabled', DD_CODE_ORIGIN_FOR_SPANS_ENABLED)
     this._setString(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
     this._setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOSTNAME)
@@ -862,6 +867,7 @@ class Config {
         : !!OTEL_PROPAGATORS)
     this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
     this._setString(env, 'version', DD_VERSION || tags.version)
+    this._setBoolean(env, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
   }
 
   _applyOptions (options) {
@@ -874,7 +880,6 @@ class Config {
     tagger.add(tags, options.tags)
 
     this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec.apiSecurity?.enabled)
-    this._setUnit(opts, 'appsec.apiSecurity.requestSampling', options.appsec.apiSecurity?.requestSampling)
     this._setValue(opts, 'appsec.blockedTemplateGraphql', maybeFile(options.appsec.blockedTemplateGraphql))
     this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(options.appsec.blockedTemplateHtml))
     this._optsUnprocessed['appsec.blockedTemplateHtml'] = options.appsec.blockedTemplateHtml
@@ -980,6 +985,7 @@ class Config {
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
     this._setString(opts, 'version', options.version || tags.version)
+    this._setBoolean(opts, 'inferredProxyServicesEnabled', options.inferredProxyServicesEnabled)
 
     // For LLMObs, we want the environment variable to take precedence over the options.
     // This is reliant on environment config being set before options.
@@ -1133,6 +1139,9 @@ class Config {
     const injectionIncludesProfiler = (this._env.injectionEnabled || []).includes('profiler')
     if (iastEnabled || ['auto', 'true'].includes(profilingEnabled) || injectionIncludesProfiler) {
       this._setBoolean(calc, 'telemetry.logCollection', true)
+    }
+    if (this._env.injectionEnabled?.length > 0) {
+      this._setBoolean(calc, 'crashtracking.enabled', true)
     }
   }
 

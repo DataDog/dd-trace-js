@@ -952,7 +952,7 @@ describe('sdk', () => {
         label: 'test',
         metric_type: 'score',
         score_value: 0.6,
-        tags: [`dd-trace.version:${tracerVersion}`, 'ml_app:test', 'host:localhost']
+        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:test', 'host:localhost']
       })
     })
 

@@ -128,6 +128,7 @@ describe('TracerProxy', () => {
       profiling: {},
       appsec: {},
       iast: {},
+      crashtracking: {},
       remoteConfig: {
         enabled: true
       },
