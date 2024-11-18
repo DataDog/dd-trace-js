@@ -26,7 +26,8 @@ class AmqplibConsumerPlugin extends ConsumerPlugin {
         'amqp.consumerTag': fields.consumerTag,
         'amqp.source': fields.source,
         'amqp.destination': fields.destination
-      }
+      },
+      extractedLinks: childOf?._links
     })
 
     if (
