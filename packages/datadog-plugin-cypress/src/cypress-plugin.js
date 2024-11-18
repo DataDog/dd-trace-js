@@ -661,7 +661,9 @@ class CypressPlugin {
         const { state, error, isRUMActive, testSourceLine, testSuite, testName, isNew, isEfdRetry } = test
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
-          const relativeCoverageFiles = coverageFiles.map(file => getTestSuitePath(file, this.rootDir))
+          const relativeCoverageFiles = coverageFiles.map(
+            file => getTestSuitePath(file, this.repositoryRoot || this.rootDir)
+          )
           if (!relativeCoverageFiles.length) {
             incrementCountMetric(TELEMETRY_CODE_COVERAGE_EMPTY)
           }

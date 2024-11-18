@@ -127,6 +127,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       if (repositoryRoot) {
         this.testSourceFile = getTestSuitePath(context.testPath, repositoryRoot)
+        this.repositoryRoot = repositoryRoot
       }
 
       this.isEarlyFlakeDetectionEnabled = this.testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled
@@ -667,8 +668,11 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
          * controls whether coverage is reported.
         */
         if (environment.testEnvironmentOptions?._ddTestCodeCoverageEnabled) {
+          const root = environment.repositoryRoot || environment.rootDir
+
           const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
-            .map(filename => getTestSuitePath(filename, environment.rootDir))
+            .map(filename => getTestSuitePath(filename, root))
+
           asyncResource.runInAsyncScope(() => {
             testSuiteCodeCoverageCh.publish({ coverageFiles, testSuite: environment.testSuite })
           })
