@@ -312,7 +312,7 @@ class TextMapPropagator {
           extractedContext = this._extractB3MultiContext(carrier)
           break
         default:
-          log.warn(`Unknown propagation style: ${extractor}`)
+          if (extractor !== 'baggage') log.warn(`Unknown propagation style: ${extractor}`)
       }
 
       if (extractedContext === null) { // If the current extractor was invalid, continue to the next extractor

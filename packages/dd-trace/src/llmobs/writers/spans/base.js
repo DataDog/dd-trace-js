@@ -6,6 +6,8 @@ const { DROPPED_IO_COLLECTION_ERROR } = require('../../constants/tags')
 const BaseWriter = require('../base')
 const logger = require('../../../log')
 
+const tracerVersion = require('../../../../../../package.json').version
+
 class LLMObsSpanWriter extends BaseWriter {
   constructor (options) {
     super({
@@ -32,6 +34,7 @@ class LLMObsSpanWriter extends BaseWriter {
   makePayload (events) {
     return {
       '_dd.stage': 'raw',
+      '_dd.tracer_version': tracerVersion,
       event_type: this._eventType,
       spans: events
     }

@@ -179,7 +179,7 @@ class LLMObsSpanProcessor {
       service: this._config.service,
       source: 'integration',
       ml_app: mlApp,
-      'dd-trace.version': tracerVersion,
+      'ddtrace.version': tracerVersion,
       error: Number(!!error) || 0,
       language: 'javascript'
     }
