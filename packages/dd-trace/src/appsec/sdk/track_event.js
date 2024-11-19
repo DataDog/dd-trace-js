@@ -26,7 +26,7 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
 
   trackEvent('users.login.success', metadata, 'trackUserLoginSuccessEvent', rootSpan)
 
-  runWaf('users.login.success', user)
+  runWaf('users.login.success', { id: user.id, login: user.login ?? user.id })
 }
 
 function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
