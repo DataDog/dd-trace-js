@@ -290,50 +290,63 @@ class TextMapPropagator {
   }
 
   _extractSpanContext (carrier) {
-    let spanContext = null
+    let context = null
     for (const extractor of this._config.tracePropagationStyle.extract) {
-      // add logic to ensure tracecontext headers takes precedence over other extracted headers
-      if (spanContext !== null) {
-        if (this._config.tracePropagationExtractFirst) {
-          return spanContext
-        }
-        if (extractor !== 'tracecontext') {
-          continue
-        }
-        spanContext = this._resolveTraceContextConflicts(
-          this._extractTraceparentContext(carrier), spanContext, carrier)
-        break
-      }
-
+      let extractedContext = null
       switch (extractor) {
         case 'datadog':
-          spanContext = this._extractDatadogContext(carrier)
+          extractedContext = this._extractDatadogContext(carrier)
           break
         case 'tracecontext':
-          spanContext = this._extractTraceparentContext(carrier)
+          extractedContext = this._extractTraceparentContext(carrier)
           break
         case 'b3' && this
           ._config
           .tracePropagationStyle
           .otelPropagators: // TODO: should match "b3 single header" in next major
         case 'b3 single header': // TODO: delete in major after singular "b3"
-          spanContext = this._extractB3SingleContext(carrier)
+          extractedContext = this._extractB3SingleContext(carrier)
           break
         case 'b3':
         case 'b3multi':
-          spanContext = this._extractB3MultiContext(carrier)
+          extractedContext = this._extractB3MultiContext(carrier)
           break
         default:
           if (extractor !== 'baggage') log.warn(`Unknown propagation style: ${extractor}`)
       }
 
+      if (extractedContext === null) { // If the current extractor was invalid, continue to the next extractor
+        continue
+      }
+
+      if (context === null) {
+        context = extractedContext
+        if (this._config.tracePropagationExtractFirst) {
+          return context
+        }
+      } else {
+        // If extractor is tracecontext, add tracecontext specific information to the context
+        if (extractor === 'tracecontext') {
+          context = this._resolveTraceContextConflicts(
+            this._extractTraceparentContext(carrier), context, carrier)
+        }
+        if (extractedContext._traceId && extractedContext._spanId &&
+           extractedContext.toTraceId(true) !== context.toTraceId(true)) {
+          const link = {
+            context: extractedContext,
+            attributes: { reason: 'terminated_context', context_headers: extractor }
+          }
+          context._links.push(link)
+        }
+      }
+
       if (this._config.tracePropagationStyle.extract.includes('baggage') && carrier.baggage) {
-        spanContext = spanContext || new DatadogSpanContext()
-        this._extractBaggageItems(carrier, spanContext)
+        context = context || new DatadogSpanContext()
+        this._extractBaggageItems(carrier, context)
       }
     }
 
-    return spanContext || this._extractSqsdContext(carrier)
+    return context || this._extractSqsdContext(carrier)
   }
 
   _extractDatadogContext (carrier) {

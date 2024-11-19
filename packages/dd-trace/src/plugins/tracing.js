@@ -101,9 +101,8 @@ class TracingPlugin extends Plugin {
     }
   }
 
-  startSpan (name, { childOf, kind, meta, metrics, service, resource, type } = {}, enter = true) {
+  startSpan (name, { childOf, kind, meta, metrics, service, resource, type, extractedLinks } = {}, enter = true) {
     const store = storage.getStore()
-
     if (store && childOf === undefined) {
       childOf = store.span
     }
@@ -119,7 +118,8 @@ class TracingPlugin extends Plugin {
         ...meta,
         ...metrics
       },
-      integrationName: type
+      integrationName: type,
+      links: extractedLinks
     })
 
     analyticsSampler.sample(span, this.config.measured)
