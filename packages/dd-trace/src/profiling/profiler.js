@@ -199,8 +199,11 @@ class Profiler extends EventEmitter {
     tags.snapshot = snapshotKind
     for (const exporter of this._config.exporters) {
       const task = exporter.export({ profiles, start, end, tags })
-        .catch(err => this._logError(err))
-
+        .catch(err => {
+          if (this._logger) {
+            this._logger.warn(err)
+          }
+        })
       tasks.push(task)
     }
 
