@@ -1469,6 +1469,48 @@ describe('jest CommonJS', () => {
         eventsPromise.then(done).catch(done)
       })
     })
+
+    it('reports code coverage relative to the repository root, not working directory', (done) => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: false
+      })
+
+      const codeCoveragesPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+          const coveredFiles = payloads
+            .flatMap(({ payload }) => payload)
+            .flatMap(({ content: { coverages } }) => coverages)
+            .flatMap(({ files }) => files)
+            .map(({ filename }) => filename)
+
+          assert.includeMembers(coveredFiles, [
+            'ci-visibility/subproject/dependency.js',
+            'ci-visibility/subproject/subproject-test.js'
+          ])
+        }, 5000)
+
+      childProcess = exec(
+        'node ./node_modules/jest/bin/jest --config config-jest.js --rootDir ci-visibility/subproject',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PROJECTS: JSON.stringify([{
+              testMatch: ['**/subproject-test*']
+            }])
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        codeCoveragesPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
   })
 
   context('early flake detection', () => {
