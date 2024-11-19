@@ -860,7 +860,7 @@ const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = [
 
 function shouldBypassJestRequireEngine (moduleName) {
   return (
-    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.some(library => moduleName.includes(library))
+    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.some(library => moduleName == library)
   )
 }
 
