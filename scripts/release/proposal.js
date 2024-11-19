@@ -103,7 +103,7 @@ try {
     // Get new changes since last commit of the proposal branch.
     const newChanges = capture(`${diffCmd} v${newVersion}-proposal master`)
 
-    pass(`\n\n${newChanges}\n`)
+    pass(`\n${newChanges}`)
 
     start('Apply changes from the main branch')
 
