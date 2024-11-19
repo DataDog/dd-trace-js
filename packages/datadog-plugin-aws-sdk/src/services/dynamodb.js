@@ -58,6 +58,15 @@ class DynamoDb extends BaseAwsSdkPlugin {
 
     const hashes = []
     switch (operationName) {
+      case 'putItem': {
+        const hash = DynamoDb.calculatePutItemHash(
+          request?.params?.TableName,
+          request?.params?.Item,
+          DynamoDb.getPrimaryKeyConfig()
+        )
+        if (hash) hashes.push(hash)
+        break
+      }
       case 'updateItem':
       case 'deleteItem': {
         const hash = DynamoDb.calculateHashWithKnownKeys(request?.params?.TableName, request?.params?.Key)
@@ -72,8 +81,75 @@ class DynamoDb extends BaseAwsSdkPlugin {
   }
 
   /**
-   * Calculates a hash for DynamoDB operations that have keys provided (UpdateItem, DeleteItem).
+   * Loads primary key config from the `DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS` env var.
+   * Only runs when needed, and warns when missing or invalid config.
+   * @returns {Object|null} Parsed config from env var or null if empty/missing/invalid config.
+   */
+  static getPrimaryKeyConfig () {
+    const config = DynamoDb.dynamoPrimaryKeyConfig || {}
+    // Return cached config if it exists
+    if (Object.keys(config).length > 0) {
+      return config
+    }
+
+    const primaryKeysEnvVar = process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS
+    if (!primaryKeysEnvVar) {
+      log.warn('Missing DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS env variable')
+      return null
+    }
+
+    try {
+      const parsedConfig = JSON.parse(primaryKeysEnvVar)
+      for (const [tableName, primaryKeys] of Object.entries(parsedConfig)) {
+        if (Array.isArray(primaryKeys) && primaryKeys.length > 0) {
+          config[tableName] = new Set(primaryKeys)
+        } else {
+          log.warn(`Invalid primary key configuration for table: ${tableName}`)
+        }
+      }
+
+      DynamoDb.dynamoPrimaryKeyConfig = config
+      return config
+    } catch (err) {
+      log.warn('Failed to parse DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS:', err)
+      return null
+    }
+  }
+
+  /**
+   * Calculates a hash for DynamoDB PutItem operations using table's configured primary keys.
+   * @param {string} tableName - Name of the DynamoDB table.
+   * @param {Object} item - Complete PutItem item parameter to be put.
+   * @param {Object.<string, Set<string>>} primaryKeyConfig - Mapping of table names to Sets of primary key names
+   *                                                         loaded from DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS.
+   * @returns {string|undefined} Hash combining table name and primary key/value pairs, or undefined if unable.
    *
+   * @example
+   * // With env var DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS='{"UserTable":["userId","timestamp"]}'
+   * calculatePutItemHash(
+   *   'UserTable',
+   *   { userId: { S: "user123" }, timestamp: { N: "1234567" }, name: { S: "John" } },
+   *   { UserTable: new Set(['userId', 'timestamp']) }
+   * )
+   */
+  static calculatePutItemHash (tableName, item, primaryKeyConfig) {
+    if (!tableName || !item || !primaryKeyConfig) {
+      log.debug('Unable to calculate hash because missing required parameters')
+      return
+    }
+    const primaryKeySet = primaryKeyConfig[tableName]
+    if (!primaryKeySet || !(primaryKeySet instanceof Set) || primaryKeySet.size === 0 || primaryKeySet.size > 2) {
+      log.warn(`Invalid dynamo primary key config for table ${tableName}: ${JSON.stringify(primaryKeyConfig)}`)
+      return
+    }
+    const keyValues = extractPrimaryKeys(primaryKeySet, item)
+    if (keyValues) {
+      return generatePointerHash([tableName, ...keyValues])
+    }
+  }
+
+  /**
+   * Calculates a hash for DynamoDB operations that have keys provided (UpdateItem, DeleteItem).
    * @param {string} tableName - Name of the DynamoDB table.
    * @param {Object} keys - Object containing primary key/value attributes in DynamoDB format.
    *                       (e.g., { userId: { S: "123" }, sortKey: { N: "456" } })
