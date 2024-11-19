@@ -871,7 +871,8 @@ moduleTypes.forEach(({
             assert.includeMembers(coveredFiles, [
               'ci-visibility/subproject/src/utils.tsx',
               'ci-visibility/subproject/src/App.tsx',
-              'ci-visibility/subproject/src/index.tsx'
+              'ci-visibility/subproject/src/index.tsx',
+              'ci-visibility/subproject/cypress/e2e/spec.cy.js'
             ])
           }, 10000)
 
