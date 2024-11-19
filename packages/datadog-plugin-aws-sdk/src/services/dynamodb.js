@@ -88,6 +88,23 @@ class DynamoDb extends BaseAwsSdkPlugin {
         }
         break
       }
+      case 'batchWriteItem': {
+        const requestItems = request?.params.RequestItems || {}
+        for (const [tableName, operations] of Object.entries(requestItems)) {
+          if (!Array.isArray(operations)) continue
+          for (const operation of operations) {
+            if (operation?.PutRequest) {
+              const hash =
+                DynamoDb.calculatePutItemHash(tableName, operation.PutRequest.Item, DynamoDb.getPrimaryKeyConfig())
+              if (hash) hashes.push(hash)
+            } else if (operation?.DeleteRequest) {
+              const hash = DynamoDb.calculateHashWithKnownKeys(tableName, operation.DeleteRequest.Key)
+              if (hash) hashes.push(hash)
+            }
+          }
+        }
+        break
+      }
     }
 
     for (const hash of hashes) {
