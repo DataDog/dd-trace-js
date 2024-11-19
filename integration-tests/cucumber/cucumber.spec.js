@@ -275,6 +275,7 @@ versions.forEach(version => {
               }
             )
           })
+
           it('can report code coverage', (done) => {
             const libraryConfigRequestPromise = receiver.payloadReceived(
               ({ url }) => url.endsWith('/api/v2/libraries/tests/services/setting')
@@ -355,6 +356,7 @@ versions.forEach(version => {
               done()
             })
           })
+
           it('does not report code coverage if disabled by the API', (done) => {
             receiver.setSettings({
               itr_enabled: false,
@@ -390,6 +392,7 @@ versions.forEach(version => {
               }
             )
           })
+
           it('can skip suites received by the intelligent test runner API and still reports code coverage',
             (done) => {
               receiver.setSuitesToSkip([{
@@ -463,6 +466,7 @@ versions.forEach(version => {
                 }
               )
             })
+
           it('does not skip tests if git metadata upload fails', (done) => {
             receiver.setSuitesToSkip([{
               type: 'suite',
@@ -505,6 +509,7 @@ versions.forEach(version => {
               }
             )
           })
+
           it('does not skip tests if test skipping is disabled by the API', (done) => {
             receiver.setSettings({
               itr_enabled: true,
@@ -543,6 +548,7 @@ versions.forEach(version => {
               }
             )
           })
+
           it('does not skip suites if suite is marked as unskippable', (done) => {
             receiver.setSettings({
               itr_enabled: true,
@@ -611,6 +617,7 @@ versions.forEach(version => {
               }).catch(done)
             })
           })
+
           it('only sets forced to run if suite was going to be skipped by ITR', (done) => {
             receiver.setSettings({
               itr_enabled: true,
@@ -673,6 +680,7 @@ versions.forEach(version => {
               }).catch(done)
             })
           })
+
           it('sets _dd.ci.itr.tests_skipped to false if the received suite is not skipped', (done) => {
             receiver.setSuitesToSkip([{
               type: 'suite',
@@ -709,6 +717,7 @@ versions.forEach(version => {
               }).catch(done)
             })
           })
+
           if (!isAgentless) {
             context('if the agent is not event platform proxy compatible', () => {
               it('does not do any intelligent test runner request', (done) => {
@@ -757,6 +766,7 @@ versions.forEach(version => {
               })
             })
           }
+
           it('reports itr_correlation_id in test suites', (done) => {
             const itrCorrelationId = '4321'
             receiver.setItrCorrelationId(itrCorrelationId)
@@ -779,6 +789,45 @@ versions.forEach(version => {
             )
             childProcess.on('exit', () => {
               eventsPromise.then(() => {
+                done()
+              }).catch(done)
+            })
+          })
+
+          it('reports code coverage relative to the repository root, not working directory', (done) => {
+            receiver.setSettings({
+              itr_enabled: true,
+              code_coverage: true,
+              tests_skipping: false
+            })
+
+            const codeCoveragesPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+                const coveredFiles = payloads
+                  .flatMap(({ payload }) => payload)
+                  .flatMap(({ content: { coverages } }) => coverages)
+                  .flatMap(({ files }) => files)
+                  .map(({ filename }) => filename)
+
+                assert.includeMembers(coveredFiles, [
+                  'ci-visibility/subproject/features/support/steps.js',
+                  'ci-visibility/subproject/features/greetings.feature'
+                ])
+              })
+
+            childProcess = exec(
+              '../../node_modules/nyc/bin/nyc.js node ../../node_modules/.bin/cucumber-js features/*.feature',
+              {
+                cwd: `${cwd}/ci-visibility/subproject`,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port)
+                },
+                stdio: 'inherit'
+              }
+            )
+
+            childProcess.on('exit', () => {
+              codeCoveragesPromise.then(() => {
                 done()
               }).catch(done)
             })
