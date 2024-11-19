@@ -85,7 +85,7 @@ class MochaPlugin extends CiPlugin {
       }
 
       const relativeCoverageFiles = [...coverageFiles, suiteFile]
-        .map(filename => getTestSuitePath(filename, this.sourceRoot))
+        .map(filename => getTestSuitePath(filename, this.repositoryRoot || this.sourceRoot))
 
       const { _traceId, _spanId } = testSuiteSpan.context()
 
