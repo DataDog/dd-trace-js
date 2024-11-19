@@ -3,7 +3,7 @@
 require('./setup/tap')
 
 const { isTrue, isFalse, globMatch } = require('../src/util')
-const { generatePointerHash } = require('../src/util')
+const { generatePointerHash, encodeValue, extractPrimaryKeys } = require('../src/util')
 
 const TRUES = [
   1,
@@ -84,5 +84,179 @@ describe('generatePointerHash', () => {
   it('should generate a valid hash for multipart-uploaded S3 object', () => {
     const hash1 = generatePointerHash(['some-bucket', 'some-key.data', 'ab12ef34-5'])
     expect(hash1).to.equal('2b90dffc37ebc7bc610152c3dc72af9f')
+  })
+})
+
+describe('encodeValue', () => {
+  describe('basic type handling', () => {
+    it('handles string (S) type correctly', () => {
+      const result = encodeValue({ S: 'hello world' })
+      expect(Buffer.isBuffer(result)).to.be.true
+      expect(result).to.deep.equal(Buffer.from('hello world'))
+    })
+
+    it('handles number (N) as string type correctly', () => {
+      const result = encodeValue({ N: '123.45' })
+      expect(Buffer.isBuffer(result)).to.be.true
+      expect(result).to.deep.equal(Buffer.from('123.45'))
+    })
+
+    it('handles number (N) as type string or number the same', () => {
+      const result1 = encodeValue({ N: 456.78 })
+      const result2 = encodeValue({ N: '456.78' })
+      expect(Buffer.isBuffer(result1)).to.be.true
+      expect(result1).to.deep.equal(result2)
+    })
+
+    it('handles binary (B) type correctly', () => {
+      const binaryData = Buffer.from([1, 2, 3])
+      const result = encodeValue({ B: binaryData })
+      expect(Buffer.isBuffer(result)).to.be.true
+      expect(result).to.deep.equal(binaryData)
+    })
+  })
+
+  describe('edge cases', () => {
+    it('returns empty buffer for null input', () => {
+      const result = encodeValue(null)
+      expect(Buffer.isBuffer(result)).to.be.true
+      expect(result.length).to.equal(0)
+    })
+
+    it('returns empty buffer for undefined input', () => {
+      const result = encodeValue(undefined)
+      expect(Buffer.isBuffer(result)).to.be.true
+      expect(result.length).to.equal(0)
+    })
+
+    it('returns empty buffer for unsupported type', () => {
+      const result = encodeValue({ A: 'abc' })
+      expect(Buffer.isBuffer(result)).to.be.true
+      expect(result.length).to.equal(0)
+    })
+
+    it('returns empty buffer for malformed input', () => {
+      const result = encodeValue({})
+      expect(Buffer.isBuffer(result)).to.be.true
+      expect(result.length).to.equal(0)
+    })
+
+    it('handles empty string values', () => {
+      const result = encodeValue({ S: '' })
+      expect(Buffer.isBuffer(result)).to.be.true
+      expect(result.length).to.equal(0)
+    })
+
+    it('handles empty buffer', () => {
+      const result = encodeValue({ B: Buffer.from([]) })
+      expect(Buffer.isBuffer(result)).to.be.true
+      expect(result.length).to.equal(0)
+    })
+  })
+})
+
+describe('extractPrimaryKeys', () => {
+  describe('single key table', () => {
+    it('handles string key with Set input', () => {
+      const keySet = new Set(['userId'])
+      const item = { userId: { S: 'user123' } }
+      const result = extractPrimaryKeys(keySet, item)
+      expect(result).to.deep.equal(['userId', Buffer.from('user123'), '', ''])
+    })
+
+    it('handles number key with Set input', () => {
+      const keySet = new Set(['timestamp'])
+      const item = { timestamp: { N: '1234567' } }
+      const result = extractPrimaryKeys(keySet, item)
+      expect(result).to.deep.equal(['timestamp', Buffer.from('1234567'), '', ''])
+    })
+
+    it('handles binary key with Set input', () => {
+      const keySet = new Set(['binaryId'])
+      const binaryData = Buffer.from([1, 2, 3])
+      const item = { binaryId: { B: binaryData } }
+      const result = extractPrimaryKeys(keySet, item)
+      expect(result).to.deep.equal(['binaryId', binaryData, '', ''])
+    })
+
+    it('handles string key with Object input', () => {
+      const keyObj = { userId: { S: 'user123' } }
+      const result = extractPrimaryKeys(keyObj, keyObj)
+      expect(result).to.deep.equal(['userId', Buffer.from('user123'), '', ''])
+    })
+  })
+
+  describe('double key table', () => {
+    it('handles and sorts string-string composite key', () => {
+      const keySet = new Set(['userId', 'email'])
+      const item = {
+        userId: { S: 'user123' },
+        email: { S: 'test@example.com' }
+      }
+      const result = extractPrimaryKeys(keySet, item)
+      expect(result).to.deep.equal(['email', Buffer.from('test@example.com'), 'userId', Buffer.from('user123')])
+    })
+
+    it('handles and sorts string-number composite key', () => {
+      const keySet = new Set(['timestamp', 'userId'])
+      const item = {
+        timestamp: { N: '1234567' },
+        userId: { S: 'user123' }
+      }
+      const result = extractPrimaryKeys(keySet, item)
+      expect(result).to.deep.equal(['timestamp', Buffer.from('1234567'), 'userId', Buffer.from('user123')])
+    })
+
+    it('handles and sorts composite key with Object input', () => {
+      const keyObj = {
+        userId: { S: 'user123' },
+        timestamp: { N: '1234567' }
+      }
+      const result = extractPrimaryKeys(keyObj, keyObj)
+      expect(result).to.deep.equal(['timestamp', Buffer.from('1234567'), 'userId', Buffer.from('user123')])
+    })
+  })
+
+  describe('edge cases', () => {
+    it('handles missing values', () => {
+      const keySet = new Set(['userId', 'timestamp'])
+      const item = { userId: { S: 'user123' } } // timestamp missing
+      const result = extractPrimaryKeys(keySet, item)
+      expect(result).to.deep.equal(['timestamp', Buffer.from(''), 'userId', Buffer.from('user123')])
+    })
+
+    it('handles invalid value types', () => {
+      const keySet = new Set(['userId', 'timestamp'])
+      const item = {
+        userId: { S: 'user123' },
+        timestamp: { INVALID: '1234567' }
+      }
+      const result = extractPrimaryKeys(keySet, item)
+      expect(result).to.deep.equal(['timestamp', Buffer.from(''), 'userId', Buffer.from('user123')])
+    })
+
+    it('handles empty Set input', () => {
+      const result = extractPrimaryKeys(new Set([]), {})
+      expect(result).to.be.undefined
+    })
+
+    it('handles null values in item', () => {
+      const keySet = new Set(['key1', 'key2'])
+      const item = {
+        key1: null,
+        key2: { S: 'value2' }
+      }
+      const result = extractPrimaryKeys(keySet, item)
+      expect(result).to.deep.equal(['key1', Buffer.from(''), 'key2', Buffer.from('value2')])
+    })
+
+    it('handles undefined values in item', () => {
+      const keySet = new Set(['key1', 'key2'])
+      const item = {
+        key2: { S: 'value2' }
+      }
+      const result = extractPrimaryKeys(keySet, item)
+      expect(result).to.deep.equal(['key1', Buffer.from(''), 'key2', Buffer.from('value2')])
+    })
   })
 })
