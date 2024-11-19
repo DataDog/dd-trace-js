@@ -4,6 +4,7 @@ const coalesce = require('koalas')
 const { isTrue } = require('../util')
 const { debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
+const { Log } = require('./log')
 
 const memoize = func => {
   const cache = {}
@@ -16,10 +17,6 @@ const memoize = func => {
   }
 
   return memoized
-}
-
-function processMsg (msg) {
-  return typeof msg === 'function' ? msg() : msg
 }
 
 const config = {
@@ -52,37 +49,37 @@ const log = {
   reset () {
     logWriter.reset()
     this._deprecate = memoize((code, message) => {
-      errorChannel.publish(message)
+      errorChannel.publish(Log.parse(message))
       return true
     })
 
     return this
   },
 
-  debug (message) {
+  debug (...args) {
     if (debugChannel.hasSubscribers) {
-      debugChannel.publish(processMsg(message))
+      debugChannel.publish(Log.parse(...args))
     }
     return this
   },
 
-  info (message) {
+  info (...args) {
     if (infoChannel.hasSubscribers) {
-      infoChannel.publish(processMsg(message))
+      infoChannel.publish(Log.parse(...args))
     }
     return this
   },
 
-  warn (message) {
+  warn (...args) {
     if (warnChannel.hasSubscribers) {
-      warnChannel.publish(processMsg(message))
+      warnChannel.publish(Log.parse(...args))
     }
     return this
   },
 
-  error (err) {
+  error (...args) {
     if (errorChannel.hasSubscribers) {
-      errorChannel.publish(processMsg(err))
+      errorChannel.publish(Log.parse(...args))
     }
     return this
   },
