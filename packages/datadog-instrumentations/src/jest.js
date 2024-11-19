@@ -674,7 +674,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
             .map(filename => getTestSuitePath(filename, root))
 
           asyncResource.runInAsyncScope(() => {
-            testSuiteCodeCoverageCh.publish({ coverageFiles, testSuite: environment.testSuite })
+            testSuiteCodeCoverageCh.publish({ coverageFiles, testSuite: environment.testSourceFile })
           })
         }
         testSuiteFinishCh.publish({ status, errorMessage })
