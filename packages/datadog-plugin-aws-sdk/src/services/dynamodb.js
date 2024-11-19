@@ -73,6 +73,21 @@ class DynamoDb extends BaseAwsSdkPlugin {
         if (hash) hashes.push(hash)
         break
       }
+      case 'transactWriteItems': {
+        const transactItems = request?.params?.TransactItems || []
+        for (const item of transactItems) {
+          if (item.Put) {
+            const hash =
+              DynamoDb.calculatePutItemHash(item.Put.TableName, item.Put.Item, DynamoDb.getPrimaryKeyConfig())
+            if (hash) hashes.push(hash)
+          } else if (item.Update || item.Delete) {
+            const operation = item.Update ? item.Update : item.Delete
+            const hash = DynamoDb.calculateHashWithKnownKeys(operation.TableName, operation.Key)
+            if (hash) hashes.push(hash)
+          }
+        }
+        break
+      }
     }
 
     for (const hash of hashes) {
