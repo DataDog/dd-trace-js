@@ -3,7 +3,7 @@
 const crypto = require('crypto')
 const log = require('../../log')
 
-// the official list doesn't include '_id', but it's common in MongoDB
+// the RFC doesn't include '_id', but it's common in MongoDB
 const USER_ID_FIELDS = ['id', '_id', 'email', 'username', 'login', 'user']
 
 let collectionMode
@@ -36,17 +36,21 @@ function setCollectionMode (mode, overwrite = true) {
 
 function obfuscateIfNeeded (str) {
   if (collectionMode === 'anonymization') {
+    // get first 16 bytes of sha256 hash in lowercase hex
     return 'anon_' + crypto.createHash('sha256').update(str).digest().toString('hex', 0, 16).toLowerCase()
   } else {
     return str
   }
 }
 
+// TODO: should we find other ways to get the user ID ?
 function getUserId (user) {
   if (!user) return
 
   for (const field of USER_ID_FIELDS) {
     let id = user[field]
+
+    // try to find a field that can be stringified
     if (id && typeof id.toString === 'function') {
       id = id.toString()
 
