@@ -66,6 +66,7 @@ function enable (_config) {
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
     passportVerify.subscribe(onPassportVerify) // possible optimization: only subscribe if collection mode is enabled
+    passportUser.subscribe(onPassportDeserializeUser)
     queryParser.subscribe(onRequestQueryParsed)
     nextBodyParsed.subscribe(onRequestBodyParsed)
     nextQueryParsed.subscribe(onRequestQueryParsed)

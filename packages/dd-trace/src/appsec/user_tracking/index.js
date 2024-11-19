@@ -137,6 +137,8 @@ function trackUser (user, abortController) {
 
   const userId = getUserId(user)
 
+  // must get user ID with USER_ID_FIELDS
+
   if (!userId) {
 
   }
@@ -149,6 +151,8 @@ function trackUser (user, abortController) {
     '_dd.appsec.usr.id': userId, // always AND only send when automated
     '_dd.appsec.user.collection_mode': collectionMode // short or long form ?
   })
+
+  // _dd.appsec.user.collection_mode: collectionMode // sdk/ident/anon
 
   // If the user monitoring SDK has already resulted in a call to libddwaf before any automated instrumentation or collection method has been executed, no extra call should be made.
   const results = waf.run({
