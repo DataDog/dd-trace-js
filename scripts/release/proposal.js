@@ -100,7 +100,10 @@ try {
     .replace(/\n/g, ' ').trim()
 
   if (proposalDiff) {
-    pass(`${proposalDiff.split(' ').length} new`)
+    // Get new changes since last commit of the proposal branch.
+    const newChanges = capture(`${diffCmd} v${newVersion}-proposal master`)
+
+    pass(`\n\n${newChanges}\n`)
 
     start('Apply changes from the main branch')
 
@@ -109,14 +112,11 @@ try {
       run('git reset --hard HEAD~1')
     }
 
-    // Output new changes since last commit of the proposal branch.
-    const newChanges = capture(`${diffCmd} v${newVersion}-proposal master`)
-
-    log(`\n${newChanges}\n`)
-
     // Cherry pick all new commits to the proposal branch.
     try {
       run(`echo "${proposalDiff}" | xargs git cherry-pick`)
+
+      pass()
     } catch (err) {
       fatal(
         'Cherry-pick failed. Resolve the conflicts and run `git cherry-pick --continue` to continue.',
