@@ -553,7 +553,7 @@ class Config {
     this._setValue(defaults, 'telemetry.dependencyCollection', true)
     this._setValue(defaults, 'telemetry.enabled', true)
     this._setValue(defaults, 'telemetry.heartbeatInterval', 60000)
-    this._setValue(defaults, 'telemetry.logCollection', false)
+    this._setValue(defaults, 'telemetry.logCollection', true)
     this._setValue(defaults, 'telemetry.metrics', true)
     this._setValue(defaults, 'traceEnabled', true)
     this._setValue(defaults, 'traceId128BitGenerationEnabled', true)
@@ -1142,12 +1142,6 @@ class Config {
       calc['tracePropagationStyle.extract'] = calc['tracePropagationStyle.extract'] || defaultPropagationStyle
     }
 
-    const iastEnabled = coalesce(this._options['iast.enabled'], this._env['iast.enabled'])
-    const profilingEnabled = coalesce(this._options['profiling.enabled'], this._env['profiling.enabled'])
-    const injectionIncludesProfiler = (this._env.injectionEnabled || []).includes('profiler')
-    if (iastEnabled || ['auto', 'true'].includes(profilingEnabled) || injectionIncludesProfiler) {
-      this._setBoolean(calc, 'telemetry.logCollection', true)
-    }
     if (this._env.injectionEnabled?.length > 0) {
       this._setBoolean(calc, 'crashtracking.enabled', true)
     }
