@@ -71,7 +71,7 @@ class LangChainLLMObsPlugin extends LLMObsPlugin {
 
     const provider = span?.context()._tags['langchain.request.provider']
     const integrationName = this.getIntegrationName(type, provider)
-    this._setMetadata(span, provider)
+    this.setMetadata(span, provider)
 
     const inputs = ctx.args?.[0]
     const options = ctx.args?.[1]
@@ -80,11 +80,12 @@ class LangChainLLMObsPlugin extends LLMObsPlugin {
     this._handlers[type].setMetaTags({ span, inputs, results, options, integrationName })
   }
 
-  _setMetadata (span, provider) {
+  setMetadata (span, provider) {
     if (!provider) return
 
     const metadata = {}
 
+    // these fields won't be set for non model-based operations
     const temperature =
       span?.context()._tags[`langchain.request.${provider}.parameters.temperature`] ||
       span?.context()._tags[`langchain.request.${provider}.parameters.model_kwargs.temperature`]

@@ -63,7 +63,7 @@ class LangChainLLMObsHandler {
   }
 
   checkTokenUsageFromAIMessage (message) {
-    let usage = message.usage_metadata
+    let usage = message.usage_metadata || message.additional_kwargs?.usage
     const runId = message.run_id || message.id || ''
     const runIdBase = runId ? runId.split('-').slice(0, -1).join('-') : ''
 

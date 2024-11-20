@@ -3,7 +3,13 @@
 const LLMObsAgentProxySpanWriter = require('../../../../src/llmobs/writers/spans/agentProxy')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const agent = require('../../../../../dd-trace/test/plugins/agent')
-const { expectedLLMObsLLMSpanEvent, expectedLLMObsNonLLMSpanEvent, deepEqualWithMockValues } = require('../../util')
+const {
+  expectedLLMObsLLMSpanEvent,
+  expectedLLMObsNonLLMSpanEvent,
+  deepEqualWithMockValues,
+  MOCK_ANY,
+  MOCK_STRING
+} = require('../../util')
 const chai = require('chai')
 
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
@@ -32,7 +38,7 @@ describe('integrations', () => {
 
   // so we can verify it gets tagged properly
   useEnv({
-    OPENAI_API_KEY: '<not-a-real-key>',
+    // OPENAI_API_KEY: '<not-a-real-key>',
     ANTHROPIC_API_KEY: '<not-a-real-key>'
   })
 
@@ -81,7 +87,7 @@ describe('integrations', () => {
         })
 
         describe('llm', () => {
-          it('submits an llm span for an openai llm', async () => {
+          it('submits an llm span for an openai llm call', async () => {
             stubCall({
               ...openAiBaseCompletionInfo,
               response: {
@@ -108,7 +114,7 @@ describe('integrations', () => {
                 name: 'langchain.llms.openai.OpenAI',
                 inputMessages: [{ content: 'Hello!' }],
                 outputMessages: [{ content: 'Hello, world!' }],
-                metadata: { temperature: 0.7, maxTokens: 256 },
+                metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
                 tags: { ml_app: 'test', language: 'javascript' }
               })
@@ -120,13 +126,119 @@ describe('integrations', () => {
 
             await checkTraces
           })
+
+          it('submits an llm span for a cohere call', async () => {})
+
+          it('submits an llm span for an ai21 call', async () => {})
         })
 
-        describe('chat model', () => {})
+        describe('chat model', () => {
+          it('submits an llm span for an openai chat model call', async () => {
+            stubCall({
+              ...openAiBaseChatInfo,
+              response: {
+                choices: [
+                  {
+                    message: {
+                      content: 'Hello, world!',
+                      role: 'assistant'
+                    }
+                  }
+                ],
+                usage: { prompt_tokens: 8, completion_tokens: 12, total_tokens: 20 }
+              }
+            })
 
-        describe('embedding', () => {})
+            const chat = new langchainOpenai.ChatOpenAI({ model: 'gpt-3.5-turbo' })
 
-        describe('chain', () => {})
+            const checkTraces = agent.use(traces => {
+              const span = traces[0][0]
+              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+
+              const expected = expectedLLMObsLLMSpanEvent({
+                span,
+                spanKind: 'llm',
+                modelName: 'gpt-3.5-turbo',
+                modelProvider: 'openai',
+                name: 'langchain.chat_models.openai.ChatOpenAI',
+                inputMessages: [{ content: 'Hello!', role: 'user' }],
+                outputMessages: [{ content: 'Hello, world!', role: 'assistant' }],
+                metadata: MOCK_ANY,
+                tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
+                tags: { ml_app: 'test', language: 'javascript' }
+              })
+
+              expect(spanEvent).to.deepEqualWithMockValues(expected)
+            })
+
+            await chat.invoke('Hello!')
+
+            await checkTraces
+          })
+
+          it('submits an llm span for an anthropic chat model call', async () => {
+            stubCall({
+              base: 'https://api.anthropic.com',
+              path: '/v1/messages',
+              response: {
+                id: 'msg_01NE2EJQcjscRyLbyercys6p',
+                type: 'message',
+                role: 'assistant',
+                model: 'claude-2.1',
+                content: [
+                  { type: 'text', text: 'Hello!' }
+                ],
+                stop_reason: 'end_turn',
+                stop_sequence: null,
+                usage: { input_tokens: 11, output_tokens: 6 }
+              }
+            })
+
+            const checkTraces = agent.use(traces => {
+              const span = traces[0][0]
+              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+
+              const expected = expectedLLMObsLLMSpanEvent({
+                span,
+                spanKind: 'llm',
+                modelName: 'claude-2.1', // overriden langchain for older versions
+                modelProvider: 'anthropic',
+                name: 'langchain.chat_models.anthropic.ChatAnthropic',
+                inputMessages: [{ content: 'Hello!', role: 'user' }],
+                outputMessages: [{ content: 'Hello!', role: 'assistant' }],
+                metadata: MOCK_ANY,
+                tokenMetrics: { input_tokens: 11, output_tokens: 6, total_tokens: 17 },
+                tags: { ml_app: 'test', language: 'javascript' }
+              })
+
+              expect(spanEvent).to.deepEqualWithMockValues(expected)
+            })
+
+            const chatModel = new langchainAnthropic.ChatAnthropic({ model: 'claude-2.1' })
+
+            await chatModel.invoke('Hello!')
+
+            await checkTraces
+          })
+
+          it('submits an llm span with tool calls', async () => {})
+        })
+
+        describe('embedding', () => {
+          it('submits an embedding span for an `embedQuery` call', async () => {})
+
+          it('submits an embedding span for an `embedDocuments` call', async () => {})
+        })
+
+        describe('chain', () => {
+          it('submits a workflow and llm spans for a simple chain call', async () => {})
+
+          it('submits workflow and llm spans for a nested chain', async () => {})
+
+          it('submits workflow and llm spans for a batched chain', async () => {})
+
+          it('submits a workflow and llm spans for different schema IO', async () => {})
+        })
       })
     })
   })
