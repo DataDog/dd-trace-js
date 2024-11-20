@@ -19,7 +19,7 @@ class LangChainChainHandler extends LangChainHandler {
         for (const [key, value] of Object.entries(input)) {
         // these are mappings to the python client names, ie lc_kwargs
         // only present on BaseMessage types
-          if (key.includes('lc')) continue
+          if (key.includes('lc_')) continue
           tags[`langchain.request.inputs.${idx}.${key}`] = this.normalize(value)
         }
       }
