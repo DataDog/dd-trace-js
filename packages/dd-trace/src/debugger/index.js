@@ -33,8 +33,8 @@ function start (config, rc) {
     const ack = rcAckCallbacks.get(ackId)
     if (ack === undefined) {
       // This should never happen, but just in case something changes in the future, we should guard against it
-      log.error(`Received an unknown ackId: ${ackId}`)
-      if (error) log.error(error)
+      log.error('Received an unknown ackId: %s', ackId)
+      if (error) log.error('Error starting Dynamic Instrumentation client', error)
       return
     }
     ack(error)

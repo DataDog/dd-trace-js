@@ -30,12 +30,12 @@ dc.subscribe(CHANNEL, (payload) => {
   try {
     hooks[payload.package]()
   } catch (err) {
-    log.error(`esbuild-wrapped ${payload.package} missing in list of hooks`)
+    log.error('esbuild-wrapped %s missing in list of hooks', payload.package)
     throw err
   }
 
   if (!instrumentations[payload.package]) {
-    log.error(`esbuild-wrapped ${payload.package} missing in list of instrumentations`)
+    log.error('esbuild-wrapped %s missing in list of instrumentations', payload.package)
     return
   }
 

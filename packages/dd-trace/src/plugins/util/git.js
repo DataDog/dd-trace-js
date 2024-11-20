@@ -196,7 +196,7 @@ function getLatestCommits () {
     distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_local_commits' }, Date.now() - startTime)
     return result
   } catch (err) {
-    log.error(`Get latest commits failed: ${err.message}`)
+    log.error('Get latest commits failed: %s', err.message)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'get_local_commits', errorType: err.status }
@@ -229,7 +229,7 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
       .split('\n')
       .filter(commit => commit)
   } catch (err) {
-    log.error(`Get commits to upload failed: ${err.message}`)
+    log.error('Get commits to upload failed: %s', err.message)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'get_objects', errorType: err.code, exitCode: err.status || err.errno } // err.status might be null

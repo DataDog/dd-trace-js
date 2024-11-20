@@ -225,7 +225,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
         repositoryUrl,
         (err) => {
           if (err) {
-            log.error(`Error uploading git metadata: ${err.message}`)
+            log.error('Error uploading git metadata: %s', err.message)
           } else {
             log.debug('Successfully uploaded git metadata')
           }

@@ -103,8 +103,7 @@ for (const packageName of names) {
         try {
           version = version || getVersion(moduleBaseDir)
         } catch (e) {
-          log.error(`Error getting version for "${name}": ${e.message}`)
-          log.error(e)
+          log.error('Error getting version for "%s": %s', name, e.message, e)
           continue
         }
         if (typeof namesAndSuccesses[`${name}@${version}`] === 'undefined') {
