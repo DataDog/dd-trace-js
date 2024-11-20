@@ -16,9 +16,13 @@ class NoopSpan {
   setOperationName (name) { return this }
   setBaggageItem (key, value) { return this }
   getBaggageItem (key) {}
+  getAllBaggageItems () {}
+  removeBaggageItem (key) { return this }
+  removeAllBaggageItems () { return this }
   setTag (key, value) { return this }
   addTags (keyValueMap) { return this }
   addLink (link) { return this }
+  addSpanPointer (ptrKind, ptrDir, ptrHash) { return this }
   log () { return this }
   logEvent () {}
   finish (finishTime) {}

@@ -145,6 +145,18 @@ class DatadogSpan {
     return this._spanContext._baggageItems[key]
   }
 
+  getAllBaggageItems () {
+    return JSON.stringify(this._spanContext._baggageItems)
+  }
+
+  removeBaggageItem (key) {
+    delete this._spanContext._baggageItems[key]
+  }
+
+  removeAllBaggageItems () {
+    this._spanContext._baggageItems = {}
+  }
+
   setTag (key, value) {
     this._addTags({ [key]: value })
     return this
@@ -166,6 +178,20 @@ class DatadogSpan {
       context: context._ddContext ? context._ddContext : context,
       attributes: this._sanitizeAttributes(attributes)
     })
+  }
+
+  addSpanPointer (ptrKind, ptrDir, ptrHash) {
+    const zeroContext = new SpanContext({
+      traceId: id('0'),
+      spanId: id('0')
+    })
+    const attributes = {
+      'ptr.kind': ptrKind,
+      'ptr.dir': ptrDir,
+      'ptr.hash': ptrHash,
+      'link.kind': 'span-pointer'
+    }
+    this.addLink(zeroContext, attributes)
   }
 
   addEvent (name, attributesOrStartTime, startTime) {

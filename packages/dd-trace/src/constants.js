@@ -46,5 +46,10 @@ module.exports = {
   SCHEMA_OPERATION: 'schema.operation',
   SCHEMA_NAME: 'schema.name',
   GRPC_CLIENT_ERROR_STATUSES: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
-  GRPC_SERVER_ERROR_STATUSES: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+  GRPC_SERVER_ERROR_STATUSES: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+  S3_PTR_KIND: 'aws.s3.object',
+  SPAN_POINTER_DIRECTION: Object.freeze({
+    UPSTREAM: 'u',
+    DOWNSTREAM: 'd'
+  })
 }

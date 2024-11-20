@@ -9,6 +9,7 @@ const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
 class Sqs extends BaseAwsSdkPlugin {
   static get id () { return 'sqs' }
   static get peerServicePrecursors () { return ['queuename'] }
+  static get isPayloadReporter () { return true }
 
   constructor (...args) {
     super(...args)
@@ -32,7 +33,8 @@ class Sqs extends BaseAwsSdkPlugin {
             {},
             this.requestTags.get(request) || {},
             { 'span.kind': 'server' }
-          )
+          ),
+          extractedLinks: contextExtraction.datadogContext._links
         }
         parsedMessageAttributes = contextExtraction.parsedAttributes
         span = plugin.tracer.startSpan('aws.response', options)
@@ -41,7 +43,7 @@ class Sqs extends BaseAwsSdkPlugin {
       // extract DSM context after as we might not have a parent-child but may have a DSM context
 
       this.responseExtractDSMContext(
-        request.operation, request.params, response, span || null, { parsedMessageAttributes }
+        request.operation, request.params, response, span || null, { parsedAttributes: parsedMessageAttributes }
       )
     })
 
@@ -194,16 +196,16 @@ class Sqs extends BaseAwsSdkPlugin {
           parsedAttributes = this.parseDatadogAttributes(message.MessageAttributes._datadog)
         }
       }
+      const payloadSize = getHeadersSize({
+        Body: message.Body,
+        MessageAttributes: message.MessageAttributes
+      })
+      const queue = params.QueueUrl.split('/').pop()
       if (parsedAttributes) {
-        const payloadSize = getHeadersSize({
-          Body: message.Body,
-          MessageAttributes: message.MessageAttributes
-        })
-        const queue = params.QueueUrl.split('/').pop()
         this.tracer.decodeDataStreamsContext(parsedAttributes)
-        this.tracer
-          .setCheckpoint(['direction:in', `topic:${queue}`, 'type:sqs'], span, payloadSize)
       }
+      this.tracer
+        .setCheckpoint(['direction:in', `topic:${queue}`, 'type:sqs'], span, payloadSize)
     })
   }
 

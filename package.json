@@ -5,6 +5,7 @@
   "main": "index.js",
   "typings": "index.d.ts",
   "scripts": {
+    "env": "bash ./plugin-env",
     "preinstall": "node scripts/preinstall.js",
     "bench": "node benchmark",
     "bench:profiler": "node benchmark/profiler",
@@ -14,6 +15,7 @@
     "type:test": "cd docs && yarn && yarn test",
     "lint": "node scripts/check_licenses.js && eslint . && yarn audit",
     "lint-fix": "node scripts/check_licenses.js && eslint . --fix && yarn audit",
+    "release:proposal": "node scripts/release/proposal",
     "services": "node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",
     "test": "SERVICES=* yarn services && mocha --expose-gc 'packages/dd-trace/test/setup/node.js' 'packages/*/test/**/*.spec.js'",
     "test:appsec": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" --exclude \"packages/dd-trace/test/appsec/**/*.plugin.spec.js\" \"packages/dd-trace/test/appsec/**/*.spec.js\"",
@@ -80,12 +82,14 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@datadog/native-appsec": "8.2.1",
+    "@datadog/libdatadog": "^0.2.2",
+    "@datadog/native-appsec": "8.3.0",
     "@datadog/native-iast-rewriter": "2.5.0",
     "@datadog/native-iast-taint-tracking": "3.2.0",
     "@datadog/native-metrics": "^3.0.1",
     "@datadog/pprof": "5.4.1",
     "@datadog/sketches-js": "^2.1.0",
+    "@isaacs/ttlcache": "^1.4.1",
     "@opentelemetry/api": ">=1.0.0 <1.9.0",
     "@opentelemetry/core": "^1.14.0",
     "crypto-randomuuid": "^1.0.0",
