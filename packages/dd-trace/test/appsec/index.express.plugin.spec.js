@@ -181,7 +181,7 @@ withVersions('express', 'express', version => {
     })
   })
 
-  describe.skip('Suspicious request blocking - query', () => {
+  describe('Suspicious request blocking - query', () => {
     let server, requestBody, axios
 
     before(() => {

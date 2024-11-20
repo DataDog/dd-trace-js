@@ -13,7 +13,7 @@ const {
   HTTP_REQUEST_URI
 } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
 
-describe.skip('URI sourcing with express', () => {
+describe('URI sourcing with express', () => {
   let express
   let appListener
 

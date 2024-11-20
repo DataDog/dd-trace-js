@@ -10,7 +10,7 @@ const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require
 
 function noop () {}
 
-describe.skip('RASP - ssrf', () => {
+describe('RASP - ssrf', () => {
   withVersions('express', 'express', expressVersion => {
     let app, server, axios
 
@@ -208,7 +208,8 @@ describe.skip('RASP - ssrf', () => {
     })
   })
 
-  describe('without express', () => {
+  // to be fixed
+  describe.skip('without express', () => {
     let app, server, axios
 
     before(() => {

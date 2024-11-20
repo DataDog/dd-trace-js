@@ -25,8 +25,10 @@ function createWrapRouterMethod (name) {
       const lastIndex = arguments.length - 1
       const name = original._name || original.name
       const req = arguments[arguments.length > 3 ? 1 : 0]
-      // wrapParams(req)
       const next = arguments[lastIndex]
+
+      // explicitly call getter for express5
+      req.query
 
       if (typeof next === 'function') {
         arguments[lastIndex] = wrapNext(req, next)
@@ -178,8 +180,8 @@ addHook({ name: 'router', versions: ['>=1'] }, Router => {
 })
 
 function createWrapLayerMethod () {
+  // TODO: create a dedicate channel for this
   const processParamsStartCh = channel('datadog:express:process_params:start')
-  const queryParserReadCh = channel('datadog:query:read:finish')
 
   return function wrapMethod (original) {
     return function wrappedHandleRequest (req, res, next) {
@@ -192,15 +194,6 @@ function createWrapLayerMethod () {
           abortController,
           params: req?.params
         })
-        if (abortController.signal.aborted) return
-      }
-
-      if (queryParserReadCh.hasSubscribers && req) {
-        const abortController = new AbortController()
-        const query = req.query
-
-        queryParserReadCh.publish({ req, res, query, abortController })
-
         if (abortController.signal.aborted) return
       }
 

@@ -70,15 +70,19 @@ addHook({ name: 'express', versions: ['>=4 <5.0.0'] }, express => {
 })
 
 addHook({ name: 'express', versions: ['>=5.0.0'] }, express => {
-  shimmer.wrap(express.Router, 'use', wrapRouterMethod)
-  shimmer.wrap(express.Router, 'route', wrapRouterMethod)
   shimmer.wrap(express.application, 'handle', wrapHandle)
-
-  shimmer.wrap(express.response, 'json', wrapResponseJson)
-  shimmer.wrap(express.response, 'jsonp', wrapResponseJson)
-  shimmer.wrap(express.response, 'render', wrapResponseRender)
+  shimmer.wrap(express.Router.prototype, 'use', wrapRouterMethod)
+  shimmer.wrap(express.Router.prototype, 'route', wrapRouterMethod)
 
   return express
+})
+
+addHook({ name: 'express', file: ['lib/response.js'], versions: ['>=5.0.0'] }, response => {
+  shimmer.wrap(response, 'json', wrapResponseJson)
+  shimmer.wrap(response, 'jsonp', wrapResponseJson)
+  shimmer.wrap(response, 'render', wrapResponseRender)
+
+  return response
 })
 
 const queryParserReadCh = channel('datadog:query:read:finish')
@@ -143,5 +147,35 @@ addHook({ name: 'express', versions: ['>=4.0.0 <4.3.0'] }, express => {
 
 addHook({ name: 'express', versions: ['>=4.3.0 <5.0.0'] }, express => {
   shimmer.wrap(express.Router, 'process_params', wrapProcessParamsMethod(2))
+  return express
+})
+
+addHook({ name: 'express', file: ['lib/express.js'], versions: ['>=5.0.0'] }, express => {
+  shimmer.wrapFunction(express, function (original) {
+    const app = original.call(this, arguments)
+    const requestProto = Object.getPrototypeOf(app.request)
+    const requestDescriptor = Object.getOwnPropertyDescriptor(requestProto, 'query')
+
+    shimmer.wrap(requestDescriptor, 'get', function (originalGet) {
+      return function wrappedGet () {
+        const query = originalGet.apply(this, arguments)
+
+        if (queryParserReadCh.hasSubscribers) {
+          const abortController = new AbortController()
+
+          queryParserReadCh.publish({ req: this, res: this.res, query, abortController })
+
+          if (abortController.signal.aborted) return
+        }
+
+        return query
+      }
+    })
+
+    Object.defineProperty(requestProto, 'query', requestDescriptor)
+
+    return original
+  })
+
   return express
 })
