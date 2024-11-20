@@ -561,6 +561,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test-and-upstream
 
+  langchain:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: langchain
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
+
   limitd-client:
     runs-on: ubuntu-latest
     services:
