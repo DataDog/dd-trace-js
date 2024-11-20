@@ -45,8 +45,12 @@ describe('URI sourcing with express', () => {
 
       iast.disable()
     })
-    // not supported express5
-    it.skip('should taint uri', done => {
+
+    it('should taint uri', function (done) {
+      // not supported express5
+      if (!semver.satisfies(version, '<5')) {
+        this.skip()
+      }
       const app = express()
       app.get('/path/*', (req, res) => {
         const store = storage.getStore()
@@ -181,6 +185,7 @@ describe('Path params sourcing with express', () => {
       })
     })
 
+    // to be fixed
     it.skip('should taint path param on router.params callback', function (done) {
       const app = express()
 
@@ -201,6 +206,7 @@ describe('Path params sourcing with express', () => {
       })
     })
 
+    // to be fixed
     it.skip('should taint path param on router.params callback with custom implementation', function (done) {
       const app = express()
 

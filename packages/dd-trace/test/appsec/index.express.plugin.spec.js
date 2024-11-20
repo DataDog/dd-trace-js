@@ -11,7 +11,7 @@ const { json } = require('../../src/appsec/blocked_templates')
 const zlib = require('zlib')
 
 withVersions('express', 'express', version => {
-  describe.skip('Suspicious request blocking - path parameters', () => {
+  describe('Suspicious request blocking - path parameters', () => {
     let server, paramCallbackSpy, axios
 
     before(() => {
@@ -175,6 +175,7 @@ withVersions('express', 'express', version => {
         } catch (e) {
           assert.equal(e.response.status, 403)
           assert.deepEqual(e.response.data, JSON.parse(json))
+          // to be fixed
           sinon.assert.notCalled(paramCallbackSpy)
         }
       })
