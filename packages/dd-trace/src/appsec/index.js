@@ -180,7 +180,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   Reporter.finishRequest(req, res)
 }
 
-function onPassportVerify ({ login, user, success, abortController }) {
+function onPassportVerify ({ framework, login, user, success, abortController }) {
   const store = storage.getStore()
   const rootSpan = store?.req && web.root(store.req)
 
@@ -189,7 +189,9 @@ function onPassportVerify ({ login, user, success, abortController }) {
     return
   }
 
-  UserTracking.trackLogin(login, user, success, rootSpan, abortController)
+  const results = UserTracking.trackLogin(framework, login, user, success, rootSpan)
+
+  handleResults(results, store.req, store.req.res, rootSpan, abortController)
 }
 
 function onRequestQueryParsed ({ req, res, query, abortController }) {
