@@ -179,6 +179,7 @@ interface Plugins {
   "kafkajs": tracer.plugins.kafkajs
   "knex": tracer.plugins.knex;
   "koa": tracer.plugins.koa;
+  "langchain": tracer.plugins.langchain;
   "mariadb": tracer.plugins.mariadb;
   "memcached": tracer.plugins.memcached;
   "microgateway-core": tracer.plugins.microgateway_core;
@@ -1591,6 +1592,12 @@ declare namespace tracer {
      * [kafkajs](https://kafka.js.org/) module.
      */
     interface kafkajs extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [langchain](https://js.langchain.com/) module
+     */
+    interface langchain extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
