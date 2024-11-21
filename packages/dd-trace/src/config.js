@@ -504,6 +504,8 @@ class Config {
     this._setValue(defaults, 'isGitUploadEnabled', false)
     this._setValue(defaults, 'isIntelligentTestRunnerEnabled', false)
     this._setValue(defaults, 'isManualApiEnabled', false)
+    this._setValue(defaults, 'langchain.spanCharLimit', 128)
+    this._setValue(defaults, 'langchain.spanPromptCompletionSampleRate', 1.0)
     this._setValue(defaults, 'llmobs.agentlessEnabled', false)
     this._setValue(defaults, 'llmobs.enabled', false)
     this._setValue(defaults, 'llmobs.mlApp', undefined)
@@ -615,6 +617,8 @@ class Config {
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
+      DD_LANGCHAIN_SPAN_CHAR_LIMIT,
+      DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,
       DD_LLMOBS_AGENTLESS_ENABLED,
       DD_LLMOBS_ENABLED,
       DD_LLMOBS_ML_APP,
@@ -770,6 +774,10 @@ class Config {
     this._setArray(env, 'injectionEnabled', DD_INJECTION_ENABLED)
     this._setBoolean(env, 'isAzureFunction', getIsAzureFunction())
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
+    this._setValue(env, 'langchain.spanCharLimit', maybeInt(DD_LANGCHAIN_SPAN_CHAR_LIMIT))
+    this._setValue(
+      env, 'langchain.spanPromptCompletionSampleRate', maybeFloat(DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
+    )
     this._setBoolean(env, 'legacyBaggageEnabled', DD_TRACE_LEGACY_BAGGAGE_ENABLED)
     this._setBoolean(env, 'llmobs.agentlessEnabled', DD_LLMOBS_AGENTLESS_ENABLED)
     this._setBoolean(env, 'llmobs.enabled', DD_LLMOBS_ENABLED)
