@@ -65,7 +65,7 @@ class IastPlugin extends Plugin {
       try {
         handler(message, name)
       } catch (e) {
-        log.error('[ASM] Error executing handler', e)
+        log.error('[ASM] Error executing IAST plugin handler', e)
       }
     }
   }
