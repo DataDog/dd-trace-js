@@ -56,6 +56,19 @@
       "envars": null
     },
     {
+      "id": "npm_symlink",
+      "description": "Ignore the npm CLI",
+      "os": null,
+      "cmds": [
+        "**/node",
+        "**/nodejs",
+        "**/ts-node",
+        "**/ts-node-*"
+      ],
+      "args": [{ "args":  ["*/npm"], "position": 1}],
+      "envars": null
+    },
+    {
       "id": "yarn",
       "description": "Ignore the yarn CLI",
       "os": null,
@@ -69,6 +82,19 @@
       "envars": null
     },
     {
+      "id": "yarn_symlink",
+      "description": "Ignore the yarn CLI",
+      "os": null,
+      "cmds": [
+        "**/node",
+        "**/nodejs",
+        "**/ts-node",
+        "**/ts-node-*"
+      ],
+      "args": [{ "args":  ["*/yarn"], "position": 1}],
+      "envars": null
+    },
+    {
       "id": "pnpm",
       "description": "Ignore the pnpm CLI",
       "os": null,
@@ -79,6 +105,19 @@
         "**/ts-node-*"
       ],
       "args": [{ "args":  ["*/pnpm.cjs"], "position": 1}],
+      "envars": null
+    },
+    {
+      "id": "pnpm_symlink",
+      "description": "Ignore the pnpm CLI",
+      "os": null,
+      "cmds": [
+        "**/node",
+        "**/nodejs",
+        "**/ts-node",
+        "**/ts-node-*"
+      ],
+      "args": [{ "args":  ["*/pnpm"], "position": 1}],
       "envars": null
     }
   ]
