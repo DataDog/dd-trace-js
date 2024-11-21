@@ -119,7 +119,7 @@ class TracingPlugin extends Plugin {
         ...metrics
       },
       integrationName: type,
-      links: childOf?.links
+      links: childOf?._links
     })
 
     analyticsSampler.sample(span, this.config.measured)
