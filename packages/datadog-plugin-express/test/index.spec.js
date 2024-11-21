@@ -2,14 +2,14 @@
 
 const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
+const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
-const semver = require('semver')
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
-describe('Plugin', function () {
+describe('Plugin', () => {
   let tracer
   let express
   let appListener
@@ -198,6 +198,162 @@ describe('Plugin', function () {
           })
         })
 
+        it('should do automatic instrumentation on middleware', done => {
+          const app = express()
+          const router = express.Router()
+
+          router.get('/user/:id', (req, res) => {
+            res.status(200).send()
+          })
+
+          app.use(function named (req, res, next) { next() })
+          app.use('/app', router)
+
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
+                expect(spans[0]).to.have.property('name', 'express.request')
+                expect(spans[0].meta).to.have.property('component', 'express')
+
+                if (semver.intersects(version, '<5.0.0')) {
+                  expect(spans[1]).to.have.property('resource', 'query')
+                  expect(spans[1]).to.have.property('name', 'express.middleware')
+                  expect(spans[1].parent_id.toString()).to.equal(spans[0].span_id.toString())
+                  expect(spans[1].meta).to.have.property('component', 'express')
+                  expect(spans[2]).to.have.property('resource', 'expressInit')
+                  expect(spans[2]).to.have.property('name', 'express.middleware')
+                  expect(spans[2].parent_id.toString()).to.equal(spans[0].span_id.toString())
+                  expect(spans[2].meta).to.have.property('component', 'express')
+                }
+
+                const namedSpanIndex = semver.intersects(version, '<5.0.0') ? 3 : 1
+
+                expect(spans[namedSpanIndex]).to.have.property('resource', 'named')
+                expect(spans[namedSpanIndex]).to.have.property('name', 'express.middleware')
+                expect(spans[namedSpanIndex].parent_id.toString()).to.equal(spans[0].span_id.toString())
+                expect(spans[namedSpanIndex].meta).to.have.property('component', 'express')
+
+                expect(spans[namedSpanIndex + 1]).to.have.property('resource', 'router')
+                expect(spans[namedSpanIndex + 1]).to.have.property('name', 'express.middleware')
+                expect(spans[namedSpanIndex + 1].parent_id.toString()).to.equal(spans[0].span_id.toString())
+                expect(spans[namedSpanIndex + 1].meta).to.have.property('component', 'express')
+
+                // expect(spans[namedSpanIndex + 2].resource).to.match(/^bound\s.*$/) called handle in express5
+                expect(spans[namedSpanIndex + 2]).to.have.property('name', 'express.middleware')
+                expect(spans[namedSpanIndex + 2].parent_id.toString()).to.equal(
+                  spans[namedSpanIndex + 1].span_id.toString()
+                )
+                expect(spans[namedSpanIndex + 2].meta).to.have.property('component', 'express')
+
+                expect(spans[namedSpanIndex + 3]).to.have.property('resource', '<anonymous>')
+                expect(spans[namedSpanIndex + 3]).to.have.property('name', 'express.middleware')
+                expect(spans[namedSpanIndex + 3].parent_id.toString()).to.equal(
+                  spans[namedSpanIndex + 2].span_id.toString()
+                )
+                expect(spans[namedSpanIndex + 3].meta).to.have.property('component', 'express')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/app/user/1`)
+              .catch(done)
+          })
+        })
+
+        it('should do automatic instrumentation on middleware that break the async context', done => {
+          let next
+
+          const app = express()
+          const interval = setInterval(() => {
+            if (next) {
+              next()
+              clearInterval(interval)
+            }
+          })
+
+          app.use(function breaking (req, res, _next) {
+            next = _next
+          })
+          app.get('/user/:id', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                const breakingSpanIndex = semver.intersects(version, '<5.0.0') ? 3 : 1
+
+                expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                expect(spans[0]).to.have.property('name', 'express.request')
+                expect(spans[0].meta).to.have.property('component', 'express')
+                expect(spans[breakingSpanIndex]).to.have.property('resource', 'breaking')
+                expect(spans[breakingSpanIndex]).to.have.property('name', 'express.middleware')
+                expect(spans[breakingSpanIndex].meta).to.have.property('component', 'express')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/user/1`)
+              .catch(done)
+          })
+        })
+
+        it('should handle errors on middleware that break the async context', done => {
+          let next
+
+          const error = new Error('boom')
+          const app = express()
+          const interval = setInterval(() => {
+            if (next) {
+              next()
+              clearInterval(interval)
+            }
+          })
+
+          app.use(function breaking (req, res, _next) {
+            next = _next
+          })
+          app.use(() => { throw error })
+          // eslint-disable-next-line n/handle-callback-err
+          app.use((err, req, res, next) => next())
+          app.get('/user/:id', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+                const errorSpanIndex = semver.intersects(version, '<5.0.0') ? 4 : 2
+
+                expect(spans[0]).to.have.property('name', 'express.request')
+                expect(spans[errorSpanIndex]).to.have.property('name', 'express.middleware')
+                expect(spans[errorSpanIndex].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(spans[0].meta).to.have.property('component', 'express')
+                expect(spans[errorSpanIndex].meta).to.have.property('component', 'express')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/user/1`)
+              .catch(done)
+          })
+        })
+
         it('should surround matchers based on regular expressions', done => {
           const app = express()
           const router = express.Router()
@@ -250,6 +406,44 @@ describe('Plugin', function () {
 
             axios
               .get(`http://localhost:${port}/app/user/1`)
+              .catch(done)
+          })
+        })
+
+        it('should only keep the last matching path of a middleware stack', done => {
+          const app = express()
+          const router = express.Router()
+
+          // supported only in express<5
+          if (semver.intersects(version, '<5.0.0')) {
+            router.use('*', (req, res, next) => next())
+            app.use('*', (req, res, next) => next())
+          }
+
+          router.use('/', (req, res, next) => next())
+          router.use('/bar', (req, res, next) => next())
+          router.use('/bar', (req, res, next) => {
+            res.status(200).send()
+          })
+
+          app.use('/', (req, res, next) => next())
+          app.use('/foo/bar', (req, res, next) => next())
+          app.use('/foo', router)
+
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /foo/bar')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/foo/bar`)
               .catch(done)
           })
         })
@@ -951,6 +1145,134 @@ describe('Plugin', function () {
           })
         })
 
+        it('should handle middleware errors', done => {
+          const app = express()
+          const error = new Error('boom')
+
+          app.use((req, res, next) => next(error))
+          // eslint-disable-next-line n/handle-callback-err
+          app.use((error, req, res, next) => res.status(500).send())
+
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+                const secondErrorIndex = spans.length - 2
+
+                expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
+                expect(spans[0].meta).to.have.property('component', 'express')
+                expect(spans[secondErrorIndex]).to.have.property('error', 1)
+                expect(spans[secondErrorIndex].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(spans[secondErrorIndex].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(spans[secondErrorIndex].meta).to.have.property(ERROR_STACK, error.stack)
+                expect(spans[secondErrorIndex].meta).to.have.property('component', 'express')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/user`, {
+                validateStatus: status => status === 500
+              })
+              .catch(done)
+          })
+        })
+
+        it('should handle middleware exceptions', done => {
+          const app = express()
+          const error = new Error('boom')
+
+          app.use((req, res) => { throw error })
+          // eslint-disable-next-line n/handle-callback-err
+          app.use((error, req, res, next) => res.status(500).send())
+
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+                const secondErrorIndex = spans.length - 2
+
+                expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
+                expect(spans[0].meta).to.have.property('component', 'express')
+                expect(spans[secondErrorIndex]).to.have.property('error', 1)
+                expect(spans[secondErrorIndex].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(spans[secondErrorIndex].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(spans[secondErrorIndex].meta).to.have.property(ERROR_STACK, error.stack)
+                expect(spans[0].meta).to.have.property('component', 'express')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/user`, {
+                validateStatus: status => status === 500
+              })
+              .catch(done)
+          })
+        })
+
+        it('should support capturing groups in routes', done => {
+          // not supported in Express5
+          if (semver.intersects(version, '>=5.0.0')) {
+            done()
+            return
+          }
+
+          const app = express()
+
+          app.get('/:path(*)', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /:path(*)')
+                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/user`)
+              .catch(done)
+          })
+        })
+
+        it('should keep the properties untouched on nested router handlers', () => {
+          const router = express.Router()
+          const childRouter = express.Router()
+
+          childRouter.get('/:id', (req, res) => {
+            res.status(200).send()
+          })
+
+          router.use('/users', childRouter)
+
+          const layer = router.stack.find(layer => {
+            if (semver.intersects(version, '>=5.0.0')) {
+              return layer.matchers.find(matcher => matcher('/users'))
+            }
+            return layer.regexp.test('/users')
+          })
+
+          expect(layer.handle).to.have.ownProperty('stack')
+        })
+
         it('should keep user stores untouched', done => {
           const app = express()
           const storage = new AsyncLocalStorage()
@@ -1084,539 +1406,6 @@ describe('Plugin', function () {
             })
           })
         })
-
-        if (semver.intersects(version, '<5.0.0')) {
-          it('should do automatic instrumentation on middleware', done => {
-            const app = express()
-            const router = express.Router()
-
-            router.get('/user/:id', (req, res) => {
-              res.status(200).send()
-            })
-
-            app.use(function named (req, res, next) { next() })
-            app.use('/app', router)
-
-            appListener = app.listen(0, 'localhost', () => {
-              const port = appListener.address().port
-
-              agent
-                .use(traces => {
-                  const spans = sort(traces[0])
-
-                  expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
-                  expect(spans[0]).to.have.property('name', 'express.request')
-                  expect(spans[0].meta).to.have.property('component', 'express')
-                  expect(spans[1]).to.have.property('resource', 'query')
-                  expect(spans[1]).to.have.property('name', 'express.middleware')
-                  expect(spans[1].parent_id.toString()).to.equal(spans[0].span_id.toString())
-                  expect(spans[1].meta).to.have.property('component', 'express')
-                  expect(spans[2]).to.have.property('resource', 'expressInit')
-                  expect(spans[2]).to.have.property('name', 'express.middleware')
-                  expect(spans[2].parent_id.toString()).to.equal(spans[0].span_id.toString())
-                  expect(spans[2].meta).to.have.property('component', 'express')
-                  expect(spans[3]).to.have.property('resource', 'named')
-                  expect(spans[3]).to.have.property('name', 'express.middleware')
-                  expect(spans[3].parent_id.toString()).to.equal(spans[0].span_id.toString())
-                  expect(spans[3].meta).to.have.property('component', 'express')
-                  expect(spans[4]).to.have.property('resource', 'router')
-                  expect(spans[4]).to.have.property('name', 'express.middleware')
-                  expect(spans[4].parent_id.toString()).to.equal(spans[0].span_id.toString())
-                  expect(spans[4].meta).to.have.property('component', 'express')
-                  expect(spans[5].resource).to.match(/^bound\s.*$/)
-                  expect(spans[5]).to.have.property('name', 'express.middleware')
-                  expect(spans[5].parent_id.toString()).to.equal(spans[4].span_id.toString())
-                  expect(spans[5].meta).to.have.property('component', 'express')
-                  expect(spans[6]).to.have.property('resource', '<anonymous>')
-                  expect(spans[6]).to.have.property('name', 'express.middleware')
-                  expect(spans[6].parent_id.toString()).to.equal(spans[5].span_id.toString())
-                  expect(spans[6].meta).to.have.property('component', 'express')
-                })
-                .then(done)
-                .catch(done)
-
-              axios
-                .get(`http://localhost:${port}/app/user/1`)
-                .catch(done)
-            })
-          })
-
-          it('should do automatic instrumentation on middleware that break the async context', done => {
-            let next
-
-            const app = express()
-            const interval = setInterval(() => {
-              if (next) {
-                next()
-                clearInterval(interval)
-              }
-            })
-
-            app.use(function breaking (req, res, _next) {
-              next = _next
-            })
-            app.get('/user/:id', (req, res) => {
-              res.status(200).send()
-            })
-
-            appListener = app.listen(0, 'localhost', () => {
-              const port = appListener.address().port
-
-              agent
-                .use(traces => {
-                  const spans = sort(traces[0])
-
-                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
-                  expect(spans[0]).to.have.property('name', 'express.request')
-                  expect(spans[0].meta).to.have.property('component', 'express')
-                  expect(spans[3]).to.have.property('resource', 'breaking')
-                  expect(spans[3]).to.have.property('name', 'express.middleware')
-                  expect(spans[3].meta).to.have.property('component', 'express')
-                })
-                .then(done)
-                .catch(done)
-
-              axios
-                .get(`http://localhost:${port}/user/1`)
-                .catch(done)
-            })
-          })
-
-          it('should handle errors on middleware that break the async context', done => {
-            let next
-
-            const error = new Error('boom')
-            const app = express()
-            const interval = setInterval(() => {
-              if (next) {
-                next()
-                clearInterval(interval)
-              }
-            })
-
-            app.use(function breaking (req, res, _next) {
-              next = _next
-            })
-            app.use(() => { throw error })
-            // eslint-disable-next-line n/handle-callback-err
-            app.use((err, req, res, next) => next())
-            app.get('/user/:id', (req, res) => {
-              res.status(200).send()
-            })
-
-            appListener = app.listen(0, 'localhost', () => {
-              const port = appListener.address().port
-
-              agent
-                .use(traces => {
-                  const spans = sort(traces[0])
-
-                  expect(spans[0]).to.have.property('name', 'express.request')
-                  expect(spans[4]).to.have.property('name', 'express.middleware')
-                  expect(spans[4].meta).to.have.property(ERROR_TYPE, error.name)
-                  expect(spans[0].meta).to.have.property('component', 'express')
-                  expect(spans[4].meta).to.have.property('component', 'express')
-                })
-                .then(done)
-                .catch(done)
-
-              axios
-                .get(`http://localhost:${port}/user/1`)
-                .catch(done)
-            })
-          })
-
-          // express v5 doesn't support regex paths
-          it('should only keep the last matching path of a middleware stack', done => {
-            const app = express()
-            const router = express.Router()
-
-            router.use('/', (req, res, next) => next())
-            router.use('*', (req, res, next) => next())
-            router.use('/bar', (req, res, next) => next())
-            router.use('/bar', (req, res, next) => {
-              res.status(200).send()
-            })
-
-            app.use('/', (req, res, next) => next())
-            app.use('*', (req, res, next) => next())
-            app.use('/foo/bar', (req, res, next) => next())
-            app.use('/foo', router)
-
-            appListener = app.listen(0, 'localhost', () => {
-              const port = appListener.address().port
-
-              agent
-                .use(traces => {
-                  const spans = sort(traces[0])
-
-                  expect(spans[0]).to.have.property('resource', 'GET /foo/bar')
-                })
-                .then(done)
-                .catch(done)
-
-              axios
-                .get(`http://localhost:${port}/foo/bar`)
-                .catch(done)
-            })
-          })
-
-          it('should handle middleware errors', done => {
-            const app = express()
-            const error = new Error('boom')
-
-            app.use((req, res, next) => next(error))
-            // eslint-disable-next-line n/handle-callback-err
-            app.use((error, req, res, next) => res.status(500).send())
-
-            appListener = app.listen(0, 'localhost', () => {
-              const port = appListener.address().port
-
-              agent
-                .use(traces => {
-                  const spans = sort(traces[0])
-
-                  expect(spans[0]).to.have.property('error', 1)
-                  expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                  expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                  expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                  expect(spans[0].meta).to.have.property('component', 'express')
-                  expect(spans[3]).to.have.property('error', 1)
-                  expect(spans[3].meta).to.have.property(ERROR_TYPE, error.name)
-                  expect(spans[3].meta).to.have.property(ERROR_MESSAGE, error.message)
-                  expect(spans[3].meta).to.have.property(ERROR_STACK, error.stack)
-                  expect(spans[3].meta).to.have.property('component', 'express')
-                })
-                .then(done)
-                .catch(done)
-
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 500
-                })
-                .catch(done)
-            })
-          })
-
-          it('should handle middleware exceptions', done => {
-            const app = express()
-            const error = new Error('boom')
-
-            app.use((req, res) => { throw error })
-            // eslint-disable-next-line n/handle-callback-err
-            app.use((error, req, res, next) => res.status(500).send())
-
-            appListener = app.listen(0, 'localhost', () => {
-              const port = appListener.address().port
-
-              agent
-                .use(traces => {
-                  const spans = sort(traces[0])
-
-                  expect(spans[0]).to.have.property('error', 1)
-                  expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                  expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                  expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                  expect(spans[0].meta).to.have.property('component', 'express')
-                  expect(spans[3]).to.have.property('error', 1)
-                  expect(spans[3].meta).to.have.property(ERROR_TYPE, error.name)
-                  expect(spans[3].meta).to.have.property(ERROR_MESSAGE, error.message)
-                  expect(spans[3].meta).to.have.property(ERROR_STACK, error.stack)
-                  expect(spans[0].meta).to.have.property('component', 'express')
-                })
-                .then(done)
-                .catch(done)
-
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 500
-                })
-                .catch(done)
-            })
-          })
-
-          it('should support capturing groups in routes', done => {
-            const app = express()
-
-            app.get('/:path(*)', (req, res) => {
-              res.status(200).send()
-            })
-
-            appListener = app.listen(0, 'localhost', () => {
-              const port = appListener.address().port
-
-              agent
-                .use(traces => {
-                  const spans = sort(traces[0])
-
-                  expect(spans[0]).to.have.property('resource', 'GET /:path(*)')
-                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-                })
-                .then(done)
-                .catch(done)
-
-              axios
-                .get(`http://localhost:${port}/user`)
-                .catch(done)
-            })
-          })
-
-          it('should keep the properties untouched on nested router handlers', () => {
-            const router = express.Router()
-            const childRouter = express.Router()
-
-            childRouter.get('/:id', (req, res) => {
-              res.status(200).send()
-            })
-
-            router.use('/users', childRouter)
-
-            const layer = router.stack.find(layer => layer.regexp.test('/users'))
-
-            expect(layer.handle).to.have.ownProperty('stack')
-          })
-        } else {
-          it('should do automatic instrumentation on middleware', done => {
-            const app = express()
-            const router = express.Router()
-
-            router.get('/user/:id', (req, res) => {
-              res.status(200).send()
-            })
-
-            app.use(function named (req, res, next) { next() })
-            app.use('/app', router)
-
-            appListener = app.listen(0, 'localhost', () => {
-              const port = appListener.address().port
-
-              agent
-                .use(traces => {
-                  const spans = sort(traces[0])
-
-                  expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
-                  expect(spans[0]).to.have.property('name', 'express.request')
-                  expect(spans[0].meta).to.have.property('component', 'express')
-                  expect(spans[1]).to.have.property('resource', 'named')
-                  expect(spans[1]).to.have.property('name', 'express.middleware')
-                  expect(spans[1].parent_id.toString()).to.equal(spans[0].span_id.toString())
-                  expect(spans[1].meta).to.have.property('component', 'express')
-                  expect(spans[2]).to.have.property('resource', 'router')
-                  expect(spans[2]).to.have.property('name', 'express.middleware')
-                  expect(spans[2].parent_id.toString()).to.equal(spans[0].span_id.toString())
-                  expect(spans[2].meta).to.have.property('component', 'express')
-                  expect(spans[3]).to.have.property('resource', 'handle')
-                  expect(spans[3]).to.have.property('name', 'express.middleware')
-                  expect(spans[3].meta).to.have.property('component', 'express')
-                  expect(spans[4]).to.have.property('name', 'express.middleware')
-                  expect(spans[4].parent_id.toString()).to.equal(spans[3].span_id.toString())
-                  expect(spans[4].meta).to.have.property('component', 'express')
-                  expect(spans[4]).to.have.property('resource', '<anonymous>')
-                })
-                .then(done)
-                .catch(done)
-
-              axios
-                .get(`http://localhost:${port}/app/user/1`)
-                .catch(done)
-            })
-          })
-
-          it('should do automatic instrumentation on middleware that break the async context', done => {
-            let next
-
-            const app = express()
-            const interval = setInterval(() => {
-              if (next) {
-                next()
-                clearInterval(interval)
-              }
-            })
-
-            app.use(function breaking (req, res, _next) {
-              next = _next
-            })
-            app.get('/user/:id', (req, res) => {
-              res.status(200).send()
-            })
-
-            appListener = app.listen(0, 'localhost', () => {
-              const port = appListener.address().port
-
-              agent
-                .use(traces => {
-                  const spans = sort(traces[0])
-
-                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
-                  expect(spans[0]).to.have.property('name', 'express.request')
-                  expect(spans[0].meta).to.have.property('component', 'express')
-                  expect(spans[1]).to.have.property('resource', 'breaking')
-                  expect(spans[1]).to.have.property('name', 'express.middleware')
-                  expect(spans[1].meta).to.have.property('component', 'express')
-                })
-                .then(done)
-                .catch(done)
-
-              axios
-                .get(`http://localhost:${port}/user/1`)
-                .catch(done)
-            })
-          })
-
-          it('should handle errors on middleware that break the async context', done => {
-            let next
-
-            const error = new Error('boom')
-            const app = express()
-            const interval = setInterval(() => {
-              if (next) {
-                next()
-                clearInterval(interval)
-              }
-            })
-
-            app.use(function breaking (req, res, _next) {
-              next = _next
-            })
-            app.use(() => { throw error })
-            // eslint-disable-next-line n/handle-callback-err
-            app.use((err, req, res, next) => next())
-            app.get('/user/:id', (req, res) => {
-              res.status(200).send()
-            })
-
-            appListener = app.listen(0, 'localhost', () => {
-              const port = appListener.address().port
-
-              agent
-                .use(traces => {
-                  const spans = sort(traces[0])
-
-                  expect(spans[0]).to.have.property('name', 'express.request')
-                  expect(spans[1]).to.have.property('name', 'express.middleware')
-                  expect(spans[2]).to.have.property('name', 'express.middleware')
-                  expect(spans[2].meta).to.have.property(ERROR_TYPE, error.name)
-                  expect(spans[0].meta).to.have.property('component', 'express')
-                  expect(spans[2].meta).to.have.property('component', 'express')
-                })
-                .then(done)
-                .catch(done)
-
-              axios
-                .get(`http://localhost:${port}/user/1`)
-                .catch(done)
-            })
-          })
-
-          // express v5 doesn't support regex paths unless theres a name after the regex ie: *foo
-          it('should only keep the last matching path of a middleware stack', done => {
-            const app = express()
-            const router = express.Router()
-
-            router.use('/', (req, res, next) => next())
-            router.use('*foo', (req, res, next) => next())
-            router.use('/bar', (req, res, next) => next())
-            router.use('/bar', (req, res, next) => {
-              res.status(200).send()
-            })
-
-            app.use('/', (req, res, next) => next())
-            app.use('*foo', (req, res, next) => next())
-            app.use('/foo/bar', (req, res, next) => next())
-            app.use('/foo', router)
-
-            appListener = app.listen(0, 'localhost', () => {
-              const port = appListener.address().port
-
-              agent
-                .use(traces => {
-                  const spans = sort(traces[0])
-
-                  expect(spans[0]).to.have.property('resource', 'GET /foo/bar')
-                })
-                .then(done)
-                .catch(done)
-
-              axios
-                .get(`http://localhost:${port}/foo/bar`)
-                .catch(done)
-            })
-          })
-
-          it('should handle middleware errors', done => {
-            const app = express()
-            const error = new Error('boom')
-
-            app.use((req, res, next) => next(error))
-            // eslint-disable-next-line n/handle-callback-err
-            app.use((error, req, res, next) => res.status(500).send())
-
-            appListener = app.listen(0, 'localhost', () => {
-              const port = appListener.address().port
-
-              agent
-                .use(traces => {
-                  const spans = sort(traces[0])
-
-                  expect(spans[0]).to.have.property('error', 1)
-                  expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                  expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                  expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                  expect(spans[0].meta).to.have.property('component', 'express')
-                  expect(spans[1]).to.have.property('error', 1)
-                  expect(spans[1].meta).to.have.property(ERROR_TYPE, error.name)
-                  expect(spans[1].meta).to.have.property(ERROR_MESSAGE, error.message)
-                  expect(spans[1].meta).to.have.property(ERROR_STACK, error.stack)
-                  expect(spans[1].meta).to.have.property('component', 'express')
-                })
-                .then(done)
-                .catch(done)
-
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 500
-                })
-                .catch(done)
-            })
-          })
-
-          it('should handle middleware exceptions', done => {
-            const app = express()
-            const error = new Error('boom')
-
-            app.use((req, res) => { throw error })
-            // eslint-disable-next-line n/handle-callback-err
-            app.use((error, req, res, next) => res.status(500).send())
-
-            appListener = app.listen(0, 'localhost', () => {
-              const port = appListener.address().port
-
-              agent
-                .use(traces => {
-                  const spans = sort(traces[0])
-
-                  expect(spans[0]).to.have.property('error', 1)
-                  expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-                  expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                  expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-                  expect(spans[0].meta).to.have.property('component', 'express')
-                  expect(spans[1]).to.have.property('error', 1)
-                  expect(spans[1].meta).to.have.property(ERROR_TYPE, error.name)
-                  expect(spans[1].meta).to.have.property(ERROR_MESSAGE, error.message)
-                  expect(spans[1].meta).to.have.property(ERROR_STACK, error.stack)
-                  expect(spans[0].meta).to.have.property('component', 'express')
-                })
-                .then(done)
-                .catch(done)
-
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 500
-                })
-                .catch(done)
-            })
-          })
-        }
       })
 
       describe('with configuration', () => {
