@@ -208,8 +208,7 @@ describe('RASP - ssrf', () => {
     })
   })
 
-  // to be fixed
-  describe.skip('without express', () => {
+  describe('without express', () => {
     let app, server, axios
 
     before(() => {

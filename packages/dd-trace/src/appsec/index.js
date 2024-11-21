@@ -164,8 +164,9 @@ function incomingHttpEndTranslator ({ req, res }) {
   }
 
   // we need to keep this to support nextjs
-  if (req.query !== null && typeof req.query === 'object') {
-    persistent[addresses.HTTP_INCOMING_QUERY] = req.query
+  const query = req.query
+  if (query !== null && typeof query === 'object') {
+    persistent[addresses.HTTP_INCOMING_QUERY] = query
   }
 
   if (apiSecuritySampler.sampleRequest(req, res, true)) {

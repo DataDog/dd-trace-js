@@ -404,8 +404,7 @@ describe('RASP - lfi', () => {
     })
   })
 
-  // to be fixed
-  describe.skip('without express', () => {
+  describe('without express', () => {
     let app, server
 
     before(() => {
