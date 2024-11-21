@@ -2,6 +2,12 @@
 
 const crypto = require('crypto')
 const log = require('../../log')
+const telemetry = require('../telemetry')
+const addresses = require('../addresses')
+const { keepTrace } = require('../../priority_sampler')
+const { SAMPLING_MECHANISM_APPSEC } = require('../../constants')
+const standalone = require('../standalone')
+const waf = require('../waf')
 
 // the RFC doesn't include '_id', but it's common in MongoDB
 const USER_ID_FIELDS = ['id', '_id', 'email', 'username', 'login', 'user']
@@ -64,75 +70,100 @@ function getUserId (user) {
   }
 }
 
-function obfuscateId (id) {
-  return 'anon_' + crypto.createHash('sha256').update(id).digest().toString('hex', 0, 16).toLowerCase()
-}
+function trackLogin (framework, login, user, success, rootSpan) {
+  if (!collectionMode || collectionMode === 'disabled') return
 
-function trackLogin (login, user, success, rootSpan) {
-  if (!collectionMode) return
-
-  // TODO: what if sdk is called after automated user
-
-  if (isSdkCalled(tags)) {
-    // Don't overwrite tags set by SDK callings
+  if (!rootSpan) {
+    log.error('No rootSpan found in AppSec trackLogin')
     return
   }
 
-  if (collectionMode === 'anon') {
-    login = obfuscateId(login)
+  if (!login || typeof login !== 'string') {
+    log.error('Invalid login provided to AppSec trackLogin')
+
+    telemetry.incrementMissingUserLogin(framework, success ? 'login_success' : 'login_failure')
+    // note:
+    //  if we start supporting using userId if login is missing, we need to only give up if both are missing, and
+    //  implement 'appsec.instrum.user_auth.missing_user_id' telemetry too
+    return
+  }
+
+  const currentTags = rootSpan.context()._tags
+  let isSdkCalled
+
+  login = obfuscateIfNeeded(login)
+  const userId = getUserId(user)
+
+  let newTags
+
+  const persistent = {
+    [addresses.USER_LOGIN]: login
+  }
+
+  // used to not overwrite tags set by SDK
+  function shouldSetTag (tag) {
+    return !isSdkCalled && !currentTags[tag]
   }
 
   if (success) {
-    // getID
-    sdk.trackEvent('users.login.success', null, 'passportTrackEvent', rootSpan, collectionMode)
-  } else {
+    isSdkCalled = currentTags['_dd.appsec.events.users.login.success.sdk'] === 'true'
 
-  }
-}
-
-
-
-// TODO passpoort-jwt ?
-
-// TODO: SDK always has precendence ?
-// Whenever relevant, the user ID must be collected by the libraries as part of the root span, using the tag usr.id.
-// Whenever relevant, the user login must be collected by the libraries as part of the root span, using the tag usr.login.
-
-
-/*
-These modes only impact automated user ID and login collection, either for business logic events or for authenticated user tracking, and should be disregarded when the collection is performed through the various SDKs. 
-
-
-In the disabled mode, as the name suggests, libraries should not collect user ID or user login. Effectively, this means that libraries shouldn’t send automated business logic events, specifically login and signup events, nor should they automatically track authenticated requests.
-*/
-
-function passportTrackEvent (credentials, passportUser, rootSpan) {
-  if (!collectionMode) return
-
-  // If a passportUser object is published then the login succeded
-  if (passportUser) {
-    const userId = getUserId(passportUser)
-
-    if (userId === undefined) {
-      log.warn('No user ID found in authentication instrumentation')
-      //  telemetry counter: 'appsec.instrum.user_auth.missing_user_id' 
-      return
+    newTags = {
+      'appsec.events.users.login.success.track': 'true',
+      '_dd.appsec.events.users.login.success.auto.mode': collectionMode,
+      '_dd.appsec.usr.login': login
     }
 
-    setUserTags({ id: userId }, rootSpan)
-
-    trackEvent('users.login.success', null, 'passportTrackEvent', rootSpan, collectionMode)
-
-    // call WAF ephemeral
-  } else {
-    const login = getLogin(credentials)
-
-    if (!login) {
-      return // idk
+    if (shouldSetTag('appsec.events.users.login.success.usr.login')) {
+      newTags['appsec.events.users.login.success.usr.login'] = login
     }
 
-    trackEvent('users.login.failure', { 'usr.id': login, login }, 'passportTrackEvent', rootSpan, collectionMode)
+    if (userId) {
+      newTags['_dd.appsec.usr.id'] = userId
+
+      if (shouldSetTag('usr.id')) {
+        newTags['usr.id'] = userId
+        persistent[addresses.USER_ID] = userId
+      }
+    }
+
+    persistent['server.business_logic.users.login.success'] = null
+  } else {
+    isSdkCalled = currentTags['_dd.appsec.events.users.login.failure.sdk'] === 'true'
+
+    newTags = {
+      'appsec.events.users.login.failure.track': 'true',
+      '_dd.appsec.events.users.login.failure.auto.mode': collectionMode,
+      '_dd.appsec.usr.login': login
+    }
+
+    if (shouldSetTag('appsec.events.users.login.failure.usr.login')) {
+      newTags['appsec.events.users.login.failure.usr.login'] = login
+    }
+
+    if (userId) {
+      newTags['_dd.appsec.usr.id'] = userId
+
+      if (shouldSetTag('appsec.events.users.login.failure.usr.id')) {
+        newTags['appsec.events.users.login.failure.usr.id'] = userId
+      }
+    }
+
+    /* TODO: if one day we have this info
+    if (shouldSetTag('appsec.events.users.login.failure.usr.exists')) {
+      newTags['appsec.events.users.login.failure.usr.exists'] = 'true'
+    }
+    */
+
+    persistent['server.business_logic.users.login.failure'] = null
   }
+
+  keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
+  standalone.sample(rootSpan)
+
+  rootSpan.addTags(newTags)
+
+  return waf.run({ persistent })
 }
 
 module.exports = {
