@@ -88,9 +88,6 @@ function trackLogin (framework, login, user, success, rootSpan) {
     return
   }
 
-  const currentTags = rootSpan.context()._tags
-  let isSdkCalled
-
   login = obfuscateIfNeeded(login)
   const userId = getUserId(user)
 
@@ -100,14 +97,15 @@ function trackLogin (framework, login, user, success, rootSpan) {
     [addresses.USER_LOGIN]: login
   }
 
+  const currentTags = rootSpan.context()._tags
+  const isSdkCalled = currentTags[`_dd.appsec.events.users.login.${success ? 'success' : 'failure'}.sdk`] === 'true'
+
   // used to not overwrite tags set by SDK
   function shouldSetTag (tag) {
-    return !isSdkCalled && !currentTags[tag]
+    return !(isSdkCalled && currentTags[tag])
   }
 
   if (success) {
-    isSdkCalled = currentTags['_dd.appsec.events.users.login.success.sdk'] === 'true'
-
     newTags = {
       'appsec.events.users.login.success.track': 'true',
       '_dd.appsec.events.users.login.success.auto.mode': collectionMode,
@@ -129,8 +127,6 @@ function trackLogin (framework, login, user, success, rootSpan) {
 
     persistent['server.business_logic.users.login.success'] = null
   } else {
-    isSdkCalled = currentTags['_dd.appsec.events.users.login.failure.sdk'] === 'true'
-
     newTags = {
       'appsec.events.users.login.failure.track': 'true',
       '_dd.appsec.events.users.login.failure.auto.mode': collectionMode,
@@ -150,8 +146,8 @@ function trackLogin (framework, login, user, success, rootSpan) {
     }
 
     /* TODO: if one day we have this info
-    if (shouldSetTag('appsec.events.users.login.failure.usr.exists')) {
-      newTags['appsec.events.users.login.failure.usr.exists'] = 'true'
+    if (exists != null && shouldSetTag('appsec.events.users.login.failure.usr.exists')) {
+      newTags['appsec.events.users.login.failure.usr.exists'] = exists
     }
     */
 
