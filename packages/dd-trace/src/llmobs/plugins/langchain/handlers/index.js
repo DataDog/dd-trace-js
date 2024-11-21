@@ -19,6 +19,8 @@ class LangChainLLMObsHandler {
       for (const [key, value] of Object.entries(messages)) {
         formatted[key] = this.formatIO(value)
       }
+
+      return formatted
     } else if (Array.isArray(messages)) {
       return messages.map(message => this.formatIO(message))
     } else { // either a BaseMesage type or a string
