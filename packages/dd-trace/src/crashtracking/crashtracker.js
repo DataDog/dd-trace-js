@@ -60,7 +60,7 @@ class Crashtracker {
         },
         timeout_ms: 3000
       },
-      timeout_ms: 0,
+      timeout_ms: 5000,
       // TODO: Use `EnabledWithSymbolsInReceiver` instead for Linux when fixed.
       resolve_frames: 'EnabledWithInprocessSymbols'
     }
