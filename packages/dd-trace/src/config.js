@@ -145,7 +145,7 @@ function maybeFile (filepath) {
   try {
     return fs.readFileSync(filepath, 'utf8')
   } catch (e) {
-    log.error(e)
+    log.error('Error reading file %s', filepath, e)
     return undefined
   }
 }
@@ -378,7 +378,7 @@ class Config {
         } catch (e) {
           // Only log error if the user has set a git.properties path
           if (process.env.DD_GIT_PROPERTIES_FILE) {
-            log.error(e)
+            log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', DD_GIT_PROPERTIES_FILE, e)
           }
         }
         if (gitPropertiesString) {

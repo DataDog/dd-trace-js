@@ -1781,9 +1781,12 @@ describe('Config', () => {
     })
 
     expect(log.error).to.be.callCount(3)
-    expect(log.error.firstCall).to.have.been.calledWithExactly(error)
-    expect(log.error.secondCall).to.have.been.calledWithExactly(error)
-    expect(log.error.thirdCall).to.have.been.calledWithExactly(error)
+    expect(log.error.firstCall)
+      .to.have.been.calledWithExactly('Error reading file %s', 'DOES_NOT_EXIST.json', error)
+    expect(log.error.secondCall)
+      .to.have.been.calledWithExactly('Error reading file %s', 'DOES_NOT_EXIST.html', error)
+    expect(log.error.thirdCall)
+      .to.have.been.calledWithExactly('Error reading file %s', 'DOES_NOT_EXIST.json', error)
 
     expect(config.appsec.enabled).to.be.true
     expect(config.appsec.rules).to.eq('path/to/rules.json')
