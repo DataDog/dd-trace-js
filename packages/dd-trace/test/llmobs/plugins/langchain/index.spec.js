@@ -29,6 +29,7 @@ const openAiBaseEmbeddingInfo = { base: 'https://api.openai.com', path: '/v1/emb
 describe('integrations', () => {
   let langchainOpenai
   let langchainAnthropic
+  let langchainCohere
 
   let langchainMessages
   let langchainOutputParsers
@@ -39,8 +40,7 @@ describe('integrations', () => {
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
     ANTHROPIC_API_KEY: '<not-a-real-key>',
-    COHERE_API_KEY: '<not-a-real-key>',
-    AI21_API_KEY: '<not-a-real-key>'
+    COHERE_API_KEY: '<not-a-real-key>'
   })
 
   describe('langchain', () => {
@@ -75,6 +75,7 @@ describe('integrations', () => {
         beforeEach(() => {
           langchainOpenai = require(`../../../../../../versions/@langchain/openai@${version}`).get()
           langchainAnthropic = require(`../../../../../../versions/@langchain/anthropic@${version}`).get()
+          langchainCohere = require(`../../../../../../versions/@langchain/cohere@${version}`).get()
 
           // need to specify specific import in `get(...)`
           langchainMessages = require(`../../../../../../versions/@langchain/core@${version}`)
@@ -128,9 +129,56 @@ describe('integrations', () => {
             await checkTraces
           })
 
-          it.skip('submits an llm span for a cohere call', async () => {})
+          it('submits an llm span for a cohere call', async function () {
+            if (version === '0.1.0') this.skip() // cannot patch client to mock response on lower versions
 
-          it.skip('submits an llm span for an ai21 call', async () => {})
+            const cohere = new langchainCohere.Cohere({
+              model: 'command',
+              client: {
+                generate () {
+                  return {
+                    generations: [
+                      {
+                        text: 'hello world!'
+                      }
+                    ],
+                    meta: {
+                      billed_units: {
+                        input_tokens: 8,
+                        output_tokens: 12
+                      }
+                    }
+                  }
+                }
+              }
+            })
+
+            const checkTraces = agent.use(traces => {
+              const span = traces[0][0]
+
+              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+
+              const expected = expectedLLMObsLLMSpanEvent({
+                span,
+                spanKind: 'llm',
+                modelName: 'command',
+                modelProvider: 'cohere',
+                name: 'langchain.llms.cohere.Cohere',
+                inputMessages: [{ content: 'Hello!' }],
+                outputMessages: [{ content: 'hello world!' }],
+                metadata: MOCK_ANY,
+                // @langchain/cohere does not provide token usage in the response
+                tokenMetrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+                tags: { ml_app: 'test', language: 'javascript' }
+              })
+
+              expect(spanEvent).to.deepEqualWithMockValues(expected)
+            })
+
+            await cohere.invoke('Hello!')
+
+            await checkTraces
+          })
         })
 
         describe('chat model', () => {
