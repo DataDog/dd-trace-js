@@ -41,7 +41,7 @@ describe('Passport', () => {
     it('should call log when credentials is undefined', () => {
       passportModule.passportTrackEvent(undefined, undefined, undefined, 'safe')
 
-      expect(log.warn).to.have.been.calledOnceWithExactly('No user ID found in authentication instrumentation')
+      expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] No user ID found in authentication instrumentation')
     })
 
     it('should call log when type is not known', () => {
@@ -49,7 +49,7 @@ describe('Passport', () => {
 
       passportModule.passportTrackEvent(credentials, undefined, undefined, 'safe')
 
-      expect(log.warn).to.have.been.calledOnceWithExactly('No user ID found in authentication instrumentation')
+      expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] No user ID found in authentication instrumentation')
     })
 
     it('should call log when type is known but username not present', () => {
@@ -57,7 +57,7 @@ describe('Passport', () => {
 
       passportModule.passportTrackEvent(credentials, undefined, undefined, 'safe')
 
-      expect(log.warn).to.have.been.calledOnceWithExactly('No user ID found in authentication instrumentation')
+      expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] No user ID found in authentication instrumentation')
     })
 
     it('should report login failure when passportUser is not present', () => {
