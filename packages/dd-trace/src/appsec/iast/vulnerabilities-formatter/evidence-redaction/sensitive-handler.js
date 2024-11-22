@@ -1,6 +1,6 @@
 'use strict'
 
-const iastLog = require('../../iast-log')
+const log = require('../../../../log')
 const vulnerabilities = require('../../vulnerabilities')
 
 const { contains, intersects, remove } = require('./range-utils')
@@ -282,7 +282,7 @@ class SensitiveHandler {
       try {
         this._namePattern = new RegExp(redactionNamePattern, 'gmi')
       } catch (e) {
-        iastLog.warn('Redaction name pattern is not valid')
+        log.warn('[ASM] Redaction name pattern is not valid')
       }
     }
 
@@ -290,7 +290,7 @@ class SensitiveHandler {
       try {
         this._valuePattern = new RegExp(redactionValuePattern, 'gmi')
       } catch (e) {
-        iastLog.warn('Redaction value pattern is not valid')
+        log.warn('[ASM] Redaction value pattern is not valid')
       }
     }
   }
