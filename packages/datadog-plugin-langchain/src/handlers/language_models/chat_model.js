@@ -46,7 +46,7 @@ class LangChainChatModelHandler extends LangChainLanguageModelHandler {
 
     this.extractTokenMetrics(ctx.currentStore?.span, result)
 
-    for (const messageSetIdx in result.generations) {
+    for (const messageSetIdx in result?.generations) {
       const messageSet = result.generations[messageSetIdx]
 
       for (const chatCompletionIdx in messageSet) {
