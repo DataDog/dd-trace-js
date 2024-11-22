@@ -64,13 +64,13 @@ describe('user_blocking', () => {
       it('should return false and log warn when passed no user', () => {
         const ret = userBlocking.checkUserAndSetUser()
         expect(ret).to.be.false
-        expect(log.warn).to.have.been.calledOnceWithExactly('Invalid user provided to isUserBlocked')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Invalid user provided to isUserBlocked')
       })
 
       it('should return false and log warn when passed invalid user', () => {
         const ret = userBlocking.checkUserAndSetUser({})
         expect(ret).to.be.false
-        expect(log.warn).to.have.been.calledOnceWithExactly('Invalid user provided to isUserBlocked')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Invalid user provided to isUserBlocked')
       })
 
       it('should set user when not already set', () => {
@@ -97,7 +97,7 @@ describe('user_blocking', () => {
         const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'user' })
         expect(ret).to.be.true
         expect(getRootSpan).to.have.been.calledOnceWithExactly(tracer)
-        expect(log.warn).to.have.been.calledOnceWithExactly('Root span not available in isUserBlocked')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Root span not available in isUserBlocked')
         expect(rootSpan.setTag).to.not.have.been.called
       })
 
@@ -122,7 +122,8 @@ describe('user_blocking', () => {
         const ret = userBlocking.blockRequest(tracer)
         expect(ret).to.be.false
         expect(storage.getStore).to.have.been.calledOnce
-        expect(log.warn).to.have.been.calledOnceWithExactly('Requests or response object not available in blockRequest')
+        expect(log.warn)
+          .to.have.been.calledOnceWithExactly('[ASM] Requests or response object not available in blockRequest')
         expect(block).to.not.have.been.called
       })
 
@@ -131,7 +132,7 @@ describe('user_blocking', () => {
 
         const ret = userBlocking.blockRequest(tracer, {}, {})
         expect(ret).to.be.false
-        expect(log.warn).to.have.been.calledOnceWithExactly('Root span not available in blockRequest')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Root span not available in blockRequest')
         expect(block).to.not.have.been.called
       })
 
