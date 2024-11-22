@@ -1,6 +1,6 @@
 'use strict'
 
-const iastLog = require('../../../iast-log')
+const log = require('../../../../../log')
 
 const LDAP_PATTERN = '\\(.*?(?:~=|=|<=|>=)(?<LITERAL>[^)]+)\\)'
 const pattern = new RegExp(LDAP_PATTERN, 'gmi')
@@ -22,7 +22,7 @@ module.exports = function extractSensitiveRanges (evidence) {
     }
     return tokens
   } catch (e) {
-    iastLog.debug(e)
+    log.debug('[ASM] Error extracting sensitive ranges', e)
   }
   return []
 }
