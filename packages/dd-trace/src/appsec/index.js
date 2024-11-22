@@ -66,7 +66,6 @@ function enable (_config) {
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
     passportVerify.subscribe(onPassportVerify) // possible optimization: only subscribe if collection mode is enabled
-    passportUser.subscribe(onPassportDeserializeUser)
     queryParser.subscribe(onRequestQueryParsed)
     nextBodyParsed.subscribe(onRequestBodyParsed)
     nextQueryParsed.subscribe(onRequestQueryParsed)
@@ -179,18 +178,6 @@ function incomingHttpEndTranslator ({ req, res }) {
   waf.disposeContext(req)
 
   Reporter.finishRequest(req, res)
-}
-
-function onPassportDeserializeUser ({ req, user, sessionId, abordController }) {
-  UserTracking.trackUser(user, abortController)
-
-  if (sessionId && typeof sessionId === 'string') {
-    const results = waf.run({
-      persistent: {
-        'usr.session_id': sessionId
-      }
-    })
-  }
 }
 
 function onPassportVerify ({ login, user, success, abortController }) {
