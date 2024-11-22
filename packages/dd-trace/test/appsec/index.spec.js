@@ -165,9 +165,7 @@ describe('AppSec Index', function () {
 
       AppSec.enable(config)
 
-      expect(log.error).to.have.been.calledTwice
-      expect(log.error.firstCall).to.have.been.calledWithExactly('Unable to start AppSec')
-      expect(log.error.secondCall).to.have.been.calledWithExactly(err)
+      expect(log.error).to.have.been.calledOnceWithExactly('[ASM] Unable to start AppSec', err)
       expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
     })
@@ -828,7 +826,7 @@ describe('AppSec Index', function () {
 
         passportVerify.publish({ credentials, user })
 
-        expect(log.warn).to.have.been.calledOnceWithExactly('No rootSpan found in onPassportVerify')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] No rootSpan found in onPassportVerify')
         expect(passport.passportTrackEvent).not.to.have.been.called
       })
     })

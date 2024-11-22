@@ -51,8 +51,8 @@ describe('IAST Plugin', () => {
 
       const iastPluginMod = proxyquire('../../../src/appsec/iast/iast-plugin', {
         '../../plugins/plugin': PluginClass,
-        './iast-log': {
-          errorAndPublish: logError
+        '../../log': {
+          error: logError
         },
         './iast-context': {
           getIastContext
@@ -205,8 +205,8 @@ describe('IAST Plugin', () => {
       }
       const IastPlugin = proxyquire('../../../src/appsec/iast/iast-plugin', {
         '../../plugins/plugin': PluginClass,
-        './iast-log': {
-          errorAndPublish: logError
+        '../../log': {
+          error: logError
         },
         './telemetry': iastTelemetry,
         '../../../../datadog-instrumentations/src/helpers/instrumentations': {}
