@@ -169,7 +169,14 @@ function createWrapRouterMethod (name) {
 
 const wrapRouterMethod = createWrapRouterMethod('router')
 
-addHook({ name: 'router', versions: ['>=1'] }, Router => {
+addHook({ name: 'router', versions: ['>=1 <2'] }, Router => {
+  shimmer.wrap(Router.prototype, 'use', wrapRouterMethod)
+  shimmer.wrap(Router.prototype, 'route', wrapRouterMethod)
+
+  return Router
+})
+
+addHook({ name: 'router', versions: ['>=2'] }, Router => {
   const originalRouter = Router
 
   function WrappedRouter (options) {
