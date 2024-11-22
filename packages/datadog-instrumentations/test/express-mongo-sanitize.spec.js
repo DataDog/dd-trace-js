@@ -4,202 +4,204 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { channel } = require('dc-polyfill')
 const axios = require('axios')
 describe('express-mongo-sanitize', () => {
-  withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {
-    describe('middleware', () => {
-      const sanitizeMiddlewareFinished = channel('datadog:express-mongo-sanitize:filter:finish')
-      let port, server, requestBody
+  withVersions('express', 'express', expressVersion => {
+    withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {
+      describe('middleware', () => {
+        const sanitizeMiddlewareFinished = channel('datadog:express-mongo-sanitize:filter:finish')
+        let port, server, requestBody
 
-      before(() => {
-        return agent.load(['express', 'express-mongo-sanitize'], { client: false })
-      })
-
-      before((done) => {
-        const express = require('../../../versions/express').get()
-        const expressMongoSanitize = require(`../../../versions/express-mongo-sanitize@${version}`).get()
-        const app = express()
-
-        app.use(expressMongoSanitize())
-        app.all('/', (req, res) => {
-          requestBody(req, res)
-          res.end()
+        before(() => {
+          return agent.load(['express', 'express-mongo-sanitize'], { client: false })
         })
 
-        server = app.listen(0, () => {
-          port = server.address().port
-          done()
+        before((done) => {
+          const express = require(`../../../versions/express@${expressVersion}`).get()
+          const expressMongoSanitize = require(`../../../versions/express-mongo-sanitize@${version}`).get()
+          const app = express()
+
+          app.use(expressMongoSanitize())
+          app.all('/', (req, res) => {
+            requestBody(req, res)
+            res.end()
+          })
+
+          server = app.listen(0, () => {
+            port = server.address().port
+            done()
+          })
         })
-      })
-
-      beforeEach(() => {
-        requestBody = sinon.stub()
-      })
-
-      after(() => {
-        server.close()
-        return agent.close({ ritmReset: false })
-      })
-
-      describe('without subscriptions', () => {
-        it('it continues working without sanitization request', async () => {
-          expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.false
-
-          await axios.get(`http://localhost:${port}/?param=paramvalue`)
-
-          expect(requestBody).to.be.calledOnce
-          expect(requestBody.firstCall.args[0].query.param).to.be.equal('paramvalue')
-        })
-
-        it('it continues working with sanitization request', async () => {
-          expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.false
-
-          await axios.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
-
-          expect(requestBody).to.be.calledOnce
-          expect(requestBody.firstCall.args[0].query.param.$eq).to.be.undefined
-        })
-      })
-
-      describe('with subscriptions', () => {
-        let subscription
 
         beforeEach(() => {
-          subscription = sinon.stub()
-          sanitizeMiddlewareFinished.subscribe(subscription)
+          requestBody = sinon.stub()
         })
 
-        afterEach(() => {
-          sanitizeMiddlewareFinished.unsubscribe(subscription)
+        after(() => {
+          server.close()
+          return agent.close({ ritmReset: false })
         })
 
-        it('it continues working without sanitization request', async () => {
-          expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.true
+        describe('without subscriptions', () => {
+          it('it continues working without sanitization request', async () => {
+            expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.false
 
-          await axios.get(`http://localhost:${port}/?param=paramvalue`)
+            await axios.get(`http://localhost:${port}/?param=paramvalue`)
 
-          expect(requestBody).to.be.calledOnce
-          expect(requestBody.firstCall.args[0].query.param).to.be.equal('paramvalue')
+            expect(requestBody).to.be.calledOnce
+            expect(requestBody.firstCall.args[0].query.param).to.be.equal('paramvalue')
+          })
+
+          it('it continues working with sanitization request', async () => {
+            expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.false
+
+            await axios.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
+
+            expect(requestBody).to.be.calledOnce
+            expect(requestBody.firstCall.args[0].query.param.$eq).to.be.undefined
+          })
         })
 
-        it('it continues working with sanitization request', async () => {
-          expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.true
+        describe('with subscriptions', () => {
+          let subscription
 
-          await axios.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
+          beforeEach(() => {
+            subscription = sinon.stub()
+            sanitizeMiddlewareFinished.subscribe(subscription)
+          })
 
-          expect(requestBody).to.be.calledOnce
-          expect(requestBody.firstCall.args[0].query.param.$eq).to.be.undefined
-        })
+          afterEach(() => {
+            sanitizeMiddlewareFinished.unsubscribe(subscription)
+          })
 
-        it('subscription is called with expected parameters without sanitization request', async () => {
-          expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.true
+          it('it continues working without sanitization request', async () => {
+            expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.true
 
-          await axios.get(`http://localhost:${port}/?param=paramvalue`)
+            await axios.get(`http://localhost:${port}/?param=paramvalue`)
 
-          expect(subscription).to.be.calledOnce
-          expect(subscription.firstCall.args[0].sanitizedProperties)
-            .to.be.deep.equal(['body', 'params', 'headers', 'query'])
-          expect(subscription.firstCall.args[0].req.query.param).to.be.equal('paramvalue')
-        })
+            expect(requestBody).to.be.calledOnce
+            expect(requestBody.firstCall.args[0].query.param).to.be.equal('paramvalue')
+          })
 
-        it('subscription is called with expected parameters with sanitization request', async () => {
-          expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.true
+          it('it continues working with sanitization request', async () => {
+            expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.true
 
-          await axios.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
+            await axios.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
 
-          expect(subscription).to.be.calledOnce
-          expect(subscription.firstCall.args[0].sanitizedProperties)
-            .to.be.deep.equal(['body', 'params', 'headers', 'query'])
-          expect(subscription.firstCall.args[0].req.query.param.$eq).to.be.undefined
-        })
-      })
-    })
+            expect(requestBody).to.be.calledOnce
+            expect(requestBody.firstCall.args[0].query.param.$eq).to.be.undefined
+          })
 
-    describe('sanitize method', () => {
-      const sanitizeFinished = channel('datadog:express-mongo-sanitize:sanitize:finish')
-      let expressMongoSanitize
+          it('subscription is called with expected parameters without sanitization request', async () => {
+            expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.true
 
-      before(() => {
-        return agent.load(['express-mongo-sanitize'], { client: false })
-      })
+            await axios.get(`http://localhost:${port}/?param=paramvalue`)
 
-      before(() => {
-        expressMongoSanitize = require(`../../../versions/express-mongo-sanitize@${version}`).get()
-      })
+            expect(subscription).to.be.calledOnce
+            expect(subscription.firstCall.args[0].sanitizedProperties)
+              .to.be.deep.equal(['body', 'params', 'headers', 'query'])
+            expect(subscription.firstCall.args[0].req.query.param).to.be.equal('paramvalue')
+          })
 
-      after(() => {
-        return agent.close({ ritmReset: false })
-      })
+          it('subscription is called with expected parameters with sanitization request', async () => {
+            expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.true
 
-      describe('without subscriptions', () => {
-        it('it works as expected without modifications', () => {
-          expect(sanitizeFinished.hasSubscribers).to.be.false
+            await axios.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
 
-          const objectToSanitize = {
-            safeKey: 'safeValue'
-          }
-
-          const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
-
-          expect(sanitizedObject.safeKey).to.be.equal(objectToSanitize.safeKey)
-        })
-
-        it('it works as expected with modifications', () => {
-          expect(sanitizeFinished.hasSubscribers).to.be.false
-
-          const objectToSanitize = {
-            unsafeKey: {
-              $ne: 'test'
-            },
-            safeKey: 'safeValue'
-          }
-
-          const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
-
-          expect(sanitizedObject.safeKey).to.be.equal(objectToSanitize.safeKey)
-          expect(sanitizedObject.unsafeKey.$ne).to.be.undefined
+            expect(subscription).to.be.calledOnce
+            expect(subscription.firstCall.args[0].sanitizedProperties)
+              .to.be.deep.equal(['body', 'params', 'headers', 'query'])
+            expect(subscription.firstCall.args[0].req.query.param.$eq).to.be.undefined
+          })
         })
       })
 
-      describe('with subscriptions', () => {
-        let subscription
+      describe('sanitize method', () => {
+        const sanitizeFinished = channel('datadog:express-mongo-sanitize:sanitize:finish')
+        let expressMongoSanitize
 
-        beforeEach(() => {
-          subscription = sinon.stub()
-          sanitizeFinished.subscribe(subscription)
+        before(() => {
+          return agent.load(['express-mongo-sanitize'], { client: false })
         })
 
-        afterEach(() => {
-          sanitizeFinished.unsubscribe(subscription)
-          subscription = undefined
+        before(() => {
+          expressMongoSanitize = require(`../../../versions/express-mongo-sanitize@${version}`).get()
         })
 
-        it('it works as expected without modifications', () => {
-          expect(sanitizeFinished.hasSubscribers).to.be.true
-
-          const objectToSanitize = {
-            safeKey: 'safeValue'
-          }
-
-          const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
-
-          expect(sanitizedObject.safeKey).to.be.equal(objectToSanitize.safeKey)
-          expect(subscription).to.be.calledOnceWith({ sanitizedObject })
+        after(() => {
+          return agent.close({ ritmReset: false })
         })
 
-        it('it works as expected with modifications', () => {
-          expect(sanitizeFinished.hasSubscribers).to.be.true
+        describe('without subscriptions', () => {
+          it('it works as expected without modifications', () => {
+            expect(sanitizeFinished.hasSubscribers).to.be.false
 
-          const objectToSanitize = {
-            unsafeKey: {
-              $ne: 'test'
-            },
-            safeKey: 'safeValue'
-          }
+            const objectToSanitize = {
+              safeKey: 'safeValue'
+            }
 
-          const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
+            const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
 
-          expect(sanitizedObject.safeKey).to.be.equal(objectToSanitize.safeKey)
-          expect(sanitizedObject.unsafeKey.$ne).to.be.undefined
-          expect(subscription).to.be.calledOnceWith({ sanitizedObject })
+            expect(sanitizedObject.safeKey).to.be.equal(objectToSanitize.safeKey)
+          })
+
+          it('it works as expected with modifications', () => {
+            expect(sanitizeFinished.hasSubscribers).to.be.false
+
+            const objectToSanitize = {
+              unsafeKey: {
+                $ne: 'test'
+              },
+              safeKey: 'safeValue'
+            }
+
+            const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
+
+            expect(sanitizedObject.safeKey).to.be.equal(objectToSanitize.safeKey)
+            expect(sanitizedObject.unsafeKey.$ne).to.be.undefined
+          })
+        })
+
+        describe('with subscriptions', () => {
+          let subscription
+
+          beforeEach(() => {
+            subscription = sinon.stub()
+            sanitizeFinished.subscribe(subscription)
+          })
+
+          afterEach(() => {
+            sanitizeFinished.unsubscribe(subscription)
+            subscription = undefined
+          })
+
+          it('it works as expected without modifications', () => {
+            expect(sanitizeFinished.hasSubscribers).to.be.true
+
+            const objectToSanitize = {
+              safeKey: 'safeValue'
+            }
+
+            const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
+
+            expect(sanitizedObject.safeKey).to.be.equal(objectToSanitize.safeKey)
+            expect(subscription).to.be.calledOnceWith({ sanitizedObject })
+          })
+
+          it('it works as expected with modifications', () => {
+            expect(sanitizeFinished.hasSubscribers).to.be.true
+
+            const objectToSanitize = {
+              unsafeKey: {
+                $ne: 'test'
+              },
+              safeKey: 'safeValue'
+            }
+
+            const sanitizedObject = expressMongoSanitize.sanitize(objectToSanitize)
+
+            expect(sanitizedObject.safeKey).to.be.equal(objectToSanitize.safeKey)
+            expect(sanitizedObject.unsafeKey.$ne).to.be.undefined
+            expect(subscription).to.be.calledOnceWith({ sanitizedObject })
+          })
         })
       })
     })

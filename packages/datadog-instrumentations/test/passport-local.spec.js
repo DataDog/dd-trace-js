@@ -4,125 +4,127 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios')
 const dc = require('dc-polyfill')
 
-withVersions('passport-local', 'passport-local', version => {
-  describe('passport-local instrumentation', () => {
-    const passportVerifyChannel = dc.channel('datadog:passport:verify:finish')
-    let port, server, subscriberStub
+withVersions('express', 'express', '>=4.21.1', expressVersion => {
+  withVersions('passport-local', 'passport-local', version => {
+    describe('passport-local instrumentation', () => {
+      const passportVerifyChannel = dc.channel('datadog:passport:verify:finish')
+      let port, server, subscriberStub
 
-    before(() => {
-      return agent.load(['express', 'passport', 'passport-local'], { client: false })
-    })
+      before(() => {
+        return agent.load(['express', 'passport', 'passport-local'], { client: false })
+      })
 
-    before((done) => {
-      const express = require('../../../versions/express').get()
-      const passport = require('../../../versions/passport').get()
-      const LocalStrategy = require(`../../../versions/passport-local@${version}`).get().Strategy
-      const app = express()
+      before((done) => {
+        const express = require(`../../../versions/express@${expressVersion}`).get()
+        const passport = require('../../../versions/passport').get()
+        const LocalStrategy = require(`../../../versions/passport-local@${version}`).get().Strategy
+        const app = express()
 
-      passport.use(new LocalStrategy({ usernameField: 'username', passwordField: 'password' },
-        (username, password, done) => {
-          const users = [{
-            _id: 1,
-            username: 'test',
-            password: '1234',
-            email: 'testuser@ddog.com'
-          }]
+        passport.use(new LocalStrategy({ usernameField: 'username', passwordField: 'password' },
+          (username, password, done) => {
+            const users = [{
+              _id: 1,
+              username: 'test',
+              password: '1234',
+              email: 'testuser@ddog.com'
+            }]
 
-          const user = users.find(user => (user.username === username) && (user.password === password))
+            const user = users.find(user => (user.username === username) && (user.password === password))
 
-          if (!user) {
-            return done(null, false)
-          } else {
-            return done(null, user)
+            if (!user) {
+              return done(null, false)
+            } else {
+              return done(null, user)
+            }
           }
-        }
-      ))
+        ))
 
-      app.use(passport.initialize())
-      app.use(express.json())
+        app.use(passport.initialize())
+        app.use(express.json())
 
-      app.post('/',
-        passport.authenticate('local', {
-          successRedirect: '/grant',
-          failureRedirect: '/deny',
-          passReqToCallback: false,
-          session: false
+        app.post('/',
+          passport.authenticate('local', {
+            successRedirect: '/grant',
+            failureRedirect: '/deny',
+            passReqToCallback: false,
+            session: false
+          })
+        )
+
+        app.post('/req',
+          passport.authenticate('local', {
+            successRedirect: '/grant',
+            failureRedirect: '/deny',
+            passReqToCallback: true,
+            session: false
+          })
+        )
+
+        app.get('/grant', (req, res) => {
+          res.send('Granted')
         })
-      )
 
-      app.post('/req',
-        passport.authenticate('local', {
-          successRedirect: '/grant',
-          failureRedirect: '/deny',
-          passReqToCallback: true,
-          session: false
+        app.get('/deny', (req, res) => {
+          res.send('Denied')
         })
-      )
 
-      app.get('/grant', (req, res) => {
-        res.send('Granted')
+        passportVerifyChannel.subscribe(function ({ credentials, user, err, info }) {
+          subscriberStub(arguments[0])
+        })
+
+        server = app.listen(0, () => {
+          port = server.address().port
+          done()
+        })
       })
 
-      app.get('/deny', (req, res) => {
-        res.send('Denied')
+      beforeEach(() => {
+        subscriberStub = sinon.stub()
       })
 
-      passportVerifyChannel.subscribe(function ({ credentials, user, err, info }) {
-        subscriberStub(arguments[0])
+      after(() => {
+        server.close()
+        return agent.close({ ritmReset: false })
       })
 
-      server = app.listen(0, () => {
-        port = server.address().port
-        done()
+      it('should call subscriber with proper arguments on success', async () => {
+        const res = await axios.post(`http://localhost:${port}/`, { username: 'test', password: '1234' })
+
+        expect(res.status).to.equal(200)
+        expect(res.data).to.equal('Granted')
+        expect(subscriberStub).to.be.calledOnceWithExactly(
+          {
+            credentials: { type: 'local', username: 'test' },
+            user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' }
+          }
+        )
       })
-    })
 
-    beforeEach(() => {
-      subscriberStub = sinon.stub()
-    })
+      it('should call subscriber with proper arguments on success with passReqToCallback set to true', async () => {
+        const res = await axios.post(`http://localhost:${port}/req`, { username: 'test', password: '1234' })
 
-    after(() => {
-      server.close()
-      return agent.close({ ritmReset: false })
-    })
+        expect(res.status).to.equal(200)
+        expect(res.data).to.equal('Granted')
+        expect(subscriberStub).to.be.calledOnceWithExactly(
+          {
+            credentials: { type: 'local', username: 'test' },
+            user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' }
+          }
+        )
+      })
 
-    it('should call subscriber with proper arguments on success', async () => {
-      const res = await axios.post(`http://localhost:${port}/`, { username: 'test', password: '1234' })
+      it('should call subscriber with proper arguments on failure', async () => {
+        const res = await axios.post(`http://localhost:${port}/`, { username: 'test', password: '1' })
 
-      expect(res.status).to.equal(200)
-      expect(res.data).to.equal('Granted')
-      expect(subscriberStub).to.be.calledOnceWithExactly(
-        {
-          credentials: { type: 'local', username: 'test' },
-          user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' }
-        }
-      )
-    })
-
-    it('should call subscriber with proper arguments on success with passReqToCallback set to true', async () => {
-      const res = await axios.post(`http://localhost:${port}/req`, { username: 'test', password: '1234' })
-
-      expect(res.status).to.equal(200)
-      expect(res.data).to.equal('Granted')
-      expect(subscriberStub).to.be.calledOnceWithExactly(
-        {
-          credentials: { type: 'local', username: 'test' },
-          user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' }
-        }
-      )
-    })
-
-    it('should call subscriber with proper arguments on failure', async () => {
-      const res = await axios.post(`http://localhost:${port}/`, { username: 'test', password: '1' })
-
-      expect(res.status).to.equal(200)
-      expect(res.data).to.equal('Denied')
-      expect(subscriberStub).to.be.calledOnceWithExactly(
-        {
-          credentials: { type: 'local', username: 'test' },
-          user: false
-        }
-      )
+        expect(res.status).to.equal(200)
+        expect(res.data).to.equal('Denied')
+        expect(subscriberStub).to.be.calledOnceWithExactly(
+          {
+            credentials: { type: 'local', username: 'test' },
+            user: false
+          }
+        )
+      })
     })
   })
 })

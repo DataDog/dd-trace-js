@@ -27,9 +27,6 @@ function createWrapRouterMethod (name) {
       const req = arguments[arguments.length > 3 ? 1 : 0]
       const next = arguments[lastIndex]
 
-      // explicitly call getter for express5
-      req.query
-
       if (typeof next === 'function') {
         arguments[lastIndex] = wrapNext(req, next)
       }
@@ -173,10 +170,28 @@ function createWrapRouterMethod (name) {
 const wrapRouterMethod = createWrapRouterMethod('router')
 
 addHook({ name: 'router', versions: ['>=1'] }, Router => {
-  shimmer.wrap(Router.prototype, 'use', wrapRouterMethod)
-  shimmer.wrap(Router.prototype, 'route', wrapRouterMethod)
+  const originalRouter = Router
 
-  return Router
+  function WrappedRouter (options) {
+    const router = originalRouter.call(this, options)
+
+    // Add query parsing middleware
+    if (!router._queryMiddlewareAdded) {
+      router._queryMiddlewareAdded = true
+      router.use(function queryParsingMiddleware (req, res, next) {
+        req.query
+        next()
+      })
+    }
+
+    return router
+  }
+  WrappedRouter.prototype = originalRouter.prototype
+
+  shimmer.wrap(WrappedRouter.prototype, 'use', wrapRouterMethod)
+  shimmer.wrap(WrappedRouter.prototype, 'route', wrapRouterMethod)
+
+  return WrappedRouter
 })
 
 const processParamsStartCh = channel('datadog:express:process_params:start')
