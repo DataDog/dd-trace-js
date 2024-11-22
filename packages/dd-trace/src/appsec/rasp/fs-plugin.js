@@ -70,7 +70,7 @@ function enable (mod) {
     fsPlugin.enable()
   }
 
-  log.info(`[ASM] Enabled AppsecFsPlugin for ${mod}`)
+  log.info('[ASM] Enabled AppsecFsPlugin for %s', mod)
 }
 
 function disable (mod) {
