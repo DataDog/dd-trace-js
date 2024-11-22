@@ -179,10 +179,9 @@ addHook({ name: 'router', versions: ['>=1'] }, Router => {
   return Router
 })
 
-function createWrapLayerMethod () {
-  // TODO: create a dedicate channel for this
-  const processParamsStartCh = channel('datadog:express:process_params:start')
+const processParamsStartCh = channel('datadog:express:process_params:start')
 
+function createWrapLayerMethod () {
   return function wrapMethod (original) {
     return function wrappedHandleRequest (req, res, next) {
       if (processParamsStartCh.hasSubscribers) {
@@ -191,8 +190,8 @@ function createWrapLayerMethod () {
         processParamsStartCh.publish({
           req,
           res,
-          abortController,
-          params: req?.params
+          params: req?.params,
+          abortController
         })
         if (abortController.signal.aborted) return
       }
@@ -207,6 +206,36 @@ addHook({
 }, Layer => {
   shimmer.wrap(Layer.prototype, 'handleRequest', createWrapLayerMethod())
   return Layer
+})
+
+function wrapProcessParamsMethod (original) {
+  return function wrappedProcessParams (name, fn) {
+    const wrappedFn = function wrappedParamCallback (req, res, next, param) {
+      if (processParamsStartCh.hasSubscribers) {
+        const abortController = new AbortController()
+
+        processParamsStartCh.publish({
+          req,
+          res,
+          params: req?.params,
+          abortController
+        })
+
+        if (abortController.signal.aborted) return
+      }
+
+      return fn(req, res, next, param, name)
+    }
+
+    return original.call(this, name, wrappedFn)
+  }
+}
+
+addHook({
+  name: 'router', versions: ['>=2']
+}, router => {
+  shimmer.wrap(router.prototype, 'param', wrapProcessParamsMethod)
+  return router
 })
 
 module.exports = { createWrapRouterMethod }

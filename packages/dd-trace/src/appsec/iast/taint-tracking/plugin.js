@@ -79,6 +79,15 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     )
 
     this.addSub(
+      { channelName: 'datadog:router:param:start', tag: HTTP_REQUEST_PATH_PARAM },
+      ({ req }) => {
+        if (req && req.params !== null && typeof req.params === 'object') {
+          this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, req, 'params')
+        }
+      }
+    )
+
+    this.addSub(
       { channelName: 'datadog:query:read:finish', tag: HTTP_REQUEST_QUERY },
       ({ query }) => {
         if (query !== null && typeof query === 'object') {

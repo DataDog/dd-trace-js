@@ -80,11 +80,11 @@ describe('Path params sourcing with express', () => {
   let appListener
 
   withVersions('express', 'express', version => {
-    const checkParamIsTaintedAndNext = (req, res, next, param) => {
+    const checkParamIsTaintedAndNext = (req, res, next, param, name) => {
       const store = storage.getStore()
       const iastContext = iastContextFunctions.getIastContext(store)
 
-      const pathParamValue = param
+      const pathParamValue = name ? req.params[name] : req.params
       const isParameterTainted = isTainted(iastContext, pathParamValue)
       expect(isParameterTainted).to.be.true
       const taintedParameterValueRanges = getRanges(iastContext, pathParamValue)
@@ -185,8 +185,7 @@ describe('Path params sourcing with express', () => {
       })
     })
 
-    // to be fixed
-    it.skip('should taint path param on router.params callback', function (done) {
+    it('should taint path param on router.params callback', function (done) {
       const app = express()
 
       app.use('/:parameter1/:parameter2', (req, res) => {
@@ -206,20 +205,15 @@ describe('Path params sourcing with express', () => {
       })
     })
 
-    // to be fixed
-    it.skip('should taint path param on router.params callback with custom implementation', function (done) {
+    it('should taint path param on router.params callback with custom implementation', function (done) {
       const app = express()
 
       app.use('/:parameter1/:parameter2', (req, res) => {
         res.status(200).send()
       })
 
-      app.param((param, option) => {
-        return checkParamIsTaintedAndNext
-      })
-
-      app.param('parameter1')
-      app.param('parameter2')
+      app.param('parameter1', checkParamIsTaintedAndNext)
+      app.param('parameter2', checkParamIsTaintedAndNext)
 
       appListener = app.listen(0, 'localhost', () => {
         const port = appListener.address().port

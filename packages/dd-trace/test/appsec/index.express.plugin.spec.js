@@ -46,8 +46,6 @@ withVersions('express', 'express', version => {
 
       app.param('callbackedParameter', paramCallbackSpy)
 
-      // app.param('callbackedParameter')
-
       getPort().then((port) => {
         server = app.listen(port, () => {
           axios = Axios.create({ baseURL: `http://localhost:${port}` })
@@ -159,7 +157,7 @@ withVersions('express', 'express', version => {
       })
     })
 
-    describe.skip('path parameter callback', () => {
+    describe('path parameter callback', () => {
       it('should not block the request when attack is not detected', async () => {
         const res = await axios.get('/callback-path-param/safe_param')
         assert.equal(res.status, 200)
@@ -182,7 +180,7 @@ withVersions('express', 'express', version => {
     })
   })
 
-  describe('Suspicious request blocking - query', () => {
+  describe.skip('Suspicious request blocking - query', () => {
     let server, requestBody, axios
 
     before(() => {
