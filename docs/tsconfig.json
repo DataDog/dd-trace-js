@@ -4,7 +4,8 @@
     "moduleResolution": "node",
     "module": "commonjs",
     "baseUrl": ".",
-    "strict": true
+    "strict": true,
+    "types": ["node"]
   },
   "files": [
     "../index.d.ts"

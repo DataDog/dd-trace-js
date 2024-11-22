@@ -654,55 +654,69 @@ class CypressPlugin {
         return this.activeTestSpan ? { traceId: this.activeTestSpan.context().toTraceId() } : {}
       },
       'dd:afterEach': ({ test, coverage }) => {
-        const { state, error, isRUMActive, testSourceLine, testSuite, testName, isNew, isEfdRetry } = test
-        if (this.activeTestSpan) {
-          if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
-            const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
-            const relativeCoverageFiles = coverageFiles.map(file => getTestSuitePath(file, this.rootDir))
-            if (!relativeCoverageFiles.length) {
-              incrementCountMetric(TELEMETRY_CODE_COVERAGE_EMPTY)
-            }
-            distributionMetric(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeCoverageFiles.length)
-            const { _traceId, _spanId } = this.testSuiteSpan.context()
-            const formattedCoverage = {
-              sessionId: _traceId,
-              suiteId: _spanId,
-              testId: this.activeTestSpan.context()._spanId,
-              files: relativeCoverageFiles
-            }
-            this.tracer._tracer._exporter.exportCoverage(formattedCoverage)
-          }
-          const testStatus = CYPRESS_STATUS_TO_TEST_STATUS[state]
-          this.activeTestSpan.setTag(TEST_STATUS, testStatus)
-
-          if (error) {
-            this.activeTestSpan.setTag('error', error)
-          }
-          if (isRUMActive) {
-            this.activeTestSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
-          }
-          if (testSourceLine) {
-            this.activeTestSpan.setTag(TEST_SOURCE_START, testSourceLine)
-          }
-          if (isNew) {
-            this.activeTestSpan.setTag(TEST_IS_NEW, 'true')
-            if (isEfdRetry) {
-              this.activeTestSpan.setTag(TEST_IS_RETRY, 'true')
-            }
-          }
-          const finishedTest = {
-            testName,
-            testStatus,
-            finishTime: this.activeTestSpan._getTime(), // we store the finish time here
-            testSpan: this.activeTestSpan
-          }
-          if (this.finishedTestsByFile[testSuite]) {
-            this.finishedTestsByFile[testSuite].push(finishedTest)
-          } else {
-            this.finishedTestsByFile[testSuite] = [finishedTest]
-          }
-          // test spans are finished at after:spec
+        if (!this.activeTestSpan) {
+          log.warn('There is no active test span in dd:afterEach handler')
+          return null
         }
+        const {
+          state,
+          error,
+          isRUMActive,
+          testSourceLine,
+          testSuite,
+          testSuiteAbsolutePath,
+          testName,
+          isNew,
+          isEfdRetry
+        } = test
+        if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
+          const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
+          const relativeCoverageFiles = [...coverageFiles, testSuiteAbsolutePath].map(
+            file => getTestSuitePath(file, this.repositoryRoot || this.rootDir)
+          )
+          if (!relativeCoverageFiles.length) {
+            incrementCountMetric(TELEMETRY_CODE_COVERAGE_EMPTY)
+          }
+          distributionMetric(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeCoverageFiles.length)
+          const { _traceId, _spanId } = this.testSuiteSpan.context()
+          const formattedCoverage = {
+            sessionId: _traceId,
+            suiteId: _spanId,
+            testId: this.activeTestSpan.context()._spanId,
+            files: relativeCoverageFiles
+          }
+          this.tracer._tracer._exporter.exportCoverage(formattedCoverage)
+        }
+        const testStatus = CYPRESS_STATUS_TO_TEST_STATUS[state]
+        this.activeTestSpan.setTag(TEST_STATUS, testStatus)
+
+        if (error) {
+          this.activeTestSpan.setTag('error', error)
+        }
+        if (isRUMActive) {
+          this.activeTestSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
+        }
+        if (testSourceLine) {
+          this.activeTestSpan.setTag(TEST_SOURCE_START, testSourceLine)
+        }
+        if (isNew) {
+          this.activeTestSpan.setTag(TEST_IS_NEW, 'true')
+          if (isEfdRetry) {
+            this.activeTestSpan.setTag(TEST_IS_RETRY, 'true')
+          }
+        }
+        const finishedTest = {
+          testName,
+          testStatus,
+          finishTime: this.activeTestSpan._getTime(), // we store the finish time here
+          testSpan: this.activeTestSpan
+        }
+        if (this.finishedTestsByFile[testSuite]) {
+          this.finishedTestsByFile[testSuite].push(finishedTest)
+        } else {
+          this.finishedTestsByFile[testSuite] = [finishedTest]
+        }
+        // test spans are finished at after:spec
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
           hasCodeOwners: !!this.activeTestSpan.context()._tags[TEST_CODE_OWNERS],
           isNew,

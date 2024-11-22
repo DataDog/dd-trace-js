@@ -179,6 +179,7 @@ interface Plugins {
   "kafkajs": tracer.plugins.kafkajs
   "knex": tracer.plugins.knex;
   "koa": tracer.plugins.koa;
+  "langchain": tracer.plugins.langchain;
   "mariadb": tracer.plugins.mariadb;
   "memcached": tracer.plugins.memcached;
   "microgateway-core": tracer.plugins.microgateway_core;
@@ -674,19 +675,13 @@ declare namespace tracer {
           'disabled'
       },
       /**
-       * Configuration for Api Security sampling
+       * Configuration for Api Security
        */
       apiSecurity?: {
         /** Whether to enable Api Security.
-         * @default false
+         * @default true
          */
         enabled?: boolean,
-
-        /** Controls the request sampling rate (between 0 and 1) in which Api Security is triggered.
-         * The value will be coerced back if it's outside of the 0-1 range.
-         * @default 0.1
-         */
-        requestSampling?: number
       },
       /**
        * Configuration for RASP
@@ -1055,6 +1050,14 @@ declare namespace tracer {
        * @default code => code < 500
        */
       validateStatus?: (code: number) => boolean;
+
+      /**
+       * Enable injection of tracing headers into requests signed with AWS IAM headers.
+       * Disable this if you get AWS signature errors (HTTP 403).
+       *
+       * @default false
+       */
+      enablePropagationWithAmazonHeaders?: boolean;
     }
 
     /** @hidden */
@@ -1601,6 +1604,12 @@ declare namespace tracer {
      * [kafkajs](https://kafka.js.org/) module.
      */
     interface kafkajs extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [langchain](https://js.langchain.com/) module
+     */
+    interface langchain extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the

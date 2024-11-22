@@ -77,8 +77,7 @@ function enable (_config) {
     isEnabled = true
     config = _config
   } catch (err) {
-    log.error('Unable to start AppSec')
-    log.error(err)
+    log.error('[ASM] Unable to start AppSec', err)
 
     disable()
   }
@@ -144,10 +143,6 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     persistent[addresses.HTTP_CLIENT_IP] = clientIp
   }
 
-  if (apiSecuritySampler.sampleRequest(req)) {
-    persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
-  }
-
   const actions = waf.run({ persistent }, req)
 
   handleResults(actions, req, res, rootSpan, abortController)
@@ -171,6 +166,10 @@ function incomingHttpEndTranslator ({ req, res }) {
     persistent[addresses.HTTP_INCOMING_QUERY] = req.query
   }
 
+  if (apiSecuritySampler.sampleRequest(req, res, true)) {
+    persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
+  }
+
   if (Object.keys(persistent).length) {
     waf.run({ persistent }, req)
   }
@@ -180,16 +179,18 @@ function incomingHttpEndTranslator ({ req, res }) {
   Reporter.finishRequest(req, res)
 }
 
-function onPassportVerify ({ login, user, success, abortController }) {
+function onPassportVerify ({ framework, login, user, success, abortController }) {
   const store = storage.getStore()
   const rootSpan = store?.req && web.root(store.req)
 
   if (!rootSpan) {
-    log.warn('No rootSpan found in onPassportVerify')
+    log.warn('[ASM] No rootSpan found in onPassportVerify')
     return
   }
 
-  UserTracking.trackLogin(login, user, success, rootSpan, abortController)
+  const results = UserTracking.trackLogin(framework, login, user, success, rootSpan)
+
+  handleResults(results, store.req, store.req.res, rootSpan, abortController)
 }
 
 function onRequestQueryParsed ({ req, res, query, abortController }) {
@@ -227,9 +228,9 @@ function onRequestProcessParams ({ req, res, abortController, params }) {
   handleResults(results, req, res, rootSpan, abortController)
 }
 
-function onResponseBody ({ req, body }) {
+function onResponseBody ({ req, res, body }) {
   if (!body || typeof body !== 'object') return
-  if (!apiSecuritySampler.isSampled(req)) return
+  if (!apiSecuritySampler.sampleRequest(req, res)) return
 
   // we don't support blocking at this point, so no results needed
   waf.run({

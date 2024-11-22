@@ -5,14 +5,14 @@ const { channel } = require('./helpers/instrument')
 
 const passportVerifyChannel = channel('datadog:passport:verify:finish')
 
-function wrapVerifiedAndPublish (username, verified) {
+function wrapVerifiedAndPublish (framework, username, verified) {
   return shimmer.wrapFunction(verified, function wrapVerify (verified) {
     return function wrappedVerified (err, user) {
       // if there is an error, it's neither an auth success nor a failure
       if (!err) {
         const abortController = new AbortController()
 
-        passportVerifyChannel.publish({ login: username, user, success: !!user, abortController })
+        passportVerifyChannel.publish({ framework, login: username, user, success: !!user, abortController })
 
         if (abortController.signal.aborted) return
       }
@@ -25,12 +25,13 @@ function wrapVerifiedAndPublish (username, verified) {
 function wrapVerify (verify) {
   return function wrappedVerify (req, username, password, verified) {
     if (passportVerifyChannel.hasSubscribers) {
+      const framework = `passport-${this.name}`
+
       // replace the callback with our own wrapper to get the result
-      // if we ever need the type of strategy, we can get it from this.name
       if (this._passReqToCallback) {
-        arguments[3] = wrapVerifiedAndPublish(arguments[1], arguments[3])
+        arguments[3] = wrapVerifiedAndPublish(framework, arguments[1], arguments[3])
       } else {
-        arguments[2] = wrapVerifiedAndPublish(arguments[0], arguments[2])
+        arguments[2] = wrapVerifiedAndPublish(framework, arguments[0], arguments[2])
       }
     }
 

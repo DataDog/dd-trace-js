@@ -4,7 +4,6 @@ const Activation = require('../activation')
 
 const RemoteConfigManager = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
-const apiSecuritySampler = require('../api_security_sampler')
 const { setCollectionMode } = require('../user_tracking')
 
 let rc
@@ -23,10 +22,6 @@ function enable (config, appsec) {
   if (activation !== Activation.DISABLED) {
     if (activation === Activation.ONECLICK) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
-    }
-
-    if (config.appsec.apiSecurity?.enabled) {
-      rc.updateCapabilities(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
     }
 
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
@@ -58,8 +53,6 @@ function enable (config, appsec) {
       if (activation === Activation.ONECLICK) {
         enableOrDisableAppsec(action, rcConfig, config, appsec)
       }
-
-      apiSecuritySampler.setRequestSampling(rcConfig.api_security?.request_sample_rate)
     })
   }
 
@@ -107,6 +100,7 @@ function enableWafUpdate (appsecConfig) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, true)
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SSRF, true)
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_LFI, true)
+      rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SHI, true)
     }
 
     // TODO: delete noop handlers and kPreUpdate and replace with batched handlers
@@ -138,6 +132,7 @@ function disableWafUpdate () {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SSRF, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_LFI, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SHI, false)
 
     rc.removeProductHandler('ASM_DATA')
     rc.removeProductHandler('ASM_DD')

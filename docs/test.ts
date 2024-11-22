@@ -115,7 +115,6 @@ tracer.init({
     },
     apiSecurity: {
       enabled: true,
-      requestSampling: 1.0
     },
     rasp: {
       enabled: true
@@ -324,6 +323,9 @@ tracer.use('http', {
 tracer.use('http', {
   client: httpClientOptions
 });
+tracer.use('http', {
+  enablePropagationWithAmazonHeaders: true
+});
 tracer.use('http2');
 tracer.use('http2', {
   server: http2ServerOptions
@@ -340,6 +342,7 @@ tracer.use('kafkajs');
 tracer.use('knex');
 tracer.use('koa');
 tracer.use('koa', httpServerOptions);
+tracer.use('langchain');
 tracer.use('mariadb', { service: () => `my-custom-mariadb` })
 tracer.use('memcached');
 tracer.use('microgateway-core');
@@ -569,19 +572,6 @@ llmobs.trace({ name: 'name', kind: 'llm' }, (span, cb) => {
 // wrap a function
 llmobs.wrap({ kind: 'llm' }, function myLLM () {})()
 llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction () {})()
-
-// decorate a function
-class MyClass {
-  @llmobs.decorate({ kind: 'llm' })
-  myLLM () {}
-
-  @llmobs.decorate({ kind: 'llm', name: 'myOtherLLM', modelName: 'myModel', modelProvider: 'myProvider' })
-  myOtherLLM () {}
-}
-
-const cls = new MyClass()
-cls.myLLM()
-cls.myOtherLLM()
 
 // export a span
 llmobs.enable({ mlApp: 'myApp' })

@@ -212,6 +212,7 @@ describe('Config', () => {
     expect(config).to.have.property('queryStringObfuscation').with.length(626)
     expect(config).to.have.property('clientIpEnabled', false)
     expect(config).to.have.property('clientIpHeader', null)
+    expect(config).to.have.nested.property('crashtracking.enabled', false)
     expect(config).to.have.property('sampleRate', undefined)
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config.tags).to.have.property('service', 'node')
@@ -232,8 +233,8 @@ describe('Config', () => {
     expect(config).to.have.property('spanRemoveIntegrationFromService', false)
     expect(config).to.have.property('instrumentation_config_id', undefined)
     expect(config).to.have.deep.property('serviceMapping', {})
-    expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog', 'tracecontext'])
-    expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog', 'tracecontext'])
+    expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog', 'tracecontext', 'baggage'])
+    expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog', 'tracecontext', 'baggage'])
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
@@ -253,7 +254,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
-    expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
+    expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 30)
     expect(config).to.have.nested.property('appsec.sca.enabled', null)
     expect(config).to.have.nested.property('appsec.standalone.enabled', undefined)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
@@ -333,6 +334,8 @@ describe('Config', () => {
       { name: 'isGitUploadEnabled', value: false, origin: 'default' },
       { name: 'isIntelligentTestRunnerEnabled', value: false, origin: 'default' },
       { name: 'isManualApiEnabled', value: false, origin: 'default' },
+      { name: 'langchain.spanCharLimit', value: 128, origin: 'default' },
+      { name: 'langchain.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' },
       { name: 'llmobs.agentlessEnabled', value: false, origin: 'default' },
       { name: 'llmobs.mlApp', value: undefined, origin: 'default' },
       { name: 'ciVisibilityTestSessionName', value: '', origin: 'default' },
@@ -440,6 +443,7 @@ describe('Config', () => {
     process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = '.*'
     process.env.DD_TRACE_CLIENT_IP_ENABLED = 'true'
     process.env.DD_TRACE_CLIENT_IP_HEADER = 'x-true-client-ip'
+    process.env.DD_CRASHTRACKING_ENABLED = 'true'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
     process.env.DD_ENV = 'test'
@@ -502,11 +506,13 @@ describe('Config', () => {
     process.env.DD_PROFILING_ENABLED = 'true'
     process.env.DD_INJECTION_ENABLED = 'profiler'
     process.env.DD_API_SECURITY_ENABLED = 'true'
-    process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE = 1
+    process.env.DD_API_SECURITY_SAMPLE_DELAY = '25'
     process.env.DD_INSTRUMENTATION_INSTALL_ID = '68e75c48-57ca-4a12-adfc-575c4b05fcbe'
     process.env.DD_INSTRUMENTATION_INSTALL_TYPE = 'k8s_single_step'
     process.env.DD_INSTRUMENTATION_INSTALL_TIME = '1703188212'
     process.env.DD_INSTRUMENTATION_CONFIG_ID = 'abcdef123'
+    process.env.DD_LANGCHAIN_SPAN_CHAR_LIMIT = 50
+    process.env.DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE = 0.5
     process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
     process.env.DD_LLMOBS_ML_APP = 'myMlApp'
     process.env.DD_TRACE_ENABLED = 'true'
@@ -529,6 +535,7 @@ describe('Config', () => {
     expect(config).to.have.property('queryStringObfuscation', '.*')
     expect(config).to.have.property('clientIpEnabled', true)
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
+    expect(config).to.have.nested.property('crashtracking.enabled', true)
     expect(config.grpc.client.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
     expect(config.grpc.server.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
     expect(config).to.have.property('runtimeMetrics', true)
@@ -591,7 +598,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'extended')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
-    expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1)
+    expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 25)
     expect(config).to.have.nested.property('appsec.sca.enabled', true)
     expect(config).to.have.nested.property('appsec.standalone.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
@@ -633,6 +640,7 @@ describe('Config', () => {
       { name: 'appsec.wafTimeout', value: '42', origin: 'env_var' },
       { name: 'clientIpEnabled', value: true, origin: 'env_var' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'env_var' },
+      { name: 'crashtracking.enabled', value: true, origin: 'env_var' },
       { name: 'codeOriginForSpans.enabled', value: true, origin: 'env_var' },
       { name: 'dogstatsd.hostname', value: 'dsd-agent', origin: 'env_var' },
       { name: 'dogstatsd.port', value: '5218', origin: 'env_var' },
@@ -680,7 +688,9 @@ describe('Config', () => {
       { name: 'tracing', value: false, origin: 'env_var' },
       { name: 'version', value: '1.0.0', origin: 'env_var' },
       { name: 'llmobs.mlApp', value: 'myMlApp', origin: 'env_var' },
-      { name: 'llmobs.agentlessEnabled', value: true, origin: 'env_var' }
+      { name: 'llmobs.agentlessEnabled', value: true, origin: 'env_var' },
+      { name: 'langchain.spanCharLimit', value: 50, origin: 'env_var' },
+      { name: 'langchain.spanPromptCompletionSampleRate', value: 0.5, origin: 'env_var' }
     ])
   })
 
@@ -736,6 +746,23 @@ describe('Config', () => {
 
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['tracecontext'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['tracecontext'])
+  })
+
+  it('should enable crash tracking for SSI by default', () => {
+    process.env.DD_INJECTION_ENABLED = 'tracer'
+
+    const config = new Config()
+
+    expect(config).to.have.nested.deep.property('crashtracking.enabled', true)
+  })
+
+  it('should disable crash tracking for SSI when configured', () => {
+    process.env.DD_CRASHTRACKING_ENABLED = 'false'
+    process.env.DD_INJECTION_ENABLED = 'tracer'
+
+    const config = new Config()
+
+    expect(config).to.have.nested.deep.property('crashtracking.enabled', false)
   })
 
   it('should initialize from the options', () => {
@@ -1154,7 +1181,6 @@ describe('Config', () => {
     process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_JSON_PATH // json and html here
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'disabled'
     process.env.DD_API_SECURITY_ENABLED = 'false'
-    process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE = 0.5
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
     process.env.DD_IAST_COOKIE_FILTER_PATTERN = '.*'
@@ -1220,8 +1246,7 @@ describe('Config', () => {
           mode: 'safe'
         },
         apiSecurity: {
-          enabled: true,
-          requestSampling: 1.0
+          enabled: true
         },
         rasp: {
           enabled: false
@@ -1299,7 +1324,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
-    expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1.0)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
@@ -1330,8 +1354,7 @@ describe('Config', () => {
           mode: 'disabled'
         },
         apiSecurity: {
-          enabled: true,
-          requestSampling: 1.0
+          enabled: true
         },
         rasp: {
           enabled: false
@@ -1364,8 +1387,7 @@ describe('Config', () => {
             mode: 'safe'
           },
           apiSecurity: {
-            enabled: false,
-            requestSampling: 0.5
+            enabled: false
           },
           rasp: {
             enabled: true
@@ -1402,7 +1424,7 @@ describe('Config', () => {
       },
       apiSecurity: {
         enabled: true,
-        requestSampling: 1.0
+        sampleDelay: 30
       },
       sca: {
         enabled: null
@@ -2157,35 +2179,6 @@ describe('Config', () => {
         name: 'llmobs.enabled', value: false, origin: 'env_var'
       })
     })
-  })
-
-  it('should sanitize values for API Security sampling between 0 and 1', () => {
-    expect(new Config({
-      appsec: {
-        apiSecurity: {
-          enabled: true,
-          requestSampling: 5
-        }
-      }
-    })).to.have.nested.property('appsec.apiSecurity.requestSampling', 1)
-
-    expect(new Config({
-      appsec: {
-        apiSecurity: {
-          enabled: true,
-          requestSampling: -5
-        }
-      }
-    })).to.have.nested.property('appsec.apiSecurity.requestSampling', 0)
-
-    expect(new Config({
-      appsec: {
-        apiSecurity: {
-          enabled: true,
-          requestSampling: 0.1
-        }
-      }
-    })).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
   })
 
   context('payload tagging', () => {
