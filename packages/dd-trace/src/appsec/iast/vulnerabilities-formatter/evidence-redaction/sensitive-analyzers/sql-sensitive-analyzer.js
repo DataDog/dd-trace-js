@@ -1,6 +1,6 @@
 'use strict'
 
-const iastLog = require('../../../iast-log')
+const log = require('../../../../../log')
 
 const STRING_LITERAL = '\'(?:\'\'|[^\'])*\''
 const POSTGRESQL_ESCAPED_LITERAL = '\\$([^$]*)\\$.*?\\$\\1\\$'
@@ -106,7 +106,7 @@ module.exports = function extractSensitiveRanges (evidence) {
     }
     return tokens
   } catch (e) {
-    iastLog.debug(e)
+    log.debug('[ASM] Error extracting sensitive ranges', e)
   }
   return []
 }

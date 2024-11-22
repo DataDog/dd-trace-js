@@ -77,8 +77,7 @@ function enable (_config) {
     isEnabled = true
     config = _config
   } catch (err) {
-    log.error('Unable to start AppSec')
-    log.error(err)
+    log.error('[ASM] Unable to start AppSec', err)
 
     disable()
   }
@@ -185,7 +184,7 @@ function onPassportVerify ({ framework, login, user, success, abortController })
   const rootSpan = store?.req && web.root(store.req)
 
   if (!rootSpan) {
-    log.warn('No rootSpan found in onPassportVerify')
+    log.warn('[ASM] No rootSpan found in onPassportVerify')
     return
   }
 

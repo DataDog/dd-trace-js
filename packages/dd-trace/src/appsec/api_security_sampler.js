@@ -64,7 +64,7 @@ function computeKey (req, res) {
   const status = res.statusCode
 
   if (!method || !status) {
-    log.warn('Unsupported groupkey for API security')
+    log.warn('[ASM] Unsupported groupkey for API security')
     return null
   }
   return method + route + status
