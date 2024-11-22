@@ -7,7 +7,8 @@ const {
   expectedLLMObsLLMSpanEvent,
   expectedLLMObsNonLLMSpanEvent,
   deepEqualWithMockValues,
-  MOCK_ANY
+  MOCK_ANY,
+  MOCK_STRING
 } = require('../../util')
 const chai = require('chai')
 
@@ -129,6 +130,42 @@ describe('integrations', () => {
             await checkTraces
           })
 
+          it('does not tag output if there is an error', async () => {
+            nock('https://api.openai.com').post('/v1/completions').reply(500)
+
+            const checkTraces = agent.use(traces => {
+              const span = traces[0][0]
+              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+
+              const expected = expectedLLMObsLLMSpanEvent({
+                span,
+                spanKind: 'llm',
+                modelName: 'gpt-3.5-turbo-instruct',
+                modelProvider: 'openai',
+                name: 'langchain.llms.openai.OpenAI',
+                inputMessages: [{ content: 'Hello!' }],
+                outputMessages: [{ content: '' }],
+                metadata: MOCK_ANY,
+                tokenMetrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+                tags: { ml_app: 'test', language: 'javascript' },
+                error: 1,
+                errorType: 'Error',
+                errorMessage: MOCK_STRING,
+                errorStack: MOCK_ANY
+              })
+
+              expect(spanEvent).to.deepEqualWithMockValues(expected)
+            })
+
+            const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct', maxRetries: 0 })
+
+            try {
+              await llm.invoke('Hello!')
+            } catch {}
+
+            await checkTraces
+          })
+
           it('submits an llm span for a cohere call', async function () {
             if (version === '0.1.0') this.skip() // cannot patch client to mock response on lower versions
 
@@ -221,6 +258,42 @@ describe('integrations', () => {
             })
 
             await chat.invoke('Hello!')
+
+            await checkTraces
+          })
+
+          it('does not tag output if there is an error', async () => {
+            nock('https://api.openai.com').post('/v1/chat/completions').reply(500)
+
+            const checkTraces = agent.use(traces => {
+              const span = traces[0][0]
+              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+
+              const expected = expectedLLMObsLLMSpanEvent({
+                span,
+                spanKind: 'llm',
+                modelName: 'gpt-3.5-turbo',
+                modelProvider: 'openai',
+                name: 'langchain.chat_models.openai.ChatOpenAI',
+                inputMessages: [{ content: 'Hello!', role: 'user' }],
+                outputMessages: [{ content: '' }],
+                metadata: MOCK_ANY,
+                tokenMetrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+                tags: { ml_app: 'test', language: 'javascript' },
+                error: 1,
+                errorType: 'Error',
+                errorMessage: MOCK_STRING,
+                errorStack: MOCK_ANY
+              })
+
+              expect(spanEvent).to.deepEqualWithMockValues(expected)
+            })
+
+            const chat = new langchainOpenai.ChatOpenAI({ model: 'gpt-3.5-turbo', maxRetries: 0 })
+
+            try {
+              await chat.invoke('Hello!')
+            } catch {}
 
             await checkTraces
           })
@@ -389,6 +462,41 @@ describe('integrations', () => {
             await checkTraces
           })
 
+          it('does not tag output if there is an error', async () => {
+            nock('https://api.openai.com').post('/v1/embeddings').reply(500)
+
+            const checkTraces = agent.use(traces => {
+              const span = traces[0][0]
+              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+
+              const expected = expectedLLMObsLLMSpanEvent({
+                span,
+                spanKind: 'embedding',
+                modelName: 'text-embedding-ada-002',
+                modelProvider: 'openai',
+                name: 'langchain.embeddings.openai.OpenAIEmbeddings',
+                inputDocuments: [{ text: 'Hello!' }],
+                outputValue: '',
+                metadata: MOCK_ANY,
+                tags: { ml_app: 'test', language: 'javascript' },
+                error: 1,
+                errorType: 'Error',
+                errorMessage: MOCK_STRING,
+                errorStack: MOCK_ANY
+              })
+
+              expect(spanEvent).to.deepEqualWithMockValues(expected)
+            })
+
+            const embeddings = new langchainOpenai.OpenAIEmbeddings({ maxRetries: 0 })
+
+            try {
+              await embeddings.embedQuery('Hello!')
+            } catch {}
+
+            await checkTraces
+          })
+
           it('submits an embedding span for an `embedDocuments` call', async () => {
             stubCall({
               ...openAiBaseEmbeddingInfo,
@@ -498,6 +606,44 @@ describe('integrations', () => {
             })
 
             await chain.invoke({ input: 'Can you tell me about LangSmith?' })
+
+            await checkTraces
+          })
+
+          it('does not tag output if there is an error', async () => {
+            nock('https://api.openai.com').post('/v1/completions').reply(500)
+
+            const checkTraces = agent.use(traces => {
+              const spans = traces[0]
+
+              const workflowSpan = spans[0]
+
+              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+
+              const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
+                span: workflowSpan,
+                spanKind: 'workflow',
+                name: 'langchain_core.runnables.RunnableSequence',
+                inputValue: 'Hello!',
+                outputValue: '',
+                metadata: MOCK_ANY,
+                tags: { ml_app: 'test', language: 'javascript' },
+                error: 1,
+                errorType: 'Error',
+                errorMessage: MOCK_STRING,
+                errorStack: MOCK_ANY
+              })
+
+              expect(workflowSpanEvent).to.deepEqualWithMockValues(expectedWorkflow)
+            })
+
+            const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct', maxRetries: 0 })
+            const parser = new langchainOutputParsers.StringOutputParser()
+            const chain = llm.pipe(parser)
+
+            try {
+              await chain.invoke('Hello!')
+            } catch {}
 
             await checkTraces
           })
