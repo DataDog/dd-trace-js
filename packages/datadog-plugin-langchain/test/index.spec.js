@@ -1,5 +1,6 @@
 'use strict'
 
+const { expect } = require('chai')
 const { useEnv } = require('../../../integration-tests/helpers')
 const agent = require('../../dd-trace/test/plugins/agent')
 
@@ -137,6 +138,33 @@ describe('Plugin', () => {
       })
 
       describe('llm', () => {
+        it('does not tag output on error', async () => {
+          nock('https://api.openai.com').post('/v1/completions').reply(403)
+
+          const checkTraces = agent
+            .use(traces => {
+              expect(traces[0].length).to.equal(1)
+
+              const span = traces[0][0]
+
+              const langchainResponseRegex = /^langchain\.response\.completions\./
+              const hasMatching = Object.keys(span.meta).some(key => langchainResponseRegex.test(key))
+
+              expect(hasMatching).to.be.false
+
+              expect(span.meta).to.have.property('error.message')
+              expect(span.meta).to.have.property('error.type')
+              expect(span.meta).to.have.property('error.stack')
+            })
+
+          try {
+            const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct', maxRetries: 0 })
+            await llm.generate(['what is 2 + 2?'])
+          } catch {}
+
+          await checkTraces
+        })
+
         it('instruments a langchain llm call for a single prompt', async () => {
           stubCall({
             ...openAiBaseCompletionInfo,
@@ -270,6 +298,32 @@ describe('Plugin', () => {
       })
 
       describe('chat model', () => {
+        it('does not tag output on error', async () => {
+          nock('https://api.openai.com').post('/v1/chat/completions').reply(403)
+
+          const checkTraces = agent
+            .use(traces => {
+              expect(traces[0].length).to.equal(1)
+
+              const span = traces[0][0]
+
+              const langchainResponseRegex = /^langchain\.response\.completions\./
+              const hasMatching = Object.keys(span.meta).some(key => langchainResponseRegex.test(key))
+              expect(hasMatching).to.be.false
+
+              expect(span.meta).to.have.property('error.message')
+              expect(span.meta).to.have.property('error.type')
+              expect(span.meta).to.have.property('error.stack')
+            })
+
+          try {
+            const chatModel = new langchainOpenai.ChatOpenAI({ model: 'gpt-4', maxRetries: 0 })
+            await chatModel.invoke('Hello!')
+          } catch {}
+
+          await checkTraces
+        })
+
         it('instruments a langchain openai chat model call for a single string prompt', async () => {
           stubCall({
             ...openAiBaseChatInfo,
@@ -546,6 +600,37 @@ describe('Plugin', () => {
       })
 
       describe('chain', () => {
+        it('does not tag output on error', async () => {
+          nock('https://api.openai.com').post('/v1/chat/completions').reply(403)
+
+          const checkTraces = agent
+            .use(traces => {
+              expect(traces[0].length).to.equal(2)
+
+              const chainSpan = traces[0][0]
+
+              const langchainResponseRegex = /^langchain\.response\.outputs\./
+
+              const hasMatching = Object.keys(chainSpan.meta).some(key => langchainResponseRegex.test(key))
+              expect(hasMatching).to.be.false
+
+              expect(chainSpan.meta).to.have.property('error.message')
+              expect(chainSpan.meta).to.have.property('error.type')
+              expect(chainSpan.meta).to.have.property('error.stack')
+            })
+
+          try {
+            const model = new langchainOpenai.ChatOpenAI({ model: 'gpt-4', maxRetries: 0 })
+            const parser = new langchainOutputParsers.StringOutputParser()
+
+            const chain = model.pipe(parser)
+
+            await chain.invoke('Hello!')
+          } catch {}
+
+          await checkTraces
+        })
+
         it('instruments a langchain chain with a single openai chat model call', async () => {
           stubCall({
             ...openAiBaseChatInfo,
@@ -790,6 +875,30 @@ describe('Plugin', () => {
 
       describe('embeddings', () => {
         describe('@langchain/openai', () => {
+          it('does not tag output on error', async () => {
+            nock('https://api.openai.com').post('/v1/embeddings').reply(403)
+
+            const checkTraces = agent
+              .use(traces => {
+                expect(traces[0].length).to.equal(1)
+
+                const span = traces[0][0]
+
+                expect(span.meta).to.not.have.property('langchain.response.outputs.embedding_length')
+
+                expect(span.meta).to.have.property('error.message')
+                expect(span.meta).to.have.property('error.type')
+                expect(span.meta).to.have.property('error.stack')
+              })
+
+            try {
+              const embeddings = new langchainOpenai.OpenAIEmbeddings()
+              await embeddings.embedQuery('Hello, world!')
+            } catch {}
+
+            await checkTraces
+          })
+
           it('instruments a langchain openai embedQuery call', async () => {
             stubCall({
               ...openAiBaseEmbeddingInfo,
