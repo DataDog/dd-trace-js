@@ -9,6 +9,7 @@ const {
   multerParser,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
+  passportUser,
   passportVerify,
   queryParser,
   nextBodyParsed,
@@ -65,8 +66,8 @@ function enable (_config) {
     cookieParser.subscribe(onRequestCookieParser)
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
-    passportVerify.subscribe(onPassportVerify) // possible optimization: only subscribe if collection mode is enabled
     passportUser.subscribe(onPassportDeserializeUser)
+    passportVerify.subscribe(onPassportVerify) // possible optimization: only subscribe if collection mode is enabled
     queryParser.subscribe(onRequestQueryParsed)
     nextBodyParsed.subscribe(onRequestBodyParsed)
     nextQueryParsed.subscribe(onRequestQueryParsed)
@@ -181,7 +182,7 @@ function incomingHttpEndTranslator ({ req, res }) {
 }
 
 function onPassportDeserializeUser ({ req, user, sessionId, abordController }) {
-  UserTracking.trackUser(user, abortController)
+  UserTracking.trackUser(user)
 
   if (sessionId && typeof sessionId === 'string') {
     const results = waf.run({

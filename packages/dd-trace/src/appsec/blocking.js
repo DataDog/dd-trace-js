@@ -115,7 +115,7 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
     res.removeHeader(headerName)
   }
 
-  res.writeHead(statusCode, headers).end(body)
+  res.writeHead(statusCode, headers)._originalEnd(body)
 
   responseBlockedSet.add(res)
 

@@ -24,6 +24,7 @@ addHook({ name: httpNames }, http => {
   shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
   shimmer.wrap(http.ServerResponse.prototype, 'writeHead', wrapWriteHead)
   shimmer.wrap(http.ServerResponse.prototype, 'write', wrapWrite)
+  http.ServerResponse.prototype._originalEnd = http.ServerResponse.prototype.end
   shimmer.wrap(http.ServerResponse.prototype, 'end', wrapEnd)
   shimmer.wrap(http.ServerResponse.prototype, 'setHeader', wrapSetHeader)
   shimmer.wrap(http.ServerResponse.prototype, 'removeHeader', wrapAppendOrRemoveHeader)
