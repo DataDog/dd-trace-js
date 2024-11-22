@@ -11,13 +11,13 @@ const { keepTrace } = require('../../priority_sampler')
 function trackUserLoginSuccessEvent (tracer, user, metadata) {
   // TODO: better user check here and in _setUser() ?
   if (!user || !user.id) {
-    log.warn('Invalid user provided to trackUserLoginSuccessEvent')
+    log.warn('[ASM] Invalid user provided to trackUserLoginSuccessEvent')
     return
   }
 
   const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
-    log.warn('Root span not available in trackUserLoginSuccessEvent')
+    log.warn('[ASM] Root span not available in trackUserLoginSuccessEvent')
     return
   }
 
@@ -28,7 +28,7 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
 
 function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
   if (!userId || typeof userId !== 'string') {
-    log.warn('Invalid userId provided to trackUserLoginFailureEvent')
+    log.warn('[ASM] Invalid userId provided to trackUserLoginFailureEvent')
     return
   }
 
@@ -43,7 +43,7 @@ function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
 
 function trackCustomEvent (tracer, eventName, metadata) {
   if (!eventName || typeof eventName !== 'string') {
-    log.warn('Invalid eventName provided to trackCustomEvent')
+    log.warn('[ASM] Invalid eventName provided to trackCustomEvent')
     return
   }
 
@@ -52,7 +52,7 @@ function trackCustomEvent (tracer, eventName, metadata) {
 
 function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode) {
   if (!rootSpan) {
-    log.warn(`Root span not available in ${sdkMethodName}`)
+    log.warn('[ASM] Root span not available in %s', sdkMethodName)
     return
   }
 
