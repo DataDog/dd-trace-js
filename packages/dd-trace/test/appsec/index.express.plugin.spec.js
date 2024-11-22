@@ -173,7 +173,6 @@ withVersions('express', 'express', version => {
         } catch (e) {
           assert.equal(e.response.status, 403)
           assert.deepEqual(e.response.data, JSON.parse(json))
-          // to be fixed
           sinon.assert.notCalled(paramCallbackSpy)
         }
       })

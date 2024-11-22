@@ -178,7 +178,7 @@ addHook({ name: 'router', versions: ['>=1'] }, Router => {
     // Add query parsing middleware
     if (!router._queryMiddlewareAdded) {
       router._queryMiddlewareAdded = true
-      router.use(function queryParsingMiddleware (req, res, next) {
+      router.use(function query (req, res, next) {
         req.query
         next()
       })

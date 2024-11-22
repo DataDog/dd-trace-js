@@ -37,9 +37,7 @@ describe('esm', () => {
 
     it('is instrumented', async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
-      // express less than <5.0 uses their own router, which creates more middleware spans than the router
-      // that is used for v5+
-      const numberofSpans = semver.intersects(version, '<5.0.0') ? 4 : 3
+      const numberofSpans = semver.intersects(version, '<5.0.0') ? 4 : 5
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)

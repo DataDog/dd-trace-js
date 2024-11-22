@@ -215,47 +215,51 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const spans = sort(traces[0])
+                const isExpress4 = semver.intersects(version, '<5.0.0')
+                let index = 0
 
-                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
-                expect(spans[0]).to.have.property('name', 'express.request')
-                expect(spans[0].meta).to.have.property('component', 'express')
+                expect(spans[index]).to.have.property('resource', 'GET /app/user/:id')
+                expect(spans[index]).to.have.property('name', 'express.request')
+                expect(spans[index].meta).to.have.property('component', 'express')
+                index++
 
-                if (semver.intersects(version, '<5.0.0')) {
-                  expect(spans[1]).to.have.property('resource', 'query')
-                  expect(spans[1]).to.have.property('name', 'express.middleware')
-                  expect(spans[1].parent_id.toString()).to.equal(spans[0].span_id.toString())
-                  expect(spans[1].meta).to.have.property('component', 'express')
-                  expect(spans[2]).to.have.property('resource', 'expressInit')
-                  expect(spans[2]).to.have.property('name', 'express.middleware')
-                  expect(spans[2].parent_id.toString()).to.equal(spans[0].span_id.toString())
-                  expect(spans[2].meta).to.have.property('component', 'express')
+                expect(spans[index]).to.have.property('resource', 'query')
+                expect(spans[index]).to.have.property('name', 'express.middleware')
+                expect(spans[index].parent_id.toString()).to.equal(spans[0].span_id.toString())
+                expect(spans[index].meta).to.have.property('component', 'express')
+                index++
+
+                if (isExpress4) {
+                  expect(spans[index]).to.have.property('resource', 'expressInit')
+                  expect(spans[index]).to.have.property('name', 'express.middleware')
+                  expect(spans[index].parent_id.toString()).to.equal(spans[0].span_id.toString())
+                  expect(spans[index].meta).to.have.property('component', 'express')
+                  index++
                 }
 
-                const namedSpanIndex = semver.intersects(version, '<5.0.0') ? 3 : 1
+                expect(spans[index]).to.have.property('resource', 'named')
+                expect(spans[index]).to.have.property('name', 'express.middleware')
+                expect(spans[index].parent_id.toString()).to.equal(spans[0].span_id.toString())
+                expect(spans[index].meta).to.have.property('component', 'express')
+                index++
 
-                expect(spans[namedSpanIndex]).to.have.property('resource', 'named')
-                expect(spans[namedSpanIndex]).to.have.property('name', 'express.middleware')
-                expect(spans[namedSpanIndex].parent_id.toString()).to.equal(spans[0].span_id.toString())
-                expect(spans[namedSpanIndex].meta).to.have.property('component', 'express')
+                expect(spans[index]).to.have.property('resource', 'router')
+                expect(spans[index]).to.have.property('name', 'express.middleware')
+                expect(spans[index].parent_id.toString()).to.equal(spans[0].span_id.toString())
+                expect(spans[index].meta).to.have.property('component', 'express')
+                index++
 
-                expect(spans[namedSpanIndex + 1]).to.have.property('resource', 'router')
-                expect(spans[namedSpanIndex + 1]).to.have.property('name', 'express.middleware')
-                expect(spans[namedSpanIndex + 1].parent_id.toString()).to.equal(spans[0].span_id.toString())
-                expect(spans[namedSpanIndex + 1].meta).to.have.property('component', 'express')
+                expect(spans[index]).to.have.property('name', 'express.middleware')
+                expect(spans[index].parent_id.toString()).to.equal(spans[index - 1].span_id.toString())
+                expect(spans[index].meta).to.have.property('component', 'express')
+                index++
 
-                // expect(spans[namedSpanIndex + 2].resource).to.match(/^bound\s.*$/) called handle in express5
-                expect(spans[namedSpanIndex + 2]).to.have.property('name', 'express.middleware')
-                expect(spans[namedSpanIndex + 2].parent_id.toString()).to.equal(
-                  spans[namedSpanIndex + 1].span_id.toString()
-                )
-                expect(spans[namedSpanIndex + 2].meta).to.have.property('component', 'express')
+                if (!isExpress4) index++
 
-                expect(spans[namedSpanIndex + 3]).to.have.property('resource', '<anonymous>')
-                expect(spans[namedSpanIndex + 3]).to.have.property('name', 'express.middleware')
-                expect(spans[namedSpanIndex + 3].parent_id.toString()).to.equal(
-                  spans[namedSpanIndex + 2].span_id.toString()
-                )
-                expect(spans[namedSpanIndex + 3].meta).to.have.property('component', 'express')
+                expect(spans[index]).to.have.property('resource', '<anonymous>')
+                expect(spans[index]).to.have.property('name', 'express.middleware')
+                expect(spans[index].parent_id.toString()).to.equal(spans[index - 1].span_id.toString())
+                expect(spans[index].meta).to.have.property('component', 'express')
               })
               .then(done)
               .catch(done)
@@ -291,7 +295,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const spans = sort(traces[0])
 
-                const breakingSpanIndex = semver.intersects(version, '<5.0.0') ? 3 : 1
+                const breakingSpanIndex = semver.intersects(version, '<5.0.0') ? 3 : 2
 
                 expect(spans[0]).to.have.property('resource', 'GET /user/:id')
                 expect(spans[0]).to.have.property('name', 'express.request')
@@ -337,7 +341,7 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const spans = sort(traces[0])
-                const errorSpanIndex = semver.intersects(version, '<5.0.0') ? 4 : 2
+                const errorSpanIndex = semver.intersects(version, '<5.0.0') ? 4 : 3
 
                 expect(spans[0]).to.have.property('name', 'express.request')
                 expect(spans[errorSpanIndex]).to.have.property('name', 'express.middleware')
