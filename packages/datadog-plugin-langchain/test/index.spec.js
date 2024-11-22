@@ -1,6 +1,5 @@
 'use strict'
 
-const { expect } = require('chai')
 const { useEnv } = require('../../../integration-tests/helpers')
 const agent = require('../../dd-trace/test/plugins/agent')
 
