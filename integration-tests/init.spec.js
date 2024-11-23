@@ -193,15 +193,15 @@ describe('init.js', () => {
 // or on 18.0.0 in particular.
 if (
   semver.satisfies(process.versions.node, '>=12.17.0') &&
-  semver.satisfies(process.versions.node, '>=14.13.1') &&
-  !semver.satisfies(process.versions.node, '18.0.0')
+  semver.satisfies(process.versions.node, '>=14.13.1')
 ) {
   describe('initialize.mjs', () => {
     useSandbox()
     stubTracerIfNeeded()
 
     context('as --loader', () => {
-      testInjectionScenarios('loader', 'initialize.mjs', true)
+      testInjectionScenarios('loader', 'initialize.mjs',
+        process.versions.node !== '18.0.0')
       testRuntimeVersionChecks('loader', 'initialize.mjs')
     })
     if (semver.satisfies(process.versions.node, '>=20.6.0')) {
