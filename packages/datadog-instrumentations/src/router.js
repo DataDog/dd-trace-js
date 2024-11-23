@@ -182,13 +182,19 @@ addHook({ name: 'router', versions: ['>=2'] }, Router => {
   function WrappedRouter (options) {
     const router = originalRouter.call(this, options)
 
-    // Add query parsing middleware
-    if (!router._queryMiddlewareAdded) {
-      router._queryMiddlewareAdded = true
-      router.use(function query (req, res, next) {
+    if (!router._queryParsingWrapped) {
+      router._queryParsingWrapped = true
+
+      const originalHandle = router.handle
+      router.handle = function (req, res, next) {
         req.query
-        next()
-      })
+
+        // If query parsing was aborted, don't continue request handling
+        if (res.writableEnded) {
+          return
+        }
+        return originalHandle.apply(this, arguments)
+      }
     }
 
     return router

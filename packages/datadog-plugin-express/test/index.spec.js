@@ -218,48 +218,54 @@ describe('Plugin', () => {
                 const isExpress4 = semver.intersects(version, '<5.0.0')
                 let index = 0
 
-                expect(spans[index]).to.have.property('resource', 'GET /app/user/:id')
-                expect(spans[index]).to.have.property('name', 'express.request')
-                expect(spans[index].meta).to.have.property('component', 'express')
-                index++
-
-                expect(spans[index]).to.have.property('resource', 'query')
-                expect(spans[index]).to.have.property('name', 'express.middleware')
-                expect(spans[index].parent_id.toString()).to.equal(spans[0].span_id.toString())
-                expect(spans[index].meta).to.have.property('component', 'express')
-                index++
+                const rootSpan = spans[index++]
+                expect(rootSpan).to.have.property('resource', 'GET /app/user/:id')
+                expect(rootSpan).to.have.property('name', 'express.request')
+                expect(rootSpan.meta).to.have.property('component', 'express')
 
                 if (isExpress4) {
+                  expect(spans[index]).to.have.property('resource', 'query')
+                  expect(spans[index]).to.have.property('name', 'express.middleware')
+                  expect(spans[index].parent_id.toString()).to.equal(rootSpan.span_id.toString())
+                  expect(spans[index].meta).to.have.property('component', 'express')
+                  index++
+
                   expect(spans[index]).to.have.property('resource', 'expressInit')
                   expect(spans[index]).to.have.property('name', 'express.middleware')
-                  expect(spans[index].parent_id.toString()).to.equal(spans[0].span_id.toString())
+                  expect(spans[index].parent_id.toString()).to.equal(rootSpan.span_id.toString())
                   expect(spans[index].meta).to.have.property('component', 'express')
                   index++
                 }
 
                 expect(spans[index]).to.have.property('resource', 'named')
                 expect(spans[index]).to.have.property('name', 'express.middleware')
-                expect(spans[index].parent_id.toString()).to.equal(spans[0].span_id.toString())
+                expect(spans[index].parent_id.toString()).to.equal(rootSpan.span_id.toString())
                 expect(spans[index].meta).to.have.property('component', 'express')
                 index++
 
                 expect(spans[index]).to.have.property('resource', 'router')
                 expect(spans[index]).to.have.property('name', 'express.middleware')
-                expect(spans[index].parent_id.toString()).to.equal(spans[0].span_id.toString())
+                expect(spans[index].parent_id.toString()).to.equal(rootSpan.span_id.toString())
                 expect(spans[index].meta).to.have.property('component', 'express')
                 index++
 
+                const handleResource = isExpress4 ? /^bound\s.*$/ : 'handle'
+                if (isExpress4) {
+                  expect(spans[index].resource).to.match(handleResource)
+                } else {
+                  expect(spans[index]).to.have.property('resource', handleResource)
+                }
                 expect(spans[index]).to.have.property('name', 'express.middleware')
                 expect(spans[index].parent_id.toString()).to.equal(spans[index - 1].span_id.toString())
                 expect(spans[index].meta).to.have.property('component', 'express')
                 index++
-
-                if (!isExpress4) index++
 
                 expect(spans[index]).to.have.property('resource', '<anonymous>')
                 expect(spans[index]).to.have.property('name', 'express.middleware')
                 expect(spans[index].parent_id.toString()).to.equal(spans[index - 1].span_id.toString())
                 expect(spans[index].meta).to.have.property('component', 'express')
+
+                expect(index).to.equal(spans.length - 1)
               })
               .then(done)
               .catch(done)
@@ -295,7 +301,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const spans = sort(traces[0])
 
-                const breakingSpanIndex = semver.intersects(version, '<5.0.0') ? 3 : 2
+                const breakingSpanIndex = semver.intersects(version, '<5.0.0') ? 3 : 1
 
                 expect(spans[0]).to.have.property('resource', 'GET /user/:id')
                 expect(spans[0]).to.have.property('name', 'express.request')
@@ -341,7 +347,7 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const spans = sort(traces[0])
-                const errorSpanIndex = semver.intersects(version, '<5.0.0') ? 4 : 3
+                const errorSpanIndex = semver.intersects(version, '<5.0.0') ? 4 : 2
 
                 expect(spans[0]).to.have.property('name', 'express.request')
                 expect(spans[errorSpanIndex]).to.have.property('name', 'express.middleware')
