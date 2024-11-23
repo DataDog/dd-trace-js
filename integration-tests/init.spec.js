@@ -189,8 +189,13 @@ describe('init.js', () => {
   testRuntimeVersionChecks('require', 'init.js')
 })
 
-// ESM is not supportable prior to Node.js 12.17.0
-if (semver.satisfies(process.versions.node, '>=12.17.0')) {
+// ESM is not supportable prior to Node.js 12.17.0, 14.13.1 on the 14.x line,
+// or on 18.0.0 in particular.
+if (
+  semver.satisfies(process.versions.node, '>=12.17.0') &&
+  semver.satisfies(process.versions.node, '>=14.13.1') &&
+  !semver.satisfies(process.versions.node, '18.0.0')
+) {
   describe('initialize.mjs', () => {
     useSandbox()
     stubTracerIfNeeded()
@@ -199,7 +204,7 @@ if (semver.satisfies(process.versions.node, '>=12.17.0')) {
       testInjectionScenarios('loader', 'initialize.mjs', true)
       testRuntimeVersionChecks('loader', 'initialize.mjs')
     })
-    if (Number(process.versions.node.split('.')[0]) >= 18) {
+    if (semver.satisfies(process.versions.node, '>=20.6.0')) {
       context('as --import', () => {
         testInjectionScenarios('import', 'initialize.mjs', true)
         testRuntimeVersionChecks('loader', 'initialize.mjs')
