@@ -99,6 +99,7 @@ describe('TextMapPropagator', () => {
       expect(carrier['ot-baggage-object']).to.equal('[object Object]')
       expect(carrier.baggage).to.be.equal('number=1.23,bool=true,array=foo%2Cbar,object=%5Bobject%20Object%5D')
     })
+    
 
     it('should handle special characters in baggage', () => {
       const carrier = {}
