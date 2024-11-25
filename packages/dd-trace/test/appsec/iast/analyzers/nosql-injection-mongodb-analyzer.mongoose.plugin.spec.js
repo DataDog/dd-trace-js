@@ -10,6 +10,7 @@ const fs = require('fs')
 const { NODE_MAJOR } = require('../../../../../../version')
 
 describe('nosql injection detection in mongodb - whole feature', () => {
+  // https://github.com/fiznool/express-mongo-sanitize/issues/200
   withVersions('mongoose', 'express', '>4.18.0 <5.0.0', expressVersion => {
     withVersions('mongoose', 'mongoose', '>4.0.0', mongooseVersion => {
       const specificMongooseVersion = require(`../../../../../../versions/mongoose@${mongooseVersion}`).version()
