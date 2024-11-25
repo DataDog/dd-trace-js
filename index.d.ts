@@ -667,7 +667,7 @@ declare namespace tracer {
          * *  'disabled': will not collect user IDs and logins
          * 
          * Unknown values will be considered as 'disabled'
-         * @default 'ident'
+         * @default 'identification'
          */
         mode?:
           'anonymous' | 'anon' | 'safe' |
