@@ -47,12 +47,9 @@ describe('URI sourcing with express', () => {
     })
 
     it('should taint uri', function (done) {
-      // not supported express5
-      if (!semver.satisfies(version, '<5')) {
-        this.skip()
-      }
       const app = express()
-      app.get('/path/*', (req, res) => {
+      const pathPattern = semver.intersects(version, '>=5.0.0') ? '/path/*splat' : '/path/*'
+      app.get(pathPattern, (req, res) => {
         const store = storage.getStore()
         const iastContext = iastContextFunctions.getIastContext(store)
         const isPathTainted = isTainted(iastContext, req.url)

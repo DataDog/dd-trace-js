@@ -424,19 +424,15 @@ describe('Plugin', () => {
           const app = express()
           const router = express.Router()
 
-          // supported only in express<5
-          if (semver.intersects(version, '<5.0.0')) {
-            router.use('*', (req, res, next) => next())
-            app.use('*', (req, res, next) => next())
-          }
-
           router.use('/', (req, res, next) => next())
+          router.use('/*splat', (req, res, next) => next())
           router.use('/bar', (req, res, next) => next())
           router.use('/bar', (req, res, next) => {
             res.status(200).send()
           })
 
           app.use('/', (req, res, next) => next())
+          app.use('/*splat', (req, res, next) => next())
           app.use('/foo/bar', (req, res, next) => next())
           app.use('/foo', router)
 
@@ -1232,15 +1228,9 @@ describe('Plugin', () => {
         })
 
         it('should support capturing groups in routes', done => {
-          // not supported in Express5
-          if (semver.intersects(version, '>=5.0.0')) {
-            done()
-            return
-          }
-
           const app = express()
 
-          app.get('/:path(*)', (req, res) => {
+          app.get('/*user', (req, res) => {
             res.status(200).send()
           })
 
@@ -1251,7 +1241,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /:path(*)')
+                expect(spans[0]).to.have.property('resource', 'GET /*user')
                 expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
               })
               .then(done)
