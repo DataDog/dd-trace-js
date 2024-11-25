@@ -8,7 +8,7 @@ const querystringParseCh = channel('datadog:querystring:parse:finish')
 
 addHook({ name: names }, function (querystring) {
   shimmer.wrap(querystring, 'parse', function (parse) {
-    function wrappedMethod () {
+    function wrappedParse () {
       const qs = parse.apply(this, arguments)
       if (querystringParseCh.hasSubscribers && qs) {
         querystringParseCh.publish({ qs })
@@ -17,7 +17,8 @@ addHook({ name: names }, function (querystring) {
       return qs
     }
 
-    return wrappedMethod
+    return wrappedParse
   })
+
   return querystring
 })

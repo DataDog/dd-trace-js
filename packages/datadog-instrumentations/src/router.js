@@ -184,21 +184,21 @@ addHook({ name: 'router', versions: ['>=2'] }, Router => {
 
     if (!router._queryParsingWrapped) {
       router._queryParsingWrapped = true
-
       const originalHandle = router.handle
       router.handle = function (req, res, next) {
         req.query
-
         // If query parsing was aborted, don't continue request handling
         if (res.writableEnded) {
           return
         }
+
         return originalHandle.apply(this, arguments)
       }
     }
 
     return router
   }
+
   WrappedRouter.prototype = originalRouter.prototype
 
   shimmer.wrap(WrappedRouter.prototype, 'use', wrapRouterMethod)
@@ -207,42 +207,41 @@ addHook({ name: 'router', versions: ['>=2'] }, Router => {
   return WrappedRouter
 })
 
-const processParamsStartCh = channel('datadog:express:process_params:start')
+const routerParamStartCh = channel('datadog:router:param:start')
 
-function createWrapLayerMethod () {
-  return function wrapMethod (original) {
-    return function wrappedHandleRequest (req, res, next) {
-      if (processParamsStartCh.hasSubscribers) {
-        const abortController = new AbortController()
+function wrapHandleRequest (original) {
+  return function wrappedHandleRequest (req, res, next) {
+    if (routerParamStartCh.hasSubscribers) {
+      const abortController = new AbortController()
 
-        processParamsStartCh.publish({
-          req,
-          res,
-          params: req?.params,
-          abortController
-        })
-        if (abortController.signal.aborted) return
-      }
+      routerParamStartCh.publish({
+        req,
+        res,
+        params: req?.params,
+        abortController
+      })
 
-      return original.apply(this, arguments)
+      if (abortController.signal.aborted) return
     }
+
+    return original.apply(this, arguments)
   }
 }
 
 addHook({
   name: 'router', file: 'lib/layer.js', versions: ['>=2']
 }, Layer => {
-  shimmer.wrap(Layer.prototype, 'handleRequest', createWrapLayerMethod())
+  shimmer.wrap(Layer.prototype, 'handleRequest', wrapHandleRequest)
   return Layer
 })
 
-function wrapProcessParamsMethod (original) {
+function wrapParam (original) {
   return function wrappedProcessParams (name, fn) {
     const wrappedFn = function wrappedParamCallback (req, res, next, param) {
-      if (processParamsStartCh.hasSubscribers) {
+      if (routerParamStartCh.hasSubscribers) {
         const abortController = new AbortController()
 
-        processParamsStartCh.publish({
+        routerParamStartCh.publish({
           req,
           res,
           params: req?.params,
@@ -262,7 +261,7 @@ function wrapProcessParamsMethod (original) {
 addHook({
   name: 'router', versions: ['>=2']
 }, router => {
-  shimmer.wrap(router.prototype, 'param', wrapProcessParamsMethod)
+  shimmer.wrap(router.prototype, 'param', wrapParam)
   return router
 })
 
