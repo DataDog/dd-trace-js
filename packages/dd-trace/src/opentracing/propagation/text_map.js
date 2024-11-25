@@ -339,11 +339,11 @@ class TextMapPropagator {
           context._links.push(link)
         }
       }
+    }
 
-      if (this._config.tracePropagationStyle.extract.includes('baggage') && carrier.baggage) {
-        context = context || new DatadogSpanContext()
-        this._extractBaggageItems(carrier, context)
-      }
+    if (this._config.tracePropagationStyle.extract.includes('baggage') && carrier.baggage) {
+      context = context || new DatadogSpanContext()
+      this._extractBaggageItems(carrier, context)
     }
 
     return context || this._extractSqsdContext(carrier)
