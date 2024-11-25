@@ -341,7 +341,7 @@ class TextMapPropagator {
       }
     }
 
-    if (this._config.tracePropagationStyle.extract.includes('baggage') && carrier.baggage) {
+    if (this._hasPropagationStyle('extract', 'baggage') && carrier.baggage) {
       context = context || new DatadogSpanContext()
       this._extractBaggageItems(carrier, context)
     }
