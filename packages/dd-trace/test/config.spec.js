@@ -28,6 +28,8 @@ describe('Config', () => {
   const BLOCKED_TEMPLATE_GRAPHQL_PATH = require.resolve('./fixtures/config/appsec-blocked-graphql-template.json')
   const BLOCKED_TEMPLATE_GRAPHQL = readFileSync(BLOCKED_TEMPLATE_GRAPHQL_PATH, { encoding: 'utf8' })
   const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
+  const CONFIG_NORM_RULES_PATH = require.resolve('./fixtures/telemetry/config_norm_rules.json')
+  const CONFIG_NORM_RULES = readFileSync(CONFIG_NORM_RULES_PATH, { encoding: 'utf8' })
 
   function reloadLoggerAndConfig () {
     log = proxyquire('../src/log', {})
@@ -2257,6 +2259,56 @@ describe('Config', () => {
       expect(taggingConfig).to.have.property('requestsEnabled', true)
       expect(taggingConfig).to.have.property('responsesEnabled', true)
       expect(taggingConfig).to.have.property('maxDepth', 7)
+    })
+
+    it('config_norm_rules completeness', () => {
+      // ⚠️ Did this test just fail? Read here! ⚠️
+      //
+      // config_norm_rules.json was copied manually from/below the paths
+      // from: https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
+      // to: packages/dd-trace/test/fixtures/telemetry/config_norm_rules.json
+      //
+      // If this test fails, it means that a telemetry key was found in config.js that does not
+      // exist in config_norm_rules.json - the impact here is that telemetry will not be reported
+      // to the Datadog backend and will be unusable.
+      //
+      // To fix this, you can either
+      // 1) Update dd-go (above) to include the proper config rules
+      // 2) Update TELEMETRY_IGNORE_LIST below to include the config that should not be sent to telemetry
+
+      function getKeysInDotNotation(obj, parentKey = '') {
+        const keys = [];
+
+        for (const key in obj) {
+          if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            const fullKey = parentKey ? `${parentKey}.${key}` : key;
+
+            if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
+              keys.push(...getKeysInDotNotation(obj[key], fullKey));
+            } else {
+              keys.push(fullKey);
+            }
+          }
+        }
+
+        return keys;
+      }
+
+      // anything that should never be in telemetry should be added here
+      const TELEMETRY_IGNORE_LIST = [
+          'apikey',
+      ]
+
+      const config = new Config()
+
+      const libraryTelemetryKeys = getKeysInDotNotation(config).sort().map((s) => s.toLowerCase());
+
+      const telemetryRules = JSON.parse(CONFIG_NORM_RULES);
+      const backendTelemetryKeys = Object.keys(telemetryRules);
+
+      const missingTelemetryKeys = libraryTelemetryKeys.filter(element => !backendTelemetryKeys.includes(element) && !TELEMETRY_IGNORE_LIST.includes(element));
+
+      expect(missingTelemetryKeys).to.be.empty;
     })
   })
 })
