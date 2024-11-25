@@ -134,7 +134,7 @@ class RemoteConfigManager extends EventEmitter {
       if (statusCode === 404) return cb()
 
       if (err) {
-        log.error(err)
+        log.error('[RC] Error in request', err)
         return cb()
       }
 
@@ -148,7 +148,7 @@ class RemoteConfigManager extends EventEmitter {
         try {
           this.parseConfig(JSON.parse(data))
         } catch (err) {
-          log.error(`Could not parse remote config response: ${err}`)
+          log.error('[RC] Could not parse remote config response', err)
 
           this.state.client.state.has_error = true
           this.state.client.state.error = err.toString()

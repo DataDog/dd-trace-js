@@ -212,7 +212,7 @@ describe('RemoteConfigManager', () => {
 
       rc.poll(() => {
         expect(request).to.have.been.calledOnceWith(payload, expectedPayload)
-        expect(log.error).to.have.been.calledOnceWithExactly(err)
+        expect(log.error).to.have.been.calledOnceWithExactly('[RC] Error in request', err)
         expect(rc.parseConfig).to.not.have.been.called
         cb()
       })
@@ -232,10 +232,11 @@ describe('RemoteConfigManager', () => {
     })
 
     it('should catch exceptions, update the error state, and clear the error state at next request', (cb) => {
+      const error = new Error('Unable to parse config')
       request
         .onFirstCall().yieldsRight(null, '{"a":"b"}', 200)
         .onSecondCall().yieldsRight(null, null, 200)
-      rc.parseConfig.onFirstCall().throws(new Error('Unable to parse config'))
+      rc.parseConfig.onFirstCall().throws(error)
 
       const payload = JSON.stringify(rc.state)
 
@@ -243,7 +244,7 @@ describe('RemoteConfigManager', () => {
         expect(request).to.have.been.calledOnceWith(payload, expectedPayload)
         expect(rc.parseConfig).to.have.been.calledOnceWithExactly({ a: 'b' })
         expect(log.error).to.have.been
-          .calledOnceWithExactly('Could not parse remote config response: Error: Unable to parse config')
+          .calledOnceWithExactly('[RC] Could not parse remote config response', error)
         expect(rc.state.client.state.has_error).to.be.true
         expect(rc.state.client.state.error).to.equal('Error: Unable to parse config')
 
