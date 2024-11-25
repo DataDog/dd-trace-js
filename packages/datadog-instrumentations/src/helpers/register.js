@@ -145,7 +145,7 @@ for (const packageName of names) {
           `integration:${name}`,
           `integration_version:${version}`
         ])
-        log.info(`Found incompatible integration version: ${nameVersion}`)
+        log.info('Found incompatible integration version: %s', nameVersion)
         seenCombo.add(nameVersion)
       }
     }
