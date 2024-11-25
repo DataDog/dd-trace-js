@@ -194,5 +194,6 @@ function trackUser (user, abortController) {
 
 module.exports = {
   setCollectionMode,
-  trackLogin
+  trackLogin,
+  trackUser
 }

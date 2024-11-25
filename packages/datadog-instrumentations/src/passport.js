@@ -1,7 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { addHook } = require('./helpers/instrument')
+const { channel, addHook } = require('./helpers/instrument')
 
 /* TODO: test with:
 passport-jwt JWTs
@@ -17,7 +17,9 @@ passport-http-bearer
 koa-passport
 */
 
-function wrapDone (done) {
+const onPassportDeserializeUserChannel = channel('datadog:passport:deserializeUser:finish')
+
+function wrapDone (req, done) {
   // eslint-disable-next-line n/handle-callback-err
   return function wrappedDone (err, user) {
     if (user) {
@@ -25,7 +27,7 @@ function wrapDone (done) {
 
       // express-session middleware sets req.sessionID, it's required to use passport sessions anyway so might as well use it ?
       // what if session IDs are using rolling sessions or always changing or something idk ?
-      channel.publish({ req, user, sessionId: req.sessionID, abortController })
+      onPassportDeserializeUserChannel.publish({ req, user, sessionId: req.sessionID, abortController })
 
       if (abortController.signal.aborted) return
     }
