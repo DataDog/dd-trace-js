@@ -2,7 +2,9 @@
 
 /* eslint-disable no-var */
 
-var NODE_MAJOR = require('./version').NODE_MAJOR
+var nodeVersion = require('./version')
+var NODE_MAJOR = nodeVersion.NODE_MAJOR
+var NODE_MINOR = nodeVersion.NODE_MINOR
 
 // We use several things that are not supported by older versions of Node:
 // - AsyncLocalStorage
@@ -11,7 +13,7 @@ var NODE_MAJOR = require('./version').NODE_MAJOR
 // - Mocha (for testing)
 // and probably others.
 // TODO: Remove all these dependencies so that we can report telemetry.
-if (NODE_MAJOR >= 12) {
+if ((NODE_MAJOR === 12 && NODE_MINOR >= 17) || NODE_MAJOR > 12) {
   var path = require('path')
   var Module = require('module')
   var semver = require('semver')

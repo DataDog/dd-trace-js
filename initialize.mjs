@@ -31,11 +31,16 @@ ${result.source}`
   return result
 }
 
+const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(x => +x)
+
+const brokenLoaders = NODE_MAJOR === 18 && NODE_MINOR === 0
+
 export async function load (...args) {
-  return insertInit(await origLoad(...args))
+  const loadHook = brokenLoaders ? args[args.length - 1] : origLoad
+  return insertInit(await loadHook(...args))
 }
 
-export const resolve = origResolve
+export const resolve = brokenLoaders ? undefined : origResolve
 
 export const getFormat = origGetFormat
 
