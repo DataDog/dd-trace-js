@@ -60,7 +60,7 @@ function getUserId (user) {
     if (id && typeof id.toString === 'function') {
       id = id.toString()
 
-      if (id.startsWith('[object ')) {
+      if (typeof id !== 'string' || id.startsWith('[object ')) {
         // probably not a usable ID ?
         continue
       }
