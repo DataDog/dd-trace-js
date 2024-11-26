@@ -7,6 +7,7 @@ let config
 let rc
 let RemoteConfigManager
 let RuleManager
+let UserTracking
 let appsec
 let remoteConfig
 
@@ -14,7 +15,10 @@ describe('Remote Config index', () => {
   beforeEach(() => {
     config = {
       appsec: {
-        enabled: undefined
+        enabled: undefined,
+        eventTracking: {
+          mode: 'identification'
+        }
       }
     }
 
@@ -32,6 +36,10 @@ describe('Remote Config index', () => {
       updateWafFromRC: sinon.stub()
     }
 
+    UserTracking = {
+      setCollectionMode: sinon.stub()
+    }
+
     appsec = {
       enable: sinon.spy(),
       disable: sinon.spy()
@@ -40,6 +48,7 @@ describe('Remote Config index', () => {
     remoteConfig = proxyquire('../src/appsec/remote_config', {
       './manager': RemoteConfigManager,
       '../rule_manager': RuleManager,
+      '../user_tracking': UserTracking,
       '..': appsec
     })
   })
@@ -52,6 +61,8 @@ describe('Remote Config index', () => {
 
       expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
       expect(rc.updateCapabilities).to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ACTIVATION, true)
+      expect(rc.updateCapabilities)
+        .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
       expect(rc.setProductHandler).to.have.been.calledWith('ASM_FEATURES')
       expect(rc.setProductHandler.firstCall.args[1]).to.be.a('function')
     })
@@ -63,6 +74,8 @@ describe('Remote Config index', () => {
 
       expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
       expect(rc.updateCapabilities).to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_ACTIVATION)
+      expect(rc.updateCapabilities)
+        .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
       expect(rc.setProductHandler).to.have.been.calledOnceWith('ASM_FEATURES')
       expect(rc.setProductHandler.firstCall.args[1]).to.be.a('function')
     })
@@ -74,6 +87,8 @@ describe('Remote Config index', () => {
 
       expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
       expect(rc.updateCapabilities).to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_ACTIVATION, true)
+      expect(rc.updateCapabilities)
+        .to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
       expect(rc.setProductHandler).to.not.have.been.called
     })
 
@@ -109,6 +124,57 @@ describe('Remote Config index', () => {
 
         expect(appsec.enable).to.not.have.been.called
         expect(appsec.disable).to.not.have.been.called
+      })
+
+      describe('auto_user_instrum', () => {
+        const rcConfig = { auto_user_instrum: { mode: 'anonymous' } }
+        const configId = 'collectionModeId'
+
+        afterEach(() => {
+          listener('unnaply', rcConfig, configId)
+        })
+
+        it('should not update collection mode when not a string', () => {
+          listener('apply', { auto_user_instrum: { mode: 123 } }, configId)
+
+          expect(UserTracking.setCollectionMode).to.not.have.been.called
+        })
+
+        it('should throw when called two times with different config ids', () => {
+          listener('apply', rcConfig, configId)
+
+          expect(() => listener('apply', rcConfig, 'anotherId')).to.throw()
+        })
+
+        it('should update collection mode when called with apply', () => {
+          listener('apply', rcConfig, configId)
+
+          expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly(rcConfig.auto_user_instrum.mode)
+        })
+
+        it('should update collection mode when called with modify', () => {
+          listener('modify', rcConfig, configId)
+
+          expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly(rcConfig.auto_user_instrum.mode)
+        })
+
+        it('should revert collection mode when called with unnaply', () => {
+          listener('apply', rcConfig, configId)
+          UserTracking.setCollectionMode.resetHistory()
+
+          listener('unnaply', rcConfig, configId)
+
+          expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly(config.appsec.eventTracking.mode)
+        })
+
+        it('should not revert collection mode when called with unnaply and unknown id', () => {
+          listener('apply', rcConfig, configId)
+          UserTracking.setCollectionMode.resetHistory()
+
+          listener('unnaply', rcConfig, 'unknownId')
+
+          expect(UserTracking.setCollectionMode).to.not.have.been.called
+        })
       })
     })
   })
