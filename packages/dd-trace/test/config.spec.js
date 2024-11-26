@@ -30,6 +30,8 @@ describe('Config', () => {
   const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
   const CONFIG_NORM_RULES_PATH = require.resolve('./fixtures/telemetry/config_norm_rules.json')
   const CONFIG_NORM_RULES = readFileSync(CONFIG_NORM_RULES_PATH, { encoding: 'utf8' })
+  const CONFIG_PREFIX_BLOCK_LIST_PATH = require.resolve('./fixtures/telemetry/config_prefix_block_list.json')
+  const CONFIG_PREFIX_BLOCK_LIST = readFileSync(CONFIG_PREFIX_BLOCK_LIST_PATH, { encoding: 'utf8' })
 
   function reloadLoggerAndConfig () {
     log = proxyquire('../src/log', {})
@@ -2268,13 +2270,17 @@ describe('Config', () => {
       // from: https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
       // to: packages/dd-trace/test/fixtures/telemetry/config_norm_rules.json
       //
-      // If this test fails, it means that a telemetry key was found in config.js that does not
-      // exist in config_norm_rules.json - the impact here is that telemetry will not be reported
-      // to the Datadog backend and will be unusable.
+      // config_prefix_block_list.json was copied manually from/below the paths
+      // from: https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_prefix_block_list.json
+      // to: packages/dd-trace/test/fixtures/telemetry/config_prefix_block_list.json
       //
-      // To fix this, you can either
-      // 1) Update dd-go (above) to include the proper config rules
-      // 2) Update TELEMETRY_IGNORE_LIST below to add configs that are not sent to telemetry
+      // If this test fails, it means that a telemetry key was found in config.js that does not
+      // exist in config_norm_rules.json and is not blocked via config_prefix_block_list
+      // The impact is that telemetry will not be reported to the Datadog backend won't be unusable
+      //
+      // To fix this, you must update dd-go to either
+      // 1) Add the exact config keys to config_norm_rules
+      // 2) Add a prefix that matches the config keys to config_prefix_block_list
 
       function getKeysInDotNotation(obj, parentKey = '') {
         const keys = []
@@ -2294,22 +2300,23 @@ describe('Config', () => {
         return keys
       }
 
-      // anything that is not sent via telemetry/handled separately should be added here
-      const TELEMETRY_IGNORE_LIST = [
-          'apiKey', // this is not sent to telemetry (needs confirmation)
-      ]
-
       const config = new Config()
 
-      const libraryTelemetryKeys = getKeysInDotNotation(config).sort();
+      const libraryConfigKeys = getKeysInDotNotation(config).sort();
 
-      const telemetryRules = JSON.parse(CONFIG_NORM_RULES);
-      const backendTelemetryKeys = Object.keys(telemetryRules);
+      const configNormRules = JSON.parse(CONFIG_NORM_RULES);
+      const allowedConfigKeys = Object.keys(configNormRules);
 
-      const missingTelemetryKeys = libraryTelemetryKeys
-          .filter(element => !backendTelemetryKeys.includes(element) && !TELEMETRY_IGNORE_LIST.includes(element));
+      const blockedConfigKeyPrefixes = JSON.parse(CONFIG_PREFIX_BLOCK_LIST);
 
-      expect(missingTelemetryKeys).to.be.empty;
+
+      const missingConfigKeys = libraryConfigKeys.filter(key => {
+        const isAllowed = allowedConfigKeys.includes(key);
+        const isBlocked = blockedConfigKeyPrefixes.some(prefix => key.startsWith(prefix));
+        return !isAllowed && !isBlocked;
+      });
+
+      expect(missingConfigKeys).to.be.empty;
     })
   })
 })
