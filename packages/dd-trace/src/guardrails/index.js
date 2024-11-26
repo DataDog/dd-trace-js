@@ -64,4 +64,4 @@ function guard (fn) {
   }
 }
 
-module.exports = { guard }
+module.exports = guard
