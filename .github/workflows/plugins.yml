@@ -828,10 +828,6 @@ jobs:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          cache: yarn
-          node-version: '16'
       - uses: ./.github/actions/install
       - run: yarn config set ignore-engines true
       - run: yarn services --ignore-engines
