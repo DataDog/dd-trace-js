@@ -827,8 +827,10 @@ jobs:
       # Needed to fix issue with `actions/checkout@v3: https://github.com/actions/checkout/issues/1590
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
+      - run: which node
       - uses: actions/checkout@v3
       - uses: ./.github/actions/install
+      - run: which node
       - run: yarn config set ignore-engines true
       - run: yarn services --ignore-engines
       - run: yarn test:plugins --ignore-engines
