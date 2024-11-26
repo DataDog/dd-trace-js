@@ -802,7 +802,11 @@ jobs:
   # TODO: Figure out why nyc stopped working with EACCESS errors.
   oracledb:
     runs-on: ubuntu-latest
-    container: bengl/node-12-with-oracle-client
+    container:
+      image: bengl/node-12-with-oracle-client
+      volumes:
+        - /node20217:/node20217:rw,rshared
+        - /node20217:/__e/node20:ro,rshared
     services:
       oracledb:
         image: gvenzl/oracle-xe:18-slim
@@ -827,7 +831,11 @@ jobs:
       # Needed to fix issue with `actions/checkout@v3: https://github.com/actions/checkout/issues/1590
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
-      - run: which node
+      # https://github.com/actions/runner/issues/2906#issuecomment-2109514798
+      - name: Install Node for runner (with glibc 2.17 compatibility)
+        run: |
+          curl -LO https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
+          tar -xf node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
       - uses: actions/checkout@v3
       - uses: ./.github/actions/install
       - run: which node
