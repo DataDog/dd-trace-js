@@ -842,7 +842,6 @@ jobs:
           cache: yarn
           node-version: '16'
       - uses: ./.github/actions/install
-      - run: which node
       - run: yarn config set ignore-engines true
       - run: yarn services --ignore-engines
       - run: yarn test:plugins --ignore-engines
