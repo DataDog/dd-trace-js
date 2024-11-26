@@ -2,7 +2,6 @@
 
 const log = require('../../log')
 const { storage } = require('../storage')
-const { storage: apmStorage } = require('../../../../datadog-core')
 
 const TracingPlugin = require('../../plugins/tracing')
 const LLMObsTagger = require('../tagger')
@@ -33,9 +32,27 @@ class LLMObsPlugin extends TracingPlugin {
 
     const registerOptions = this.getLLMObsSpanRegisterOptions(ctx)
 
+    // register options may not be set for operations we do not trace with llmobs
+    // ie OpenAI fine tuning jobs, file jobs, etc.
     if (registerOptions) {
+      ctx.llmobs = {} // initialize context-based namespace
+      storage.enterWith({ span })
+      ctx.llmobs.parent = parent
+
       this._tagger.registerLLMObsSpan(span, { parent, ...registerOptions })
     }
+  }
+
+  end (ctx) {
+    const enabled = this._tracerConfig.llmobs.enabled
+    if (!enabled) return
+
+    // only attempt to restore the context if the current span was an LLMObs span
+    const span = ctx.currentStore?.span
+    if (!LLMObsTagger.tagMap.has(span)) return
+
+    const parent = ctx.llmobs.parent
+    storage.enterWith({ span: parent })
   }
 
   asyncEnd (ctx) {
@@ -66,22 +83,8 @@ class LLMObsPlugin extends TracingPlugin {
   }
 
   getLLMObsParent () {
-    // we need to look one level up the APM span stack to find the parent
-    // the current span is the current langchain span (it was activated in the tracing `bindStart`)
-    const parentApmSpan = apmStorage.getStore()?.span?._store?.span
-    const parentLLMObsSpan = storage.getStore()?.span
-
-    let parent
-    if (
-      parentApmSpan === parentLLMObsSpan || // they are the same
-      LLMObsTagger.tagMap.has(parentApmSpan) // they are not the same, but the APM span is a parent
-    ) {
-      parent = parentApmSpan
-    } else {
-      parent = parentLLMObsSpan
-    }
-
-    return parent
+    const store = storage.getStore()
+    return store?.span
   }
 }
 

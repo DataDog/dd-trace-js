@@ -37,6 +37,8 @@ describe('integrations', () => {
   let langchainPrompts
   let langchainRunnables
 
+  let llmobs
+
   // so we can verify it gets tagged properly
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
@@ -45,7 +47,7 @@ describe('integrations', () => {
   })
 
   describe('langchain', () => {
-    before(() => {
+    before(async () => {
       sinon.stub(LLMObsAgentProxySpanWriter.prototype, 'append')
 
       // reduce errors related to too many listeners
@@ -53,11 +55,13 @@ describe('integrations', () => {
 
       LLMObsAgentProxySpanWriter.prototype.append.reset()
 
-      return agent.load('langchain', {}, {
+      await agent.load('langchain', {}, {
         llmobs: {
           mlApp: 'test'
         }
       })
+
+      llmobs = require('../../../../../..').llmobs
     })
 
     afterEach(() => {
@@ -1005,6 +1009,94 @@ describe('integrations', () => {
               ],
               input: 'What is the powerhouse of the cell?'
             })
+
+            await checkTraces
+          })
+
+          it('traces a manually-instrumented step', async () => {
+            stubCall({
+              ...openAiBaseChatInfo,
+              response: {
+                choices: [
+                  {
+                    message: {
+                      content: '3 squared is 9',
+                      role: 'assistant'
+                    }
+                  }
+                ],
+                usage: { prompt_tokens: 8, completion_tokens: 12, total_tokens: 20 }
+              }
+            })
+
+            let lengthFunction = (input = { foo: '' }) => {
+              llmobs.annotate({ inputData: input }) // so we don't try and tag `config` with auto-annotation
+              return {
+                length: input.foo.length.toString()
+              }
+            }
+            lengthFunction = llmobs.wrap({ kind: 'task' }, lengthFunction)
+
+            const model = new langchainOpenai.ChatOpenAI({ model: 'gpt-4o' })
+
+            const prompt = langchainPrompts.ChatPromptTemplate.fromTemplate('What is {length} squared?')
+
+            const chain = langchainRunnables.RunnableLambda.from(lengthFunction)
+              .pipe(prompt)
+              .pipe(model)
+              .pipe(new langchainOutputParsers.StringOutputParser())
+
+            const checkTraces = agent.use(traces => {
+              const spans = traces[0]
+              expect(spans.length).to.equal(3)
+
+              const workflowSpan = spans[0]
+              const taskSpan = spans[1]
+              const llmSpan = spans[2]
+
+              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const taskSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
+              const llmSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(2).args[0]
+
+              const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
+                span: workflowSpan,
+                spanKind: 'workflow',
+                name: 'langchain_core.runnables.RunnableSequence',
+                inputValue: JSON.stringify({ foo: 'bar' }),
+                outputValue: '3 squared is 9',
+                tags: { ml_app: 'test', language: 'javascript' }
+              })
+
+              const expectedTask = expectedLLMObsNonLLMSpanEvent({
+                span: taskSpan,
+                parentId: workflowSpan.span_id,
+                spanKind: 'task',
+                name: 'lengthFunction',
+                inputValue: JSON.stringify({ foo: 'bar' }),
+                outputValue: JSON.stringify({ length: '3' }),
+                tags: { ml_app: 'test', language: 'javascript' }
+              })
+
+              const expectedLLM = expectedLLMObsLLMSpanEvent({
+                span: llmSpan,
+                parentId: workflowSpan.span_id,
+                spanKind: 'llm',
+                modelName: 'gpt-4o',
+                modelProvider: 'openai',
+                name: 'langchain.chat_models.openai.ChatOpenAI',
+                inputMessages: [{ content: 'What is 3 squared?', role: 'user' }],
+                outputMessages: [{ content: '3 squared is 9', role: 'assistant' }],
+                metadata: MOCK_ANY,
+                tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
+                tags: { ml_app: 'test', language: 'javascript' }
+              })
+
+              expect(workflowSpanEvent).to.deepEqualWithMockValues(expectedWorkflow)
+              expect(taskSpanEvent).to.deepEqualWithMockValues(expectedTask)
+              expect(llmSpanEvent).to.deepEqualWithMockValues(expectedLLM)
+            })
+
+            await chain.invoke({ foo: 'bar' })
 
             await checkTraces
           })

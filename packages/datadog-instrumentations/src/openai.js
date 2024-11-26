@@ -338,6 +338,8 @@ for (const shim of V4_PACKAGE_SHIMS) {
               })
           })
 
+          ch.end.publish(ctx)
+
           return apiProm
         })
       })
