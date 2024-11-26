@@ -3,7 +3,7 @@
 /* eslint-disable no-var */
 /* eslint-disable no-console */
 
-const isTrue = require('./util').isTrue
+var isTrue = require('./util').isTrue
 
 var DD_TRACE_DEBUG = process.env.DD_TRACE_DEBUG
 var DD_TRACE_LOG_LEVEL = process.env.DD_TRACE_LOG_LEVEL
