@@ -46,7 +46,7 @@ describe('Remote Config index', () => {
 
   describe('enable', () => {
     it('should listen to remote config when appsec is not explicitly configured', () => {
-      config.appsec = { enabled: undefined }
+      config.appsec.enabled = undefined
 
       remoteConfig.enable(config)
 
@@ -57,18 +57,18 @@ describe('Remote Config index', () => {
     })
 
     it('should listen to remote config when appsec is explicitly configured as enabled=true', () => {
-      config.appsec = { enabled: true }
+      config.appsec.enabled = true
 
       remoteConfig.enable(config)
 
       expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
-      expect(rc.updateCapabilities).to.not.have.been.calledWith('ASM_ACTIVATION')
+      expect(rc.updateCapabilities).to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_ACTIVATION)
       expect(rc.setProductHandler).to.have.been.calledOnceWith('ASM_FEATURES')
       expect(rc.setProductHandler.firstCall.args[1]).to.be.a('function')
     })
 
     it('should not listen to remote config when appsec is explicitly configured as enabled=false', () => {
-      config.appsec = { enabled: false }
+      config.appsec.enabled = false
 
       remoteConfig.enable(config)
 
@@ -81,8 +81,6 @@ describe('Remote Config index', () => {
       let listener
 
       beforeEach(() => {
-        config.appsec = { enabled: undefined }
-
         remoteConfig.enable(config, appsec)
 
         listener = rc.setProductHandler.firstCall.args[1]
