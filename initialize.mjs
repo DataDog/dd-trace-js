@@ -12,6 +12,7 @@
 
 import { isMainThread } from 'worker_threads'
 
+import * as Module from 'node:module'
 import { fileURLToPath } from 'node:url'
 import {
   load as origLoad,
@@ -31,11 +32,16 @@ ${result.source}`
   return result
 }
 
+const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(x => +x)
+
+const brokenLoaders = NODE_MAJOR === 18 && NODE_MINOR === 0
+
 export async function load (...args) {
-  return insertInit(await origLoad(...args))
+  const loadHook = brokenLoaders ? args[args.length - 1] : origLoad
+  return insertInit(await loadHook(...args))
 }
 
-export const resolve = origResolve
+export const resolve = brokenLoaders ? undefined : origResolve
 
 export const getFormat = origGetFormat
 
@@ -44,12 +50,9 @@ export async function getSource (...args) {
 }
 
 if (isMainThread) {
-  // Need this IIFE for versions of Node.js without top-level await.
-  (async () => {
-    await import('./init.js')
-    const { register } = await import('node:module')
-    if (register) {
-      register('./loader-hook.mjs', import.meta.url)
-    }
-  })()
+  const require = Module.createRequire(import.meta.url)
+  require('./init.js')
+  if (Module.register) {
+    Module.register('./loader-hook.mjs', import.meta.url)
+  }
 }
