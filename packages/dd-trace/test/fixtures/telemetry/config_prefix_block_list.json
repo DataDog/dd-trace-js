@@ -1,4 +1,6 @@
 [
+  "apiKey",
+  "appsec.eventTracking.enabled",
   "trace.integration.",
   "global_tag_runtime-id",
   "tracePropagationStyle.inject.",

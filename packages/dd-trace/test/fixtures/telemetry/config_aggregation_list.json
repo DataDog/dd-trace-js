@@ -19,5 +19,6 @@
   "logger.": "logger_configs",
   "sampler.rules.": "sampler_rules",
   "sampler.spansamplingrules.": "sampler_span_sampling_rules",
-  "appsec.rules.rules": "appsec_rules"
+  "appsec.rules.rules": "appsec_rules",
+  "installSignature": "install_signature"
 }
