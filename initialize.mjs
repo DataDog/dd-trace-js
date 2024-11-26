@@ -12,6 +12,7 @@
 
 import { isMainThread } from 'worker_threads'
 
+import * as Module from 'node:module'
 import { fileURLToPath } from 'node:url'
 import {
   load as origLoad,
@@ -49,12 +50,9 @@ export async function getSource (...args) {
 }
 
 if (isMainThread) {
-  // Need this IIFE for versions of Node.js without top-level await.
-  (async () => {
-    await import('./init.js')
-    const { register } = await import('node:module')
-    if (register) {
-      register('./loader-hook.mjs', import.meta.url)
-    }
-  })()
+  const require = Module.createRequire(import.meta.url)
+  require('./init.js')
+  if (Module.register) {
+    Module.register('./loader-hook.mjs', import.meta.url)
+  }
 }
