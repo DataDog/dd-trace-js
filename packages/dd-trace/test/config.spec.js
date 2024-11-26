@@ -32,6 +32,11 @@ describe('Config', () => {
   const CONFIG_NORM_RULES = readFileSync(CONFIG_NORM_RULES_PATH, { encoding: 'utf8' })
   const CONFIG_PREFIX_BLOCK_LIST_PATH = require.resolve('./fixtures/telemetry/config_prefix_block_list.json')
   const CONFIG_PREFIX_BLOCK_LIST = readFileSync(CONFIG_PREFIX_BLOCK_LIST_PATH, { encoding: 'utf8' })
+  const CONFIG_AGGREGATION_LIST_PATH = require.resolve('./fixtures/telemetry/config_aggregation_list.json')
+  const CONFIG_AGGREGATION_LIST = readFileSync(CONFIG_AGGREGATION_LIST_PATH, { encoding: 'utf8' })
+  const NODEJS_CONFIG_RULES_PATH = require.resolve('./fixtures/telemetry/nodejs_config_rules.json')
+  const NODEJS_CONFIG_RULES = readFileSync(NODEJS_CONFIG_RULES_PATH, { encoding: 'utf8' })
+
 
   function reloadLoggerAndConfig () {
     log = proxyquire('../src/log', {})
@@ -2279,8 +2284,10 @@ describe('Config', () => {
       // The impact is that telemetry will not be reported to the Datadog backend won't be unusable
       //
       // To fix this, you must update dd-go to either
-      // 1) Add the exact config keys to config_norm_rules
-      // 2) Add a prefix that matches the config keys to config_prefix_block_list
+      // 1) Add an exact config key to match config_norm_rules.json
+      // 2) Add a prefix that matches the config keys to config_prefix_block_list.json
+      // 3) Add a prefix rule that fits an existing prefix to config_aggregation_list.json
+      // 4) (Discouraged) Add a language-specific rule to nodejs_config_rules.json
 
       function getKeysInDotNotation(obj, parentKey = '') {
         const keys = []
@@ -2304,16 +2311,20 @@ describe('Config', () => {
 
       const libraryConfigKeys = getKeysInDotNotation(config).sort();
 
+      const nodejsConfigRules = JSON.parse(NODEJS_CONFIG_RULES);
       const configNormRules = JSON.parse(CONFIG_NORM_RULES);
-      const allowedConfigKeys = Object.keys(configNormRules);
+      const configPrefixBlockList = JSON.parse(CONFIG_PREFIX_BLOCK_LIST);
+      const configAggregationList = JSON.parse(CONFIG_AGGREGATION_LIST);
 
-      const blockedConfigKeyPrefixes = JSON.parse(CONFIG_PREFIX_BLOCK_LIST);
-
+      const allowedConfigKeys = [...Object.keys(configNormRules), ...Object.keys(nodejsConfigRules['normalization_rules'])];
+      const blockedConfigKeyPrefixes = [...configPrefixBlockList, ...nodejsConfigRules['prefix_block_list']];
+      const configAggregationPrefixes = [...Object.keys(configAggregationList), ...Object.keys(nodejsConfigRules['reduce_rules'])];
 
       const missingConfigKeys = libraryConfigKeys.filter(key => {
         const isAllowed = allowedConfigKeys.includes(key);
         const isBlocked = blockedConfigKeyPrefixes.some(prefix => key.startsWith(prefix));
-        return !isAllowed && !isBlocked;
+        const isReduced = configAggregationPrefixes.some(prefix => key.startsWith(prefix));
+        return !isAllowed && !isBlocked && !isReduced;
       });
 
       expect(missingConfigKeys).to.be.empty;
