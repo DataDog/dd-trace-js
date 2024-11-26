@@ -40,8 +40,9 @@ describe('ldap-injection-analyzer with ldapjs', () => {
         })
       })
 
-      afterEach(() => {
-        client.unbind()
+      afterEach((done) => {
+        // testing
+        client.unbind(done)
       })
 
       describe('has vulnerability', () => {
