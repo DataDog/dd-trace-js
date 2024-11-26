@@ -271,6 +271,12 @@
       "versions": ["6.1.0"]
     }
   ],
+  "langchain": [
+    {
+      "name": "@langchain/anthropic",
+      "versions": [">=0.1"]
+    }
+  ],
   "ldapjs": [
     {
       "name": "ldapjs",

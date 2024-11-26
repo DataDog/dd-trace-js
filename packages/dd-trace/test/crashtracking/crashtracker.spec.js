@@ -73,6 +73,15 @@ describe('crashtracking', () => {
 
         expect(() => crashtracker.start(config)).to.not.throw()
       })
+
+      it('should handle unix sockets', () => {
+        config.url = new URL('unix:///var/datadog/apm/test.socket')
+
+        crashtracker.start(config)
+
+        expect(binding.init).to.have.been.called
+        expect(log.error).to.not.have.been.called
+      })
     })
 
     describe('configure', () => {

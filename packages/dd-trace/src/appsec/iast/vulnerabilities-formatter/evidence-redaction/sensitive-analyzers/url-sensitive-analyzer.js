@@ -1,6 +1,6 @@
 'use strict'
 
-const iastLog = require('../../../iast-log')
+const log = require('../../../../../log')
 
 const AUTHORITY = '^(?:[^:]+:)?//([^@]+)@'
 const QUERY_FRAGMENT = '[?#&]([^=&;]+)=([^?#&]+)'
@@ -33,7 +33,7 @@ module.exports = function extractSensitiveRanges (evidence) {
 
     return ranges
   } catch (e) {
-    iastLog.debug(e)
+    log.debug('[ASM] Error extracting sensitive ranges', e)
   }
 
   return []

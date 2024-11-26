@@ -20,6 +20,7 @@ const telemetryGood = ['complete', 'injection_forced:false']
 const { engines } = require('../package.json')
 const supportedRange = engines.node
 const currentVersionIsSupported = semver.satisfies(process.versions.node, supportedRange)
+const currentVersionCanLog = semver.satisfies(process.versions.node, '>=12.17.0')
 
 // These are on by default in release tests, so we'll turn them off for
 // more fine-grained control of these variables in these tests.
@@ -83,7 +84,30 @@ function testRuntimeVersionChecks (arg, filename) {
       }
     }
 
-    if (!currentVersionIsSupported) {
+    if (!currentVersionCanLog) {
+      context('when node version is too low for AsyncLocalStorage', () => {
+        useEnv({ NODE_OPTIONS })
+
+        it('should initialize the tracer, if no DD_INJECTION_ENABLED', () =>
+          doTest('false\n'))
+        context('with DD_INJECTION_ENABLED', () => {
+          useEnv({ DD_INJECTION_ENABLED })
+
+          context('without debug', () => {
+            it('should not initialize the tracer', () => doTest('false\n'))
+            it('should not, if DD_INJECT_FORCE', () => doTestForced('false\n'))
+          })
+          context('with debug', () => {
+            useEnv({ DD_TRACE_DEBUG })
+
+            it('should not initialize the tracer', () =>
+              doTest('false\n'))
+            it('should initialize the tracer, if DD_INJECT_FORCE', () =>
+              doTestForced('false\n'))
+          })
+        })
+      })
+    } else if (!currentVersionIsSupported) {
       context('when node version is less than engines field', () => {
         useEnv({ NODE_OPTIONS })
 
@@ -165,17 +189,22 @@ describe('init.js', () => {
   testRuntimeVersionChecks('require', 'init.js')
 })
 
-// ESM is not supportable prior to Node.js 12
-if (semver.satisfies(process.versions.node, '>=12')) {
+// ESM is not supportable prior to Node.js 12.17.0, 14.13.1 on the 14.x line,
+// or on 18.0.0 in particular.
+if (
+  semver.satisfies(process.versions.node, '>=12.17.0') &&
+  semver.satisfies(process.versions.node, '>=14.13.1')
+) {
   describe('initialize.mjs', () => {
     useSandbox()
     stubTracerIfNeeded()
 
     context('as --loader', () => {
-      testInjectionScenarios('loader', 'initialize.mjs', true)
+      testInjectionScenarios('loader', 'initialize.mjs',
+        process.versions.node !== '18.0.0')
       testRuntimeVersionChecks('loader', 'initialize.mjs')
     })
-    if (Number(process.versions.node.split('.')[0]) >= 18) {
+    if (semver.satisfies(process.versions.node, '>=20.6.0')) {
       context('as --import', () => {
         testInjectionScenarios('import', 'initialize.mjs', true)
         testRuntimeVersionChecks('loader', 'initialize.mjs')

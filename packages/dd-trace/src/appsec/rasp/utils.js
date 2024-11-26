@@ -8,7 +8,7 @@ const log = require('../../log')
 const abortOnUncaughtException = process.execArgv?.includes('--abort-on-uncaught-exception')
 
 if (abortOnUncaughtException) {
-  log.warn('The --abort-on-uncaught-exception flag is enabled. The RASP module will not block operations.')
+  log.warn('[ASM] The --abort-on-uncaught-exception flag is enabled. The RASP module will not block operations.')
 }
 
 const RULE_TYPES = {
