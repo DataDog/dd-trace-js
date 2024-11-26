@@ -108,10 +108,14 @@ class SchemaExtractor {
       if (!builder.shouldExtractSchema(schemaName, depth)) {
         return false
       }
-      for (const field of schema.fields) {
-        if (!this.extractProperty(field, schemaName, field.name, builder, depth)) {
-          log.warn(`DSM: Unable to extract field with name: ${field.name} from Avro schema with name: ${schemaName}`)
+      if (schema.fields?.[Symbol.iterator]) {
+        for (const field of schema.fields) {
+          if (!this.extractProperty(field, schemaName, field.name, builder, depth)) {
+            log.warn(`DSM: Unable to extract field with name: ${field.name} from Avro schema with name: ${schemaName}`)
+          }
         }
+      } else {
+        log.warn(`DSM: schema.fields is not iterable from Avro schema with name: ${schemaName}`)
       }
     }
     return true

@@ -20,11 +20,17 @@ class EventPlugin extends TracingPlugin {
   }
 
   error () {
-    this.store.getStore().error = true
+    const store = this.store.getStore()
+    if (store) {
+      store.error = true
+    }
   }
 
   finish () {
-    const { startEvent, startTime, error } = this.store.getStore()
+    const store = this.store.getStore()
+    if (!store) return
+
+    const { startEvent, startTime, error } = store
     if (error) {
       return // don't emit perf events for failed operations
     }
