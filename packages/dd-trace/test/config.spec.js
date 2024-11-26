@@ -2274,39 +2274,40 @@ describe('Config', () => {
       //
       // To fix this, you can either
       // 1) Update dd-go (above) to include the proper config rules
-      // 2) Update TELEMETRY_IGNORE_LIST below to include the config that should not be sent to telemetry
+      // 2) Update TELEMETRY_IGNORE_LIST below to add configs that are not sent to telemetry
 
       function getKeysInDotNotation(obj, parentKey = '') {
-        const keys = [];
+        const keys = []
 
         for (const key in obj) {
           if (Object.prototype.hasOwnProperty.call(obj, key)) {
-            const fullKey = parentKey ? `${parentKey}.${key}` : key;
+            const fullKey = parentKey ? `${parentKey}.${key}` : key
 
             if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
-              keys.push(...getKeysInDotNotation(obj[key], fullKey));
+              keys.push(...getKeysInDotNotation(obj[key], fullKey))
             } else {
-              keys.push(fullKey);
+              keys.push(fullKey)
             }
           }
         }
 
-        return keys;
+        return keys
       }
 
-      // anything that should never be in telemetry should be added here
+      // anything that is not sent via telemetry/handled separately should be added here
       const TELEMETRY_IGNORE_LIST = [
-          'apikey',
+          'apiKey', // this is not sent to telemetry (needs confirmation)
       ]
 
       const config = new Config()
 
-      const libraryTelemetryKeys = getKeysInDotNotation(config).sort().map((s) => s.toLowerCase());
+      const libraryTelemetryKeys = getKeysInDotNotation(config).sort();
 
       const telemetryRules = JSON.parse(CONFIG_NORM_RULES);
       const backendTelemetryKeys = Object.keys(telemetryRules);
 
-      const missingTelemetryKeys = libraryTelemetryKeys.filter(element => !backendTelemetryKeys.includes(element) && !TELEMETRY_IGNORE_LIST.includes(element));
+      const missingTelemetryKeys = libraryTelemetryKeys
+          .filter(element => !backendTelemetryKeys.includes(element) && !TELEMETRY_IGNORE_LIST.includes(element));
 
       expect(missingTelemetryKeys).to.be.empty;
     })
