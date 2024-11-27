@@ -74,5 +74,5 @@ function sendTelemetry (name, tags) {
   proc.stdin.on('error', function () {
     log.error('Failed to write telemetry data to telemetry forwarder')
   })
-  proc.stdin.end(JSON.stringify({ metadata, points }))
+  proc.stdin.end(JSON.stringify({ metadata: metadata, points: points }))
 }
