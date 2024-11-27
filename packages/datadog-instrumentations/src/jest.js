@@ -237,7 +237,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             name: removeEfdStringFromTestName(testName),
             suite: this.testSuite,
             testSourceFile: this.testSourceFile,
-            runner: 'jest-circus',
             displayName: this.displayName,
             testParameters,
             frameworkVersion: jestVersion,
@@ -274,13 +273,18 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
       }
       if (event.name === 'test_done') {
+        const probe = {}
         const asyncResource = asyncResources.get(event.test)
         asyncResource.runInAsyncScope(() => {
           let status = 'pass'
           if (event.test.errors && event.test.errors.length) {
             status = 'fail'
-            const formattedError = formatJestError(event.test.errors[0])
-            testErrCh.publish(formattedError)
+            const numRetries = this.global[RETRY_TIMES]
+            const numTestExecutions = event.test?.invocations
+            const willBeRetried = numRetries > 0 && numTestExecutions - 1 < numRetries
+
+            const error = formatJestError(event.test.errors[0])
+            testErrCh.publish({ error, willBeRetried, probe, numTestExecutions })
           }
           testRunFinishCh.publish({
             status,
@@ -302,6 +306,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             }
           }
         })
+        if (probe.setProbePromise) {
+          await probe.setProbePromise
+        }
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
         const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -310,7 +317,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             name: getJestTestName(event.test),
             suite: this.testSuite,
             testSourceFile: this.testSourceFile,
-            runner: 'jest-circus',
             displayName: this.displayName,
             frameworkVersion: jestVersion,
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
