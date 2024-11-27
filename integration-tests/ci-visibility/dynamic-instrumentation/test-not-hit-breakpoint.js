@@ -1,9 +1,10 @@
 /* eslint-disable */
 const sum = require('./dependency')
+const isJest = require('./is-jest')
 const { expect } = require('chai')
 
 // TODO: instead of retrying through jest, this should be retried with auto test retries
-if (global.jest) {
+if (isJest()) {
   jest.retryTimes(1)
 }
 

@@ -2155,7 +2155,7 @@ describe('mocha CommonJS', function () {
         itr_enabled: false,
         code_coverage: false,
         tests_skipping: false,
-        flaky_test_retries_enabled: true,
+        flaky_test_retries_enabled: false,
         early_flake_detection: {
           enabled: false
         }
@@ -2212,7 +2212,7 @@ describe('mocha CommonJS', function () {
         itr_enabled: false,
         code_coverage: false,
         tests_skipping: false,
-        flaky_test_retries_enabled: true,
+        flaky_test_retries_enabled: false,
         early_flake_detection: {
           enabled: false
         }
@@ -2307,7 +2307,7 @@ describe('mocha CommonJS', function () {
         itr_enabled: false,
         code_coverage: false,
         tests_skipping: false,
-        flaky_test_retries_enabled: true,
+        flaky_test_retries_enabled: false,
         early_flake_detection: {
           enabled: false
         }
