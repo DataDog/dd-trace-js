@@ -401,36 +401,6 @@ class MochaPlugin extends CiPlugin {
     })
   }
 
-  // TODO: copied from `jest`: move to ci_plugin
-  addDiProbe (err) {
-    const [file, line] = getFileAndLineNumberFromError(err)
-
-    const relativePath = getTestSuitePath(file, this.repositoryRoot)
-
-    const [snapshotId,, hitProbePromise] = this.di.addLineProbe({ file: relativePath, line })
-
-    // can't sync in mocha (no async)
-    // probe.setProbePromise = setProbePromise
-
-    hitProbePromise.then(({ snapshot }) => {
-      // TODO: handle race conditions for this.retriedTestIds
-      const { traceId, spanId } = this.retriedTestIds
-      this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
-        debugger: { snapshot },
-        dd: {
-          trace_id: traceId,
-          span_id: spanId
-        }
-      })
-    })
-
-    return {
-      snapshotId,
-      file: relativePath,
-      line
-    }
-  }
-
   startTestSpan (testInfo) {
     const {
       testSuiteAbsolutePath,
