@@ -1228,6 +1228,37 @@ describe('Plugin', () => {
         })
 
         it('should support capturing groups in routes', done => {
+          if (semver.intersects(version, '>=5.0.0')) {
+            this.skip && this.skip() // mocha allows dynamic skipping, tap does not
+            return done()
+          }
+
+          const app = express()
+
+          app.get('/:path(*)', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /:path(*)')
+                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/user`)
+              .catch(done)
+          })
+        })
+
+        it('should support wildcard path prefix matching in routes', done => {
           const app = express()
 
           app.get('/*user', (req, res) => {
