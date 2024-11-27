@@ -497,7 +497,7 @@ class TextMapPropagator {
 
   _extractGenericContext (carrier, traceKey, spanKey, radix) {
     if (carrier[traceKey] && carrier[spanKey]) {
-      if (invalidSegment.test(carrier[traceKey])) return null
+      if (invalidSegment.test(carrier[traceKey]) || invalidSegment.test(carrier[spanKey])) return null
 
       return new DatadogSpanContext({
         traceId: id(carrier[traceKey], radix),
