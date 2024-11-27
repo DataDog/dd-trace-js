@@ -46,13 +46,13 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     )
 
     this.addSub(
-      { channelName: 'datadog:qs:parse:finish', tag: HTTP_REQUEST_PARAMETER },
-      ({ qs }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, qs)
+      { channelName: 'datadog:query:read:finish', tag: HTTP_REQUEST_PARAMETER },
+      ({ query }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, query)
     )
 
     this.addSub(
-      { channelName: 'datadog:querystring:parse:finish', tag: HTTP_REQUEST_PARAMETER },
-      ({ qs }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, qs)
+      { channelName: 'datadog:query:parse:finish', tag: HTTP_REQUEST_PARAMETER },
+      ({ query }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, query)
     )
 
     this.addSub(

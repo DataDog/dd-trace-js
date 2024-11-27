@@ -57,14 +57,18 @@ function wrapResponseRender (render) {
   }
 }
 
+addHook({ name: 'express', versions: ['>=4'] }, express => {
+  shimmer.wrap(express.response, 'json', wrapResponseJson)
+  shimmer.wrap(express.response, 'jsonp', wrapResponseJson)
+  shimmer.wrap(express.response, 'render', wrapResponseRender)
+
+  return express
+})
+
 addHook({ name: 'express', versions: ['>=4.0.0 <5.0.0'] }, express => {
   shimmer.wrap(express.application, 'handle', wrapHandle)
   shimmer.wrap(express.Router, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router, 'route', wrapRouterMethod)
-
-  shimmer.wrap(express.response, 'json', wrapResponseJson)
-  shimmer.wrap(express.response, 'jsonp', wrapResponseJson)
-  shimmer.wrap(express.response, 'render', wrapResponseRender)
 
   return express
 })
@@ -77,23 +81,15 @@ addHook({ name: 'express', versions: ['>=5.0.0'] }, express => {
   return express
 })
 
-addHook({ name: 'express', file: ['lib/response.js'], versions: ['>=5.0.0'] }, response => {
-  shimmer.wrap(response, 'json', wrapResponseJson)
-  shimmer.wrap(response, 'jsonp', wrapResponseJson)
-  shimmer.wrap(response, 'render', wrapResponseRender)
-
-  return response
-})
-
-const queryParserReadCh = channel('datadog:query:read:finish')
+const queryReaderReadCh = channel('datadog:query:read:finish')
 
 function publishQueryParsedAndNext (req, res, next) {
   return shimmer.wrapFunction(next, next => function () {
-    if (queryParserReadCh.hasSubscribers && req) {
+    if (queryReaderReadCh.hasSubscribers && req) {
       const abortController = new AbortController()
       const query = req.query
 
-      queryParserReadCh.publish({ req, res, query, abortController })
+      queryReaderReadCh.publish({ req, res, query, abortController })
 
       if (abortController.signal.aborted) return
     }
@@ -150,32 +146,24 @@ addHook({ name: 'express', versions: ['>=4.3.0 <5.0.0'] }, express => {
   return express
 })
 
-addHook({ name: 'express', file: ['lib/express.js'], versions: ['>=5.0.0'] }, express => {
-  shimmer.wrapFunction(express, function (original) {
-    const app = original.call(this, arguments)
-    const requestProto = Object.getPrototypeOf(app.request)
-    const requestDescriptor = Object.getOwnPropertyDescriptor(requestProto, 'query')
+const queryParserReadCh = channel('datadog:query:parse:finish')
 
-    shimmer.wrap(requestDescriptor, 'get', function (originalGet) {
-      return function wrappedGet () {
-        const query = originalGet.apply(this, arguments)
+addHook({ name: 'express', file: ['lib/request.js'], versions: ['>=5.0.0'] }, request => {
+  const requestDescriptor = Object.getOwnPropertyDescriptor(request, 'query')
 
-        if (queryParserReadCh.hasSubscribers) {
-          const abortController = new AbortController()
+  shimmer.wrap(requestDescriptor, 'get', function (originalGet) {
+    return function wrappedGet () {
+      const query = originalGet.apply(this, arguments)
 
-          queryParserReadCh.publish({ req: this, res: this.res, query, abortController })
-
-          if (abortController.signal.aborted) return
-        }
-
-        return query
+      if (queryParserReadCh.hasSubscribers && query) {
+        queryParserReadCh.publish({ query })
       }
-    })
 
-    Object.defineProperty(requestProto, 'query', requestDescriptor)
-
-    return original
+      return query
+    }
   })
 
-  return express
+  Object.defineProperty(request, 'query', requestDescriptor)
+
+  return request
 })

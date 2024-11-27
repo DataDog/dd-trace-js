@@ -12,7 +12,7 @@ const {
 } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 
 const middlewareNextChannel = dc.channel('apm:express:middleware:next')
-const queryParseFinishChannel = dc.channel('datadog:qs:parse:finish')
+const queryReadFinishChannel = dc.channel('datadog:query:read:finish')
 const bodyParserFinishChannel = dc.channel('datadog:body-parser:read:finish')
 const cookieParseFinishCh = dc.channel('datadog:cookie:parse:finish')
 const processParamsStartCh = dc.channel('datadog:express:process_params:start')
@@ -46,8 +46,8 @@ describe('IAST Taint tracking plugin', () => {
     expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(11)
     expect(taintTrackingPlugin._subscriptions[0]._channel.name).to.equals('datadog:body-parser:read:finish')
     expect(taintTrackingPlugin._subscriptions[1]._channel.name).to.equals('datadog:multer:read:finish')
-    expect(taintTrackingPlugin._subscriptions[2]._channel.name).to.equals('datadog:qs:parse:finish')
-    expect(taintTrackingPlugin._subscriptions[3]._channel.name).to.equals('datadog:querystring:parse:finish')
+    expect(taintTrackingPlugin._subscriptions[2]._channel.name).to.equals('datadog:query:read:finish')
+    expect(taintTrackingPlugin._subscriptions[3]._channel.name).to.equals('datadog:query:parse:finish')
     expect(taintTrackingPlugin._subscriptions[4]._channel.name).to.equals('apm:express:middleware:next')
     expect(taintTrackingPlugin._subscriptions[5]._channel.name).to.equals('datadog:cookie:parse:finish')
     expect(taintTrackingPlugin._subscriptions[6]._channel.name).to.equals('datadog:express:process_params:start')
@@ -139,7 +139,7 @@ describe('IAST Taint tracking plugin', () => {
         }
       }
 
-      queryParseFinishChannel.publish({ qs: req.query })
+      queryReadFinishChannel.publish({ query: req.query })
 
       expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
         iastContext,

@@ -176,30 +176,33 @@ addHook({ name: 'router', versions: ['>=1 <2'] }, Router => {
   return Router
 })
 
+const queryParserReadCh = channel('datadog:query:read:finish')
+
 addHook({ name: 'router', versions: ['>=2'] }, Router => {
-  const originalRouter = Router
+  const WrappedRouter = shimmer.wrapFunction(Router, function (originalRouter) {
+    return function wrappedMethod (options) {
+      const router = originalRouter.call(this, options)
 
-  function WrappedRouter (options) {
-    const router = originalRouter.call(this, options)
+      if (!router._queryParsingWrapped) {
+        router._queryParsingWrapped = true
+        const originalHandle = router.handle
 
-    if (!router._queryParsingWrapped) {
-      router._queryParsingWrapped = true
-      const originalHandle = router.handle
-      router.handle = function (req, res, next) {
-        req.query
-        // If query parsing was aborted, don't continue request handling
-        if (res.writableEnded) {
-          return
+        router.handle = function (req, res, next) {
+          const abortController = new AbortController()
+
+          if (queryParserReadCh.hasSubscribers && req) {
+            queryParserReadCh.publish({ req, res, query: req.query, abortController })
+
+            if (abortController.signal.aborted) return
+          }
+
+          return originalHandle.apply(this, arguments)
         }
-
-        return originalHandle.apply(this, arguments)
       }
+
+      return router
     }
-
-    return router
-  }
-
-  WrappedRouter.prototype = originalRouter.prototype
+  })
 
   shimmer.wrap(WrappedRouter.prototype, 'use', wrapRouterMethod)
   shimmer.wrap(WrappedRouter.prototype, 'route', wrapRouterMethod)
