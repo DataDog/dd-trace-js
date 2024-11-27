@@ -48,7 +48,7 @@ function sanitize (logEntry) {
     .map(line => line.replace(ddBasePath, ''))
 
   logEntry.stack_trace = stackLines.join(EOL)
-  if (logEntry.stack_trace === '' && !logEntry.message) {
+  if (logEntry.stack_trace === '' && (!logEntry.message || logEntry.message === 'Generic Error')) {
     // If entire stack was removed and there is no message we'd rather not log it at all.
     return null
   }

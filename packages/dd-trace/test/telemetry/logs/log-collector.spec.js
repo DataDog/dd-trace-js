@@ -43,6 +43,15 @@ describe('telemetry log collector', () => {
       expect(logCollector.add({ message: 'Error 1', level: 'DEBUG', stack_trace: `stack 1\n${ddFrame}` })).to.be.true
     })
 
+    it('should not store logs with empty stack and \'Generic Error\' message', () => {
+      expect(logCollector.add({
+        message: 'Generic Error',
+        level: 'ERROR',
+        stack_trace: 'stack 1\n/not/a/dd/frame'
+      })
+      ).to.be.false
+    })
+
     it('should include original message and dd frames', () => {
       const ddFrame = `at T (${ddBasePath}packages/dd-trace/test/telemetry/logs/log_collector.spec.js:29:21)`
       const stack = new Error('Error 1')
