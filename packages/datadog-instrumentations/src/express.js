@@ -58,6 +58,8 @@ function wrapResponseRender (render) {
 }
 
 addHook({ name: 'express', versions: ['>=4'] }, express => {
+  shimmer.wrap(express.application, 'handle', wrapHandle)
+
   shimmer.wrap(express.response, 'json', wrapResponseJson)
   shimmer.wrap(express.response, 'jsonp', wrapResponseJson)
   shimmer.wrap(express.response, 'render', wrapResponseRender)
@@ -66,7 +68,6 @@ addHook({ name: 'express', versions: ['>=4'] }, express => {
 })
 
 addHook({ name: 'express', versions: ['>=4.0.0 <5.0.0'] }, express => {
-  shimmer.wrap(express.application, 'handle', wrapHandle)
   shimmer.wrap(express.Router, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router, 'route', wrapRouterMethod)
 
@@ -74,22 +75,21 @@ addHook({ name: 'express', versions: ['>=4.0.0 <5.0.0'] }, express => {
 })
 
 addHook({ name: 'express', versions: ['>=5.0.0'] }, express => {
-  shimmer.wrap(express.application, 'handle', wrapHandle)
   shimmer.wrap(express.Router.prototype, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router.prototype, 'route', wrapRouterMethod)
 
   return express
 })
 
-const queryReaderReadCh = channel('datadog:query:read:finish')
+const queryParserReadCh = channel('datadog:query:read:finish')
 
 function publishQueryParsedAndNext (req, res, next) {
   return shimmer.wrapFunction(next, next => function () {
-    if (queryReaderReadCh.hasSubscribers && req) {
+    if (queryParserReadCh.hasSubscribers && req) {
       const abortController = new AbortController()
       const query = req.query
 
-      queryReaderReadCh.publish({ req, res, query, abortController })
+      queryParserReadCh.publish({ req, res, query, abortController })
 
       if (abortController.signal.aborted) return
     }
@@ -146,7 +146,7 @@ addHook({ name: 'express', versions: ['>=4.3.0 <5.0.0'] }, express => {
   return express
 })
 
-const queryParserReadCh = channel('datadog:query:parse:finish')
+const queryReadCh = channel('datadog:express:query:finish')
 
 addHook({ name: 'express', file: ['lib/request.js'], versions: ['>=5.0.0'] }, request => {
   const requestDescriptor = Object.getOwnPropertyDescriptor(request, 'query')
@@ -155,8 +155,8 @@ addHook({ name: 'express', file: ['lib/request.js'], versions: ['>=5.0.0'] }, re
     return function wrappedGet () {
       const query = originalGet.apply(this, arguments)
 
-      if (queryParserReadCh.hasSubscribers && query) {
-        queryParserReadCh.publish({ query })
+      if (queryReadCh.hasSubscribers && query) {
+        queryReadCh.publish({ query })
       }
 
       return query

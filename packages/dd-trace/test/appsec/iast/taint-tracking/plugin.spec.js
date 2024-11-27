@@ -47,7 +47,7 @@ describe('IAST Taint tracking plugin', () => {
     expect(taintTrackingPlugin._subscriptions[0]._channel.name).to.equals('datadog:body-parser:read:finish')
     expect(taintTrackingPlugin._subscriptions[1]._channel.name).to.equals('datadog:multer:read:finish')
     expect(taintTrackingPlugin._subscriptions[2]._channel.name).to.equals('datadog:query:read:finish')
-    expect(taintTrackingPlugin._subscriptions[3]._channel.name).to.equals('datadog:query:parse:finish')
+    expect(taintTrackingPlugin._subscriptions[3]._channel.name).to.equals('datadog:express:query:finish')
     expect(taintTrackingPlugin._subscriptions[4]._channel.name).to.equals('apm:express:middleware:next')
     expect(taintTrackingPlugin._subscriptions[5]._channel.name).to.equals('datadog:cookie:parse:finish')
     expect(taintTrackingPlugin._subscriptions[6]._channel.name).to.equals('datadog:express:process_params:start')

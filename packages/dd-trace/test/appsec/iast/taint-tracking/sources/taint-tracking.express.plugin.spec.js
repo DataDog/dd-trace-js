@@ -189,8 +189,7 @@ describe('Path params sourcing with express', () => {
         res.status(200).send()
       })
 
-      app.param('parameter1', checkParamIsTaintedAndNext)
-      app.param('parameter2', checkParamIsTaintedAndNext)
+      app.param(['parameter1', 'parameter2'], checkParamIsTaintedAndNext)
 
       appListener = app.listen(0, 'localhost', () => {
         const port = appListener.address().port
@@ -209,8 +208,7 @@ describe('Path params sourcing with express', () => {
         res.status(200).send()
       })
 
-      app.param('parameter1', checkParamIsTaintedAndNext)
-      app.param('parameter2', checkParamIsTaintedAndNext)
+      app.param(['parameter1', 'parameter2'], checkParamIsTaintedAndNext)
 
       appListener = app.listen(0, 'localhost', () => {
         const port = appListener.address().port

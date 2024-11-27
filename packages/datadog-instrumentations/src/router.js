@@ -183,11 +183,8 @@ addHook({ name: 'router', versions: ['>=2'] }, Router => {
     return function wrappedMethod (options) {
       const router = originalRouter.call(this, options)
 
-      if (!router._queryParsingWrapped) {
-        router._queryParsingWrapped = true
-        const originalHandle = router.handle
-
-        router.handle = function (req, res, next) {
+      shimmer.wrap(router, 'handle', function wrapHandle (originalHandle) {
+        return function wrappedHandle (req, res, next) {
           const abortController = new AbortController()
 
           if (queryParserReadCh.hasSubscribers && req) {
@@ -198,7 +195,7 @@ addHook({ name: 'router', versions: ['>=2'] }, Router => {
 
           return originalHandle.apply(this, arguments)
         }
-      }
+      })
 
       return router
     }
