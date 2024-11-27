@@ -79,6 +79,7 @@ class Crashtracker {
         'language:javascript',
         `library_version:${pkg.version}`,
         'runtime:nodejs',
+        `runtime_version:${process.versions.node}`,
         'severity:crash'
       ]
     }
