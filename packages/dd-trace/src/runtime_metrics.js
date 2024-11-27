@@ -7,11 +7,18 @@ const os = require('os')
 const { DogStatsDClient } = require('./dogstatsd')
 const log = require('./log')
 const Histogram = require('./histogram')
-const { performance } = require('perf_hooks')
+const { performance, monitorEventLoopDelay } = require('perf_hooks')
 
+const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
 const INTERVAL = 10 * 1000
 
+const allMetricsAvailable = NODE_MAJOR > 22 ||
+  (NODE_MAJOR === 22 && NODE_MAJOR >= 8) ||
+  (NODE_MAJOR === 20 && NODE_MINOR >= 18)
+
 let nativeMetrics = null
+let loopDelayHistogram = null
+let gcProfiler = null
 
 let interval
 let client
@@ -21,6 +28,7 @@ let gauges
 let counters
 let histograms
 let elu
+let lastLoopCount
 
 reset()
 
@@ -28,33 +36,51 @@ module.exports = {
   start (config) {
     const clientConfig = DogStatsDClient.generateClientConfig(config)
 
-    try {
-      nativeMetrics = require('@datadog/native-metrics')
-      nativeMetrics.start()
-    } catch (e) {
-      log.error(e)
-      nativeMetrics = null
-    }
-
     client = new DogStatsDClient(clientConfig)
 
     time = process.hrtime()
 
-    if (nativeMetrics) {
-      interval = setInterval(() => {
-        captureCommonMetrics()
-        captureNativeMetrics()
-        client.flush()
-      }, INTERVAL)
-    } else {
+    if (allMetricsAvailable) { // All metrics are available from Node, skip native.
       cpuUsage = process.cpuUsage()
+      lastLoopCount = performance.nodeTiming.uvMetricsInfo.loopCount
+      loopDelayHistogram = monitorEventLoopDelay()
+      loopDelayHistogram.enable()
+      gcProfiler = new v8.GCProfiler()
+      gcProfiler.start()
 
       interval = setInterval(() => {
         captureCommonMetrics()
         captureCpuUsage()
         captureHeapSpace()
+        captureGCMetrics()
+        captureEventLoopMetrics()
         client.flush()
       }, INTERVAL)
+    } else {
+      try {
+        nativeMetrics = require('@datadog/native-metrics')
+        nativeMetrics.start()
+      } catch (e) {
+        log.error(e)
+        nativeMetrics = null
+      }
+
+      if (nativeMetrics) {
+        interval = setInterval(() => {
+          captureCommonMetrics()
+          captureNativeMetrics()
+          client.flush()
+        }, INTERVAL)
+      } else {
+        cpuUsage = process.cpuUsage()
+
+        interval = setInterval(() => {
+          captureCommonMetrics()
+          captureCpuUsage()
+          captureHeapSpace()
+          client.flush()
+        }, INTERVAL)
+      }
     }
 
     interval.unref()
@@ -138,6 +164,11 @@ function reset () {
   counters = {}
   histograms = {}
   nativeMetrics = null
+  lastLoopCount = null
+  loopDelayHistogram && loopDelayHistogram.disable()
+  loopDelayHistogram = null
+  gcProfiler && gcProfiler.stop()
+  gcProfiler = null
 }
 
 function captureCpuUsage () {
@@ -201,6 +232,47 @@ function captureHeapSpace () {
     client.gauge('runtime.node.heap.available_size.by.space', stats[i].space_available_size, tags)
     client.gauge('runtime.node.heap.physical_size.by.space', stats[i].physical_space_size, tags)
   }
+}
+
+function captureEventLoopMetrics () {
+  const totalLoopCount = performance.nodeTiming.uvMetricsInfo.loopCount
+  const loopCount = totalLoopCount - lastLoopCount
+
+  histogram('runtime.node.event_loop.delay', {
+    max: loopDelayHistogram.max,
+    min: loopDelayHistogram.min,
+    sum: loopDelayHistogram.mean * loopCount,
+    avg: loopDelayHistogram.mean,
+    median: loopDelayHistogram.percentile(50),
+    p95: loopDelayHistogram.percentile(95),
+    count: loopCount
+  })
+
+  lastLoopCount = totalLoopCount
+
+  loopDelayHistogram.reset()
+}
+
+function captureGCMetrics () {
+  const profile = gcProfiler.stop()
+  const pauseAll = new Histogram()
+  const pause = {}
+
+  for (const stat of profile.statistics) {
+    const type = stat.gcType.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase()
+
+    pause[type] = pause[type] || new Histogram()
+    pause[type].record(stat.cost)
+    pauseAll.record(stat.cost)
+  }
+
+  histogram('runtime.node.gc.pause', pauseAll)
+
+  for (const type in pause) {
+    histogram('runtime.node.gc.pause.by.type', pause[type], [`gc_type:${type}`])
+  }
+
+  gcProfiler.start()
 }
 
 function captureGauges () {
@@ -296,6 +368,11 @@ function captureNativeMetrics () {
 
 function histogram (name, stats, tags) {
   tags = [].concat(tags)
+
+  // Stats can contain garbage data when a value was never recorded.
+  if (stats.count === 0) {
+    stats = { max: 0, min: 0, sum: 0, avg: 0, median: 0, p95: 0, count: 0 }
+  }
 
   client.gauge(`${name}.min`, stats.min, tags)
   client.gauge(`${name}.max`, stats.max, tags)
