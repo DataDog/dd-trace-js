@@ -87,7 +87,7 @@ function send (payload) {
   }
 
   request(form, options, (err) => {
-    if (err) log.error(err)
+    if (err) log.error('Error sending debugger payload', err)
   })
 }
 
