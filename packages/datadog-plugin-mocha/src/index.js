@@ -407,11 +407,7 @@ class MochaPlugin extends CiPlugin {
 
     const relativePath = getTestSuitePath(file, this.repositoryRoot)
 
-    const [
-      snapshotId,
-      _setProbePromise,
-      hitProbePromise
-    ] = this.di.addLineProbe({ file: relativePath, line })
+    const [snapshotId,, hitProbePromise] = this.di.addLineProbe({ file: relativePath, line })
 
     // can't sync in mocha (no async)
     // probe.setProbePromise = setProbePromise
