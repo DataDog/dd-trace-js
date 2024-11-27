@@ -57,6 +57,6 @@ module.exports = {
 session.on('Debugger.scriptParsed', ({ params }) => {
   scriptUrls.set(params.scriptId, params.url)
   if (params.url.startsWith('file:')) {
-    scriptIds.push([params.url, params.scriptId])
+    scriptIds.push([params.url, params.scriptId, params.sourceMapURL])
   }
 })
