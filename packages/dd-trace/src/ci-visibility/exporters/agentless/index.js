@@ -38,7 +38,7 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
       apiUrl = new URL(apiUrl)
       this._apiUrl = apiUrl
     } catch (e) {
-      log.error(e)
+      log.error('Error setting CI exporter api url', e)
     }
   }
 
