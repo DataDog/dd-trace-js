@@ -47,7 +47,7 @@ jobs:
   integration-guardrails-unsupported:
     strategy:
       matrix:
-        version: ['0.8', '0.10', '0.12', '4', '6', '8', '10']
+        version: ['0.8', '0.10', '0.12', '4', '6', '8', '10', '12.0.0']
     runs-on: ubuntu-latest
     env:
       DD_INJECTION_ENABLED: 'true'
