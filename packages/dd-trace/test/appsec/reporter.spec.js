@@ -225,7 +225,9 @@ describe('reporter', () => {
 
     it('should add tags to request span when socket is not there', () => {
       delete req.socket
+
       const result = Reporter.reportAttack('[{"rule":{},"rule_matches":[{}]}]')
+
       expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
 
