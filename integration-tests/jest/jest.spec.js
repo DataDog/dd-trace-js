@@ -61,7 +61,13 @@ describe('jest CommonJS', () => {
   let testOutput = ''
 
   before(async function () {
-    sandbox = await createSandbox(['jest', 'chai@v4', 'jest-jasmine2', 'jest-environment-jsdom'], true)
+    sandbox = await createSandbox([
+      'jest',
+      'chai@v4',
+      'jest-jasmine2',
+      'jest-environment-jsdom',
+      'office-addin-mock'
+    ], true)
     cwd = sandbox.folder
     startupTestFile = path.join(cwd, testFile)
   })
@@ -2598,6 +2604,48 @@ describe('jest CommonJS', () => {
 
       childProcess.on('exit', (code) => {
         Promise.all([eventsPromise, logsPromise]).then(() => {
+          assert.equal(code, 0)
+          done()
+        }).catch(done)
+      })
+    })
+  })
+
+  // This happens when using office-addin-mock
+  context('a test imports a file whose name includes a library we should bypass jest require cache for', () => {
+    it('does not crash', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: false,
+        early_flake_detection: {
+          enabled: false
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.equal(tests.length, 1)
+        })
+
+      childProcess = exec(runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'office-addin-mock/test'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', (code) => {
+        eventsPromise.then(() => {
           assert.equal(code, 0)
           done()
         }).catch(done)
