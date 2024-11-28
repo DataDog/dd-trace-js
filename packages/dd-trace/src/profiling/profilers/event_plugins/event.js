@@ -1,4 +1,4 @@
-const { AsyncLocalStorage } = require('async_hooks')
+const { storage } = require('../../../../../datadog-core')
 const TracingPlugin = require('../../../plugins/tracing')
 const { performance } = require('perf_hooks')
 
@@ -8,7 +8,7 @@ class EventPlugin extends TracingPlugin {
   constructor (eventHandler) {
     super()
     this.eventHandler = eventHandler
-    this.store = new AsyncLocalStorage()
+    this.store = storage('profiling')
     this.entryType = this.constructor.entryType
   }
 
