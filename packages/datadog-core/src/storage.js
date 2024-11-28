@@ -17,6 +17,16 @@ class DatadogStorage {
     const handle = this._storage.getStore()
     return stores.get(handle)
   }
+
+  run (store, fn, ...args) {
+    const prior = this._storage.getStore()
+    this.enterWith(store)
+    try {
+      return Reflect.apply(fn, null, args)
+    } finally {
+      this.enterWith(prior)
+    }
+  }
 }
 
 const storages = Object.create(null)
@@ -31,6 +41,7 @@ const storage = function (namespace) {
 
 storage.enterWith = legacyStorage.enterWith.bind(legacyStorage)
 storage.getStore = legacyStorage.getStore.bind(legacyStorage)
+storage.run = legacyStorage.run.bind(legacyStorage)
 
 const stores = new WeakMap()
 
