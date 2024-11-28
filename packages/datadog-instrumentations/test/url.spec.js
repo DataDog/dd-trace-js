@@ -70,7 +70,7 @@ names.forEach(name => {
         })
 
         it('instanceof should work also for original instances', () => {
-          const OriginalUrl = url.URL.__proto__
+          const OriginalUrl = Object.getPrototypeOf(url.URL)
           const originalUrl = new OriginalUrl('https://www.datadoghq.com')
 
           assert.isTrue(originalUrl instanceof url.URL)

@@ -60,8 +60,8 @@ addHook({ name: names }, function (url) {
         })
       }
 
-      static [Symbol.hasInstance](instance) {
-        return instance instanceof URL;
+      static [Symbol.hasInstance] (instance) {
+        return instance instanceof URL
       }
     }
   })
