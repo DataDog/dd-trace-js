@@ -861,12 +861,18 @@ addHook({
 
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = [
   'selenium-webdriver',
+  'selenium-webdriver/chrome',
+  'selenium-webdriver/edge',
+  'selenium-webdriver/safari',
+  'selenium-webdriver/firefox',
+  'selenium-webdriver/ie',
+  'selenium-webdriver/chromium',
   'winston'
 ]
 
 function shouldBypassJestRequireEngine (moduleName) {
   return (
-    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.some(library => moduleName === library)
+    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.includes(moduleName)
   )
 }
 
