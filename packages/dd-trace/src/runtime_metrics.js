@@ -13,7 +13,7 @@ const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
 const INTERVAL = 10 * 1000
 
 const allMetricsAvailable = NODE_MAJOR > 22 ||
-  (NODE_MAJOR === 22 && NODE_MAJOR >= 8) ||
+  (NODE_MAJOR === 22 && NODE_MINOR >= 8) ||
   (NODE_MAJOR === 20 && NODE_MINOR >= 18)
 
 let nativeMetrics = null
