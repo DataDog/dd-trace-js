@@ -47,6 +47,12 @@ function sanitize (logEntry) {
     .filter((line, index) => (isDDCode && index < firstIndex) || line.includes(ddBasePath))
     .map(line => line.replace(ddBasePath, ''))
 
+  if (!isDDCode && logEntry.errorType && stackLines.length) {
+    stackLines = [`${logEntry.errorType}: redacted`, ...stackLines]
+  }
+
+  delete logEntry.errorType
+
   logEntry.stack_trace = stackLines.join(EOL)
   if (logEntry.stack_trace === '' && (!logEntry.message || logEntry.message === 'Generic Error')) {
     // If entire stack was removed and there is no message we'd rather not log it at all.
