@@ -24,7 +24,7 @@ class DatadogStorage {
     try {
       return Reflect.apply(fn, null, args)
     } finally {
-      this.enterWith(prior)
+      this._storage.enterWith(prior)
     }
   }
 }
