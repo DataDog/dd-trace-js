@@ -8,11 +8,13 @@ const { assert } = require('chai')
 const { createSandbox } = require('./helpers')
 const { FakeCiVisIntake } = require('./ci-visibility-intake')
 
+const packageManagers = ['yarn', 'npm', 'pnpm']
+
 describe('test optimization startup', () => {
-  let sandbox, cwd, receiver, childProcess
+  let sandbox, cwd, receiver, childProcess, processOutput
 
   before(async () => {
-    sandbox = await createSandbox(['yarn', 'npm', 'pnpm'], true)
+    sandbox = await createSandbox(packageManagers, true)
     cwd = sandbox.folder
   })
 
@@ -21,6 +23,7 @@ describe('test optimization startup', () => {
   })
 
   beforeEach(async function () {
+    processOutput = ''
     const port = await getPort()
     receiver = await new FakeCiVisIntake(port).start()
   })
@@ -30,60 +33,33 @@ describe('test optimization startup', () => {
     await receiver.stop()
   })
 
-  it('skips initialization for yarn', (done) => {
-    let testOutput
+  packageManagers.forEach(packageManager => {
+    it(`skips initialization for ${packageManager}`, (done) => {
+      childProcess = exec(`node ./node_modules/.bin/${packageManager} -v`,
+        {
+          cwd,
+          env: {
+            ...process.env,
+            NODE_OPTIONS: '-r dd-trace/ci/init',
+            DD_TRACE_DEBUG: '1'
+          },
+          stdio: 'pipe'
+        }
+      )
 
-    childProcess = exec('node ./node_modules/.bin/yarn -v',
-      {
-        cwd,
-        env: {
-          ...process.env,
-          NODE_OPTIONS: '-r dd-trace/ci/init',
-          DD_TRACE_DEBUG: '1'
-        },
-        stdio: 'pipe'
-      }
-    )
+      childProcess.stdout.on('data', (chunk) => {
+        processOutput += chunk.toString()
+      })
 
-    childProcess.stdout.on('data', (chunk) => {
-      testOutput += chunk.toString()
-    })
-
-    childProcess.on('exit', () => {
-      assert.include(testOutput, 'dd-trace is not initialized in a package manager')
-      done()
-    })
-  })
-
-  it('skips initialization for npm', (done) => {
-    let testOutput
-
-    childProcess = exec('node ./node_modules/.bin/npm -v',
-      {
-        cwd,
-        env: {
-          ...process.env,
-          NODE_OPTIONS: '-r dd-trace/ci/init',
-          DD_TRACE_DEBUG: '1'
-        },
-        stdio: 'pipe'
-      }
-    )
-
-    childProcess.stdout.on('data', (chunk) => {
-      testOutput += chunk.toString()
-    })
-
-    childProcess.on('exit', () => {
-      assert.include(testOutput, 'dd-trace is not initialized in a package manager')
-      done()
+      childProcess.on('exit', () => {
+        assert.include(processOutput, 'dd-trace is not initialized in a package manager')
+        done()
+      })
     })
   })
 
-  it('skips initialization for pnpm', (done) => {
-    let testOutput
-
-    childProcess = exec('node ./node_modules/.bin/pnpm -v',
+  it('does not skip initialization for non package managers', (done) => {
+    childProcess = exec('node -e "console.log(\'hello!\')"',
       {
         cwd,
         env: {
@@ -96,11 +72,12 @@ describe('test optimization startup', () => {
     )
 
     childProcess.stdout.on('data', (chunk) => {
-      testOutput += chunk.toString()
+      processOutput += chunk.toString()
     })
 
     childProcess.on('exit', () => {
-      assert.include(testOutput, 'dd-trace is not initialized in a package manager')
+      assert.include(processOutput, 'hello!')
+      assert.notInclude(processOutput, 'dd-trace is not initialized in a package manager')
       done()
     })
   })

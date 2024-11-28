@@ -71,8 +71,6 @@ if (shouldInit) {
   tracer.init(options)
   tracer.use('fs', false)
   tracer.use('child_process', false)
-} else {
-  console.log('not init')
 }
 
 module.exports = tracer
