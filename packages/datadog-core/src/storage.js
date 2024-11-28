@@ -7,10 +7,18 @@ class DatadogStorage {
     this._storage = new AsyncLocalStorage()
   }
 
+  disable () {
+    this._storage.disable()
+  }
+
   enterWith (store) {
     const handle = {}
     stores.set(handle, store)
     this._storage.enterWith(handle)
+  }
+
+  exit (callback, ...args) {
+    this._storage.exit(callback, ...args)
   }
 
   getStore () {
@@ -39,7 +47,9 @@ const storage = function (namespace) {
   return storages[namespace]
 }
 
+storage.disable = legacyStorage.disable.bind(legacyStorage)
 storage.enterWith = legacyStorage.enterWith.bind(legacyStorage)
+storage.exit = legacyStorage.exit.bind(legacyStorage)
 storage.getStore = legacyStorage.getStore.bind(legacyStorage)
 storage.run = legacyStorage.run.bind(legacyStorage)
 
