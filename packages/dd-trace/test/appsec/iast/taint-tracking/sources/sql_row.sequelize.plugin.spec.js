@@ -14,12 +14,12 @@ describe('db sources with sequelize', () => {
           logging: false
         })
         await sequelize.query(`CREATE TABLE examples (
-  id INT,
-  name VARCHAR(50),
-  query VARCHAR(100),
-  command VARCHAR(50),
-  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP )`)
+                                id INT,
+                                name VARCHAR(50),
+                                query VARCHAR(100),
+                                command VARCHAR(50),
+                                createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                                updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP )`)
 
         await sequelize.query(`INSERT INTO examples (id, name, query, command)
                                VALUES (1, 'Item1', 'SELECT 1', 'ls'),
@@ -95,6 +95,7 @@ describe('db sources with sequelize', () => {
         testThatRequestHasNoVulnerability(async (req, res) => {
           const examples = await Example.findAll()
 
+          const childProcess = require('child_process')
           childProcess.execSync(examples[0].command)
 
           res.end('OK')

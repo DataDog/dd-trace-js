@@ -76,7 +76,12 @@ class TaintTrackingPlugin extends SourceIastPlugin {
 
     this.addSub(
       { channelName: 'datadog:sequelize:query:finish', tag: SQL_ROW_VALUE },
-      ({ result }) => this._taintSequelizeResult(result)
+      ({ result }) => this._taintDatabaseResult(result)
+    )
+
+    this.addSub(
+      { channelName: 'apm:pg:query:finish', tag: SQL_ROW_VALUE },
+      ({ result }) => this._taintDatabaseResult(result)
     )
 
     this.addSub(
@@ -191,25 +196,24 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.taintUrl(req, iastContext)
   }
 
-  _taintSequelizeResult (result, iastContext = getIastContext(storage.getStore())) {
+  _taintDatabaseResult (result, iastContext = getIastContext(storage.getStore())) {
     if (!iastContext) return result
 
     const rowsToTaint = 1 // TODO fill this from config
     if (Array.isArray(result)) {
       for (let i = 0; i < result.length && i < rowsToTaint; i++) {
-        result[i] = this._taintSequelizeResult(result[i], iastContext)
+        result[i] = this._taintDatabaseResult(result[i], iastContext)
       }
     } else if (result && typeof result === 'object') {
-      if (result.dataValues) {
-        result.dataValues = this._taintSequelizeResult(result.dataValues, iastContext)
+      if (result.dataValues) { // TODO keep this in mind only with sequelize
+        result.dataValues = this._taintDatabaseResult(result.dataValues, iastContext)
       } else {
         Object.keys(result).forEach(key => {
-          result[key] = this._taintSequelizeResult(result[key], iastContext)
+          result[key] = this._taintDatabaseResult(result[key], iastContext)
         })
       }
     } else if (typeof result === 'string') {
       result = newTaintedString(iastContext, result, SQL_ROW_VALUE, SQL_ROW_VALUE)
-      // console.log('tainting?', result, getRanges(iastContext, result))
     }
 
     return result
