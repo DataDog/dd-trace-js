@@ -384,6 +384,7 @@ describe('IAST Plugin', () => {
   describe('Add sub to iast plugin', () => {
     class BadPlugin extends IastPlugin {
       static get id () { return 'badPlugin' }
+
       constructor () {
         super()
         this.addSub('appsec:badPlugin:start', this.start)
@@ -395,6 +396,7 @@ describe('IAST Plugin', () => {
     }
     class GoodPlugin extends IastPlugin {
       static get id () { return 'goodPlugin' }
+
       constructor () {
         super()
         this.addSub('appsec:goodPlugin:start', this.start)
