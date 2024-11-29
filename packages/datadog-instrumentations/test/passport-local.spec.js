@@ -1,8 +1,9 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const axios = require('axios')
+const axios = require('axios').create({ validateStatus: null })
 const dc = require('dc-polyfill')
+const { storage } = require('../../datadog-core')
 
 withVersions('passport-local', 'passport-local', version => {
   describe('passport-local instrumentation', () => {
@@ -10,7 +11,7 @@ withVersions('passport-local', 'passport-local', version => {
     let port, server, subscriberStub
 
     before(() => {
-      return agent.load(['express', 'passport', 'passport-local'], { client: false })
+      return agent.load(['http', 'express', 'passport', 'passport-local'], { client: false })
     })
 
     before((done) => {
@@ -85,9 +86,7 @@ withVersions('passport-local', 'passport-local', version => {
         res.send('Denied')
       })
 
-      passportVerifyChannel.subscribe(function ({ credentials, user, err, info }) {
-        subscriberStub(arguments[0])
-      })
+      passportVerifyChannel.subscribe((data) => subscriberStub(data))
 
       server = app.listen(0, () => {
         port = server.address().port
@@ -104,17 +103,25 @@ withVersions('passport-local', 'passport-local', version => {
       return agent.close({ ritmReset: false })
     })
 
+    it('should not call subscriber when an error occurs', async () => {
+      const res = await axios.post(`http://localhost:${port}/`, { username: 'error', password: '1234' })
+
+      expect(res.status).to.equal(500)
+      expect(subscriberStub).to.not.be.called
+    })
+
     it('should call subscriber with proper arguments on success', async () => {
       const res = await axios.post(`http://localhost:${port}/`, { username: 'test', password: '1234' })
 
       expect(res.status).to.equal(200)
       expect(res.data).to.equal('Granted')
-      expect(subscriberStub).to.be.calledOnceWithExactly(
-        {
-          credentials: { type: 'local', username: 'test' },
-          user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' }
-        }
-      )
+      expect(subscriberStub).to.be.calledOnceWithExactly({
+        framework: 'passport-local',
+        login: 'test',
+        user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
+        success: true,
+        abortController: new AbortController()
+      })
     })
 
     it('should call subscriber with proper arguments on success with passReqToCallback set to true', async () => {
@@ -122,12 +129,13 @@ withVersions('passport-local', 'passport-local', version => {
 
       expect(res.status).to.equal(200)
       expect(res.data).to.equal('Granted')
-      expect(subscriberStub).to.be.calledOnceWithExactly(
-        {
-          credentials: { type: 'local', username: 'test' },
-          user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' }
-        }
-      )
+      expect(subscriberStub).to.be.calledOnceWithExactly({
+        framework: 'passport-local',
+        login: 'test',
+        user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
+        success: true,
+        abortController: new AbortController()
+      })
     })
 
     it('should call subscriber with proper arguments on failure', async () => {
@@ -135,12 +143,32 @@ withVersions('passport-local', 'passport-local', version => {
 
       expect(res.status).to.equal(200)
       expect(res.data).to.equal('Denied')
-      expect(subscriberStub).to.be.calledOnceWithExactly(
-        {
-          credentials: { type: 'local', username: 'test' },
-          user: false
-        }
-      )
+      expect(subscriberStub).to.be.calledOnceWithExactly({
+        framework: 'passport-local',
+        login: 'test',
+        user: false,
+        success: false,
+        abortController: new AbortController()
+      })
+    })
+
+    it('should block when subscriber aborts', async () => {
+      subscriberStub = sinon.spy(({ abortController }) => {
+        storage.getStore().req.res.writeHead(403).end('Blocked')
+        abortController.abort()
+      })
+
+      const res = await axios.post(`http://localhost:${port}/`, { username: 'test', password: '1234' })
+
+      expect(res.status).to.equal(403)
+      expect(res.data).to.equal('Blocked')
+      expect(subscriberStub).to.be.calledOnceWithExactly({
+        framework: 'passport-local',
+        login: 'test',
+        user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
+        success: true,
+        abortController: new AbortController()
+      })
     })
   })
 })
