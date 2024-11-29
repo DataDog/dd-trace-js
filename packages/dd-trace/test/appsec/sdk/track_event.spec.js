@@ -62,7 +62,6 @@ describe('track_event', () => {
       trackUserLoginSuccessEvent = trackEvents.trackUserLoginSuccessEvent
       trackUserLoginFailureEvent = trackEvents.trackUserLoginFailureEvent
       trackCustomEvent = trackEvents.trackCustomEvent
-      trackEvent = trackEvents.trackEvent
     })
 
     describe('trackUserLoginSuccessEvent', () => {
@@ -276,43 +275,6 @@ describe('track_event', () => {
         })
         expect(prioritySampler.setPriority)
           .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
-      })
-    })
-
-    describe('trackEvent', () => {
-      it('should call addTags with safe mode', () => {
-        trackEvent('event', { metaKey1: 'metaValue1', metakey2: 'metaValue2' }, 'trackEvent', rootSpan, 'safe')
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-          'appsec.events.event.track': 'true',
-          '_dd.appsec.events.event.auto.mode': 'safe',
-          'appsec.events.event.metaKey1': 'metaValue1',
-          'appsec.events.event.metakey2': 'metaValue2'
-        })
-        expect(prioritySampler.setPriority)
-          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
-      })
-
-      it('should call addTags with extended mode', () => {
-        trackEvent('event', { metaKey1: 'metaValue1', metakey2: 'metaValue2' }, 'trackEvent', rootSpan, 'extended')
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-          'appsec.events.event.track': 'true',
-          '_dd.appsec.events.event.auto.mode': 'extended',
-          'appsec.events.event.metaKey1': 'metaValue1',
-          'appsec.events.event.metakey2': 'metaValue2'
-        })
-        expect(prioritySampler.setPriority)
-          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
-      })
-
-      it('should call standalone sample', () => {
-        trackEvent('event', undefined, 'trackEvent', rootSpan, undefined)
-
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-          'appsec.events.event.track': 'true'
-        })
-        expect(prioritySampler.setPriority)
-          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
-        expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
       })
     })
   })
