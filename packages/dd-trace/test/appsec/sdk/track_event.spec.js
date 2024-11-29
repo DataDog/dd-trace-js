@@ -12,13 +12,13 @@ describe('track_event', () => {
   describe('Internal API', () => {
     const tracer = {}
     let log
+    let prioritySampler
     let rootSpan
     let getRootSpan
     let setUserTags
-    let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent, trackEvent
     let sample
     let waf
-    let prioritySampler
+    let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent
 
     beforeEach(() => {
       log = {
@@ -63,10 +63,6 @@ describe('track_event', () => {
       trackUserLoginFailureEvent = trackEvents.trackUserLoginFailureEvent
       trackCustomEvent = trackEvents.trackCustomEvent
       trackEvent = trackEvents.trackEvent
-    })
-
-    afterEach(() => {
-      sinon.restore()
     })
 
     describe('trackUserLoginSuccessEvent', () => {
