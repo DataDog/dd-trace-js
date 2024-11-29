@@ -61,8 +61,6 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan) {
     return
   }
 
-  keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
-
   const tags = {
     [`appsec.events.${eventName}.track`]: 'true',
     [`_dd.appsec.events.${eventName}.sdk`]: 'true'
@@ -76,6 +74,7 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan) {
 
   rootSpan.addTags(tags)
 
+  keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
   standalone.sample(rootSpan)
 }
 
