@@ -55,7 +55,7 @@ function ackEmitting ({ id: probeId, version }) {
 }
 
 function ackError (err, { id: probeId, version }) {
-  log.error(err)
+  log.error('Debugger ackError', err)
 
   onlyUniqueUpdates(STATUSES.ERROR, probeId, version, () => {
     const payload = statusPayload(probeId, version, STATUSES.ERROR)

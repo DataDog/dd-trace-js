@@ -412,7 +412,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       }
     } catch (e) {
       isEarlyFlakeDetectionEnabled = false
-      log.error(e)
+      log.error('Playwright session start error', e)
     }
 
     if (isEarlyFlakeDetectionEnabled && semver.gte(playwrightVersion, MINIMUM_SUPPORTED_VERSION_EFD)) {
@@ -425,7 +425,7 @@ function runnerHook (runnerExport, playwrightVersion) {
         }
       } catch (err) {
         isEarlyFlakeDetectionEnabled = false
-        log.error(err)
+        log.error('Playwright known tests error', err)
       }
     }
 
