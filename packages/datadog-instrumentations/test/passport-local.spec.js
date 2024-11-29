@@ -19,24 +19,44 @@ withVersions('passport-local', 'passport-local', version => {
       const LocalStrategy = require(`../../../versions/passport-local@${version}`).get().Strategy
       const app = express()
 
-      passport.use(new LocalStrategy({ usernameField: 'username', passwordField: 'password' },
-        (username, password, done) => {
-          const users = [{
-            _id: 1,
-            username: 'test',
-            password: '1234',
-            email: 'testuser@ddog.com'
-          }]
-
-          const user = users.find(user => (user.username === username) && (user.password === password))
-
-          if (!user) {
-            return done(null, false)
-          } else {
-            return done(null, user)
-          }
+      function validateUser (req, username, password, done) {
+        // support with or without passReqToCallback
+        if (typeof done !== 'function') {
+          done = password
+          password = username
+          username = req
         }
-      ))
+
+        // simulate db error
+        if (username === 'error') return done('error')
+
+        const users = [{
+          _id: 1,
+          username: 'test',
+          password: '1234',
+          email: 'testuser@ddog.com'
+        }]
+
+        const user = users.find(user => (user.username === username) && (user.password === password))
+
+        if (!user) {
+          return done(null, false)
+        } else {
+          return done(null, user)
+        }
+      }
+
+      passport.use('local', new LocalStrategy({
+        usernameField: 'username',
+        passwordField: 'password',
+        passReqToCallback: false
+      }, validateUser))
+
+      passport.use('local-withreq', new LocalStrategy({
+        usernameField: 'username',
+        passwordField: 'password',
+        passReqToCallback: true
+      }, validateUser))
 
       app.use(passport.initialize())
       app.use(express.json())
@@ -45,16 +65,14 @@ withVersions('passport-local', 'passport-local', version => {
         passport.authenticate('local', {
           successRedirect: '/grant',
           failureRedirect: '/deny',
-          passReqToCallback: false,
           session: false
         })
       )
 
       app.post('/req',
-        passport.authenticate('local', {
+        passport.authenticate('local-withreq', {
           successRedirect: '/grant',
           failureRedirect: '/deny',
-          passReqToCallback: true,
           session: false
         })
       )
