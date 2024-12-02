@@ -7,7 +7,7 @@ const tracingChannel = require('dc-polyfill').tracingChannel
 
 const invokeTracingChannel = tracingChannel('apm:langchain:invoke')
 
-function wrapLangChainPromise (fn, type, namespace = []) {
+function wrapLangChainPromise (fn, type, namespace = [], name) {
   return function () {
     if (!invokeTracingChannel.start.hasSubscribers) {
       return fn.apply(this, arguments)
@@ -15,7 +15,7 @@ function wrapLangChainPromise (fn, type, namespace = []) {
 
     // Runnable interfaces have an `lc_namespace` property
     const ns = this.lc_namespace || namespace
-    const resource = [...ns, this.constructor.name].join('.')
+    const resource = [...ns, name ?? this.constructor.name].join('.')
 
     const ctx = {
       args: arguments,
@@ -61,17 +61,32 @@ for (const extension of extensions) {
     return exports
   })
 
-  addHook({ name: '@langchain/openai', file: `dist/embeddings.${extension}`, versions: ['>=0.1'] }, exports => {
-    const OpenAIEmbeddings = exports.OpenAIEmbeddings
+  addHook({ name: '@langchain/core', file: `dist/embeddings.${extension}`, versions: ['>=0.1'] }, exports => {
+    shimmer.wrap(exports, 'Embeddings', Embeddings => {
+      return class extends Embeddings {
+        constructor (...args) {
+          super(...args)
 
-    // OpenAI (and Embeddings in general) do not define an lc_namespace
-    const namespace = ['langchain', 'embeddings', 'openai']
-    shimmer.wrap(OpenAIEmbeddings.prototype, 'embedDocuments', embedDocuments =>
-      wrapLangChainPromise(embedDocuments, 'embedding', namespace)
-    )
-    shimmer.wrap(OpenAIEmbeddings.prototype, 'embedQuery', embedQuery =>
-      wrapLangChainPromise(embedQuery, 'embedding', namespace)
-    )
+          const namespace = ['langchain', 'embeddings']
+
+          // when originally implemented, we only wrapped OpenAI embeddings
+          // these embeddings had the resource name of `langchain.embeddings.openai.OpenAIEmbeddings`
+          // we need to make sure `openai` is appended to the resource name until a new tracer major
+          if (this.constructor.name === 'OpenAIEmbeddings') {
+            namespace.push('openai')
+          }
+
+          shimmer.wrap(this, 'embedQuery', embedQuery => wrapLangChainPromise(embedQuery, 'embedding', namespace))
+          shimmer.wrap(this, 'embedDocuments',
+            embedDocuments => wrapLangChainPromise(embedDocuments, 'embedding', namespace))
+        }
+
+        static [Symbol.hasInstance] (instance) {
+          return instance instanceof Embeddings
+        }
+      }
+    })
+
     return exports
   })
 }
