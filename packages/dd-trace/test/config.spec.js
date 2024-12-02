@@ -1,6 +1,6 @@
 'use strict'
 
-// require('./setup/tap')
+require('./setup/tap')
 
 const { expect } = require('chai')
 const { readFileSync } = require('fs')
