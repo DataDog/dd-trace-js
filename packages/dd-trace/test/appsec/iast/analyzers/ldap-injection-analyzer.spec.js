@@ -1,6 +1,7 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
+const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 
 describe('ldap-injection-analyzer', () => {
   const NOT_TAINTED_QUERY = 'no vulnerable query'
@@ -9,6 +10,19 @@ describe('ldap-injection-analyzer', () => {
   const TaintTrackingMock = {
     isTainted: (iastContext, string) => {
       return string === TAINTED_QUERY
+    },
+    getRanges: (iastContext, string) => {
+      return [
+        {
+          start: 0,
+          end: string.length,
+          iinfo: {
+            parameterName: 'param',
+            parameterValue: string,
+            type: HTTP_REQUEST_PARAMETER
+          }
+        }
+      ]
     }
   }
 
