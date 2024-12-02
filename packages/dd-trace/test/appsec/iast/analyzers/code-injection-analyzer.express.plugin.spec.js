@@ -33,7 +33,6 @@ describe('Code injection vulnerability', () => {
       (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
         testThatRequestHasVulnerability({
           fn: (req, res) => {
-            // eslint-disable-next-line no-eval
             res.send(require(evalFunctionsPath).runEval(req.query.script, 'test-result'))
           },
           vulnerability: 'CODE_INJECTION',
@@ -52,7 +51,7 @@ describe('Code injection vulnerability', () => {
             const store = storage.getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
-            // eslint-disable-next-line no-eval
+
             res.send(require(evalFunctionsPath).runEval(str, 'test-result'))
           },
           vulnerability: 'CODE_INJECTION',

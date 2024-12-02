@@ -25,6 +25,7 @@ class InjectionAnalyzer extends Analyzer {
     if (!ranges) return false
 
     const nonRowRanges = ranges.filter(range => range.iinfo.type !== SQL_ROW_VALUE)
+
     return nonRowRanges.length > 0
   }
 }

@@ -62,11 +62,11 @@ function wrapQuery (query) {
         abortController
       })
 
-      const finish = asyncResource.bind(function (error, result) {
+      const finish = asyncResource.bind(function (error, res) {
         if (error) {
           errorCh.publish(error)
         }
-        finishCh.publish({ result: result?.rows })
+        finishCh.publish({ result: res?.rows })
       })
 
       if (abortController.signal.aborted) {
@@ -125,7 +125,7 @@ function wrapQuery (query) {
       } else if (newQuery.once) {
         newQuery
           .once('error', finish)
-          .once('end', (result) => finish(null, result))
+          .once('end', (res) => finish(null, res))
       } else {
         newQuery.then((res) => finish(null, res), finish)
       }

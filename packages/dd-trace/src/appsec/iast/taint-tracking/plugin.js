@@ -76,12 +76,12 @@ class TaintTrackingPlugin extends SourceIastPlugin {
 
     this.addSub(
       { channelName: 'datadog:sequelize:query:finish', tag: SQL_ROW_VALUE },
-      ({ result }) => this._taintDatabaseResult(result)
+      ({ result }) => this._taintDatabaseResult(result, 'sequelize')
     )
 
     this.addSub(
       { channelName: 'apm:pg:query:finish', tag: SQL_ROW_VALUE },
-      ({ result }) => this._taintDatabaseResult(result)
+      ({ result }) => this._taintDatabaseResult(result, 'pg')
     )
 
     this.addSub(
@@ -196,7 +196,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.taintUrl(req, iastContext)
   }
 
-  _taintDatabaseResult (result, iastContext = getIastContext(storage.getStore()), name) {
+  _taintDatabaseResult (result, dbOrigin, iastContext = getIastContext(storage.getStore()), name) {
     if (!iastContext) return result
 
     let rowsToTaint = this.iastConfig?.dbRowsToTaint
@@ -209,15 +209,15 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     if (Array.isArray(result)) {
       for (let i = 0; i < result.length && i < rowsToTaint; i++) {
         const nextName = name ? `${name}.${i}` : '' + i
-        result[i] = this._taintDatabaseResult(result[i], iastContext, nextName)
+        result[i] = this._taintDatabaseResult(result[i], dbOrigin, iastContext, nextName)
       }
     } else if (result && typeof result === 'object') {
-      if (result.dataValues) { // TODO keep this in mind only with sequelize
-        result.dataValues = this._taintDatabaseResult(result.dataValues, iastContext, name)
+      if (dbOrigin === 'sequelize' && result.dataValues) {
+        result.dataValues = this._taintDatabaseResult(result.dataValues, dbOrigin, iastContext, name)
       } else {
         Object.keys(result).forEach(key => {
           const nextName = name ? `${name}.${key}` : key
-          result[key] = this._taintDatabaseResult(result[key], iastContext, nextName)
+          result[key] = this._taintDatabaseResult(result[key], dbOrigin, iastContext, nextName)
         })
       }
     } else if (typeof result === 'string') {
