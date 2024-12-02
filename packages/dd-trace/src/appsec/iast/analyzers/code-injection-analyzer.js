@@ -13,6 +13,10 @@ class CodeInjectionAnalyzer extends InjectionAnalyzer {
       this.analyze(script)
     })
   }
+
+  _areRangesVulnerable () {
+    return true
+  }
 }
 
 module.exports = new CodeInjectionAnalyzer()
