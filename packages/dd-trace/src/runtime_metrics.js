@@ -7,11 +7,17 @@ const os = require('os')
 const { DogStatsDClient } = require('./dogstatsd')
 const log = require('./log')
 const Histogram = require('./histogram')
-const { performance } = require('perf_hooks')
+const { performance, PerformanceObserver } = require('perf_hooks')
 
+const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
 const INTERVAL = 10 * 1000
 
+// Node >=16 has PerformanceObserver with `gc` type, but <16.7 had a critical bug.
+// See: https://github.com/nodejs/node/issues/39548
+const hasGCMetrics = NODE_MAJOR >= 18 || (NODE_MAJOR === 16 && NODE_MINOR >= 7)
+
 let nativeMetrics = null
+let gcObserver = null
 
 let interval
 let client
@@ -24,13 +30,18 @@ let elu
 
 reset()
 
-module.exports = {
+const runtimeMetrics = module.exports = {
   start (config) {
     const clientConfig = DogStatsDClient.generateClientConfig(config)
 
     try {
       nativeMetrics = require('@datadog/native-metrics')
-      nativeMetrics.start()
+
+      if (hasGCMetrics) {
+        nativeMetrics.start('loop') // Only add event loop watcher and not GC.
+      } else {
+        nativeMetrics.start()
+      }
     } catch (e) {
       log.error(e)
       nativeMetrics = null
@@ -39,6 +50,8 @@ module.exports = {
     client = new DogStatsDClient(clientConfig)
 
     time = process.hrtime()
+
+    startObservers()
 
     if (nativeMetrics) {
       interval = setInterval(() => {
@@ -64,6 +77,8 @@ module.exports = {
     if (nativeMetrics) {
       nativeMetrics.stop()
     }
+
+    stopObservers()
 
     clearInterval(interval)
     reset()
@@ -305,4 +320,58 @@ function histogram (name, stats, tags) {
   client.increment(`${name}.count`, stats.count, tags)
   client.gauge(`${name}.median`, stats.median, tags)
   client.gauge(`${name}.95percentile`, stats.p95, tags)
+}
+
+function startObservers () {
+  if (gcObserver || !hasGCMetrics) return
+
+  gcObserver = new PerformanceObserver(list => {
+    for (const entry of list.getEntries()) {
+      const type = gcType(entry.kind)
+
+      runtimeMetrics.histogram('runtime.node.gc.pause.by.type', entry.duration, `gc_type:${type}`)
+      runtimeMetrics.histogram('runtime.node.gc.pause', entry.duration)
+    }
+  })
+
+  gcObserver.observe({ type: 'gc' })
+}
+
+function stopObservers () {
+  if (!gcObserver) return
+
+  gcObserver.disconnect()
+  gcObserver = null
+}
+
+function gcType (kind) {
+  if (NODE_MAJOR >= 22) {
+    switch (kind) {
+      case 1: return 'scavenge'
+      case 2: return 'minor_mark_sweep'
+      case 4: return 'mark_sweep_compact' // Deprecated, might be removed soon.
+      case 8: return 'incremental_marking'
+      case 16: return 'process_weak_callbacks'
+      case 31: return 'all'
+    }
+  } else if (NODE_MAJOR >= 18) {
+    switch (kind) {
+      case 1: return 'scavenge'
+      case 2: return 'minor_mark_compact'
+      case 4: return 'mark_sweep_compact'
+      case 8: return 'incremental_marking'
+      case 16: return 'process_weak_callbacks'
+      case 31: return 'all'
+    }
+  } else {
+    switch (kind) {
+      case 1: return 'scavenge'
+      case 2: return 'mark_sweep_compact'
+      case 4: return 'incremental_marking'
+      case 8: return 'process_weak_callbacks'
+      case 15: return 'all'
+    }
+  }
+
+  return 'unknown'
 }
