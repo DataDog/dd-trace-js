@@ -198,7 +198,7 @@ function buildTagsFromParams (requestParams, textAndResponseReasons, modelProvid
       tags[`aws.bedrock.response.choices.${index}.id`] = textAndResponseReason.choice_id
     }
     tags[`aws.bedrock.response.choices.${index}.text`] = textAndResponseReason.text
-    tags[`aws.bedrock.response.choices.${index}.finish_reason`] = textAndResponseReason.finish_reason;
+    tags[`aws.bedrock.response.choices.${index}.finish_reason`] = textAndResponseReason.finish_reason
   })
 
   return tags
