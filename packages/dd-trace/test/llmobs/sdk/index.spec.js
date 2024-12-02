@@ -435,6 +435,32 @@ describe('sdk', () => {
           })
         })
 
+        it('does not crash for auto-annotation values that are overriden', () => {
+          const circular = {}
+          circular.circular = circular
+
+          let span
+          function myWorkflow (input) {
+            span = llmobs._active()
+            llmobs.annotate({
+              inputData: 'circular',
+              outputData: 'foo'
+            })
+            return ''
+          }
+
+          const wrappedMyWorkflow = llmobs.wrap({ kind: 'workflow' }, myWorkflow)
+          wrappedMyWorkflow(circular)
+
+          expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+            '_ml_obs.meta.span.kind': 'workflow',
+            '_ml_obs.meta.ml_app': 'mlApp',
+            '_ml_obs.llmobs_parent_id': 'undefined',
+            '_ml_obs.meta.input.value': 'circular',
+            '_ml_obs.meta.output.value': 'foo'
+          })
+        })
+
         // TODO: need span kind optional for this test
         it.skip('sets the span name to "unnamed-anonymous-function" if no name is provided', () => {
           let span

@@ -1,6 +1,6 @@
 'use strict'
 
-const { SPAN_KIND, OUTPUT_VALUE } = require('./constants/tags')
+const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
 
 const {
   getFunctionArguments,
@@ -135,25 +135,31 @@ class LLMObs extends NoopLLMObs {
     function wrapped () {
       const span = llmobs._tracer.scope().active()
 
-      const result = llmobs._activate(span, { kind, options: llmobsOptions }, () => {
-        if (!['llm', 'embedding'].includes(kind)) {
-          llmobs.annotate(span, { inputData: getFunctionArguments(fn, arguments) })
-        }
+      const lastArgId = arguments.length - 1
+      const cb = arguments[lastArgId]
+      const hasCallback = typeof cb === 'function'
 
-        return fn.apply(this, arguments)
-      })
+      if (hasCallback) {
+        const scopeBoundCb = llmobs._tracer.scope().bind(cb)
+        arguments[lastArgId] = function () {
+          llmobs._autoAnnotate(span, kind, getFunctionArguments(fn, arguments)) // no output annotation
+          return scopeBoundCb.apply(this, arguments)
+        }
+      }
+
+      const result = llmobs._activate(span, { kind, options: llmobsOptions }, () => fn.apply(this, arguments))
 
       if (result && typeof result.then === 'function') {
         return result.then(value => {
-          if (value && !['llm', 'retrieval'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
-            llmobs.annotate(span, { outputData: value })
+          if (!hasCallback) {
+            llmobs._autoAnnotate(span, kind, getFunctionArguments(fn, arguments), value)
           }
           return value
         })
       }
 
-      if (result && !['llm', 'retrieval'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
-        llmobs.annotate(span, { outputData: result })
+      if (!hasCallback) {
+        llmobs._autoAnnotate(span, kind, getFunctionArguments(fn, arguments), result)
       }
 
       return result
@@ -331,6 +337,19 @@ class LLMObs extends NoopLLMObs {
     if (!this.enabled) return
 
     flushCh.publish()
+  }
+
+  _autoAnnotate (span, kind, input, output) {
+    const annotations = {}
+    if (input && !['llm', 'embedding'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[INPUT_VALUE]) {
+      annotations.inputData = input
+    }
+
+    if (output && !['llm', 'retrieval'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
+      annotations.outputData = output
+    }
+
+    this.annotate(span, annotations)
   }
 
   _active () {
