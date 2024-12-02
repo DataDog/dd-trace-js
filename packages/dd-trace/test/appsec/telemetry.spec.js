@@ -339,6 +339,17 @@ describe('Appsec Telemetry metrics', () => {
         expect(count).to.not.have.been.called
       })
     })
+
+    describe('incrementMissingUserLogin', () => {
+      it('should increment instrum.user_auth.missing_user_login metric', () => {
+        appsecTelemetry.incrementMissingUserLogin('passport-local', 'login_success')
+
+        expect(count).to.have.been.calledOnceWithExactly('instrum.user_auth.missing_user_login', {
+          framework: 'passport-local',
+          event_type: 'login_success'
+        })
+      })
+    })
   })
 
   describe('if disabled', () => {
