@@ -78,7 +78,7 @@ function trackLogin (framework, login, user, success, rootSpan) {
     return
   }
 
-  if (!login || typeof login !== 'string') {
+  if (typeof login !== 'string') {
     log.error('Invalid login provided to AppSec trackLogin')
 
     telemetry.incrementMissingUserLogin(framework, success ? 'login_success' : 'login_failure')
