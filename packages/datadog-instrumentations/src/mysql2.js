@@ -302,4 +302,4 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['1 - 3.11.4'] },
 addHook({ name: 'mysql2', file: 'lib/pool.js', versions: ['1 - 3.11.4'] }, wrapPool)
 
 // PoolNamespace.prototype.query does not exist in mysql2<2.3.0
-addHook({ name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['>=2.3.0 <3.11.5'] }, wrapPoolCluster)
+addHook({ name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['2.3.0 - 3.11.4'] }, wrapPoolCluster)
