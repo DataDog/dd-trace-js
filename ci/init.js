@@ -1,10 +1,21 @@
 /* eslint-disable no-console */
 const tracer = require('../packages/dd-trace')
 const { isTrue } = require('../packages/dd-trace/src/util')
+const log = require('../packages/dd-trace/src/log')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
 const isCucumberWorker = !!process.env.CUCUMBER_WORKER_ID
 const isMochaWorker = !!process.env.MOCHA_WORKER_ID
+
+const packageManagers = [
+  'npm',
+  'yarn',
+  'pnpm'
+]
+
+const isPackageManager = () => {
+  return packageManagers.some(packageManager => process.argv[1]?.includes(`bin/${packageManager}`))
+}
 
 const options = {
   startupLogs: false,
@@ -13,6 +24,11 @@ const options = {
 }
 
 let shouldInit = true
+
+if (isPackageManager()) {
+  log.debug('dd-trace is not initialized in a package manager.')
+  shouldInit = false
+}
 
 const isAgentlessEnabled = isTrue(process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED)
 
