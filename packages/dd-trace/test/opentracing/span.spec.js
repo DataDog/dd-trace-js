@@ -223,6 +223,15 @@ describe('Span', () => {
       expect(otelBaggages.length).to.equal(1)
       expect(otelBaggages[0][0]).to.equal('foo')
       expect(otelBaggages[0][1].value).to.equal('bar')
+      span.setBaggageItem('penguin', 'chunky')
+      expect(span._spanContext._baggageItems).to.deep.equal({
+        foo: 'bar',
+        penguin: 'chunky'
+      })
+      expect(propagation.getActiveBaggage().getAllEntries()).to.deep.equal([
+        [ 'foo', { value: 'bar' } ],
+        [ 'penguin', { value: 'chunky' } ]
+      ])
     })
 
     it('should pass baggage items to future causal spans', () => {
@@ -380,22 +389,6 @@ describe('Span', () => {
 
       expect(span.getBaggageItem('foo')).to.equal('bar')
     })
-
-    it('should sync opentelemetry baggages', () => {
-      // span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
-      // const entries = {
-      //   banana: { value: 'boats' },
-      // };
-      // const bag = propagation.createBaggage(entries);
-      // const ctx = propagation.setBaggage(ROOT_CONTEXT, bag);
-
-      // context.setGlobalContextManager({
-      //   active: () => ctx,
-      //   disable: () => {},
-      // });
-      // expect(Object.keys(JSON.parse(span.getAllBaggageItems())).length).to.equal(1)
-      // expect(span.getBaggageItem('banana')).to.equal('boats')
-    })
   })
 
   describe('getAllBaggageItems', () => {
@@ -420,21 +413,20 @@ describe('Span', () => {
       span.removeBaggageItem('foo')
       expect(span.getBaggageItem('foo')).to.be.undefined
     })
+
+    it('should remove a baggage item with opentelemetry api', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      span.setBaggageItem('foo', 'bar')
+      expect(propagation.getActiveBaggage().getEntry('foo').value).to.equal('bar')
+      span.removeBaggageItem('foo')
+      expect(propagation.getActiveBaggage().getEntry('foo')).to.be.undefined
+    })
   })
 
   describe('removeAllBaggageItems', () => {
     it('should remove all baggage items', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
-      span.setBaggageItem('penguin', 'chunky')
       span.setBaggageItem('raccoon', 'cute')
-      expect(span._spanContext._baggageItems).to.deep.equal({
-        penguin: 'chunky',
-        raccoon: 'cute'
-      })
-      expect(propagation.getActiveBaggage().getAllEntries()).to.deep.equal([
-        [ 'penguin', { value: 'chunky' } ],
-        [ 'raccoon', { value: 'cute' } ]
-      ])
       span.removeAllBaggageItems()
       expect(propagation.getActiveBaggage()).to.be.undefined
       expect(span._spanContext._baggageItems).to.deep.equal({})

@@ -176,6 +176,17 @@ class DatadogSpan {
   }
 
   removeBaggageItem (key) {
+    this._syncOtelBaggage()
+    if (this._otelBaggageReference !== undefined) {
+      const newBaggages = this._otelBaggageReference.removeEntry(key)
+      const otelContext = propagation.setBaggage(context.active(), newBaggages)
+      context.disable()
+      context.setGlobalContextManager({
+        active: () => otelContext,
+        disable: () => {},
+      })
+      this._otelBaggageReference = propagation.getActiveBaggage()
+    }
     delete this._spanContext._baggageItems[key]
   }
 
