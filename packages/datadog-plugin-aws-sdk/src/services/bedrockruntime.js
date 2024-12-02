@@ -1,6 +1,7 @@
 'use strict'
 
 const BaseAwsSdkPlugin = require('../base')
+const log = require('../../../dd-trace/src/log')
 
 const _AI21 = 'ai21'
 const _AMAZON = 'amazon'
@@ -13,7 +14,7 @@ class BedrockRuntime extends BaseAwsSdkPlugin {
   static get id () { return 'bedrock runtime' }
 
   generateTags (params, operation, response) {
-    const tags = {}
+    let tags = {}
     let modelName = ''
     let modelProvider = ''
     const modelMeta = params.modelId.split('.')
@@ -22,22 +23,15 @@ class BedrockRuntime extends BaseAwsSdkPlugin {
     } else {
       [, modelProvider, modelName] = modelMeta
     }
-    const requestParams = extractRequestParams(params, modelProvider)
-    const responseParams = extractResponseParams(response, modelProvider)
 
-    Object.assign(tags, {
-      'resource.name': `${operation}`,
-      'aws.bedrock.request.model': modelName,
-      'aws.bedrock.request.model_provider': modelProvider,
-      'aws.bedrock.request.prompt': requestParams.prompt,
-      'aws.bedrock.request.temperature': requestParams.temperature,
-      'aws.bedrock.request.top_p': requestParams.top_p,
-      'aws.bedrock.request.max_tokens': requestParams.max_tokens,
-      'aws.bedrock.request.stop_sequences': requestParams.stop_sequences,
-      // response tags only for amazon model
-      'openai.response.usage.prompt_tokens': responseParams.input_token_count,
-      'openai.response.usage.generated_tokens': responseParams.output_token_count
-    })
+    const shouldSetChoiceIds = modelProvider === 'COHERE' && !modelName.includes('embed')
+
+    const requestParams = extractRequestParams(params, modelProvider)
+    const textAndResponseReasons = extractTextAndResponseReason(response, modelProvider, modelName, shouldSetChoiceIds)
+
+    tags = buildTagsFromParams(requestParams, textAndResponseReasons, modelProvider, modelName, operation)
+
+    console.log(tags)
 
     return tags
   }
@@ -108,28 +102,97 @@ function extractRequestParams (params, provider) {
   return {}
 }
 
-function extractResponseParams (response, provider) {
-  const responseBody = JSON.parse(Buffer.from(response.body).toString('utf8'))
-  if (provider === _AI21) {
-    return {}
-  } else if (provider === _AMAZON) {
-    // loop over responseBody.results and extract the token count
-    const inputTokenCount = responseBody.inputTextTokenCount
-    const outputTokenCount = responseBody.results.reduce((acc, result) => acc + result.tokenCount, 0)
-    return {
-      input_token_count: inputTokenCount,
-      output_token_count: outputTokenCount
+function extractTextAndResponseReason (response, provider, modelName, shouldSetChoiceIds) {
+  const body = JSON.parse(Buffer.from(response.body).toString('utf8'))
+  let text = ''
+  let finishReason = ''
+  let choiceId = ''
+
+  try {
+    if (provider === 'AI21') {
+      const completions = body.completions || []
+      if (completions.length > 0) {
+        const data = completions[0].data || {}
+        text = data.text
+        finishReason = completions[0].finishReason
+      }
+    } else if (provider === 'AMAZON' && modelName.includes('embed')) {
+      text = [body.embedding || []]
+    } else if (provider === 'AMAZON') {
+      const results = body.results || []
+      if (results.length > 0) {
+        text = results[0].outputText
+        finishReason = results[0].completionReason
+      }
+    } else if (provider === 'ANTHROPIC') {
+      text = body.completion || body.content || ''
+      finishReason = body.stop_reason
+    } else if (provider === 'COHERE' && modelName.includes('embed')) {
+      text = body.embeddings || [[]]
+    } else if (provider === 'COHERE') {
+      const generations = body.generations || []
+      text = generations.map(generation => generation.text)
+      finishReason = generations.map(generation => generation.finish_reason)
+    } else if (provider === 'META') {
+      text = body.generation
+      finishReason = body.stop_reason
+    } else if (provider === 'STABILITY') {
+      // TODO: request/response formats are different for image-based models. Defer for now
     }
-  } else if (provider === _ANTHROPIC) {
-    return {}
-  } else if (provider === _COHERE) {
-    return {}
-  } else if (provider === _META) {
-    return {}
-  } else if (provider === _STABILITY) {
-    return {}
+    if (shouldSetChoiceIds) {
+      choiceId = body.generations.map(generation => generation.id)
+    }
+  } catch (error) {
+    log.error('Unable to extract text/finish_reason from response body. Defaulting to empty text/finish_reason.')
+    if (!(Array.isArray(text))) {
+      text = [text]
+    }
+    if (!(Array.isArray(finishReason))) {
+      finishReason = [finishReason]
+    }
   }
-  return {}
+
+  if (!Array.isArray(text)) {
+    text = [text]
+  }
+  if (!Array.isArray(finishReason)) {
+    finishReason = [finishReason]
+  }
+
+  if (shouldSetChoiceIds) {
+    return { text, finish_reason: finishReason, choice_id: choiceId }
+  }
+
+  return { text, finish_reason: finishReason }
+}
+
+function buildTagsFromParams (requestParams, textAndResponseReasons, modelProvider, modelName, operation) {
+  const tags = {}
+
+  // add request tags
+  tags['resource.name'] = `${operation}`
+  tags['aws.bedrock.request.model'] = modelName
+  tags['aws.bedrock.request.model_provider'] = modelProvider
+  tags['aws.bedrock.request.prompt'] = requestParams.prompt
+  tags['aws.bedrock.request.temperature'] = requestParams.temperature
+  tags['aws.bedrock.request.top_p'] = requestParams.top_p
+  tags['aws.bedrock.request.max_tokens'] = requestParams.max_tokens
+  tags['aws.bedrock.request.stop_sequences'] = requestParams.stop_sequences
+
+  // add response tags
+  Object.entries(textAndResponseReasons).forEach(([key, value]) => {
+    console.log(textAndResponseReason, index)
+    if (modelName.includes('embed')) {
+      tags['aws.bedrock.response.embedding_length'] = textAndResponseReason.text[0].length
+    }
+    if (textAndResponseReason.choice_id) {
+      tags[`aws.bedrock.response.choices.${index}.id`] = textAndResponseReason.choice_id[index]
+    }
+    tags[`aws.bedrock.response.choices.${index}.text`] = textAndResponseReason.text[index]
+    tags[`aws.bedrock.response.choices.${index}.finish_reason`] = textAndResponseReason.finish_reason[index]
+  })
+
+  return tags
 }
 
 module.exports = BedrockRuntime
