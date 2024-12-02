@@ -4,7 +4,7 @@ require('../setup/tap')
 
 const Config = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
-const { context, propagation, ROOT_CONTEXT } = require('@opentelemetry/api')
+const { propagation } = require('@opentelemetry/api')
 
 const { channel } = require('dc-polyfill')
 const startCh = channel('dd-trace:span:start')
@@ -229,8 +229,8 @@ describe('Span', () => {
         penguin: 'chunky'
       })
       expect(propagation.getActiveBaggage().getAllEntries()).to.deep.equal([
-        [ 'foo', { value: 'bar' } ],
-        [ 'penguin', { value: 'chunky' } ]
+        ['foo', { value: 'bar' }],
+        ['penguin', { value: 'chunky' }]
       ])
     })
 

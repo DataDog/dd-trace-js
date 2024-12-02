@@ -153,7 +153,7 @@ class DatadogSpan {
     context.disable()
     context.setGlobalContextManager({
       active: () => otelContext,
-      disable: () => {},
+      disable: () => {}
     })
     this._otelBaggageReference = propagation.getActiveBaggage()
     this._spanContext._baggageItems[key] = value
@@ -183,7 +183,7 @@ class DatadogSpan {
       context.disable()
       context.setGlobalContextManager({
         active: () => otelContext,
-        disable: () => {},
+        disable: () => {}
       })
       this._otelBaggageReference = propagation.getActiveBaggage()
     }
@@ -196,7 +196,7 @@ class DatadogSpan {
     context.disable()
     context.setGlobalContextManager({
       active: () => otelContext,
-      disable: () => {},
+      disable: () => {}
     })
     this._otelBaggageReference = propagation.getActiveBaggage()
     this._spanContext._baggageItems = {}
