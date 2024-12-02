@@ -23,12 +23,10 @@ const {
   JEST_DISPLAY_NAME,
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_DRIVER,
-  getFileAndLineNumberFromError,
   DI_ERROR_DEBUG_INFO_CAPTURED,
   DI_DEBUG_ERROR_SNAPSHOT_ID,
   DI_DEBUG_ERROR_FILE,
   DI_DEBUG_ERROR_LINE,
-  getTestSuitePath,
   TEST_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -379,39 +377,6 @@ class JestPlugin extends CiPlugin {
       span.setTag(TEST_STATUS, 'skip')
       span.finish()
     })
-  }
-
-  // TODO: If the test finishes and the probe is not hit, we should remove the breakpoint
-  addDiProbe (err, probe) {
-    const [file, line] = getFileAndLineNumberFromError(err)
-
-    const relativePath = getTestSuitePath(file, this.repositoryRoot)
-
-    const [
-      snapshotId,
-      setProbePromise,
-      hitProbePromise
-    ] = this.di.addLineProbe({ file: relativePath, line })
-
-    probe.setProbePromise = setProbePromise
-
-    hitProbePromise.then(({ snapshot }) => {
-      // TODO: handle race conditions for this.retriedTestIds
-      const { traceId, spanId } = this.retriedTestIds
-      this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
-        debugger: { snapshot },
-        dd: {
-          trace_id: traceId,
-          span_id: spanId
-        }
-      })
-    })
-
-    return {
-      snapshotId,
-      file: relativePath,
-      line
-    }
   }
 
   startTestSpan (test) {
