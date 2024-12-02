@@ -6,6 +6,10 @@ const path = require('path')
 const os = require('os')
 const fs = require('fs')
 const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
+const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
+const { SQL_ROW_VALUE } = require('../../../../src/appsec/iast/taint-tracking/source-types')
+const { storage } = require('../../../../../datadog-core')
+const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 
 describe('Code injection vulnerability', () => {
   withVersions('express', 'express', '>4.18.0', version => {
@@ -40,6 +44,19 @@ describe('Code injection vulnerability', () => {
               })
               .catch(done)
           }
+        })
+
+        testThatRequestHasVulnerability({
+          fn: (req, res) => {
+            const source = '1 + 2'
+            const store = storage.getStore()
+            const iastContext = iastContextFunctions.getIastContext(store)
+            const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
+            // eslint-disable-next-line no-eval
+            res.send(require(evalFunctionsPath).runEval(str, 'test-result'))
+          },
+          vulnerability: 'CODE_INJECTION',
+          testDescription: 'Should detect CODE_INJECTION vulnerability with DB source'
         })
 
         testThatRequestHasNoVulnerability({
