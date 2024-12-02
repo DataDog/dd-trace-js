@@ -60,7 +60,7 @@ function getUserId (user) {
     if (id && typeof id.toString === 'function') {
       id = id.toString()
 
-      if (id.startsWith('[object ')) {
+      if (typeof id !== 'string' || id.startsWith('[object ')) {
         // probably not a usable ID ?
         continue
       }
@@ -125,7 +125,7 @@ function trackLogin (framework, login, user, success, rootSpan) {
       }
     }
 
-    persistent['server.business_logic.users.login.success'] = null
+    persistent[addresses.LOGIN_SUCCESS] = null
   } else {
     newTags = {
       'appsec.events.users.login.failure.track': 'true',
@@ -151,7 +151,7 @@ function trackLogin (framework, login, user, success, rootSpan) {
     }
     */
 
-    persistent['server.business_logic.users.login.failure'] = null
+    persistent[addresses.LOGIN_FAILURE] = null
   }
 
   keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
