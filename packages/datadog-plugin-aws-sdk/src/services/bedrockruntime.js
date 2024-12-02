@@ -20,8 +20,10 @@ class BedrockRuntime extends BaseAwsSdkPlugin {
     const modelMeta = params.modelId.split('.')
     if (modelMeta.length === 2) {
       [modelProvider, modelName] = modelMeta
+      modelProvider = modelProvider.toUpperCase()
     } else {
       [, modelProvider, modelName] = modelMeta
+      modelProvider = modelProvider.toUpperCase()
     }
 
     const shouldSetChoiceIds = modelProvider === 'COHERE' && !modelName.includes('embed')
@@ -31,7 +33,7 @@ class BedrockRuntime extends BaseAwsSdkPlugin {
 
     tags = buildTagsFromParams(requestParams, textAndResponseReasons, modelProvider, modelName, operation)
 
-    console.log(tags)
+    tags = Object.fromEntries(Object.entries(tags).filter(([_, v]) => v !== undefined))
 
     return tags
   }
@@ -104,66 +106,74 @@ function extractRequestParams (params, provider) {
 
 function extractTextAndResponseReason (response, provider, modelName, shouldSetChoiceIds) {
   const body = JSON.parse(Buffer.from(response.body).toString('utf8'))
-  let text = ''
-  let finishReason = ''
-  let choiceId = ''
+  const textAndResponseReasons = []
 
   try {
     if (provider === 'AI21') {
       const completions = body.completions || []
-      if (completions.length > 0) {
-        const data = completions[0].data || {}
-        text = data.text
-        finishReason = completions[0].finishReason
-      }
+      completions.forEach(completion => {
+        textAndResponseReasons.push({
+          text: completion.data ? completion.data.text : '',
+          finish_reason: completion.finishReason || '',
+          choice_id: shouldSetChoiceIds ? completion.id : undefined
+        })
+      })
     } else if (provider === 'AMAZON' && modelName.includes('embed')) {
-      text = [body.embedding || []]
+      textAndResponseReasons.push({
+        text: body.embedding || [],
+        finish_reason: '',
+        choice_id: undefined
+      })
     } else if (provider === 'AMAZON') {
-      const results = body.results || []
-      if (results.length > 0) {
-        text = results[0].outputText
-        finishReason = results[0].completionReason
-      }
+      (body.results || []).forEach(result => {
+        textAndResponseReasons.push({
+          text: result.outputText || '',
+          finish_reason: result.completionReason || '',
+          choice_id: undefined
+        })
+      })
     } else if (provider === 'ANTHROPIC') {
-      text = body.completion || body.content || ''
-      finishReason = body.stop_reason
+      textAndResponseReasons.push({
+        text: body.completion || body.content || '',
+        finish_reason: body.stop_reason || '',
+        choice_id: undefined
+      })
     } else if (provider === 'COHERE' && modelName.includes('embed')) {
-      text = body.embeddings || [[]]
+      (body.embeddings || [[]]).forEach(embedding => {
+        textAndResponseReasons.push({
+          text: embedding,
+          finish_reason: '',
+          choice_id: undefined
+        })
+      })
     } else if (provider === 'COHERE') {
       const generations = body.generations || []
-      text = generations.map(generation => generation.text)
-      finishReason = generations.map(generation => generation.finish_reason)
+      generations.forEach(generation => {
+        textAndResponseReasons.push({
+          text: generation.text,
+          finish_reason: generation.finish_reason,
+          choice_id: shouldSetChoiceIds ? generation.id : undefined
+        })
+      })
     } else if (provider === 'META') {
-      text = body.generation
-      finishReason = body.stop_reason
+      textAndResponseReasons.push({
+        text: body.generation || '',
+        finish_reason: body.stop_reason || '',
+        choice_id: undefined
+      })
     } else if (provider === 'STABILITY') {
       // TODO: request/response formats are different for image-based models. Defer for now
     }
-    if (shouldSetChoiceIds) {
-      choiceId = body.generations.map(generation => generation.id)
-    }
   } catch (error) {
     log.error('Unable to extract text/finish_reason from response body. Defaulting to empty text/finish_reason.')
-    if (!(Array.isArray(text))) {
-      text = [text]
-    }
-    if (!(Array.isArray(finishReason))) {
-      finishReason = [finishReason]
-    }
+    textAndResponseReasons.push({
+      text: '',
+      finish_reason: '',
+      choice_id: undefined
+    })
   }
 
-  if (!Array.isArray(text)) {
-    text = [text]
-  }
-  if (!Array.isArray(finishReason)) {
-    finishReason = [finishReason]
-  }
-
-  if (shouldSetChoiceIds) {
-    return { text, finish_reason: finishReason, choice_id: choiceId }
-  }
-
-  return { text, finish_reason: finishReason }
+  return textAndResponseReasons
 }
 
 function buildTagsFromParams (requestParams, textAndResponseReasons, modelProvider, modelName, operation) {
@@ -180,16 +190,15 @@ function buildTagsFromParams (requestParams, textAndResponseReasons, modelProvid
   tags['aws.bedrock.request.stop_sequences'] = requestParams.stop_sequences
 
   // add response tags
-  Object.entries(textAndResponseReasons).forEach(([key, value]) => {
-    console.log(textAndResponseReason, index)
+  textAndResponseReasons.forEach((textAndResponseReason, index) => {
     if (modelName.includes('embed')) {
-      tags['aws.bedrock.response.embedding_length'] = textAndResponseReason.text[0].length
+      tags['aws.bedrock.response.embedding_length'] = textAndResponseReason.text.length
     }
     if (textAndResponseReason.choice_id) {
-      tags[`aws.bedrock.response.choices.${index}.id`] = textAndResponseReason.choice_id[index]
+      tags[`aws.bedrock.response.choices.${index}.id`] = textAndResponseReason.choice_id
     }
-    tags[`aws.bedrock.response.choices.${index}.text`] = textAndResponseReason.text[index]
-    tags[`aws.bedrock.response.choices.${index}.finish_reason`] = textAndResponseReason.finish_reason[index]
+    tags[`aws.bedrock.response.choices.${index}.text`] = textAndResponseReason.text
+    tags[`aws.bedrock.response.choices.${index}.finish_reason`] = textAndResponseReason.finish_reason;
   })
 
   return tags
