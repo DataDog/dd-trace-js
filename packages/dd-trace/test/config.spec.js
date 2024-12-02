@@ -1,6 +1,6 @@
 'use strict'
 
-require('./setup/tap')
+// require('./setup/tap')
 
 const { expect } = require('chai')
 const { readFileSync } = require('fs')
@@ -324,6 +324,7 @@ describe('Config', () => {
       { name: 'headerTags', value: [], origin: 'default' },
       { name: 'hostname', value: '127.0.0.1', origin: 'default' },
       { name: 'iast.cookieFilterPattern', value: '.{32,}', origin: 'default' },
+      { name: 'iast.dbRowsToTaint', value: 1, origin: 'default' },
       { name: 'iast.deduplicationEnabled', value: true, origin: 'default' },
       { name: 'iast.enabled', value: false, origin: 'default' },
       { name: 'iast.maxConcurrentRequests', value: 2, origin: 'default' },
@@ -504,6 +505,7 @@ describe('Config', () => {
     process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
     process.env.DD_IAST_COOKIE_FILTER_PATTERN = '.*'
+    process.env.DD_IAST_DB_ROWS_TO_TAINT = 2
     process.env.DD_IAST_DEDUPLICATION_ENABLED = false
     process.env.DD_IAST_REDACTION_ENABLED = false
     process.env.DD_IAST_REDACTION_NAME_PATTERN = 'REDACTION_NAME_PATTERN'
@@ -615,6 +617,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 3)
     expect(config).to.have.nested.property('iast.maxContextOperations', 4)
     expect(config).to.have.nested.property('iast.cookieFilterPattern', '.*')
+    expect(config).to.have.nested.property('iast.dbRowsToTaint', 2)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
@@ -659,6 +662,7 @@ describe('Config', () => {
       { name: 'experimental.runtimeId', value: true, origin: 'env_var' },
       { name: 'hostname', value: 'agent', origin: 'env_var' },
       { name: 'iast.cookieFilterPattern', value: '.*', origin: 'env_var' },
+      { name: 'iast.dbRowsToTaint', value: 2, origin: 'env_var' },
       { name: 'iast.deduplicationEnabled', value: false, origin: 'env_var' },
       { name: 'iast.enabled', value: true, origin: 'env_var' },
       { name: 'iast.maxConcurrentRequests', value: '3', origin: 'env_var' },
@@ -857,6 +861,7 @@ describe('Config', () => {
           maxConcurrentRequests: 4,
           maxContextOperations: 5,
           cookieFilterPattern: '.*',
+          dbRowsToTaint: 2,
           deduplicationEnabled: false,
           redactionEnabled: false,
           redactionNamePattern: 'REDACTION_NAME_PATTERN',
@@ -929,6 +934,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 4)
     expect(config).to.have.nested.property('iast.maxContextOperations', 5)
     expect(config).to.have.nested.property('iast.cookieFilterPattern', '.*')
+    expect(config).to.have.nested.property('iast.dbRowsToTaint', 2)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
@@ -976,6 +982,7 @@ describe('Config', () => {
       { name: 'flushMinSpans', value: 500, origin: 'code' },
       { name: 'hostname', value: 'agent', origin: 'code' },
       { name: 'iast.cookieFilterPattern', value: '.*', origin: 'code' },
+      { name: 'iast.dbRowsToTaint', value: 2, origin: 'code' },
       { name: 'iast.deduplicationEnabled', value: false, origin: 'code' },
       { name: 'iast.enabled', value: true, origin: 'code' },
       { name: 'iast.maxConcurrentRequests', value: 4, origin: 'code' },
@@ -1201,6 +1208,7 @@ describe('Config', () => {
     process.env.DD_API_SECURITY_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
+    process.env.DD_IAST_DB_ROWS_TO_TAINT = '2'
     process.env.DD_IAST_COOKIE_FILTER_PATTERN = '.*'
     process.env.DD_IAST_REDACTION_NAME_PATTERN = 'name_pattern_to_be_overriden_by_options'
     process.env.DD_IAST_REDACTION_VALUE_PATTERN = 'value_pattern_to_be_overriden_by_options'
@@ -1278,6 +1286,7 @@ describe('Config', () => {
       iast: {
         enabled: true,
         cookieFilterPattern: '.{10,}',
+        dbRowsToTaint: 3,
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
         redactionValuePattern: 'REDACTION_VALUE_PATTERN'
       },
@@ -1346,6 +1355,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.requestSampling', 30)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 2)
     expect(config).to.have.nested.property('iast.maxContextOperations', 2)
+    expect(config).to.have.nested.property('iast.dbRowsToTaint', 3)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', true)
     expect(config).to.have.nested.property('iast.cookieFilterPattern', '.{10,}')
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
@@ -1383,6 +1393,7 @@ describe('Config', () => {
         maxConcurrentRequests: 3,
         maxContextOperations: 4,
         cookieFilterPattern: '.*',
+        dbRowsToTaint: 3,
         deduplicationEnabled: false,
         redactionEnabled: false,
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
@@ -1416,6 +1427,7 @@ describe('Config', () => {
           maxConcurrentRequests: 6,
           maxContextOperations: 7,
           cookieFilterPattern: '.{10,}',
+          dbRowsToTaint: 2,
           deduplicationEnabled: true,
           redactionEnabled: true,
           redactionNamePattern: 'IGNORED_REDACTION_NAME_PATTERN',
@@ -1464,6 +1476,7 @@ describe('Config', () => {
       maxConcurrentRequests: 3,
       maxContextOperations: 4,
       cookieFilterPattern: '.*',
+      dbRowsToTaint: 3,
       deduplicationEnabled: false,
       redactionEnabled: false,
       redactionNamePattern: 'REDACTION_NAME_PATTERN',

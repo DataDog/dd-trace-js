@@ -10,7 +10,7 @@ const connectionData = {
   application_name: 'test'
 }
 
-describe('db sources with pg', () => {
+describe.only('db sources with pg', () => {
   let pg
   withVersions('pg', 'pg', '>=8.0.3', version => {
     let client

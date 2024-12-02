@@ -196,24 +196,32 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.taintUrl(req, iastContext)
   }
 
-  _taintDatabaseResult (result, iastContext = getIastContext(storage.getStore())) {
+  _taintDatabaseResult (result, iastContext = getIastContext(storage.getStore()), name) {
     if (!iastContext) return result
 
-    const rowsToTaint = 1 // TODO fill this from config
+    let rowsToTaint = this.iastConfig?.dbRowsToTaint
+    if (typeof rowsToTaint !== 'number') {
+      rowsToTaint = 1
+    }
+
+    if (rowsToTaint === 0) return
+
     if (Array.isArray(result)) {
       for (let i = 0; i < result.length && i < rowsToTaint; i++) {
-        result[i] = this._taintDatabaseResult(result[i], iastContext)
+        const nextName = name ? `${name}.${i}` : '' + i
+        result[i] = this._taintDatabaseResult(result[i], iastContext, nextName)
       }
     } else if (result && typeof result === 'object') {
       if (result.dataValues) { // TODO keep this in mind only with sequelize
-        result.dataValues = this._taintDatabaseResult(result.dataValues, iastContext)
+        result.dataValues = this._taintDatabaseResult(result.dataValues, iastContext, name)
       } else {
         Object.keys(result).forEach(key => {
-          result[key] = this._taintDatabaseResult(result[key], iastContext)
+          const nextName = name ? `${name}.${key}` : key
+          result[key] = this._taintDatabaseResult(result[key], iastContext, nextName)
         })
       }
     } else if (typeof result === 'string') {
-      result = newTaintedString(iastContext, result, SQL_ROW_VALUE, SQL_ROW_VALUE)
+      result = newTaintedString(iastContext, result, name, SQL_ROW_VALUE)
     }
 
     return result
