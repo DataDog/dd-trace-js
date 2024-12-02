@@ -10,7 +10,7 @@ class InjectionAnalyzer extends Analyzer {
         return false
       }
 
-      return this._rangesAreExpected(getRanges(iastContext, value))
+      return this._areRangesVulnerable(getRanges(iastContext, value))
     }
 
     return false
@@ -21,7 +21,7 @@ class InjectionAnalyzer extends Analyzer {
     return { value, ranges }
   }
 
-  _rangesAreExpected (ranges) {
+  _areRangesVulnerable (ranges) {
     if (!ranges) return false
 
     const nonRowRanges = ranges.filter(range => range.iinfo.type !== SQL_ROW_VALUE)
