@@ -14,6 +14,7 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const spanleak = require('../spanleak')
+const { propagation, context } = require('@opentelemetry/api')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -74,6 +75,8 @@ class DatadogSpan {
     // This is necessary for span count metrics.
     this._name = operationName
     this._integrationName = fields.integrationName || 'opentracing'
+
+    this._otelBaggageReference = propagation.getActiveBaggage()
 
     getIntegrationCounter('spans_created', this._integrationName).inc()
 
@@ -137,15 +140,38 @@ class DatadogSpan {
   }
 
   setBaggageItem (key, value) {
+    this._syncOtelBaggage()
+    let newBaggages
+    if (this._otelBaggageReference) {
+      newBaggages = this._otelBaggageReference.setEntry(key, { value })
+    } else {
+      const entry = {}
+      entry[key] = { value }
+      newBaggages = propagation.createBaggage(entry)
+    }
+    const otelContext = propagation.setBaggage(context.active(), newBaggages)
+    context.disable()
+    context.setGlobalContextManager({
+      active: () => otelContext,
+      disable: () => {},
+    })
+    this._otelBaggageReference = propagation.getActiveBaggage()
+    this._spanContext._baggageItems[key] = value
+    return this
+  }
+
+  _setBaggageItem (key, value) {
     this._spanContext._baggageItems[key] = value
     return this
   }
 
   getBaggageItem (key) {
+    this._syncOtelBaggage()
     return this._spanContext._baggageItems[key]
   }
 
   getAllBaggageItems () {
+    this._syncOtelBaggage()
     return JSON.stringify(this._spanContext._baggageItems)
   }
 
@@ -154,6 +180,14 @@ class DatadogSpan {
   }
 
   removeAllBaggageItems () {
+    this._syncOtelBaggage()
+    const otelContext = propagation.deleteBaggage(context.active())
+    context.disable()
+    context.setGlobalContextManager({
+      active: () => otelContext,
+      disable: () => {},
+    })
+    this._otelBaggageReference = propagation.getActiveBaggage()
     this._spanContext._baggageItems = {}
   }
 
@@ -351,6 +385,18 @@ class DatadogSpan {
     tagger.add(this._spanContext._tags, keyValuePairs)
 
     this._prioritySampler.sample(this, false)
+  }
+
+  _syncOtelBaggage () {
+    const currentOtelBaggageReference = propagation.getActiveBaggage()
+    if (currentOtelBaggageReference !== this._otelBaggageReference) {
+      const baggages = currentOtelBaggageReference.getAllEntries()
+      this.removeAllBaggageItems()
+      for (const baggage of baggages) {
+        this._setBaggageItem(baggage[0], baggage[1].value)
+      }
+      this._otelBaggageReference = currentOtelBaggageReference
+    }
   }
 }
 

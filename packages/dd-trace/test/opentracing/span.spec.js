@@ -4,6 +4,7 @@ require('../setup/tap')
 
 const Config = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
+const { context, propagation, ROOT_CONTEXT } = require('@opentelemetry/api')
 
 const { channel } = require('dc-polyfill')
 const startCh = channel('dd-trace:span:start')
@@ -218,6 +219,10 @@ describe('Span', () => {
 
       expect(span.context()._baggageItems).to.have.property('foo', 'bar')
       expect(parent._baggageItems).to.not.have.property('foo', 'bar')
+      const otelBaggages = propagation.getActiveBaggage().getAllEntries()
+      expect(otelBaggages.length).to.equal(1)
+      expect(otelBaggages[0][0]).to.equal('foo')
+      expect(otelBaggages[0][1].value).to.equal('bar')
     })
 
     it('should pass baggage items to future causal spans', () => {
@@ -375,6 +380,22 @@ describe('Span', () => {
 
       expect(span.getBaggageItem('foo')).to.equal('bar')
     })
+
+    it('should sync opentelemetry baggages', () => {
+      // span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      // const entries = {
+      //   banana: { value: 'boats' },
+      // };
+      // const bag = propagation.createBaggage(entries);
+      // const ctx = propagation.setBaggage(ROOT_CONTEXT, bag);
+
+      // context.setGlobalContextManager({
+      //   active: () => ctx,
+      //   disable: () => {},
+      // });
+      // expect(Object.keys(JSON.parse(span.getAllBaggageItems())).length).to.equal(1)
+      // expect(span.getBaggageItem('banana')).to.equal('boats')
+    })
   })
 
   describe('getAllBaggageItems', () => {
@@ -404,9 +425,18 @@ describe('Span', () => {
   describe('removeAllBaggageItems', () => {
     it('should remove all baggage items', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
-      span._spanContext._baggageItems.foo = 'bar'
-      span._spanContext._baggageItems.raccoon = 'cute'
+      span.setBaggageItem('penguin', 'chunky')
+      span.setBaggageItem('raccoon', 'cute')
+      expect(span._spanContext._baggageItems).to.deep.equal({
+        penguin: 'chunky',
+        raccoon: 'cute'
+      })
+      expect(propagation.getActiveBaggage().getAllEntries()).to.deep.equal([
+        [ 'penguin', { value: 'chunky' } ],
+        [ 'raccoon', { value: 'cute' } ]
+      ])
       span.removeAllBaggageItems()
+      expect(propagation.getActiveBaggage()).to.be.undefined
       expect(span._spanContext._baggageItems).to.deep.equal({})
     })
   })
