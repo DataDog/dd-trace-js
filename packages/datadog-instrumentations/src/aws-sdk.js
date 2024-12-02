@@ -206,8 +206,3 @@ addHook({ name: 'aws-sdk', file: 'lib/core.js', versions: ['>=2.1.35'] }, AWS =>
   shimmer.wrap(AWS.Request.prototype, 'send', wrapRequest)
   return AWS
 })
-
-addHook({ name: '@aws-sdk/client-bedrock-runtime', file: 'dist-cjs/index.js', versions: ['>=3.693.0'] }, AWS => {
-  shimmer.wrap(AWS.Client.prototype, 'send', wrapRequest())
-  return AWS
-})
