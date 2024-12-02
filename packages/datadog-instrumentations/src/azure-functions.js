@@ -6,7 +6,7 @@ const {
 const shimmer = require('../../datadog-shimmer')
 const dc = require('dc-polyfill')
 
-const azureFunctionsChannel = dc.tracingChannel('datadog:azure-functions:invoke')
+const azureFunctionsChannel = dc.tracingChannel('datadog:azure:functions:invoke')
 
 addHook({ name: '@azure/functions', versions: ['>=4'] }, azureFunction => {
   const { app } = azureFunction
