@@ -83,7 +83,7 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
     }
   }
 
-  _rangesAreExpected () {
+  _areRangesVulnerable () {
     return true
   }
 }
