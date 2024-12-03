@@ -29,6 +29,11 @@ class FilesystemPlugin extends EventPlugin {
     return 'fs'
   }
 
+  ignoreEvent (event) {
+    // Don't care about sync events, they show up in the event loop samples anyway
+    return event.operation?.endsWith('Sync')
+  }
+
   extendEvent (event, detail) {
     const d = { ...detail }
     Object.entries(d).forEach(([k, v]) => {
