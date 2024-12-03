@@ -50,6 +50,14 @@ variables:
     ONBOARDING_FILTER_WEBLOG: "test-app-nodejs"
     SCENARIO: "HOST_AUTO_INJECTION_INSTALL_SCRIPT"
     DD_INSTALLER_LIBRARY_VERSION: pipeline-${CI_PIPELINE_ID}
+    USE_DEFAULT_VMS: "True"
+  rules:
+    - if: $SKIP_SHARED_PIPELINE == "true"
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v?[0-9]+\.[0-9]+\.[0-9]+$/'
+      variables:
+        USE_DEFAULT_VMS: "All"  # For releases, run all vms
+    - when: on_success
   before_script:
     - export DD_API_KEY_ONBOARDING=xyz
     - export DD_APP_KEY_ONBOARDING=xyz
@@ -57,8 +65,9 @@ variables:
       - export TEST_LIBRARY="$SYSTEM_TESTS_LIBRARY"
       - git clone https://git@github.com/DataDog/system-tests.git system-tests
       - cd system-tests
+      - git checkout robertomonteromiguel/onboarding_one_pipeline
       - ./build.sh -i runner
-      - ./run.sh $SCENARIO --vm-weblog ${ONBOARDING_FILTER_WEBLOG} --vm-env prod --vm-library ${TEST_LIBRARY} --vm-provider aws --vm-default-vms All --vm-gitlab-pipeline
+      - ./run.sh $SCENARIO --vm-weblog ${ONBOARDING_FILTER_WEBLOG} --vm-env prod --vm-library ${TEST_LIBRARY} --vm-provider aws --vm-default-vms ${USE_DEFAULT_VMS} --vm-gitlab-pipeline one-pipeline
   after_script:
     - echo "After onboarding script"
     - cd system-tests
