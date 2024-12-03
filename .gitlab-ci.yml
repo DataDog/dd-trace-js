@@ -56,7 +56,7 @@ variables:
       when: never
     - if: '$CI_COMMIT_TAG =~ /^v?[0-9]+\.[0-9]+\.[0-9]+$/'
       variables:
-        USE_DEFAULT_VMS: "All"  # For releases, run all vms
+        USE_DEFAULT_VMS: "All" # For releases, run all vms
     - when: on_success
   before_script:
     - export DD_API_KEY_ONBOARDING=xyz
