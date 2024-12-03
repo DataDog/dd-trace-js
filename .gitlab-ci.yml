@@ -60,6 +60,8 @@ variables:
       - ./build.sh -i runner
       - ./run.sh $SCENARIO --vm-weblog ${ONBOARDING_FILTER_WEBLOG} --vm-env prod --vm-library ${TEST_LIBRARY} --vm-provider aws --vm-default-vms All --vm-gitlab-pipeline
   after_script:
+    - echo "After onboarding script"
+    - cd system-tests
     - SCENARIO_SUFIX=$(echo "$SCENARIO" | tr '[:upper:]' '[:lower:]')
     - mkdir -p reports/logs_"${SCENARIO_SUFIX}_${ONBOARDING_FILTER_WEBLOG}"
     - cp -R logs_"${SCENARIO_SUFIX}"/gitlab_pipeline.yml reports/logs_"${SCENARIO_SUFIX}_${ONBOARDING_FILTER_WEBLOG}"/
