@@ -75,13 +75,14 @@ variables:
   tags: ["arch:amd64"]
   script:
       - |
+        git clone https://git@github.com/DataDog/system-tests.git system-tests-scripts
         for folder in system-tests/reports/logs*/ ; do
           echo "Checking folder:: ${folder}"
           for filename in ./${folder}gitlab_pipeline.yml; do
             if [ -e ${filename} ]
             then
               echo "Processing pipeline: ${filename}"
-              python utils/scripts/merge_gitlab_aws_pipelines.py --input ${filename} --output aws_gitlab_pipeline.yml
+              python system-tests-scripts/utils/scripts/merge_gitlab_aws_pipelines.py --input ${filename} --output aws_gitlab_pipeline.yml
             fi
           done
         done
