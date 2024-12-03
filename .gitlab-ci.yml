@@ -75,7 +75,7 @@ variables:
   tags: ["arch:amd64"]
   script:
       - |
-        for folder in reports/logs*/ ; do
+        for folder in system-tests/reports/logs*/ ; do
           echo "Checking folder:: ${folder}"
           for filename in ./${folder}gitlab_pipeline.yml; do
             if [ -e ${filename} ]
