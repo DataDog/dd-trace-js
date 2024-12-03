@@ -42,16 +42,14 @@ variables:
 .compute_aws_scenarios:
   image: registry.ddbuild.io/ci/libdatadog-build/system-tests:48436362
   tags: ["arch:arm64"]
+  needs: [ oci-internal-test-ecr-publish ]
   stage: nodejs_ssi_pipelines
   allow_failure: true
   variables:
     TEST_LIBRARY: "nodejs"
     ONBOARDING_FILTER_WEBLOG: "test-app-nodejs"
     SCENARIO: "HOST_AUTO_INJECTION_INSTALL_SCRIPT"
-    #Because sometimes I don't want to run all pipeline, I only run step1_xx with env filter param
-    ONBOARDING_FILTER_ENV: "$FILTER_ENV"
-    DD_INSTALLER_LIBRARY_VERSION: "$INSTALLER_LIBRARY_VERSION"
-    DD_INSTALLER_INJECTOR_VERSION: "$INSTALLER_INJECTOR_VERSION"
+    DD_INSTALLER_LIBRARY_VERSION: pipeline-${CI_PIPELINE_ID}
   before_script:
     - export DD_API_KEY_ONBOARDING=xyz
     - export DD_APP_KEY_ONBOARDING=xyz
@@ -60,7 +58,7 @@ variables:
       - git clone https://git@github.com/DataDog/system-tests.git system-tests
       - cd system-tests
       - ./build.sh -i runner
-      - ./run.sh $SCENARIO --vm-weblog ${ONBOARDING_FILTER_WEBLOG} --vm-env ${ONBOARDING_FILTER_ENV} --vm-library ${TEST_LIBRARY} --vm-provider aws --vm-default-vms All --vm-gitlab-pipeline
+      - ./run.sh $SCENARIO --vm-weblog ${ONBOARDING_FILTER_WEBLOG} --vm-env prod --vm-library ${TEST_LIBRARY} --vm-provider aws --vm-default-vms All --vm-gitlab-pipeline
   after_script:
     - SCENARIO_SUFIX=$(echo "$SCENARIO" | tr '[:upper:]' '[:lower:]')
     - mkdir -p reports/logs_"${SCENARIO_SUFIX}_${ONBOARDING_FILTER_WEBLOG}"
