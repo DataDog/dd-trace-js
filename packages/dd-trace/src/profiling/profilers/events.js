@@ -254,10 +254,10 @@ class NodeApiEventSource {
 }
 
 class DatadogInstrumentationEventSource {
-  constructor (eventHandler) {
+  constructor (eventHandler, eventFilter) {
     this.plugins = ['dns_lookup', 'dns_lookupservice', 'dns_resolve', 'dns_reverse', 'net'].map(m => {
       const Plugin = require(`./event_plugins/${m}`)
-      return new Plugin(eventHandler)
+      return new Plugin(eventHandler, eventFilter)
     })
 
     this.started = false
@@ -347,9 +347,11 @@ class EventsProfiler {
       ? new PoissonPointProcessSamplingStrategy(options)
       : new SampleEverythingStrategy()
 
-    const eventHandler = event => {
-      if (this.samplingStrategy.shouldSample(event)) {
-        this.eventSerializer.addEvent(event)
+    const eventHandler = event => this.eventSerializer.addEvent(event)
+    const eventFilter = this.samplingStrategy.shouldSample.bind(this.samplingStrategy)
+    const filteringEventHandler = event => {
+      if (eventFilter(event)) {
+        eventHandler(event)
       }
     }
 
@@ -357,12 +359,12 @@ class EventsProfiler {
       // Use Datadog instrumentation to collect events with span IDs. Still use
       // Node API for GC events.
       this.eventSource = new CompositeEventSource([
-        new DatadogInstrumentationEventSource(eventHandler),
-        new NodeApiEventSource(eventHandler, ['gc'])
+        new DatadogInstrumentationEventSource(eventHandler, eventFilter),
+        new NodeApiEventSource(filteringEventHandler, ['gc'])
       ])
     } else {
       // Use Node API instrumentation to collect events without span IDs
-      this.eventSource = new NodeApiEventSource(eventHandler)
+      this.eventSource = new NodeApiEventSource(filteringEventHandler)
     }
   }
 
