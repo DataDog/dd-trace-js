@@ -67,7 +67,7 @@ variables:
     - cp -R logs_"${SCENARIO_SUFIX}"/gitlab_pipeline.yml reports/logs_"${SCENARIO_SUFIX}_${ONBOARDING_FILTER_WEBLOG}"/
   artifacts:
     paths:
-      - reports/
+      - system-tests/reports/
 
 .merge_aws_ssi_pipeline:
   image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/test-infra-definitions/runner:a58cc31c
