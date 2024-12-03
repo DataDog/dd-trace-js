@@ -7,7 +7,7 @@ const tracingChannel = require('dc-polyfill').tracingChannel
 
 const invokeTracingChannel = tracingChannel('apm:langchain:invoke')
 
-function wrapLangChainPromise (fn, type, namespace = [], name) {
+function wrapLangChainPromise (fn, type, namespace = []) {
   return function () {
     if (!invokeTracingChannel.start.hasSubscribers) {
       return fn.apply(this, arguments)
@@ -15,7 +15,7 @@ function wrapLangChainPromise (fn, type, namespace = [], name) {
 
     // Runnable interfaces have an `lc_namespace` property
     const ns = this.lc_namespace || namespace
-    const resource = [...ns, name ?? this.constructor.name].join('.')
+    const resource = [...ns, this.constructor.name].join('.')
 
     const ctx = {
       args: arguments,
