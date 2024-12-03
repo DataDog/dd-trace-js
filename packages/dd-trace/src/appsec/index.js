@@ -163,10 +163,6 @@ function incomingHttpEndTranslator ({ req, res }) {
     persistent[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
 
-  if (req.query !== null && typeof req.query === 'object') {
-    persistent[addresses.HTTP_INCOMING_QUERY] = req.query
-  }
-
   if (apiSecuritySampler.sampleRequest(req, res, true)) {
     persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
