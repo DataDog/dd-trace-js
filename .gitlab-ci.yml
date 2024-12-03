@@ -15,11 +15,118 @@ variables:
   AGENT_REPO_PRODUCT_NAME: auto_inject-node
   SYSTEM_TESTS_LIBRARY: nodejs
 
-onboarding_tests_installer:
+.onboarding_tests_installer:
+  extends: .base_job_onboarding
+  stage: shared-pipeline
+  needs: [ oci-internal-test-ecr-publish ]
+  timeout: 90 minutes
+  variables:
+    DD_INSTALLER_LIBRARY_VERSION: pipeline-${CI_PIPELINE_ID}
+    SCENARIO: SIMPLE_INSTALLER_AUTO_INJECTION
+    USE_DEFAULT_VMS: "True"
+
+  rules:
+    - if: $SKIP_SHARED_PIPELINE == "true"
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v?[0-9]+\.[0-9]+\.[0-9]+$/'
+      variables:
+        USE_DEFAULT_VMS: "All"  # For releases, run all vms
+    - when: on_success
+  script:
+    - *verify-variables
+    - export TEST_LIBRARY="$SYSTEM_TESTS_LIBRARY"
+    - git clone https://git@github.com/DataDog/system-tests.git system-tests
+    - cd system-tests
+    - ./build.sh -i runner # TODO replace with prebuilt image eventually
+    - timeout 4800 ./run.sh $SCENARIO --vm-weblog ${ONBOARDING_FILTER_WEBLOG} --vm-env prod --vm-library ${TEST_LIBRARY} --vm-provider aws --vm-default-vms ${USE_DEFAULT_VMS}
+
+.compute_aws_scenarios:
+  image: registry.ddbuild.io/ci/libdatadog-build/system-tests:48436362
+  tags: ["arch:arm64"]
+  stage: nodejs_ssi_pipelines
+  allow_failure: true
+  variables:
+    TEST_LIBRARY: "nodejs"
+    ONBOARDING_FILTER_WEBLOG: "test-app-nodejs"
+    SCENARIO: "HOST_AUTO_INJECTION_INSTALL_SCRIPT"
+    #Because sometimes I don't want to run all pipeline, I only run step1_xx with env filter param
+    ONBOARDING_FILTER_ENV: "$FILTER_ENV"
+    DD_INSTALLER_LIBRARY_VERSION: "$INSTALLER_LIBRARY_VERSION"
+    DD_INSTALLER_INJECTOR_VERSION: "$INSTALLER_INJECTOR_VERSION"
+  before_script:
+    - export DD_API_KEY_ONBOARDING=xyz
+    - export DD_APP_KEY_ONBOARDING=xyz
+  script:
+      - ./build.sh -i runner
+      - ./run.sh $SCENARIO --vm-weblog ${ONBOARDING_FILTER_WEBLOG} --vm-env ${ONBOARDING_FILTER_ENV} --vm-library ${TEST_LIBRARY} --vm-provider aws --vm-default-vms All --vm-gitlab-pipeline
+  after_script:
+    - SCENARIO_SUFIX=$(echo "$SCENARIO" | tr '[:upper:]' '[:lower:]')
+    - mkdir -p reports/logs_"${SCENARIO_SUFIX}_${ONBOARDING_FILTER_WEBLOG}"
+    - cp -R logs_"${SCENARIO_SUFIX}"/gitlab_pipeline.yml reports/logs_"${SCENARIO_SUFIX}_${ONBOARDING_FILTER_WEBLOG}"/
+  artifacts:
+    paths:
+      - reports/
+
+.merge_aws_ssi_pipeline:
+  image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/test-infra-definitions/runner:a58cc31c
+  stage: nodejs_ssi_pipelines
+  tags: ["arch:amd64"]
+  script:
+      - |
+        for folder in reports/logs*/ ; do
+          echo "Checking folder:: ${folder}"
+          for filename in ./${folder}gitlab_pipeline.yml; do
+            if [ -e ${filename} ]
+            then
+              echo "Processing pipeline: ${filename}"
+              python utils/scripts/merge_gitlab_aws_pipelines.py --input ${filename} --output aws_gitlab_pipeline.yml
+            fi
+          done
+        done
+  needs: ["onboarding_nodejs"]
+  dependencies:
+    - onboarding_nodejs
+  artifacts:
+    paths:
+      - aws_gitlab_pipeline.yml
+
+.exec_aws_ssi_pipeline:
+  stage: nodejs_ssi_pipelines
+  needs: ["merge_aws_ssi_pipeline"]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: always
+    - when: manual
+      allow_failure: true
+  variables:
+    PARENT_PIPELINE_SOURCE: $CI_PIPELINE_SOURCE
+  trigger:
+    include:
+      - artifact: aws_gitlab_pipeline.yml
+        job: merge_aws_ssi_pipeline
+    strategy: depend
+
+onboarding_tests_installer2:
+  extends: .compute_aws_scenarios
   parallel:
     matrix:
       - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs,test-app-nodejs-container]
         SCENARIO: [ SIMPLE_INSTALLER_AUTO_INJECTION, SIMPLE_AUTO_INJECTION_PROFILING ]
+
+x_merge_nodejs_ssi_pipeline:
+  extends: .merge_aws_ssi_pipeline
+  needs: ["onboarding_tests_installer2"]
+  dependencies:
+    - onboarding_tests_installer2
+
+exec_nodejs_ssi_pipeline:
+  extends: .exec_aws_ssi_pipeline
+  needs: ["x_merge_nodejs_ssi_pipeline"]
+  trigger:
+    include:
+      - artifact: aws_gitlab_pipeline.yml
+        job: x_merge_nodejs_ssi_pipeline
+    strategy: depend
 
 onboarding_tests_k8s_injection:
   variables:
