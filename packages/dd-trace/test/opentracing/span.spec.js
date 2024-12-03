@@ -4,7 +4,7 @@ require('../setup/tap')
 
 const Config = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
-const { propagation } = require('@opentelemetry/api')
+const { propagation, context } = require('@opentelemetry/api')
 
 const { channel } = require('dc-polyfill')
 const startCh = channel('dd-trace:span:start')
@@ -388,6 +388,18 @@ describe('Span', () => {
       span._spanContext._baggageItems.foo = 'bar'
 
       expect(span.getBaggageItem('foo')).to.equal('bar')
+    })
+
+    it('should get a baggage item 2', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      const entries = {
+        test: { value: 'test1' },
+      };
+      const bag = propagation.createBaggage(entries);
+      propagation.setBaggage(context.active(), bag)
+      console.log(propagation.getActiveBaggage())
+
+      console.log(span.getAllBaggageItems())
     })
   })
 
