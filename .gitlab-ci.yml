@@ -96,11 +96,6 @@ variables:
 .exec_aws_ssi_pipeline:
   stage: nodejs_ssi_pipelines
   needs: ["merge_aws_ssi_pipeline"]
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: always
-    - when: manual
-      allow_failure: true
   variables:
     PARENT_PIPELINE_SOURCE: $CI_PIPELINE_SOURCE
   trigger:
