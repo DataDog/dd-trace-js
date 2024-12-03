@@ -58,7 +58,9 @@ function analyzeLfi (ctx) {
       [FS_OPERATION_PATH]: path
     }
 
-    const result = waf.run({ persistent }, req, RULE_TYPES.LFI)
+    const raspRule = { type: RULE_TYPES.LFI }
+
+    const result = waf.run({ persistent }, req, raspRule)
     handleResult(result, req, res, ctx.abortController, config)
   })
 }

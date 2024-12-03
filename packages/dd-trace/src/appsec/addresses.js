@@ -28,6 +28,7 @@ module.exports = {
   DB_STATEMENT: 'server.db.statement',
   DB_SYSTEM: 'server.db.system',
 
+  EXEC_COMMAND: 'server.sys.exec.cmd',
   SHELL_COMMAND: 'server.sys.shell.cmd',
 
   LOGIN_SUCCESS: 'server.business_logic.users.login.success',
