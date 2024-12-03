@@ -34,7 +34,7 @@ function returnSpawnSyncError (error, context) {
     pid: 0
   }
 
-  return context.result
+  throw error
 }
 
 names.forEach(name => {

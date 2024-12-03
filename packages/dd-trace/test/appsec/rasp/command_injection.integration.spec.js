@@ -52,7 +52,7 @@ describe('RASP - command_injection - integration', () => {
     await agent.stop()
   })
 
-  async function testRequestBlocked (url) {
+  async function testRequestBlocked (url, id = 3) {
     try {
       await axios.get(url)
     } catch (e) {
@@ -63,26 +63,46 @@ describe('RASP - command_injection - integration', () => {
       assert.strictEqual(e.response.status, 403)
       return await agent.assertMessageReceived(({ headers, payload }) => {
         assert.property(payload[0][0].meta, '_dd.appsec.json')
-        assert.include(payload[0][0].meta['_dd.appsec.json'], '"rasp-command_injection-rule-id-3"')
+        assert.include(payload[0][0].meta['_dd.appsec.json'], `"rasp-command_injection-rule-id-${id}"`)
       })
     }
 
     throw new Error('Request should be blocked')
   }
 
-  it('should block using execFileSync and exception handled by express', async () => {
-    await testRequestBlocked('/shi/execFileSync?dir=$(cat /etc/passwd 1>%262 ; echo .)')
+  describe('with shell', () => {
+    it('should block using execFileSync and exception handled by express', async () => {
+      await testRequestBlocked('/shi/execFileSync?dir=$(cat /etc/passwd 1>%262 ; echo .)')
+    })
+
+    it('should block using execFileSync and unhandled exception', async () => {
+      await testRequestBlocked('/shi/execFileSync/out-of-express-scope?dir=$(cat /etc/passwd 1>%262 ; echo .)')
+    })
+
+    it('should block using execSync and exception handled by express', async () => {
+      await testRequestBlocked('/shi/execSync?dir=$(cat /etc/passwd 1>%262 ; echo .)')
+    })
+
+    it('should block using execSync and unhandled exception', async () => {
+      await testRequestBlocked('/shi/execSync/out-of-express-scope?dir=$(cat /etc/passwd 1>%262 ; echo .)')
+    })
   })
 
-  it('should block using execFileSync and unhandled exception', async () => {
-    await testRequestBlocked('/shi/execFileSync/out-of-express-scope?dir=$(cat /etc/passwd 1>%262 ; echo .)')
-  })
+  describe('without shell', () => {
+    it('should block using execFileSync and exception handled by express', async () => {
+      await testRequestBlocked('/cmdi/execFileSync?dir=cat /etc/passwd 1>&2 ; echo .', 4)
+    })
 
-  it('should block using execSync and exception handled by express', async () => {
-    await testRequestBlocked('/shi/execSync?dir=$(cat /etc/passwd 1>%262 ; echo .)')
-  })
+    it('should block using execFileSync and unhandled exception', async () => {
+      await testRequestBlocked('/cmdi/execFileSync/out-of-express-scope?dir=cat /etc/passwd 1>&2 ; echo .', 4)
+    })
 
-  it('should block using execSync and unhandled exception', async () => {
-    await testRequestBlocked('/shi/execSync/out-of-express-scope?dir=$(cat /etc/passwd 1>%262 ; echo .)')
+    it('should block using spawnSync and exception handled by express', async () => {
+      await testRequestBlocked('/cmdi/spawnSync?dir=cat /etc/passwd 1>&2 ; echo .', 4)
+    })
+
+    it('should block using spawnSync and exception handled', async () => {
+      await testRequestBlocked('/cmdi/spawnSync/out-of-express-scope?dir=cat /etc/passwd 1>&2 ; echo .', 4)
+    })
   })
 })
