@@ -275,6 +275,10 @@
     {
       "name": "@langchain/anthropic",
       "versions": [">=0.1"]
+    },
+    {
+      "name": "@langchain/google-genai",
+      "versions": [">=0.1"]
     }
   ],
   "ldapjs": [

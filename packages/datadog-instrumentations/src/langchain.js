@@ -62,6 +62,12 @@ for (const extension of extensions) {
   })
 
   addHook({ name: '@langchain/core', file: `dist/embeddings.${extension}`, versions: ['>=0.1'] }, exports => {
+    // we unfortunately cannot patch the prototype of the Embeddings class directly
+    // this is because the "abstract class Embeddings" is transpiled from TypeScript to not include abstract functions
+    // thus, we patch the exports instead.
+
+    // Embeddings is a simple class with no defined functions, just instantiating an async caller in its constructor,
+    // handled by the `super` call here
     shimmer.wrap(exports, 'Embeddings', Embeddings => {
       return class extends Embeddings {
         constructor (...args) {
@@ -71,7 +77,7 @@ for (const extension of extensions) {
 
           // when originally implemented, we only wrapped OpenAI embeddings
           // these embeddings had the resource name of `langchain.embeddings.openai.OpenAIEmbeddings`
-          // we need to make sure `openai` is appended to the resource name until a new tracer major
+          // we need to make sure `openai` is appended to the resource name until a new tracer major version
           if (this.constructor.name === 'OpenAIEmbeddings') {
             namespace.push('openai')
           }
