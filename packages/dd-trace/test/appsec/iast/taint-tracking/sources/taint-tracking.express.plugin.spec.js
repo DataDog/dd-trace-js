@@ -46,7 +46,7 @@ describe('URI sourcing with express', () => {
       iast.disable()
     })
 
-    it('should taint uri', function (done) {
+    it('should taint uri', (done) => {
       const app = express()
       const pathPattern = semver.intersects(version, '>=5.0.0') ? '/path/*splat' : '/path/*'
       app.get(pathPattern, (req, res) => {

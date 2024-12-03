@@ -249,11 +249,10 @@ describe('Plugin', () => {
                 expect(spans[index].meta).to.have.property('component', 'express')
                 index++
 
-                const handleResource = isExpress4 ? /^bound\s.*$/ : 'handle'
                 if (isExpress4) {
-                  expect(spans[index].resource).to.match(handleResource)
+                  expect(spans[index].resource).to.match(/^bound\s.*$/)
                 } else {
-                  expect(spans[index]).to.have.property('resource', handleResource)
+                  expect(spans[index]).to.have.property('resource', 'handle')
                 }
                 expect(spans[index]).to.have.property('name', 'express.middleware')
                 expect(spans[index].parent_id.toString()).to.equal(spans[index - 1].span_id.toString())

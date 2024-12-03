@@ -37,14 +37,14 @@ describe('esm', () => {
 
     it('is instrumented', async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
-      const numberofSpans = semver.intersects(version, '<5.0.0') ? 4 : 3
+      const numberOfSpans = semver.intersects(version, '<5.0.0') ? 4 : 3
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
         assert.strictEqual(payload.length, 1)
         assert.isArray(payload[0])
-        assert.strictEqual(payload[0].length, numberofSpans)
+        assert.strictEqual(payload[0].length, numberOfSpans)
         assert.propertyVal(payload[0][0], 'name', 'express.request')
         assert.propertyVal(payload[0][1], 'name', 'express.middleware')
       })
