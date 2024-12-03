@@ -292,19 +292,15 @@ class CompositeEventSource {
   }
 }
 
-class PoissonPointProcessSamplingStrategy {
-  constructor (options) {
-    // options.samplingInterval comes in microseconds, we need millis
-    this.samplingIntervalMillis = (options.samplingInterval ?? 1e6 / 99) / 1000
+function createPossionProcessSamplingFilter (samplingIntervalMillis) {
+  let nextSamplingInstant = performance.now()
+  let currentSamplingInstant = 0
+  setNextSamplingInstant()
 
-    this.nextSamplingInstant = performance.now()
-    this.setNextSamplingInstant()
-  }
-
-  shouldSample (event) {
+  return event => {
     const endTime = event.startTime + event.duration
-    while (endTime >= this.nextSamplingInstant) {
-      this.setNextSamplingInstant()
+    while (endTime >= nextSamplingInstant) {
+      setNextSamplingInstant()
     }
     // An event is sampled if it started before, and ended on or after a sampling instant. The above
     // while loop will ensure that the ending invariant is always true for the current sampling
@@ -319,36 +315,29 @@ class PoissonPointProcessSamplingStrategy {
     // were to check for this.currentSamplingInstant <= endTime, we would discard some long events
     // that also ended before the current sampling instant. We'd rather err on the side of including
     // some short events than excluding some long events.
-    return event.startTime < this.currentSamplingInstant
+    return event.startTime < currentSamplingInstant
   }
 
-  setNextSamplingInstant () {
-    this.currentSamplingInstant = this.nextSamplingInstant
-    this.nextSamplingInstant =
-      this.currentSamplingInstant - Math.log(1 - Math.random()) * this.samplingIntervalMillis
-  }
-}
-
-class SampleEverythingStrategy {
-  shouldSample () {
-    return true
+  function setNextSamplingInstant () {
+    currentSamplingInstant = nextSamplingInstant
+    nextSamplingInstant -= Math.log(1 - Math.random()) * samplingIntervalMillis
   }
 }
 
 /**
  * This class generates pprof files with timeline events. It combines an event
- * source with a sampling strategy and an event serializer.
+ * source with a sampling event filter and an event serializer.
  */
 class EventsProfiler {
   constructor (options = {}) {
     this.type = 'events'
     this.eventSerializer = new EventSerializer()
-    this.samplingStrategy = options.timelineSamplingEnabled
-      ? new PoissonPointProcessSamplingStrategy(options)
-      : new SampleEverythingStrategy()
 
     const eventHandler = event => this.eventSerializer.addEvent(event)
-    const eventFilter = this.samplingStrategy.shouldSample.bind(this.samplingStrategy)
+    const eventFilter = options.timelineSamplingEnabled
+      // options.samplingInterval comes in microseconds, we need millis
+      ? createPossionProcessSamplingFilter((options.samplingInterval ?? 1e6 / 99) / 1000)
+      : _ => true
     const filteringEventHandler = event => {
       if (eventFilter(event)) {
         eventHandler(event)
