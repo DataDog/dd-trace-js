@@ -60,24 +60,10 @@ class IastPlugin extends Plugin {
     this.pluginSubs = []
   }
 
-  _wrapHandler (handler) {
-    return (message, name) => {
-      try {
-        handler(message, name)
-      } catch (e) {
-        log.error('[ASM] Error executing IAST plugin handler', e)
-      }
-    }
-  }
-
   _getTelemetryHandler (iastSub) {
     return () => {
-      try {
-        const iastContext = getIastContext(storage.getStore())
-        iastSub.increaseExecuted(iastContext)
-      } catch (e) {
-        log.error('[ASM] Error increasing handler executed metrics', e)
-      }
+      const iastContext = getIastContext(storage.getStore())
+      iastSub.increaseExecuted(iastContext)
     }
   }
 
@@ -99,11 +85,11 @@ class IastPlugin extends Plugin {
 
   addSub (iastSub, handler) {
     if (typeof iastSub === 'string') {
-      super.addSub(iastSub, this._wrapHandler(handler))
+      super.addSub(iastSub, handler)
     } else {
       iastSub = this._getAndRegisterSubscription(iastSub)
       if (iastSub) {
-        super.addSub(iastSub.channelName, this._wrapHandler(handler))
+        super.addSub(iastSub.channelName, handler)
 
         if (iastTelemetry.isEnabled()) {
           super.addSub(iastSub.channelName, this._getTelemetryHandler(iastSub))
