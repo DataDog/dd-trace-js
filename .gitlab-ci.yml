@@ -33,7 +33,6 @@ variables:
         USE_DEFAULT_VMS: "All"  # For releases, run all vms
     - when: on_success
   script:
-    - *verify-variables
     - export TEST_LIBRARY="$SYSTEM_TESTS_LIBRARY"
     - git clone https://git@github.com/DataDog/system-tests.git system-tests
     - cd system-tests
@@ -108,6 +107,7 @@ variables:
 
 onboarding_tests_installer2:
   extends: .compute_aws_scenarios
+  stage: shared-pipeline
   parallel:
     matrix:
       - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs,test-app-nodejs-container]
@@ -115,12 +115,14 @@ onboarding_tests_installer2:
 
 x_merge_nodejs_ssi_pipeline:
   extends: .merge_aws_ssi_pipeline
+  stage: shared-pipeline
   needs: ["onboarding_tests_installer2"]
   dependencies:
     - onboarding_tests_installer2
 
 exec_nodejs_ssi_pipeline:
   extends: .exec_aws_ssi_pipeline
+  stage: shared-pipeline
   needs: ["x_merge_nodejs_ssi_pipeline"]
   trigger:
     include:
