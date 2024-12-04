@@ -91,12 +91,12 @@ function send (payload) {
   })
 }
 
-function statusPayload (probeId, version, status) {
+function statusPayload (probeId, probeVersion, status) {
   return {
     ddsource,
     service,
     debugger: {
-      diagnostics: { probeId, runtimeId, version, status }
+      diagnostics: { probeId, runtimeId, probeVersion, status }
     }
   }
 }

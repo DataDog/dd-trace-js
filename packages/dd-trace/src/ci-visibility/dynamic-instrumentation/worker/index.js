@@ -75,16 +75,20 @@ async function addBreakpoint (snapshotId, probe) {
 
   log.debug(`Adding breakpoint at ${path}:${line}`)
 
-  let generatedPosition = { line }
+  let lineNumber = line
 
   if (sourceMapURL && sourceMapURL.startsWith('data:')) {
-    generatedPosition = await processScriptWithInlineSourceMap({ file, line, sourceMapURL })
+    try {
+      lineNumber = await processScriptWithInlineSourceMap({ file, line, sourceMapURL })
+    } catch (err) {
+      log.error(err)
+    }
   }
 
   const { breakpointId } = await session.post('Debugger.setBreakpoint', {
     location: {
       scriptId,
-      lineNumber: generatedPosition.line
+      lineNumber: lineNumber - 1
     }
   })
 
@@ -118,5 +122,5 @@ async function processScriptWithInlineSourceMap (params) {
 
   consumer.destroy()
 
-  return generatedPosition
+  return generatedPosition.line
 }

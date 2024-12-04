@@ -1,15 +1,22 @@
 /* eslint-disable */
 const sum = require('./dependency')
+const isJest = require('./is-jest')
+const { expect } = require('chai')
 
 // TODO: instead of retrying through jest, this should be retried with auto test retries
-jest.retryTimes(1)
+if (isJest()) {
+  jest.retryTimes(1)
+}
 
 describe('dynamic-instrumentation', () => {
-  it('retries with DI', () => {
-    expect(sum(11, 3)).toEqual(14)
+  it('retries with DI', function () {
+    if (this.retries) {
+      this.retries(1)
+    }
+    expect(sum(11, 3)).to.equal(14)
   })
 
   it('is not retried', () => {
-    expect(sum(1, 2)).toEqual(3)
+    expect(1 + 2).to.equal(3)
   })
 })

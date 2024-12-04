@@ -17,7 +17,12 @@ const {
   TEST_SOURCE_START,
   TEST_IS_NEW,
   TEST_EARLY_FLAKE_ENABLED,
-  TEST_EARLY_FLAKE_ABORT_REASON
+  TEST_EARLY_FLAKE_ABORT_REASON,
+  TEST_NAME,
+  DI_ERROR_DEBUG_INFO_CAPTURED,
+  DI_DEBUG_ERROR_SNAPSHOT_ID,
+  DI_DEBUG_ERROR_FILE,
+  DI_DEBUG_ERROR_LINE
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -30,6 +35,8 @@ const {
 // so that they do not overlap with the following test
 // This is because there's some loss of resolution.
 const MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION = 5
+
+const debuggerParameterPerTest = new Map()
 
 class VitestPlugin extends CiPlugin {
   static get id () {
@@ -81,6 +88,26 @@ class VitestPlugin extends CiPlugin {
         extraTags
       )
 
+      const debuggerParameters = debuggerParameterPerTest.get(testName)
+
+      if (debuggerParameters) {
+        const spanContext = span.context()
+
+        // TODO: handle race conditions with this.retriedTestIds
+        this.retriedTestIds = {
+          spanId: spanContext.toSpanId(),
+          traceId: spanContext.toTraceId()
+        }
+        const { snapshotId, file, line } = debuggerParameters
+
+        // TODO: should these be added on test:end if and only if the probe is hit?
+        // Sync issues: `hitProbePromise` might be resolved after the test ends
+        span.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+        span.setTag(DI_DEBUG_ERROR_SNAPSHOT_ID, snapshotId)
+        span.setTag(DI_DEBUG_ERROR_FILE, file)
+        span.setTag(DI_DEBUG_ERROR_LINE, line)
+      }
+
       this.enter(span, store)
     })
 
@@ -110,11 +137,16 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:test:error', ({ duration, error }) => {
+    this.addSub('ci:vitest:test:error', ({ duration, error, willBeRetried, probe }) => {
       const store = storage.getStore()
       const span = store?.span
 
       if (span) {
+        if (willBeRetried && this.di) {
+          const testName = span.context()._tags[TEST_NAME]
+          const debuggerParameters = this.addDiProbe(error, probe)
+          debuggerParameterPerTest.set(testName, debuggerParameters)
+        }
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
           hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS]
         })
