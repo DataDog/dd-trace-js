@@ -202,13 +202,21 @@ describe('Path params sourcing with express', () => {
     })
 
     it('should taint path param on router.params callback with custom implementation', function (done) {
+      if (!semver.satisfies(expressVersion, '4')) {
+        this.skip()
+      }
       const app = express()
 
       app.use('/:parameter1/:parameter2', (req, res) => {
         res.status(200).send()
       })
 
-      app.param(['parameter1', 'parameter2'], checkParamIsTaintedAndNext)
+      app.param((param, option) => {
+        return checkParamIsTaintedAndNext
+      })
+
+      app.param('parameter1')
+      app.param('parameter2')
 
       appListener = app.listen(0, 'localhost', () => {
         const port = appListener.address().port
