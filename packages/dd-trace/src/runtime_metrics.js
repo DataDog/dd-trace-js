@@ -341,6 +341,11 @@ function captureNativeMetrics () {
 function histogram (name, stats, tags) {
   tags = [].concat(tags)
 
+  // Stats can contain garbage data when a value was never recorded.
+  if (stats.count === 0) {
+    stats = { max: 0, min: 0, sum: 0, avg: 0, median: 0, p95: 0, count: 0 }
+  }
+
   client.gauge(`${name}.min`, stats.min, tags)
   client.gauge(`${name}.max`, stats.max, tags)
   client.increment(`${name}.sum`, stats.sum, tags)
