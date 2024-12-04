@@ -239,29 +239,31 @@ addHook({
 })
 
 function wrapParam (original) {
-  return function wrappedProcessParams (name, fn) {
-    const wrappedFn = (...args) => {
-      const [req, res] = args
+  return function wrappedProcessParams () {
+    arguments[1] = shimmer.wrapFunction(arguments[1], (originalFn) => {
+      return (...args) => {
+        const [req, res] = args
 
-      if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length && !visitedParams.has(req.params)) {
-        visitedParams.add(req.params)
+        if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length && !visitedParams.has(req.params)) {
+          visitedParams.add(req.params)
 
-        const abortController = new AbortController()
+          const abortController = new AbortController()
 
-        routerParamStartCh.publish({
-          req,
-          res,
-          params: req?.params,
-          abortController
-        })
+          routerParamStartCh.publish({
+            req,
+            res,
+            params: req?.params,
+            abortController
+          })
 
-        if (abortController.signal.aborted) return
+          if (abortController.signal.aborted) return
+        }
+
+        return originalFn.apply(this, args)
       }
+    })
 
-      return fn.apply(this, args)
-    }
-
-    return original.call(this, name, wrappedFn)
+    return original.apply(this, arguments)
   }
 }
 
