@@ -180,8 +180,8 @@ const queryParserReadCh = channel('datadog:query:read:finish')
 
 addHook({ name: 'router', versions: ['>=2'] }, Router => {
   const WrappedRouter = shimmer.wrapFunction(Router, function (originalRouter) {
-    return function wrappedMethod (options) {
-      const router = originalRouter.call(this, options)
+    return function wrappedMethod () {
+      const router = originalRouter.apply(this, arguments)
 
       shimmer.wrap(router, 'handle', function wrapHandle (originalHandle) {
         return function wrappedHandle (req, res, next) {
@@ -240,7 +240,7 @@ addHook({
 
 function wrapParam (original) {
   return function wrappedProcessParams (name, fn) {
-    const wrappedFn = function wrappedParamCallback (req, res, next, param) {
+    const wrappedFn = function wrappedParamCallback (req, res) {
       if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length && !visitedParams.has(req.params)) {
         visitedParams.add(req.params)
 
@@ -256,7 +256,7 @@ function wrapParam (original) {
         if (abortController.signal.aborted) return
       }
 
-      return fn(req, res, next, param, name)
+      return fn.apply(this, arguments)
     }
 
     return original.call(this, name, wrappedFn)
