@@ -202,6 +202,10 @@ class DatadogSpan {
     this._spanContext._baggageItems = {}
   }
 
+  _removeAllBaggageItems () {
+    this._spanContext._baggageItems = {}
+  }
+
   setTag (key, value) {
     this._addTags({ [key]: value })
     return this
@@ -402,7 +406,7 @@ class DatadogSpan {
     const currentOtelBaggageReference = propagation.getActiveBaggage()
     if (currentOtelBaggageReference !== this._otelBaggageReference) {
       const baggages = currentOtelBaggageReference.getAllEntries()
-      this.removeAllBaggageItems()
+      this._removeAllBaggageItems()
       for (const baggage of baggages) {
         this._setBaggageItem(baggage[0], baggage[1].value)
       }

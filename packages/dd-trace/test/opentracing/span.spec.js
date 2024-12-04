@@ -390,16 +390,23 @@ describe('Span', () => {
       expect(span.getBaggageItem('foo')).to.equal('bar')
     })
 
-    it('should get a baggage item 2', () => {
+    it('should get a baggage item following otel baggage operation', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       const entries = {
-        test: { value: 'test1' },
-      };
+        test: { value: 'test1' }
+      }
       const bag = propagation.createBaggage(entries);
-      propagation.setBaggage(context.active(), bag)
-      console.log(propagation.getActiveBaggage())
-
-      console.log(span.getAllBaggageItems())
+      const otelContext = propagation.setBaggage(context.active(), bag)
+      context.disable()
+      context.setGlobalContextManager({
+        active: () => otelContext,
+        disable: () => {}
+      })
+      const currentBaggage = propagation.getActiveBaggage().getAllEntries()[0]
+      const currentBaggageKey = currentBaggage[0]
+      const currentBaggageValue = currentBaggage[1].value
+      expect(span.getBaggageItem(currentBaggageKey)).to.equal(currentBaggageValue)
+      expect(span._spanContext._baggageItems).to.deep.equal({ test: 'test1'})
     })
   })
 
