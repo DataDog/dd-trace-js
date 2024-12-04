@@ -14,10 +14,12 @@ const INTERVAL = 10 * 1000
 
 // Node >=16 has PerformanceObserver with `gc` type, but <16.7 had a critical bug.
 // See: https://github.com/nodejs/node/issues/39548
-const hasGCMetrics = NODE_MAJOR >= 18 || (NODE_MAJOR === 16 && NODE_MINOR >= 7)
+const hasGCObserver = NODE_MAJOR >= 18 || (NODE_MAJOR === 16 && NODE_MINOR >= 7)
+const hasGCProfiler = NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 15)
 
 let nativeMetrics = null
 let gcObserver = null
+let gcProfiler = null
 
 let interval
 let client
@@ -37,7 +39,7 @@ const runtimeMetrics = module.exports = {
     try {
       nativeMetrics = require('@datadog/native-metrics')
 
-      if (hasGCMetrics) {
+      if (hasGCObserver) {
         nativeMetrics.start('loop') // Only add event loop watcher and not GC.
       } else {
         nativeMetrics.start()
@@ -51,7 +53,8 @@ const runtimeMetrics = module.exports = {
 
     time = process.hrtime()
 
-    startObservers()
+    startGCObserver()
+    startGCProfiler()
 
     if (nativeMetrics) {
       interval = setInterval(() => {
@@ -77,8 +80,6 @@ const runtimeMetrics = module.exports = {
     if (nativeMetrics) {
       nativeMetrics.stop()
     }
-
-    stopObservers()
 
     clearInterval(interval)
     reset()
@@ -153,6 +154,10 @@ function reset () {
   counters = {}
   histograms = {}
   nativeMetrics = null
+  gcObserver && gcObserver.disconnect()
+  gcObserver = null
+  gcProfiler && gcProfiler.stop()
+  gcProfiler = null
 }
 
 function captureCpuUsage () {
@@ -217,6 +222,29 @@ function captureHeapSpace () {
     client.gauge('runtime.node.heap.physical_size.by.space', stats[i].physical_space_size, tags)
   }
 }
+function captureGCMetrics () {
+  if (!gcProfiler) return
+
+  const profile = gcProfiler.stop()
+  const pauseAll = new Histogram()
+  const pause = {}
+
+  for (const stat of profile.statistics) {
+    const type = stat.gcType.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase()
+
+    pause[type] = pause[type] || new Histogram()
+    pause[type].record(stat.cost)
+    pauseAll.record(stat.cost)
+  }
+
+  histogram('runtime.node.gc.pause', pauseAll)
+
+  for (const type in pause) {
+    histogram('runtime.node.gc.pause.by.type', pause[type], [`gc_type:${type}`])
+  }
+
+  gcProfiler.start()
+}
 
 function captureGauges () {
   Object.keys(gauges).forEach(name => {
@@ -271,6 +299,7 @@ function captureCommonMetrics () {
   captureCounters()
   captureHistograms()
   captureELU()
+  captureGCMetrics()
 }
 
 function captureNativeMetrics () {
@@ -322,8 +351,8 @@ function histogram (name, stats, tags) {
   client.gauge(`${name}.95percentile`, stats.p95, tags)
 }
 
-function startObservers () {
-  if (gcObserver || !hasGCMetrics) return
+function startGCObserver () {
+  if (gcObserver || hasGCProfiler || !hasGCObserver) return
 
   gcObserver = new PerformanceObserver(list => {
     for (const entry of list.getEntries()) {
@@ -337,11 +366,11 @@ function startObservers () {
   gcObserver.observe({ type: 'gc' })
 }
 
-function stopObservers () {
-  if (!gcObserver) return
+function startGCProfiler () {
+  if (gcProfiler || !hasGCProfiler) return
 
-  gcObserver.disconnect()
-  gcObserver = null
+  gcProfiler = new v8.GCProfiler()
+  gcProfiler.start()
 }
 
 function gcType (kind) {
