@@ -240,7 +240,9 @@ addHook({
 
 function wrapParam (original) {
   return function wrappedProcessParams (name, fn) {
-    const wrappedFn = function wrappedParamCallback (req, res) {
+    const wrappedFn = (...args) => {
+      const [req, res] = args
+
       if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length && !visitedParams.has(req.params)) {
         visitedParams.add(req.params)
 
@@ -256,7 +258,7 @@ function wrapParam (original) {
         if (abortController.signal.aborted) return
       }
 
-      return fn.apply(this, arguments)
+      return fn.apply(this, args)
     }
 
     return original.call(this, name, wrappedFn)
