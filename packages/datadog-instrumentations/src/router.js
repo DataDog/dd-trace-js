@@ -208,10 +208,13 @@ addHook({ name: 'router', versions: ['>=2'] }, Router => {
 })
 
 const routerParamStartCh = channel('datadog:router:param:start')
+const visitedParams = new WeakSet()
 
 function wrapHandleRequest (original) {
   return function wrappedHandleRequest (req, res, next) {
-    if (routerParamStartCh.hasSubscribers) {
+    if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length && !visitedParams.has(req.params)) {
+      visitedParams.add(req.params)
+
       const abortController = new AbortController()
 
       routerParamStartCh.publish({
@@ -238,7 +241,9 @@ addHook({
 function wrapParam (original) {
   return function wrappedProcessParams (name, fn) {
     const wrappedFn = function wrappedParamCallback (req, res, next, param) {
-      if (routerParamStartCh.hasSubscribers) {
+      if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length && !visitedParams.has(req.params)) {
+        visitedParams.add(req.params)
+
         const abortController = new AbortController()
 
         routerParamStartCh.publish({
