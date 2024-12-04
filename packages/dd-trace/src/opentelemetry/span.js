@@ -1,6 +1,6 @@
 'use strict'
 
-const { api, propagation } = require('@opentelemetry/api')
+const api = require('@opentelemetry/api')
 
 const { performance } = require('perf_hooks')
 const { timeOrigin } = performance

@@ -395,7 +395,7 @@ describe('Span', () => {
       const entries = {
         test: { value: 'test1' }
       }
-      const bag = propagation.createBaggage(entries);
+      const bag = propagation.createBaggage(entries)
       const otelContext = propagation.setBaggage(context.active(), bag)
       context.disable()
       context.setGlobalContextManager({
@@ -406,7 +406,7 @@ describe('Span', () => {
       const currentBaggageKey = currentBaggage[0]
       const currentBaggageValue = currentBaggage[1].value
       expect(span.getBaggageItem(currentBaggageKey)).to.equal(currentBaggageValue)
-      expect(span._spanContext._baggageItems).to.deep.equal({ test: 'test1'})
+      expect(span._spanContext._baggageItems).to.deep.equal({ test: 'test1' })
     })
   })
 
