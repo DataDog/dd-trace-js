@@ -279,6 +279,10 @@
     {
       "name": "@langchain/google-genai",
       "versions": [">=0.1"]
+    },
+    {
+      "name": "@langchain/openai",
+      "versions": [">=0.1"]
     }
   ],
   "ldapjs": [
