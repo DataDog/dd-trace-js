@@ -7,4 +7,3 @@ const db = client.db('test_db')
 const collection = db.collection('test_collection')
 collection.insertOne({ a: 1 }, {}, () => {})
 setTimeout(() => { client.close() }, 1500)
-
