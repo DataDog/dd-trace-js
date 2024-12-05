@@ -2,9 +2,10 @@ const pkg = require('../../../../package.json')
 const log = require('../log')
 const request = require('../exporters/common/request')
 const { URL, format } = require('url')
-const msgpack = require('msgpack-lite')
+const { MsgpackEncoder } = require('../msgpack')
 const zlib = require('zlib')
-const codec = msgpack.createCodec({ int64: true })
+
+const msgpack = new MsgpackEncoder()
 
 function makeRequest (data, url, cb) {
   const options = {
@@ -41,7 +42,7 @@ class DataStreamsWriter {
       log.debug(() => `Maximum number of active requests reached. Payload discarded: ${JSON.stringify(payload)}`)
       return
     }
-    const encodedPayload = msgpack.encode(payload, { codec })
+    const encodedPayload = msgpack.encode(payload)
 
     zlib.gzip(encodedPayload, { level: 1 }, (err, compressedData) => {
       if (err) {

@@ -21,7 +21,6 @@ require,limiter,MIT,Copyright 2011 John Hurliman
 require,lodash.sortby,MIT,Copyright JS Foundation and other contributors
 require,lru-cache,ISC,Copyright (c) 2010-2022 Isaac Z. Schlueter and Contributors
 require,module-details-from-path,MIT,Copyright 2016 Thomas Watson Steen
-require,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
 require,path-to-regexp,MIT,Copyright 2014 Blake Embrey
 require,pprof-format,MIT,Copyright 2022 Stephen Belanger
@@ -63,6 +62,7 @@ dev,jszip,MIT,Copyright 2015-2016 Stuart Knightley and contributors
 dev,knex,MIT,Copyright (c) 2013-present Tim Griesser
 dev,mkdirp,MIT,Copyright 2010 James Halliday
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
+dev,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
 dev,multer,MIT,Copyright 2014 Hage Yaapa
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
 dev,nyc,ISC,Copyright 2015 Contributors
