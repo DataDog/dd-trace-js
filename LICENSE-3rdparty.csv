@@ -13,7 +13,6 @@ require,crypto-randomuuid,MIT,Copyright 2021 Node.js Foundation and contributors
 require,dc-polyfill,MIT,Copyright 2023 Datadog Inc.
 require,ignore,MIT,Copyright 2013 Kael Zhang and contributors
 require,import-in-the-middle,Apache license 2.0,Copyright 2021 Datadog Inc.
-require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 require,istanbul-lib-coverage,BSD-3-Clause,Copyright 2012-2015 Yahoo! Inc.
 require,jest-docblock,MIT,Copyright Meta Platforms, Inc. and affiliates.
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
@@ -58,6 +57,7 @@ dev,get-port,MIT,Copyright Sindre Sorhus
 dev,glob,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,globals,MIT,Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
 dev,graphql,MIT,Copyright 2015 Facebook Inc.
+dev,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 dev,jszip,MIT,Copyright 2015-2016 Stuart Knightley and contributors
 dev,knex,MIT,Copyright (c) 2013-present Tim Griesser
 dev,mkdirp,MIT,Copyright 2010 James Halliday
