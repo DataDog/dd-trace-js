@@ -108,7 +108,7 @@ describe('TextMapPropagator', () => {
       const spanContext = createContext({ baggageItems })
 
       propagator.inject(spanContext, carrier)
-      // eslint-disable-next-line max-len
+      // eslint-disable-next-line @stylistic/js/max-len
       expect(carrier.baggage).to.be.equal('%22%2C%3B%5C%28%29%2F%3A%3C%3D%3E%3F%40%5B%5D%7B%7D%F0%9F%90%B6%C3%A9%E6%88%91=%22%2C%3B%5C%F0%9F%90%B6%C3%A9%E6%88%91')
     })
 
