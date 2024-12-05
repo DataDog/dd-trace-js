@@ -29,7 +29,7 @@ export default [
       'integration-tests/esbuild/out.js', // Generated
       'integration-tests/esbuild/aws-sdk-out.js', // Generated
       'packages/dd-trace/src/appsec/blocked_templates.js', // TODO Why is this ignored?
-      'packages/dd-trace/src/payload-tagging/jsonpath-plus.js', // Vendored
+      'packages/dd-trace/src/payload-tagging/jsonpath-plus.js' // Vendored
     ]
   }, ...compat.extends('eslint:recommended', 'standard', 'plugin:mocha/recommended'), {
     plugins: {

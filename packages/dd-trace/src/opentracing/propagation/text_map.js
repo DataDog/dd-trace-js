@@ -306,9 +306,9 @@ class TextMapPropagator {
         case 'b3':
           if (this._config.tracePropagationStyle.otelPropagators) {
             // TODO: should match "b3 single header" in next major
-            spanContext = this._extractB3SingleContext(carrier)
+            extractedContext = this._extractB3SingleContext(carrier)
           } else {
-            spanContext = this._extractB3MultiContext(carrier)
+            extractedContext = this._extractB3MultiContext(carrier)
           }
           break
         case 'b3multi':
