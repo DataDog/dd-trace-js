@@ -168,6 +168,10 @@ class AgentEncoder {
     bytes.buffer[offset + 8] = id[7]
   }
 
+  _encodeNumber (bytes, value) {
+    this._msgpack.encodeNumber(bytes, value)
+  }
+
   _encodeInteger (bytes, value) {
     this._msgpack.encodeInteger(bytes, value)
   }
