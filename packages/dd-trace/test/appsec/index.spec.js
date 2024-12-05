@@ -362,7 +362,7 @@ describe('AppSec Index', function () {
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-lenght': 42
+          'content-length': 42
         }),
         statusCode: 201
       }
@@ -400,7 +400,7 @@ describe('AppSec Index', function () {
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-lenght': 42
+          'content-length': 42
         }),
         statusCode: 201
       }
@@ -446,7 +446,7 @@ describe('AppSec Index', function () {
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-lenght': 42
+          'content-length': 42
         }),
         statusCode: 201
       }
@@ -512,7 +512,7 @@ describe('AppSec Index', function () {
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-lenght': 42
+          'content-length': 42
         }),
         statusCode: 201
       }
@@ -558,7 +558,7 @@ describe('AppSec Index', function () {
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-lenght': 42
+          'content-length': 42
         }),
         statusCode: 201
       }
@@ -649,7 +649,7 @@ describe('AppSec Index', function () {
       res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-lenght': 42
+          'content-length': 42
         }),
         writeHead: sinon.stub(),
         end: sinon.stub(),
@@ -893,7 +893,7 @@ describe('AppSec Index', function () {
 
         const responseHeaders = {
           'content-type': 'application/json',
-          'content-lenght': 42,
+          'content-length': 42,
           'set-cookie': 'a=1;b=2'
         }
 
@@ -904,7 +904,7 @@ describe('AppSec Index', function () {
             'server.response.status': '404',
             'server.response.headers.no_cookies': {
               'content-type': 'application/json',
-              'content-lenght': 42
+              'content-length': 42
             }
           }
         }, req)
@@ -925,7 +925,7 @@ describe('AppSec Index', function () {
 
         const responseHeaders = {
           'content-type': 'application/json',
-          'content-lenght': 42,
+          'content-length': 42,
           'set-cookie': 'a=1;b=2'
         }
 
@@ -936,7 +936,7 @@ describe('AppSec Index', function () {
             'server.response.status': '404',
             'server.response.headers.no_cookies': {
               'content-type': 'application/json',
-              'content-lenght': 42
+              'content-length': 42
             }
           }
         }, req)
@@ -956,7 +956,7 @@ describe('AppSec Index', function () {
 
         const responseHeaders = {
           'content-type': 'application/json',
-          'content-lenght': 42,
+          'content-length': 42,
           'set-cookie': 'a=1;b=2'
         }
 
@@ -972,7 +972,7 @@ describe('AppSec Index', function () {
 
         const responseHeaders = {
           'content-type': 'application/json',
-          'content-lenght': 42,
+          'content-length': 42,
           'set-cookie': 'a=1;b=2'
         }
 
@@ -983,7 +983,7 @@ describe('AppSec Index', function () {
             'server.response.status': '404',
             'server.response.headers.no_cookies': {
               'content-type': 'application/json',
-              'content-lenght': 42
+              'content-length': 42
             }
           }
         }, req)
@@ -999,7 +999,7 @@ describe('AppSec Index', function () {
 
         const responseHeaders = {
           'content-type': 'application/json',
-          'content-lenght': 42,
+          'content-length': 42,
           'set-cookie': 'a=1;b=2'
         }
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
