@@ -162,6 +162,7 @@ function incomingHttpEndTranslator ({ req, res }) {
     persistent[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
 
+  // we need to keep this to support nextjs
   if (req.query !== null && typeof req.query === 'object') {
     persistent[addresses.HTTP_INCOMING_QUERY] = req.query
   }

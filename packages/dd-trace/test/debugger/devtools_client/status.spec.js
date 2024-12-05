@@ -79,7 +79,7 @@ describe('diagnostic message http request caching', function () {
 
 function assertRequestData (request, { probeId, version, status, exception }) {
   const payload = getFormPayload(request)
-  const diagnostics = { probeId, runtimeId, version, status }
+  const diagnostics = { probeId, runtimeId, probeVersion: version, status }
 
   // Error requests will also contain an `exception` property
   if (exception) diagnostics.exception = exception
