@@ -645,6 +645,17 @@ describe('AppSec Index', function () {
 
       abortController = { abort: sinon.stub() }
 
+      res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-lenght': 42
+        }),
+        writeHead: sinon.stub(),
+        end: sinon.stub(),
+        getHeaderNames: sinon.stub().returns([])
+      }
+      res.writeHead.returns(res)
+
       req = {
         url: '/path',
         headers: {
@@ -657,16 +668,6 @@ describe('AppSec Index', function () {
           remotePort: 8080
         }
       }
-      res = {
-        getHeaders: () => ({
-          'content-type': 'application/json',
-          'content-lenght': 42
-        }),
-        writeHead: sinon.stub(),
-        end: sinon.stub(),
-        getHeaderNames: sinon.stub().returns([])
-      }
-      res.writeHead.returns(res)
 
       AppSec.enable(config)
       AppSec.incomingHttpStartTranslator({ req, res })
