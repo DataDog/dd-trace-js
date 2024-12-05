@@ -73,7 +73,7 @@ jobs:
         id: build-agent
         run: ./build.sh -i agent
       - name: Run scenario ${{ matrix.scenario }}
-        run: ./run.sh ${{ matrix.scenario }} -F tests/parametric/test_trace_sampling.py::Test_Trace_Sampling_Globs_Feb2024_Revision
+        run: ./run.sh ${{ matrix.scenario }}
       - name: Compress artifact
         if: ${{ always() }}
         run: tar -czvf artifact.tar.gz $(ls | grep logs)
