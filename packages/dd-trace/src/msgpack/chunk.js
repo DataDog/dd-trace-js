@@ -40,7 +40,9 @@ class Chunk {
   set (array) {
     const length = this.length
 
-    this.reserve(array.length)
+    array = new Uint8Array(array.buffer, array.byteOffset, array.byteLength)
+
+    this.reserve(array.byteLength)
     this.buffer.set(array, length)
   }
 

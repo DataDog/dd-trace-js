@@ -27,6 +27,8 @@ class MsgpackEncoder {
           this.encodeNull(bytes, value)
         } else if (Array.isArray(value)) {
           this.encodeArray(bytes, value)
+        } else if (Buffer.isBuffer(value) || ArrayBuffer.isView(value)) {
+          this.encodeBin(bytes, value)
         } else {
           this.encodeMap(bytes, value)
         }
@@ -116,9 +118,20 @@ class MsgpackEncoder {
   encodeBin (bytes, value) {
     const offset = bytes.length
 
-    bytes.reserve(3)
-    bytes.buffer[offset] = 0xc5
-    bytes.view.setUint16(offset + 1, value.byteLength)
+    if (value.byteLength < 256) {
+      bytes.reserve(2)
+      bytes.buffer[offset] = 0xc4
+      bytes.view.setUint8(offset + 1, value.byteLength)
+    } else if (value.byteLength < 65536) {
+      bytes.reserve(3)
+      bytes.buffer[offset] = 0xc5
+      bytes.view.setUint16(offset + 1, value.byteLength)
+    } else {
+      bytes.reserve(5)
+      bytes.buffer[offset] = 0xc6
+      bytes.view.setUint32(offset + 1, value.byteLength)
+    }
+
     bytes.set(value)
   }
 

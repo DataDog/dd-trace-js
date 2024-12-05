@@ -129,6 +129,14 @@ class AgentEncoder {
     this._cacheString('')
   }
 
+  _encodeBuffer (bytes, buffer) {
+    this._msgpack.encodeBin(bytes, buffer)
+  }
+
+  _encodeBool (bytes, value) {
+    this._msgpack.encodeBoolean(bytes, value)
+  }
+
   _encodeArrayPrefix (bytes, value) {
     this._msgpack.encodeArrayPrefix(bytes, value)
   }
@@ -141,6 +149,7 @@ class AgentEncoder {
     this._msgpack.encodeByte(bytes, value)
   }
 
+  // TODO: Use BigInt instead.
   _encodeId (bytes, id) {
     const offset = bytes.length
 

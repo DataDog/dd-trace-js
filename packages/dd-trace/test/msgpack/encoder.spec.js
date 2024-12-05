@@ -36,7 +36,10 @@ describe('msgpack/encoder', () => {
         int32: -2147483647,
         float: 12345.6789,
         biguint: BigInt('9223372036854775807'),
-        bigint: BigInt('-9223372036854775807')
+        bigint: BigInt('-9223372036854775807'),
+        buffer: Buffer.from('test'),
+        uint8array: new Uint8Array([1, 2, 3, 4]),
+        uint32array: new Uint32Array([1, 2])
       }
     ]
 
@@ -63,5 +66,17 @@ describe('msgpack/encoder', () => {
     expect(decoded[1].biguint.toString()).to.equal('9223372036854775807')
     expect(decoded[1]).to.have.property('bigint')
     expect(decoded[1].bigint.toString()).to.equal('-9223372036854775807')
+    expect(decoded[1]).to.have.property('buffer')
+    expect(decoded[1].buffer.toString('utf8')).to.equal('test')
+    expect(decoded[1]).to.have.property('buffer')
+    expect(decoded[1].buffer.toString('utf8')).to.equal('test')
+    expect(decoded[1]).to.have.property('uint8array')
+    expect(decoded[1].uint8array[0]).to.equal(1)
+    expect(decoded[1].uint8array[1]).to.equal(2)
+    expect(decoded[1].uint8array[2]).to.equal(3)
+    expect(decoded[1].uint8array[3]).to.equal(4)
+    expect(decoded[1]).to.have.property('uint32array')
+    expect(decoded[1].uint32array[0]).to.equal(1)
+    expect(decoded[1].uint32array[4]).to.equal(2)
   })
 })
