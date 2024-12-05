@@ -17,8 +17,8 @@ const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
-    this.hash = BigInt(hash)
-    this.parentHash = BigInt(parentHash)
+    this.hash = hash.readBigUInt64BE()
+    this.parentHash = parentHash.readBigUInt64BE()
     this.edgeTags = edgeTags
     this.edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
     this.pathwayLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
