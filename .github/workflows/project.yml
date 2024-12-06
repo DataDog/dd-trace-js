@@ -49,14 +49,15 @@ jobs:
       matrix:
         version: ['0.8', '0.10', '0.12', '4', '6', '8', '10', '12.0.0']
     runs-on: ubuntu-latest
-    env:
-      DD_INJECTION_ENABLED: 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
       - run: node ./init
+      - run: node ./init
+        env:
+          DD_INJECTION_ENABLED: 'true'
 
   integration-ci:
     strategy:
