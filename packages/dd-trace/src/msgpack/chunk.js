@@ -26,7 +26,10 @@ class Chunk {
     } else if (length < 0x100000000) { // str 32
       this.reserve(length + 5)
       this.buffer[offset] = 0xdb
-      this.view.setUint32(offset + 1, length)
+      this.buffer[offset + 1] = length >> 24
+      this.buffer[offset + 2] = length >> 16
+      this.buffer[offset + 3] = length >> 8
+      this.buffer[offset + 4] = length
       this.buffer.utf8Write(value, offset + 5, length)
     }
 
