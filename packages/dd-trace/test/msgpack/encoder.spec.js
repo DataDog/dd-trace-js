@@ -31,9 +31,11 @@ describe('msgpack/encoder', () => {
         uint8: 255,
         uint16: 65535,
         uint32: 4294967295,
+        uint53: 9007199254740991,
         int8: -15,
         int16: -32767,
         int32: -2147483647,
+        int53: -9007199254740991,
         float: 12345.6789,
         biguint: BigInt('9223372036854775807'),
         bigint: BigInt('-9223372036854775807'),
@@ -58,9 +60,13 @@ describe('msgpack/encoder', () => {
     expect(decoded[1]).to.have.property('uint8', 255)
     expect(decoded[1]).to.have.property('uint16', 65535)
     expect(decoded[1]).to.have.property('uint32', 4294967295)
+    expect(decoded[1]).to.have.property('uint53')
+    expect(decoded[1].uint53.toString()).to.equal('9007199254740991')
     expect(decoded[1]).to.have.property('int8', -15)
     expect(decoded[1]).to.have.property('int16', -32767)
     expect(decoded[1]).to.have.property('int32', -2147483647)
+    expect(decoded[1]).to.have.property('int53')
+    expect(decoded[1].int53.toString()).to.equal('-9007199254740991')
     expect(decoded[1]).to.have.property('float', 12345.6789)
     expect(decoded[1]).to.have.property('biguint')
     expect(decoded[1].biguint.toString()).to.equal('9223372036854775807')

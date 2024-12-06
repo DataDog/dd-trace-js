@@ -80,7 +80,10 @@ class MsgpackEncoder {
 
     bytes.reserve(5)
     bytes.buffer[offset] = 0xdd
-    bytes.view.setUint32(offset + 1, length)
+    bytes.buffer[offset + 1] = length >> 24
+    bytes.buffer[offset + 2] = length >> 16
+    bytes.buffer[offset + 3] = length >> 8
+    bytes.buffer[offset + 4] = length
   }
 
   encodeArray (bytes, value) {
@@ -107,7 +110,10 @@ class MsgpackEncoder {
 
     bytes.reserve(5)
     bytes.buffer[offset] = 0xdf
-    bytes.view.setUint32(offset + 1, keysLength)
+    bytes.buffer[offset + 1] = keysLength >> 24
+    bytes.buffer[offset + 2] = keysLength >> 16
+    bytes.buffer[offset + 3] = keysLength >> 8
+    bytes.buffer[offset + 4] = keysLength
   }
 
   encodeByte (bytes, value) {
@@ -121,15 +127,19 @@ class MsgpackEncoder {
     if (value.byteLength < 256) {
       bytes.reserve(2)
       bytes.buffer[offset] = 0xc4
-      bytes.view.setUint8(offset + 1, value.byteLength)
+      bytes.buffer[offset + 1] = value.byteLength
     } else if (value.byteLength < 65536) {
       bytes.reserve(3)
       bytes.buffer[offset] = 0xc5
-      bytes.view.setUint16(offset + 1, value.byteLength)
+      bytes.buffer[offset + 1] = value.byteLength >> 8
+      bytes.buffer[offset + 2] = value.byteLength
     } else {
       bytes.reserve(5)
       bytes.buffer[offset] = 0xc6
-      bytes.view.setUint32(offset + 1, value.byteLength)
+      bytes.buffer[offset + 1] = value.byteLength >> 24
+      bytes.buffer[offset + 2] = value.byteLength >> 16
+      bytes.buffer[offset + 3] = value.byteLength >> 8
+      bytes.buffer[offset + 4] = value.byteLength
     }
 
     bytes.set(value)
@@ -140,7 +150,10 @@ class MsgpackEncoder {
 
     bytes.reserve(5)
     bytes.buffer[offset] = 0xce
-    bytes.view.setUint32(offset + 1, value)
+    bytes.buffer[offset + 1] = value >> 24
+    bytes.buffer[offset + 2] = value >> 16
+    bytes.buffer[offset + 3] = value >> 8
+    bytes.buffer[offset + 4] = value
   }
 
   encodeShort (bytes, value) {
@@ -148,7 +161,8 @@ class MsgpackEncoder {
 
     bytes.reserve(3)
     bytes.buffer[offset] = 0xcd
-    bytes.view.setUint16(offset + 1, value)
+    bytes.buffer[offset + 1] = value >> 8
+    bytes.buffer[offset + 2] = value
   }
 
   encodeLong (bytes, value) {
@@ -158,8 +172,14 @@ class MsgpackEncoder {
 
     bytes.reserve(9)
     bytes.buffer[offset] = 0xcf
-    bytes.view.setUint32(offset + 1, hi)
-    bytes.view.setUint32(offset + 5, lo)
+    bytes.buffer[offset + 1] = hi >> 24
+    bytes.buffer[offset + 2] = hi >> 16
+    bytes.buffer[offset + 3] = hi >> 8
+    bytes.buffer[offset + 4] = hi
+    bytes.buffer[offset + 5] = lo >> 24
+    bytes.buffer[offset + 6] = lo >> 16
+    bytes.buffer[offset + 7] = lo >> 8
+    bytes.buffer[offset + 8] = lo
   }
 
   encodeNumber (bytes, value) {
@@ -182,27 +202,38 @@ class MsgpackEncoder {
 
     if (value >= -0x20) {
       bytes.reserve(1)
-      bytes.view.setInt8(offset, value)
+      bytes.buffer[offset] = value
     } else if (value >= -0x80) {
       bytes.reserve(2)
       bytes.buffer[offset] = 0xd0
-      bytes.view.setInt8(offset + 1, value)
+      bytes.buffer[offset + 1] = value
     } else if (value >= -0x8000) {
       bytes.reserve(3)
       bytes.buffer[offset] = 0xd1
-      bytes.view.setInt16(offset + 1, value)
+      bytes.buffer[offset + 1] = value >> 8
+      bytes.buffer[offset + 2] = value
     } else if (value >= -0x80000000) {
       bytes.reserve(5)
       bytes.buffer[offset] = 0xd2
-      bytes.view.setInt32(offset + 1, value)
+      bytes.buffer[offset + 1] = value >> 24
+      bytes.buffer[offset + 2] = value >> 16
+      bytes.buffer[offset + 3] = value >> 8
+      bytes.buffer[offset + 4] = value
     } else {
-      const hi = (value / Math.pow(2, 32)) >> 0
+      console.log(value)
+      const hi = Math.floor(value / Math.pow(2, 32))
       const lo = value >>> 0
 
       bytes.reserve(9)
       bytes.buffer[offset] = 0xd3
-      bytes.view.setInt8(offset + 1, hi)
-      bytes.view.setInt8(offset + 5, lo)
+      bytes.buffer[offset + 1] = hi >> 24
+      bytes.buffer[offset + 2] = hi >> 16
+      bytes.buffer[offset + 3] = hi >> 8
+      bytes.buffer[offset + 4] = hi
+      bytes.buffer[offset + 5] = lo >> 24
+      bytes.buffer[offset + 6] = lo >> 16
+      bytes.buffer[offset + 7] = lo >> 8
+      bytes.buffer[offset + 8] = lo
     }
   }
 
@@ -211,27 +242,37 @@ class MsgpackEncoder {
 
     if (value <= 0x7f) {
       bytes.reserve(1)
-      bytes.view.setUint8(offset, value)
+      bytes.buffer[offset] = value
     } else if (value <= 0xff) {
       bytes.reserve(2)
       bytes.buffer[offset] = 0xcc
-      bytes.view.setUint8(offset + 1, value)
+      bytes.buffer[offset + 1] = value
     } else if (value <= 0xffff) {
       bytes.reserve(3)
       bytes.buffer[offset] = 0xcd
-      bytes.view.setUint16(offset + 1, value)
+      bytes.buffer[offset + 1] = value >> 8
+      bytes.buffer[offset + 2] = value
     } else if (value <= 0xffffffff) {
       bytes.reserve(5)
       bytes.buffer[offset] = 0xce
-      bytes.view.setUint32(offset + 1, value)
+      bytes.buffer[offset + 1] = value >> 24
+      bytes.buffer[offset + 2] = value >> 16
+      bytes.buffer[offset + 3] = value >> 8
+      bytes.buffer[offset + 4] = value
     } else {
       const hi = (value / Math.pow(2, 32)) >> 0
       const lo = value >>> 0
 
       bytes.reserve(9)
       bytes.buffer[offset] = 0xcf
-      bytes.view.setUint32(offset + 1, hi)
-      bytes.view.setUint32(offset + 5, lo)
+      bytes.buffer[offset + 1] = hi >> 24
+      bytes.buffer[offset + 2] = hi >> 16
+      bytes.buffer[offset + 3] = hi >> 8
+      bytes.buffer[offset + 4] = hi
+      bytes.buffer[offset + 5] = lo >> 24
+      bytes.buffer[offset + 6] = lo >> 16
+      bytes.buffer[offset + 7] = lo >> 8
+      bytes.buffer[offset + 8] = lo
     }
   }
 
