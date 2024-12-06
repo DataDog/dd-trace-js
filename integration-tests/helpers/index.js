@@ -105,7 +105,7 @@ async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelem
 }
 
 function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
-  const proc = fork(filename, { ...options, stdio: 'pipe', env: { ...process.env, ...options.env } })
+  const proc = fork(filename, { ...options, stdio: 'pipe' })
   return new Promise((resolve, reject) => {
     proc
       .on('message', ({ port }) => {
@@ -306,7 +306,7 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort
   }
-  env = { ...env, ...additionalEnvArgs }
+  env = { ...process.env, ...env, ...additionalEnvArgs }
   return spawnProc(path.join(cwd, serverFile), {
     cwd,
     env
