@@ -108,6 +108,7 @@ typings/
 
 .next
 package-lock.json
+yarn.lock
 out
 versions
 build

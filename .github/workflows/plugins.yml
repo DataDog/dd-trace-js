@@ -840,6 +840,7 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           cache: yarn
+          cache-dependency-path: ./package.json
           node-version: '16'
       - uses: ./.github/actions/install
       - run: yarn config set ignore-engines true

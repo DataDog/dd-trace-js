@@ -5,4 +5,5 @@ runs:
     - uses: actions/setup-node@v3
       with:
         cache: yarn
+        cache-dependency-path: ./package.json
         node-version: '18'
