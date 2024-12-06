@@ -105,7 +105,7 @@ async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelem
 }
 
 function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
-  const proc = fork(filename, { ...options, stdio: 'pipe' })
+  const proc = fork(filename, { ...options, stdio: 'pipe', env: { ...process.env, ...options.env } })
   return new Promise((resolve, reject) => {
     proc
       .on('message', ({ port }) => {
