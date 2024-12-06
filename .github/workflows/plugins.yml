@@ -295,7 +295,6 @@ jobs:
       SERVICES: couchbase
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
       DD_INJECT_FORCE: 'true'
-      DD_TRACE_DEBUG: 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
