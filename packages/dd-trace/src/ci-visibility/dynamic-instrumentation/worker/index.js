@@ -1,6 +1,8 @@
 'use strict'
-
+const sourceMap = require('source-map')
+const path = require('path')
 const { workerData: { breakpointSetChannel, breakpointHitChannel } } = require('worker_threads')
+
 // TODO: move debugger/devtools_client/session to common place
 const session = require('../../../debugger/devtools_client/session')
 // TODO: move debugger/devtools_client/snapshot to common place
@@ -69,14 +71,24 @@ async function addBreakpoint (snapshotId, probe) {
   const script = findScriptFromPartialPath(file)
   if (!script) throw new Error(`No loaded script found for ${file}`)
 
-  const [path, scriptId] = script
+  const [path, scriptId, sourceMapURL] = script
 
   log.debug(`Adding breakpoint at ${path}:${line}`)
+
+  let lineNumber = line
+
+  if (sourceMapURL && sourceMapURL.startsWith('data:')) {
+    try {
+      lineNumber = await processScriptWithInlineSourceMap({ file, line, sourceMapURL })
+    } catch (err) {
+      log.error(err)
+    }
+  }
 
   const { breakpointId } = await session.post('Debugger.setBreakpoint', {
     location: {
       scriptId,
-      lineNumber: line - 1
+      lineNumber: lineNumber - 1
     }
   })
 
@@ -87,4 +99,28 @@ async function addBreakpoint (snapshotId, probe) {
 function start () {
   sessionStarted = true
   return session.post('Debugger.enable') // return instead of await to reduce number of promises created
+}
+
+async function processScriptWithInlineSourceMap (params) {
+  const { file, line, sourceMapURL } = params
+
+  // Extract the base64-encoded source map
+  const base64SourceMap = sourceMapURL.split('base64,')[1]
+
+  // Decode the base64 source map
+  const decodedSourceMap = Buffer.from(base64SourceMap, 'base64').toString('utf8')
+
+  // Parse the source map
+  const consumer = await new sourceMap.SourceMapConsumer(decodedSourceMap)
+
+  // Map to the generated position
+  const generatedPosition = consumer.generatedPositionFor({
+    source: path.basename(file), // this needs to be the file, not the filepath
+    line,
+    column: 0
+  })
+
+  consumer.destroy()
+
+  return generatedPosition.line
 }

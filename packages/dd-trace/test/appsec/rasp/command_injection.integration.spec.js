@@ -10,7 +10,7 @@ describe('RASP - command_injection - integration', () => {
   let axios, sandbox, cwd, appPort, appFile, agent, proc
 
   before(async function () {
-    this.timeout(60000)
+    this.timeout(process.platform === 'win32' ? 90000 : 30000)
 
     sandbox = await createSandbox(
       ['express'],

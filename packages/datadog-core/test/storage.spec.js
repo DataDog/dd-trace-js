@@ -3,6 +3,7 @@
 require('../../dd-trace/test/setup/tap')
 
 const { expect } = require('chai')
+const { executionAsyncResource } = require('async_hooks')
 const storage = require('../src/storage')
 
 describe('storage', () => {
@@ -46,5 +47,17 @@ describe('storage', () => {
 
   it('should return the same storage for a namespace', () => {
     expect(storage('test')).to.equal(testStorage)
+  })
+
+  it('should not have its store referenced by the underlying async resource', () => {
+    const resource = executionAsyncResource()
+
+    testStorage.enterWith({ internal: 'internal' })
+
+    for (const sym of Object.getOwnPropertySymbols(resource)) {
+      if (sym.toString() === 'Symbol(kResourceStore)' && resource[sym]) {
+        expect(resource[sym]).to.not.have.property('internal')
+      }
+    }
   })
 })

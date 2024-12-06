@@ -70,7 +70,7 @@ function enable (mod) {
     fsPlugin.enable()
   }
 
-  log.info(`Enabled AppsecFsPlugin for ${mod}`)
+  log.info('[ASM] Enabled AppsecFsPlugin for %s', mod)
 }
 
 function disable (mod) {
@@ -85,7 +85,7 @@ function disable (mod) {
     fsPlugin = undefined
   }
 
-  log.info(`Disabled AppsecFsPlugin for ${mod}`)
+  log.info('[ASM] Disabled AppsecFsPlugin for %s', mod)
 }
 
 module.exports = {

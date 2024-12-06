@@ -7,7 +7,7 @@ const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
 const checkRequireCache = require('../check_require_cache')
-const telemetry = require('../../../dd-trace/src/telemetry/init-telemetry')
+const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 
 const {
   DD_TRACE_DISABLED_INSTRUMENTATIONS = '',

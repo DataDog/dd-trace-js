@@ -24,15 +24,15 @@ describe('Dynamic Instrumentation', function () {
       const expectedPayloads = [{
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, version: 0, status: 'RECEIVED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'RECEIVED' } }
       }, {
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, version: 0, status: 'INSTALLED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'INSTALLED' } }
       }, {
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, version: 0, status: 'EMITTING' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'EMITTING' } }
       }]
 
       t.agent.on('remote-config-ack-update', (id, version, state, error) => {
@@ -75,19 +75,19 @@ describe('Dynamic Instrumentation', function () {
       const expectedPayloads = [{
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, version: 0, status: 'RECEIVED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'RECEIVED' } }
       }, {
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, version: 0, status: 'INSTALLED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'INSTALLED' } }
       }, {
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, version: 1, status: 'RECEIVED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 1, status: 'RECEIVED' } }
       }, {
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, version: 1, status: 'INSTALLED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 1, status: 'INSTALLED' } }
       }]
       const triggers = [
         () => {
@@ -128,11 +128,11 @@ describe('Dynamic Instrumentation', function () {
       const expectedPayloads = [{
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, version: 0, status: 'RECEIVED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'RECEIVED' } }
       }, {
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, version: 0, status: 'INSTALLED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'INSTALLED' } }
       }]
 
       t.agent.on('remote-config-ack-update', (id, version, state, error) => {

@@ -105,10 +105,9 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args
   const proc = fork(path.join(cwd, scriptFilePath), args, {
     cwd,
     env: {
-      DD_PROFILING_PROFILERS: 'wall',
       DD_PROFILING_EXPORTERS: 'file',
       DD_PROFILING_ENABLED: 1,
-      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED: 1
+      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: 0 // capture all events
     }
   })
 
@@ -205,12 +204,8 @@ describe('profiler', () => {
       const proc = fork(path.join(cwd, 'profiler/codehotspots.js'), {
         cwd,
         env: {
-          DD_PROFILING_PROFILERS: 'wall',
           DD_PROFILING_EXPORTERS: 'file',
-          DD_PROFILING_ENABLED: 1,
-          DD_PROFILING_CODEHOTSPOTS_ENABLED: 1,
-          DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: 1,
-          DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED: 1
+          DD_PROFILING_ENABLED: 1
         }
       })
 
@@ -541,6 +536,71 @@ describe('profiler', () => {
 
     it('triggers for long-lived span-creating app with the auto env var', () => {
       return heuristicsTrigger(true)
+    })
+  })
+
+  context('Profiler API telemetry', () => {
+    beforeEach(async () => {
+      agent = await new FakeAgent().start()
+    })
+
+    afterEach(async () => {
+      proc.kill()
+      await agent.stop()
+    })
+
+    it('sends profiler API telemetry', () => {
+      proc = fork(profilerTestFile, {
+        cwd,
+        env: {
+          DD_TRACE_AGENT_PORT: agent.port,
+          DD_PROFILING_ENABLED: 1,
+          DD_PROFILING_UPLOAD_PERIOD: 1,
+          TEST_DURATION_MS: 2500
+        }
+      })
+
+      let requestCount = 0
+      let pointsCount = 0
+
+      const checkMetrics = agent.assertTelemetryReceived(({ _, payload }) => {
+        const pp = payload.payload
+        assert.equal(pp.namespace, 'profilers')
+        const series = pp.series
+        assert.lengthOf(series, 2)
+        assert.equal(series[0].metric, 'profile_api.requests')
+        assert.equal(series[0].type, 'count')
+        // There's a race between metrics and on-shutdown profile, so metric
+        // value will be between 2 and 3
+        requestCount = series[0].points[0][1]
+        assert.isAtLeast(requestCount, 2)
+        assert.isAtMost(requestCount, 3)
+
+        assert.equal(series[1].metric, 'profile_api.responses')
+        assert.equal(series[1].type, 'count')
+        assert.include(series[1].tags, 'status_code:200')
+
+        // Same number of requests and responses
+        assert.equal(series[1].points[0][1], requestCount)
+      }, timeout, 'generate-metrics')
+
+      const checkDistributions = agent.assertTelemetryReceived(({ _, payload }) => {
+        const pp = payload.payload
+        assert.equal(pp.namespace, 'profilers')
+        const series = pp.series
+        assert.lengthOf(series, 2)
+        assert.equal(series[0].metric, 'profile_api.bytes')
+        assert.equal(series[1].metric, 'profile_api.ms')
+
+        // Same number of points
+        pointsCount = series[0].points.length
+        assert.equal(pointsCount, series[1].points.length)
+      }, timeout, 'distributions')
+
+      return Promise.all([checkProfiles(agent, proc, timeout), checkMetrics, checkDistributions]).then(() => {
+        // Same number of requests and points
+        assert.equal(requestCount, pointsCount)
+      })
     })
   })
 

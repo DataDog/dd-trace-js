@@ -31,7 +31,7 @@ describe('Dynamic Instrumentation', function () {
             str: { type: 'string', value: 'foo' },
             lstr: {
               type: 'string',
-              // eslint-disable-next-line max-len
+              // eslint-disable-next-line @stylistic/js/max-len
               value: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor i',
               truncated: true,
               size: 445
@@ -129,7 +129,7 @@ describe('Dynamic Instrumentation', function () {
             str: { type: 'string', value: 'foo' },
             lstr: {
               type: 'string',
-              // eslint-disable-next-line max-len
+              // eslint-disable-next-line @stylistic/js/max-len
               value: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor i',
               truncated: true,
               size: 445

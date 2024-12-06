@@ -88,6 +88,7 @@ afterEach(function () {
     const testInfo = {
       testName: currentTest.fullTitle(),
       testSuite: Cypress.mocha.getRootSuite().file,
+      testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
       state: currentTest.state,
       error: currentTest.err,
       isNew: currentTest._ddIsNew,

@@ -126,6 +126,20 @@ function getTestStatusFromRetries (testStatuses) {
   return 'pass'
 }
 
+function getErrorFromCucumberResult (cucumberResult) {
+  if (!cucumberResult.message) {
+    return
+  }
+
+  const [message] = cucumberResult.message.split('\n')
+  const error = new Error(message)
+  if (cucumberResult.exception) {
+    error.type = cucumberResult.exception.type
+  }
+  error.stack = cucumberResult.message
+  return error
+}
+
 function getChannelPromise (channelToPublishTo) {
   return new Promise(resolve => {
     sessionAsyncResource.runInAsyncScope(() => {
@@ -230,9 +244,19 @@ function wrapRun (pl, isLatestVersion) {
         if (testCase?.testCaseFinished) {
           const { testCaseFinished: { willBeRetried } } = testCase
           if (willBeRetried) { // test case failed and will be retried
+            let error
+            try {
+              const cucumberResult = this.getWorstStepResult()
+              error = getErrorFromCucumberResult(cucumberResult)
+            } catch (e) {
+              // ignore error
+            }
+
             const failedAttemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
+            const isRetry = numAttempt++ > 0
             failedAttemptAsyncResource.runInAsyncScope(() => {
-              testRetryCh.publish(numAttempt++ > 0) // the current span will be finished and a new one will be created
+              // the current span will be finished and a new one will be created
+              testRetryCh.publish({ isRetry, error })
             })
 
             const newAsyncResource = new AsyncResource('bound-anonymous-fn')
@@ -251,7 +275,7 @@ function wrapRun (pl, isLatestVersion) {
       })
       promise.finally(() => {
         const result = this.getWorstStepResult()
-        const { status, skipReason, errorMessage } = isLatestVersion
+        const { status, skipReason } = isLatestVersion
           ? getStatusFromResultLatest(result)
           : getStatusFromResult(result)
 
@@ -270,8 +294,10 @@ function wrapRun (pl, isLatestVersion) {
         }
         const attemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
 
+        const error = getErrorFromCucumberResult(result)
+
         attemptAsyncResource.runInAsyncScope(() => {
-          testFinishCh.publish({ status, skipReason, errorMessage, isNew, isEfdRetry, isFlakyRetry: numAttempt > 0 })
+          testFinishCh.publish({ status, skipReason, error, isNew, isEfdRetry, isFlakyRetry: numAttempt > 0 })
         })
       })
       return promise

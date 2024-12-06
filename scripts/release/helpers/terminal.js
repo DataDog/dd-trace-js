@@ -17,7 +17,7 @@ const RESET = '\x1b[0m'
 
 const print = (...msgs) => msgs.forEach(msg => process.stdout.write(msg))
 const log = (...msgs) => msgs.forEach(msg => print(`${msg}\n`))
-const fatal = (...msgs) => log(...msgs) || process.exit(1)
+const fatal = (...msgs) => fail() || log(...msgs) || process.exit(1)
 
 let timer
 let current
@@ -115,7 +115,9 @@ function fail (err) {
 
   current = undefined
 
-  throw err
+  if (err) {
+    throw err
+  }
 }
 
 // Parse CLI arguments into parameters and flags.

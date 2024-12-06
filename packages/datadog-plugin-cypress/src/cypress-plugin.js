@@ -658,10 +658,22 @@ class CypressPlugin {
           log.warn('There is no active test span in dd:afterEach handler')
           return null
         }
-        const { state, error, isRUMActive, testSourceLine, testSuite, testName, isNew, isEfdRetry } = test
+        const {
+          state,
+          error,
+          isRUMActive,
+          testSourceLine,
+          testSuite,
+          testSuiteAbsolutePath,
+          testName,
+          isNew,
+          isEfdRetry
+        } = test
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
-          const relativeCoverageFiles = coverageFiles.map(file => getTestSuitePath(file, this.rootDir))
+          const relativeCoverageFiles = [...coverageFiles, testSuiteAbsolutePath].map(
+            file => getTestSuitePath(file, this.repositoryRoot || this.rootDir)
+          )
           if (!relativeCoverageFiles.length) {
             incrementCountMetric(TELEMETRY_CODE_COVERAGE_EMPTY)
           }

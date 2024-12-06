@@ -294,6 +294,7 @@ jobs:
       PLUGINS: couchbase
       SERVICES: couchbase
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
+      DD_INJECT_FORCE: 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -561,6 +562,25 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test-and-upstream
 
+  langchain:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: langchain
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - uses: ./.github/actions/install
+      - uses: ./.github/actions/node/18 # langchain doesn't support Node 16
+      - run: yarn test:plugins:ci
+        shell: bash
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+        shell: bash
+      - uses: codecov/codecov-action@v3
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+
   limitd-client:
     runs-on: ubuntu-latest
     services:
@@ -734,11 +754,12 @@ jobs:
   # TODO: fix performance issues and test more Node versions
   next:
     strategy:
+      fail-fast: false
       matrix:
         version:
           - 18
           - latest
-        range: ['9.5.0', '11.1.4', '13.2.0', '14.2.6']
+        range: ['9.5.0', '11.1.4', '13.2.0', '>=14.0.0 <=14.2.6', '>=14.2.7 <15', '>=15.0.0']
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
@@ -782,7 +803,11 @@ jobs:
   # TODO: Figure out why nyc stopped working with EACCESS errors.
   oracledb:
     runs-on: ubuntu-latest
-    container: bengl/node-12-with-oracle-client
+    container:
+      image: bengl/node-12-with-oracle-client
+      volumes:
+        - /node20217:/node20217:rw,rshared
+        - /node20217:/__e/node20:ro,rshared
     services:
       oracledb:
         image: gvenzl/oracle-xe:18-slim
@@ -804,9 +829,15 @@ jobs:
       PLUGINS: oracledb
       SERVICES: oracledb
       DD_TEST_AGENT_URL: http://testagent:9126
+      DD_INJECT_FORCE: 'true'
       # Needed to fix issue with `actions/checkout@v3: https://github.com/actions/checkout/issues/1590
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
+      # https://github.com/actions/runner/issues/2906#issuecomment-2109514798
+      - name: Install Node for runner (with glibc 2.17 compatibility)
+        run: |
+          curl -LO https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
+          tar -xf node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:

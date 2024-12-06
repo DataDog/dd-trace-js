@@ -78,8 +78,7 @@ function enable (_config) {
     isEnabled = true
     config = _config
   } catch (err) {
-    log.error('Unable to start AppSec')
-    log.error(err)
+    log.error('[ASM] Unable to start AppSec', err)
 
     disable()
   }
@@ -164,6 +163,7 @@ function incomingHttpEndTranslator ({ req, res }) {
     persistent[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
 
+  // we need to keep this to support nextjs
   if (req.query !== null && typeof req.query === 'object') {
     persistent[addresses.HTTP_INCOMING_QUERY] = req.query
   }
@@ -186,7 +186,7 @@ function onPassportVerify ({ credentials, user }) {
   const rootSpan = store?.req && web.root(store.req)
 
   if (!rootSpan) {
-    log.warn('No rootSpan found in onPassportVerify')
+    log.warn('[ASM] No rootSpan found in onPassportVerify')
     return
   }
 

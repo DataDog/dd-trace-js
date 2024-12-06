@@ -316,12 +316,17 @@ addHook({
 
     // We finish the previous test here because we know it has failed already
     if (numAttempt > 0) {
+      const probe = {}
       const asyncResource = taskToAsync.get(task)
       const testError = task.result?.errors?.[0]
       if (asyncResource) {
         asyncResource.runInAsyncScope(() => {
-          testErrorCh.publish({ error: testError })
+          testErrorCh.publish({ error: testError, willBeRetried: true, probe })
         })
+        // We wait for the probe to be set
+        if (probe.setProbePromise) {
+          await probe.setProbePromise
+        }
       }
     }
 

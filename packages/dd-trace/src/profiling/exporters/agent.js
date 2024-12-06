@@ -13,15 +13,42 @@ const os = require('os')
 const { urlToHttpOptions } = require('url')
 const perf = require('perf_hooks').performance
 
+const telemetryMetrics = require('../../telemetry/metrics')
+const profilersNamespace = telemetryMetrics.manager.namespace('profilers')
+
 const containerId = docker.id()
+
+const statusCodeCounters = []
+const requestCounter = profilersNamespace.count('profile_api.requests', [])
+const sizeDistribution = profilersNamespace.distribution('profile_api.bytes', [])
+const durationDistribution = profilersNamespace.distribution('profile_api.ms', [])
+const statusCodeErrorCounter = profilersNamespace.count('profile_api.errors', ['type:status_code'])
+const networkErrorCounter = profilersNamespace.count('profile_api.errors', ['type:network'])
+// TODO: implement timeout error counter when we have a way to track timeouts
+// const timeoutErrorCounter = profilersNamespace.count('profile_api.errors', ['type:timeout'])
+
+function countStatusCode (statusCode) {
+  let counter = statusCodeCounters[statusCode]
+  if (counter === undefined) {
+    counter = statusCodeCounters[statusCode] = profilersNamespace.count(
+      'profile_api.responses', [`status_code:${statusCode}`]
+    )
+  }
+  counter.inc()
+}
 
 function sendRequest (options, form, callback) {
   const request = options.protocol === 'https:' ? httpsRequest : httpRequest
 
   const store = storage.getStore()
   storage.enterWith({ noop: true })
+  requestCounter.inc()
+  const start = perf.now()
   const req = request(options, res => {
+    durationDistribution.track(perf.now() - start)
+    countStatusCode(res.statusCode)
     if (res.statusCode >= 400) {
+      statusCodeErrorCounter.inc()
       const error = new Error(`HTTP Error ${res.statusCode}`)
       error.status = res.statusCode
       callback(error)
@@ -29,14 +56,24 @@ function sendRequest (options, form, callback) {
       callback(null, res)
     }
   })
-  req.on('error', callback)
-  if (form) form.pipe(req)
+
+  req.on('error', (err) => {
+    networkErrorCounter.inc()
+    callback(err)
+  })
+  if (form) {
+    sizeDistribution.track(form.size())
+    form.pipe(req)
+  }
   storage.enterWith(store)
 }
 
 function getBody (stream, callback) {
   const chunks = []
-  stream.on('error', callback)
+  stream.on('error', (err) => {
+    networkErrorCounter.inc()
+    callback(err)
+  })
   stream.on('data', chunk => chunks.push(chunk))
   stream.on('end', () => {
     callback(null, Buffer.concat(chunks))
@@ -198,7 +235,7 @@ class AgentExporter {
           if (err) {
             const { status } = err
             if ((typeof status !== 'number' || status >= 500 || status === 429) && operation.retry(err)) {
-              this._logger.error(`Error from the agent: ${err.message}`)
+              this._logger.warn(`Error from the agent: ${err.message}`)
             } else {
               reject(err)
             }
@@ -207,7 +244,7 @@ class AgentExporter {
 
           getBody(response, (err, body) => {
             if (err) {
-              this._logger.error(`Error reading agent response: ${err.message}`)
+              this._logger.warn(`Error reading agent response: ${err.message}`)
             } else {
               this._logger.debug(() => {
                 const bytes = (body.toString('hex').match(/../g) || []).join(' ')

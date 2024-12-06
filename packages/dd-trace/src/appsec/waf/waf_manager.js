@@ -25,7 +25,7 @@ class WAFManager {
       const { obfuscatorKeyRegex, obfuscatorValueRegex } = this.config
       return new DDWAF(rules, { obfuscatorKeyRegex, obfuscatorValueRegex })
     } catch (err) {
-      log.error('AppSec could not load native package. In-app WAF features will not be available.')
+      log.error('[ASM] AppSec could not load native package. In-app WAF features will not be available.')
 
       throw err
     }

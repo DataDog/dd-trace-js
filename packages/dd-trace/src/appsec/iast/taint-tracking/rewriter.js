@@ -2,12 +2,12 @@
 
 const Module = require('module')
 const shimmer = require('../../../../../datadog-shimmer')
-const iastLog = require('../iast-log')
 const { isPrivateModule, isNotLibraryFile } = require('./filter')
 const { csiMethods } = require('./csi-methods')
 const { getName } = require('../telemetry/verbosity')
 const { getRewriteFunction } = require('./rewriter-telemetry')
 const dc = require('dc-polyfill')
+const log = require('../../../log')
 
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')
 let rewriter
@@ -60,8 +60,7 @@ function getRewriter (telemetryVerbosity) {
         chainSourceMap
       })
     } catch (e) {
-      iastLog.error('Unable to initialize TaintTracking Rewriter')
-        .errorAndPublish(e)
+      log.error('[ASM] Unable to initialize TaintTracking Rewriter', e)
     }
   }
   return rewriter
@@ -99,8 +98,7 @@ function getCompileMethodFn (compileMethod) {
         }
       }
     } catch (e) {
-      iastLog.error(`Error rewriting ${filename}`)
-        .errorAndPublish(e)
+      log.error('[ASM] Error rewriting file %s', filename, e)
     }
     return compileMethod.apply(this, [content, filename])
   }
@@ -117,8 +115,7 @@ function enableRewriter (telemetryVerbosity) {
       shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
     }
   } catch (e) {
-    iastLog.error('Error enabling TaintTracking Rewriter')
-      .errorAndPublish(e)
+    log.error('[ASM] Error enabling TaintTracking Rewriter', e)
   }
 }
 
@@ -132,7 +129,7 @@ function disableRewriter () {
 
     Error.prepareStackTrace = originalPrepareStackTrace
   } catch (e) {
-    iastLog.warn(e)
+    log.warn('[ASM] Error disabling TaintTracking rewriter', e)
   }
 }
 

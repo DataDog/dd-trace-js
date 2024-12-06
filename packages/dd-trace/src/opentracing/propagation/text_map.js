@@ -300,14 +300,17 @@ class TextMapPropagator {
         case 'tracecontext':
           extractedContext = this._extractTraceparentContext(carrier)
           break
-        case 'b3' && this
-          ._config
-          .tracePropagationStyle
-          .otelPropagators: // TODO: should match "b3 single header" in next major
         case 'b3 single header': // TODO: delete in major after singular "b3"
           extractedContext = this._extractB3SingleContext(carrier)
           break
         case 'b3':
+          if (this._config.tracePropagationStyle.otelPropagators) {
+            // TODO: should match "b3 single header" in next major
+            extractedContext = this._extractB3SingleContext(carrier)
+          } else {
+            extractedContext = this._extractB3MultiContext(carrier)
+          }
+          break
         case 'b3multi':
           extractedContext = this._extractB3MultiContext(carrier)
           break
@@ -339,11 +342,11 @@ class TextMapPropagator {
           context._links.push(link)
         }
       }
+    }
 
-      if (this._config.tracePropagationStyle.extract.includes('baggage') && carrier.baggage) {
-        context = context || new DatadogSpanContext()
-        this._extractBaggageItems(carrier, context)
-      }
+    if (this._hasPropagationStyle('extract', 'baggage') && carrier.baggage) {
+      context = context || new DatadogSpanContext()
+      this._extractBaggageItems(carrier, context)
     }
 
     return context || this._extractSqsdContext(carrier)

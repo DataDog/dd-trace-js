@@ -10,24 +10,20 @@ const {
   getCiVisAgentlessConfig
 } = require('./helpers')
 const { FakeCiVisIntake } = require('./ci-visibility-intake')
-const webAppServer = require('./ci-visibility/web-app-server')
 const {
   TEST_STATUS
 } = require('../packages/dd-trace/src/plugins/util/test')
 
 describe('test-api-manual', () => {
-  let sandbox, cwd, receiver, childProcess, webAppPort
+  let sandbox, cwd, receiver, childProcess
 
   before(async () => {
     sandbox = await createSandbox([], true)
     cwd = sandbox.folder
-    webAppPort = await getPort()
-    webAppServer.listen(webAppPort)
   })
 
   after(async () => {
     await sandbox.remove()
-    await new Promise(resolve => webAppServer.close(resolve))
   })
 
   beforeEach(async function () {

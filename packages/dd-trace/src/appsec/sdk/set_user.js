@@ -11,13 +11,13 @@ function setUserTags (user, rootSpan) {
 
 function setUser (tracer, user) {
   if (!user || !user.id) {
-    log.warn('Invalid user provided to setUser')
+    log.warn('[ASM] Invalid user provided to setUser')
     return
   }
 
   const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
-    log.warn('Root span not available in setUser')
+    log.warn('[ASM] Root span not available in setUser')
     return
   }
 

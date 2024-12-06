@@ -181,6 +181,11 @@ class Tracer extends NoopProxy {
           )
         }
       }
+
+      if (config.isTestDynamicInstrumentationEnabled) {
+        const testVisibilityDynamicInstrumentation = require('./ci-visibility/dynamic-instrumentation')
+        testVisibilityDynamicInstrumentation.start()
+      }
     } catch (e) {
       log.error(e)
     }

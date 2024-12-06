@@ -1,6 +1,6 @@
 'use strict'
 
-const iastLog = require('../../../iast-log')
+const log = require('../../../../../log')
 
 const COMMAND_PATTERN = '^(?:\\s*(?:sudo|doas)\\s+)?\\b\\S+\\b\\s(.*)'
 const pattern = new RegExp(COMMAND_PATTERN, 'gmi')
@@ -16,7 +16,7 @@ module.exports = function extractSensitiveRanges (evidence) {
       return [{ start, end }]
     }
   } catch (e) {
-    iastLog.debug(e)
+    log.debug('[ASM] Error extracting sensitive ranges', e)
   }
   return []
 }
