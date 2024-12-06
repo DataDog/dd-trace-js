@@ -45,10 +45,6 @@ class MsgpackEncoder {
     }
   }
 
-  encodeRaw (bytes, value) {
-    bytes.set(value)
-  }
-
   encodeNull (bytes) {
     const offset = bytes.length
 
