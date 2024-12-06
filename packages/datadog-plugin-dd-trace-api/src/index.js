@@ -2,6 +2,7 @@
 
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 
+// api ==> here
 const objectMap = new WeakMap()
 
 module.exports = class DdTraceApiPlugin extends Plugin {
@@ -23,7 +24,7 @@ module.exports = class DdTraceApiPlugin extends Plugin {
       // For v1, APIs are 1:1 with their internal equivalents, so we can just
       // call the internal method directly. That's what we do here unless we
       // want to override. As the API evolves, this may change.
-      this.addSub(`datadog-api:v1:${name}`, ({ self, args, ret, proxy }) => {
+      this.addSub(`datadog-api:v1:${name}`, ({ self, args, ret, proxy, revProxy }) => {
         if (name.includes(':')) {
           name = name.split(':').pop()
         }
@@ -35,6 +36,20 @@ module.exports = class DdTraceApiPlugin extends Plugin {
         for (let i = 0; i < args.length; i++) {
           if (objectMap.has(args[i])) {
             args[i] = objectMap.get(args[i])
+          }
+          if (typeof args[i] === 'function') {
+            const orig = args[i]
+            args[i] = (...fnArgs) => {
+              for (let j = 0; j < fnArgs.length; j++) {
+                if (revProxy && revProxy[j]) {
+                  const proxyVal = revProxy[j]()
+                  objectMap.set(proxyVal, fnArgs[j])
+                  fnArgs[j] = proxyVal
+                }
+              }
+              // TODO do we need to apply(this, ...) here?
+              return orig(...fnArgs)
+            }
           }
         }
 
@@ -57,6 +72,8 @@ module.exports = class DdTraceApiPlugin extends Plugin {
     // calling API. We don't expect spans to change much, but if they do, this
     // needs to be taken into account.
     handleEvent('startSpan')
+    handleEvent('wrap')
+    handleEvent('trace')
     handleEvent('inject')
     handleEvent('extract')
     handleEvent('getRumData')
