@@ -117,28 +117,24 @@ describe('encodeValue', () => {
   })
 
   describe('edge cases', () => {
-    it('returns empty buffer for null input', () => {
+    it('returns undefined for null input', () => {
       const result = encodeValue(null)
-      expect(Buffer.isBuffer(result)).to.be.true
-      expect(result.length).to.equal(0)
+      expect(result).to.be.undefined
     })
 
-    it('returns empty buffer for undefined input', () => {
+    it('returns undefined for undefined input', () => {
       const result = encodeValue(undefined)
-      expect(Buffer.isBuffer(result)).to.be.true
-      expect(result.length).to.equal(0)
+      expect(result).to.be.undefined
     })
 
-    it('returns empty buffer for unsupported type', () => {
+    it('returns undefined for unsupported type', () => {
       const result = encodeValue({ A: 'abc' })
-      expect(Buffer.isBuffer(result)).to.be.true
-      expect(result.length).to.equal(0)
+      expect(result).to.be.undefined
     })
 
-    it('returns empty buffer for malformed input', () => {
+    it('returns undefined for malformed input', () => {
       const result = encodeValue({})
-      expect(Buffer.isBuffer(result)).to.be.true
-      expect(result.length).to.equal(0)
+      expect(result).to.be.undefined
     })
 
     it('handles empty string values', () => {

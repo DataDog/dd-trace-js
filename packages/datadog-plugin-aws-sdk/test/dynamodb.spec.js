@@ -131,7 +131,11 @@ describe('Plugin', () => {
             delete process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS
           })
 
-          function testSpanPointers ({ expectedLength = 1, expectedHashes, operation }) {
+          function testSpanPointers ({ expectedHashes, operation }) {
+            let expectedLength = 0
+            if (expectedHashes) {
+              expectedLength = Array.isArray(expectedHashes) ? expectedHashes.length : 1
+            }
             return (done) => {
               operation((err) => {
                 if (err) {
@@ -189,7 +193,6 @@ describe('Plugin', () => {
 
             it('should not add links or error for putItem when config is invalid', () => {
               testSpanPointers({
-                expectedLength: 0,
                 operation: (callback) => {
                   process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = '{"DifferentTable": ["test"]}'
                   dynamo.putItem({
@@ -205,7 +208,6 @@ describe('Plugin', () => {
 
             it('should not add links or error for putItem when config is missing', () => {
               testSpanPointers({
-                expectedLength: 0,
                 operation: (callback) => {
                   process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = null
                   dynamo.putItem({
@@ -255,7 +257,6 @@ describe('Plugin', () => {
                 return
               }
               testSpanPointers({
-                expectedLength: 3,
                 expectedHashes: [
                   '955ab85fc7d1d63fe4faf18696514f13',
                   '856c95a173d9952008a70283175041fc',
@@ -302,7 +303,6 @@ describe('Plugin', () => {
                 return
               }
               testSpanPointers({
-                expectedLength: 2,
                 expectedHashes: [
                   '955ab85fc7d1d63fe4faf18696514f13',
                   '9682c132f1900106a792f166d0619e0b'
@@ -354,7 +354,6 @@ describe('Plugin', () => {
 
             it('should not add links or error for putItem when config is invalid', () => {
               testSpanPointers({
-                expectedLength: 0,
                 operation: (callback) => {
                   process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = '{"DifferentTable": ["test"]}'
                   dynamo.putItem({
@@ -370,7 +369,6 @@ describe('Plugin', () => {
 
             it('should not add links or error for putItem when config is missing', () => {
               testSpanPointers({
-                expectedLength: 0,
                 operation: (callback) => {
                   process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = null
                   dynamo.putItem({
@@ -448,7 +446,6 @@ describe('Plugin', () => {
                 return
               }
               testSpanPointers({
-                expectedLength: 3,
                 expectedHashes: [
                   'dd071963cd90e4b3088043f0b9a9f53c',
                   '7794824f72d673ac7844353bc3ea25d9',
@@ -503,7 +500,6 @@ describe('Plugin', () => {
                 return
               }
               testSpanPointers({
-                expectedLength: 2,
                 expectedHashes: [
                   '1f64650acbe1ae4d8413049c6bd9bbe8',
                   '8a6f801cc4e7d1d5e0dd37e0904e6316'
@@ -655,14 +651,13 @@ describe('Plugin', () => {
           expect(result).to.be.undefined
         })
 
-        it('handles missing attributes in item', () => {
+        it('returns undefined when missing attributes in item', () => {
           const tableName = 'UserTable'
           const item = { someOtherField: { S: 'value' } }
           const keyConfig = { UserTable: new Set(['userId']) }
 
           const actualHash = DynamoDb.calculatePutItemHash(tableName, item, keyConfig)
-          const expectedHash = generatePointerHash([tableName, 'userId', Buffer.from(''), '', ''])
-          expect(actualHash).to.equal(expectedHash)
+          expect(actualHash).to.be.undefined
         })
 
         it('returns undefined for Set with more than 2 keys', () => {
@@ -784,9 +779,7 @@ describe('Plugin', () => {
             invalidKey: { INVALID: 'value' }
           }
           const hash = DynamoDb.calculateHashWithKnownKeys('TestTable', keys)
-          expect(hash).to.equal(
-            generatePointerHash(['TestTable', 'invalidKey', Buffer.from(''), 'validKey', Buffer.from('test')])
-          )
+          expect(hash).to.be.undefined
         })
       })
     })

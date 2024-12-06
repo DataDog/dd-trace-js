@@ -133,7 +133,10 @@ class DynamoDb extends BaseAwsSdkPlugin {
     }
     const primaryKeySet = primaryKeyConfig[tableName]
     if (!primaryKeySet || !(primaryKeySet instanceof Set) || primaryKeySet.size === 0 || primaryKeySet.size > 2) {
-      log.warn(`Invalid dynamo primary key config for table ${tableName}: ${JSON.stringify(primaryKeyConfig)}`)
+      log.warn(
+        `span pointers: failed to extract PutItem span pointer: table ${tableName} ` +
+        'not found in primary key names. Please set them through the DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS env var.'
+      )
       return
     }
     const keyValues = extractPrimaryKeys(primaryKeySet, item)
