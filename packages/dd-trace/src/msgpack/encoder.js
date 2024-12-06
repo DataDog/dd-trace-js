@@ -220,7 +220,6 @@ class MsgpackEncoder {
       bytes.buffer[offset + 3] = value >> 8
       bytes.buffer[offset + 4] = value
     } else {
-      console.log(value)
       const hi = Math.floor(value / Math.pow(2, 32))
       const lo = value >>> 0
 
