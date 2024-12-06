@@ -11,14 +11,16 @@ var nodeVersion = require('../../../../version')
 
 var NODE_MAJOR = nodeVersion.NODE_MAJOR
 
-// TODO: Test telemetry for Node <12. For now only bailout is tested for those.
 function guard (fn) {
   var initBailout = false
   var clobberBailout = false
   var forced = isTrue(process.env.DD_INJECT_FORCE)
+  var engines = require('../../../../package.json').engines
+  var minMajor = parseInt(engines.node.replace(/[^0-9]/g, ''))
+  var version = process.versions.node
 
   if (process.env.DD_INJECTION_ENABLED) {
-    // If we're running via single-step install, and we're not in the app's
+    // If we're running via single-step install, and we're in the app's
     // node_modules, then we should not initialize the tracer. This prevents
     // single-step-installed tracer from clobbering the manually-installed tracer.
     var resolvedInApp
@@ -34,25 +36,20 @@ function guard (fn) {
         clobberBailout = true
       }
     }
+  }
 
-    // If we're running via single-step install, and the runtime doesn't match
-    // the engines field in package.json, then we should not initialize the tracer.
-    if (!clobberBailout) {
-      var engines = require('../../../../package.json').engines
-      var minMajor = parseInt(engines.node.replace(/[^0-9]/g, ''))
-      var version = process.versions.node
-      if (NODE_MAJOR < minMajor) {
-        initBailout = true
-        telemetry([
-          { name: 'abort', tags: ['reason:incompatible_runtime'] },
-          { name: 'abort.runtime', tags: [] }
-        ])
-        log.info('Aborting application instrumentation due to incompatible_runtime.')
-        log.info('Found incompatible runtime nodejs ' + version + ', Supported runtimes: nodejs ' + engines.node + '.')
-        if (forced) {
-          log.info('DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.')
-        }
-      }
+  // If the runtime doesn't match the engines field in package.json, then we
+  // should not initialize the tracer.
+  if (!clobberBailout && NODE_MAJOR < minMajor) {
+    initBailout = true
+    telemetry([
+      { name: 'abort', tags: ['reason:incompatible_runtime'] },
+      { name: 'abort.runtime', tags: [] }
+    ])
+    log.info('Aborting application instrumentation due to incompatible_runtime.')
+    log.info('Found incompatible runtime nodejs ' + version + ', Supported runtimes: nodejs ' + engines.node + '.')
+    if (forced) {
+      log.info('DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.')
     }
   }
 
