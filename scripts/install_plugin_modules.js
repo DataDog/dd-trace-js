@@ -152,12 +152,10 @@ async function addDependencies (dependencies, name, versionRange) {
     for (const section of ['devDependencies', 'peerDependencies']) {
       if (pkgJson[section] && dep in pkgJson[section]) {
         if (pkgJson[section][dep].includes('||')) {
-          dependencies[dep] = pkgJson[section][dep].split('||')
-            .map(v => v.trim())
-            .filter(v => !/[a-z]/.test(v)) // Ignore prereleases.
-            .join(' || ')
+          // Use the first version in the list (as npm does by default)
+          dependencies[dep] = pkgJson[section][dep].split('||')[0].trim()
         } else {
-          // Only one version available so use that even if it is a prerelease.
+          // Only one version available so use that.
           dependencies[dep] = pkgJson[section][dep]
         }
         break
