@@ -2,6 +2,22 @@ const os = require('os')
 const perf = require('perf_hooks').performance
 const version = require('../../../../../package.json').version
 
+const libuvThreadPoolSize = (() => {
+  const ss = process.env.UV_THREADPOOL_SIZE
+  if (ss === undefined) {
+    // Backend will apply the default size based on Node version.
+    return undefined
+  }
+  // libuv uses atoi to parse the value, which is almost the same as parseInt, except that parseInt
+  // will return NaN on invalid input, while atoi will return 0. This is handled at return.
+  const s = parseInt(ss)
+  // We dont' interpret the value further here in the library. Backend will interpret the number
+  // based on Node version. In all currently known Node versions, 0 results in 1 worker thread,
+  // negative values (because they're assigned to an unsigned int) become very high positive values,
+  // and the value is finally capped at 1024.
+  return isNaN(s) ? 0 : s
+})()
+
 class EventSerializer {
   constructor ({ env, host, service, version, libraryInjected, activation } = {}) {
     this._env = env
@@ -65,8 +81,7 @@ class EventSerializer {
           // proscribed by the Intake API, but that's an internal enum and is
           // not customer visible.
           engine: 'nodejs',
-          // Sent as a string, we'll let the backend figure out the effective numeric value.
-          libuv_threadpool_size: process.env.UV_THREADPOOL_SIZE,
+          libuv_threadpool_size: libuvThreadPoolSize,
           // strip off leading 'v'. This makes the format consistent with other
           // runtimes (e.g. Ruby) but not with the existing `runtime_version` tag.
           // We'll keep it like this as we want cross-engine consistency. We
