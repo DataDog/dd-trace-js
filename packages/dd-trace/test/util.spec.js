@@ -117,28 +117,24 @@ describe('encodeValue', () => {
   })
 
   describe('edge cases', () => {
-    it('returns empty buffer for null input', () => {
+    it('returns undefined for null input', () => {
       const result = encodeValue(null)
-      expect(Buffer.isBuffer(result)).to.be.true
-      expect(result.length).to.equal(0)
+      expect(result).to.be.undefined
     })
 
-    it('returns empty buffer for undefined input', () => {
+    it('returns undefined for undefined input', () => {
       const result = encodeValue(undefined)
-      expect(Buffer.isBuffer(result)).to.be.true
-      expect(result.length).to.equal(0)
+      expect(result).to.be.undefined
     })
 
-    it('returns empty buffer for unsupported type', () => {
+    it('returns undefined for unsupported type', () => {
       const result = encodeValue({ A: 'abc' })
-      expect(Buffer.isBuffer(result)).to.be.true
-      expect(result.length).to.equal(0)
+      expect(result).to.be.undefined
     })
 
-    it('returns empty buffer for malformed input', () => {
+    it('returns undefined for malformed input', () => {
       const result = encodeValue({})
-      expect(Buffer.isBuffer(result)).to.be.true
-      expect(result.length).to.equal(0)
+      expect(result).to.be.undefined
     })
 
     it('handles empty string values', () => {
@@ -218,21 +214,21 @@ describe('extractPrimaryKeys', () => {
   })
 
   describe('edge cases', () => {
-    it('handles missing values', () => {
+    it('returns undefined when missing values', () => {
       const keySet = new Set(['userId', 'timestamp'])
       const item = { userId: { S: 'user123' } } // timestamp missing
       const result = extractPrimaryKeys(keySet, item)
-      expect(result).to.deep.equal(['timestamp', Buffer.from(''), 'userId', Buffer.from('user123')])
+      expect(result).to.be.undefined
     })
 
-    it('handles invalid value types', () => {
+    it('returns undefined when invalid value types', () => {
       const keySet = new Set(['userId', 'timestamp'])
       const item = {
         userId: { S: 'user123' },
         timestamp: { INVALID: '1234567' }
       }
       const result = extractPrimaryKeys(keySet, item)
-      expect(result).to.deep.equal(['timestamp', Buffer.from(''), 'userId', Buffer.from('user123')])
+      expect(result).to.be.undefined
     })
 
     it('handles empty Set input', () => {
@@ -240,23 +236,23 @@ describe('extractPrimaryKeys', () => {
       expect(result).to.be.undefined
     })
 
-    it('handles null values in item', () => {
+    it('returns undefined when null values in item', () => {
       const keySet = new Set(['key1', 'key2'])
       const item = {
         key1: null,
         key2: { S: 'value2' }
       }
       const result = extractPrimaryKeys(keySet, item)
-      expect(result).to.deep.equal(['key1', Buffer.from(''), 'key2', Buffer.from('value2')])
+      expect(result).to.be.undefined
     })
 
-    it('handles undefined values in item', () => {
+    it('returns undefined when undefined values in item', () => {
       const keySet = new Set(['key1', 'key2'])
       const item = {
         key2: { S: 'value2' }
       }
       const result = extractPrimaryKeys(keySet, item)
-      expect(result).to.deep.equal(['key1', Buffer.from(''), 'key2', Buffer.from('value2')])
+      expect(result).to.be.undefined
     })
   })
 })

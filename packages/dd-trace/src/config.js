@@ -1293,7 +1293,8 @@ class Config {
       if (Array.isArray(primaryKeys) && primaryKeys.length > 0 && primaryKeys.length <= 2) {
         validatedConfig[tableName] = new Set(primaryKeys)
       } else {
-        log.warn(`Invalid primary key configuration for table: ${tableName}`)
+        log.warn(`Invalid primary key configuration for table: ${tableName}.` +
+          'Please fix the DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS env var.')
       }
     }
     this._setValue(obj, name, validatedConfig)

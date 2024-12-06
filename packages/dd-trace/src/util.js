@@ -90,7 +90,7 @@ function generatePointerHash (components) {
 /**
  * Encodes a DynamoDB attribute value to Buffer for span pointer hashing.
  * @param {Object} valueObject - DynamoDB value in AWS format ({ S: string } or { N: string } or { B: Buffer })
- * @returns {Buffer} Encoded value as Buffer, or empty Buffer if invalid input.
+ * @returns {Buffer|undefined} Encoded value as Buffer, or undefined if invalid input.
  *
  * @example
  * encodeValue({ S: "user123" }) -> Buffer("user123")
@@ -99,7 +99,7 @@ function generatePointerHash (components) {
  */
 function encodeValue (valueObject) {
   if (!valueObject) {
-    return Buffer.from('')
+    return
   }
 
   try {
@@ -113,12 +113,8 @@ function encodeValue (valueObject) {
         return Buffer.from(value.toString())
       case 'B':
         return Buffer.isBuffer(value) ? value : Buffer.from(value)
-      default:
-        return Buffer.from('')
     }
-  } catch (err) {
-    return Buffer.from('')
-  }
+  } catch (err) {}
 }
 
 /**
@@ -144,15 +140,17 @@ const extractPrimaryKeys = (keySet, keyValuePairs) => {
   }
 
   if (keyNames.length === 1) {
-    return [keyNames[0], encodeValue(keyValuePairs[keyNames[0]]), '', '']
+    const value = encodeValue(keyValuePairs[keyNames[0]])
+    if (value) {
+      return [keyNames[0], value, '', '']
+    }
   } else {
     const [key1, key2] = keyNames.sort()
-    return [
-      key1,
-      encodeValue(keyValuePairs[key1]),
-      key2,
-      encodeValue(keyValuePairs[key2])
-    ]
+    const value1 = encodeValue(keyValuePairs[key1])
+    const value2 = encodeValue(keyValuePairs[key2])
+    if (value1 && value2) {
+      return [key1, value1, key2, value2]
+    }
   }
 }
 
