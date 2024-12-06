@@ -8,7 +8,6 @@
     "env": "bash ./plugin-env",
     "preinstall": "node scripts/preinstall.js",
     "bench": "node benchmark",
-    "bench:profiler": "node benchmark/profiler",
     "bench:e2e": "SERVICES=mongo yarn services && cd benchmark/e2e && node benchmark-run.js --duration=30",
     "bench:e2e:ci-visibility": "node benchmark/e2e-ci/benchmark-run.js",
     "type:doc": "cd docs && yarn && yarn build",
