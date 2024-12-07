@@ -252,7 +252,7 @@ function testBeginHandler (test, browserName) {
   const testAsyncResource = new AsyncResource('bound-anonymous-fn')
   testToAr.set(test, testAsyncResource)
   testAsyncResource.runInAsyncScope(() => {
-    testStartCh.publish({ testName, testSuiteAbsolutePath, testSourceLine, browserName })
+    // testStartCh.publish({ testName, testSuiteAbsolutePath, testSourceLine, browserName })
   })
 }
 
@@ -566,4 +566,39 @@ addHook({
   loadUtilsPackage.createRootSuite = newCreateRootSuite
 
   return loadUtilsPackage
+})
+
+// Only in worker
+addHook({
+  name: 'playwright',
+  file: 'lib/worker/workerMain.js',
+  versions: ['>=1.38.0']
+}, (workerPackage) => {
+  shimmer.wrap(workerPackage.WorkerMain.prototype, '_runTest', _runTest => async function (test, retry) {
+    const {
+      _requireFile: testSuiteAbsolutePath,
+      title: testName,
+      location: {
+        line: testSourceLine
+      }
+    } = test
+    let res
+
+    // If test events are created in the worker process I need to stop creating it in the main process
+    // Probably yet another test worker exporter is needed in addition to the ones for mocha, jest and cucumber
+    // it's probably hard to tell that's a playwright worker though, as I don't think there is a specific env variable
+    const testAsyncResource = new AsyncResource('bound-anonymous-fn')
+    testAsyncResource.runInAsyncScope(() => {
+      // TODO: clear browserName
+      testStartCh.publish({ testName, testSuiteAbsolutePath, testSourceLine, browserName: 'chromium' })
+      res = _runTest.apply(this, arguments)
+    })
+    return res
+  })
+
+  shimmer.wrap(workerPackage.WorkerMain.prototype, 'dispatchEvent', dispatchEvent => function (event) {
+    // Do I augment the testBegin event to include the test span id? Or do I create the test events in the worker process?
+    return dispatchEvent.apply(this, arguments)
+  })
+  return workerPackage
 })
