@@ -163,7 +163,7 @@ class Sqs extends BaseAwsSdkPlugin {
         return JSON.parse(buffer)
       }
     } catch (e) {
-      log.error(e)
+      log.error('Sqs error parsing DD attributes', e)
     }
   }
 

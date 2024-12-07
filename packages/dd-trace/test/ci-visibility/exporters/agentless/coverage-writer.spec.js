@@ -111,7 +111,7 @@ describe('CI Visibility Coverage Writer', () => {
       encoder.makePayload.returns(payload)
 
       coverageWriter.flush(() => {
-        expect(log.error).to.have.been.calledWith(error)
+        expect(log.error).to.have.been.calledWith('Error sending CI coverage payload', error)
         done()
       })
     })

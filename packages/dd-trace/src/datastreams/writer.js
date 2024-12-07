@@ -45,13 +45,13 @@ class DataStreamsWriter {
 
     zlib.gzip(encodedPayload, { level: 1 }, (err, compressedData) => {
       if (err) {
-        log.error(err)
+        log.error('Error zipping datastream', err)
         return
       }
       makeRequest(compressedData, this._url, (err, res) => {
         log.debug(`Response from the agent: ${res}`)
         if (err) {
-          log.error(err)
+          log.error('Error sending datastream', err)
         }
       })
     })

@@ -90,8 +90,8 @@ class TestVisDynamicInstrumentation {
       }
     }).unref()
 
-    this.worker.on('error', (err) => log.error(err))
-    this.worker.on('messageerror', (err) => log.error(err))
+    this.worker.on('error', (err) => log.error('ci-visibility DI worker error', err))
+    this.worker.on('messageerror', (err) => log.error('ci-visibility DI worker messageerror', err))
   }
 }
 

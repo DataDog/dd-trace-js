@@ -451,7 +451,7 @@ function cliWrapper (cli, jestVersion) {
         earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
       }
     } catch (err) {
-      log.error(err)
+      log.error('Jest library configuration error', err)
     }
 
     if (isEarlyFlakeDetectionEnabled) {
@@ -472,7 +472,7 @@ function cliWrapper (cli, jestVersion) {
           isEarlyFlakeDetectionEnabled = false
         }
       } catch (err) {
-        log.error(err)
+        log.error('Jest known tests error', err)
       }
     }
 
@@ -491,7 +491,7 @@ function cliWrapper (cli, jestVersion) {
           skippableSuites = receivedSkippableSuites
         }
       } catch (err) {
-        log.error(err)
+        log.error('Jest test-suite skippable error', err)
       }
     }
 

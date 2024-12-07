@@ -97,7 +97,7 @@ class Kinesis extends BaseAwsSdkPlugin {
         parsedAttributes: decodedData._datadog
       }
     } catch (e) {
-      log.error(e)
+      log.error('Kinesis error extracting response', e)
     }
   }
 

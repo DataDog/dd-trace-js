@@ -15,7 +15,7 @@ const config = module.exports = {
 updateUrl(parentConfig)
 
 configPort.on('message', updateUrl)
-configPort.on('messageerror', (err) => log.error(err))
+configPort.on('messageerror', (err) => log.error('Debugger config messageerror', err))
 
 function updateUrl (updates) {
   config.url = updates.url || format({
