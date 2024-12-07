@@ -12,7 +12,8 @@ const {
   HTTP_REQUEST_HEADER_NAME,
   HTTP_REQUEST_PARAMETER,
   HTTP_REQUEST_PATH_PARAM,
-  HTTP_REQUEST_URI
+  HTTP_REQUEST_URI,
+  SQL_ROW_VALUE
 } = require('./source-types')
 const { EXECUTED_SOURCE } = require('../telemetry/iast-metric')
 
@@ -66,6 +67,16 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.addSub(
       { channelName: 'datadog:cookie:parse:finish', tag: [HTTP_REQUEST_COOKIE_VALUE, HTTP_REQUEST_COOKIE_NAME] },
       ({ cookies }) => this._cookiesTaintTrackingHandler(cookies)
+    )
+
+    this.addSub(
+      { channelName: 'datadog:sequelize:query:finish', tag: SQL_ROW_VALUE },
+      ({ result }) => this._taintDatabaseResult(result, 'sequelize')
+    )
+
+    this.addSub(
+      { channelName: 'apm:pg:query:finish', tag: SQL_ROW_VALUE },
+      ({ result }) => this._taintDatabaseResult(result, 'pg')
     )
 
     this.addSub(
@@ -169,6 +180,37 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   taintRequest (req, iastContext) {
     this.taintHeaders(req.headers, iastContext)
     this.taintUrl(req, iastContext)
+  }
+
+  _taintDatabaseResult (result, dbOrigin, iastContext = getIastContext(storage.getStore()), name) {
+    if (!iastContext) return result
+
+    let rowsToTaint = this.iastConfig?.dbRowsToTaint
+    if (typeof rowsToTaint !== 'number') {
+      rowsToTaint = 1
+    }
+
+    if (rowsToTaint === 0) return
+
+    if (Array.isArray(result)) {
+      for (let i = 0; i < result.length && i < rowsToTaint; i++) {
+        const nextName = name ? `${name}.${i}` : '' + i
+        result[i] = this._taintDatabaseResult(result[i], dbOrigin, iastContext, nextName)
+      }
+    } else if (result && typeof result === 'object') {
+      if (dbOrigin === 'sequelize' && result.dataValues) {
+        result.dataValues = this._taintDatabaseResult(result.dataValues, dbOrigin, iastContext, name)
+      } else {
+        Object.keys(result).forEach(key => {
+          const nextName = name ? `${name}.${key}` : key
+          result[key] = this._taintDatabaseResult(result[key], dbOrigin, iastContext, nextName)
+        })
+      }
+    } else if (typeof result === 'string') {
+      result = newTaintedString(iastContext, result, name, SQL_ROW_VALUE)
+    }
+
+    return result
   }
 }
 

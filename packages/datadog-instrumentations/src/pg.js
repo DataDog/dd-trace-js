@@ -62,11 +62,11 @@ function wrapQuery (query) {
         abortController
       })
 
-      const finish = asyncResource.bind(function (error) {
+      const finish = asyncResource.bind(function (error, res) {
         if (error) {
           errorCh.publish(error)
         }
-        finishCh.publish()
+        finishCh.publish({ result: res?.rows })
       })
 
       if (abortController.signal.aborted) {
@@ -119,15 +119,15 @@ function wrapQuery (query) {
       if (newQuery.callback) {
         const originalCallback = callbackResource.bind(newQuery.callback)
         newQuery.callback = function (err, res) {
-          finish(err)
+          finish(err, res)
           return originalCallback.apply(this, arguments)
         }
       } else if (newQuery.once) {
         newQuery
           .once('error', finish)
-          .once('end', () => finish())
+          .once('end', (res) => finish(null, res))
       } else {
-        newQuery.then(() => finish(), finish)
+        newQuery.then((res) => finish(null, res), finish)
       }
 
       try {

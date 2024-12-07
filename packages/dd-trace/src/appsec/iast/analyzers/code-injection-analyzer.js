@@ -11,6 +11,10 @@ class CodeInjectionAnalyzer extends InjectionAnalyzer {
   onConfigure () {
     this.addSub('datadog:eval:call', ({ script }) => this.analyze(script))
   }
+
+  _areRangesVulnerable () {
+    return true
+  }
 }
 
 module.exports = new CodeInjectionAnalyzer()

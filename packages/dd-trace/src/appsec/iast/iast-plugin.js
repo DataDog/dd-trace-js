@@ -98,7 +98,8 @@ class IastPlugin extends Plugin {
     }
   }
 
-  enable () {
+  enable (iastConfig) {
+    this.iastConfig = iastConfig
     this.configure(true)
   }
 
