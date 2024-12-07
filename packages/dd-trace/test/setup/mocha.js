@@ -12,6 +12,8 @@ const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')
 const { schemaDefinitions } = require('../../src/service-naming/schemas')
 
+const latestVersions = require('../../../datadog-instrumentations/src/helpers/latests.json').latests
+
 global.withVersions = withVersions
 global.withExports = withExports
 global.withNamingSchema = withNamingSchema
@@ -173,6 +175,15 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
   })
 }
 
+// function isVersionInRange(version, latestVersion) {
+//   if (!latestVersion) return true
+//   try {
+//     return semver.lte(version, latestVersion)
+//   } catch (e) {
+//     return true // TODO this is a bit of a hack, but I'm not sure what else to do
+//   }
+// }
+
 function withVersions (plugin, modules, range, cb) {
   const instrumentations = typeof plugin === 'string' ? loadInst(plugin) : [].concat(plugin)
   const names = instrumentations.map(instrumentation => instrumentation.name)
@@ -199,6 +210,8 @@ function withVersions (plugin, modules, range, cb) {
       if (!packages.includes(moduleName)) return
     }
 
+    const latestVersion = latestVersions[moduleName] // TODO is moduleName correct?
+
     const testVersions = new Map()
 
     instrumentations
@@ -216,9 +229,13 @@ function withVersions (plugin, modules, range, cb) {
               testVersions.set(min, { range: version, test: min })
             }
 
-            const max = require(`../../../../versions/${moduleName}@${version}`).version()
-
-            testVersions.set(max, { range: version, test: version })
+            // TODO may run into issues with the latest version being greater than supported Node
+            if (latestVersion) {
+              testVersions.set(latestVersion, { range: version, test: latestVersion })
+            } else {
+              const max = require(`../../../../versions/${moduleName}@${version}`).version()
+              testVersions.set(max, { range: version, test: version })
+            }
           })
       })
 
