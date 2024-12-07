@@ -58,6 +58,10 @@ class Scope {
   _isPromise (promise) {
     return promise && typeof promise.then === 'function'
   }
+
+  isNoop () {
+    return storage.getStore()?.noop
+  }
 }
 
 module.exports = Scope

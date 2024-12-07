@@ -3,7 +3,6 @@
 const Tracer = require('./opentracing/tracer')
 const tags = require('../../../ext/tags')
 const Scope = require('./scope')
-const { storage } = require('../../datadog-core')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -106,9 +105,7 @@ class DatadogTracer extends Tracer {
     const tracer = this
 
     return function () {
-      const store = storage.getStore()
-
-      if (store && store.noop) return fn.apply(this, arguments)
+      if (tracer.scope().isNoop()) return fn.apply(this, arguments)
 
       let optionsObj = options
       if (typeof optionsObj === 'function' && typeof fn === 'function') {
