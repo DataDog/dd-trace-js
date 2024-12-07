@@ -126,6 +126,12 @@ interface Tracer extends opentracing.Tracer {
   getRumData (): string;
 
   /**
+   * Forces any unsent spans to be sent.
+   * @param {cb} cb Callback fired after flush completes.
+   */
+  flush (cb?: () => any): void;
+
+  /**
    * Links an authenticated user to the current trace.
    * @param {User} user Properties of the authenticated user. Accepts custom fields.
    * @returns {Tracer} The Tracer instance for chaining.
