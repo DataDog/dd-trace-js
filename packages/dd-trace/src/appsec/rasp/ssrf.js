@@ -29,7 +29,9 @@ function analyzeSsrf (ctx) {
     [addresses.HTTP_OUTGOING_URL]: outgoingUrl
   }
 
-  const result = waf.run({ persistent }, req, RULE_TYPES.SSRF)
+  const raspRule = { type: RULE_TYPES.SSRF }
+
+  const result = waf.run({ persistent }, req, raspRule)
 
   const res = store?.res
   handleResult(result, req, res, ctx.abortController, config)

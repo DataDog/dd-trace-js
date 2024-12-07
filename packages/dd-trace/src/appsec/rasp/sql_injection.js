@@ -72,7 +72,9 @@ function analyzeSqlInjection (query, dbSystem, abortController) {
     [addresses.DB_SYSTEM]: dbSystem
   }
 
-  const result = waf.run({ persistent }, req, RULE_TYPES.SQL_INJECTION)
+  const raspRule = { type: RULE_TYPES.SQL_INJECTION }
+
+  const result = waf.run({ persistent }, req, raspRule)
 
   handleResult(result, req, res, abortController, config)
 }
