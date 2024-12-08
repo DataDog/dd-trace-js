@@ -42,11 +42,9 @@ function enable (config, appsec) {
 
           setCollectionMode(rcConfig.auto_user_instrum.mode)
           autoUserInstrumModeId = configId
-        } else {
-          if (configId === autoUserInstrumModeId) {
-            setCollectionMode(config.appsec.eventTracking.mode)
-            autoUserInstrumModeId = null
-          }
+        } else if (configId === autoUserInstrumModeId) {
+          setCollectionMode(config.appsec.eventTracking.mode)
+          autoUserInstrumModeId = null
         }
       }
 
