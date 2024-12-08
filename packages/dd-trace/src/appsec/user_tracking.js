@@ -81,7 +81,7 @@ function trackLogin (framework, login, user, success, rootSpan) {
   if (typeof login !== 'string') {
     log.error('[ASM] Invalid login provided to AppSec trackLogin')
 
-    telemetry.incrementMissingUserLogin(framework, success ? 'login_success' : 'login_failure')
+    telemetry.incrementMissingUserLoginMetric(framework, success ? 'login_success' : 'login_failure')
     // note:
     //  if we start supporting using userId if login is missing, we need to only give up if both are missing, and
     //  implement 'appsec.instrum.user_auth.missing_user_id' telemetry too

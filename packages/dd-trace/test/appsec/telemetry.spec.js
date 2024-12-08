@@ -340,9 +340,9 @@ describe('Appsec Telemetry metrics', () => {
       })
     })
 
-    describe('incrementMissingUserLogin', () => {
+    describe('incrementMissingUserLoginMetric', () => {
       it('should increment instrum.user_auth.missing_user_login metric', () => {
-        appsecTelemetry.incrementMissingUserLogin('passport-local', 'login_success')
+        appsecTelemetry.incrementMissingUserLoginMetric('passport-local', 'login_success')
 
         expect(count).to.have.been.calledOnceWithExactly('instrum.user_auth.missing_user_login', {
           framework: 'passport-local',

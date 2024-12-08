@@ -197,7 +197,7 @@ module.exports = {
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,
-  incrementMissingUserLogin,
+  incrementMissingUserLoginMetric,
 
   getRequestMetrics
 }
