@@ -5,7 +5,7 @@ const request = require('./exporters/common/request')
 const dgram = require('dgram')
 const isIP = require('net').isIP
 const log = require('./log')
-const { URL, format } = require('url')
+const { format } = require('url')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
 
@@ -174,11 +174,11 @@ class DogStatsDClient {
     if (config.url) {
       clientConfig.metricsProxyUrl = config.url
     } else if (config.port) {
-      clientConfig.metricsProxyUrl = new URL(format({
+      clientConfig.metricsProxyUrl = format({
         protocol: 'http:',
         hostname: config.hostname || 'localhost',
         port: config.port
-      }))
+      })
     }
 
     return clientConfig
