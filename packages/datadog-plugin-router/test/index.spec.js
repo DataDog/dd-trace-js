@@ -71,8 +71,9 @@ describe('Plugin', () => {
           })
 
           router.use('/parent', childRouter)
-          expect(router.stack[0].handle.hello).to.equal('goodbye')
-          expect(router.stack[0].handle.foo).to.equal('bar')
+          const index = router.stack.length - 1
+          expect(router.stack[index].handle.hello).to.equal('goodbye')
+          expect(router.stack[index].handle.foo).to.equal('bar')
         })
 
         it('should add the route to the request span', done => {

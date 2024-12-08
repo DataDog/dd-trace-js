@@ -9,7 +9,8 @@ const { prepareTestServerForIastInExpress } = require('../utils')
 const agent = require('../../../plugins/agent')
 
 describe('nosql injection detection in mongodb - whole feature', () => {
-  withVersions('express', 'express', '>4.18.0', expressVersion => {
+  // https://github.com/fiznool/express-mongo-sanitize/issues/200
+  withVersions('mongodb', 'express', '>4.18.0 <5.0.0', expressVersion => {
     withVersions('mongodb', 'mongodb', mongodbVersion => {
       const mongodb = require(`../../../../../../versions/mongodb@${mongodbVersion}`)
 

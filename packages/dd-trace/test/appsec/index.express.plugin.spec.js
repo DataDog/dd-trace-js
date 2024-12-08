@@ -19,7 +19,7 @@ withVersions('express', 'express', version => {
     })
 
     before((done) => {
-      const express = require('../../../../versions/express').get()
+      const express = require(`../../../../versions/express@${version}`).get()
 
       const app = express()
 
@@ -44,11 +44,7 @@ withVersions('express', 'express', version => {
 
       paramCallbackSpy = sinon.spy(paramCallback)
 
-      app.param(() => {
-        return paramCallbackSpy
-      })
-
-      app.param('callbackedParameter')
+      app.param('callbackedParameter', paramCallbackSpy)
 
       getPort().then((port) => {
         server = app.listen(port, () => {
@@ -191,7 +187,7 @@ withVersions('express', 'express', version => {
     })
 
     before((done) => {
-      const express = require('../../../../versions/express').get()
+      const express = require(`../../../../versions/express@${version}`).get()
 
       const app = express()
 
@@ -256,7 +252,7 @@ withVersions('express', 'express', version => {
     })
 
     before((done) => {
-      const express = require('../../../../versions/express').get()
+      const express = require(`../../../../versions/express@${version}`).get()
       const bodyParser = require('../../../../versions/body-parser').get()
 
       const app = express()
