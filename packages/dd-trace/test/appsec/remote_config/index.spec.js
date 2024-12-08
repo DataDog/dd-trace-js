@@ -150,7 +150,9 @@ describe('Remote Config index', () => {
           listener('apply', rcConfig, configId)
 
           expect(() => listener('apply', rcConfig, 'anotherId')).to.throw()
-          expect(log.error).to.have.been.calledOnceWithExactly('[RC] Multiple auto_user_instrum received in ASM_FEATURES. Discarding config')
+          expect(log.error).to.have.been.calledOnceWithExactly(
+            '[RC] Multiple auto_user_instrum received in ASM_FEATURES. Discarding config'
+          )
         })
 
         it('should update collection mode when called with apply', () => {
