@@ -5,6 +5,7 @@ const Activation = require('../activation')
 const RemoteConfigManager = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
 const { setCollectionMode } = require('../user_tracking')
+const log = require('../../log')
 
 let rc
 
@@ -36,6 +37,7 @@ function enable (config, appsec) {
         if (action === 'apply' || action === 'modify') {
           // check if there is already a config applied with this field
           if (autoUserInstrumModeId && configId !== autoUserInstrumModeId) {
+            log.error('[RC] Multiple auto_user_instrum received in ASM_FEATURES. Discarding config')
             // eslint-disable-next-line no-throw-literal
             throw 'Multiple auto_user_instrum.mode received in ASM_FEATURES'
           }
