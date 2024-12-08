@@ -4,6 +4,8 @@ const Activation = require('../activation')
 
 const RemoteConfigManager = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
+const { setCollectionMode } = require('../user_tracking')
+const log = require('../../log')
 
 let rc
 
@@ -23,8 +25,30 @@ function enable (config, appsec) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
     }
 
-    rc.setProductHandler('ASM_FEATURES', (action, rcConfig) => {
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
+
+    let autoUserInstrumModeId
+
+    rc.setProductHandler('ASM_FEATURES', (action, rcConfig, configId) => {
       if (!rcConfig) return
+
+      // this is put before other handlers because it can reject the config
+      if (typeof rcConfig.auto_user_instrum?.mode === 'string') {
+        if (action === 'apply' || action === 'modify') {
+          // check if there is already a config applied with this field
+          if (autoUserInstrumModeId && configId !== autoUserInstrumModeId) {
+            log.error('[RC] Multiple auto_user_instrum received in ASM_FEATURES. Discarding config')
+            // eslint-disable-next-line no-throw-literal
+            throw 'Multiple auto_user_instrum.mode received in ASM_FEATURES'
+          }
+
+          setCollectionMode(rcConfig.auto_user_instrum.mode)
+          autoUserInstrumModeId = configId
+        } else if (configId === autoUserInstrumModeId) {
+          setCollectionMode(config.appsec.eventTracking.mode)
+          autoUserInstrumModeId = null
+        }
+      }
 
       if (activation === Activation.ONECLICK) {
         enableOrDisableAppsec(action, rcConfig, config, appsec)
