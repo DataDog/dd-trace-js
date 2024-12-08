@@ -151,7 +151,13 @@ async function addDependencies (dependencies, name, versionRange) {
   for (const dep of deps[name]) {
     for (const section of ['devDependencies', 'peerDependencies']) {
       if (pkgJson[section] && dep in pkgJson[section]) {
-        dependencies[dep] = pkgJson[section][dep]
+        if (pkgJson[section][dep].includes('||')) {
+          // Use the first version in the list (as npm does by default)
+          dependencies[dep] = pkgJson[section][dep].split('||')[0].trim()
+        } else {
+          // Only one version available so use that.
+          dependencies[dep] = pkgJson[section][dep]
+        }
         break
       }
     }
