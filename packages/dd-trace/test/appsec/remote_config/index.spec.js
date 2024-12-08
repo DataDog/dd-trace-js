@@ -119,8 +119,8 @@ describe('Remote Config index', () => {
         expect(appsec.enable).to.have.been.called
       })
 
-      it('should disable appsec when listener is called with unnaply and enabled', () => {
-        listener('unnaply', { asm: { enabled: true } })
+      it('should disable appsec when listener is called with unapply and enabled', () => {
+        listener('unapply', { asm: { enabled: true } })
 
         expect(appsec.disable).to.have.been.calledOnce
       })
@@ -137,7 +137,7 @@ describe('Remote Config index', () => {
         const configId = 'collectionModeId'
 
         afterEach(() => {
-          listener('unnaply', rcConfig, configId)
+          listener('unapply', rcConfig, configId)
         })
 
         it('should not update collection mode when not a string', () => {
@@ -165,20 +165,20 @@ describe('Remote Config index', () => {
           expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly(rcConfig.auto_user_instrum.mode)
         })
 
-        it('should revert collection mode when called with unnaply', () => {
+        it('should revert collection mode when called with unapply', () => {
           listener('apply', rcConfig, configId)
           UserTracking.setCollectionMode.resetHistory()
 
-          listener('unnaply', rcConfig, configId)
+          listener('unapply', rcConfig, configId)
 
           expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly(config.appsec.eventTracking.mode)
         })
 
-        it('should not revert collection mode when called with unnaply and unknown id', () => {
+        it('should not revert collection mode when called with unapply and unknown id', () => {
           listener('apply', rcConfig, configId)
           UserTracking.setCollectionMode.resetHistory()
 
-          listener('unnaply', rcConfig, 'unknownId')
+          listener('unapply', rcConfig, 'unknownId')
 
           expect(UserTracking.setCollectionMode).to.not.have.been.called
         })
