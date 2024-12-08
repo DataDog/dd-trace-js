@@ -162,3 +162,10 @@ jobs:
       - run: yarn type:test
       - run: yarn type:doc
 
+  verify-yaml:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/node/setup
+      - uses: ./.github/actions/install
+      - run: node scripts/verify-ci-config.js
