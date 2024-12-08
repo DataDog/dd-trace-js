@@ -13,6 +13,7 @@ module.exports = {
   apolloServerCoreChannel: dc.tracingChannel('datadog:apollo-server-core:request'),
   incomingHttpRequestStart: dc.channel('dd-trace:incomingHttpRequestStart'),
   incomingHttpRequestEnd: dc.channel('dd-trace:incomingHttpRequestEnd'),
+  passportUser: dc.channel('datadog:passport:deserializeUser:finish'),
   passportVerify: dc.channel('datadog:passport:verify:finish'),
   queryParser: dc.channel('datadog:query:read:finish'),
   setCookieChannel: dc.channel('datadog:iast:set-cookie'),
