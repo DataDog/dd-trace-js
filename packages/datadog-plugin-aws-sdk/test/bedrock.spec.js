@@ -1,28 +1,34 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const {setup} = require('./spec_helpers')
+const { setup } = require('./spec_helpers')
 
 const serviceName = 'bedrock-service-name-test'
 
-describe.only('Plugin', () => {
+describe('Plugin', () => {
   describe('aws-sdk (bedrock)', function () {
     setup()
 
     withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
       let AWS
-      let bedrockRuntime
+      let bedrockRuntimeClient
 
-      const bedrockClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-bedrock-runtime' : 'aws-sdk'
-      describe('with configuration', () => {
+      const bedrockRuntimeClientName =
+        moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-bedrock-runtime' : 'aws-sdk'
+      describe.only('with configuration', () => {
         before(() => {
           return agent.load('aws-sdk')
         })
 
         before(done => {
-          AWS = require(`../../../versions/${bedrockClientName}@${version}`).get()
-          bedrockRuntime = new AWS.BedrockRuntimeClient(
-            { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', ServiceId: serviceName}
+          try {
+            AWS = require(`../../../versions/${bedrockRuntimeClientName}@${version}`).get()
+          } catch (e) {
+            // TODO figure out how to manage bedrock runtime client not found error
+            done()
+          }
+          bedrockRuntimeClient = new AWS.BedrockRuntimeClient(
+            { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', ServiceId: serviceName }
           )
           done()
         })
@@ -37,51 +43,69 @@ describe.only('Plugin', () => {
         const maxTokens = 512
         const stopSequences = []
 
-        const models = {
-          Amazon: {
+        const models = [
+          {
+            provider: 'amazon',
             modelId: 'amazon.titan-text-lite-v1',
             requestBody:
               {
                 inputText: `${prompt}`,
-                textGenerationConfig: { temperature: temperature, topP: topP, maxTokenCount: maxTokens }
+                textGenerationConfig: { temperature, topP, maxTokenCount: maxTokens }
               },
+            // TODO figure out how to mock the response body instead of calling the client
             responseBody: {}
           },
-          A21Lab: {
+          // TODO add a test for the AI21 model
+          {
+            provider: 'ai21',
             modelId: 'ai21.jamba-1-5-mini-v1:0',
             requestBody: {},
             responseBody: {}
           },
-          Anthropic: {
+          // TODO add a test for the Anthropic model
+          {
+            provider: 'anthropic',
             modelId: 'anthropic.claude-v2',
             requestBody: {},
             responseBody: {}
           },
-          Cohere: {
+          // TODO add a test for the Cohere model
+          {
+            provider: 'cohere',
             modelId: 'cohere.command-light-text-v14',
             requestBody: {},
             responseBody: {}
           },
-          Meta: {
+          // TODO add a test for the Meta model
+          {
+            provider: 'meta',
             modelId: 'meta.llama3-70b-instruct-v1:0',
             requestBody: {},
             responseBody: {}
           },
-          Mistral: {
+          // TODO add a test for the Mistral model
+          {
+            provider: 'mistral',
             modelId: 'mistral.mistral-7b-instruct-v0:2',
             requestBody: {},
             responseBody: {}
           }
-        }
+        ]
 
-        Object.values(models).forEach(model => {
-          it(`should invoke model for ${model}`, done => {
-            const params = {
-              modelId: `${model.ModelId}`,
-              body: JSON.stringify(model.requestBody)
+        models.forEach(model => {
+          it(`should invoke model for provider:${model.provider}`, done => {
+            const Request = {
+              body: JSON.stringify(model.requestBody),
+              contentType: 'application/json',
+              accept: 'application/json',
+              modelId: `${model.ModelId}`
             }
 
-            bedrockRuntime.invokeModel(params, (err, response) => {
+            // TODO figure out why InvokeModelCommand is undefined
+            const command = new AWS.InvokeModelCommand(Request)
+
+            // TODO mock the send command to return a specific response
+            bedrockRuntimeClient.send(command, (err, response) => {
               if (err) return done(err)
 
               agent.use(traces => {
