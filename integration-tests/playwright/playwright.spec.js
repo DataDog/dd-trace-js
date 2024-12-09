@@ -123,10 +123,14 @@ versions.forEach((version) => {
             })
 
             assert.includeMembers(testEvents.map(test => test.content.resource), [
-              'landing-page-test.js.highest-level-describe  leading and trailing spaces    should work with passing tests',
-              'landing-page-test.js.highest-level-describe  leading and trailing spaces    should work with skipped tests',
-              'landing-page-test.js.highest-level-describe  leading and trailing spaces    should work with fixme',
-              'landing-page-test.js.highest-level-describe  leading and trailing spaces    should work with annotated tests',
+              'landing-page-test.js.highest-level-describe' +
+              '  leading and trailing spaces    should work with passing tests',
+              'landing-page-test.js.highest-level-describe' +
+              '  leading and trailing spaces    should work with skipped tests',
+              'landing-page-test.js.highest-level-describe' +
+              '  leading and trailing spaces    should work with fixme',
+              'landing-page-test.js.highest-level-describe' +
+              '  leading and trailing spaces    should work with annotated tests',
               'todo-list-page-test.js.playwright should work with failing tests',
               'todo-list-page-test.js.should work with fixme root'
             ])
@@ -263,10 +267,11 @@ versions.forEach((version) => {
             {
               playwright: {
                 'landing-page-test.js': [
-                  // 'highest-level-describe  leading and trailing spaces    should work with passing tests', // it will be considered new
+                  // it will be considered new
+                  // 'highest-level-describe  leading and trailing spaces    should work with passing tests',
                   'highest-level-describe  leading and trailing spaces    should work with skipped tests',
                   'highest-level-describe  leading and trailing spaces    should work with fixme',
-                  'highest-level-describe  leading and trailing spaces    should work with annotated tests',
+                  'highest-level-describe  leading and trailing spaces    should work with annotated tests'
                 ],
                 'skipped-suite-test.js': [
                   'should work with fixme root'
@@ -336,10 +341,11 @@ versions.forEach((version) => {
             {
               playwright: {
                 'landing-page-test.js': [
-                  // 'highest-level-describe  leading and trailing spaces    should work with passing tests', // it will be considered new
+                  // it will be considered new
+                  // 'highest-level-describe  leading and trailing spaces    should work with passing tests',
                   'highest-level-describe  leading and trailing spaces    should work with skipped tests',
                   'highest-level-describe  leading and trailing spaces    should work with fixme',
-                  'highest-level-describe  leading and trailing spaces    should work with annotated tests',
+                  'highest-level-describe  leading and trailing spaces    should work with annotated tests'
                 ],
                 'skipped-suite-test.js': [
                   'should work with fixme root'
@@ -409,7 +415,7 @@ versions.forEach((version) => {
                   // 'highest-level-describe  leading and trailing spaces    should work with skipped tests',
                   // new but not retried because it's skipped
                   // 'highest-level-describe  leading and trailing spaces    should work with fixme',
-                  'highest-level-describe  leading and trailing spaces    should work with annotated tests',
+                  'highest-level-describe  leading and trailing spaces    should work with annotated tests'
                 ],
                 'skipped-suite-test.js': [
                   'should work with fixme root'
