@@ -111,7 +111,7 @@ describe('RASP - lfi.js', () => {
       fsOperationStart.publish(ctx)
 
       const persistent = { [FS_OPERATION_PATH]: path }
-      sinon.assert.calledOnceWithExactly(waf.run, { persistent }, req, 'lfi')
+      sinon.assert.calledOnceWithExactly(waf.run, { persistent }, req, { type: 'lfi' })
     })
 
     it('should NOT analyze lfi for child fs operations', () => {
