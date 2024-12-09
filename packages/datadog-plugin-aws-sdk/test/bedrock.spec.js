@@ -5,7 +5,7 @@ const { setup } = require('./spec_helpers')
 
 const serviceName = 'bedrock-service-name-test'
 
-describe('Plugin', () => {
+describe.only('Plugin', () => {
   describe('aws-sdk (bedrock)', function () {
     setup()
 
@@ -15,7 +15,7 @@ describe('Plugin', () => {
 
       const bedrockRuntimeClientName =
         moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-bedrock-runtime' : 'aws-sdk'
-      describe.only('with configuration', () => {
+      describe('with configuration', () => {
         before(() => {
           return agent.load('aws-sdk')
         })
@@ -94,15 +94,19 @@ describe('Plugin', () => {
 
         models.forEach(model => {
           it(`should invoke model for provider:${model.provider}`, done => {
-            const Request = {
+            const request = {
               body: JSON.stringify(model.requestBody),
               contentType: 'application/json',
               accept: 'application/json',
               modelId: `${model.ModelId}`
             }
 
+            const response = {
+              body: JSON.stringify(model.responseBody)
+            }
+
             // TODO figure out why InvokeModelCommand is undefined
-            const command = new AWS.InvokeModelCommand(Request)
+            const command = new AWS.InvokeModelCommand(request)
 
             // TODO mock the send command to return a specific response
             bedrockRuntimeClient.send(command, (err, response) => {
