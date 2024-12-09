@@ -737,5 +737,6 @@
   "telemetry.dependencyCollection": "instrumentation_telemetry_dependency_collection_enabled",
   "telemetry.heartbeatInterval": "instrumentation_telemetry_heartbeat_interval",
   "traceEnabled": "trace_enabled",
-  "tracePropagationStyle.otelPropagators": "trace_propagation_style_otel_propagators"
+  "tracePropagationStyle.otelPropagators": "trace_propagation_style_otel_propagators",
+  "aws.dynamoDb.tablePrimaryKeys": "aws_dynamodb_table_primary_keys"
 }

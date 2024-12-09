@@ -2,7 +2,7 @@
 
 const BaseAwsSdkPlugin = require('../base')
 const log = require('../../../dd-trace/src/log')
-const { generatePointerHash } = require('../../../dd-trace/src/util')
+const { generatePointerHash } = require('../util')
 const { S3_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../../dd-trace/src/constants')
 
 class S3 extends BaseAwsSdkPlugin {
