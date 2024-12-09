@@ -536,6 +536,50 @@ describe('Plugin', () => {
       })
     })
 
+    describe('getPrimaryKeyConfig', () => {
+      let dynamoDbInstance
+
+      beforeEach(() => {
+        dynamoDbInstance = new DynamoDb()
+        dynamoDbInstance.dynamoPrimaryKeyConfig = null
+        dynamoDbInstance._tracerConfig = {}
+      })
+
+      it('should return cached config if available', () => {
+        const cachedConfig = { Table1: new Set(['key1']) }
+        dynamoDbInstance.dynamoPrimaryKeyConfig = cachedConfig
+
+        const result = dynamoDbInstance.getPrimaryKeyConfig()
+        expect(result).to.equal(cachedConfig)
+      })
+
+      it('should return undefined when config str is missing', () => {
+        const result = dynamoDbInstance.getPrimaryKeyConfig()
+        expect(result).to.be.undefined
+      })
+
+      it('should parse valid config with single table', () => {
+        const configStr = '{"Table1": ["key1", "key2"]}'
+        dynamoDbInstance._tracerConfig = { aws: { dynamoDb: { tablePrimaryKeys: configStr } } }
+
+        const result = dynamoDbInstance.getPrimaryKeyConfig()
+        expect(result).to.deep.equal({
+          Table1: new Set(['key1', 'key2'])
+        })
+      })
+
+      it('should parse valid config with multiple tables', () => {
+        const configStr = '{"Table1": ["key1"], "Table2": ["key2", "key3"]}'
+        dynamoDbInstance._tracerConfig = { aws: { dynamoDb: { tablePrimaryKeys: configStr } } }
+
+        const result = dynamoDbInstance.getPrimaryKeyConfig()
+        expect(result).to.deep.equal({
+          Table1: new Set(['key1']),
+          Table2: new Set(['key2', 'key3'])
+        })
+      })
+    })
+
     describe('calculatePutItemHash', () => {
       it('generates correct hash for single string key', () => {
         const tableName = 'UserTable'

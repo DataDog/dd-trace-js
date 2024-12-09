@@ -566,7 +566,7 @@ class Config {
     this._setValue(defaults, 'url', undefined)
     this._setValue(defaults, 'version', pkg.version)
     this._setValue(defaults, 'instrumentation_config_id', undefined)
-    this._setValue(defaults, 'aws.dynamoDb.tablePrimaryKeys', {})
+    this._setValue(defaults, 'aws.dynamoDb.tablePrimaryKeys', undefined)
   }
 
   _applyEnvironment () {
@@ -878,7 +878,7 @@ class Config {
     this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
     this._setString(env, 'version', DD_VERSION || tags.version)
     this._setBoolean(env, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
-    this._setDynamoDbTablePrimaryKeys(env, 'aws.dynamoDb.tablePrimaryKeys', DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS)
+    this._setString(env, 'aws.dynamoDb.tablePrimaryKeys', DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS)
   }
 
   _applyOptions (options) {
@@ -1285,27 +1285,6 @@ class Config {
 
   _setValue (obj, name, value) {
     obj[name] = value
-  }
-
-  _setDynamoDbTablePrimaryKeys (obj, name, value) {
-    if (!value) {
-      return this._setValue(obj, name, {})
-    }
-    const parsed = safeJsonParse(value)
-    if (!parsed) {
-      log.warn('Failed to parse DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS')
-      return
-    }
-    const validatedConfig = {}
-    for (const [tableName, primaryKeys] of Object.entries(parsed)) {
-      if (Array.isArray(primaryKeys) && primaryKeys.length > 0 && primaryKeys.length <= 2) {
-        validatedConfig[tableName] = new Set(primaryKeys)
-      } else {
-        log.warn(`Invalid primary key configuration for table: ${tableName}.` +
-          'Please fix the DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS env var.')
-      }
-    }
-    this._setValue(obj, name, validatedConfig)
   }
 
   // TODO: Report origin changes and errors to telemetry.
