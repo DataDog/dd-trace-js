@@ -1,4 +1,4 @@
-import {generatePointerHash, encodeValue, extractPrimaryKeys} from '../src/util'
+const { generatePointerHash, encodeValue, extractPrimaryKeys } = require('../src/util')
 
 describe('generatePointerHash', () => {
   it('should generate a valid hash for a basic S3 object', () => {
