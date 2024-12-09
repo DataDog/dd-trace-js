@@ -29,6 +29,10 @@ function Hook (modules, hookOptions, onrequire) {
 
     this._patched[filename] = true
 
+    if (moduleExports?.default) {
+      moduleExports.default = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion)
+    }
+
     return onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion)
   }
 
@@ -38,12 +42,7 @@ function Hook (modules, hookOptions, onrequire) {
     // modules and not ESM. In the meantime, all the modules we instrument are
     // CommonJS modules for which the default export is always moved to
     // `default` anyway.
-    if (moduleExports && moduleExports.default) {
-      moduleExports.default = safeHook(moduleExports.default, moduleName, moduleBaseDir)
-      return moduleExports
-    } else {
-      return safeHook(moduleExports, moduleName, moduleBaseDir)
-    }
+    return safeHook(moduleExports, moduleName, moduleBaseDir)
   })
 }
 
