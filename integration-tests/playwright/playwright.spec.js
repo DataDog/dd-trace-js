@@ -123,11 +123,11 @@ versions.forEach((version) => {
             })
 
             assert.includeMembers(testEvents.map(test => test.content.resource), [
-              'landing-page-test.js.should work with passing tests',
-              'landing-page-test.js.should work with skipped tests',
-              'landing-page-test.js.should work with fixme',
-              'landing-page-test.js.should work with annotated tests',
-              'todo-list-page-test.js.should work with failing tests',
+              'landing-page-test.js.highest-level-describe  leading and trailing spaces    should work with passing tests',
+              'landing-page-test.js.highest-level-describe  leading and trailing spaces    should work with skipped tests',
+              'landing-page-test.js.highest-level-describe  leading and trailing spaces    should work with fixme',
+              'landing-page-test.js.highest-level-describe  leading and trailing spaces    should work with annotated tests',
+              'todo-list-page-test.js.playwright should work with failing tests',
               'todo-list-page-test.js.should work with fixme root'
             ])
 
@@ -155,7 +155,7 @@ versions.forEach((version) => {
               assert.property(stepEvent.content.meta, 'playwright.step')
             })
             const annotatedTest = testEvents.find(test =>
-              test.content.resource === 'landing-page-test.js.should work with annotated tests'
+              test.content.resource.endsWith('should work with annotated tests')
             )
 
             assert.propertyVal(annotatedTest.content.meta, 'test.memory.usage', 'low')
@@ -187,8 +187,8 @@ versions.forEach((version) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
         const testEvents = events.filter(event => event.type === 'test')
         assert.includeMembers(testEvents.map(test => test.content.resource), [
-          'playwright-tests-ts/one-test.js.should work with passing tests',
-          'playwright-tests-ts/one-test.js.should work with skipped tests'
+          'playwright-tests-ts/one-test.js.playwright should work with passing tests',
+          'playwright-tests-ts/one-test.js.playwright should work with skipped tests'
         ])
         assert.include(testOutput, '1 passed')
         assert.include(testOutput, '1 skipped')
@@ -263,16 +263,16 @@ versions.forEach((version) => {
             {
               playwright: {
                 'landing-page-test.js': [
-                  // 'should work with passing tests', // it will be considered new
-                  'should work with skipped tests',
-                  'should work with fixme',
-                  'should work with annotated tests'
+                  // 'highest-level-describe  leading and trailing spaces    should work with passing tests', // it will be considered new
+                  'highest-level-describe  leading and trailing spaces    should work with skipped tests',
+                  'highest-level-describe  leading and trailing spaces    should work with fixme',
+                  'highest-level-describe  leading and trailing spaces    should work with annotated tests',
                 ],
                 'skipped-suite-test.js': [
                   'should work with fixme root'
                 ],
                 'todo-list-page-test.js': [
-                  'should work with failing tests',
+                  'playwright should work with failing tests',
                   'should work with fixme root'
                 ]
               }
@@ -288,8 +288,7 @@ versions.forEach((version) => {
 
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
               const newTests = tests.filter(test =>
-                test.resource ===
-                  'landing-page-test.js.should work with passing tests'
+                test.resource.endsWith('should work with passing tests')
               )
               newTests.forEach(test => {
                 assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
@@ -337,16 +336,16 @@ versions.forEach((version) => {
             {
               playwright: {
                 'landing-page-test.js': [
-                  // 'should work with passing tests', // it will be considered new
-                  'should work with skipped tests',
-                  'should work with fixme',
-                  'should work with annotated tests'
+                  // 'highest-level-describe  leading and trailing spaces    should work with passing tests', // it will be considered new
+                  'highest-level-describe  leading and trailing spaces    should work with skipped tests',
+                  'highest-level-describe  leading and trailing spaces    should work with fixme',
+                  'highest-level-describe  leading and trailing spaces    should work with annotated tests',
                 ],
                 'skipped-suite-test.js': [
                   'should work with fixme root'
                 ],
                 'todo-list-page-test.js': [
-                  'should work with failing tests',
+                  'playwright should work with failing tests',
                   'should work with fixme root'
                 ]
               }
@@ -359,8 +358,7 @@ versions.forEach((version) => {
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
               const newTests = tests.filter(test =>
-                test.resource ===
-                  'landing-page-test.js.should work with passing tests'
+                test.resource.endsWith('should work with passing tests')
               )
               newTests.forEach(test => {
                 assert.notProperty(test.meta, TEST_IS_NEW)
@@ -406,16 +404,18 @@ versions.forEach((version) => {
             {
               playwright: {
                 'landing-page-test.js': [
-                  'should work with passing tests',
-                  // 'should work with skipped tests', // new but not retried because it's skipped
-                  // 'should work with fixme', // new but not retried because it's skipped
-                  'should work with annotated tests'
+                  'highest-level-describe  leading and trailing spaces    should work with passing tests',
+                  // new but not retried because it's skipped
+                  // 'highest-level-describe  leading and trailing spaces    should work with skipped tests',
+                  // new but not retried because it's skipped
+                  // 'highest-level-describe  leading and trailing spaces    should work with fixme',
+                  'highest-level-describe  leading and trailing spaces    should work with annotated tests',
                 ],
                 'skipped-suite-test.js': [
                   'should work with fixme root'
                 ],
                 'todo-list-page-test.js': [
-                  'should work with failing tests',
+                  'playwright should work with failing tests',
                   'should work with fixme root'
                 ]
               }
@@ -428,9 +428,8 @@ versions.forEach((version) => {
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
               const newTests = tests.filter(test =>
-                test.resource ===
-                  'landing-page-test.js.should work with skipped tests' ||
-                test.resource === 'landing-page-test.js.should work with fixme'
+                test.resource.endsWith('should work with skipped tests') ||
+                test.resource.endsWith('should work with fixme')
               )
               // no retries
               assert.equal(newTests.length, 2)
