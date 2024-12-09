@@ -760,7 +760,7 @@ describe('Plugin', () => {
           const tableName = 'UserTable'
           const keys = { userId: { INVALID: 'user123' } }
           const hash = DynamoDb.calculateHashWithKnownKeys(tableName, keys)
-          expect(hash).to.be.a('string')
+          expect(hash).to.be(undefined)
         })
 
         it('handles null keys object', () => {
