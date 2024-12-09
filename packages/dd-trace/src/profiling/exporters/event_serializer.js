@@ -19,7 +19,7 @@ class EventSerializer {
   getEventJSON ({ profiles, start, end, tags = {}, endpointCounts }) {
     return JSON.stringify({
       attachments: Object.keys(profiles).map(t => this.typeToFile(t)),
-      start: start && start.toISOString(),
+      start: start.toISOString(),
       end: end.toISOString(),
       family: 'node',
       version: '4',
