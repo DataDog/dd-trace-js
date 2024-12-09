@@ -23,7 +23,7 @@ class WAFContextWrapper {
 
   run ({ persistent, ephemeral }, raspRuleType) {
     if (this.ddwafContext.disposed) {
-      log.warn('Calling run on a disposed context')
+      log.warn('[ASM] Calling run on a disposed context')
       return
     }
 
@@ -101,8 +101,7 @@ class WAFContextWrapper {
 
       return result.actions
     } catch (err) {
-      log.error('Error while running the AppSec WAF')
-      log.error(err)
+      log.error('[ASM] Error while running the AppSec WAF', err)
     }
   }
 

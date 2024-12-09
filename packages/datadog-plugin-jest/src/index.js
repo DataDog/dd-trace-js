@@ -22,7 +22,12 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   JEST_DISPLAY_NAME,
   TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_DRIVER
+  TEST_BROWSER_DRIVER,
+  DI_ERROR_DEBUG_INFO_CAPTURED,
+  DI_DEBUG_ERROR_SNAPSHOT_ID,
+  DI_DEBUG_ERROR_FILE,
+  DI_DEBUG_ERROR_LINE,
+  TEST_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -39,6 +44,7 @@ const {
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
+const debuggerParameterPerTest = new Map()
 
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
@@ -219,8 +225,7 @@ class JestPlugin extends CiPlugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
-        },
-        extractedLinks: testSessionSpanContext?._links
+        }
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (_ddTestCodeCoverageEnabled) {
@@ -302,6 +307,29 @@ class JestPlugin extends CiPlugin {
       const span = this.startTestSpan(test)
 
       this.enter(span, store)
+
+      const { name: testName } = test
+
+      const debuggerParameters = debuggerParameterPerTest.get(testName)
+
+      // If we have a debugger probe, we need to add the snapshot id to the span
+      if (debuggerParameters) {
+        const spanContext = span.context()
+
+        // TODO: handle race conditions with this.retriedTestIds
+        this.retriedTestIds = {
+          spanId: spanContext.toSpanId(),
+          traceId: spanContext.toTraceId()
+        }
+        const { snapshotId, file, line } = debuggerParameters
+
+        // TODO: should these be added on test:end if and only if the probe is hit?
+        // Sync issues: `hitProbePromise` might be resolved after the test ends
+        span.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+        span.setTag(DI_DEBUG_ERROR_SNAPSHOT_ID, snapshotId)
+        span.setTag(DI_DEBUG_ERROR_FILE, file)
+        span.setTag(DI_DEBUG_ERROR_LINE, line)
+      }
     })
 
     this.addSub('ci:jest:test:finish', ({ status, testStartLine }) => {
@@ -327,13 +355,19 @@ class JestPlugin extends CiPlugin {
       finishAllTraceSpans(span)
     })
 
-    this.addSub('ci:jest:test:err', (error) => {
+    this.addSub('ci:jest:test:err', ({ error, willBeRetried, probe }) => {
       if (error) {
         const store = storage.getStore()
         if (store && store.span) {
           const span = store.span
           span.setTag(TEST_STATUS, 'fail')
           span.setTag('error', error)
+          if (willBeRetried && this.di) {
+            // if we use numTestExecutions, we have to remove the breakpoint after each execution
+            const testName = span.context()._tags[TEST_NAME]
+            const debuggerParameters = this.addDiProbe(error, probe)
+            debuggerParameterPerTest.set(testName, debuggerParameters)
+          }
         }
       }
     })
@@ -349,7 +383,6 @@ class JestPlugin extends CiPlugin {
     const {
       suite,
       name,
-      runner,
       displayName,
       testParameters,
       frameworkVersion,
@@ -361,7 +394,7 @@ class JestPlugin extends CiPlugin {
     } = test
 
     const extraTags = {
-      [JEST_TEST_RUNNER]: runner,
+      [JEST_TEST_RUNNER]: 'jest-circus',
       [TEST_PARAMETERS]: testParameters,
       [TEST_FRAMEWORK_VERSION]: frameworkVersion
     }

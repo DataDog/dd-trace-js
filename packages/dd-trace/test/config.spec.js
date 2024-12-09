@@ -28,6 +28,14 @@ describe('Config', () => {
   const BLOCKED_TEMPLATE_GRAPHQL_PATH = require.resolve('./fixtures/config/appsec-blocked-graphql-template.json')
   const BLOCKED_TEMPLATE_GRAPHQL = readFileSync(BLOCKED_TEMPLATE_GRAPHQL_PATH, { encoding: 'utf8' })
   const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
+  const CONFIG_NORM_RULES_PATH = require.resolve('./fixtures/telemetry/config_norm_rules.json')
+  const CONFIG_NORM_RULES = readFileSync(CONFIG_NORM_RULES_PATH, { encoding: 'utf8' })
+  const CONFIG_PREFIX_BLOCK_LIST_PATH = require.resolve('./fixtures/telemetry/config_prefix_block_list.json')
+  const CONFIG_PREFIX_BLOCK_LIST = readFileSync(CONFIG_PREFIX_BLOCK_LIST_PATH, { encoding: 'utf8' })
+  const CONFIG_AGGREGATION_LIST_PATH = require.resolve('./fixtures/telemetry/config_aggregation_list.json')
+  const CONFIG_AGGREGATION_LIST = readFileSync(CONFIG_AGGREGATION_LIST_PATH, { encoding: 'utf8' })
+  const NODEJS_CONFIG_RULES_PATH = require.resolve('./fixtures/telemetry/nodejs_config_rules.json')
+  const NODEJS_CONFIG_RULES = readFileSync(NODEJS_CONFIG_RULES_PATH, { encoding: 'utf8' })
 
   function reloadLoggerAndConfig () {
     log = proxyquire('../src/log', {})
@@ -279,13 +287,13 @@ describe('Config', () => {
       { name: 'appsec.enabled', value: undefined, origin: 'default' },
       {
         name: 'appsec.obfuscatorKeyRegex',
-        // eslint-disable-next-line max-len
+        // eslint-disable-next-line @stylistic/js/max-len
         value: '(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt',
         origin: 'default'
       },
       {
         name: 'appsec.obfuscatorValueRegex',
-        // eslint-disable-next-line max-len
+        // eslint-disable-next-line @stylistic/js/max-len
         value: '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\\.net(?:[_-]|-)sessionid|sid|jwt)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}',
         origin: 'default'
       },
@@ -334,6 +342,8 @@ describe('Config', () => {
       { name: 'isGitUploadEnabled', value: false, origin: 'default' },
       { name: 'isIntelligentTestRunnerEnabled', value: false, origin: 'default' },
       { name: 'isManualApiEnabled', value: false, origin: 'default' },
+      { name: 'langchain.spanCharLimit', value: 128, origin: 'default' },
+      { name: 'langchain.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' },
       { name: 'llmobs.agentlessEnabled', value: false, origin: 'default' },
       { name: 'llmobs.mlApp', value: undefined, origin: 'default' },
       { name: 'ciVisibilityTestSessionName', value: '', origin: 'default' },
@@ -352,7 +362,7 @@ describe('Config', () => {
       { name: 'protocolVersion', value: '0.4', origin: 'default' },
       {
         name: 'queryStringObfuscation',
-        // eslint-disable-next-line max-len
+        // eslint-disable-next-line @stylistic/js/max-len
         value: '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}',
         origin: 'default'
       },
@@ -509,6 +519,8 @@ describe('Config', () => {
     process.env.DD_INSTRUMENTATION_INSTALL_TYPE = 'k8s_single_step'
     process.env.DD_INSTRUMENTATION_INSTALL_TIME = '1703188212'
     process.env.DD_INSTRUMENTATION_CONFIG_ID = 'abcdef123'
+    process.env.DD_LANGCHAIN_SPAN_CHAR_LIMIT = 50
+    process.env.DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE = 0.5
     process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
     process.env.DD_LLMOBS_ML_APP = 'myMlApp'
     process.env.DD_TRACE_ENABLED = 'true'
@@ -684,7 +696,9 @@ describe('Config', () => {
       { name: 'tracing', value: false, origin: 'env_var' },
       { name: 'version', value: '1.0.0', origin: 'env_var' },
       { name: 'llmobs.mlApp', value: 'myMlApp', origin: 'env_var' },
-      { name: 'llmobs.agentlessEnabled', value: true, origin: 'env_var' }
+      { name: 'llmobs.agentlessEnabled', value: true, origin: 'env_var' },
+      { name: 'langchain.spanCharLimit', value: 50, origin: 'env_var' },
+      { name: 'langchain.spanPromptCompletionSampleRate', value: 0.5, origin: 'env_var' }
     ])
   })
 
@@ -2251,6 +2265,77 @@ describe('Config', () => {
       expect(taggingConfig).to.have.property('requestsEnabled', true)
       expect(taggingConfig).to.have.property('responsesEnabled', true)
       expect(taggingConfig).to.have.property('maxDepth', 7)
+    })
+
+    it('config_norm_rules completeness', () => {
+      // ⚠️ Did this test just fail? Read here! ⚠️
+      //
+      // Some files are manually copied from dd-go from/to the following paths
+      // from: https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/
+      // to: packages/dd-trace/test/fixtures/telemetry/
+      // files:
+      // - config_norm_rules.json
+      // - config_prefix_block_list.json
+      // - config_aggregation_list.json
+      // - nodejs_config_rules.json
+      //
+      // If this test fails, it means that a telemetry key was found in config.js that does not
+      // exist in any of the files listed above in dd-go
+      // The impact is that telemetry will not be reported to the Datadog backend won't be unusable
+      //
+      // To fix this, you must update dd-go to either
+      // 1) Add an exact config key to match config_norm_rules.json
+      // 2) Add a prefix that matches the config keys to config_prefix_block_list.json
+      // 3) Add a prefix rule that fits an existing prefix to config_aggregation_list.json
+      // 4) (Discouraged) Add a language-specific rule to nodejs_config_rules.json
+      //
+      // Once dd-go is updated, you can copy over the files to this repo and merge them in as part of your changes
+
+      function getKeysInDotNotation (obj, parentKey = '') {
+        const keys = []
+
+        for (const key in obj) {
+          if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            const fullKey = parentKey ? `${parentKey}.${key}` : key
+
+            if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
+              keys.push(...getKeysInDotNotation(obj[key], fullKey))
+            } else {
+              keys.push(fullKey)
+            }
+          }
+        }
+
+        return keys
+      }
+
+      const config = new Config()
+
+      const libraryConfigKeys = getKeysInDotNotation(config).sort()
+
+      const nodejsConfigRules = JSON.parse(NODEJS_CONFIG_RULES)
+      const configNormRules = JSON.parse(CONFIG_NORM_RULES)
+      const configPrefixBlockList = JSON.parse(CONFIG_PREFIX_BLOCK_LIST)
+      const configAggregationList = JSON.parse(CONFIG_AGGREGATION_LIST)
+
+      const allowedConfigKeys = [
+        ...Object.keys(configNormRules),
+        ...Object.keys(nodejsConfigRules.normalization_rules)
+      ]
+      const blockedConfigKeyPrefixes = [...configPrefixBlockList, ...nodejsConfigRules.prefix_block_list]
+      const configAggregationPrefixes = [
+        ...Object.keys(configAggregationList),
+        ...Object.keys(nodejsConfigRules.reduce_rules)
+      ]
+
+      const missingConfigKeys = libraryConfigKeys.filter(key => {
+        const isAllowed = allowedConfigKeys.includes(key)
+        const isBlocked = blockedConfigKeyPrefixes.some(prefix => key.startsWith(prefix))
+        const isReduced = configAggregationPrefixes.some(prefix => key.startsWith(prefix))
+        return !isAllowed && !isBlocked && !isReduced
+      })
+
+      expect(missingConfigKeys).to.be.empty
     })
   })
 })
