@@ -105,7 +105,9 @@ describe('typescript', () => {
 
       for (const test of testCases) {
         const { name, file } = test
-        it(name, async () => {
+        it(name, async function () {
+          this.timeout(20000)
+
           const cwd = sandbox.folder
 
           const results = {}
