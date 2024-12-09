@@ -4,9 +4,12 @@ const { EventEmitter } = require('events')
 const { Config } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
+const { HTTP_METHOD, HTTP_ROUTE, RESOURCE_NAME, SPAN_TYPE } = require('../../../../ext/tags')
+const { WEB } = require('../../../../ext/types')
 const dc = require('dc-polyfill')
 
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
+const spanFinishedChannel = dc.channel('dd-trace:span:finish')
 
 function maybeSourceMap (sourceMap, SourceMapper, debug) {
   if (!sourceMap) return
@@ -30,6 +33,7 @@ class Profiler extends EventEmitter {
     this._timer = undefined
     this._lastStart = undefined
     this._timeoutInterval = undefined
+    this.endpointCounts = new Map()
   }
 
   start (options) {
@@ -82,6 +86,9 @@ class Profiler extends EventEmitter {
         this._logger.debug(`Started ${profiler.type} profiler in ${threadNamePrefix} thread`)
       }
 
+      this._spanFinishListener = this._onSpanFinish.bind(this)
+      spanFinishedChannel.subscribe(this._spanFinishListener)
+
       this._capture(this._timeoutInterval, start)
       return true
     } catch (e) {
@@ -117,6 +124,9 @@ class Profiler extends EventEmitter {
 
     this._enabled = false
 
+    spanFinishedChannel.unsubscribe(this._spanFinishListener)
+    this._spanFinishListener = undefined
+
     for (const profiler of this._config.profilers) {
       profiler.stop()
       this._logger.debug(`Stopped ${profiler.type} profiler in ${threadNamePrefix} thread`)
@@ -134,6 +144,25 @@ class Profiler extends EventEmitter {
       this._timer.unref()
     } else {
       this._timer.refresh()
+    }
+  }
+
+  _onSpanFinish (span) {
+    const tags = span.context()._tags
+    if (tags[SPAN_TYPE] !== WEB) return
+
+    const endpointName = tags[RESOURCE_NAME] || [
+      tags[HTTP_METHOD],
+      tags[HTTP_ROUTE]
+    ].filter(v => v).join(' ')
+    if (!endpointName) return
+
+    let counter = this.endpointCounts.get(endpointName)
+    if (counter === undefined) {
+      counter = { count: 1 }
+      this.endpointCounts.set(endpointName, counter)
+    } else {
+      counter.count++
     }
   }
 
@@ -196,9 +225,16 @@ class Profiler extends EventEmitter {
     const { tags } = this._config
     const tasks = []
 
+    // Flatten endpoint counts
+    const endpointCounts = {}
+    for (const [endpoint, { count }] of this.endpointCounts) {
+      endpointCounts[endpoint] = count
+    }
+    this.endpointCounts.clear()
+
     tags.snapshot = snapshotKind
     for (const exporter of this._config.exporters) {
-      const task = exporter.export({ profiles, start, end, tags })
+      const task = exporter.export({ profiles, start, end, tags, endpointCounts })
         .catch(err => {
           if (this._logger) {
             this._logger.warn(err)

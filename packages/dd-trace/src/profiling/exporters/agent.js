@@ -106,7 +106,7 @@ class AgentExporter {
     this._activation = activation || 'unknown'
   }
 
-  export ({ profiles, start, end, tags }) {
+  export ({ profiles, start, end, tags, endpointCounts }) {
     const fields = []
 
     function typeToFile (type) {
@@ -130,6 +130,7 @@ class AgentExporter {
         'format:pprof',
         ...Object.entries(tags).map(([key, value]) => `${key}:${value}`)
       ].join(','),
+      endpoint_counts: endpointCounts,
       info: {
         application: {
           env: this._env,
