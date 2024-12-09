@@ -223,7 +223,6 @@ class Profiler extends EventEmitter {
 
   _submit (profiles, start, end, snapshotKind) {
     const { tags } = this._config
-    const tasks = []
 
     // Flatten endpoint counts
     const endpointCounts = {}
@@ -233,15 +232,14 @@ class Profiler extends EventEmitter {
     this.endpointCounts.clear()
 
     tags.snapshot = snapshotKind
-    for (const exporter of this._config.exporters) {
-      const task = exporter.export({ profiles, start, end, tags, endpointCounts })
-        .catch(err => {
-          if (this._logger) {
-            this._logger.warn(err)
-          }
-        })
-      tasks.push(task)
-    }
+    const exportSpec = { profiles, start, end, tags, endpointCounts }
+    const tasks = this._config.exporters.map(exporter =>
+      exporter.export(exportSpec).catch(err => {
+        if (this._logger) {
+          this._logger.warn(err)
+        }
+      })
+    )
 
     return Promise.all(tasks)
   }
