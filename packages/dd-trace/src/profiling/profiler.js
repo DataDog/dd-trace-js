@@ -4,8 +4,7 @@ const { EventEmitter } = require('events')
 const { Config } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
-const { HTTP_METHOD, HTTP_ROUTE, RESOURCE_NAME, SPAN_TYPE } = require('../../../../ext/tags')
-const { WEB } = require('../../../../ext/types')
+const { isWebServerSpan, endpointNameFromTags } = require('./webspan-utils')
 const dc = require('dc-polyfill')
 
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
@@ -149,12 +148,9 @@ class Profiler extends EventEmitter {
 
   _onSpanFinish (span) {
     const tags = span.context()._tags
-    if (tags[SPAN_TYPE] !== WEB) return
+    if (!isWebServerSpan(tags)) return
 
-    const endpointName = tags[RESOURCE_NAME] || [
-      tags[HTTP_METHOD],
-      tags[HTTP_ROUTE]
-    ].filter(v => v).join(' ')
+    const endpointName = endpointNameFromTags(tags)
     if (!endpointName) return
 
     let counter = this.endpointCounts.get(endpointName)
