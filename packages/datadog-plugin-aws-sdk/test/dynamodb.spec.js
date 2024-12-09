@@ -5,7 +5,7 @@ const { setup } = require('./spec_helpers')
 const axios = require('axios')
 const { DYNAMODB_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/constants')
 const DynamoDb = require('../src/services/dynamodb')
-const { generatePointerHash } = require('../../dd-trace/src/util')
+const { generatePointerHash } = require('../src/util')
 
 /* eslint-disable no-console */
 async function resetLocalStackDynamo () {

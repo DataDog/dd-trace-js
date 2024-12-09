@@ -3,7 +3,7 @@
 const BaseAwsSdkPlugin = require('../base')
 const log = require('../../../dd-trace/src/log')
 const { DYNAMODB_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../../dd-trace/src/constants')
-const { extractPrimaryKeys, generatePointerHash } = require('../../../dd-trace/src/util')
+const { extractPrimaryKeys, generatePointerHash } = require('../util')
 
 class DynamoDb extends BaseAwsSdkPlugin {
   static get id () { return 'dynamodb' }
