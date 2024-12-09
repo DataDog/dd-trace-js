@@ -1,6 +1,7 @@
 'use strict'
 
 const crypto = require('crypto')
+const log = require('../../dd-trace/src/log')
 
 /**
  * Generates a unique hash from an array of strings by joining them with | before hashing.
@@ -41,8 +42,12 @@ function encodeValue (valueObject) {
         return Buffer.from(value.toString())
       case 'B':
         return Buffer.isBuffer(value) ? value : Buffer.from(value)
+      default:
+        log.debug(`Found unknown type while trying to create DynamoDB span pointer: ${type}`)
     }
-  } catch (err) {}
+  } catch (err) {
+    log.debug(`Failed to encode value while trying to create DynamoDB span pointer: ${err.message}`)
+  }
 }
 
 /**
