@@ -224,10 +224,21 @@ function testWillRetry (test, testStatus) {
   return testStatus === 'fail' && test.results.length <= test.retries
 }
 
+function getTestFullname (test) {
+  let parent = test.parent
+  const names = [test.title]
+  while (parent?._type === 'describe') {
+    if (parent.title) {
+      names.unshift(parent.title)
+    }
+    parent = parent.parent
+  }
+  return names.join(' ')
+}
+
 function testBeginHandler (test, browserName) {
   const {
     _requireFile: testSuiteAbsolutePath,
-    title: testName,
     _type,
     location: {
       line: testSourceLine
@@ -237,6 +248,8 @@ function testBeginHandler (test, browserName) {
   if (_type === 'beforeAll' || _type === 'afterAll') {
     return
   }
+
+  const testName = getTestFullname(test)
 
   const isNewTestSuite = !startedSuites.includes(testSuiteAbsolutePath)
 
