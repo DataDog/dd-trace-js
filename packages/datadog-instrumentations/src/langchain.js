@@ -61,17 +61,38 @@ for (const extension of extensions) {
     return exports
   })
 
-  addHook({ name: '@langchain/openai', file: `dist/embeddings.${extension}`, versions: ['>=0.1'] }, exports => {
-    const OpenAIEmbeddings = exports.OpenAIEmbeddings
+  addHook({ name: '@langchain/core', file: `dist/embeddings.${extension}`, versions: ['>=0.1'] }, exports => {
+    // we unfortunately cannot patch the prototype of the Embeddings class directly
+    // this is because the "abstract class Embeddings" is transpiled from TypeScript to not include abstract functions
+    // thus, we patch the exports instead.
 
-    // OpenAI (and Embeddings in general) do not define an lc_namespace
-    const namespace = ['langchain', 'embeddings', 'openai']
-    shimmer.wrap(OpenAIEmbeddings.prototype, 'embedDocuments', embedDocuments =>
-      wrapLangChainPromise(embedDocuments, 'embedding', namespace)
-    )
-    shimmer.wrap(OpenAIEmbeddings.prototype, 'embedQuery', embedQuery =>
-      wrapLangChainPromise(embedQuery, 'embedding', namespace)
-    )
+    // Embeddings is a simple class with no defined functions, just instantiating an async caller in its constructor,
+    // handled by the `super` call here
+    shimmer.wrap(exports, 'Embeddings', Embeddings => {
+      return class extends Embeddings {
+        constructor (...args) {
+          super(...args)
+
+          const namespace = ['langchain', 'embeddings']
+
+          // when originally implemented, we only wrapped OpenAI embeddings
+          // these embeddings had the resource name of `langchain.embeddings.openai.OpenAIEmbeddings`
+          // we need to make sure `openai` is appended to the resource name until a new tracer major version
+          if (this.constructor.name === 'OpenAIEmbeddings') {
+            namespace.push('openai')
+          }
+
+          shimmer.wrap(this, 'embedQuery', embedQuery => wrapLangChainPromise(embedQuery, 'embedding', namespace))
+          shimmer.wrap(this, 'embedDocuments',
+            embedDocuments => wrapLangChainPromise(embedDocuments, 'embedding', namespace))
+        }
+
+        static [Symbol.hasInstance] (instance) {
+          return instance instanceof Embeddings
+        }
+      }
+    })
+
     return exports
   })
 }
