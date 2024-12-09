@@ -85,8 +85,10 @@ class Profiler extends EventEmitter {
         this._logger.debug(`Started ${profiler.type} profiler in ${threadNamePrefix} thread`)
       }
 
-      this._spanFinishListener = this._onSpanFinish.bind(this)
-      spanFinishedChannel.subscribe(this._spanFinishListener)
+      if (config.endpointCollectionEnabled) {
+        this._spanFinishListener = this._onSpanFinish.bind(this)
+        spanFinishedChannel.subscribe(this._spanFinishListener)
+      }
 
       this._capture(this._timeoutInterval, start)
       return true
@@ -123,8 +125,10 @@ class Profiler extends EventEmitter {
 
     this._enabled = false
 
-    spanFinishedChannel.unsubscribe(this._spanFinishListener)
-    this._spanFinishListener = undefined
+    if (this._spanFinishListener !== undefined) {
+      spanFinishedChannel.unsubscribe(this._spanFinishListener)
+      this._spanFinishListener = undefined
+    }
 
     for (const profiler of this._config.profilers) {
       profiler.stop()
