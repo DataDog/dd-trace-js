@@ -13,7 +13,7 @@ const {
   getThreadLabels
 } = require('./shared')
 
-const { isWebServerSpan, endpointNameFromTags } = require('../webspan-utils')
+const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
 
 const beforeCh = dc.channel('dd-trace:storage:before')
 const enterCh = dc.channel('dd-trace:storage:enter')
@@ -27,10 +27,6 @@ let kSampleCount
 function getActiveSpan () {
   const store = storage.getStore()
   return store && store.span
-}
-
-function getStartedSpans (context) {
-  return context._trace.started
 }
 
 let channelsActivated = false

@@ -12,7 +12,12 @@ function endpointNameFromTags (tags) {
   ].filter(v => v).join(' ')
 }
 
+function getStartedSpans (context) {
+  return context._trace.started
+}
+
 module.exports = {
   isWebServerSpan,
-  endpointNameFromTags
+  endpointNameFromTags,
+  getStartedSpans
 }

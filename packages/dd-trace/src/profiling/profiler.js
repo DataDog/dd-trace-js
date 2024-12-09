@@ -4,7 +4,7 @@ const { EventEmitter } = require('events')
 const { Config } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
-const { isWebServerSpan, endpointNameFromTags } = require('./webspan-utils')
+const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./webspan-utils')
 const dc = require('dc-polyfill')
 
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
@@ -21,6 +21,20 @@ function logError (logger, err) {
   if (logger) {
     logger.error(err)
   }
+}
+
+function findWebSpan (startedSpans, spanId) {
+  for (let i = startedSpans.length; --i >= 0;) {
+    const ispan = startedSpans[i]
+    const context = ispan.context()
+    if (context._spanId === spanId) {
+      if (isWebServerSpan(context._tags)) {
+        return true
+      }
+      spanId = context._parentId
+    }
+  }
+  return false
 }
 
 class Profiler extends EventEmitter {
@@ -151,11 +165,15 @@ class Profiler extends EventEmitter {
   }
 
   _onSpanFinish (span) {
-    const tags = span.context()._tags
+    const context = span.context()
+    const tags = context._tags
     if (!isWebServerSpan(tags)) return
 
     const endpointName = endpointNameFromTags(tags)
     if (!endpointName) return
+
+    // Make sure this is the outermost web span, just in case so we don't overcount
+    if (findWebSpan(getStartedSpans(context), context._parentId)) return
 
     let counter = this.endpointCounts.get(endpointName)
     if (counter === undefined) {
