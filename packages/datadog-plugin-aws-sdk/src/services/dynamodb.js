@@ -55,8 +55,6 @@ class DynamoDb extends BaseAwsSdkPlugin {
   addSpanPointers (span, response) {
     const request = response?.request
     const operationName = request?.operation
-    /** @type {Object.<string, Set<string>>} */
-    const primaryKeyConfig = this._tracerConfig?.aws?.dynamoDb?.tablePrimaryKeys
 
     const hashes = []
     switch (operationName) {
@@ -64,7 +62,7 @@ class DynamoDb extends BaseAwsSdkPlugin {
         const hash = DynamoDb.calculatePutItemHash(
           request?.params?.TableName,
           request?.params?.Item,
-          primaryKeyConfig
+          this.getPrimaryKeyConfig()
         )
         if (hash) hashes.push(hash)
         break
@@ -80,7 +78,7 @@ class DynamoDb extends BaseAwsSdkPlugin {
         for (const item of transactItems) {
           if (item.Put) {
             const hash =
-              DynamoDb.calculatePutItemHash(item.Put.TableName, item.Put.Item, primaryKeyConfig)
+              DynamoDb.calculatePutItemHash(item.Put.TableName, item.Put.Item, this.getPrimaryKeyConfig())
             if (hash) hashes.push(hash)
           } else if (item.Update || item.Delete) {
             const operation = item.Update ? item.Update : item.Delete
@@ -97,7 +95,7 @@ class DynamoDb extends BaseAwsSdkPlugin {
           for (const operation of operations) {
             if (operation?.PutRequest) {
               const hash =
-                DynamoDb.calculatePutItemHash(tableName, operation.PutRequest.Item, primaryKeyConfig)
+                DynamoDb.calculatePutItemHash(tableName, operation.PutRequest.Item, this.getPrimaryKeyConfig())
               if (hash) hashes.push(hash)
             } else if (operation?.DeleteRequest) {
               const hash = DynamoDb.calculateHashWithKnownKeys(tableName, operation.DeleteRequest.Key)
@@ -111,6 +109,42 @@ class DynamoDb extends BaseAwsSdkPlugin {
 
     for (const hash of hashes) {
       span.addSpanPointer(DYNAMODB_PTR_KIND, SPAN_POINTER_DIRECTION.DOWNSTREAM, hash)
+    }
+  }
+
+  /**
+   * Parses primary key config from the `DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS` env var.
+   * Only runs when needed, and warns when missing or invalid config.
+   * @returns {Object|undefined} Parsed config from env var or undefined if empty/missing/invalid config.
+   */
+  getPrimaryKeyConfig () {
+    if (this.dynamoPrimaryKeyConfig) {
+      // Return cached config if it exists
+      return this.dynamoPrimaryKeyConfig
+    }
+
+    const configStr = this._tracerConfig?.aws?.dynamoDb?.tablePrimaryKeys
+    if (!configStr) {
+      log.warn('Missing DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS env variable')
+      return
+    }
+
+    try {
+      const parsedConfig = JSON.parse(configStr)
+      const config = {}
+      for (const [tableName, primaryKeys] of Object.entries(parsedConfig)) {
+        if (Array.isArray(primaryKeys) && primaryKeys.length > 0 && primaryKeys.length <= 2) {
+          config[tableName] = new Set(primaryKeys)
+        } else {
+          log.warn(`Invalid primary key configuration for table: ${tableName}.` +
+            'Please fix the DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS env var.')
+        }
+      }
+
+      this.dynamoPrimaryKeyConfig = config
+      return config
+    } catch (err) {
+      log.warn('Failed to parse DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS:', err.message)
     }
   }
 
