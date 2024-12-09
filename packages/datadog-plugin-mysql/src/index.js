@@ -20,7 +20,8 @@ class MySQLPlugin extends DatabasePlugin {
         'db.name': payload.conf.database,
         'out.host': payload.conf.host,
         [CLIENT_PORT_KEY]: payload.conf.port
-      }
+      },
+      traceLevel: payload.traceLevel
     })
     payload.sql = this.injectDbmQuery(span, payload.sql, service)
   }

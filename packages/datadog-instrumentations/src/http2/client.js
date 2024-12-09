@@ -3,12 +3,12 @@
 const shimmer = require('../../../datadog-shimmer')
 const { addHook, channel } = require('../helpers/instrument')
 
-const connectChannel = channel('apm:http2:client:connect:start')
-const startChannel = channel('apm:http2:client:request:start')
-const endChannel = channel('apm:http2:client:request:end')
-const asyncStartChannel = channel('apm:http2:client:request:asyncStart')
-const asyncEndChannel = channel('apm:http2:client:request:asyncEnd')
-const errorChannel = channel('apm:http2:client:request:error')
+const connectChannel = channel('apm:http2:client:connect:start:medium')
+const startChannel = channel('apm:http2:client:request:start:high')
+const endChannel = channel('apm:http2:client:request:end:high')
+const asyncStartChannel = channel('apm:http2:client:request:asyncStart:high')
+const asyncEndChannel = channel('apm:http2:client:request:asyncEnd:high')
+const errorChannel = channel('apm:http2:client:request:error:error')
 
 const names = ['http2', 'node:http2']
 

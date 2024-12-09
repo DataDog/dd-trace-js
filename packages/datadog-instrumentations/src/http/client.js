@@ -8,11 +8,11 @@ const shimmer = require('../../../datadog-shimmer')
 
 const log = require('../../../dd-trace/src/log')
 
-const startChannel = channel('apm:http:client:request:start')
-const finishChannel = channel('apm:http:client:request:finish')
-const endChannel = channel('apm:http:client:request:end')
-const asyncStartChannel = channel('apm:http:client:request:asyncStart')
-const errorChannel = channel('apm:http:client:request:error')
+const startChannel = channel('apm:http:client:request:start:high')
+const finishChannel = channel('apm:http:client:request:finish:high')
+const endChannel = channel('apm:http:client:request:end:high')
+const asyncStartChannel = channel('apm:http:client:request:asyncStart:high')
+const errorChannel = channel('apm:http:client:request:error:error')
 
 const names = ['http', 'https', 'node:http', 'node:https']
 

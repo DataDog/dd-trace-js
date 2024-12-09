@@ -94,14 +94,14 @@ class TracingPlugin extends Plugin {
   }
 
   addError (error, span = this.activeSpan) {
-    if (!span._spanContext._tags.error) {
+    if (!span.context()._tags.error) {
       // Errors may be wrapped in a context.
       error = (error && error.error) || error
       span.setTag('error', error || 1)
     }
   }
 
-  startSpan (name, { childOf, kind, meta, metrics, service, resource, type } = {}, enter = true) {
+  startSpan (name, { childOf, kind, meta, metrics, service, resource, type, traceLevel } = {}, enter = true) {
     const store = storage.getStore()
     if (store && childOf === undefined) {
       childOf = store.span
@@ -119,7 +119,8 @@ class TracingPlugin extends Plugin {
         ...metrics
       },
       integrationName: type,
-      links: childOf?._links
+      links: childOf?._links,
+      traceLevel
     })
 
     analyticsSampler.sample(span, this.config.measured)

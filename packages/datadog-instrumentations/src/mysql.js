@@ -8,9 +8,9 @@ const {
 const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connection => {
-  const startCh = channel('apm:mysql:query:start')
-  const finishCh = channel('apm:mysql:query:finish')
-  const errorCh = channel('apm:mysql:query:error')
+  const startCh = channel('apm:mysql:query:start:medium')
+  const finishCh = channel('apm:mysql:query:finish:medium')
+  const errorCh = channel('apm:mysql:query:error:error')
 
   shimmer.wrap(Connection.prototype, 'query', query => function () {
     if (!startCh.hasSubscribers) {
@@ -66,8 +66,8 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
 })
 
 addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
-  const startPoolQueryCh = channel('datadog:mysql:pool:query:start')
-  const finishPoolQueryCh = channel('datadog:mysql:pool:query:finish')
+  const startPoolQueryCh = channel('datadog:mysql:pool:query:start:medium')
+  const finishPoolQueryCh = channel('datadog:mysql:pool:query:finish:medium')
 
   shimmer.wrap(Pool.prototype, 'getConnection', getConnection => function (cb) {
     arguments[0] = AsyncResource.bind(cb)

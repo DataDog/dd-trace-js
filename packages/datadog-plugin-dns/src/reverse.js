@@ -6,14 +6,15 @@ class DNSReversePlugin extends ClientPlugin {
   static get id () { return 'dns' }
   static get operation () { return 'reverse' }
 
-  start ([ip]) {
+  start ([ip, traceLevel]) {
     this.startSpan('dns.reverse', {
       service: this.config.service,
       resource: ip,
       kind: 'client',
       meta: {
         'dns.ip': ip
-      }
+      },
+      traceLevel
     })
   }
 }

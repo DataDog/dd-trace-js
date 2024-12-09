@@ -6,7 +6,7 @@ class DNSLookupServicePlugin extends ClientPlugin {
   static get id () { return 'dns' }
   static get operation () { return 'lookup_service' }
 
-  start ([address, port]) {
+  start ([address, port, traceLevel]) {
     this.startSpan('dns.lookup_service', {
       service: this.config.service,
       resource: `${address}:${port}`,
@@ -16,7 +16,8 @@ class DNSLookupServicePlugin extends ClientPlugin {
       },
       metrics: {
         'dns.port': port
-      }
+      },
+      traceLevel
     })
   }
 }

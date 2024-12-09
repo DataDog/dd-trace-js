@@ -7,7 +7,7 @@ class SetCookiesHeaderInterceptor extends Plugin {
   constructor () {
     super()
     this.cookiesInRequest = new WeakMap()
-    this.addSub('datadog:http:server:response:set-header:finish', ({ name, value, res }) => {
+    this.addSub('datadog:http:server:response:set-header:finish:high', ({ name, value, res }) => {
       if (name.toLowerCase() === 'set-cookie') {
         let allCookies = value
         if (typeof value === 'string') {

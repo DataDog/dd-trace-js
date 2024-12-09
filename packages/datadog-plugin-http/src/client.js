@@ -20,7 +20,7 @@ class HttpClientPlugin extends ClientPlugin {
   static get prefix () { return 'apm:http:client:request' }
 
   bindStart (message) {
-    const { args, http = {} } = message
+    const { args, http = {}, traceLevel } = message
     const store = storage.getStore()
     const options = args.options
     const agent = options.agent || options._defaultAgent || http.globalAgent || {}
@@ -50,7 +50,8 @@ class HttpClientPlugin extends ClientPlugin {
       },
       metrics: {
         [CLIENT_PORT_KEY]: parseInt(options.port)
-      }
+      },
+      traceLevel
     }, false)
 
     // TODO: Figure out a better way to do this for any span.

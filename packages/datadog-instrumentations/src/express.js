@@ -5,7 +5,7 @@ const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 const tracingChannel = require('dc-polyfill').tracingChannel
 
-const handleChannel = channel('apm:express:request:handle')
+const handleChannel = channel('apm:express:request:handle:high')
 
 function wrapHandle (handle) {
   return function handleWithTrace (req, res) {
@@ -19,7 +19,7 @@ function wrapHandle (handle) {
 
 const wrapRouterMethod = createWrapRouterMethod('express')
 
-const responseJsonChannel = channel('datadog:express:response:json:start')
+const responseJsonChannel = channel('datadog:express:response:json:start:high')
 
 function wrapResponseJson (json) {
   return function wrappedJson (obj) {
@@ -36,7 +36,7 @@ function wrapResponseJson (json) {
   }
 }
 
-const responseRenderChannel = tracingChannel('datadog:express:response:render')
+const responseRenderChannel = tracingChannel('datadog:express:response:render:high')
 
 function wrapResponseRender (render) {
   return function wrappedRender (view, options, callback) {
@@ -69,7 +69,7 @@ addHook({ name: 'express', versions: ['>=4'] }, express => {
   return express
 })
 
-const queryParserReadCh = channel('datadog:query:read:finish')
+const queryParserReadCh = channel('datadog:query:read:finish:high')
 
 function publishQueryParsedAndNext (req, res, next) {
   return shimmer.wrapFunction(next, next => function () {
@@ -101,7 +101,7 @@ addHook({
   })
 })
 
-const processParamsStartCh = channel('datadog:express:process_params:start')
+const processParamsStartCh = channel('datadog:express:process_params:start:high')
 function wrapProcessParamsMethod (requestPositionInArguments) {
   return function wrapProcessParams (original) {
     return function wrappedProcessParams () {

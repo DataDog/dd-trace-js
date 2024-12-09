@@ -18,7 +18,7 @@ class UnvalidatedRedirectAnalyzer extends InjectionAnalyzer {
   }
 
   onConfigure () {
-    this.addSub('datadog:http:server:response:set-header:finish', ({ name, value }) => this.analyze(name, value))
+    this.addSub('datadog:http:server:response:set-header:finish:high', ({ name, value }) => this.analyze(name, value))
   }
 
   analyze (name, value) {

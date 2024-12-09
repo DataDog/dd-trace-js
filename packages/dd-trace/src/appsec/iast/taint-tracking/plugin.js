@@ -36,22 +36,22 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     }
 
     this.addSub(
-      { channelName: 'datadog:body-parser:read:finish', tag: HTTP_REQUEST_BODY },
+      { channelName: 'datadog:body-parser:read:finish:high', tag: HTTP_REQUEST_BODY },
       onRequestBody
     )
 
     this.addSub(
-      { channelName: 'datadog:multer:read:finish', tag: HTTP_REQUEST_BODY },
+      { channelName: 'datadog:multer:read:finish:high', tag: HTTP_REQUEST_BODY },
       onRequestBody
     )
 
     this.addSub(
-      { channelName: 'datadog:qs:parse:finish', tag: HTTP_REQUEST_PARAMETER },
+      { channelName: 'datadog:qs:parse:finish:high', tag: HTTP_REQUEST_PARAMETER },
       ({ qs }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, qs)
     )
 
     this.addSub(
-      { channelName: 'apm:express:middleware:next', tag: HTTP_REQUEST_BODY },
+      { channelName: 'apm:express:middleware:next:high', tag: HTTP_REQUEST_BODY },
       ({ req }) => {
         if (req && req.body !== null && typeof req.body === 'object') {
           const iastContext = getIastContext(storage.getStore())
@@ -64,12 +64,12 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     )
 
     this.addSub(
-      { channelName: 'datadog:cookie:parse:finish', tag: [HTTP_REQUEST_COOKIE_VALUE, HTTP_REQUEST_COOKIE_NAME] },
+      { channelName: 'datadog:cookie:parse:finish:high', tag: [HTTP_REQUEST_COOKIE_VALUE, HTTP_REQUEST_COOKIE_NAME] },
       ({ cookies }) => this._cookiesTaintTrackingHandler(cookies)
     )
 
     this.addSub(
-      { channelName: 'datadog:express:process_params:start', tag: HTTP_REQUEST_PATH_PARAM },
+      { channelName: 'datadog:express:process_params:start:high', tag: HTTP_REQUEST_PATH_PARAM },
       ({ req }) => {
         if (req && req.params !== null && typeof req.params === 'object') {
           this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, req, 'params')
@@ -78,7 +78,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     )
 
     this.addSub(
-      { channelName: 'apm:graphql:resolve:start', tag: HTTP_REQUEST_BODY },
+      { channelName: 'apm:graphql:resolve:start:high', tag: HTTP_REQUEST_BODY },
       (data) => {
         const iastContext = getIastContext(storage.getStore())
         const source = data.context?.source
@@ -91,7 +91,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
 
     const urlResultTaintedProperties = ['host', 'origin', 'hostname']
     this.addSub(
-      { channelName: 'datadog:url:parse:finish' },
+      { channelName: 'datadog:url:parse:finish:high' },
       ({ input, base, parsed, isURL }) => {
         const iastContext = getIastContext(storage.getStore())
         let ranges
@@ -115,7 +115,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     )
 
     this.addSub(
-      { channelName: 'datadog:url:getter:finish' },
+      { channelName: 'datadog:url:getter:finish:high' },
       (context) => {
         if (!urlResultTaintedProperties.includes(context.property)) return
 

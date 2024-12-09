@@ -6,11 +6,11 @@ const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 
 function createWrapRouterMethod (name) {
-  const enterChannel = channel(`apm:${name}:middleware:enter`)
-  const exitChannel = channel(`apm:${name}:middleware:exit`)
-  const finishChannel = channel(`apm:${name}:middleware:finish`)
-  const errorChannel = channel(`apm:${name}:middleware:error`)
-  const nextChannel = channel(`apm:${name}:middleware:next`)
+  const enterChannel = channel(`apm:${name}:middleware:enter:medium`)
+  const exitChannel = channel(`apm:${name}:middleware:exit:medium`)
+  const finishChannel = channel(`apm:${name}:middleware:finish:medium`)
+  const errorChannel = channel(`apm:${name}:middleware:error:error`)
+  const nextChannel = channel(`apm:${name}:middleware:next:high`)
 
   const layerMatchers = new WeakMap()
   const regexpCache = Object.create(null)

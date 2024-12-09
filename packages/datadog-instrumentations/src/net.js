@@ -7,15 +7,15 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const startICPCh = channel('apm:net:ipc:start')
-const finishICPCh = channel('apm:net:ipc:finish')
-const errorICPCh = channel('apm:net:ipc:error')
+const startICPCh = channel('apm:net:ipc:start:low')
+const finishICPCh = channel('apm:net:ipc:finish:low')
+const errorICPCh = channel('apm:net:ipc:error:error')
 
-const startTCPCh = channel('apm:net:tcp:start')
-const finishTCPCh = channel('apm:net:tcp:finish')
-const errorTCPCh = channel('apm:net:tcp:error')
+const startTCPCh = channel('apm:net:tcp:start:low')
+const finishTCPCh = channel('apm:net:tcp:finish:low')
+const errorTCPCh = channel('apm:net:tcp:error:error')
 
-const connectionCh = channel('apm:net:tcp:connection')
+const connectionCh = channel('apm:net:tcp:connection:low')
 
 const names = ['net', 'node:net']
 

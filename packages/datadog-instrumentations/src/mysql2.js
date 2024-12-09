@@ -9,10 +9,10 @@ const shimmer = require('../../datadog-shimmer')
 const semver = require('semver')
 
 addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, (Connection, version) => {
-  const startCh = channel('apm:mysql2:query:start')
-  const finishCh = channel('apm:mysql2:query:finish')
-  const errorCh = channel('apm:mysql2:query:error')
-  const startOuterQueryCh = channel('datadog:mysql2:outerquery:start')
+  const startCh = channel('apm:mysql2:query:start:medium')
+  const finishCh = channel('apm:mysql2:query:finish:medium')
+  const errorCh = channel('apm:mysql2:query:error:error')
+  const startOuterQueryCh = channel('datadog:mysql2:outerquery:start:medium')
   const shouldEmitEndAfterQueryAbort = semver.intersects(version, '>=1.3.3')
 
   shimmer.wrap(Connection.prototype, 'addCommand', addCommand => function (cmd) {
@@ -154,7 +154,7 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, (Conne
 })
 
 addHook({ name: 'mysql2', file: 'lib/pool.js', versions: ['>=1'] }, (Pool, version) => {
-  const startOuterQueryCh = channel('datadog:mysql2:outerquery:start')
+  const startOuterQueryCh = channel('datadog:mysql2:outerquery:start:medium')
   const shouldEmitEndAfterQueryAbort = semver.intersects(version, '>=1.3.3')
 
   shimmer.wrap(Pool.prototype, 'query', query => function (sql, values, cb) {
@@ -225,7 +225,7 @@ addHook({ name: 'mysql2', file: 'lib/pool.js', versions: ['>=1'] }, (Pool, versi
 
 // PoolNamespace.prototype.query does not exist in mysql2<2.3.0
 addHook({ name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['>=2.3.0'] }, PoolCluster => {
-  const startOuterQueryCh = channel('datadog:mysql2:outerquery:start')
+  const startOuterQueryCh = channel('datadog:mysql2:outerquery:start:medium')
   const wrappedPoolNamespaces = new WeakSet()
 
   shimmer.wrap(PoolCluster.prototype, 'of', of => function () {

@@ -17,21 +17,23 @@ class RouterPlugin extends WebPlugin {
     this._storeStack = []
     this._contexts = new WeakMap()
 
-    this.addSub(`apm:${this.constructor.id}:middleware:enter`, ({ req, name, route }) => {
+    this.addSub(`apm:${this.constructor.id}:middleware:enter`, ({ req, name, route, traceLevel }) => {
       const childOf = this._getActive(req) || this._getStoreSpan()
 
       if (!childOf) return
 
-      const span = this._getMiddlewareSpan(name, childOf)
+      const span = this._getMiddlewareSpan(name, childOf, traceLevel)
       const context = this._createContext(req, route, childOf)
 
       if (childOf !== span) {
         context.middleware.push(span)
       }
 
-      const store = storage.getStore()
-      this._storeStack.push(store)
-      this.enter(span, store)
+      if (span.constructor.name !== 'NoopSpan') {
+        const store = storage.getStore()
+        this._storeStack.push(store)
+        this.enter(span, store)
+      }
 
       web.patch(req)
       web.setRoute(req, context.route)
@@ -90,6 +92,9 @@ class RouterPlugin extends WebPlugin {
     if (!context) return
     if (context.middleware.length === 0) return context.span
 
+    // if the span is no-op then use the OG request span
+    if (context.middleware[context.middleware.length - 1].constructor.name === 'NoopSpan') return context.span
+
     return context.middleware[context.middleware.length - 1]
   }
 
@@ -99,13 +104,14 @@ class RouterPlugin extends WebPlugin {
     return store && store.span
   }
 
-  _getMiddlewareSpan (name, childOf) {
+  _getMiddlewareSpan (name, childOf, traceLevel) {
     if (this.config.middleware === false) {
       return childOf
     }
 
     const span = this.tracer.startSpan(`${this.constructor.id}.middleware`, {
       childOf,
+      traceLevel,
       tags: {
         [COMPONENT]: this.constructor.id,
         'resource.name': name || '<anonymous>'

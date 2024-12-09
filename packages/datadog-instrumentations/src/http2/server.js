@@ -10,9 +10,9 @@ const {
 } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
-const startServerCh = channel('apm:http2:server:request:start')
-const errorServerCh = channel('apm:http2:server:request:error')
-const finishServerCh = channel('apm:http2:server:request:finish')
+const startServerCh = channel('apm:http2:server:request:start:high')
+const errorServerCh = channel('apm:http2:server:request:error:error')
+const finishServerCh = channel('apm:http2:server:request:finish:high')
 
 const names = ['http2', 'node:http2']
 

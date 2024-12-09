@@ -73,21 +73,73 @@ module.exports = class Plugin {
   }
 
   addSub (channelName, handler) {
-    const plugin = this
-    const wrappedHandler = function () {
-      try {
-        return handler.apply(this, arguments)
-      } catch (e) {
-        logger.error('Error in plugin handler:', e)
-        logger.info('Disabling plugin:', plugin.id)
-        plugin.configure(false)
-      }
+    const levels = ['low', 'medium', 'high', 'error']
+    const inputLevel = 'low'
+
+    const startIndex = levels.indexOf(inputLevel)
+    if (startIndex === -1) {
+      console.error(`Invalid level: ${inputLevel}`)
+      return
     }
-    this._subscriptions.push(new Subscription(channelName, wrappedHandler))
+
+    if (channelName.includes('mysql')) {
+      // pass
+      console.log(channelName)
+    }
+
+    const plugin = this
+
+    // Loop through levels stsarting from the specified level and above
+    for (let i = startIndex; i < levels.length; i++) {
+      const level = levels[i]
+      const channel = `${channelName}:${level}`
+
+      const wrappedHandler = function () {
+        try {
+          const traceLevel = level
+          if (arguments && arguments[0] && arguments[0] instanceof Array) {
+            arguments[0].push(traceLevel)
+          } else if (arguments && arguments[0] && arguments[0] instanceof Object) {
+            arguments[0].traceLevel = traceLevel
+          } else {
+            arguments[0] = [{ traceLevel }]
+          }
+
+          return handler.apply(this, arguments)
+        } catch (e) {
+          logger.error('Error in plugin handler:', e)
+          logger.info('Disabling plugin:', plugin.id)
+          plugin.configure(false)
+        }
+      }
+
+      this._subscriptions.push(new Subscription(channel, wrappedHandler))
+    }
   }
 
   addBind (channelName, transform) {
-    this._bindings.push(new StoreBinding(channelName, transform))
+    const levels = ['low', 'medium', 'high', 'error']
+    const inputLevel = 'low'
+
+    const startIndex = levels.indexOf(inputLevel)
+    if (startIndex === -1) {
+      console.error(`Invalid level: ${inputLevel}`)
+      return
+    }
+
+    // Loop through levels stsarting from the specified level and above
+    for (let i = startIndex; i < levels.length; i++) {
+      const level = levels[i]
+      const channel = `${channelName}:${level}`
+
+      const wrappedTransform = function () {
+        const traceLevel = level
+        arguments[0].traceLevel = traceLevel
+        return transform.apply(this, arguments)
+      }
+
+      this._bindings.push(new StoreBinding(channel, wrappedTransform))
+    }
   }
 
   addError (error) {

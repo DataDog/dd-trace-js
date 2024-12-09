@@ -9,7 +9,7 @@ class SSRFAnalyzer extends InjectionAnalyzer {
   }
 
   onConfigure () {
-    this.addSub('apm:http:client:request:start', ({ args }) => {
+    this.addSub('apm:http:client:request:start:high', ({ args }) => {
       if (typeof args.originalUrl === 'string') {
         this.analyze(args.originalUrl)
       } else if (args.options && args.options.host) {
@@ -17,7 +17,7 @@ class SSRFAnalyzer extends InjectionAnalyzer {
       }
     })
 
-    this.addSub('apm:http2:client:connect:start', ({ authority }) => {
+    this.addSub('apm:http2:client:connect:start:high', ({ authority }) => {
       if (authority && typeof authority === 'string') {
         this.analyze(authority)
       }

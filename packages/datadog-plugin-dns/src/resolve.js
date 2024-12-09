@@ -6,7 +6,7 @@ class DNSResolvePlugin extends ClientPlugin {
   static get id () { return 'dns' }
   static get operation () { return 'resolve' }
 
-  start ([hostname, maybeType]) {
+  start ([hostname, maybeType, traceLevel]) {
     const rrtype = typeof maybeType === 'string' ? maybeType : 'A'
 
     this.startSpan('dns.resolve', {
@@ -16,7 +16,8 @@ class DNSResolvePlugin extends ClientPlugin {
       meta: {
         'dns.hostname': hostname,
         'dns.rrtype': rrtype
-      }
+      },
+      traceLevel
     })
   }
 }

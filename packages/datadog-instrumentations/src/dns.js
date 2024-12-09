@@ -48,9 +48,9 @@ function patchResolveShorthands (prototype) {
 }
 
 function wrap (prefix, fn, expectedArgs, rrtype) {
-  const startCh = channel(prefix + ':start')
-  const finishCh = channel(prefix + ':finish')
-  const errorCh = channel(prefix + ':error')
+  const startCh = channel(prefix + ':start:low')
+  const finishCh = channel(prefix + ':finish:low')
+  const errorCh = channel(prefix + ':error:error')
 
   const wrapped = function () {
     const cb = AsyncResource.bind(arguments[arguments.length - 1])

@@ -89,7 +89,7 @@ const web = {
     analyticsSampler.sample(span, config.measured, true)
   },
 
-  startSpan (tracer, config, req, res, name) {
+  startSpan (tracer, config, req, res, name, traceLevel) {
     const context = this.patch(req)
 
     let span
@@ -98,7 +98,7 @@ const web = {
       context.span.context()._name = name
       span = context.span
     } else {
-      span = web.startChildSpan(tracer, name, req)
+      span = web.startChildSpan(tracer, name, req, traceLevel)
     }
 
     context.tracer = tracer
@@ -254,7 +254,7 @@ const web = {
   },
 
   // Extract the parent span from the headers and start a new span as its child
-  startChildSpan (tracer, name, req) {
+  startChildSpan (tracer, name, req, traceLevel) {
     const headers = req.headers
     const context = contexts.get(req)
     let childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
@@ -267,7 +267,7 @@ const web = {
       }
     }
 
-    const span = tracer.startSpan(name, { childOf, links: childOf?._links })
+    const span = tracer.startSpan(name, { childOf, links: childOf?._links, traceLevel })
 
     return span
   },

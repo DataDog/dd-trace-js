@@ -23,7 +23,7 @@ class MissingHeaderAnalyzer extends Analyzer {
 
   onConfigure () {
     this.addSub({
-      channelName: 'datadog:iast:response-end',
+      channelName: 'datadog:iast:response-end:high',
       moduleName: 'http'
     }, (data) => this.analyze(data))
   }

@@ -7,9 +7,9 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const startCh = channel('apm:redis:command:start')
-const finishCh = channel('apm:redis:command:finish')
-const errorCh = channel('apm:redis:command:error')
+const startCh = channel('apm:redis:command:start:medium')
+const finishCh = channel('apm:redis:command:finish:medium')
+const errorCh = channel('apm:redis:command:error:error')
 
 let createClientUrl
 

@@ -20,7 +20,7 @@ class NetTCPPlugin extends ClientPlugin {
     })
   }
 
-  start ({ options }) {
+  start ({ options, traceLevel }) {
     const host = options.host || 'localhost'
     const port = options.port || 0
     const family = options.family || 4
@@ -39,7 +39,8 @@ class NetTCPPlugin extends ClientPlugin {
         'tcp.remote.port': port,
         'tcp.local.port': 0,
         [CLIENT_PORT_KEY]: port
-      }
+      },
+      traceLevel
     })
   }
 }

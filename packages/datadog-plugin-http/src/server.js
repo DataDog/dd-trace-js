@@ -21,7 +21,7 @@ class HttpServerPlugin extends ServerPlugin {
     this.addSub(`apm:${this.constructor.id}:server:${this.operation}:${eventName}`, handler)
   }
 
-  start ({ req, res, abortController }) {
+  start ({ req, res, abortController, traceLevel }) {
     const store = storage.getStore()
     const span = web.startSpan(
       this.tracer,
@@ -31,7 +31,8 @@ class HttpServerPlugin extends ServerPlugin {
       },
       req,
       res,
-      this.operationName()
+      this.operationName(),
+      traceLevel
     )
     span.setTag(COMPONENT, this.constructor.id)
 

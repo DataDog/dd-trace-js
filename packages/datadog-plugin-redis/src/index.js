@@ -8,7 +8,7 @@ class RedisPlugin extends CachePlugin {
   static get id () { return 'redis' }
   static get system () { return 'redis' }
 
-  start ({ db, command, args, connectionOptions = {}, connectionName }) {
+  start ({ db, command, args, connectionOptions = {}, connectionName, traceLevel }) {
     const resource = command
     const normalizedCommand = command.toUpperCase()
     if (!this.config.filter(normalizedCommand)) return this.skip()
@@ -23,7 +23,8 @@ class RedisPlugin extends CachePlugin {
         'redis.raw_command': formatCommand(normalizedCommand, args),
         'out.host': connectionOptions.host,
         [CLIENT_PORT_KEY]: connectionOptions.port
-      }
+      },
+      traceLevel
     })
   }
 
