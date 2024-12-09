@@ -21,7 +21,7 @@ function Hook (modules, hookOptions, onrequire) {
 
   this._patched = Object.create(null)
 
-  const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
+  const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion, iitm = false) => {
     const parts = [moduleBaseDir, moduleName].filter(v => v)
     const filename = path.join(...parts)
 
@@ -29,7 +29,7 @@ function Hook (modules, hookOptions, onrequire) {
 
     this._patched[filename] = true
 
-    if (moduleExports?.default) {
+    if (iitm && moduleExports?.default) {
       moduleExports.default = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion)
     }
 
@@ -42,7 +42,7 @@ function Hook (modules, hookOptions, onrequire) {
     // modules and not ESM. In the meantime, all the modules we instrument are
     // CommonJS modules for which the default export is always moved to
     // `default` anyway.
-    return safeHook(moduleExports, moduleName, moduleBaseDir)
+    return safeHook(moduleExports, moduleName, moduleBaseDir, undefined, true)
   })
 }
 
