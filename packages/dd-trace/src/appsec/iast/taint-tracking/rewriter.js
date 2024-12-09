@@ -1,6 +1,8 @@
 'use strict'
 
 const Module = require('module')
+const { pathToFileURL } = require('url')
+const { MessageChannel } = require('worker_threads');
 const shimmer = require('../../../../../datadog-shimmer')
 const { isPrivateModule, isNotLibraryFile } = require('./filter')
 const { csiMethods } = require('./csi-methods')
@@ -8,6 +10,8 @@ const { getName } = require('../telemetry/verbosity')
 const { getRewriteFunction } = require('./rewriter-telemetry')
 const dc = require('dc-polyfill')
 const log = require('../../../log')
+const path = require('path')
+const { isMainThread } = require('worker_threads')
 
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')
 let rewriter
@@ -104,6 +108,27 @@ function getCompileMethodFn (compileMethod) {
   }
 }
 
+function rewriteForESM (content, filename) {
+  const rewriteFn = getRewriteFunction(rewriter)
+  try {
+    if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
+      const rewritten = rewriteFn(content, filename)
+
+      if (rewritten?.literalsResult && hardcodedSecretCh.hasSubscribers) {
+        hardcodedSecretCh.publish(rewritten.literalsResult)
+      }
+
+      if (rewritten?.content) {
+        return rewritten.content
+      }
+    }
+  } catch (e) {
+    log.error('[ASM] Error rewriting file %s', filename, e)
+  }
+
+  return content
+}
+
 function enableRewriter (telemetryVerbosity) {
   try {
     const rewriter = getRewriter(telemetryVerbosity)
@@ -114,8 +139,28 @@ function enableRewriter (telemetryVerbosity) {
       }
       shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
     }
+    enableEsmRewriter()
   } catch (e) {
     log.error('[ASM] Error enabling TaintTracking Rewriter', e)
+  }
+}
+
+function enableEsmRewriter (telemetryVerbosity) {
+  if (isMainThread && Module.register) {
+    const { port1, port2 } = new MessageChannel();
+    port1.on('message', (message) => {
+      message.source = rewriteForESM(message.source, message.url)
+      port1.postMessage(message)
+    })
+    const entryPoint = path.resolve(process.argv[1])
+
+    process.nextTick(() => {
+      Module.register('./rewriter-esm.mjs', {
+        parentURL: pathToFileURL(__filename),
+        data: { port2, entryPoint },
+        transferList: [port2]
+      })
+    })
   }
 }
 
