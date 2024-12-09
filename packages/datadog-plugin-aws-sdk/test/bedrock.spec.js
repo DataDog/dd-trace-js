@@ -74,7 +74,7 @@ describe.only('Plugin', () => {
           }
         }
 
-        models.forEach(model => {
+        Object.values(models).forEach(model => {
           it(`should invoke model for ${model}`, done => {
             const params = {
               modelId: `${model.ModelId}`,
