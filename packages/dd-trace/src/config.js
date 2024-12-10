@@ -594,6 +594,7 @@ class Config {
       DD_DATA_STREAMS_ENABLED,
       DD_DBM_PROPAGATION_MODE,
       DD_DOGSTATSD_HOSTNAME,
+      DD_DOGSTATSD_HOST,
       DD_DOGSTATSD_PORT,
       DD_DYNAMIC_INSTRUMENTATION_ENABLED,
       DD_ENV,
@@ -740,6 +741,7 @@ class Config {
     this._setBoolean(env, 'codeOriginForSpans.enabled', DD_CODE_ORIGIN_FOR_SPANS_ENABLED)
     this._setString(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
     this._setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOSTNAME)
+    if (DD_DOGSTATSD_HOST) this._setString(env, 'dogstatsd.hostname', DD_DOPGSTATSD_HOST)
     this._setString(env, 'dogstatsd.port', DD_DOGSTATSD_PORT)
     this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
     this._setBoolean(env, 'dynamicInstrumentationEnabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
