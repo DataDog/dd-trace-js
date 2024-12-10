@@ -15,6 +15,7 @@ const {
   nextBodyParsed,
   nextQueryParsed,
   expressProcessParams,
+  routerParam,
   responseBody,
   responseWriteHead,
   responseSetHeader
@@ -178,6 +179,7 @@ describe('AppSec Index', function () {
       expect(nextBodyParsed.hasSubscribers).to.be.false
       expect(nextQueryParsed.hasSubscribers).to.be.false
       expect(expressProcessParams.hasSubscribers).to.be.false
+      expect(routerParam.hasSubscribers).to.be.false
       expect(responseWriteHead.hasSubscribers).to.be.false
       expect(responseSetHeader.hasSubscribers).to.be.false
 
@@ -190,6 +192,7 @@ describe('AppSec Index', function () {
       expect(nextBodyParsed.hasSubscribers).to.be.true
       expect(nextQueryParsed.hasSubscribers).to.be.true
       expect(expressProcessParams.hasSubscribers).to.be.true
+      expect(routerParam.hasSubscribers).to.be.true
       expect(responseWriteHead.hasSubscribers).to.be.true
       expect(responseSetHeader.hasSubscribers).to.be.true
     })
@@ -271,6 +274,7 @@ describe('AppSec Index', function () {
       expect(nextBodyParsed.hasSubscribers).to.be.false
       expect(nextQueryParsed.hasSubscribers).to.be.false
       expect(expressProcessParams.hasSubscribers).to.be.false
+      expect(routerParam.hasSubscribers).to.be.false
       expect(responseWriteHead.hasSubscribers).to.be.false
       expect(responseSetHeader.hasSubscribers).to.be.false
     })
