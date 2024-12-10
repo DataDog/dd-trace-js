@@ -29,7 +29,7 @@ addHook({ name: 'sequelize', versions: ['>=4'] }, Sequelize => {
 
       function onFinish (result) {
         const type = options?.type || 'RAW'
-        if (type === 'RAW' && result && result.length > 1) {
+        if (type === 'RAW' && result?.length > 1) {
           result = result[0]
         }
 
