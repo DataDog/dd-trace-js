@@ -44,7 +44,7 @@ rcPort.on('message', async ({ action, conf: probe, ackId }) => {
     ackError(err, probe)
   }
 })
-rcPort.on('messageerror', (err) => log.error(err))
+rcPort.on('messageerror', (err) => log.error('Debugger RC message error', err))
 
 async function start () {
   sessionStarted = true

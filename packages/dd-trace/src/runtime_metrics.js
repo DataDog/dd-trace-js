@@ -32,7 +32,7 @@ module.exports = {
       nativeMetrics = require('@datadog/native-metrics')
       nativeMetrics.start()
     } catch (e) {
-      log.error(e)
+      log.error('Error starting native metrics', e)
       nativeMetrics = null
     }
 

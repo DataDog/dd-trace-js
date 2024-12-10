@@ -43,9 +43,18 @@ describe('telemetry log collector', () => {
       expect(logCollector.add({ message: 'Error 1', level: 'DEBUG', stack_trace: `stack 1\n${ddFrame}` })).to.be.true
     })
 
+    it('should not store logs with empty stack and \'Generic Error\' message', () => {
+      expect(logCollector.add({
+        message: 'Generic Error',
+        level: 'ERROR',
+        stack_trace: 'stack 1\n/not/a/dd/frame'
+      })
+      ).to.be.false
+    })
+
     it('should include original message and dd frames', () => {
       const ddFrame = `at T (${ddBasePath}packages/dd-trace/test/telemetry/logs/log_collector.spec.js:29:21)`
-      const stack = new Error('Error 1')
+      const stack = new TypeError('Error 1')
         .stack.replace(`Error 1${EOL}`, `Error 1${EOL}${ddFrame}${EOL}`)
 
       const ddFrames = stack
@@ -54,28 +63,41 @@ describe('telemetry log collector', () => {
         .map(line => line.replace(ddBasePath, ''))
         .join(EOL)
 
-      expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: stack })).to.be.true
+      expect(logCollector.add({
+        message: 'Error 1',
+        level: 'ERROR',
+        stack_trace: stack,
+        errorType: 'TypeError'
+      })).to.be.true
 
       expect(logCollector.hasEntry({
         message: 'Error 1',
         level: 'ERROR',
-        stack_trace: `Error: Error 1${EOL}${ddFrames}`
+        stack_trace: `TypeError: Error 1${EOL}${ddFrames}`
       })).to.be.true
     })
 
-    it('should include original message if first frame is not a dd frame', () => {
+    it('should redact stack message if first frame is not a dd frame', () => {
       const thirdPartyFrame = `at callFn (/this/is/not/a/dd/frame/runnable.js:366:21)
         at T (${ddBasePath}packages/dd-trace/test/telemetry/logs/log_collector.spec.js:29:21)`
-      const stack = new Error('Error 1')
+      const stack = new TypeError('Error 1')
         .stack.replace(`Error 1${EOL}`, `Error 1${EOL}${thirdPartyFrame}${EOL}`)
 
-      const ddFrames = stack
-        .split(EOL)
-        .filter(line => line.includes(ddBasePath))
-        .map(line => line.replace(ddBasePath, ''))
-        .join(EOL)
+      const ddFrames = [
+        'TypeError: redacted',
+        ...stack
+          .split(EOL)
+          .filter(line => line.includes(ddBasePath))
+          .map(line => line.replace(ddBasePath, ''))
+      ].join(EOL)
 
-      expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: stack })).to.be.true
+      expect(logCollector.add({
+        message: 'Error 1',
+        level: 'ERROR',
+        stack_trace: stack,
+        errorType: 'TypeError'
+      })).to.be.true
+
       expect(logCollector.hasEntry({
         message: 'Error 1',
         level: 'ERROR',

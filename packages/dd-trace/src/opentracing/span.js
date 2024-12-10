@@ -214,7 +214,7 @@ class DatadogSpan {
 
     if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true') {
       if (!this._spanContext._tags['service.name']) {
-        log.error(`Finishing invalid span: ${this}`)
+        log.error('Finishing invalid span: %s', this)
       }
     }
 

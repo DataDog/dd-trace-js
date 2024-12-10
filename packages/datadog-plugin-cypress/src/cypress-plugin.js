@@ -223,7 +223,7 @@ class CypressPlugin {
     this.libraryConfigurationPromise = getLibraryConfiguration(this.tracer, this.testConfiguration)
       .then((libraryConfigurationResponse) => {
         if (libraryConfigurationResponse.err) {
-          log.error(libraryConfigurationResponse.err)
+          log.error('Cypress plugin library config response error', libraryConfigurationResponse.err)
         } else {
           const {
             libraryConfig: {
@@ -360,7 +360,7 @@ class CypressPlugin {
         this.testConfiguration
       )
       if (knownTestsResponse.err) {
-        log.error(knownTestsResponse.err)
+        log.error('Cypress known tests response error', knownTestsResponse.err)
         this.isEarlyFlakeDetectionEnabled = false
       } else {
         // We use TEST_FRAMEWORK_NAME for the name of the module
@@ -374,7 +374,7 @@ class CypressPlugin {
         this.testConfiguration
       )
       if (skippableTestsResponse.err) {
-        log.error(skippableTestsResponse.err)
+        log.error('Cypress skippable tests response error', skippableTestsResponse.err)
       } else {
         const { skippableTests, correlationId } = skippableTestsResponse
         this.testsToSkip = skippableTests || []
