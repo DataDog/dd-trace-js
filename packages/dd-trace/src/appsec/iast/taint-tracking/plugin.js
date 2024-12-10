@@ -28,6 +28,12 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   }
 
   onConfigure () {
+    let rowsToTaint = this.iastConfig?.dbRowsToTaint
+    if (rowsToTaint !== 'number') {
+      rowsToTaint = 1
+    }
+    this._rowsToTaint = rowsToTaint
+
     const onRequestBody = ({ req }) => {
       const iastContext = getIastContext(storage.getStore())
       if (iastContext && iastContext.body !== req.body) {
@@ -199,15 +205,10 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   _taintDatabaseResult (result, dbOrigin, iastContext = getIastContext(storage.getStore()), name) {
     if (!iastContext) return result
 
-    let rowsToTaint = this.iastConfig?.dbRowsToTaint
-    if (typeof rowsToTaint !== 'number') {
-      rowsToTaint = 1
-    }
-
-    if (rowsToTaint === 0) return
+    if (this._rowsToTaint === 0) return
 
     if (Array.isArray(result)) {
-      for (let i = 0; i < result.length && i < rowsToTaint; i++) {
+      for (let i = 0; i < result.length && i < this._rowsToTaint; i++) {
         const nextName = name ? `${name}.${i}` : '' + i
         result[i] = this._taintDatabaseResult(result[i], dbOrigin, iastContext, nextName)
       }
@@ -215,10 +216,10 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       if (dbOrigin === 'sequelize' && result.dataValues) {
         result.dataValues = this._taintDatabaseResult(result.dataValues, dbOrigin, iastContext, name)
       } else {
-        Object.keys(result).forEach(key => {
+        for (const key in result) {
           const nextName = name ? `${name}.${key}` : key
           result[key] = this._taintDatabaseResult(result[key], dbOrigin, iastContext, nextName)
-        })
+        }
       }
     } else if (typeof result === 'string') {
       result = newTaintedString(iastContext, result, name, SQL_ROW_VALUE)
