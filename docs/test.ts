@@ -111,7 +111,7 @@ tracer.init({
     blockedTemplateJson: './blocked.json',
     blockedTemplateGraphql: './blockedgraphql.json',
     eventTracking: {
-      mode: 'safe'
+      mode: 'anon'
     },
     apiSecurity: {
       enabled: true,

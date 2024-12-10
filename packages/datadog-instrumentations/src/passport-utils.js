@@ -5,33 +5,57 @@ const { channel } = require('./helpers/instrument')
 
 const passportVerifyChannel = channel('datadog:passport:verify:finish')
 
-function wrapVerifiedAndPublish (username, password, verified, type) {
-  if (!passportVerifyChannel.hasSubscribers) {
-    return verified
-  }
+function wrapVerifiedAndPublish (framework, username, verified) {
+  return shimmer.wrapFunction(verified, function wrapVerified (verified) {
+    return function wrappedVerified (err, user) {
+      // if there is an error, it's neither an auth success nor a failure
+      if (!err) {
+        const abortController = new AbortController()
 
-  // eslint-disable-next-line n/handle-callback-err
-  return shimmer.wrapFunction(verified, verified => function (err, user, info) {
-    const credentials = { type, username }
-    passportVerifyChannel.publish({ credentials, user })
-    return verified.apply(this, arguments)
+        passportVerifyChannel.publish({ framework, login: username, user, success: !!user, abortController })
+
+        if (abortController.signal.aborted) return
+      }
+
+      return verified.apply(this, arguments)
+    }
   })
 }
 
-function wrapVerify (verify, passReq, type) {
-  if (passReq) {
-    return function (req, username, password, verified) {
-      arguments[3] = wrapVerifiedAndPublish(username, password, verified, type)
-      return verify.apply(this, arguments)
+function wrapVerify (verify) {
+  return function wrappedVerify (req, username, password, verified) {
+    if (passportVerifyChannel.hasSubscribers) {
+      const framework = `passport-${this.name}`
+
+      // replace the callback with our own wrapper to get the result
+      if (this._passReqToCallback) {
+        arguments[3] = wrapVerifiedAndPublish(framework, arguments[1], arguments[3])
+      } else {
+        arguments[2] = wrapVerifiedAndPublish(framework, arguments[0], arguments[2])
+      }
     }
-  } else {
-    return function (username, password, verified) {
-      arguments[2] = wrapVerifiedAndPublish(username, password, verified, type)
-      return verify.apply(this, arguments)
-    }
+
+    return verify.apply(this, arguments)
   }
 }
 
+function wrapStrategy (Strategy) {
+  return function wrappedStrategy () {
+    // verify function can be either the first or second argument
+    if (typeof arguments[0] === 'function') {
+      arguments[0] = wrapVerify(arguments[0])
+    } else {
+      arguments[1] = wrapVerify(arguments[1])
+    }
+
+    return Strategy.apply(this, arguments)
+  }
+}
+
+function strategyHook (Strategy) {
+  return shimmer.wrapFunction(Strategy, wrapStrategy)
+}
+
 module.exports = {
-  wrapVerify
+  strategyHook
 }

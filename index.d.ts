@@ -655,12 +655,24 @@ declare namespace tracer {
        */
       eventTracking?: {
         /**
-         * Controls the automated user event tracking mode. Possible values are disabled, safe and extended.
-         * On safe mode, any detected Personally Identifiable Information (PII) about the user will be redacted from the event.
-         * On extended mode, no redaction will take place.
-         * @default 'safe'
+         * Controls the automated user tracking mode for user IDs and logins collections. Possible values:
+         * *  'anonymous': will hash user IDs and user logins before collecting them
+         * *  'anon': alias for 'anonymous'
+         * *  'safe': deprecated alias for 'anonymous'
+         * 
+         * *  'identification': will collect user IDs and logins without redaction
+         * *  'ident': alias for 'identification'
+         * *  'extended': deprecated alias for 'identification'
+         * 
+         * *  'disabled': will not collect user IDs and logins
+         * 
+         * Unknown values will be considered as 'disabled'
+         * @default 'identification'
          */
-        mode?: 'safe' | 'extended' | 'disabled'
+        mode?:
+          'anonymous' | 'anon' | 'safe' |
+          'identification' | 'ident' | 'extended' |
+          'disabled'
       },
       /**
        * Configuration for Api Security
