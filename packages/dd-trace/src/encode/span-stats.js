@@ -22,42 +22,12 @@ function truncate (value, maxLength, suffix = '') {
 }
 
 class SpanStatsEncoder extends AgentEncoder {
-  _encodeBool (bytes, value) {
-    this._encodeByte(bytes, value ? 0xc3 : 0xc2)
-  }
-
   makePayload () {
     const traceSize = this._traceBytes.length
     const buffer = Buffer.allocUnsafe(traceSize)
     this._traceBytes.copy(buffer, 0, traceSize)
     this._reset()
     return buffer
-  }
-
-  _encodeMapPrefix (bytes, length) {
-    const offset = bytes.length
-
-    bytes.reserve(1)
-    bytes.length += 1
-
-    bytes.buffer[offset] = 0x80 + length
-  }
-
-  _encodeBuffer (bytes, buffer) {
-    const length = buffer.length
-    const offset = bytes.length
-
-    bytes.reserve(5)
-    bytes.length += 5
-
-    bytes.buffer[offset] = 0xc6
-    bytes.buffer[offset + 1] = length >> 24
-    bytes.buffer[offset + 2] = length >> 16
-    bytes.buffer[offset + 3] = length >> 8
-    bytes.buffer[offset + 4] = length
-
-    buffer.copy(bytes.buffer, offset + 5)
-    bytes.length += length
   }
 
   _encodeStat (bytes, stat) {
