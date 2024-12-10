@@ -1,19 +1,59 @@
 const { generatePointerHash, encodeValue, extractPrimaryKeys } = require('../src/util')
 
 describe('generatePointerHash', () => {
-  it('should generate a valid hash for a basic S3 object', () => {
-    const hash = generatePointerHash(['some-bucket', 'some-key.data', 'ab12ef34'])
-    expect(hash).to.equal('e721375466d4116ab551213fdea08413')
+  describe('should generate a valid hash for S3 object with', () => {
+    it('basic values', () => {
+      const hash = generatePointerHash(['some-bucket', 'some-key.data', 'ab12ef34'])
+      expect(hash).to.equal('e721375466d4116ab551213fdea08413')
+    })
+
+    it('non-ascii key', () => {
+      const hash = generatePointerHash(['some-bucket', 'some-key.你好', 'ab12ef34'])
+      expect(hash).to.equal('d1333a04b9928ab462b5c6cadfa401f4')
+    })
+
+    it('multipart-upload', () => {
+      const hash = generatePointerHash(['some-bucket', 'some-key.data', 'ab12ef34-5'])
+      expect(hash).to.equal('2b90dffc37ebc7bc610152c3dc72af9f')
+    })
   })
 
-  it('should generate a valid hash for an S3 object with a non-ascii key', () => {
-    const hash1 = generatePointerHash(['some-bucket', 'some-key.你好', 'ab12ef34'])
-    expect(hash1).to.equal('d1333a04b9928ab462b5c6cadfa401f4')
-  })
+  describe('should generate a valid hash for DynamoDB item with', () => {
+    it('one string primary key', () => {
+      const hash = generatePointerHash(['some-table', 'some-key', 'some-value', '', ''])
+      expect(hash).to.equal('7f1aee721472bcb48701d45c7c7f7821')
+    })
 
-  it('should generate a valid hash for multipart-uploaded S3 object', () => {
-    const hash1 = generatePointerHash(['some-bucket', 'some-key.data', 'ab12ef34-5'])
-    expect(hash1).to.equal('2b90dffc37ebc7bc610152c3dc72af9f')
+    it('one buffered binary primary key', () => {
+      const hash = generatePointerHash(['some-table', 'some-key', Buffer.from('some-value'), '', ''])
+      expect(hash).to.equal('7f1aee721472bcb48701d45c7c7f7821')
+    })
+
+    it('one number primary key', () => {
+      const hash = generatePointerHash(['some-table', 'some-key', '123.456', '', ''])
+      expect(hash).to.equal('434a6dba3997ce4dbbadc98d87a0cc24')
+    })
+
+    it('one buffered number primary key', () => {
+      const hash = generatePointerHash(['some-table', 'some-key', Buffer.from('123.456'), '', ''])
+      expect(hash).to.equal('434a6dba3997ce4dbbadc98d87a0cc24')
+    })
+
+    it('string and number primary key', () => {
+      // sort primary keys lexicographically
+      const hash = generatePointerHash(['some-table', 'other-key', '123', 'some-key', 'some-value'])
+      expect(hash).to.equal('7aa1b80b0e49bd2078a5453399f4dd67')
+    })
+
+    it('buffered string and number primary key', () => {
+      const hash = generatePointerHash([
+        'some-table',
+        'other-key',
+        Buffer.from('123'),
+        'some-key', Buffer.from('some-value')
+      ])
+      expect(hash).to.equal('7aa1b80b0e49bd2078a5453399f4dd67')
+    })
   })
 })
 
