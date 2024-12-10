@@ -280,7 +280,11 @@ describe('IAST Taint tracking plugin', () => {
 
     describe('taint database sources', () => {
       it('Should not taint if config is set to 0', () => {
-        taintTrackingPlugin.iastConfig.dbRowsToTaint = 0
+        taintTrackingPlugin.disable()
+        const config = new Config()
+        config.dbRowsToTaint = 0
+        taintTrackingPlugin.enable(config)
+
         const result = [
           {
             id: 1,
@@ -379,7 +383,10 @@ describe('IAST Taint tracking plugin', () => {
 
       describe('with config set to 2', () => {
         beforeEach(() => {
-          taintTrackingPlugin.iastConfig.dbRowsToTaint = 2
+          taintTrackingPlugin.disable()
+          const config = new Config()
+          config.dbRowsToTaint = 2
+          taintTrackingPlugin.enable(config)
         })
 
         it('Should taint first database row coming from sequelize', () => {

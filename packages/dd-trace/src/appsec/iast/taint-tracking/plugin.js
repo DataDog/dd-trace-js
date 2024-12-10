@@ -27,13 +27,17 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this._taintedURLs = new WeakMap()
   }
 
-  onConfigure () {
+  configure (config) {
+    super.configure(config)
+
     let rowsToTaint = this.iastConfig?.dbRowsToTaint
-    if (rowsToTaint !== 'number') {
+    if (typeof rowsToTaint !== 'number') {
       rowsToTaint = 1
     }
     this._rowsToTaint = rowsToTaint
+  }
 
+  onConfigure () {
     const onRequestBody = ({ req }) => {
       const iastContext = getIastContext(storage.getStore())
       if (iastContext && iastContext.body !== req.body) {
