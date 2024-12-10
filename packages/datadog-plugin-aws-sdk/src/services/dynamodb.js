@@ -125,7 +125,8 @@ class DynamoDb extends BaseAwsSdkPlugin {
 
     const configStr = this._tracerConfig?.aws?.dynamoDb?.tablePrimaryKeys
     if (!configStr) {
-      log.warn('Missing DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS env variable')
+      log.warn('Missing DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS env variable. ' +
+        'Please add your table\'s primary keys under this env variable.')
       return
     }
 
@@ -169,7 +170,8 @@ class DynamoDb extends BaseAwsSdkPlugin {
     if (!primaryKeySet || !(primaryKeySet instanceof Set) || primaryKeySet.size === 0 || primaryKeySet.size > 2) {
       log.warn(
         `span pointers: failed to extract PutItem span pointer: table ${tableName} ` +
-        'not found in primary key names. Please set them through the DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS env var.'
+        'not found in primary key names or the DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS env var was invalid.' +
+        'Please update the env var.'
       )
       return
     }
