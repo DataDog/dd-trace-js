@@ -12,6 +12,7 @@ const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking
 
 const { prepareTestServerForIast } = require('../utils')
 const fs = require('fs')
+const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 
 const iastContext = {
   rootSpan: {
@@ -26,7 +27,20 @@ const iastContext = {
 }
 
 const TaintTrackingMock = {
-  isTainted: sinon.stub()
+  isTainted: sinon.stub(),
+  getRanges: (ctx, val) => {
+    return [
+      {
+        start: 0,
+        end: val.length,
+        iinfo: {
+          parameterName: 'param',
+          parameterValue: val,
+          type: HTTP_REQUEST_PARAMETER
+        }
+      }
+    ]
+  }
 }
 
 const getIastContext = sinon.stub()
