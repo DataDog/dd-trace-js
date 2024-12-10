@@ -1836,6 +1836,15 @@ describe('Config', () => {
     expect(config.appsec.apiSecurity.enabled).to.be.true
   })
 
+  it('should prioritize DD_DOGSTATSD_HOST over DD_DOGSTATSD_HOSTNAME', () => {
+    process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
+    process.env.DD_DOGSTATSD_HOST = 'localhost'
+
+    const config = new Config()
+
+    expect(config).to.have.nested.property('dogstatsd.hostname', 'localhost')
+  })
+
   context('auto configuration w/ unix domain sockets', () => {
     context('on windows', () => {
       it('should not be used', () => {
