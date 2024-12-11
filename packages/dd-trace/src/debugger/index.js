@@ -57,8 +57,6 @@ function start (config, rc) {
     }
   )
 
-  worker.unref()
-
   worker.on('online', () => {
     log.debug(`Dynamic Instrumentation worker thread started successfully (thread id: ${worker.threadId})`)
   })
@@ -80,6 +78,12 @@ function start (config, rc) {
       rcAckCallbacks.delete(ackId)
     }
   })
+
+  worker.unref()
+  rcChannel.port1.unref()
+  rcChannel.port2.unref()
+  configChannel.port1.unref()
+  configChannel.port2.unref()
 }
 
 function configure (config) {
