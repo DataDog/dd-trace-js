@@ -101,9 +101,7 @@ describe.only('Plugin', () => {
               modelId: `${model.ModelId}`
             }
 
-            const response = {
-              body: JSON.stringify(model.responseBody)
-            }
+            const response = JSON.stringify(model.responseBody)
 
             // TODO figure out why InvokeModelCommand is undefined
             const command = new AWS.InvokeModelCommand(request)
