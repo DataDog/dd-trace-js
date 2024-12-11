@@ -201,7 +201,7 @@ describe('Dynamic Instrumentation', function () {
         }, {
           ddsource: 'dd_debugger',
           service: 'node',
-          debugger: { diagnostics: customErrorDiagnosticsObj ?? { probeId, version: 0, status: 'ERROR' } }
+          debugger: { diagnostics: customErrorDiagnosticsObj ?? { probeId, probeVersion: 0, status: 'ERROR' } }
         }]
 
         t.agent.on('debugger-diagnostics', ({ payload }) => {
@@ -316,29 +316,17 @@ describe('Dynamic Instrumentation', function () {
     })
 
     it('should not trigger if probe is deleted', function (done) {
-      t.agent.on('debugger-diagnostics', async ({ payload }) => {
-        try {
-          if (payload.debugger.diagnostics.status === 'INSTALLED') {
-            t.agent.once('remote-confg-responded', async () => {
-              try {
-                await t.axios.get('/foo')
-                // We want to wait enough time to see if the client triggers on the breakpoint so that the test can fail
-                // if it does, but not so long that the test times out.
-                // TODO: Is there some signal we can use instead of a timer?
-                setTimeout(done, pollInterval * 2 * 1000) // wait twice as long as the RC poll interval
-              } catch (err) {
-                // Nessecary hack: Any errors thrown inside of an async function is invisible to Mocha unless the outer
-                // `it` callback is also `async` (which we can't do in this case since we rely on the `done` callback).
-                done(err)
-              }
-            })
+      t.agent.on('debugger-diagnostics', ({ payload }) => {
+        if (payload.debugger.diagnostics.status === 'INSTALLED') {
+          t.agent.once('remote-confg-responded', async () => {
+            await t.axios.get('/foo')
+            // We want to wait enough time to see if the client triggers on the breakpoint so that the test can fail
+            // if it does, but not so long that the test times out.
+            // TODO: Is there some signal we can use instead of a timer?
+            setTimeout(done, pollInterval * 2 * 1000) // wait twice as long as the RC poll interval
+          })
 
-            t.agent.removeRemoteConfig(t.rcConfig.id)
-          }
-        } catch (err) {
-          // Nessecary hack: Any errors thrown inside of an async function is invisible to Mocha unless the outer `it`
-          // callback is also `async` (which we can't do in this case since we rely on the `done` callback).
-          done(err)
+          t.agent.removeRemoteConfig(t.rcConfig.id)
         }
       })
 
