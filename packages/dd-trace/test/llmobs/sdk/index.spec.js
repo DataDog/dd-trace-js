@@ -581,6 +581,37 @@ describe('sdk', () => {
           })
         })
 
+        it('maintains context consistent with the tracer', () => {
+          let llmSpan, workflowSpan, taskSpan
+
+          function myLlm (input, cb) {
+            llmSpan = llmobs._active()
+            setTimeout(() => {
+              cb(null, 'output')
+            }, 1000)
+          }
+          const myWrappedLlm = llmobs.wrap({ kind: 'llm' }, myLlm)
+
+          llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, _workflow => {
+            workflowSpan = _workflow
+            tracer.trace('apmOperation', () => {
+              myWrappedLlm('input', (err, res) => {
+                expect(err).to.not.exist
+                expect(res).to.equal('output')
+                llmobs.trace({ kind: 'task', name: 'afterLlmTask' }, _task => {
+                  taskSpan = _task
+
+                  const llmParentId = LLMObsTagger.tagMap.get(llmSpan)['_ml_obs.llmobs_parent_id']
+                  expect(llmParentId).to.equal(workflowSpan.context().toSpanId())
+
+                  const taskParentId = LLMObsTagger.tagMap.get(taskSpan)['_ml_obs.llmobs_parent_id']
+                  expect(taskParentId).to.equal(workflowSpan.context().toSpanId())
+                })
+              })
+            })
+          })
+        })
+
         // TODO: need span kind optional for this test
         it.skip('sets the span name to "unnamed-anonymous-function" if no name is provided', () => {
           let span
