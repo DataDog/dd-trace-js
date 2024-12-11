@@ -370,7 +370,7 @@ function failOnException (done, fn) {
       try {
         fn(...args)
       } catch (err) {
-        done (err)
+        done(err)
       }
     }
   }

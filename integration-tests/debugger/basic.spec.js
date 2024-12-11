@@ -342,7 +342,8 @@ describe('Dynamic Instrumentation', function () {
     it('should remove the last breakpoint completely before trying to add a new one', function (done) {
       const rcConfig2 = t.generateRemoteConfig()
 
-      t.agent.on('debugger-diagnostics', failOnException(done, ({ payload: { debugger: { diagnostics: { status, probeId } } } }) => {
+      t.agent.on('debugger-diagnostics', failOnException(done, ({ payload }) => {
+        const { status, probeId } = payload.debugger.diagnostics
         if (status !== 'INSTALLED') return
 
         if (probeId === t.rcConfig.config.id) {
