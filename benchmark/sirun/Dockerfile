@@ -35,6 +35,7 @@ RUN mkdir -p /usr/local/nvm \
 	&& nvm install --no-progress 16.20.1 \
 	&& nvm install --no-progress 18.16.1 \
 	&& nvm install --no-progress 20.4.0 \
+	&& nvm install --no-progress 22.10.0 \
 	&& nvm alias default 18 \
 	&& nvm use 18
 
