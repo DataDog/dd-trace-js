@@ -18,7 +18,7 @@ module.exports = {
 }
 
 function setup () {
-  let sandbox, cwd, appPort, proc
+  let sandbox, cwd, appPort
   const breakpoint = getBreakpointInfo(1) // `1` to disregard the `setup` function
   const t = {
     breakpoint,
@@ -68,7 +68,7 @@ function setup () {
   }
 
   before(async function () {
-    sandbox = await createSandbox(['fastify'])
+    sandbox = await createSandbox(['fastify']) // TODO: Make this dynamic
     cwd = sandbox.folder
     t.appFile = join(cwd, ...breakpoint.file.split('/'))
   })
@@ -81,7 +81,7 @@ function setup () {
     t.rcConfig = generateRemoteConfig(breakpoint)
     appPort = await getPort()
     t.agent = await new FakeAgent().start()
-    proc = await spawnProc(t.appFile, {
+    t.proc = await spawnProc(t.appFile, {
       cwd,
       env: {
         APP_PORT: appPort,
@@ -97,7 +97,7 @@ function setup () {
   })
 
   afterEach(async function () {
-    proc.kill()
+    t.proc.kill()
     await t.agent.stop()
   })
 
