@@ -356,6 +356,26 @@ function assertUUID (actual, msg = 'not a valid UUID') {
   assert.match(actual, /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/, msg)
 }
 
+function failOnException (done, fn) {
+  if (fn[Symbol.toStringTag] === 'AsyncFunction') {
+    return async (...args) => {
+      try {
+        await fn(...args)
+      } catch (err) {
+        done(err)
+      }
+    }
+  } else {
+    return (...args) => {
+      try {
+        fn(...args)
+      } catch (err) {
+        done(err)
+      }
+    }
+  }
+}
+
 module.exports = {
   FakeAgent,
   hookFile,
@@ -372,5 +392,6 @@ module.exports = {
   spawnPluginIntegrationTestProc,
   useEnv,
   useSandbox,
-  sandboxCwd
+  sandboxCwd,
+  failOnException
 }
