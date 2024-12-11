@@ -201,7 +201,7 @@ describe('Dynamic Instrumentation', function () {
         }, {
           ddsource: 'dd_debugger',
           service: 'node',
-          debugger: { diagnostics: customErrorDiagnosticsObj ?? { probeId, version: 0, status: 'ERROR' } }
+          debugger: { diagnostics: customErrorDiagnosticsObj ?? { probeId, probeVersion: 0, status: 'ERROR' } }
         }]
 
         t.agent.on('debugger-diagnostics', failOnException(done, ({ payload }) => {
