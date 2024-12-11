@@ -8,7 +8,7 @@ const { SAMPLING_MECHANISM_APPSEC } = require('../../src/constants')
 const standalone = require('../../src/appsec/standalone')
 const waf = require('../../src/appsec/waf')
 
-describe.only('User Tracking', () => {
+describe('User Tracking', () => {
   let currentTags
   let rootSpan
   let keepTrace
