@@ -2,7 +2,6 @@
 
 const { assert } = require('chai')
 const { setup, getBreakpointInfo } = require('./utils')
-const { failOnException } = require('../helpers')
 
 const { line } = getBreakpointInfo()
 
@@ -14,7 +13,7 @@ describe('Dynamic Instrumentation', function () {
       beforeEach(t.triggerBreakpoint)
 
       it('should prune snapshot if payload is too large', function (done) {
-        t.agent.on('debugger-input', failOnException(done, ({ payload }) => {
+        t.agent.on('debugger-input', ({ payload }) => {
           assert.isBelow(Buffer.byteLength(JSON.stringify(payload)), 1024 * 1024) // 1MB
           assert.deepEqual(payload['debugger.snapshot'].captures, {
             lines: {
@@ -27,7 +26,7 @@ describe('Dynamic Instrumentation', function () {
             }
           })
           done()
-        }))
+        })
 
         t.agent.addRemoteConfig(t.generateRemoteConfig({
           captureSnapshot: true,
