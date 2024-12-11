@@ -3,12 +3,12 @@
 const BaseAwsSdkPlugin = require('../base')
 const log = require('../../../dd-trace/src/log')
 
-const _AI21 = 'ai21'
-const _AMAZON = 'amazon'
-const _ANTHROPIC = 'anthropic'
-const _COHERE = 'cohere'
-const _META = 'meta'
-const _STABILITY = 'stability'
+const AI21 = 'ai21'
+const AMAZON = 'amazon'
+const ANTHROPIC = 'anthropic'
+const COHERE = 'cohere'
+const META = 'meta'
+const STABILITY = 'stability'
 
 class BedrockRuntime extends BaseAwsSdkPlugin {
   static get id () { return 'bedrock runtime' }
@@ -43,7 +43,7 @@ function extractRequestParams (params, provider) {
   const requestBody = JSON.parse(params.body)
   const modelId = params.modelId
 
-  if (provider === _AI21) {
+  if (provider === AI21) {
     return {
       prompt: requestBody.prompt,
       temperature: requestBody.temperature || '',
@@ -51,9 +51,9 @@ function extractRequestParams (params, provider) {
       max_tokens: requestBody.maxTokens || '',
       stop_sequences: requestBody.stopSequences || []
     }
-  } else if (provider === _AMAZON && modelId.includes('embed')) {
+  } else if (provider === AMAZON && modelId.includes('embed')) {
     return { prompt: requestBody.inputText }
-  } else if (provider === _AMAZON) {
+  } else if (provider === AMAZON) {
     const textGenerationConfig = requestBody.textGenerationConfig || {}
     return {
       prompt: requestBody.inputText,
@@ -62,7 +62,7 @@ function extractRequestParams (params, provider) {
       max_tokens: textGenerationConfig.maxTokenCount || '',
       stop_sequences: textGenerationConfig.stopSequences || []
     }
-  } else if (provider === _ANTHROPIC) {
+  } else if (provider === ANTHROPIC) {
     const prompt = requestBody.prompt || ''
     const messages = requestBody.messages || ''
     return {
@@ -73,13 +73,13 @@ function extractRequestParams (params, provider) {
       max_tokens: requestBody.max_tokens_to_sample || '',
       stop_sequences: requestBody.stop_sequences || []
     }
-  } else if (provider === _COHERE && modelId.includes('embed')) {
+  } else if (provider === COHERE && modelId.includes('embed')) {
     return {
       prompt: requestBody.texts,
       input_type: requestBody.input_type || '',
       truncate: requestBody.truncate || ''
     }
-  } else if (provider === _COHERE) {
+  } else if (provider === COHERE) {
     return {
       prompt: requestBody.prompt,
       temperature: requestBody.temperature || '',
@@ -90,14 +90,14 @@ function extractRequestParams (params, provider) {
       stream: requestBody.stream || '',
       n: requestBody.num_generations || ''
     }
-  } else if (provider === _META) {
+  } else if (provider === META) {
     return {
       prompt: requestBody.prompt,
       temperature: requestBody.temperature || '',
       top_p: requestBody.top_p || '',
       max_tokens: requestBody.max_gen_len || ''
     }
-  } else if (provider === _STABILITY) {
+  } else if (provider === STABILITY) {
     // TODO: request/response formats are different for image-based models. Defer for now
     return {}
   }
