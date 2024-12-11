@@ -4,7 +4,7 @@ const os = require('os')
 
 const { assert } = require('chai')
 const { pollInterval, setup } = require('./utils')
-const { assertObjectContains, assertUUID, failOnException } = require('../helpers')
+const { assertObjectContains, assertUUID } = require('../helpers')
 const { ACKNOWLEDGED, ERROR } = require('../../packages/dd-trace/src/appsec/remote_config/apply_states')
 const { version } = require('../../package.json')
 
@@ -35,7 +35,7 @@ describe('Dynamic Instrumentation', function () {
         debugger: { diagnostics: { probeId, probeVersion: 0, status: 'EMITTING' } }
       }]
 
-      t.agent.on('remote-config-ack-update', failOnException(done, (id, version, state, error) => {
+      t.agent.on('remote-config-ack-update', (id, version, state, error) => {
         assert.strictEqual(id, t.rcConfig.id)
         assert.strictEqual(version, 1)
         assert.strictEqual(state, ACKNOWLEDGED)
@@ -43,9 +43,9 @@ describe('Dynamic Instrumentation', function () {
 
         receivedAckUpdate = true
         endIfDone()
-      }))
+      })
 
-      t.agent.on('debugger-diagnostics', failOnException(done, ({ payload }) => {
+      t.agent.on('debugger-diagnostics', ({ payload }) => {
         const expected = expectedPayloads.shift()
         assertObjectContains(payload, expected)
         assertUUID(payload.debugger.diagnostics.runtimeId)
@@ -60,7 +60,7 @@ describe('Dynamic Instrumentation', function () {
         } else {
           endIfDone()
         }
-      }))
+      })
 
       t.agent.addRemoteConfig(t.rcConfig)
 
@@ -97,22 +97,22 @@ describe('Dynamic Instrumentation', function () {
         () => {}
       ]
 
-      t.agent.on('remote-config-ack-update', failOnException(done, (id, version, state, error) => {
+      t.agent.on('remote-config-ack-update', (id, version, state, error) => {
         assert.strictEqual(id, t.rcConfig.id)
         assert.strictEqual(version, ++receivedAckUpdates)
         assert.strictEqual(state, ACKNOWLEDGED)
         assert.notOk(error) // falsy check since error will be an empty string, but that's an implementation detail
 
         endIfDone()
-      }))
+      })
 
-      t.agent.on('debugger-diagnostics', failOnException(done, ({ payload }) => {
+      t.agent.on('debugger-diagnostics', ({ payload }) => {
         const expected = expectedPayloads.shift()
         assertObjectContains(payload, expected)
         assertUUID(payload.debugger.diagnostics.runtimeId)
         if (payload.debugger.diagnostics.status === 'INSTALLED') triggers.shift()()
         endIfDone()
-      }))
+      })
 
       t.agent.addRemoteConfig(t.rcConfig)
 
@@ -135,7 +135,7 @@ describe('Dynamic Instrumentation', function () {
         debugger: { diagnostics: { probeId, probeVersion: 0, status: 'INSTALLED' } }
       }]
 
-      t.agent.on('remote-config-ack-update', failOnException(done, (id, version, state, error) => {
+      t.agent.on('remote-config-ack-update', (id, version, state, error) => {
         assert.strictEqual(id, t.rcConfig.id)
         assert.strictEqual(version, 1)
         assert.strictEqual(state, ACKNOWLEDGED)
@@ -143,9 +143,9 @@ describe('Dynamic Instrumentation', function () {
 
         receivedAckUpdate = true
         endIfDone()
-      }))
+      })
 
-      t.agent.on('debugger-diagnostics', failOnException(done, ({ payload }) => {
+      t.agent.on('debugger-diagnostics', ({ payload }) => {
         const expected = expectedPayloads.shift()
         assertObjectContains(payload, expected)
         assertUUID(payload.debugger.diagnostics.runtimeId)
@@ -158,7 +158,7 @@ describe('Dynamic Instrumentation', function () {
             endIfDone()
           }, pollInterval * 2 * 1000) // wait twice as long as the RC poll interval
         }
-      }))
+      })
 
       t.agent.addRemoteConfig(t.rcConfig)
 
@@ -183,7 +183,7 @@ describe('Dynamic Instrumentation', function () {
       it(title, function (done) {
         let receivedAckUpdate = false
 
-        t.agent.on('remote-config-ack-update', failOnException(done, (id, version, state, error) => {
+        t.agent.on('remote-config-ack-update', (id, version, state, error) => {
           assert.strictEqual(id, `logProbe_${config.id}`)
           assert.strictEqual(version, 1)
           assert.strictEqual(state, ERROR)
@@ -191,7 +191,7 @@ describe('Dynamic Instrumentation', function () {
 
           receivedAckUpdate = true
           endIfDone()
-        }))
+        })
 
         const probeId = config.id
         const expectedPayloads = [{
@@ -204,7 +204,7 @@ describe('Dynamic Instrumentation', function () {
           debugger: { diagnostics: customErrorDiagnosticsObj ?? { probeId, probeVersion: 0, status: 'ERROR' } }
         }]
 
-        t.agent.on('debugger-diagnostics', failOnException(done, ({ payload }) => {
+        t.agent.on('debugger-diagnostics', ({ payload }) => {
           const expected = expectedPayloads.shift()
           assertObjectContains(payload, expected)
           const { diagnostics } = payload.debugger
@@ -218,7 +218,7 @@ describe('Dynamic Instrumentation', function () {
           }
 
           endIfDone()
-        }))
+        })
 
         t.agent.addRemoteConfig({
           product: 'LIVE_DEBUGGING',
@@ -237,7 +237,7 @@ describe('Dynamic Instrumentation', function () {
     it('should capture and send expected payload when a log line probe is triggered', function (done) {
       t.triggerBreakpoint()
 
-      t.agent.on('debugger-input', failOnException(done, ({ payload }) => {
+      t.agent.on('debugger-input', ({ payload }) => {
         const expected = {
           ddsource: 'dd_debugger',
           hostname: os.hostname(),
@@ -284,7 +284,7 @@ describe('Dynamic Instrumentation', function () {
         assert.strictEqual(topFrame.columnNumber, 3)
 
         done()
-      }))
+      })
 
       t.agent.addRemoteConfig(t.rcConfig)
     })
@@ -307,31 +307,31 @@ describe('Dynamic Instrumentation', function () {
         if (payload.debugger.diagnostics.status === 'INSTALLED') triggers.shift()().catch(done)
       })
 
-      t.agent.on('debugger-input', failOnException(done, ({ payload }) => {
+      t.agent.on('debugger-input', ({ payload }) => {
         assert.strictEqual(payload.message, expectedMessages.shift())
         if (expectedMessages.length === 0) done()
-      }))
+      })
 
       t.agent.addRemoteConfig(t.rcConfig)
     })
 
     it('should not trigger if probe is deleted', function (done) {
-      t.agent.on('debugger-diagnostics', failOnException(done, ({ payload }) => {
+      t.agent.on('debugger-diagnostics', ({ payload }) => {
         if (payload.debugger.diagnostics.status === 'INSTALLED') {
-          t.agent.once('remote-confg-responded', failOnException(done, async () => {
+          t.agent.once('remote-confg-responded', async () => {
             await t.axios.get('/foo')
             // We want to wait enough time to see if the client triggers on the breakpoint so that the test can fail
             // if it does, but not so long that the test times out.
             // TODO: Is there some signal we can use instead of a timer?
             setTimeout(done, pollInterval * 2 * 1000) // wait twice as long as the RC poll interval
-          }))
+          })
 
           t.agent.removeRemoteConfig(t.rcConfig.id)
         }
-      }))
+      })
 
       t.agent.on('debugger-input', () => {
-        done(new Error('should not capture anything when the probe is deleted'))
+        assert.fail('should not capture anything when the probe is deleted')
       })
 
       t.agent.addRemoteConfig(t.rcConfig)
@@ -342,8 +342,7 @@ describe('Dynamic Instrumentation', function () {
     it('should remove the last breakpoint completely before trying to add a new one', function (done) {
       const rcConfig2 = t.generateRemoteConfig()
 
-      t.agent.on('debugger-diagnostics', failOnException(done, ({ payload }) => {
-        const { status, probeId } = payload.debugger.diagnostics
+      t.agent.on('debugger-diagnostics', ({ payload: { debugger: { diagnostics: { status, probeId } } } }) => {
         if (status !== 'INSTALLED') return
 
         if (probeId === t.rcConfig.config.id) {
@@ -376,7 +375,7 @@ describe('Dynamic Instrumentation', function () {
             if (!finished) done(err)
           })
         }
-      }))
+      })
 
       t.agent.addRemoteConfig(t.rcConfig)
     })
