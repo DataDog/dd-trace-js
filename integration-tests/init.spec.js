@@ -34,12 +34,14 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
       const NODE_OPTIONS = `--no-warnings --${arg} ${path.join(__dirname, '..', filename)}`
       useEnv({ NODE_OPTIONS })
 
-      context('without DD_INJECTION_ENABLED', () => {
-        it('should initialize the tracer', () => doTest('init/trace.js', 'true\n'))
-        it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n'))
-        it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-          doTest('init/instrument.mjs', `${esmWorks}\n`))
-      })
+      if (currentVersionIsSupported) {
+        context('without DD_INJECTION_ENABLED', () => {
+          it('should initialize the tracer', () => doTest('init/trace.js', 'true\n'))
+          it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n'))
+          it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
+            doTest('init/instrument.mjs', `${esmWorks}\n`))
+        })
+      }
       context('with DD_INJECTION_ENABLED', () => {
         useEnv({ DD_INJECTION_ENABLED })
 
@@ -87,8 +89,8 @@ function testRuntimeVersionChecks (arg, filename) {
       context('when node version is less than engines field', () => {
         useEnv({ NODE_OPTIONS })
 
-        it('should initialize the tracer, if no DD_INJECTION_ENABLED', () =>
-          doTest('true\n'))
+        it('should not initialize the tracer', () =>
+          doTest('false\n'))
         context('with DD_INJECTION_ENABLED', () => {
           useEnv({ DD_INJECTION_ENABLED })
 

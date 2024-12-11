@@ -871,6 +871,14 @@
   resolved "https://registry.yarnpkg.com/@sinonjs/text-encoding/-/text-encoding-0.7.3.tgz#282046f03e886e352b2d5f5da5eb755e01457f3f"
   integrity sha512-DE427ROAphMQzU4ENbliGYrBSYPXF+TtLg9S8vzeA+OF4ZKzoDdzfL8sxuMUGS/lgRhM6j1URSk9ghf7Xo1tyA==
 
+"@stylistic/eslint-plugin-js@^2.8.0":
+  version "2.8.0"
+  resolved "https://registry.yarnpkg.com/@stylistic/eslint-plugin-js/-/eslint-plugin-js-2.8.0.tgz#f605202c75aa17692342662231f77d413d96d940"
+  integrity sha512-/e7pSzVMrwBd6yzSDsKHwax3TS96+pd/xSKzELaTkOuYqUhYfj/becWdfDbFSBGQD7BBBCiiE4L8L2cUfu5h+A==
+  dependencies:
+    eslint-visitor-keys "^4.0.0"
+    espree "^10.1.0"
+
 "@types/body-parser@*":
   version "1.19.5"
   resolved "https://registry.yarnpkg.com/@types/body-parser/-/body-parser-1.19.5.tgz#04ce9a3b677dc8bd681a17da1ab9835dc9d3ede4"
@@ -910,14 +918,6 @@
   version "2.0.4"
   resolved "https://registry.yarnpkg.com/@types/http-errors/-/http-errors-2.0.4.tgz#7eb47726c391b7345a6ec35ad7f4de469cf5ba4f"
   integrity sha512-D0CFMMtydbJAegzOyHjtiKPLlvnm3iTZyZRSZoLq2mRhDdmLfIWOCYPfQJ4cu2erKghU++QvjcUjp/5h7hESpA==
-
-"@stylistic/eslint-plugin-js@^2.8.0":
-  version "2.8.0"
-  resolved "https://registry.yarnpkg.com/@stylistic/eslint-plugin-js/-/eslint-plugin-js-2.8.0.tgz#f605202c75aa17692342662231f77d413d96d940"
-  integrity sha512-/e7pSzVMrwBd6yzSDsKHwax3TS96+pd/xSKzELaTkOuYqUhYfj/becWdfDbFSBGQD7BBBCiiE4L8L2cUfu5h+A==
-  dependencies:
-    eslint-visitor-keys "^4.0.0"
-    espree "^10.1.0"
 
 "@types/json5@^0.0.29":
   version "0.0.29"
@@ -2368,10 +2368,10 @@ events@1.1.1:
   resolved "https://registry.npmjs.org/events/-/events-1.1.1.tgz"
   integrity "sha1-nr23Y1rQmccNzEwqH1AEKI6L2SQ= sha512-kEcvvCBByWXGnZy6JUlgAp2gBIUjfCAV6P6TgT1/aaQKcmuAEC4OZTV1I4EWQLz2gxZw76atuVyvHhTxvi0Flw=="
 
-express@^4.17.1, express@^4.18.2:
-  version "4.21.1"
-  resolved "https://registry.yarnpkg.com/express/-/express-4.21.1.tgz#9dae5dda832f16b4eec941a4e44aa89ec481b281"
-  integrity sha512-YSFlK1Ee0/GC8QaO91tHcDxJiE/X4FbpAyQWkxAvG6AXCuR65YzK8ua6D9hvi/TzUfZMpc+BwuM1IPw8fmQBiQ==
+express@^4.17.1, express@^4.21.2:
+  version "4.21.2"
+  resolved "https://registry.yarnpkg.com/express/-/express-4.21.2.tgz#cf250e48362174ead6cea4a566abef0162c1ec32"
+  integrity sha512-28HqgMZAmih1Czt9ny7qr6ek2qddF4FclbMzwhCREB6OFfH+rXAnuNCwo1/wFvrtbgsQDb4kSbX9de9lFbrXnA==
   dependencies:
     accepts "~1.3.8"
     array-flatten "1.1.1"
@@ -2392,7 +2392,7 @@ express@^4.17.1, express@^4.18.2:
     methods "~1.1.2"
     on-finished "2.4.1"
     parseurl "~1.3.3"
-    path-to-regexp "0.1.10"
+    path-to-regexp "0.1.12"
     proxy-addr "~2.0.7"
     qs "6.13.0"
     range-parser "~1.2.1"
@@ -3623,7 +3623,7 @@ mocha@^9:
     log-symbols "4.1.0"
     minimatch "4.2.1"
     ms "2.1.3"
-    nanoid "3.3.1"
+    nanoid "3.3.8"
     serialize-javascript "6.0.0"
     strip-json-comments "3.1.1"
     supports-color "8.1.1"
@@ -3681,10 +3681,10 @@ multer@^1.4.5-lts.1:
     type-is "^1.6.4"
     xtend "^4.0.0"
 
-nanoid@3.3.1:
-  version "3.3.1"
-  resolved "https://registry.yarnpkg.com/nanoid/-/nanoid-3.3.1.tgz#6347a18cac88af88f58af0b3594b723d5e99bb35"
-  integrity sha512-n6Vs/3KGyxPQd6uO0eH4Bv0ojGSUvuLlIHtC3Y0kEO23YRge8H9x1GCzLn28YX0H66pMkxuaeESFq4tKISKwdw==
+nanoid@3.3.8:
+  version "3.3.8"
+  resolved "https://registry.yarnpkg.com/nanoid/-/nanoid-3.3.8.tgz#b1be3030bee36aaff18bacb375e5cce521684baf"
+  integrity sha512-WNLf5Sd8oZxOm+TzppcYk8gVOgP+l58xNy58D0nbUnOxOWRWvlcCV4kUF7ltmI6PsrLl/BgKEyS4mqsGChFN0w==
 
 natural-compare@^1.4.0:
   version "1.4.0"
@@ -4012,10 +4012,10 @@ path-parse@^1.0.7:
   resolved "https://registry.npmjs.org/path-parse/-/path-parse-1.0.7.tgz"
   integrity sha512-LDJzPVEEEPR+y48z93A0Ed0yXb8pAByGWo/k5YYdYgpY2/2EsOsksJrq7lOHxryrVOn1ejG6oAp8ahvOIQD8sw==
 
-path-to-regexp@0.1.10, path-to-regexp@^0.1.10:
-  version "0.1.10"
-  resolved "https://registry.yarnpkg.com/path-to-regexp/-/path-to-regexp-0.1.10.tgz#67e9108c5c0551b9e5326064387de4763c4d5f8b"
-  integrity sha512-7lf7qcQidTku0Gu3YDPc8DJ1q7OOucfa/BSsIwjuh56VU7katFvuM8hULfkwB3Fns/rsVF7PwPKVw1sl5KQS9w==
+path-to-regexp@0.1.12, path-to-regexp@^0.1.12:
+  version "0.1.12"
+  resolved "https://registry.yarnpkg.com/path-to-regexp/-/path-to-regexp-0.1.12.tgz#d5e1a12e478a976d432ef3c58d534b9923164bb7"
+  integrity sha512-RA1GjUVMnvYFxuqovrEqZoxxW5NUZqbwKtYz/Tt7nXerk0LbLblQmrsgdeOxV5SFHf0UDggjS/bSeOZwt1pmEQ==
 
 path-to-regexp@^6.2.1:
   version "6.3.0"
