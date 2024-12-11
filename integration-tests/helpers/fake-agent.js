@@ -363,6 +363,14 @@ function buildExpressServer (agent) {
     })
   })
 
+  // Ensure that any failure inside of Express isn't swallowed and returned as a 500, but instead crashes the test
+  app.use((err, req, res, next) => {
+    if (!err) next()
+    process.nextTick(() => {
+      throw err
+    })
+  })
+
   return app
 }
 
