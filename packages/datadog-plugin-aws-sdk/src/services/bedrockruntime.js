@@ -3,12 +3,12 @@
 const BaseAwsSdkPlugin = require('../base')
 const log = require('../../../dd-trace/src/log')
 
-const AI21 = 'ai21'
-const AMAZON = 'amazon'
-const ANTHROPIC = 'anthropic'
-const COHERE = 'cohere'
-const META = 'meta'
-const STABILITY = 'stability'
+const AI21 = 'AI21'
+const AMAZON = 'AMAZON'
+const ANTHROPIC = 'ANTHROPIC'
+const COHERE = 'COHERE'
+const META = 'META'
+const STABILITY = 'STABILITY'
 
 class BedrockRuntime extends BaseAwsSdkPlugin {
   static get id () { return 'bedrock runtime' }
@@ -26,7 +26,7 @@ class BedrockRuntime extends BaseAwsSdkPlugin {
       modelProvider = modelProvider.toUpperCase()
     }
 
-    const shouldSetChoiceIds = modelProvider === 'COHERE' && !modelName.includes('embed')
+    const shouldSetChoiceIds = modelProvider === COHERE && !modelName.includes('embed')
 
     const requestParams = extractRequestParams(params, modelProvider)
     const textAndResponseReasons = extractTextAndResponseReason(response, modelProvider, modelName, shouldSetChoiceIds)
@@ -109,7 +109,7 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
   const textAndResponseReasons = []
 
   try {
-    if (provider === 'AI21') {
+    if (provider === AI21) {
       const completions = body.completions || []
       completions.forEach(completion => {
         textAndResponseReasons.push({
@@ -118,13 +118,13 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
           choice_id: shouldSetChoiceIds ? completion.id : undefined
         })
       })
-    } else if (provider === 'AMAZON' && modelName.includes('embed')) {
+    } else if (provider === AMAZON && modelName.includes('embed')) {
       textAndResponseReasons.push({
         text: body.embedding || [],
         finish_reason: '',
         choice_id: undefined
       })
-    } else if (provider === 'AMAZON') {
+    } else if (provider === AMAZON) {
       (body.results || []).forEach(result => {
         textAndResponseReasons.push({
           text: result.outputText || '',
@@ -132,13 +132,13 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
           choice_id: undefined
         })
       })
-    } else if (provider === 'ANTHROPIC') {
+    } else if (provider === ANTHROPIC) {
       textAndResponseReasons.push({
         text: body.completion || body.content || '',
         finish_reason: body.stop_reason || '',
         choice_id: undefined
       })
-    } else if (provider === 'COHERE' && modelName.includes('embed')) {
+    } else if (provider === COHERE && modelName.includes('embed')) {
       (body.embeddings || [[]]).forEach(embedding => {
         textAndResponseReasons.push({
           text: embedding,
@@ -146,7 +146,7 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
           choice_id: undefined
         })
       })
-    } else if (provider === 'COHERE') {
+    } else if (provider === COHERE) {
       const generations = body.generations || []
       generations.forEach(generation => {
         textAndResponseReasons.push({
@@ -155,13 +155,13 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
           choice_id: shouldSetChoiceIds ? generation.id : undefined
         })
       })
-    } else if (provider === 'META') {
+    } else if (provider === META) {
       textAndResponseReasons.push({
         text: body.generation || '',
         finish_reason: body.stop_reason || '',
         choice_id: undefined
       })
-    } else if (provider === 'STABILITY') {
+    } else if (provider === STABILITY) {
       // TODO: request/response formats are different for image-based models. Defer for now
     }
   } catch (error) {
