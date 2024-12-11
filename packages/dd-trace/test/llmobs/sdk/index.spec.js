@@ -323,6 +323,55 @@ describe('sdk', () => {
             })
           })
         })
+
+        it('respects the "childOf" option for manually setting parentage', async () => {
+          let parent, child
+
+          async function myLlm () {
+            await llmobs.trace({ kind: 'llm', name: 'child', childOf: parent }, async (span) => {
+              child = span
+              await new Promise(resolve => setTimeout(resolve, 5))
+            })
+          }
+
+          async function myWorkflow () {
+            setTimeout(myLlm, 2)
+            await llmobs.trace({ kind: 'workflow', name: 'parent' }, async (span) => {
+              parent = span
+              await new Promise(resolve => setTimeout(resolve, 10))
+            })
+          }
+
+          await myWorkflow()
+
+          expect(LLMObsTagger.tagMap.get(child)['_ml_obs.llmobs_parent_id']).to.equal(parent.context().toSpanId())
+        })
+
+        it('maintains proper parentage when "childOf" is used', () => {
+          let one, two, three, four, five
+
+          llmobs.trace({ name: 'one', kind: 'workflow' }, span => {
+            one = span
+            llmobs.trace({ name: 'two', kind: 'workflow' }, _two => {
+              two = _two
+              llmobs.trace({ name: 'three', kind: 'workflow', childOf: span }, _three => {
+                three = _three
+                llmobs.trace({ name: 'four', kind: 'workflow' }, _four => {
+                  four = _four
+                })
+              })
+              llmobs.trace({ name: 'five', kind: 'workflow' }, _five => {
+                five = _five
+              })
+            })
+          })
+
+          expect(LLMObsTagger.tagMap.get(one)['_ml_obs.llmobs_parent_id']).to.equal('undefined')
+          expect(LLMObsTagger.tagMap.get(two)['_ml_obs.llmobs_parent_id']).to.equal(one.context().toSpanId())
+          expect(LLMObsTagger.tagMap.get(three)['_ml_obs.llmobs_parent_id']).to.equal(one.context().toSpanId())
+          expect(LLMObsTagger.tagMap.get(four)['_ml_obs.llmobs_parent_id']).to.equal(three.context().toSpanId())
+          expect(LLMObsTagger.tagMap.get(five)['_ml_obs.llmobs_parent_id']).to.equal(two.context().toSpanId())
+        })
       })
     })
 
