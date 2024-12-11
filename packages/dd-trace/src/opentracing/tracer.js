@@ -95,46 +95,45 @@ class DatadogTracer {
     }
 
     // zero trace level indicates service exit / entry span only
-    this.trace_level = 3
-    if (this.trace_level === 0) {
+    if (this._config.traceLevel === 0) {
       // if the parent is a SpanContext, this is a distributed trace and should create a child span
       // if the parent is a Span or NoopSpan, this is from the same service
       if (
         parent instanceof Span || parent instanceof NoopSpan ||
         options.childOf instanceof Span || options.childOf instanceof NoopSpan
       ) {
-        let metaIndex = null
-        if (parent instanceof Span) {
-          metaIndex = updateParentSpan(null, options.childOf, options, name)
-        } else if (parent instanceof SpanContext) {
-          metaIndex = updateParentSpan(null, options.childOf, options, name)
-        }
+        let metaIndex = 0
+        // if (parent instanceof Span) {
+        //   metaIndex = updateParentSpan(null, options.childOf, options, name)
+        // } else if (parent instanceof SpanContext) {
+        //   metaIndex = updateParentSpan(null, options.childOf, options, name)
+        // }
         return new NoopSpan(this, parent, { keepParent: true, metaIndex })
       }
-    } else if (this.trace_level === 1) {
+    } else if (this._config.traceLevel === 1) {
       if (parent) {
         if (
           options?.tags && parent._tags && options?.tags['span.kind'] &&
           parent._tags['span.kind'] === options.tags['span.kind']
         ) {
-          let metaIndex = null
-          if (parent instanceof Span) {
-            metaIndex = updateParentSpan(null, options.childOf, options, name)
-          } else if (parent instanceof SpanContext) {
-            metaIndex = updateParentSpan(null, options.childOf, options, name)
-          }
+          let metaIndex = 0
+          // if (parent instanceof Span) {
+          //   metaIndex = updateParentSpan(null, options.childOf, options, name)
+          // } else if (parent instanceof SpanContext) {
+          //   metaIndex = updateParentSpan(null, options.childOf, options, name)
+          // }
           return new NoopSpan(this, parent, { keepParent: true, metaIndex })
         }
       }
-    } else if (this.trace_level === 2) {
+    } else if (this._config.traceLevel === 2) {
       if (parent) {
         if (options?.tags?.component && parent?._tags?.component === options?.tags?.component) {
-          let metaIndex = null
-          if (parent instanceof Span) {
-            metaIndex = updateParentSpan(null, options.childOf, options, name)
-          } else if (parent instanceof SpanContext) {
-            metaIndex = updateParentSpan(null, options.childOf, options, name)
-          }
+          let metaIndex = 0
+          // if (parent instanceof Span) {
+          //   metaIndex = updateParentSpan(null, options.childOf, options, name)
+          // } else if (parent instanceof SpanContext) {
+          //   metaIndex = updateParentSpan(null, options.childOf, options, name)
+          // }
           return new NoopSpan(this, parent, { keepParent: true, metaIndex })
         }
       }

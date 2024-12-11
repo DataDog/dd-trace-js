@@ -37,10 +37,10 @@ class NoopSpan {
   log () { return this }
   logEvent () {}
   finish (finishTime) {
-    const finish = finishTime ?? this._getTime()
-    if (this._options.keepParent) {
-      this._noopContext._tags[`operations.${this._options.metaIndex}.duration`] = finish - this._startTime
-    }
+    // const finish = finishTime ?? this._getTime()
+    // if (this._options.keepParent) {
+    //   this._noopContext._tags[`operations.${this._options.metaIndex}.duration`] = finish - this._startTime
+    // }
   }
 
   _createContext (parent, options) {
