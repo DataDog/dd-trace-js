@@ -9,6 +9,7 @@ const ANTHROPIC = 'ANTHROPIC'
 const COHERE = 'COHERE'
 const META = 'META'
 const STABILITY = 'STABILITY'
+const MISTRAL = 'MISTRAL'
 
 class BedrockRuntime extends BaseAwsSdkPlugin {
   static get id () { return 'bedrock runtime' }
@@ -32,8 +33,6 @@ class BedrockRuntime extends BaseAwsSdkPlugin {
     const textAndResponseReasons = extractTextAndResponseReason(response, modelProvider, modelName, shouldSetChoiceIds)
 
     tags = buildTagsFromParams(requestParams, textAndResponseReasons, modelProvider, modelName, operation)
-
-    tags = Object.fromEntries(Object.entries(tags).filter(([_, v]) => v !== undefined))
 
     return tags
   }
@@ -96,6 +95,15 @@ function extractRequestParams (params, provider) {
       temperature: requestBody.temperature || '',
       top_p: requestBody.top_p || '',
       max_tokens: requestBody.max_gen_len || ''
+    }
+  } else if (provider === MISTRAL) {
+    return {
+      prompt: requestBody.prompt,
+      max_tokens: requestBody.max_tokens || '',
+      stop_sequences: requestBody.stop || [],
+      temperature: requestBody.temperature || '',
+      top_p: requestBody.top_p || '',
+      top_k: requestBody.top_k || ''
     }
   } else if (provider === STABILITY) {
     // TODO: request/response formats are different for image-based models. Defer for now
@@ -160,6 +168,14 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
         text: body.generation || '',
         finish_reason: body.stop_reason || '',
         choice_id: undefined
+      })
+    } else if (provider === MISTRAL) {
+      const generations = body.outputs || []
+      generations.forEach(generation => {
+        textAndResponseReasons.push({
+          text: generation.text,
+          finish_reason: generation.stop_reason
+        })
       })
     } else if (provider === STABILITY) {
       // TODO: request/response formats are different for image-based models. Defer for now
