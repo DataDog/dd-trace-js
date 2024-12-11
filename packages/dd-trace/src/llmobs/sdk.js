@@ -102,12 +102,20 @@ class LLMObs extends NoopLLMObs {
 
     if (fn.length > 1) {
       return this._tracer.trace(name, spanOptions, (span, cb) =>
-        this._activate(span, { kind, options: llmobsOptions }, () => fn(span, cb))
+        this._activate(span, { 
+          kind, 
+          options: llmobsOptions, 
+          childOf: spanOptions?.childOf 
+        }, () => fn(span, cb))
       )
     }
 
     return this._tracer.trace(name, spanOptions, span =>
-      this._activate(span, { kind, options: llmobsOptions }, () => fn(span))
+      this._activate(span, { 
+        kind, 
+        options: llmobsOptions, 
+        childOf: spanOptions?.childOf 
+      }, () => fn(span))
     )
   }
 
@@ -135,7 +143,11 @@ class LLMObs extends NoopLLMObs {
     function wrapped () {
       const span = llmobs._tracer.scope().active()
 
-      const result = llmobs._activate(span, { kind, options: llmobsOptions }, () => {
+      const result = llmobs._activate(span, { 
+        kind, 
+        options: llmobsOptions, 
+        childOf: spanOptions?.childOf 
+      }, () => {
         if (!['llm', 'embedding'].includes(kind)) {
           llmobs.annotate(span, { inputData: getFunctionArguments(fn, arguments) })
         }
@@ -338,8 +350,8 @@ class LLMObs extends NoopLLMObs {
     return store?.span
   }
 
-  _activate (span, { kind, options } = {}, fn) {
-    const parent = this._active()
+  _activate (span, { kind, options, childOf } = {}, fn) {
+    const parent = childOf instanceof Span && LLMObsTagger.tagMap.has(childOf) ? childOf : this._active()
     if (this.enabled) storage.enterWith({ span })
 
     this._tagger.registerLLMObsSpan(span, {
