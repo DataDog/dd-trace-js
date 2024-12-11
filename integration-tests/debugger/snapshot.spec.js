@@ -2,6 +2,7 @@
 
 const { assert } = require('chai')
 const { setup } = require('./utils')
+const { failOnException } = require('../helpers')
 
 describe('Dynamic Instrumentation', function () {
   const t = setup()
@@ -11,7 +12,7 @@ describe('Dynamic Instrumentation', function () {
       beforeEach(t.triggerBreakpoint)
 
       it('should capture a snapshot', function (done) {
-        t.agent.on('debugger-input', ({ payload: { 'debugger.snapshot': { captures } } }) => {
+        t.agent.on('debugger-input', failOnException(done, ({ payload: { 'debugger.snapshot': { captures } } }) => {
           assert.deepEqual(Object.keys(captures), ['lines'])
           assert.deepEqual(Object.keys(captures.lines), [String(t.breakpoint.line)])
 
@@ -108,13 +109,13 @@ describe('Dynamic Instrumentation', function () {
           })
 
           done()
-        })
+        }))
 
         t.agent.addRemoteConfig(t.generateRemoteConfig({ captureSnapshot: true }))
       })
 
       it('should respect maxReferenceDepth', function (done) {
-        t.agent.on('debugger-input', ({ payload: { 'debugger.snapshot': { captures } } }) => {
+        t.agent.on('debugger-input', failOnException(done, ({ payload: { 'debugger.snapshot': { captures } } }) => {
           const { locals } = captures.lines[t.breakpoint.line]
           delete locals.request
           delete locals.fastify
@@ -144,13 +145,13 @@ describe('Dynamic Instrumentation', function () {
           })
 
           done()
-        })
+        }))
 
         t.agent.addRemoteConfig(t.generateRemoteConfig({ captureSnapshot: true, capture: { maxReferenceDepth: 0 } }))
       })
 
       it('should respect maxLength', function (done) {
-        t.agent.on('debugger-input', ({ payload: { 'debugger.snapshot': { captures } } }) => {
+        t.agent.on('debugger-input', failOnException(done, ({ payload: { 'debugger.snapshot': { captures } } }) => {
           const { locals } = captures.lines[t.breakpoint.line]
 
           assert.deepEqual(locals.lstr, {
@@ -161,13 +162,13 @@ describe('Dynamic Instrumentation', function () {
           })
 
           done()
-        })
+        }))
 
         t.agent.addRemoteConfig(t.generateRemoteConfig({ captureSnapshot: true, capture: { maxLength: 10 } }))
       })
 
       it('should respect maxCollectionSize', function (done) {
-        t.agent.on('debugger-input', ({ payload: { 'debugger.snapshot': { captures } } }) => {
+        t.agent.on('debugger-input', failOnException(done, ({ payload: { 'debugger.snapshot': { captures } } }) => {
           const { locals } = captures.lines[t.breakpoint.line]
 
           assert.deepEqual(locals.arr, {
@@ -182,7 +183,7 @@ describe('Dynamic Instrumentation', function () {
           })
 
           done()
-        })
+        }))
 
         t.agent.addRemoteConfig(t.generateRemoteConfig({ captureSnapshot: true, capture: { maxCollectionSize: 3 } }))
       })
@@ -205,7 +206,7 @@ describe('Dynamic Instrumentation', function () {
           }
         }
 
-        t.agent.on('debugger-input', ({ payload: { 'debugger.snapshot': { captures } } }) => {
+        t.agent.on('debugger-input', failOnException(done, ({ payload: { 'debugger.snapshot': { captures } } }) => {
           const { locals } = captures.lines[t.breakpoint.line]
 
           assert.deepEqual(Object.keys(locals), [
@@ -230,7 +231,7 @@ describe('Dynamic Instrumentation', function () {
           }
 
           done()
-        })
+        }))
 
         t.agent.addRemoteConfig(t.generateRemoteConfig({ captureSnapshot: true, capture: { maxFieldCount } }))
       })
