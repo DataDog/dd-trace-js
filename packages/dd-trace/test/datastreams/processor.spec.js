@@ -294,11 +294,11 @@ describe('DataStreamsProcessor', () => {
       Service: 'service1',
       Version: 'v1',
       Stats: [{
-        Start: new Uint64(1680000000000),
-        Duration: new Uint64(10000000000),
+        Start: 1680000000000n,
+        Duration: 10000000000n,
         Stats: [{
-          Hash: new Uint64(DEFAULT_CURRENT_HASH),
-          ParentHash: new Uint64(DEFAULT_PARENT_HASH),
+          Hash: DEFAULT_CURRENT_HASH.readBigUInt64BE(),
+          ParentHash: DEFAULT_PARENT_HASH.readBigUInt64BE(),
           EdgeTags: mockCheckpoint.edgeTags,
           EdgeLatency: edgeLatency.toProto(),
           PathwayLatency: pathwayLatency.toProto(),
