@@ -130,7 +130,7 @@ describe('track_event', () => {
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.sdk': 'true',
-          'appsec.events.users.login.success.usr.login': 'user_id',
+          'appsec.events.users.login.success.usr.login': 'user_id'
         })
         expect(prioritySampler.setPriority)
           .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
@@ -154,7 +154,7 @@ describe('track_event', () => {
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.sdk': 'true',
-          'appsec.events.users.login.success.usr.login': 'user_login',
+          'appsec.events.users.login.success.usr.login': 'user_login'
         })
         expect(prioritySampler.setPriority)
           .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
