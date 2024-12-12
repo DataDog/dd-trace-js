@@ -33,14 +33,14 @@ function start (config, rc) {
     const ack = rcAckCallbacks.get(ackId)
     if (ack === undefined) {
       // This should never happen, but just in case something changes in the future, we should guard against it
-      log.error(`Received an unknown ackId: ${ackId}`)
-      if (error) log.error(error)
+      log.error('Received an unknown ackId: %s', ackId)
+      if (error) log.error('Error starting Dynamic Instrumentation client', error)
       return
     }
     ack(error)
     rcAckCallbacks.delete(ackId)
   })
-  rcChannel.port2.on('messageerror', (err) => log.error(err))
+  rcChannel.port2.on('messageerror', (err) => log.error('Debugger RC messageerror', err))
 
   worker = new Worker(
     join(__dirname, 'devtools_client', 'index.js'),
@@ -61,13 +61,13 @@ function start (config, rc) {
     log.debug(`Dynamic Instrumentation worker thread started successfully (thread id: ${worker.threadId})`)
   })
 
-  worker.on('error', (err) => log.error(err))
-  worker.on('messageerror', (err) => log.error(err))
+  worker.on('error', (err) => log.error('Debugger worker error', err))
+  worker.on('messageerror', (err) => log.error('Debugger worker messageerror', err))
 
   worker.on('exit', (code) => {
     const error = new Error(`Dynamic Instrumentation worker thread exited unexpectedly with code ${code}`)
 
-    log.error(error)
+    log.error('Debugger worker exited unexpectedly', error)
 
     // Be nice, clean up now that the worker thread encounted an issue and we can't continue
     rc.removeProductHandler('LIVE_DEBUGGING')
