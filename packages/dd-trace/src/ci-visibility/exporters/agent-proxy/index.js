@@ -7,6 +7,7 @@ const CiVisibilityExporter = require('../ci-visibility-exporter')
 
 const AGENT_EVP_PROXY_PATH_PREFIX = '/evp_proxy/v'
 const AGENT_EVP_PROXY_PATH_REGEX = /\/evp_proxy\/v(\d+)\/?/
+const AGENT_DEBUGGER_INPUT = '/debugger/v1/input'
 
 function getLatestEvpProxyVersion (err, agentInfo) {
   if (err) {
@@ -24,6 +25,10 @@ function getLatestEvpProxyVersion (err, agentInfo) {
   }, 0)
 }
 
+function getCanForwardDebuggerLogs (err, agentInfo) {
+  return !err && agentInfo.endpoints.some(endpoint => endpoint === AGENT_DEBUGGER_INPUT)
+}
+
 class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
   constructor (config) {
     super(config)
@@ -33,7 +38,8 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       prioritySampler,
       lookup,
       protocolVersion,
-      headers
+      headers,
+      isTestDynamicInstrumentationEnabled
     } = config
 
     this.getAgentInfo((err, agentInfo) => {
@@ -60,6 +66,18 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
           url: this._url,
           evpProxyPrefix
         })
+        if (isTestDynamicInstrumentationEnabled) {
+          const canFowardLogs = getCanForwardDebuggerLogs(err, agentInfo)
+          if (canFowardLogs) {
+            const DynamicInstrumentationLogsWriter = require('../agentless/di-logs-writer')
+            this._logsWriter = new DynamicInstrumentationLogsWriter({
+              url: this._url,
+              tags,
+              isAgentProxy: true
+            })
+            this._canForwardLogs = true
+          }
+        }
       } else {
         this._writer = new AgentWriter({
           url: this._url,

@@ -1,14 +1,10 @@
 'use strict'
 
-const {
-  channel,
-  addHook
-} = require('./helpers/instrument')
+const { addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const startCh = channel('apm:openai:request:start')
-const finishCh = channel('apm:openai:request:finish')
-const errorCh = channel('apm:openai:request:error')
+const dc = require('dc-polyfill')
+const ch = dc.tracingChannel('apm:openai:request')
 
 const V4_PACKAGE_SHIMS = [
   {
@@ -110,33 +106,18 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
 
   for (const methodName of methodNames) {
     shimmer.wrap(exports.OpenAIApi.prototype, methodName, fn => function () {
-      if (!startCh.hasSubscribers) {
+      if (!ch.start.hasSubscribers) {
         return fn.apply(this, arguments)
       }
 
-      startCh.publish({
+      const ctx = {
         methodName,
         args: arguments,
         basePath: this.basePath,
         apiKey: this.configuration.apiKey
-      })
+      }
 
-      return fn.apply(this, arguments)
-        .then((response) => {
-          finish({
-            headers: response.headers,
-            body: response.data,
-            path: response.request.path,
-            method: response.request.method
-          })
-
-          return response
-        })
-        .catch(error => {
-          finish(undefined, error)
-
-          throw error
-        })
+      return ch.tracePromise(fn, ctx, this, ...arguments)
     })
   }
 
@@ -184,10 +165,12 @@ function addStreamedChunk (content, chunk) {
 
       if (tools) {
         oldChoice.delta.tool_calls = tools.map((newTool, toolIdx) => {
-          const oldTool = oldChoice.delta.tool_calls[toolIdx]
+          const oldTool = oldChoice.delta.tool_calls?.[toolIdx]
 
           if (oldTool) {
             oldTool.function.arguments += newTool.function.arguments
+          } else {
+            return newTool
           }
 
           return oldTool
@@ -213,7 +196,7 @@ function convertBufferstoObjects (chunks = []) {
  * the chunks, and let the combined content be the final response.
  * This way, spans look the same as when not streamed.
  */
-function wrapStreamIterator (response, options, n) {
+function wrapStreamIterator (response, options, n, ctx) {
   let processChunksAsBuffers = false
   let chunks = []
   return function (itr) {
@@ -253,18 +236,20 @@ function wrapStreamIterator (response, options, n) {
                 }
               }
 
-              finish({
+              finish(ctx, {
                 headers: response.headers,
-                body,
-                path: response.url,
-                method: options.method
+                data: body,
+                request: {
+                  path: response.url,
+                  method: options.method
+                }
               })
             }
 
             return res
           })
           .catch(err => {
-            finish(undefined, err)
+            finish(ctx, undefined, err)
 
             throw err
           })
@@ -281,7 +266,7 @@ for (const shim of V4_PACKAGE_SHIMS) {
 
     for (const methodName of methods) {
       shimmer.wrap(targetPrototype, methodName, methodFn => function () {
-        if (!startCh.hasSubscribers) {
+        if (!ch.start.hasSubscribers) {
           return methodFn.apply(this, arguments)
         }
 
@@ -303,66 +288,72 @@ for (const shim of V4_PACKAGE_SHIMS) {
 
         const client = this._client || this.client
 
-        startCh.publish({
+        const ctx = {
           methodName: `${baseResource}.${methodName}`,
           args: arguments,
           basePath: client.baseURL,
           apiKey: client.apiKey
-        })
+        }
 
-        const apiProm = methodFn.apply(this, arguments)
+        return ch.start.runStores(ctx, () => {
+          const apiProm = methodFn.apply(this, arguments)
 
-        // wrapping `parse` avoids problematic wrapping of `then` when trying to call
-        // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
-        shimmer.wrap(apiProm, 'parse', origApiPromParse => function () {
-          return origApiPromParse.apply(this, arguments)
+          // wrapping `parse` avoids problematic wrapping of `then` when trying to call
+          // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
+          shimmer.wrap(apiProm, 'parse', origApiPromParse => function () {
+            return origApiPromParse.apply(this, arguments)
             // the original response is wrapped in a promise, so we need to unwrap it
-            .then(body => Promise.all([this.responsePromise, body]))
-            .then(([{ response, options }, body]) => {
-              if (stream) {
-                if (body.iterator) {
-                  shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, n))
+              .then(body => Promise.all([this.responsePromise, body]))
+              .then(([{ response, options }, body]) => {
+                if (stream) {
+                  if (body.iterator) {
+                    shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, n, ctx))
+                  } else {
+                    shimmer.wrap(
+                      body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, n, ctx)
+                    )
+                  }
                 } else {
-                  shimmer.wrap(
-                    body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, n)
-                  )
+                  finish(ctx, {
+                    headers: response.headers,
+                    data: body,
+                    request: {
+                      path: response.url,
+                      method: options.method
+                    }
+                  })
                 }
-              } else {
-                finish({
-                  headers: response.headers,
-                  body,
-                  path: response.url,
-                  method: options.method
-                })
-              }
 
-              return body
-            })
-            .catch(error => {
-              finish(undefined, error)
+                return body
+              })
+              .catch(error => {
+                finish(ctx, undefined, error)
 
-              throw error
-            })
-            .finally(() => {
+                throw error
+              })
+              .finally(() => {
               // maybe we don't want to unwrap here in case the promise is re-used?
               // other hand: we want to avoid resource leakage
-              shimmer.unwrap(apiProm, 'parse')
-            })
-        })
+                shimmer.unwrap(apiProm, 'parse')
+              })
+          })
 
-        return apiProm
+          return apiProm
+        })
       })
     }
     return exports
   })
 }
 
-function finish (response, error) {
+function finish (ctx, response, error) {
   if (error) {
-    errorCh.publish({ error })
+    ctx.error = error
+    ch.error.publish(ctx)
   }
 
-  finishCh.publish(response)
+  ctx.result = response
+  ch.asyncEnd.publish(ctx)
 }
 
 function getOption (args, option, defaultValue) {

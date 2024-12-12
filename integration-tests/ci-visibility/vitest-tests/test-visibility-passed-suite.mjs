@@ -30,3 +30,18 @@ describe('other context', () => {
     expect(sum(1, 2)).to.equal(3)
   })
 })
+
+test('no suite', () => {
+  expect(sum(1, 2)).to.equal(3)
+})
+
+test.skip('skip no suite', () => {
+  expect(sum(1, 2)).to.equal(3)
+})
+
+// eslint-disable-next-line
+test('programmatic skip no suite', (context) => {
+  // eslint-disable-next-line
+  context.skip()
+  expect(sum(1, 2)).to.equal(3)
+})

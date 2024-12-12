@@ -1,7 +1,10 @@
 'use strict'
 
+const coalesce = require('koalas')
+const { isTrue } = require('../util')
 const { debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
+const { Log } = require('./log')
 
 const memoize = func => {
   const cache = {}
@@ -16,17 +19,29 @@ const memoize = func => {
   return memoized
 }
 
-function processMsg (msg) {
-  return typeof msg === 'function' ? msg() : msg
+const config = {
+  enabled: false,
+  logger: undefined,
+  logLevel: 'debug'
 }
 
 const log = {
+  /**
+   * @returns Read-only version of logging config. To modify config, call `log.use` and `log.toggle`
+   */
+  getConfig () {
+    return { ...config }
+  },
+
   use (logger) {
+    config.logger = logger
     logWriter.use(logger)
     return this
   },
 
   toggle (enabled, logLevel) {
+    config.enabled = enabled
+    config.logLevel = logLevel
     logWriter.toggle(enabled, logLevel)
     return this
   },
@@ -34,37 +49,37 @@ const log = {
   reset () {
     logWriter.reset()
     this._deprecate = memoize((code, message) => {
-      errorChannel.publish(message)
+      errorChannel.publish(Log.parse(message))
       return true
     })
 
     return this
   },
 
-  debug (message) {
+  debug (...args) {
     if (debugChannel.hasSubscribers) {
-      debugChannel.publish(processMsg(message))
+      debugChannel.publish(Log.parse(...args))
     }
     return this
   },
 
-  info (message) {
+  info (...args) {
     if (infoChannel.hasSubscribers) {
-      infoChannel.publish(processMsg(message))
+      infoChannel.publish(Log.parse(...args))
     }
     return this
   },
 
-  warn (message) {
+  warn (...args) {
     if (warnChannel.hasSubscribers) {
-      warnChannel.publish(processMsg(message))
+      warnChannel.publish(Log.parse(...args))
     }
     return this
   },
 
-  error (err) {
+  error (...args) {
     if (errorChannel.hasSubscribers) {
-      errorChannel.publish(processMsg(err))
+      errorChannel.publish(Log.parse(...args))
     }
     return this
   },
@@ -75,5 +90,19 @@ const log = {
 }
 
 log.reset()
+
+const enabled = isTrue(coalesce(
+  process.env.DD_TRACE_DEBUG,
+  process.env.OTEL_LOG_LEVEL === 'debug',
+  config.enabled
+))
+
+const logLevel = coalesce(
+  process.env.DD_TRACE_LOG_LEVEL,
+  process.env.OTEL_LOG_LEVEL,
+  config.logLevel
+)
+
+log.toggle(enabled, logLevel)
 
 module.exports = log

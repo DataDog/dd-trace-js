@@ -2,6 +2,7 @@
 
 const Analyzer = require('./vulnerability-analyzer')
 const { getNodeModulesPaths } = require('../path-line')
+const log = require('../../../log')
 
 const EXCLUDED_PATHS = getNodeModulesPaths('express/lib/response.js')
 
@@ -11,7 +12,14 @@ class CookieAnalyzer extends Analyzer {
     this.propertyToBeSafe = propertyToBeSafe.toLowerCase()
   }
 
-  onConfigure () {
+  onConfigure (config) {
+    try {
+      this.cookieFilterRegExp = new RegExp(config.iast.cookieFilterPattern)
+    } catch {
+      log.error('[ASM] Invalid regex in cookieFilterPattern')
+      this.cookieFilterRegExp = /.{32,}/
+    }
+
     this.addSub(
       { channelName: 'datadog:iast:set-cookie', moduleName: 'http' },
       (cookieInfo) => this.analyze(cookieInfo)
@@ -28,6 +36,10 @@ class CookieAnalyzer extends Analyzer {
   }
 
   _createHashSource (type, evidence, location) {
+    if (typeof evidence.value === 'string' && evidence.value.match(this.cookieFilterRegExp)) {
+      return 'FILTERED_' + this._type
+    }
+
     return `${type}:${evidence.value}`
   }
 

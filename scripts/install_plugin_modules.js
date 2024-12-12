@@ -81,7 +81,10 @@ async function assertInstrumentation (instrumentation, external) {
 
   for (const version of versions) {
     if (version) {
-      await assertModules(instrumentation.name, semver.coerce(version).version, external)
+      if (version !== '*') {
+        await assertModules(instrumentation.name, semver.coerce(version).version, external)
+      }
+
       await assertModules(instrumentation.name, version, external)
     }
   }
@@ -148,7 +151,13 @@ async function addDependencies (dependencies, name, versionRange) {
   for (const dep of deps[name]) {
     for (const section of ['devDependencies', 'peerDependencies']) {
       if (pkgJson[section] && dep in pkgJson[section]) {
-        dependencies[dep] = pkgJson[section][dep]
+        if (pkgJson[section][dep].includes('||')) {
+          // Use the first version in the list (as npm does by default)
+          dependencies[dep] = pkgJson[section][dep].split('||')[0].trim()
+        } else {
+          // Only one version available so use that.
+          dependencies[dep] = pkgJson[section][dep]
+        }
         break
       }
     }
@@ -203,7 +212,11 @@ function assertWorkspace () {
 }
 
 function install () {
-  exec('yarn --ignore-engines', { cwd: folder() })
+  try {
+    exec('yarn --ignore-engines', { cwd: folder() })
+  } catch (e) { // retry in case of server error from registry
+    exec('yarn --ignore-engines', { cwd: folder() })
+  }
 }
 
 function addFolder (name, version) {

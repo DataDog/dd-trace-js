@@ -1,5 +1,6 @@
 'use strict'
 
+const crypto = require('crypto')
 const path = require('path')
 
 function isTrue (str) {
@@ -24,6 +25,8 @@ function isError (value) {
 
 // Matches a glob pattern to a given subject string
 function globMatch (pattern, subject) {
+  if (typeof pattern === 'string') pattern = pattern.toLowerCase()
+  if (typeof subject === 'string') subject = subject.toLowerCase()
   let px = 0 // [p]attern inde[x]
   let sx = 0 // [s]ubject inde[x]
   let nextPx = 0
@@ -73,11 +76,25 @@ function hasOwn (object, prop) {
   return Object.prototype.hasOwnProperty.call(object, prop)
 }
 
+/**
+ * Generates a unique hash from an array of strings by joining them with | before hashing.
+ * Used to uniquely identify AWS requests for span pointers.
+ * @param {string[]} components - Array of strings to hash
+ * @returns {string} A 32-character hash uniquely identifying the components
+ */
+function generatePointerHash (components) {
+  // If passing S3's ETag as a component, make sure any quotes have already been removed!
+  const dataToHash = components.join('|')
+  const hash = crypto.createHash('sha256').update(dataToHash).digest('hex')
+  return hash.substring(0, 32)
+}
+
 module.exports = {
   isTrue,
   isFalse,
   isError,
   globMatch,
   calculateDDBasePath,
-  hasOwn
+  hasOwn,
+  generatePointerHash
 }

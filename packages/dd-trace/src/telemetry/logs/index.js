@@ -5,6 +5,7 @@ const logCollector = require('./log-collector')
 const { sendData } = require('../send-data')
 
 const telemetryLog = dc.channel('datadog:telemetry:log')
+const errorLog = dc.channel('datadog:log:error')
 
 let enabled = false
 
@@ -33,12 +34,34 @@ function onLog (log) {
   }
 }
 
+function onErrorLog (msg) {
+  const { message, cause } = msg
+  if (!message && !cause) return
+
+  const telLog = {
+    level: 'ERROR',
+
+    // existing log.error(err) without message will be reported as 'Generic Error'
+    message: message ?? 'Generic Error'
+  }
+
+  if (cause) {
+    telLog.stack_trace = cause.stack
+    const errorType = cause.name ?? 'Error'
+    telLog.message = `${errorType}: ${telLog.message}`
+  }
+
+  onLog(telLog)
+}
+
 function start (config) {
   if (!config.telemetry.logCollection || enabled) return
 
   enabled = true
 
   telemetryLog.subscribe(onLog)
+
+  errorLog.subscribe(onErrorLog)
 }
 
 function stop () {
@@ -47,6 +70,8 @@ function stop () {
   if (telemetryLog.hasSubscribers) {
     telemetryLog.unsubscribe(onLog)
   }
+
+  errorLog.unsubscribe(onErrorLog)
 }
 
 function send (config, application, host) {

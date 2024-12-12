@@ -162,41 +162,41 @@ describe('Appsec Telemetry metrics', () => {
     })
 
     describe('updateRaspRequestsMetricTags', () => {
-      it('should increment appsec.rasp.rule.eval metric', () => {
+      it('should increment rasp.rule.eval metric', () => {
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 42,
           durationExt: 52
         }, req, 'rule-type')
 
-        expect(count).to.have.been.calledWith('appsec.rasp.rule.eval')
-        expect(count).to.not.have.been.calledWith('appsec.rasp.timeout')
-        expect(count).to.not.have.been.calledWith('appsec.rasp.rule.match')
+        expect(count).to.have.been.calledWith('rasp.rule.eval')
+        expect(count).to.not.have.been.calledWith('rasp.timeout')
+        expect(count).to.not.have.been.calledWith('rasp.rule.match')
         expect(inc).to.have.been.calledOnceWith(1)
       })
 
-      it('should increment appsec.rasp.timeout metric if timeout', () => {
+      it('should increment rasp.timeout metric if timeout', () => {
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 42,
           durationExt: 52,
           wafTimeout: true
         }, req, 'rule-type')
 
-        expect(count).to.have.been.calledWith('appsec.rasp.rule.eval')
-        expect(count).to.have.been.calledWith('appsec.rasp.timeout')
-        expect(count).to.not.have.been.calledWith('appsec.rasp.rule.match')
+        expect(count).to.have.been.calledWith('rasp.rule.eval')
+        expect(count).to.have.been.calledWith('rasp.timeout')
+        expect(count).to.not.have.been.calledWith('rasp.rule.match')
         expect(inc).to.have.been.calledTwice
       })
 
-      it('should increment appsec.rasp.rule.match metric if ruleTriggered', () => {
+      it('should increment rasp.rule.match metric if ruleTriggered', () => {
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 42,
           durationExt: 52,
           ruleTriggered: true
         }, req, 'rule-type')
 
-        expect(count).to.have.been.calledWith('appsec.rasp.rule.match')
-        expect(count).to.have.been.calledWith('appsec.rasp.rule.eval')
-        expect(count).to.not.have.been.calledWith('appsec.rasp.timeout')
+        expect(count).to.have.been.calledWith('rasp.rule.match')
+        expect(count).to.have.been.calledWith('rasp.rule.eval')
+        expect(count).to.not.have.been.calledWith('rasp.timeout')
         expect(inc).to.have.been.calledTwice
       })
 

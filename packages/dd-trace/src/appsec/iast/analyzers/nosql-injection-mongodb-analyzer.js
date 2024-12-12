@@ -13,7 +13,7 @@ const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb', 'mongoose', 'mq
 const MONGODB_NOSQL_SECURE_MARK = getNextSecureMark()
 
 function iterateObjectStrings (target, fn, levelKeys = [], depth = 20, visited = new Set()) {
-  if (target && typeof target === 'object') {
+  if (target !== null && typeof target === 'object') {
     Object.keys(target).forEach((key) => {
       const nextLevelKeys = [...levelKeys, key]
       const val = target[key]

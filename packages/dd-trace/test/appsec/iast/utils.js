@@ -112,9 +112,7 @@ function beforeEachIastTest (iastConfig) {
   beforeEach(() => {
     vulnerabilityReporter.clearCache()
     iast.enable(new Config({
-      experimental: {
-        iast: iastConfig
-      }
+      iast: iastConfig
     }))
   })
 }
@@ -138,6 +136,7 @@ function endResponse (res, appResult) {
 function checkNoVulnerabilityInRequest (vulnerability, config, done, makeRequest) {
   agent
     .use(traces => {
+      if (traces[0][0].type !== 'web') throw new Error('Not a web span')
       // iastJson == undefiend is valid
       const iastJson = traces[0][0].meta['_dd.iast.json'] || ''
       expect(iastJson).to.not.include(`"${vulnerability}"`)
@@ -154,7 +153,7 @@ function checkNoVulnerabilityInRequest (vulnerability, config, done, makeRequest
 function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb, makeRequest, config, done) {
   let location
   let occurrences = occurrencesAndLocation
-  if (typeof occurrencesAndLocation === 'object') {
+  if (occurrencesAndLocation !== null && typeof occurrencesAndLocation === 'object') {
     location = occurrencesAndLocation.location
     occurrences = occurrencesAndLocation.occurrences
   }
@@ -170,7 +169,7 @@ function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb,
         vulnerabilitiesCount.set(v.type, ++count)
       })
 
-      expect(vulnerabilitiesCount.get(vulnerability)).to.not.be.null
+      expect(vulnerabilitiesCount.get(vulnerability)).to.be.greaterThan(0)
       if (occurrences) {
         expect(vulnerabilitiesCount.get(vulnerability)).to.equal(occurrences)
       }
@@ -249,8 +248,8 @@ function prepareTestServerForIast (description, tests, iastConfig) {
       return agent.close({ ritmReset: false })
     })
 
-    function testThatRequestHasVulnerability (fn, vulnerability, occurrences, cb, makeRequest) {
-      it(`should have ${vulnerability} vulnerability`, function (done) {
+    function testThatRequestHasVulnerability (fn, vulnerability, occurrences, cb, makeRequest, description) {
+      it(description || `should have ${vulnerability} vulnerability`, function (done) {
         this.timeout(5000)
         app = fn
         checkVulnerabilityInRequest(vulnerability, occurrences, cb, makeRequest, config, done)
@@ -290,9 +289,10 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
     before((done) => {
       const express = require(`../../../../../versions/express@${expressVersion}`).get()
       const bodyParser = require('../../../../../versions/body-parser').get()
+
       const expressApp = express()
 
-      if (loadMiddlewares) loadMiddlewares(expressApp)
+      if (loadMiddlewares) loadMiddlewares(expressApp, listener)
 
       expressApp.use(bodyParser.json())
       try {
@@ -325,7 +325,7 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
 
     function testThatRequestHasVulnerability (fn, vulnerability, occurrencesAndLocation, cb, makeRequest) {
       let testDescription
-      if (typeof fn === 'object') {
+      if (fn !== null && typeof fn === 'object') {
         const obj = fn
         fn = obj.fn
         vulnerability = obj.vulnerability
@@ -347,7 +347,7 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
 
     function testThatRequestHasNoVulnerability (fn, vulnerability, makeRequest) {
       let testDescription
-      if (typeof fn === 'object') {
+      if (fn !== null && typeof fn === 'object') {
         const obj = fn
         fn = obj.fn
         vulnerability = obj.vulnerability

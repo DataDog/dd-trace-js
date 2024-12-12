@@ -62,7 +62,8 @@ describe('Child process plugin', () => {
               'span.type': 'system',
               'cmd.exec': JSON.stringify(['ls', '-l'])
             },
-            integrationName: 'system'
+            integrationName: 'system',
+            links: undefined
           }
         )
       })
@@ -84,7 +85,8 @@ describe('Child process plugin', () => {
               'span.type': 'system',
               'cmd.shell': 'ls -l'
             },
-            integrationName: 'system'
+            integrationName: 'system',
+            links: undefined
           }
         )
       })
@@ -109,7 +111,8 @@ describe('Child process plugin', () => {
               'cmd.exec': JSON.stringify(['echo', arg, '']),
               'cmd.truncated': 'true'
             },
-            integrationName: 'system'
+            integrationName: 'system',
+            links: undefined
           }
         )
       })
@@ -134,7 +137,8 @@ describe('Child process plugin', () => {
               'cmd.shell': 'ls -l /h ',
               'cmd.truncated': 'true'
             },
-            integrationName: 'system'
+            integrationName: 'system',
+            links: undefined
           }
         )
       })
@@ -160,7 +164,8 @@ describe('Child process plugin', () => {
               'cmd.exec': JSON.stringify(['ls', '-l', '', '']),
               'cmd.truncated': 'true'
             },
-            integrationName: 'system'
+            integrationName: 'system',
+            links: undefined
           }
         )
       })
@@ -186,7 +191,8 @@ describe('Child process plugin', () => {
               'cmd.shell': 'ls -l /home -t',
               'cmd.truncated': 'true'
             },
-            integrationName: 'system'
+            integrationName: 'system',
+            links: undefined
           }
         )
       })
@@ -283,6 +289,82 @@ describe('Child process plugin', () => {
     })
   })
 
+  describe('context maintenance', () => {
+    let parent
+    let childProcess
+    let tracer
+
+    before(() => {
+      return agent.load(['child_process'])
+        .then(() => {
+          childProcess = require('child_process')
+          tracer = require('../../dd-trace')
+          tracer.init()
+          parent = tracer.startSpan('parent')
+          parent.finish()
+        }).then(_port => {
+          return new Promise(resolve => setImmediate(resolve))
+        })
+    })
+
+    after(() => {
+      return agent.close()
+    })
+
+    it('should preserve context around execSync calls', () => {
+      tracer.scope().activate(parent, () => {
+        expect(tracer.scope().active()).to.equal(parent)
+        childProcess.execSync('ls')
+        expect(tracer.scope().active()).to.equal(parent)
+      })
+    })
+
+    it('should preserve context around exec calls', (done) => {
+      tracer.scope().activate(parent, () => {
+        expect(tracer.scope().active()).to.equal(parent)
+        childProcess.exec('ls', () => {
+          expect(tracer.scope().active()).to.equal(parent)
+          done()
+        })
+      })
+    })
+
+    it('should preserve context around execFileSync calls', () => {
+      tracer.scope().activate(parent, () => {
+        expect(tracer.scope().active()).to.equal(parent)
+        childProcess.execFileSync('ls')
+        expect(tracer.scope().active()).to.equal(parent)
+      })
+    })
+
+    it('should preserve context around execFile calls', (done) => {
+      tracer.scope().activate(parent, () => {
+        expect(tracer.scope().active()).to.equal(parent)
+        childProcess.execFile('ls', () => {
+          expect(tracer.scope().active()).to.equal(parent)
+          done()
+        })
+      })
+    })
+
+    it('should preserve context around spawnSync calls', () => {
+      tracer.scope().activate(parent, () => {
+        expect(tracer.scope().active()).to.equal(parent)
+        childProcess.spawnSync('ls')
+        expect(tracer.scope().active()).to.equal(parent)
+      })
+    })
+
+    it('should preserve context around spawn calls', (done) => {
+      tracer.scope().activate(parent, () => {
+        expect(tracer.scope().active()).to.equal(parent)
+        childProcess.spawn('ls')
+        expect(tracer.scope().active()).to.equal(parent)
+        done()
+      })
+    })
+  })
+
   describe('Integration', () => {
     describe('Methods which spawn a shell by default', () => {
       const execAsyncMethods = ['exec']
@@ -299,19 +381,25 @@ describe('Child process plugin', () => {
 
       afterEach(() => agent.close({ ritmReset: false }))
       const parentSpanList = [true, false]
-      parentSpanList.forEach(parentSpan => {
-        describe(`${parentSpan ? 'with' : 'without'} parent span`, () => {
+      parentSpanList.forEach(hasParentSpan => {
+        let parentSpan
+
+        describe(`${hasParentSpan ? 'with' : 'without'} parent span`, () => {
           const methods = [
             ...execAsyncMethods.map(methodName => ({ methodName, async: true })),
             ...execSyncMethods.map(methodName => ({ methodName, async: false }))
           ]
-          if (parentSpan) {
-            beforeEach((done) => {
-              const parentSpan = tracer.startSpan('parent')
+
+          beforeEach((done) => {
+            if (hasParentSpan) {
+              parentSpan = tracer.startSpan('parent')
               parentSpan.finish()
               tracer.scope().activate(parentSpan, done)
-            })
-          }
+            } else {
+              storage.enterWith({})
+              done()
+            }
+          })
 
           methods.forEach(({ methodName, async }) => {
             describe(methodName, () => {
@@ -334,6 +422,30 @@ describe('Child process plugin', () => {
                   res.on('close', noop)
                 }
               })
+
+              it('should maintain previous span after the execution', (done) => {
+                const res = childProcess[methodName]('ls')
+                const span = storage.getStore()?.span
+                expect(span).to.be.equals(parentSpan)
+                if (async) {
+                  res.on('close', () => {
+                    expect(span).to.be.equals(parentSpan)
+                    done()
+                  })
+                } else {
+                  done()
+                }
+              })
+
+              if (async) {
+                it('should maintain previous span in the callback', (done) => {
+                  childProcess[methodName]('ls', () => {
+                    const span = storage.getStore()?.span
+                    expect(span).to.be.equals(parentSpan)
+                    done()
+                  })
+                })
+              }
 
               it('command should be scrubbed', (done) => {
                 const expected = {

@@ -8,6 +8,7 @@ const { expect } = require('chai')
 const nock = require('nock')
 
 const AgentlessCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/agentless')
+const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 
 describe('CI Visibility Agentless Exporter', () => {
   const url = new URL('http://www.example.com')
@@ -17,6 +18,7 @@ describe('CI Visibility Agentless Exporter', () => {
     sinon.stub(cp, 'execFileSync').returns('false')
     nock.cleanAll()
   })
+
   afterEach(() => {
     sinon.restore()
   })
@@ -60,6 +62,7 @@ describe('CI Visibility Agentless Exporter', () => {
         done()
       })
     })
+
     it('will request skippable to api.site by default', (done) => {
       const scope = nock('https://api.datadoge.c0m')
         .post('/api/v2/libraries/tests/services/setting')
@@ -91,6 +94,7 @@ describe('CI Visibility Agentless Exporter', () => {
         })
       })
     })
+
     it('can request ITR configuration right away', (done) => {
       const scope = nock('http://www.example.com')
         .post('/api/v2/libraries/tests/services/setting')
@@ -113,6 +117,7 @@ describe('CI Visibility Agentless Exporter', () => {
         done()
       })
     })
+
     it('can report code coverages if enabled by the API', (done) => {
       const scope = nock('http://www.example.com')
         .post('/api/v2/libraries/tests/services/setting')
@@ -134,6 +139,7 @@ describe('CI Visibility Agentless Exporter', () => {
         done()
       })
     })
+
     it('will not allow skippable request if ITR configuration fails', (done) => {
       // request will fail
       delete process.env.DD_API_KEY
@@ -169,6 +175,33 @@ describe('CI Visibility Agentless Exporter', () => {
         process.env.DD_API_KEY = '1'
         done()
       })
+    })
+  })
+
+  context('if isTestDynamicInstrumentationEnabled is set', () => {
+    it('should initialise DynamicInstrumentationLogsWriter', async () => {
+      const agentProxyCiVisibilityExporter = new AgentlessCiVisibilityExporter({
+        tags: {},
+        isTestDynamicInstrumentationEnabled: true
+      })
+      await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
+      expect(agentProxyCiVisibilityExporter._logsWriter).to.be.instanceOf(DynamicInstrumentationLogsWriter)
+    })
+
+    it('should process logs', async () => {
+      const mockWriter = {
+        append: sinon.spy(),
+        flush: sinon.spy()
+      }
+      const agentProxyCiVisibilityExporter = new AgentlessCiVisibilityExporter({
+        tags: {},
+        isTestDynamicInstrumentationEnabled: true
+      })
+      await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
+      agentProxyCiVisibilityExporter._logsWriter = mockWriter
+      const log = { message: 'hello' }
+      agentProxyCiVisibilityExporter.exportDiLogs({}, log)
+      expect(mockWriter.append).to.have.been.calledWith(sinon.match(log))
     })
   })
 

@@ -1,0 +1,161 @@
+{
+  "version": "2.2",
+  "metadata": {
+    "rules_version": "1.99.0"
+  },
+  "rules": [
+    {
+      "id": "rasp-ssrf-rule-id-1",
+      "name": "Server-side request forgery exploit",
+      "enabled": true,
+      "tags": {
+        "type": "ssrf",
+        "category": "vulnerability_trigger",
+        "cwe": "918",
+        "capec": "1000/225/115/664",
+        "confidence": "0",
+        "module": "rasp"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "resource": [
+              {
+                "address": "server.io.net.url"
+              }
+            ],
+            "params": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ]
+          },
+          "operator": "ssrf_detector"
+        }
+      ],
+      "transformers": [],
+      "on_match": [
+        "block",
+        "stack_trace"
+      ]
+    },
+    {
+      "id": "rasp-sqli-rule-id-2",
+      "name": "SQL injection exploit",
+      "tags": {
+        "type": "sql_injection",
+        "category": "vulnerability_trigger",
+        "cwe": "89",
+        "capec": "1000/152/248/66",
+        "confidence": "0",
+        "module": "rasp"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "resource": [
+              {
+                "address": "server.db.statement"
+              }
+            ],
+            "params": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "db_type": [
+              {
+                "address": "server.db.system"
+              }
+            ]
+          },
+          "operator": "sqli_detector"
+        }
+      ],
+      "transformers": [],
+      "on_match": [
+        "block",
+        "stack_trace"
+      ]
+    },
+    {
+      "id": "rasp-command_injection-rule-id-3",
+      "name": "Command injection exploit",
+      "tags": {
+        "type": "command_injection",
+        "category": "vulnerability_trigger",
+        "cwe": "77",
+        "capec": "1000/152/248/88",
+        "confidence": "0",
+        "module": "rasp"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "resource": [
+              {
+                "address": "server.sys.shell.cmd"
+              }
+            ],
+            "params": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ]
+          },
+          "operator": "shi_detector"
+        }
+      ],
+      "transformers": [],
+      "on_match": [
+        "block",
+        "stack_trace"
+      ]
+    }
+  ]
+}

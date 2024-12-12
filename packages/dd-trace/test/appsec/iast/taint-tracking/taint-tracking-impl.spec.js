@@ -25,6 +25,8 @@ const propagationFns = [
   'sliceStr',
   'substrStr',
   'substringStr',
+  'templateLiteralEndingWithNumberParams',
+  'templateLiteralWithTaintedAtTheEnd',
   'toLowerCaseStr',
   'toUpperCaseStr',
   'trimEndStr',
@@ -48,6 +50,7 @@ const propagationFunctions = require(propagationFunctionsFile)
 
 describe('TaintTracking', () => {
   let instrumentedFunctionsFile
+
   beforeEach(() => {
     instrumentedFunctionsFile = copyFileToTmp(propagationFunctionsFile)
   })
@@ -134,7 +137,9 @@ describe('TaintTracking', () => {
       'arrayProtoJoin',
       'concatSuffix',
       'concatTaintedStr',
-      'insertStr'
+      'insertStr',
+      'templateLiteralEndingWithNumberParams',
+      'templateLiteralWithTaintedAtTheEnd'
     ]
     propagationFns.forEach((propFn) => {
       if (filtered.includes(propFn)) return

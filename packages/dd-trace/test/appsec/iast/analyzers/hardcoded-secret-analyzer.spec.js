@@ -20,6 +20,7 @@ describe('Hardcoded Secret Analyzer', () => {
     const column = 3
 
     let report
+
     beforeEach(() => {
       report = sinon.stub(hardcodedSecretAnalyzer, '_report')
     })

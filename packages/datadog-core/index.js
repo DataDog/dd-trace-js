@@ -1,7 +1,5 @@
 'use strict'
 
-const LocalStorage = require('./src/storage')
-
-const storage = new LocalStorage()
+const storage = require('./src/storage')
 
 module.exports = { storage }

@@ -14,7 +14,13 @@ const queryParsedChannel = channel('apm:next:query-parsed')
 const requests = new WeakSet()
 const nodeNextRequestsToNextRequests = new WeakMap()
 
+// Next.js <= 14.2.6
 const MIDDLEWARE_HEADER = 'x-middleware-invoke'
+
+// Next.js >= 14.2.7
+const NEXT_REQUEST_META = Symbol.for('NextInternalRequestMeta')
+const META_IS_MIDDLEWARE = 'middlewareInvoke'
+const encounteredMiddleware = new WeakSet()
 
 function wrapHandleRequest (handleRequest) {
   return function (req, res, pathname, query) {
@@ -46,7 +52,7 @@ function wrapHandleApiRequest (handleApiRequest) {
 function wrapHandleApiRequestWithMatch (handleApiRequest) {
   return function (req, res, query, match) {
     return instrument(req, res, () => {
-      const page = (typeof match === 'object' && typeof match.definition === 'object')
+      const page = (match !== null && typeof match === 'object' && typeof match.definition === 'object')
         ? match.definition.pathname
         : undefined
 
@@ -111,6 +117,11 @@ function getPageFromPath (page, dynamicRoutes = []) {
   return getPagePath(page)
 }
 
+function getRequestMeta (req, key) {
+  const meta = req[NEXT_REQUEST_META] || {}
+  return typeof key === 'string' ? meta[key] : meta
+}
+
 function instrument (req, res, error, handler) {
   if (typeof error === 'function') {
     handler = error
@@ -121,8 +132,9 @@ function instrument (req, res, error, handler) {
   res = res.originalResponse || res
 
   // TODO support middleware properly in the future?
-  const isMiddleware = req.headers[MIDDLEWARE_HEADER]
-  if (isMiddleware || requests.has(req)) {
+  const isMiddleware = req.headers[MIDDLEWARE_HEADER] || getRequestMeta(req, META_IS_MIDDLEWARE)
+  if ((isMiddleware && !encounteredMiddleware.has(req)) || requests.has(req)) {
+    encounteredMiddleware.add(req)
     if (error) {
       errorChannel.publish({ error })
     }

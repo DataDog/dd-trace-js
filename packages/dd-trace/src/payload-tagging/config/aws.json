@@ -1,0 +1,98 @@
+{
+  "sns": {
+    "request": [
+      "$.Attributes.KmsMasterKeyId",
+      "$.Attributes.PlatformCredential",
+      "$.Attributes.PlatformPrincipal",
+      "$.Attributes.Token",
+      "$.AWSAccountId",
+      "$.Endpoint",
+      "$.OneTimePassword",
+      "$.phoneNumber",
+      "$.PhoneNumber",
+      "$.Token"
+    ],
+    "response": [
+      "$.Attributes.KmsMasterKeyId",
+      "$.Attributes.Token",
+      "$.Endpoints.*.Token",
+      "$.PhoneNumber",
+      "$.PlatformApplication.*.PlatformCredential",
+      "$.PlatformApplication.*.PlatformPrincipal",
+      "$.Subscriptions.*.Endpoint",
+      "$.PhoneNumbers[*].PhoneNumber",
+      "$.phoneNumbers[*]"
+    ],
+    "expand": [
+      "$.MessageAttributes.*.StringValue"
+    ]
+  },
+  "eventbridge": {
+    "request": [
+      "$.AuthParameters.OAuthParameters.OAuthHttpParameters.HeaderParameters[*].Value",
+      "$.AuthParameters.OAuthParameters.OAuthHttpParameters.QueryStringParameters[*].Value",
+      "$.AuthParameters.OAuthParameters.OAuthHttpParameters.BodyParameters[*].Value",
+      "$.AuthParameters.InvocationHttpParameters.HeaderParameters[*].Value",
+      "$.AuthParameters.InvocationHttpParameters.QueryStringParameters[*].Value",
+      "$.AuthParameters.InvocationHttpParameters.BodyParameters[*].Value",
+      "$.Targets[*].RedshiftDataParameters.Sql",
+      "$.Targets[*].RedshiftDataParameters.Sqls",
+      "$.Targets[*].AppSyncParameters.GraphQLOperation",
+      "$.AuthParameters.BasicAuthParameters.Password",
+      "$.AuthParameters.OAuthParameters.ClientParameters.ClientSecret",
+      "$.AuthParameters.ApiKeyAuthParameters.ApiKeyValue"
+    ],
+    "response": [
+      "$.AuthParameters.OAuthParameters.OAuthHttpParameters.HeaderParameters[*].Value",
+      "$.AuthParameters.OAuthParameters.OAuthHttpParameters.QueryStringParameters[*].Value",
+      "$.AuthParameters.OAuthParameters.OAuthHttpParameters.BodyParameters[*].Value",
+      "$.AuthParameters.InvocationHttpParameters.HeaderParameters[*].Value",
+      "$.AuthParameters.InvocationHttpParameters.QueryStringParameters[*].Value",
+      "$.AuthParameters.InvocationHttpParameters.BodyParameters[*].Value",
+      "$.Targets[*].RedshiftDataParameters.Sql",
+      "$.Targets[*].RedshiftDataParameters.Sqls",
+      "$.Targets[*].AppSyncParameters.GraphQLOperation"
+    ],
+    "expand": [
+    ]
+  },
+  "s3": {
+    "request": [
+      "$.SSEKMSKeyId",
+      "$.SSEKMSEncryptionContext",
+      "$.ServerSideEncryptionConfiguration.Rules[*].ApplyServerSideEncryptionByDefault.KMSMasterKeyID",
+      "$.InventoryConfiguration.Destination.S3BucketDestination.Encryption.SSEKMS.KeyId",
+      "$.SSECustomerKey",
+      "$.CopySourceSSECustomerKey",
+      "$.RestoreRequest.OutputLocation.S3.Encryption.KMSKeyId"
+
+    ],
+    "response": [
+      "$.SSEKMSKeyId",
+      "$.SSEKMSEncryptionContext",
+      "$.ServerSideEncryptionConfiguration.Rules[*].ApplyServerSideEncryptionByDefault.KMSMasterKeyID",
+      "$.InventoryConfiguration.Destination.S3BucketDestination.Encryption.SSEKMS.KeyId",
+      "$.Credentials.SecretAccessKey",
+      "$.Credentials.SessionToken",
+      "$.InventoryConfigurationList[*].Destination.S3BucketDestination.Encryption.SSEKMS.KeyId"
+    ],
+    "expand": [
+    ]
+  },
+  "sqs": {
+    "request": [
+    ],
+    "response": [
+    ],
+    "expand": [
+    ]
+  },
+  "kinesis": {
+    "request": [
+    ],
+    "response": [
+    ],
+    "expand": [
+    ]
+  }
+}

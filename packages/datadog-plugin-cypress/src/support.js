@@ -61,7 +61,10 @@ beforeEach(function () {
 })
 
 before(function () {
-  cy.task('dd:testSuiteStart', Cypress.mocha.getRootSuite().file).then((suiteConfig) => {
+  cy.task('dd:testSuiteStart', {
+    testSuite: Cypress.mocha.getRootSuite().file,
+    testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute
+  }).then((suiteConfig) => {
     if (suiteConfig) {
       isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled
       knownTestsForSuite = suiteConfig.knownTestsForSuite
@@ -85,6 +88,7 @@ afterEach(function () {
     const testInfo = {
       testName: currentTest.fullTitle(),
       testSuite: Cypress.mocha.getRootSuite().file,
+      testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
       state: currentTest.state,
       error: currentTest.err,
       isNew: currentTest._ddIsNew,

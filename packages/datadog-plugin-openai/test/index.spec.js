@@ -21,13 +21,14 @@ describe('Plugin', () => {
   let metricStub
   let externalLoggerStub
   let realVersion
+  let tracer
 
   describe('openai', () => {
     withVersions('openai', 'openai', version => {
       const moduleRequirePath = `../../../versions/openai@${version}`
 
       beforeEach(() => {
-        require(tracerRequirePath)
+        tracer = require(tracerRequirePath)
       })
 
       before(() => {
@@ -143,6 +144,80 @@ describe('Plugin', () => {
           expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.remaining.requests')
           expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.remaining.tokens')
         })
+      })
+
+      describe('maintains context', () => {
+        afterEach(() => {
+          nock.cleanAll()
+        })
+
+        it('should maintain the context with a non-streamed call', async () => {
+          nock('https://api.openai.com:443')
+            .post('/v1/completions')
+            .reply(200, {
+              id: 'cmpl-7GWDlQbOrAYGmeFZtoRdOEjDXDexM',
+              object: 'text_completion',
+              created: 1684171461,
+              model: 'text-davinci-002',
+              choices: [{
+                text: 'FOO BAR BAZ',
+                index: 0,
+                logprobs: null,
+                finish_reason: 'length'
+              }],
+              usage: { prompt_tokens: 3, completion_tokens: 16, total_tokens: 19 }
+            })
+
+          await tracer.trace('outer', async (outerSpan) => {
+            const params = {
+              model: 'text-davinci-002',
+              prompt: 'Hello, \n\nFriend\t\tHi'
+            }
+
+            if (semver.satisfies(realVersion, '>=4.0.0')) {
+              const result = await openai.completions.create(params)
+              expect(result.id).to.eql('cmpl-7GWDlQbOrAYGmeFZtoRdOEjDXDexM')
+            } else {
+              const result = await openai.createCompletion(params)
+              expect(result.data.id).to.eql('cmpl-7GWDlQbOrAYGmeFZtoRdOEjDXDexM')
+            }
+
+            tracer.trace('child of outer', innerSpan => {
+              expect(innerSpan.context()._parentId).to.equal(outerSpan.context()._spanId)
+            })
+          })
+        })
+
+        if (semver.intersects('>4.1.0', version)) {
+          it('should maintain the context with a streamed call', async () => {
+            nock('https://api.openai.com:443')
+              .post('/v1/chat/completions')
+              .reply(200, function () {
+                return fs.createReadStream(Path.join(__dirname, 'streamed-responses/chat.completions.simple.txt'))
+              }, {
+                'Content-Type': 'text/plain',
+                'openai-organization': 'kill-9'
+              })
+
+            await tracer.trace('outer', async (outerSpan) => {
+              const stream = await openai.chat.completions.create({
+                model: 'gpt-4o',
+                messages: [{ role: 'user', content: 'Hello, OpenAI!', name: 'hunter2' }],
+                temperature: 0.5,
+                stream: true
+              })
+
+              for await (const part of stream) {
+                expect(part).to.have.property('choices')
+                expect(part.choices[0]).to.have.property('delta')
+              }
+
+              tracer.trace('child of outer', innerSpan => {
+                expect(innerSpan.context()._parentId).to.equal(outerSpan.context()._spanId)
+              })
+            })
+          })
+        }
       })
 
       describe('create completion', () => {
@@ -482,6 +557,57 @@ describe('Plugin', () => {
             message: semver.satisfies(realVersion, '>=4.0.0') ? 'sampled embeddings.create' : 'sampled createEmbedding',
             input: 'Cat?'
           })
+        })
+      })
+
+      describe('embedding with missing usages', () => {
+        afterEach(() => {
+          nock.cleanAll()
+        })
+
+        it('makes a successful call', async () => {
+          nock('https://api.openai.com:443')
+            .post('/v1/embeddings')
+            .reply(200, {
+              object: 'list',
+              data: [{
+                object: 'embedding',
+                index: 0,
+                embedding: [-0.0034387498, -0.026400521]
+              }],
+              model: 'text-embedding-ada-002-v2',
+              usage: {
+                prompt_tokens: 0
+              }
+            }, [])
+
+          const checkTraces = agent
+            .use(traces => {
+              expect(traces[0][0].metrics).to.have.property('openai.response.usage.prompt_tokens', 0)
+              expect(traces[0][0].metrics).to.not.have.property('openai.response.usage.completion_tokens')
+              expect(traces[0][0].metrics).to.not.have.property('openai.response.usage.total_tokens')
+            })
+
+          const params = {
+            model: 'text-embedding-ada-002',
+            input: '',
+            user: 'hunter2'
+          }
+
+          if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const result = await openai.embeddings.create(params)
+            expect(result.model).to.eql('text-embedding-ada-002-v2')
+          } else {
+            const result = await openai.createEmbedding(params)
+            expect(result.data.model).to.eql('text-embedding-ada-002-v2')
+          }
+
+          await checkTraces
+
+          expect(metricStub).to.have.been.calledWith('openai.request.duration') // timing value not guaranteed
+          expect(metricStub).to.have.been.calledWith('openai.tokens.prompt')
+          expect(metricStub).to.not.have.been.calledWith('openai.tokens.completion')
+          expect(metricStub).to.not.have.been.calledWith('openai.tokens.total')
         })
       })
 
@@ -3530,6 +3656,61 @@ describe('Plugin', () => {
                 temperature: 0.5,
                 tools,
                 tool_choice: 'auto',
+                stream: true
+              })
+
+              for await (const part of stream) {
+                expect(part).to.have.property('choices')
+                expect(part.choices[0]).to.have.property('delta')
+              }
+
+              await checkTraces
+            })
+
+            it('makes a successful chat completion call with tools and content', async () => {
+              nock('https://api.openai.com:443')
+                .post('/v1/chat/completions')
+                .reply(200, function () {
+                  return fs.createReadStream(
+                    Path.join(__dirname, 'streamed-responses/chat.completions.tool.and.content.txt')
+                  )
+                }, {
+                  'Content-Type': 'text/plain',
+                  'openai-organization': 'kill-9'
+                })
+
+              const checkTraces = agent
+                .use(traces => {
+                  const span = traces[0][0]
+
+                  expect(span).to.have.property('name', 'openai.request')
+                  expect(span).to.have.property('type', 'openai')
+                  expect(span).to.have.property('error', 0)
+                  expect(span.meta).to.have.property('openai.organization.name', 'kill-9')
+                  expect(span.meta).to.have.property('openai.request.method', 'POST')
+                  expect(span.meta).to.have.property('openai.request.endpoint', '/v1/chat/completions')
+                  expect(span.meta).to.have.property('openai.request.model', 'gpt-4')
+                  expect(span.meta).to.have.property('openai.request.messages.0.content', 'Hello, OpenAI!')
+                  expect(span.meta).to.have.property('openai.request.messages.0.role', 'user')
+                  expect(span.meta).to.have.property('openai.request.messages.0.name', 'hunter2')
+                  expect(span.meta).to.have.property('openai.response.choices.0.message.role', 'assistant')
+                  expect(span.meta).to.have.property('openai.response.choices.0.message.content',
+                    'THOUGHT: Hi')
+                  expect(span.meta).to.have.property('openai.response.choices.0.finish_reason', 'tool_calls')
+                  expect(span.meta).to.have.property('openai.response.choices.0.logprobs', 'returned')
+                  expect(span.meta).to.have.property('openai.response.choices.0.message.tool_calls.0.function.name',
+                    'finish')
+                  expect(span.meta).to.have.property(
+                    'openai.response.choices.0.message.tool_calls.0.function.arguments',
+                    '{\n"answer": "5"\n}'
+                  )
+                })
+
+              const stream = await openai.chat.completions.create({
+                model: 'gpt-4',
+                messages: [{ role: 'user', content: 'Hello, OpenAI!', name: 'hunter2' }],
+                temperature: 0.5,
+                tools: [], // dummy tools, the response is hardcoded
                 stream: true
               })
 

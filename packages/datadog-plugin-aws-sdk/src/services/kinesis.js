@@ -10,6 +10,7 @@ const { storage } = require('../../../datadog-core')
 class Kinesis extends BaseAwsSdkPlugin {
   static get id () { return 'kinesis' }
   static get peerServicePrecursors () { return ['streamname'] }
+  static get isPayloadReporter () { return true }
 
   constructor (...args) {
     super(...args)
@@ -112,14 +113,15 @@ class Kinesis extends BaseAwsSdkPlugin {
     response.Records.forEach(record => {
       const parsedAttributes = JSON.parse(Buffer.from(record.Data).toString())
 
-      if (
-        parsedAttributes?._datadog && streamName && DsmPathwayCodec.contextExists(parsedAttributes._datadog)
-      ) {
-        const payloadSize = getSizeOrZero(record.Data)
+      const payloadSize = getSizeOrZero(record.Data)
+      if (parsedAttributes?._datadog) {
         this.tracer.decodeDataStreamsContext(parsedAttributes._datadog)
-        this.tracer
-          .setCheckpoint(['direction:in', `topic:${streamName}`, 'type:kinesis'], span, payloadSize)
       }
+      const tags = streamName
+        ? ['direction:in', `topic:${streamName}`, 'type:kinesis']
+        : ['direction:in', 'type:kinesis']
+      this.tracer
+        .setCheckpoint(tags, span, payloadSize)
     })
   }
 
@@ -156,7 +158,7 @@ class Kinesis extends BaseAwsSdkPlugin {
             span,
             params.Records[i],
             stream,
-            i === 0 || (this.config.kinesis && this.config.kinesis.batchPropagationEnabled)
+            i === 0 || (this.config.batchPropagationEnabled)
           )
         }
     }

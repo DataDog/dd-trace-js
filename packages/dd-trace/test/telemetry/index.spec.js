@@ -70,7 +70,7 @@ describe('telemetry', () => {
       },
       circularObject,
       appsec: { enabled: true },
-      profiling: { enabled: true },
+      profiling: { enabled: 'true' },
       peerServiceMapping: {
         service_1: 'remapped_service_1',
         service_2: 'remapped_service_2'
@@ -203,6 +203,7 @@ describe('telemetry app-heartbeat', () => {
     telemetry.stop()
     traceAgent.close()
   })
+
   it('should send heartbeat in uniform intervals', (done) => {
     let beats = 0 // to keep track of the amont of times extendedHeartbeat is called
     const sendDataRequest = {
@@ -408,7 +409,7 @@ describe('Telemetry extended heartbeat', () => {
         {
           name: 'DD_TRACE_SAMPLING_RULES',
           value:
-          // eslint-disable-next-line max-len
+          // eslint-disable-next-line @stylistic/js/max-len
           '[{"service":"*","sampling_rate":1},{"service":"svc*","resource":"*abc","name":"op-??","tags":{"tag-a":"ta-v*","tag-b":"tb-v?","tag-c":"tc-v"},"sample_rate":0.5}]',
           origin: 'code'
         }
@@ -439,6 +440,7 @@ describe('Telemetry retry', () => {
       bar2: { _enabled: false }
     }
   })
+
   afterEach(() => {
     clock.restore()
   })

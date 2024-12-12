@@ -24,8 +24,7 @@ const originalFns = new WeakMap()
 const testToStartLine = new WeakMap()
 const testFileToSuiteAr = new Map()
 const wrappedFunctions = new WeakSet()
-
-const NUM_FAILED_TEST_RETRIES = 5
+const newTests = {}
 
 function isNewTest (test, knownTests) {
   const testSuite = getTestSuitePath(test.file, process.cwd())
@@ -115,7 +114,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
     }
     // Flaky test retries does not work in parallel mode
     if (libraryConfig?.isFlakyTestRetriesEnabled) {
-      this.retries(NUM_FAILED_TEST_RETRIES)
+      this.retries(libraryConfig?.flakyTestRetriesCount)
     }
     // The reason why the wrapping logic is here is because we need to cover
     // `afterEach` and `beforeEach` hooks as well.
@@ -153,7 +152,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
   return RunnablePackage
 }
 
-function getOnTestHandler (isMain, newTests) {
+function getOnTestHandler (isMain) {
   return function (test) {
     const testStartLine = testToStartLine.get(test)
     const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -181,20 +180,20 @@ function getOnTestHandler (isMain, newTests) {
       testStartLine
     }
 
-    if (isMain) {
-      testInfo.isNew = isNew
-      testInfo.isEfdRetry = isEfdRetry
-      // We want to store the result of the new tests
-      if (isNew) {
-        const testFullName = getTestFullName(test)
-        if (newTests[testFullName]) {
-          newTests[testFullName].push(test)
-        } else {
-          newTests[testFullName] = [test]
-        }
-      }
-    } else {
+    if (!isMain) {
       testInfo.isParallel = true
+    }
+
+    testInfo.isNew = isNew
+    testInfo.isEfdRetry = isEfdRetry
+    // We want to store the result of the new tests
+    if (isNew) {
+      const testFullName = getTestFullName(test)
+      if (newTests[testFullName]) {
+        newTests[testFullName].push(test)
+      } else {
+        newTests[testFullName] = [test]
+      }
     }
 
     asyncResource.runInAsyncScope(() => {
@@ -281,12 +280,13 @@ function getOnFailHandler (isMain) {
 }
 
 function getOnTestRetryHandler () {
-  return function (test) {
+  return function (test, err) {
     const asyncResource = getTestAsyncResource(test)
     if (asyncResource) {
       const isFirstAttempt = test._currentRetry === 0
+      const willBeRetried = test._currentRetry < test._retries
       asyncResource.runInAsyncScope(() => {
-        testRetryCh.publish(isFirstAttempt)
+        testRetryCh.publish({ isFirstAttempt, err, willBeRetried })
       })
     }
     const key = getTestToArKey(test)
@@ -329,6 +329,23 @@ function getOnPendingHandler () {
     }
   }
 }
+
+// Hook to add retries to tests if EFD is enabled
+function getRunTestsWrapper (runTests, config) {
+  return function (suite, fn) {
+    if (config.isEarlyFlakeDetectionEnabled) {
+      // by the time we reach `this.on('test')`, it is too late. We need to add retries here
+      suite.tests.forEach(test => {
+        if (!test.isPending() && isNewTest(test, config.knownTests)) {
+          test._ddIsNew = true
+          retryTest(test, config.earlyFlakeDetectionNumRetries)
+        }
+      })
+    }
+    return runTests.apply(this, arguments)
+  }
+}
+
 module.exports = {
   isNewTest,
   retryTest,
@@ -347,5 +364,7 @@ module.exports = {
   getOnHookEndHandler,
   getOnFailHandler,
   getOnPendingHandler,
-  testFileToSuiteAr
+  testFileToSuiteAr,
+  getRunTestsWrapper,
+  newTests
 }

@@ -81,8 +81,8 @@ function compare (expected, actual) {
 }
 
 function isObject (obj) {
-  // `null` is also typeof 'object', so check for that with truthiness.
-  return obj && typeof obj === 'object'
+  // `null` is also typeof 'object'
+  return obj !== null && typeof obj === 'object'
 }
 
 function withDefaults (defaults, obj) {
@@ -117,11 +117,16 @@ function unbreakThen (promise) {
   }
 }
 
+function getNextLineNumber () {
+  return Number(new Error().stack.split('\n')[2].match(/:(\d+):/)[1]) + 1
+}
+
 module.exports = {
   breakThen,
   compare,
   deepInclude,
   expectSomeSpan,
+  getNextLineNumber,
   resolveNaming,
   unbreakThen,
   withDefaults

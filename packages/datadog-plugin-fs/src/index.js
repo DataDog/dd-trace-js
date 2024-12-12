@@ -29,7 +29,7 @@ class FsPlugin extends TracingPlugin {
       resource: operation,
       kind: 'internal',
       meta: {
-        'file.descriptor': (typeof fd === 'object' || typeof fd === 'number') ? fd.toString() : '',
+        'file.descriptor': ((fd !== null && typeof fd === 'object') || typeof fd === 'number') ? fd.toString() : '',
         'file.dest': params.dest || params.newPath || (params.target && params.path),
         'file.flag': String(flag || defaultFlag || ''),
         'file.gid': gid || '',

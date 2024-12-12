@@ -14,6 +14,7 @@ const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 
 const SpanContext = require('./span_context')
+const id = require('../id')
 
 // The one built into OTel rounds so we lose sub-millisecond precision.
 function hrTimeToMilliseconds (time) {
@@ -142,7 +143,7 @@ class Span {
       context: spanContext._ddContext,
       startTime,
       hostname: _tracer._hostname,
-      integrationName: 'otel',
+      integrationName: parentTracer?._isOtelLibrary ? 'otel.library' : 'otel',
       tags: {
         [SERVICE_NAME]: _tracer._service,
         [RESOURCE_NAME]: spanName
@@ -217,6 +218,20 @@ class Span {
     return this
   }
 
+  addSpanPointer (ptrKind, ptrDir, ptrHash) {
+    const zeroContext = new SpanContext({
+      traceId: id('0'),
+      spanId: id('0')
+    })
+    const attributes = {
+      'ptr.kind': ptrKind,
+      'ptr.dir': ptrDir,
+      'ptr.hash': ptrHash,
+      'link.kind': 'span-pointer'
+    }
+    return this.addLink(zeroContext, attributes)
+  }
+
   setStatus ({ code, message }) {
     if (!this.ended && !this._hasStatus && code) {
       this._hasStatus = true
@@ -283,7 +298,7 @@ class Span {
   }
 
   get ended () {
-    return typeof this.duration !== 'undefined'
+    return this.duration !== undefined
   }
 }
 

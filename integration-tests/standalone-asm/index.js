@@ -30,6 +30,24 @@ const app = express()
 const valueToHash = 'iast-showcase-demo'
 const crypto = require('crypto')
 
+async function makeRequest (url) {
+  return new Promise((resolve, reject) => {
+    http.get(url, function (res) {
+      const chunks = []
+
+      res.on('data', function (chunk) {
+        chunks.push(chunk)
+      })
+
+      res.on('end', () => {
+        resolve(Buffer.concat(chunks).toString('utf8'))
+      })
+
+      res.on('error', reject)
+    })
+  })
+}
+
 app.get('/', (req, res) => {
   res.status(200).send('hello world')
 })
@@ -58,8 +76,7 @@ app.get('/propagation-with-event', async (req, res) => {
   const port = req.query.port || server.address().port
   const url = `http://localhost:${port}/down`
 
-  const resFetch = await fetch(url)
-  await resFetch.text()
+  await makeRequest(url)
 
   res.status(200).send('propagation-with-event')
 })
@@ -71,8 +88,7 @@ app.get('/propagation-without-event', async (req, res) => {
   const span = tracer.scope().active()
   span.context()._trace.tags['_dd.p.other'] = '1'
 
-  const resFetch = await fetch(url)
-  await resFetch.text()
+  await makeRequest(url)
 
   res.status(200).send('propagation-without-event')
 })
@@ -89,8 +105,7 @@ app.get('/propagation-after-drop-and-call-sdk', async (req, res) => {
 
   const url = `http://localhost:${port}/sdk`
 
-  const resFetch = await fetch(url)
-  const sdkRes = await resFetch.text()
+  const sdkRes = await makeRequest(url)
 
   res.status(200).send(`drop-and-call-sdk ${sdkRes}`)
 })

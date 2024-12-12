@@ -29,6 +29,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => agent.load(['restify', 'find-my-way', 'http'], [{}, {}, { client: false }]))
+
         after(() => agent.close({ ritmReset: false }))
 
         it('should do automatic instrumentation', done => {

@@ -23,29 +23,42 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   constructor () {
     super()
     this._type = 'taint-tracking'
+    this._taintedURLs = new WeakMap()
   }
 
   onConfigure () {
+    const onRequestBody = ({ req }) => {
+      const iastContext = getIastContext(storage.getStore())
+      if (iastContext && iastContext.body !== req.body) {
+        this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
+        iastContext.body = req.body
+      }
+    }
+
     this.addSub(
       { channelName: 'datadog:body-parser:read:finish', tag: HTTP_REQUEST_BODY },
-      ({ req }) => {
-        const iastContext = getIastContext(storage.getStore())
-        if (iastContext && iastContext.body !== req.body) {
-          this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
-          iastContext.body = req.body
-        }
-      }
+      onRequestBody
     )
 
     this.addSub(
-      { channelName: 'datadog:qs:parse:finish', tag: HTTP_REQUEST_PARAMETER },
-      ({ qs }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, qs)
+      { channelName: 'datadog:multer:read:finish', tag: HTTP_REQUEST_BODY },
+      onRequestBody
+    )
+
+    this.addSub(
+      { channelName: 'datadog:query:read:finish', tag: HTTP_REQUEST_PARAMETER },
+      ({ query }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, query)
+    )
+
+    this.addSub(
+      { channelName: 'datadog:express:query:finish', tag: HTTP_REQUEST_PARAMETER },
+      ({ query }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, query)
     )
 
     this.addSub(
       { channelName: 'apm:express:middleware:next', tag: HTTP_REQUEST_BODY },
       ({ req }) => {
-        if (req && req.body && typeof req.body === 'object') {
+        if (req && req.body !== null && typeof req.body === 'object') {
           const iastContext = getIastContext(storage.getStore())
           if (iastContext && iastContext.body !== req.body) {
             this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
@@ -63,7 +76,16 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.addSub(
       { channelName: 'datadog:express:process_params:start', tag: HTTP_REQUEST_PATH_PARAM },
       ({ req }) => {
-        if (req && req.params && typeof req.params === 'object') {
+        if (req && req.params !== null && typeof req.params === 'object') {
+          this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, req, 'params')
+        }
+      }
+    )
+
+    this.addSub(
+      { channelName: 'datadog:router:param:start', tag: HTTP_REQUEST_PATH_PARAM },
+      ({ req }) => {
+        if (req && req.params !== null && typeof req.params === 'object') {
           this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, req, 'params')
         }
       }
@@ -80,6 +102,46 @@ class TaintTrackingPlugin extends SourceIastPlugin {
         }
       }
     )
+
+    const urlResultTaintedProperties = ['host', 'origin', 'hostname']
+    this.addSub(
+      { channelName: 'datadog:url:parse:finish' },
+      ({ input, base, parsed, isURL }) => {
+        const iastContext = getIastContext(storage.getStore())
+        let ranges
+
+        if (base) {
+          ranges = getRanges(iastContext, base)
+        } else {
+          ranges = getRanges(iastContext, input)
+        }
+
+        if (ranges?.length) {
+          if (isURL) {
+            this._taintedURLs.set(parsed, ranges[0])
+          } else {
+            urlResultTaintedProperties.forEach(param => {
+              this._taintTrackingHandler(ranges[0].iinfo.type, parsed, param, iastContext)
+            })
+          }
+        }
+      }
+    )
+
+    this.addSub(
+      { channelName: 'datadog:url:getter:finish' },
+      (context) => {
+        if (!urlResultTaintedProperties.includes(context.property)) return
+
+        const origRange = this._taintedURLs.get(context.urlObject)
+        if (!origRange) return
+
+        const iastContext = getIastContext(storage.getStore())
+        if (!iastContext) return
+
+        context.result =
+          newTaintedString(iastContext, context.result, origRange.iinfo.parameterName, origRange.iinfo.type)
+      })
 
     // this is a special case to increment INSTRUMENTED_SOURCE metric for header
     this.addInstrumentedSource('http', [HTTP_REQUEST_HEADER_VALUE, HTTP_REQUEST_HEADER_NAME])

@@ -13,6 +13,11 @@ const DD_TRACE_DEBUG = 'true'
 const DD_INJECTION_ENABLED = 'tracing'
 const DD_LOG_LEVEL = 'error'
 
+// These are on by default in release tests, so we'll turn them off for
+// more fine-grained control of these variables in these tests.
+delete process.env.DD_INJECTION_ENABLED
+delete process.env.DD_INJECT_FORCE
+
 describe('package guardrails', () => {
   useEnv({ NODE_OPTIONS })
   const runTest = (...args) =>
@@ -49,6 +54,19 @@ false
     context('when bluebird is 3.7.2', () => {
       useSandbox(['bluebird@3.7.2'])
       it('should instrument the package', () => runTest('true\n'))
+    })
+  })
+
+  context('when package is in range (fastify)', () => {
+    context('when fastify is latest', () => {
+      useSandbox(['fastify'])
+      it('should instrument the package', () => runTest('true\n'))
+    })
+    context('when fastify is latest and logging enabled', () => {
+      useSandbox(['fastify'])
+      useEnv({ DD_TRACE_DEBUG })
+      it('should instrument the package', () =>
+        runTest('Application instrumentation bootstrapping complete\ntrue\n'))
     })
   })
 

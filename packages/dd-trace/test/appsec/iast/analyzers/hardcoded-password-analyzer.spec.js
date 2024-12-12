@@ -1,4 +1,4 @@
-/* eslint-disable max-len */
+/* eslint-disable @stylistic/js/max-len */
 'use strict'
 
 const path = require('path')
@@ -33,6 +33,7 @@ describe('Hardcoded Password Analyzer', () => {
     const column = 3
 
     let report
+
     beforeEach(() => {
       report = sinon.stub(hardcodedPasswordAnalyzer, '_report')
     })

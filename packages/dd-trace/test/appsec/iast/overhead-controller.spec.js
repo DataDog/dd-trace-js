@@ -39,33 +39,40 @@ describe('Overhead controller', () => {
     describe('Global context', () => {
       let originalSetInterval
       let originalClearInterval
+
       before(() => {
         originalSetInterval = global.setInterval
         originalClearInterval = global.clearInterval
       })
+
       beforeEach(() => {
         global.setInterval = sinon.spy(global.setInterval)
         global.clearInterval = sinon.spy(global.clearInterval)
       })
+
       afterEach(() => {
         sinon.restore()
       })
+
       after(() => {
         global.setInterval = originalSetInterval
         global.clearInterval = originalClearInterval
       })
+
       it('should not start refresher interval when already started', () => {
         overheadController.startGlobalContext()
         overheadController.startGlobalContext()
         expect(global.setInterval).to.have.been.calledOnce
         overheadController.finishGlobalContext()
       })
+
       it('should stop refresher interval once when already finished', () => {
         overheadController.startGlobalContext()
         overheadController.finishGlobalContext()
         overheadController.finishGlobalContext()
         expect(global.clearInterval).to.have.been.calledOnce
       })
+
       it('should restart refresher when already finished', () => {
         overheadController.startGlobalContext()
         overheadController.finishGlobalContext()
@@ -216,6 +223,7 @@ describe('Overhead controller', () => {
       })
     })
   })
+
   describe('full feature', () => {
     describe('multiple request at same time', () => {
       const TEST_REQUEST_STARTED = 'test-request-started'
@@ -323,7 +331,8 @@ describe('Overhead controller', () => {
               iast: {
                 enabled: true,
                 requestSampling: 100,
-                maxConcurrentRequests: 2
+                maxConcurrentRequests: 2,
+                deduplicationEnabled: false
               }
             }
           })
@@ -357,7 +366,6 @@ describe('Overhead controller', () => {
             } else if (url === SECOND_REQUEST) {
               setImmediate(() => {
                 requestResolvers[FIRST_REQUEST]()
-                vulnerabilityReporter.clearCache()
               })
             }
           })
@@ -365,7 +373,6 @@ describe('Overhead controller', () => {
             if (url === FIRST_REQUEST) {
               setImmediate(() => {
                 requestResolvers[SECOND_REQUEST]()
-                vulnerabilityReporter.clearCache()
               })
             }
           })
@@ -380,7 +387,8 @@ describe('Overhead controller', () => {
               iast: {
                 enabled: true,
                 requestSampling: 100,
-                maxConcurrentRequests: 2
+                maxConcurrentRequests: 2,
+                deduplicationEnabled: false
               }
             }
           })
@@ -427,7 +435,6 @@ describe('Overhead controller', () => {
               requestResolvers[FIRST_REQUEST]()
             } else if (url === FIFTH_REQUEST) {
               requestResolvers[SECOND_REQUEST]()
-              vulnerabilityReporter.clearCache()
             }
           })
           testRequestEventEmitter.on(TEST_REQUEST_FINISHED, (url) => {
@@ -436,7 +443,6 @@ describe('Overhead controller', () => {
               axios.get(`http://localhost:${serverConfig.port}${FIFTH_REQUEST}`).then().catch(done)
             } else if (url === SECOND_REQUEST) {
               setImmediate(() => {
-                vulnerabilityReporter.clearCache()
                 requestResolvers[THIRD_REQUEST]()
                 requestResolvers[FOURTH_REQUEST]()
                 requestResolvers[FIFTH_REQUEST]()

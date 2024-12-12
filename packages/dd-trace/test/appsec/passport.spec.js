@@ -14,6 +14,7 @@ describe('Passport', () => {
   }
 
   let passportModule, log, events, setUser
+
   beforeEach(() => {
     rootSpan.context = () => { return {} }
 

@@ -1,4 +1,4 @@
-/* eslint-disable max-len */
+/* eslint-disable @stylistic/js/max-len */
 'use strict'
 
 const sinon = require('sinon')
@@ -297,6 +297,32 @@ describe('Kinesis', function () {
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
 
+          helpers.getTestData(kinesis, streamNameDSM, data, (err) => {
+            if (err) return done(err)
+          })
+        })
+      })
+
+      it('emits DSM stats to the agent during Kinesis getRecord when the putRecord was done without DSM enabled', done => {
+        agent.expectPipelineStats(dsmStats => {
+          let statsPointsReceived = 0
+          // we should have only have 1 stats point since we only had 1 put operation
+          dsmStats.forEach((timeStatsBucket) => {
+            if (timeStatsBucket && timeStatsBucket.Stats) {
+              timeStatsBucket.Stats.forEach((statsBuckets) => {
+                statsPointsReceived += statsBuckets.Stats.length
+              })
+            }
+          }, { timeoutMs: 10000 })
+          expect(statsPointsReceived).to.equal(1)
+          expect(agent.dsmStatsExistWithParentHash(agent, '0')).to.equal(true)
+        }, { timeoutMs: 10000 }).then(done, done)
+
+        agent.reload('aws-sdk', { kinesis: { dsmEnabled: false } }, { dsmEnabled: false })
+        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
+          if (err) return done(err)
+
+          agent.reload('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
           helpers.getTestData(kinesis, streamNameDSM, data, (err) => {
             if (err) return done(err)
           })

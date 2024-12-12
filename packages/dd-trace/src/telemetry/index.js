@@ -89,7 +89,7 @@ function getProducts (config) {
     },
     profiler: {
       version: tracerVersion,
-      enabled: config.profiling.enabled
+      enabled: profilingEnabledToBoolean(config.profiling.enabled)
     }
   }
   if (errors.profilingError) {
@@ -314,10 +314,20 @@ function updateConfig (changes, config) {
     logInjection: 'DD_LOG_INJECTION',
     headerTags: 'DD_TRACE_HEADER_TAGS',
     tags: 'DD_TAGS',
-    'sampler.rules': 'DD_TRACE_SAMPLING_RULES'
+    'sampler.rules': 'DD_TRACE_SAMPLING_RULES',
+    traceEnabled: 'DD_TRACE_ENABLED',
+    url: 'DD_TRACE_AGENT_URL',
+    'sampler.rateLimit': 'DD_TRACE_RATE_LIMIT',
+    queryStringObfuscation: 'DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP',
+    version: 'DD_VERSION',
+    env: 'DD_ENV',
+    service: 'DD_SERVICE',
+    clientIpHeader: 'DD_TRACE_CLIENT_IP_HEADER',
+    'grpc.client.error.statuses': 'DD_GRPC_CLIENT_ERROR_STATUSES',
+    'grpc.server.error.statuses': 'DD_GRPC_SERVER_ERROR_STATUSES'
   }
 
-  const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping'])
+  const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
 
   const configuration = []
   const names = [] // list of config names whose values have been changed
@@ -329,13 +339,17 @@ function updateConfig (changes, config) {
     const { origin, value } = change
     const entry = { name, value, origin }
 
-    if (namesNeedFormatting.has(entry.name)) entry.value = formatMapForTelemetry(entry.value)
-    if (entry.name === 'url' && entry.value) entry.value = entry.value.toString()
-    if (entry.name === 'DD_TRACE_SAMPLING_RULES') {
+    if (namesNeedFormatting.has(entry.name)) {
+      entry.value = formatMapForTelemetry(entry.value)
+    } else if (entry.name === 'url') {
+      if (entry.value) {
+        entry.value = entry.value.toString()
+      }
+    } else if (entry.name === 'DD_TRACE_SAMPLING_RULES') {
       entry.value = JSON.stringify(entry.value)
+    } else if (Array.isArray(entry.value)) {
+      entry.value = value.join(',')
     }
-    if (Array.isArray(entry.value)) entry.value = value.join(',')
-
     configuration.push(entry)
   }
 
@@ -352,6 +366,19 @@ function updateConfig (changes, config) {
     const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
     sendData(config, application, host, reqType, payload, updateRetryData)
   }
+}
+
+function profilingEnabledToBoolean (profilingEnabled) {
+  if (typeof profilingEnabled === 'boolean') {
+    return profilingEnabled
+  }
+  if (['auto', 'true'].includes(profilingEnabled)) {
+    return true
+  }
+  if (profilingEnabled === 'false') {
+    return false
+  }
+  return undefined
 }
 
 module.exports = {

@@ -9,6 +9,7 @@ const axios = require('axios')
 const path = require('path')
 const waf = require('../../../src/appsec/waf')
 const { USER_ID } = require('../../../src/appsec/addresses')
+const blocking = require('../../../src/appsec/blocking')
 
 const resultActions = {
   block_request: {
@@ -63,13 +64,13 @@ describe('user_blocking', () => {
       it('should return false and log warn when passed no user', () => {
         const ret = userBlocking.checkUserAndSetUser()
         expect(ret).to.be.false
-        expect(log.warn).to.have.been.calledOnceWithExactly('Invalid user provided to isUserBlocked')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Invalid user provided to isUserBlocked')
       })
 
       it('should return false and log warn when passed invalid user', () => {
         const ret = userBlocking.checkUserAndSetUser({})
         expect(ret).to.be.false
-        expect(log.warn).to.have.been.calledOnceWithExactly('Invalid user provided to isUserBlocked')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Invalid user provided to isUserBlocked')
       })
 
       it('should set user when not already set', () => {
@@ -96,7 +97,7 @@ describe('user_blocking', () => {
         const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'user' })
         expect(ret).to.be.true
         expect(getRootSpan).to.have.been.calledOnceWithExactly(tracer)
-        expect(log.warn).to.have.been.calledOnceWithExactly('Root span not available in isUserBlocked')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Root span not available in isUserBlocked')
         expect(rootSpan.setTag).to.not.have.been.called
       })
 
@@ -121,7 +122,8 @@ describe('user_blocking', () => {
         const ret = userBlocking.blockRequest(tracer)
         expect(ret).to.be.false
         expect(storage.getStore).to.have.been.calledOnce
-        expect(log.warn).to.have.been.calledOnceWithExactly('Requests or response object not available in blockRequest')
+        expect(log.warn)
+          .to.have.been.calledOnceWithExactly('[ASM] Requests or response object not available in blockRequest')
         expect(block).to.not.have.been.called
       })
 
@@ -130,7 +132,7 @@ describe('user_blocking', () => {
 
         const ret = userBlocking.blockRequest(tracer, {}, {})
         expect(ret).to.be.false
-        expect(log.warn).to.have.been.calledOnceWithExactly('Root span not available in blockRequest')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Root span not available in blockRequest')
         expect(block).to.not.have.been.called
       })
 
@@ -228,6 +230,16 @@ describe('user_blocking', () => {
     })
 
     describe('blockRequest', () => {
+      beforeEach(() => {
+        // reset to default, other tests may have changed it with RC
+        blocking.setDefaultBlockingActionParameters(undefined)
+      })
+
+      afterEach(() => {
+        // reset to default
+        blocking.setDefaultBlockingActionParameters(undefined)
+      })
+
       it('should set the proper tags', (done) => {
         controller = (req, res) => {
           const ret = tracer.appsec.blockRequest(req, res)
@@ -263,6 +275,34 @@ describe('user_blocking', () => {
           expect(traces[0][0].meta).to.have.property('http.status_code', '200')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
+      })
+
+      it('should block using redirect data if it is configured', (done) => {
+        blocking.setDefaultBlockingActionParameters([
+          {
+            id: 'notblock',
+            parameters: {
+              location: '/notfound',
+              status_code: 404
+            }
+          },
+          {
+            id: 'block',
+            parameters: {
+              location: '/redirected',
+              status_code: 302
+            }
+          }
+        ])
+        controller = (req, res) => {
+          const ret = tracer.appsec.blockRequest(req, res)
+          expect(ret).to.be.true
+        }
+        agent.use(traces => {
+          expect(traces[0][0].meta).to.have.property('appsec.blocked', 'true')
+          expect(traces[0][0].meta).to.have.property('http.status_code', '302')
+        }).then(done).catch(done)
+        axios.get(`http://localhost:${port}/`, { maxRedirects: 0 })
       })
     })
   })

@@ -28,10 +28,16 @@ const {
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
   TEST_SOURCE_FILE,
+  TEST_SOURCE_START,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_EARLY_FLAKE_ENABLED
+  TEST_EARLY_FLAKE_ENABLED,
+  TEST_SUITE,
+  TEST_CODE_OWNERS,
+  TEST_SESSION_NAME,
+  TEST_LEVEL_EVENT_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { NODE_MAJOR } = require('../../version')
 
@@ -128,9 +134,23 @@ moduleTypes.forEach(({
       childProcess.stderr.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
+
+      // TODO: remove once we find the source of flakiness
+      childProcess.stdout.pipe(process.stdout)
+      childProcess.stderr.pipe(process.stderr)
+
       childProcess.on('exit', () => {
         assert.notInclude(testOutput, 'TypeError')
-        assert.include(testOutput, '1 of 1 failed')
+        // TODO: remove try/catch once we find the source of flakiness
+        try {
+          assert.include(testOutput, '1 of 1 failed')
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.log('---- Actual test output -----')
+          // eslint-disable-next-line no-console
+          console.log(testOutput)
+          throw e
+        }
         done()
       })
     })
@@ -209,6 +229,13 @@ moduleTypes.forEach(({
     it('can run and report tests', (done) => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+          metadataDicts.forEach(metadata => {
+            for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+              assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+            }
+          })
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSessionEvent = events.find(event => event.type === 'test_session_end')
@@ -250,6 +277,7 @@ moduleTypes.forEach(({
           testSuiteEvents.forEach(({
             content: {
               meta,
+              metrics,
               test_suite_id: testSuiteId,
               test_module_id: testModuleId,
               test_session_id: testSessionId
@@ -260,6 +288,9 @@ moduleTypes.forEach(({
             assert.exists(testSuiteId)
             assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
             assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+            assert.isTrue(meta[TEST_SOURCE_FILE].startsWith('cypress/e2e/'))
+            assert.equal(metrics[TEST_SOURCE_START], 1)
+            assert.exists(metrics[DD_HOST_CPU_COUNT])
           })
 
           assert.includeMembers(testEvents.map(test => test.content.resource), [
@@ -277,6 +308,7 @@ moduleTypes.forEach(({
           testEvents.forEach(({
             content: {
               meta,
+              metrics,
               test_suite_id: testSuiteId,
               test_module_id: testModuleId,
               test_session_id: testSessionId
@@ -291,6 +323,7 @@ moduleTypes.forEach(({
             // Can read DD_TAGS
             assert.propertyVal(meta, 'test.customtag', 'customvalue')
             assert.propertyVal(meta, 'test.customtag2', 'customvalue2')
+            assert.exists(metrics[DD_HOST_CPU_COUNT])
           })
         }, 25000)
 
@@ -306,7 +339,8 @@ moduleTypes.forEach(({
           env: {
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-            DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
+            DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+            DD_TEST_SESSION_NAME: 'my-test-session'
           },
           stdio: 'pipe'
         }
@@ -803,6 +837,63 @@ moduleTypes.forEach(({
           }).catch(done)
         })
       })
+
+      it('reports code coverage relative to the repository root, not working directory', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: true,
+          tests_skipping: false
+        })
+        let command
+
+        if (type === 'commonJS') {
+          const commandSuffix = version === '6.7.0'
+            ? '--config-file cypress-config.json --spec "cypress/e2e/*.cy.js"'
+            : ''
+          command = `../../node_modules/.bin/cypress run ${commandSuffix}`
+        } else {
+          command = `node --loader=${hookFile} ../../cypress-esm-config.mjs`
+        }
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisAgentlessConfig(receiver.port)
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+            const coveredFiles = payloads
+              .flatMap(({ payload }) => payload)
+              .flatMap(({ content: { coverages } }) => coverages)
+              .flatMap(({ files }) => files)
+              .map(({ filename }) => filename)
+
+            assert.includeMembers(coveredFiles, [
+              'ci-visibility/subproject/src/utils.tsx',
+              'ci-visibility/subproject/src/App.tsx',
+              'ci-visibility/subproject/src/index.tsx',
+              'ci-visibility/subproject/cypress/e2e/spec.cy.js'
+            ])
+          }, 10000)
+
+        childProcess = exec(
+          command,
+          {
+            cwd: `${cwd}/ci-visibility/subproject`,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
     })
 
     it('still reports correct format if there is a plugin incompatibility', (done) => {
@@ -1172,6 +1263,252 @@ moduleTypes.forEach(({
             done()
           }).catch(done)
         })
+      })
+    })
+
+    context('flaky test retries', () => {
+      it('retries flaky tests', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          early_flake_detection: {
+            enabled: false
+          }
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+            assert.equal(testSuites.length, 1)
+            assert.equal(testSuites[0].meta[TEST_STATUS], 'fail')
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 10)
+
+            assert.includeMembers(tests.map(test => test.resource), [
+              'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
+              'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
+              // passes at the second retry
+              'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
+              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+              // never passes
+              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+              // passes on the first try
+              'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
+            ])
+
+            const eventuallyPassingTest = tests.filter(
+              test => test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes'
+            )
+            assert.equal(eventuallyPassingTest.length, 3)
+            assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 2)
+            assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
+            assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
+
+            const neverPassingTest = tests.filter(
+              test => test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry never passes'
+            )
+            assert.equal(neverPassingTest.length, 6)
+            assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 6)
+            assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 0)
+            assert.equal(neverPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 5)
+          })
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/flaky-test-retries.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+
+      it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          early_flake_detection: {
+            enabled: false
+          }
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+            assert.equal(testSuites.length, 1)
+            assert.equal(testSuites[0].meta[TEST_STATUS], 'fail')
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 3)
+
+            assert.includeMembers(tests.map(test => test.resource), [
+              'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
+              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+              'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
+            ])
+            assert.equal(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 0)
+          })
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/flaky-test-retries.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
+              SPEC_PATTERN: specToRun
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => done()).catch(done)
+        })
+      })
+
+      it('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          early_flake_detection: {
+            enabled: false
+          }
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+            assert.equal(testSuites.length, 1)
+            assert.equal(testSuites[0].meta[TEST_STATUS], 'fail')
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 5)
+
+            assert.includeMembers(tests.map(test => test.resource), [
+              'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
+              'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
+              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+              'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
+            ])
+
+            assert.equal(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
+          })
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/flaky-test-retries.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1,
+              SPEC_PATTERN: specToRun
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+    })
+
+    it('correctly calculates test code owners when working directory is not repository root', (done) => {
+      let command
+
+      if (type === 'commonJS') {
+        const commandSuffix = version === '6.7.0'
+          ? '--config-file cypress-config.json --spec "cypress/e2e/*.cy.js"'
+          : ''
+        command = `../../node_modules/.bin/cypress run ${commandSuffix}`
+      } else {
+        command = `node --loader=${hookFile} ../../cypress-esm-config.mjs`
+      }
+
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisAgentlessConfig(receiver.port)
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const test = events.find(event => event.type === 'test').content
+          const testSuite = events.find(event => event.type === 'test_suite_end').content
+          // The test is in a subproject
+          assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
+          assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          assert.equal(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+        }, 25000)
+
+      childProcess = exec(
+        command,
+        {
+          cwd: `${cwd}/ci-visibility/subproject`,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
       })
     })
   })

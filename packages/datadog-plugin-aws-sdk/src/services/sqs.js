@@ -9,6 +9,7 @@ const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
 class Sqs extends BaseAwsSdkPlugin {
   static get id () { return 'sqs' }
   static get peerServicePrecursors () { return ['queuename'] }
+  static get isPayloadReporter () { return true }
 
   constructor (...args) {
     super(...args)
@@ -41,7 +42,7 @@ class Sqs extends BaseAwsSdkPlugin {
       // extract DSM context after as we might not have a parent-child but may have a DSM context
 
       this.responseExtractDSMContext(
-        request.operation, request.params, response, span || null, { parsedMessageAttributes }
+        request.operation, request.params, response, span || null, { parsedAttributes: parsedMessageAttributes }
       )
     })
 
@@ -157,8 +158,8 @@ class Sqs extends BaseAwsSdkPlugin {
       if (attributes.StringValue) {
         const textMap = attributes.StringValue
         return JSON.parse(textMap)
-      } else if (attributes.Type === 'Binary') {
-        const buffer = Buffer.from(attributes.Value, 'base64')
+      } else if (attributes.Type === 'Binary' || attributes.DataType === 'Binary') {
+        const buffer = Buffer.from(attributes.Value ?? attributes.BinaryValue, 'base64')
         return JSON.parse(buffer)
       }
     } catch (e) {
@@ -194,16 +195,16 @@ class Sqs extends BaseAwsSdkPlugin {
           parsedAttributes = this.parseDatadogAttributes(message.MessageAttributes._datadog)
         }
       }
-      if (parsedAttributes && DsmPathwayCodec.contextExists(parsedAttributes)) {
-        const payloadSize = getHeadersSize({
-          Body: message.Body,
-          MessageAttributes: message.MessageAttributes
-        })
-        const queue = params.QueueUrl.split('/').pop()
+      const payloadSize = getHeadersSize({
+        Body: message.Body,
+        MessageAttributes: message.MessageAttributes
+      })
+      const queue = params.QueueUrl.split('/').pop()
+      if (parsedAttributes) {
         this.tracer.decodeDataStreamsContext(parsedAttributes)
-        this.tracer
-          .setCheckpoint(['direction:in', `topic:${queue}`, 'type:sqs'], span, payloadSize)
       }
+      this.tracer
+        .setCheckpoint(['direction:in', `topic:${queue}`, 'type:sqs'], span, payloadSize)
     })
   }
 
@@ -222,7 +223,7 @@ class Sqs extends BaseAwsSdkPlugin {
             span,
             params.Entries[i],
             params.QueueUrl,
-            i === 0 || (this.config.sqs && this.config.sqs.batchPropagationEnabled)
+            i === 0 || (this.config.batchPropagationEnabled)
           )
         }
         break

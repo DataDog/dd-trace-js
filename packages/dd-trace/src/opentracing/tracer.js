@@ -5,6 +5,7 @@ const Span = require('./span')
 const SpanProcessor = require('../span_processor')
 const PrioritySampler = require('../priority_sampler')
 const TextMapPropagator = require('./propagation/text_map')
+const DSMTextMapPropagator = require('./propagation/text_map_dsm')
 const HttpPropagator = require('./propagation/http')
 const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
@@ -38,7 +39,8 @@ class DatadogTracer {
       [formats.TEXT_MAP]: new TextMapPropagator(config),
       [formats.HTTP_HEADERS]: new HttpPropagator(config),
       [formats.BINARY]: new BinaryPropagator(config),
-      [formats.LOG]: new LogPropagator(config)
+      [formats.LOG]: new LogPropagator(config),
+      [formats.TEXT_MAP_DSM]: new DSMTextMapPropagator(config)
     }
     if (config.reportHostname) {
       this._hostname = os.hostname()
@@ -50,8 +52,15 @@ class DatadogTracer {
       ? getContext(options.childOf)
       : getParent(options.references)
 
+    // as per spec, allow the setting of service name through options
     const tags = {
-      'service.name': this._service
+      'service.name': options?.tags?.service ? String(options.tags.service) : this._service
+    }
+
+    // As per unified service tagging spec if a span is created with a service name different from the global
+    // service name it will not inherit the global version value
+    if (options?.tags?.service && options.tags.service !== this._service) {
+      options.tags.version = undefined
     }
 
     const span = new Span(this, this._processor, this._prioritySampler, {
@@ -71,14 +80,16 @@ class DatadogTracer {
     return span
   }
 
-  inject (spanContext, format, carrier) {
-    if (spanContext instanceof Span) {
-      spanContext = spanContext.context()
+  inject (context, format, carrier) {
+    if (context instanceof Span) {
+      context = context.context()
     }
 
     try {
-      this._prioritySampler.sample(spanContext)
-      this._propagators[format].inject(spanContext, carrier)
+      if (format !== 'text_map_dsm') {
+        this._prioritySampler.sample(context)
+      }
+      this._propagators[format].inject(context, carrier)
     } catch (e) {
       log.error(e)
       runtimeMetrics.increment('datadog.tracer.node.inject.errors', true)

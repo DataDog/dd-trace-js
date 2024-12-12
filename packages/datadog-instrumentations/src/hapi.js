@@ -1,12 +1,13 @@
 'use strict'
 
+const tracingChannel = require('dc-polyfill').tracingChannel
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 
 const handleChannel = channel('apm:hapi:request:handle')
 const routeChannel = channel('apm:hapi:request:route')
 const errorChannel = channel('apm:hapi:request:error')
-const enterChannel = channel('apm:hapi:extension:enter')
+const hapiTracingChannel = tracingChannel('apm:hapi:extension')
 
 function wrapServer (server) {
   return function (options) {
@@ -27,25 +28,25 @@ function wrapServer (server) {
 }
 
 function wrapStart (start) {
-  return function () {
+  return shimmer.wrapFunction(start, start => function () {
     if (this && typeof this.ext === 'function') {
       this.ext('onPreResponse', onPreResponse)
     }
 
     return start.apply(this, arguments)
-  }
+  })
 }
 
 function wrapExt (ext) {
-  return function (events, method, options) {
-    if (typeof events === 'object') {
+  return shimmer.wrapFunction(ext, ext => function (events, method, options) {
+    if (events !== null && typeof events === 'object') {
       arguments[0] = wrapEvents(events)
     } else {
       arguments[1] = wrapExtension(method)
     }
 
     return ext.apply(this, arguments)
-  }
+  })
 }
 
 function wrapDispatch (dispatch) {
@@ -91,19 +92,15 @@ function wrapEvents (events) {
 function wrapHandler (handler) {
   if (typeof handler !== 'function') return handler
 
-  return function (request, h) {
+  return shimmer.wrapFunction(handler, handler => function (request, h) {
     const req = request && request.raw && request.raw.req
 
     if (!req) return handler.apply(this, arguments)
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    return asyncResource.runInAsyncScope(() => {
-      enterChannel.publish({ req })
-
+    return hapiTracingChannel.traceSync(() => {
       return handler.apply(this, arguments)
     })
-  }
+  })
 }
 
 function onPreResponse (request, h) {

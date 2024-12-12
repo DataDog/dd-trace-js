@@ -30,8 +30,16 @@ const {
   TEST_NAME,
   JEST_DISPLAY_NAME,
   TEST_EARLY_FLAKE_ABORT_REASON,
-  TEST_SOURCE_START
+  TEST_SOURCE_START,
+  TEST_CODE_OWNERS,
+  TEST_SESSION_NAME,
+  TEST_LEVEL_EVENT_TYPES,
+  DI_ERROR_DEBUG_INFO_CAPTURED,
+  DI_DEBUG_ERROR_FILE,
+  DI_DEBUG_ERROR_SNAPSHOT_ID,
+  DI_DEBUG_ERROR_LINE
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
 const testFile = 'ci-visibility/run-jest.js'
@@ -53,7 +61,13 @@ describe('jest CommonJS', () => {
   let testOutput = ''
 
   before(async function () {
-    sandbox = await createSandbox(['jest', 'chai@v4', 'jest-jasmine2', 'jest-environment-jsdom'], true)
+    sandbox = await createSandbox([
+      'jest',
+      'chai@v4',
+      'jest-jasmine2',
+      'jest-environment-jsdom',
+      'office-addin-mock'
+    ], true)
     cwd = sandbox.folder
     startupTestFile = path.join(cwd, testFile)
   })
@@ -132,6 +146,14 @@ describe('jest CommonJS', () => {
         receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       }
       receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
+        const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+        metadataDicts.forEach(metadata => {
+          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+            assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+          }
+        })
+
         const events = payloads.flatMap(({ payload }) => payload.events)
         const sessionEventContent = events.find(event => event.type === 'test_session_end').content
         const moduleEventContent = events.find(event => event.type === 'test_module_end').content
@@ -152,15 +174,19 @@ describe('jest CommonJS', () => {
 
         assert.include(testOutput, expectedStdout)
 
-        // Can read DD_TAGS
-        tests.forEach(testEvent => {
-          assert.propertyVal(testEvent.meta, 'test.customtag', 'customvalue')
-          assert.propertyVal(testEvent.meta, 'test.customtag2', 'customvalue2')
-        })
-
         tests.forEach(testEvent => {
           assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
           assert.exists(testEvent.metrics[TEST_SOURCE_START])
+          // Can read DD_TAGS
+          assert.propertyVal(testEvent.meta, 'test.customtag', 'customvalue')
+          assert.propertyVal(testEvent.meta, 'test.customtag2', 'customvalue2')
+          assert.exists(testEvent.metrics[DD_HOST_CPU_COUNT])
+        })
+
+        suites.forEach(testSuite => {
+          assert.isTrue(testSuite.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'))
+          assert.equal(testSuite.metrics[TEST_SOURCE_START], 1)
+          assert.exists(testSuite.metrics[DD_HOST_CPU_COUNT])
         })
 
         done()
@@ -170,7 +196,8 @@ describe('jest CommonJS', () => {
         cwd,
         env: {
           ...envVars,
-          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
+          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+          DD_TEST_SESSION_NAME: 'my-test-session'
         },
         stdio: 'pipe'
       })
@@ -237,6 +264,40 @@ describe('jest CommonJS', () => {
         assert.include(testOutput, expectedStdout)
         done()
       })
+    })
+  })
+
+  it('correctly calculates test code owners when working directory is not repository root', (done) => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+
+        const test = events.find(event => event.type === 'test').content
+        const testSuite = events.find(event => event.type === 'test_suite_end').content
+        // The test is in a subproject
+        assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
+        assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+        assert.equal(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+      })
+
+    childProcess = exec(
+      'node ./node_modules/jest/bin/jest --config config-jest.js --rootDir ci-visibility/subproject',
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          PROJECTS: JSON.stringify([{
+            testMatch: ['**/subproject-test*']
+          }])
+        },
+        stdio: 'inherit'
+      }
+    )
+
+    childProcess.on('exit', () => {
+      eventsPromise.then(() => {
+        done()
+      }).catch(done)
     })
   })
 
@@ -395,17 +456,27 @@ describe('jest CommonJS', () => {
         cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
-          RUN_IN_PARALLEL: true
+          RUN_IN_PARALLEL: true,
+          DD_TEST_SESSION_NAME: 'my-test-session'
         },
         stdio: 'pipe'
       })
 
       receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000).then(eventsRequests => {
-        const eventTypes = eventsRequests.map(({ payload }) => payload)
-          .flatMap(({ events }) => events)
-          .map(event => event.type)
+        const metadataDicts = eventsRequests.flatMap(({ payload }) => payload.metadata)
 
+        // it propagates test session name to the test and test suite events in parallel mode
+        metadataDicts.forEach(metadata => {
+          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+            assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+          }
+        })
+
+        const events = eventsRequests.map(({ payload }) => payload)
+          .flatMap(({ events }) => events)
+        const eventTypes = events.map(event => event.type)
         assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+
         done()
       }).catch(done)
     })
@@ -1408,6 +1479,48 @@ describe('jest CommonJS', () => {
         eventsPromise.then(done).catch(done)
       })
     })
+
+    it('reports code coverage relative to the repository root, not working directory', (done) => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: false
+      })
+
+      const codeCoveragesPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+          const coveredFiles = payloads
+            .flatMap(({ payload }) => payload)
+            .flatMap(({ content: { coverages } }) => coverages)
+            .flatMap(({ files }) => files)
+            .map(({ filename }) => filename)
+
+          assert.includeMembers(coveredFiles, [
+            'ci-visibility/subproject/dependency.js',
+            'ci-visibility/subproject/subproject-test.js'
+          ])
+        }, 5000)
+
+      childProcess = exec(
+        'node ./node_modules/jest/bin/jest --config config-jest.js --rootDir ci-visibility/subproject',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PROJECTS: JSON.stringify([{
+              testMatch: ['**/subproject-test*']
+            }])
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        codeCoveragesPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
   })
 
   context('early flake detection', () => {
@@ -2109,6 +2222,431 @@ describe('jest CommonJS', () => {
       )
       childProcess.on('exit', () => {
         eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+  })
+
+  context('flaky test retries', () => {
+    it('retries failed tests automatically', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.equal(tests.length, 10)
+          assert.includeMembers(tests.map(test => test.resource), [
+            // does not retry
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries will not retry passed tests',
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
+            // retries twice and passes
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests',
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests',
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests',
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests',
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests',
+            // retries up to 5 times and still fails
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests'
+          ])
+
+          const eventuallyPassingTest = tests.filter(
+            test => test.resource ===
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests'
+          )
+          assert.equal(eventuallyPassingTest.length, 3)
+          assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 2)
+          assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
+          assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
+
+          const neverPassingTest = tests.filter(
+            test => test.resource ===
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests'
+          )
+          assert.equal(neverPassingTest.length, 6)
+          assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 6)
+          assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 0)
+          assert.equal(neverPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 5)
+
+          const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+
+          const passingSuite = testSuites.find(
+            suite => suite.resource === 'test_suite.ci-visibility/jest-flaky/flaky-passes.js'
+          )
+          assert.equal(passingSuite.meta[TEST_STATUS], 'pass')
+
+          const failedSuite = testSuites.find(
+            suite => suite.resource === 'test_suite.ci-visibility/jest-flaky/flaky-fails.js'
+          )
+          assert.equal(failedSuite.meta[TEST_STATUS], 'fail')
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-flaky/flaky-'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.equal(tests.length, 3)
+          assert.includeMembers(tests.map(test => test.resource), [
+            // does not retry anything
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries will not retry passed tests',
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests'
+          ])
+
+          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+          assert.equal(retriedTests.length, 0)
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-flaky/flaky-',
+            DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.equal(tests.length, 5)
+          // only one retry
+          assert.includeMembers(tests.map(test => test.resource), [
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries will not retry passed tests',
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests',
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests'
+          ])
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-flaky/flaky-',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => done()).catch(done)
+      })
+    })
+  })
+
+  context('dynamic instrumentation', () => {
+    it('does not activate dynamic instrumentation if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: false,
+        early_flake_detection: {
+          enabled: false
+        }
+        // di_enabled: true // TODO
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+          assert.equal(retriedTests.length, 1)
+          const [retriedTest] = retriedTests
+
+          assert.notProperty(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
+          assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_FILE)
+          assert.notProperty(retriedTest.metrics, DI_DEBUG_ERROR_LINE)
+          assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_SNAPSHOT_ID)
+        })
+      const logsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+          if (payloads.length > 0) {
+            throw new Error('Unexpected logs')
+          }
+        }, 5000)
+
+      childProcess = exec(runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', (code) => {
+        Promise.all([eventsPromise, logsPromise]).then(() => {
+          assert.equal(code, 0)
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('runs retries with dynamic instrumentation', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: false,
+        early_flake_detection: {
+          enabled: false
+        }
+        // di_enabled: true // TODO
+      })
+      let snapshotIdByTest, snapshotIdByLog
+      let spanIdByTest, spanIdByLog, traceIdByTest, traceIdByLog
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+          assert.equal(retriedTests.length, 1)
+          const [retriedTest] = retriedTests
+
+          assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+          assert.propertyVal(
+            retriedTest.meta,
+            DI_DEBUG_ERROR_FILE,
+            'ci-visibility/dynamic-instrumentation/dependency.js'
+          )
+          assert.equal(retriedTest.metrics[DI_DEBUG_ERROR_LINE], 4)
+          assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
+
+          snapshotIdByTest = retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID]
+          spanIdByTest = retriedTest.span_id.toString()
+          traceIdByTest = retriedTest.trace_id.toString()
+
+          const notRetriedTest = tests.find(test => test.meta[TEST_NAME].includes('is not retried'))
+
+          assert.notProperty(notRetriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
+        })
+
+      const logsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+          const [{ logMessage: [diLog] }] = payloads
+          assert.deepInclude(diLog, {
+            ddsource: 'dd_debugger',
+            level: 'error'
+          })
+          assert.equal(diLog.debugger.snapshot.language, 'javascript')
+          assert.deepInclude(diLog.debugger.snapshot.captures.lines['4'].locals, {
+            a: {
+              type: 'number',
+              value: '11'
+            },
+            b: {
+              type: 'number',
+              value: '3'
+            },
+            localVariable: {
+              type: 'number',
+              value: '2'
+            }
+          })
+          spanIdByLog = diLog.dd.span_id
+          traceIdByLog = diLog.dd.trace_id
+          snapshotIdByLog = diLog.debugger.snapshot.id
+        })
+
+      childProcess = exec(runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
+            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        Promise.all([eventsPromise, logsPromise]).then(() => {
+          assert.equal(snapshotIdByTest, snapshotIdByLog)
+          assert.equal(spanIdByTest, spanIdByLog)
+          assert.equal(traceIdByTest, traceIdByLog)
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('does not crash if the retry does not hit the breakpoint', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: false,
+        early_flake_detection: {
+          enabled: false
+        }
+        // di_enabled: true // TODO
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+          assert.equal(retriedTests.length, 1)
+          const [retriedTest] = retriedTests
+
+          assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+          assert.propertyVal(
+            retriedTest.meta,
+            DI_DEBUG_ERROR_FILE,
+            'ci-visibility/dynamic-instrumentation/dependency.js'
+          )
+          assert.equal(retriedTest.metrics[DI_DEBUG_ERROR_LINE], 4)
+          assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
+        })
+      const logsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+          if (payloads.length > 0) {
+            throw new Error('Unexpected logs')
+          }
+        }, 5000)
+
+      childProcess = exec(runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-not-hit-breakpoint',
+            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', (code) => {
+        Promise.all([eventsPromise, logsPromise]).then(() => {
+          assert.equal(code, 0)
+          done()
+        }).catch(done)
+      })
+    })
+  })
+
+  // This happens when using office-addin-mock
+  context('a test imports a file whose name includes a library we should bypass jest require cache for', () => {
+    it('does not crash', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: false,
+        early_flake_detection: {
+          enabled: false
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.equal(tests.length, 1)
+        })
+
+      childProcess = exec(runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'office-addin-mock/test'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', (code) => {
+        eventsPromise.then(() => {
+          assert.equal(code, 0)
           done()
         }).catch(done)
       })

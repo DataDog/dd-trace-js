@@ -7,7 +7,7 @@ const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
 const checkRequireCache = require('../check_require_cache')
-const telemetry = require('../../../dd-trace/src/telemetry/init-telemetry')
+const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 
 const {
   DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
@@ -22,11 +22,24 @@ const disabledInstrumentations = new Set(
   DD_TRACE_DISABLED_INSTRUMENTATIONS ? DD_TRACE_DISABLED_INSTRUMENTATIONS.split(',') : []
 )
 
+// Check for DD_TRACE_<INTEGRATION>_ENABLED environment variables
+for (const [key, value] of Object.entries(process.env)) {
+  const match = key.match(/^DD_TRACE_(.+)_ENABLED$/)
+  if (match && (value.toLowerCase() === 'false' || value === '0')) {
+    const integration = match[1].toLowerCase()
+    disabledInstrumentations.add(integration)
+  }
+}
+
 const loadChannel = channel('dd-trace:instrumentation:load')
 
 // Globals
 if (!disabledInstrumentations.has('fetch')) {
   require('../fetch')
+}
+
+if (!disabledInstrumentations.has('process')) {
+  require('../process')
 }
 
 const HOOK_SYMBOL = Symbol('hookExportsMap')
@@ -86,18 +99,22 @@ for (const packageName of names) {
       }
 
       if (matchesFile) {
-        const version = moduleVersion || getVersion(moduleBaseDir)
-        if (!Object.hasOwnProperty(namesAndSuccesses, name)) {
-          namesAndSuccesses[name] = {
-            success: false,
-            version
-          }
+        let version = moduleVersion
+        try {
+          version = version || getVersion(moduleBaseDir)
+        } catch (e) {
+          log.error(`Error getting version for "${name}": ${e.message}`)
+          log.error(e)
+          continue
+        }
+        if (typeof namesAndSuccesses[`${name}@${version}`] === 'undefined') {
+          namesAndSuccesses[`${name}@${version}`] = false
         }
 
         if (matchVersion(version, versions)) {
           // Check if the hook already has a set moduleExport
           if (hook[HOOK_SYMBOL].has(moduleExports)) {
-            namesAndSuccesses[name].success = true
+            namesAndSuccesses[`${name}@${version}`] = true
             return moduleExports
           }
 
@@ -117,19 +134,20 @@ for (const packageName of names) {
               `integration_version:${version}`
             ])
           }
-          namesAndSuccesses[name].success = true
+          namesAndSuccesses[`${name}@${version}`] = true
         }
       }
     }
-    for (const name of Object.keys(namesAndSuccesses)) {
-      const { success, version } = namesAndSuccesses[name]
-      if (!success && !seenCombo.has(`${name}@${version}`)) {
+    for (const nameVersion of Object.keys(namesAndSuccesses)) {
+      const [name, version] = nameVersion.split('@')
+      const success = namesAndSuccesses[nameVersion]
+      if (!success && !seenCombo.has(nameVersion)) {
         telemetry('abort.integration', [
           `integration:${name}`,
           `integration_version:${version}`
         ])
-        log.info(`Found incompatible integration version: ${name}@${version}`)
-        seenCombo.add(`${name}@${version}`)
+        log.info(`Found incompatible integration version: ${nameVersion}`)
+        seenCombo.add(nameVersion)
       }
     }
 

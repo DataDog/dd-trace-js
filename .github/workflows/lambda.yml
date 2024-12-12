@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - uses: ./.github/actions/node/18
       - run: yarn test:lambda:ci
       - uses: ./.github/actions/node/20

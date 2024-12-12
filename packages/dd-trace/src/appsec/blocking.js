@@ -9,6 +9,10 @@ let templateHtml = blockedTemplates.html
 let templateJson = blockedTemplates.json
 let templateGraphqlJson = blockedTemplates.graphqlJson
 
+let defaultBlockingActionParameters
+
+const responseBlockedSet = new WeakSet()
+
 const specificBlockingTypes = {
   GRAPHQL: 'graphql'
 }
@@ -21,7 +25,7 @@ function addSpecificEndpoint (method, url, type) {
   detectedSpecificEndpoints[getSpecificKey(method, url)] = type
 }
 
-function getBlockWithRedirectData (rootSpan, actionParameters) {
+function getBlockWithRedirectData (actionParameters) {
   let statusCode = actionParameters.status_code
   if (!statusCode || statusCode < 300 || statusCode >= 400) {
     statusCode = 303
@@ -29,10 +33,6 @@ function getBlockWithRedirectData (rootSpan, actionParameters) {
   const headers = {
     Location: actionParameters.location
   }
-
-  rootSpan.addTags({
-    'appsec.blocked': 'true'
-  })
 
   return { headers, statusCode }
 }
@@ -47,7 +47,7 @@ function getSpecificBlockingData (type) {
   }
 }
 
-function getBlockWithContentData (req, specificType, rootSpan, actionParameters) {
+function getBlockWithContentData (req, specificType, actionParameters) {
   let type
   let body
 
@@ -88,28 +88,28 @@ function getBlockWithContentData (req, specificType, rootSpan, actionParameters)
     'Content-Length': Buffer.byteLength(body)
   }
 
-  rootSpan.addTags({
-    'appsec.blocked': 'true'
-  })
-
   return { body, statusCode, headers }
 }
 
-function getBlockingData (req, specificType, rootSpan, actionParameters) {
+function getBlockingData (req, specificType, actionParameters) {
   if (actionParameters?.location) {
-    return getBlockWithRedirectData(rootSpan, actionParameters)
+    return getBlockWithRedirectData(actionParameters)
   } else {
-    return getBlockWithContentData(req, specificType, rootSpan, actionParameters)
+    return getBlockWithContentData(req, specificType, actionParameters)
   }
 }
 
-function block (req, res, rootSpan, abortController, actionParameters) {
+function block (req, res, rootSpan, abortController, actionParameters = defaultBlockingActionParameters) {
   if (res.headersSent) {
-    log.warn('Cannot send blocking response when headers have already been sent')
+    log.warn('[ASM] Cannot send blocking response when headers have already been sent')
     return
   }
 
-  const { body, headers, statusCode } = getBlockingData(req, null, rootSpan, actionParameters)
+  const { body, headers, statusCode } = getBlockingData(req, null, actionParameters)
+
+  rootSpan.addTags({
+    'appsec.blocked': 'true'
+  })
 
   for (const headerName of res.getHeaderNames()) {
     res.removeHeader(headerName)
@@ -117,11 +117,14 @@ function block (req, res, rootSpan, abortController, actionParameters) {
 
   res.writeHead(statusCode, headers).end(body)
 
+  responseBlockedSet.add(res)
+
   abortController?.abort()
 }
 
 function getBlockingAction (actions) {
-  return actions?.block_request || actions?.redirect_request
+  // waf only returns one action, but it prioritizes redirect over block
+  return actions?.redirect_request || actions?.block_request
 }
 
 function setTemplates (config) {
@@ -144,11 +147,23 @@ function setTemplates (config) {
   }
 }
 
+function isBlocked (res) {
+  return responseBlockedSet.has(res)
+}
+
+function setDefaultBlockingActionParameters (actions) {
+  const blockAction = actions?.find(action => action.id === 'block')
+
+  defaultBlockingActionParameters = blockAction?.parameters
+}
+
 module.exports = {
   addSpecificEndpoint,
   block,
   specificBlockingTypes,
   getBlockingData,
   getBlockingAction,
-  setTemplates
+  setTemplates,
+  isBlocked,
+  setDefaultBlockingActionParameters
 }

@@ -21,13 +21,21 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_SESSION_ID,
   TEST_MODULE_ID,
   TEST_MODULE,
   TEST_SUITE_ID,
   TEST_COMMAND,
   TEST_SUITE,
-  MOCHA_IS_PARALLEL
+  MOCHA_IS_PARALLEL,
+  TEST_IS_RUM_ACTIVE,
+  TEST_BROWSER_DRIVER,
+  TEST_NAME,
+  DI_ERROR_DEBUG_INFO_CAPTURED,
+  DI_DEBUG_ERROR_SNAPSHOT_ID,
+  DI_DEBUG_ERROR_FILE,
+  DI_DEBUG_ERROR_LINE
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -38,10 +46,13 @@ const {
   TELEMETRY_ITR_FORCED_TO_RUN,
   TELEMETRY_CODE_COVERAGE_EMPTY,
   TELEMETRY_ITR_UNSKIPPABLE,
-  TELEMETRY_CODE_COVERAGE_NUM_FILES
+  TELEMETRY_CODE_COVERAGE_NUM_FILES,
+  TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const id = require('../../dd-trace/src/id')
 const log = require('../../dd-trace/src/log')
+
+const debuggerParameterPerTest = new Map()
 
 function getTestSuiteLevelVisibilityTags (testSuiteSpan) {
   const testSuiteSpanContext = testSuiteSpan.context()
@@ -81,7 +92,7 @@ class MochaPlugin extends CiPlugin {
       }
 
       const relativeCoverageFiles = [...coverageFiles, suiteFile]
-        .map(filename => getTestSuitePath(filename, this.sourceRoot))
+        .map(filename => getTestSuitePath(filename, this.repositoryRoot || this.sourceRoot))
 
       const { _traceId, _spanId } = testSuiteSpan.context()
 
@@ -120,6 +131,19 @@ class MochaPlugin extends CiPlugin {
       if (isForcedToRun) {
         testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
         this.telemetry.count(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
+      }
+      if (this.repositoryRoot !== this.sourceRoot && !!this.repositoryRoot) {
+        testSuiteMetadata[TEST_SOURCE_FILE] = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      } else {
+        testSuiteMetadata[TEST_SOURCE_FILE] = testSuite
+      }
+      if (testSuiteMetadata[TEST_SOURCE_FILE]) {
+        testSuiteMetadata[TEST_SOURCE_START] = 1
+      }
+
+      const codeOwners = this.getCodeOwners(testSuiteMetadata)
+      if (codeOwners) {
+        testSuiteMetadata[TEST_CODE_OWNERS] = codeOwners
       }
 
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
@@ -168,6 +192,28 @@ class MochaPlugin extends CiPlugin {
       const store = storage.getStore()
       const span = this.startTestSpan(testInfo)
 
+      const { testName } = testInfo
+
+      const debuggerParameters = debuggerParameterPerTest.get(testName)
+
+      if (debuggerParameters) {
+        const spanContext = span.context()
+
+        // TODO: handle race conditions with this.retriedTestIds
+        this.retriedTestIds = {
+          spanId: spanContext.toSpanId(),
+          traceId: spanContext.toTraceId()
+        }
+        const { snapshotId, file, line } = debuggerParameters
+
+        // TODO: should these be added on test:end if and only if the probe is hit?
+        // Sync issues: `hitProbePromise` might be resolved after the test ends
+        span.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+        span.setTag(DI_DEBUG_ERROR_SNAPSHOT_ID, snapshotId)
+        span.setTag(DI_DEBUG_ERROR_FILE, file)
+        span.setTag(DI_DEBUG_ERROR_LINE, line)
+      }
+
       this.enter(span, store)
     })
 
@@ -184,12 +230,20 @@ class MochaPlugin extends CiPlugin {
         if (hasBeenRetried) {
           span.setTag(TEST_IS_RETRY, 'true')
         }
-        span.finish()
+
+        const spanTags = span.context()._tags
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
           'test',
-          { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+          {
+            hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
+            isNew: spanTags[TEST_IS_NEW] === 'true',
+            isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
+            browserDriver: spanTags[TEST_BROWSER_DRIVER]
+          }
         )
+
+        span.finish()
         finishAllTraceSpans(span)
       }
     })
@@ -217,7 +271,7 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:retry', (isFirstAttempt) => {
+    this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, willBeRetried, err }) => {
       const store = storage.getStore()
       const span = store?.span
       if (span) {
@@ -225,13 +279,28 @@ class MochaPlugin extends CiPlugin {
         if (!isFirstAttempt) {
           span.setTag(TEST_IS_RETRY, 'true')
         }
+        if (err) {
+          span.setTag('error', err)
+        }
 
-        span.finish()
+        const spanTags = span.context()._tags
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
           'test',
-          { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+          {
+            hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
+            isNew: spanTags[TEST_IS_NEW] === 'true',
+            isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
+            browserDriver: spanTags[TEST_BROWSER_DRIVER]
+          }
         )
+        if (willBeRetried && this.di) {
+          const testName = span.context()._tags[TEST_NAME]
+          const debuggerParameters = this.addDiProbe(err)
+          debuggerParameterPerTest.set(testName, debuggerParameters)
+        }
+
+        span.finish()
         finishAllTraceSpans(span)
       }
     })
@@ -249,6 +318,7 @@ class MochaPlugin extends CiPlugin {
       hasUnskippableSuites,
       error,
       isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
       isParallel
     }) => {
       if (this.testSessionSpan) {
@@ -283,12 +353,16 @@ class MochaPlugin extends CiPlugin {
         if (isEarlyFlakeDetectionEnabled) {
           this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
         }
+        if (isEarlyFlakeDetectionFaulty) {
+          this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+        }
 
         this.testModuleSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
         this.testSessionSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
         finishAllTraceSpans(this.testSessionSpan)
+        this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
       }
       this.libraryConfig = null
       this.tracer._exporter.flush()

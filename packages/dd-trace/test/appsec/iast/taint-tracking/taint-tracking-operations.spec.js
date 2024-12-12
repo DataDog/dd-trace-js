@@ -169,15 +169,14 @@ describe('IAST TaintTracking Operations', () => {
         trim: id => id
       }
 
-      const iastLogStub = {
-        error (data) { return this },
-        errorAndPublish (data) { return this }
+      const logStub = {
+        error (data) { return this }
       }
 
-      const logSpy = sinon.spy(iastLogStub)
+      const logSpy = sinon.spy(logStub)
       const operationsTaintObject = proxyquire('../../../../src/appsec/iast/taint-tracking/operations-taint-object', {
         '@datadog/native-iast-taint-tracking': taintedUtils,
-        '../iast-log': logSpy
+        '../../../log': logSpy
       })
       const taintTrackingOperations = proxyquire('../../../../src/appsec/iast/taint-tracking/operations', {
         '../../../../../datadog-core': datadogCore,
@@ -188,7 +187,6 @@ describe('IAST TaintTracking Operations', () => {
       taintTrackingOperations.createTransaction(transactionId, iastContext)
       const result = taintTrackingOperations.taintObject(iastContext, obj, null)
       expect(logSpy.error).to.have.been.calledOnce
-      expect(logSpy.errorAndPublish).to.have.been.calledOnce
       expect(result).to.equal(obj)
     })
   })
@@ -277,6 +275,7 @@ describe('IAST TaintTracking Operations', () => {
 
   describe('enableTaintTracking', () => {
     let context
+
     beforeEach(() => {
       context = { [taintTrackingOperations.IAST_TRANSACTION_ID]: 'id' }
       iastContextFunctions.saveIastContext(
@@ -408,6 +407,7 @@ describe('IAST TaintTracking Operations', () => {
         value
       )
     })
+
     it('Given iastContext with undefined IAST_TRANSACTION_ID should not call TaintedUtils.isTainted', () => {
       const iastContext = {}
       taintTrackingOperations.isTainted(iastContext)

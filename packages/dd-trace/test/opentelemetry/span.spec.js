@@ -46,7 +46,6 @@ describe('OTel Span', () => {
   it('should expose parent span id', () => {
     tracer.trace('outer', (outer) => {
       const span = makeSpan('name', {})
-
       expect(span.parentSpanId).to.equal(outer.context()._spanId.toString(16))
     })
   })
@@ -220,6 +219,7 @@ describe('OTel Span', () => {
         expect(span.name).to.equal(kindName)
       })
     }
+
     it('should map span name with default span kind of internal', () => {
       const span = makeSpan()
       expect(span.name).to.equal('internal')
@@ -323,6 +323,33 @@ describe('OTel Span', () => {
 
     span.addLink(span3.spanContext())
     expect(_links).to.have.lengthOf(2)
+  })
+
+  it('should add span pointers', () => {
+    const span = makeSpan('name')
+    const { _links } = span._ddSpan
+
+    span.addSpanPointer('pointer_kind', 'd', 'abc123')
+    expect(_links).to.have.lengthOf(1)
+    expect(_links[0].attributes).to.deep.equal({
+      'ptr.kind': 'pointer_kind',
+      'ptr.dir': 'd',
+      'ptr.hash': 'abc123',
+      'link.kind': 'span-pointer'
+    })
+    expect(_links[0].context.toTraceId()).to.equal('0')
+    expect(_links[0].context.toSpanId()).to.equal('0')
+
+    span.addSpanPointer('another_kind', 'd', '1234567')
+    expect(_links).to.have.lengthOf(2)
+    expect(_links[1].attributes).to.deep.equal({
+      'ptr.kind': 'another_kind',
+      'ptr.dir': 'd',
+      'ptr.hash': '1234567',
+      'link.kind': 'span-pointer'
+    })
+    expect(_links[1].context.toTraceId()).to.equal('0')
+    expect(_links[1].context.toSpanId()).to.equal('0')
   })
 
   it('should set status', () => {
@@ -452,6 +479,7 @@ describe('OTel Span', () => {
     expect(processor.onStart).to.have.been.calledWith(span, span._context)
     expect(processor.onEnd).to.have.been.calledWith(span)
   })
+
   it('should add span events', () => {
     const span1 = makeSpan('span1')
     const span2 = makeSpan('span2')

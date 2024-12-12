@@ -10,6 +10,7 @@ const {
   curlAndAssertMessage,
   curl
 } = require('./helpers')
+const { USER_KEEP, AUTO_REJECT, AUTO_KEEP } = require('../ext/priority')
 
 describe('Standalone ASM', () => {
   let sandbox, cwd, startupTestFile, agent, proc, env
@@ -43,22 +44,18 @@ describe('Standalone ASM', () => {
       await agent.stop()
     })
 
-    function assertKeep (payload, manual = true) {
+    function assertKeep (payload) {
       const { meta, metrics } = payload
-      if (manual) {
-        assert.propertyVal(meta, 'manual.keep', 'true')
-      } else {
-        assert.notProperty(meta, 'manual.keep')
-      }
+
       assert.propertyVal(meta, '_dd.p.appsec', '1')
 
-      assert.propertyVal(metrics, '_sampling_priority_v1', 2)
+      assert.propertyVal(metrics, '_sampling_priority_v1', USER_KEEP)
       assert.propertyVal(metrics, '_dd.apm.enabled', 0)
     }
 
     function assertDrop (payload) {
       const { metrics } = payload
-      assert.propertyVal(metrics, '_sampling_priority_v1', 0)
+      assert.propertyVal(metrics, '_sampling_priority_v1', AUTO_REJECT)
       assert.propertyVal(metrics, '_dd.apm.enabled', 0)
       assert.notProperty(metrics, '_dd.p.appsec')
     }
@@ -84,33 +81,42 @@ describe('Standalone ASM', () => {
       })
     })
 
-    it('should keep second req because RateLimiter allows 1 req/min and discard the next', async () => {
-      // 1st req kept because waf init
-      // 2nd req kept because it's the first one hitting RateLimiter
-      // next in the first minute are dropped
-      await doWarmupRequests(proc)
-
-      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+    it('should keep fifth req because RateLimiter allows 1 req/min', async () => {
+      const promise = curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
         assert.isArray(payload)
-        assert.strictEqual(payload.length, 4)
+        if (payload.length === 4) {
+          assertKeep(payload[0][0])
+          assertDrop(payload[1][0])
+          assertDrop(payload[2][0])
+          assertDrop(payload[3][0])
 
-        const secondReq = payload[1]
-        assert.isArray(secondReq)
-        assert.strictEqual(secondReq.length, 5)
+          // req after a minute
+        } else {
+          const fifthReq = payload[0]
+          assert.isArray(fifthReq)
+          assert.strictEqual(fifthReq.length, 5)
 
-        const { meta, metrics } = secondReq[0]
-        assert.notProperty(meta, 'manual.keep')
-        assert.notProperty(meta, '_dd.p.appsec')
+          const { meta, metrics } = fifthReq[0]
+          assert.notProperty(meta, 'manual.keep')
+          assert.notProperty(meta, '_dd.p.appsec')
 
-        assert.propertyVal(metrics, '_sampling_priority_v1', 1)
-        assert.propertyVal(metrics, '_dd.apm.enabled', 0)
+          assert.propertyVal(metrics, '_sampling_priority_v1', AUTO_KEEP)
+          assert.propertyVal(metrics, '_dd.apm.enabled', 0)
+        }
+      }, 70000, 2)
 
-        assertDrop(payload[2][0])
+      // 1st req kept because waf init
+      // next in the first minute are dropped
+      // 5nd req kept because RateLimiter allows 1 req/min
+      await doWarmupRequests(proc)
 
-        assertDrop(payload[3][0])
-      })
-    })
+      await new Promise(resolve => setTimeout(resolve, 60000))
+
+      await curl(proc)
+
+      return promise
+    }).timeout(70000)
 
     it('should keep attack requests', async () => {
       await doWarmupRequests(proc)
@@ -213,7 +219,7 @@ describe('Standalone ASM', () => {
 
             const innerReq = payload.find(p => p[0].resource === 'GET /down')
             assert.notStrictEqual(innerReq, undefined)
-            assertKeep(innerReq[0], false)
+            assertKeep(innerReq[0])
           }, undefined, undefined, true)
         })
 

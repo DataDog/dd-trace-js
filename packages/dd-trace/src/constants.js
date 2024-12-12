@@ -34,5 +34,22 @@ module.exports = {
   SCI_REPOSITORY_URL: '_dd.git.repository_url',
   SCI_COMMIT_SHA: '_dd.git.commit.sha',
   APM_TRACING_ENABLED_KEY: '_dd.apm.enabled',
-  APPSEC_PROPAGATION_KEY: '_dd.p.appsec'
+  APPSEC_PROPAGATION_KEY: '_dd.p.appsec',
+  PAYLOAD_TAG_REQUEST_PREFIX: 'aws.request.body',
+  PAYLOAD_TAG_RESPONSE_PREFIX: 'aws.response.body',
+  PAYLOAD_TAGGING_MAX_TAGS: 758,
+  SCHEMA_DEFINITION: 'schema.definition',
+  SCHEMA_WEIGHT: 'schema.weight',
+  SCHEMA_TYPE: 'schema.type',
+  SCHEMA_ID: 'schema.id',
+  SCHEMA_TOPIC: 'schema.topic',
+  SCHEMA_OPERATION: 'schema.operation',
+  SCHEMA_NAME: 'schema.name',
+  GRPC_CLIENT_ERROR_STATUSES: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+  GRPC_SERVER_ERROR_STATUSES: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+  S3_PTR_KIND: 'aws.s3.object',
+  SPAN_POINTER_DIRECTION: Object.freeze({
+    UPSTREAM: 'u',
+    DOWNSTREAM: 'd'
+  })
 }

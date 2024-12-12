@@ -19,7 +19,8 @@ const {
   GIT_COMMIT_AUTHOR_NAME,
   GIT_COMMIT_MESSAGE,
   CI_WORKSPACE_PATH,
-  CI_PIPELINE_URL
+  CI_PIPELINE_URL,
+  CI_JOB_NAME
 } = require('./tags')
 const id = require('../../id')
 
@@ -27,6 +28,9 @@ const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../
 const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { version: ddTraceVersion } = require('../../../../../package.json')
+
+// session tags
+const TEST_SESSION_NAME = 'test_session.name'
 
 const TEST_FRAMEWORK = 'test.framework'
 const TEST_FRAMEWORK_VERSION = 'test.framework_version'
@@ -95,8 +99,23 @@ const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
 const EFD_STRING = "Retried by Datadog's Early Flake Detection"
 const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
 
+const TEST_LEVEL_EVENT_TYPES = [
+  'test',
+  'test_suite_end',
+  'test_module_end',
+  'test_session_end'
+]
+
+// Dynamic instrumentation - Test optimization integration tags
+const DI_ERROR_DEBUG_INFO_CAPTURED = 'error.debug_info_captured'
+// TODO: for the moment we'll only use a single snapshot id, so `0` is hardcoded
+const DI_DEBUG_ERROR_SNAPSHOT_ID = '_dd.debug.error.0.snapshot_id'
+const DI_DEBUG_ERROR_FILE = '_dd.debug.error.0.file'
+const DI_DEBUG_ERROR_LINE = '_dd.debug.error.0.line'
+
 module.exports = {
   TEST_CODE_OWNERS,
+  TEST_SESSION_NAME,
   TEST_FRAMEWORK,
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
@@ -156,7 +175,6 @@ module.exports = {
   mergeCoverage,
   fromCoverageMapToCoverage,
   getTestLineStart,
-  getCallSites,
   removeInvalidMetadata,
   parseAnnotations,
   EFD_STRING,
@@ -167,7 +185,15 @@ module.exports = {
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
-  TEST_BROWSER_VERSION
+  TEST_BROWSER_VERSION,
+  getTestSessionName,
+  TEST_LEVEL_EVENT_TYPES,
+  getNumFromKnownTests,
+  getFileAndLineNumberFromError,
+  DI_ERROR_DEBUG_INFO_CAPTURED,
+  DI_DEBUG_ERROR_SNAPSHOT_ID,
+  DI_DEBUG_ERROR_FILE,
+  DI_DEBUG_ERROR_LINE
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -543,26 +569,6 @@ function getTestLineStart (err, testSuitePath) {
   }
 }
 
-// From https://github.com/felixge/node-stack-trace/blob/ba06dcdb50d465cd440d84a563836e293b360427/index.js#L1
-function getCallSites () {
-  const oldLimit = Error.stackTraceLimit
-  Error.stackTraceLimit = Infinity
-
-  const dummy = {}
-
-  const v8Handler = Error.prepareStackTrace
-  Error.prepareStackTrace = function (_, v8StackTrace) {
-    return v8StackTrace
-  }
-  Error.captureStackTrace(dummy)
-
-  const v8StackTrace = dummy.stack
-  Error.prepareStackTrace = v8Handler
-  Error.stackTraceLimit = oldLimit
-
-  return v8StackTrace
-}
-
 /**
  * Gets an object of test tags from an Playwright annotations array.
  * @param {Object[]} annotations - Annotations from a Playwright test.
@@ -614,4 +620,53 @@ function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faulty
     newSuites > faultyThresholdPercentage &&
     newSuitesPercentage > faultyThresholdPercentage
   )
+}
+
+function getTestSessionName (config, testCommand, envTags) {
+  if (config.ciVisibilityTestSessionName) {
+    return config.ciVisibilityTestSessionName
+  }
+  if (envTags[CI_JOB_NAME]) {
+    return `${envTags[CI_JOB_NAME]}-${testCommand}`
+  }
+  return testCommand
+}
+
+// Calculate the number of a tests from the known tests response, which has a shape like:
+// { testModule1: { testSuite1: [test1, test2, test3] }, testModule2: { testSuite2: [test4, test5] } }
+function getNumFromKnownTests (knownTests) {
+  if (!knownTests) {
+    return 0
+  }
+
+  let totalNumTests = 0
+
+  for (const testModule of Object.values(knownTests)) {
+    for (const testSuite of Object.values(testModule)) {
+      totalNumTests += testSuite.length
+    }
+  }
+
+  return totalNumTests
+}
+
+function getFileAndLineNumberFromError (error) {
+  // Split the stack trace into individual lines
+  const stackLines = error.stack.split('\n')
+
+  // The top frame is usually the second line
+  const topFrame = stackLines[1]
+
+  // Regular expression to match the file path, line number, and column number
+  const regex = /\s*at\s+(?:.*\()?(.+):(\d+):(\d+)\)?/
+  const match = topFrame.match(regex)
+
+  if (match) {
+    const filePath = match[1]
+    const lineNumber = Number(match[2])
+    const columnNumber = Number(match[3])
+
+    return [filePath, lineNumber, columnNumber]
+  }
+  return []
 }
