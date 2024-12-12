@@ -36,12 +36,7 @@ class NoopSpan {
   addSpanPointer (ptrKind, ptrDir, ptrHash) { return this }
   log () { return this }
   logEvent () {}
-  finish (finishTime) {
-    const finish = finishTime ?? this._getTime()
-    if (this._options.keepParent) {
-      this._noopContext._tags[`operations.${this._options.metaIndex}.duration`] = finish - this._startTime
-    }
-  }
+  finish (finishTime) {}
 
   _createContext (parent, options) {
     const spanId = id()
