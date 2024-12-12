@@ -79,7 +79,7 @@ module.exports = class Plugin {
         return handler.apply(this, arguments)
       } catch (e) {
         logger.error('Error in plugin handler:', e)
-        logger.info('Disabling plugin:', plugin.id)
+        logger.info('Disabling plugin: %s', plugin.id)
         plugin.configure(false)
       }
     }
