@@ -6,8 +6,6 @@ const log = require('../../dd-trace/src/log')
 const unwrappers = new WeakMap()
 
 function copyProperties (original, wrapped) {
-  Object.setPrototypeOf(wrapped, original)
-
   const props = Object.getOwnPropertyDescriptors(original)
   const keys = Reflect.ownKeys(props)
 
