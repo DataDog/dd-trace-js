@@ -6,6 +6,12 @@ const log = require('../../dd-trace/src/log')
 const unwrappers = new WeakMap()
 
 function copyProperties (original, wrapped) {
+  // TODO getPrototypeOf is not fast. Should we instead do this in specific
+  // instrumentations where needed?
+  const proto = Object.getPrototypeOf(original)
+  if (proto !== Function.prototype) {
+    Object.setPrototypeOf(wrapped, proto)
+  }
   const props = Object.getOwnPropertyDescriptors(original)
   const keys = Reflect.ownKeys(props)
 
