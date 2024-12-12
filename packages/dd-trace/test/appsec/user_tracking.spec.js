@@ -294,7 +294,7 @@ describe('User Tracking', () => {
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.auto.mode': 'identification',
           '_dd.appsec.usr.login': 'login',
-          '_dd.appsec.usr.id': '123',
+          '_dd.appsec.usr.id': '123'
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
@@ -348,7 +348,7 @@ describe('User Tracking', () => {
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.auto.mode': 'identification',
           '_dd.appsec.usr.login': 'login',
-          'appsec.events.users.login.success.usr.login': 'login',
+          'appsec.events.users.login.success.usr.login': 'login'
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
@@ -372,7 +372,7 @@ describe('User Tracking', () => {
           'appsec.events.users.login.failure.track': 'true',
           '_dd.appsec.events.users.login.failure.auto.mode': 'identification',
           '_dd.appsec.usr.login': 'login',
-          'appsec.events.users.login.failure.usr.login': 'login',
+          'appsec.events.users.login.failure.usr.login': 'login'
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
@@ -461,7 +461,7 @@ describe('User Tracking', () => {
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.auto.mode': 'anonymization',
           '_dd.appsec.usr.login': 'anon_428821350e9691491f616b754cd8315f',
-          '_dd.appsec.usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8',
+          '_dd.appsec.usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8'
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
@@ -515,7 +515,7 @@ describe('User Tracking', () => {
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.auto.mode': 'anonymization',
           '_dd.appsec.usr.login': 'anon_428821350e9691491f616b754cd8315f',
-          'appsec.events.users.login.success.usr.login': 'anon_428821350e9691491f616b754cd8315f',
+          'appsec.events.users.login.success.usr.login': 'anon_428821350e9691491f616b754cd8315f'
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
@@ -539,7 +539,7 @@ describe('User Tracking', () => {
           'appsec.events.users.login.failure.track': 'true',
           '_dd.appsec.events.users.login.failure.auto.mode': 'anonymization',
           '_dd.appsec.usr.login': 'anon_428821350e9691491f616b754cd8315f',
-          'appsec.events.users.login.failure.usr.login': 'anon_428821350e9691491f616b754cd8315f',
+          'appsec.events.users.login.failure.usr.login': 'anon_428821350e9691491f616b754cd8315f'
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
