@@ -136,7 +136,7 @@ function wrapMethod (target, name, wrapper, noAssert) {
       if (callState.completed) {
         // error was thrown after original function returned/resolved, so
         // it was us. log it.
-        log.error(e)
+        log.error('Shimmer error was thrown after original function returned/resolved', e)
         // original ran and returned something. return it.
         return callState.retVal
       }
@@ -144,7 +144,7 @@ function wrapMethod (target, name, wrapper, noAssert) {
       if (!callState.called) {
         // error was thrown before original function was called, so
         // it was us. log it.
-        log.error(e)
+        log.error('Shimmer error was thrown before original function was called', e)
         // original never ran. call it unwrapped.
         return original.apply(this, args)
       }

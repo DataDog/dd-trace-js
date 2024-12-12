@@ -86,7 +86,7 @@ function request (data, options, callback) {
         if (isGzip) {
           zlib.gunzip(buffer, (err, result) => {
             if (err) {
-              log.error(`Could not gunzip response: ${err.message}`)
+              log.error('Could not gunzip response: %s', err.message)
               callback(null, '', res.statusCode)
             } else {
               callback(null, result.toString(), res.statusCode)

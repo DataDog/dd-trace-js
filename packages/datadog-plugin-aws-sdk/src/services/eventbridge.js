@@ -45,7 +45,7 @@ class EventBridge extends BaseAwsSdkPlugin {
         }
         request.params.Entries[0].Detail = finalData
       } catch (e) {
-        log.error(e)
+        log.error('EventBridge error injecting request', e)
       }
     }
   }

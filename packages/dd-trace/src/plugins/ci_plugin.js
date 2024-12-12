@@ -49,7 +49,7 @@ module.exports = class CiPlugin extends Plugin {
       }
       this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
         if (err) {
-          log.error(`Library configuration could not be fetched. ${err.message}`)
+          log.error('Library configuration could not be fetched. %s', err.message)
         } else {
           this.libraryConfig = libraryConfig
         }
@@ -63,7 +63,7 @@ module.exports = class CiPlugin extends Plugin {
       }
       this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites, itrCorrelationId) => {
         if (err) {
-          log.error(`Skippable suites could not be fetched. ${err.message}`)
+          log.error('Skippable suites could not be fetched. %s', err.message)
         } else {
           this.itrCorrelationId = itrCorrelationId
         }
@@ -152,7 +152,7 @@ module.exports = class CiPlugin extends Plugin {
       }
       this.tracer._exporter.getKnownTests(this.testConfiguration, (err, knownTests) => {
         if (err) {
-          log.error(`Known tests could not be fetched. ${err.message}`)
+          log.error('Known tests could not be fetched. %s', err.message)
           this.libraryConfig.isEarlyFlakeDetectionEnabled = false
         }
         onDone({ err, knownTests })

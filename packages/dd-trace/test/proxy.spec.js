@@ -520,8 +520,9 @@ describe('TracerProxy', () => {
         const profilerImportFailureProxy = new ProfilerImportFailureProxy()
         profilerImportFailureProxy.init()
 
+        sinon.assert.calledOnce(log.error)
         const expectedErr = sinon.match.instanceOf(Error).and(sinon.match.has('code', 'MODULE_NOT_FOUND'))
-        sinon.assert.calledWith(log.error, sinon.match(expectedErr))
+        sinon.assert.match(log.error.firstCall.lastArg, sinon.match(expectedErr))
       })
 
       it('should start telemetry', () => {
