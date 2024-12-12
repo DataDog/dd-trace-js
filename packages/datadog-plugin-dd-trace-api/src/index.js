@@ -1,6 +1,8 @@
 'use strict'
 
 const Plugin = require('../../dd-trace/src/plugins/plugin')
+const telemetryMetrics = require('../../dd-trace/src/telemetry/metrics')
+const apiMetrics = telemetryMetrics.manager.namespace('tracers')
 
 // api ==> here
 const objectMap = new WeakMap()
@@ -21,10 +23,18 @@ module.exports = class DdTraceApiPlugin extends Plugin {
     })
 
     const handleEvent = (name) => {
+      const counter = apiMetrics.count('dd_trace_api.called', [
+        `name:${name.replace(':', '.')}`,
+        `api_version:v1`,
+        `injection_enabled:${process.env.DD_INJECTION_ENABLED ? 'yes' : 'no'}`
+      ])
+
       // For v1, APIs are 1:1 with their internal equivalents, so we can just
       // call the internal method directly. That's what we do here unless we
       // want to override. As the API evolves, this may change.
       this.addSub(`datadog-api:v1:${name}`, ({ self, args, ret, proxy, revProxy }) => {
+        counter.inc()
+
         if (name.includes(':')) {
           name = name.split(':').pop()
         }
