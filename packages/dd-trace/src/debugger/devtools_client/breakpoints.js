@@ -28,7 +28,10 @@ async function addBreakpoint (probe) {
   if (!script) throw new Error(`No loaded script found for ${file} (probe: ${probe.id}, version: ${probe.version})`)
   const [path, scriptId] = script
 
-  log.debug(`Adding breakpoint at ${path}:${line} (probe: ${probe.id}, version: ${probe.version})`)
+  log.debug(
+    '[debugger:devtools_client] Adding breakpoint at %s:%d (probe: %s, version: %d)',
+    path, line, probe.id, probe.version
+  )
 
   const { breakpointId } = await session.post('Debugger.setBreakpoint', {
     location: {
