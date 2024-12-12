@@ -2,6 +2,7 @@
 
 const LRUCache = require('lru-cache')
 const config = require('./config')
+const JSONQueue = require('./queue')
 const request = require('../../exporters/common/request')
 const FormData = require('../../exporters/common/form-data')
 const log = require('../../log')
@@ -24,6 +25,8 @@ const cache = new LRUCache({
   // TODO: Consider alternative as this is NOT performant :(
   ttlAutopurge: true
 })
+
+const queue = new JSONQueue({ size: config.maxTotalPayloadSize, timeout: 1000, onFlush })
 
 const STATUSES = {
   RECEIVED: 'RECEIVED',
@@ -71,11 +74,15 @@ function ackError (err, { id: probeId, version }) {
 }
 
 function send (payload) {
+  queue.add(JSON.stringify(payload))
+}
+
+function onFlush (payload) {
   const form = new FormData()
 
   form.append(
     'event',
-    JSON.stringify(payload),
+    payload,
     { filename: 'event.json', contentType: 'application/json; charset=utf-8' }
   )
 
@@ -87,7 +94,7 @@ function send (payload) {
   }
 
   request(form, options, (err) => {
-    if (err) log.error('[debugger:devtools_client] Error sending debugger payload', err)
+    if (err) log.error('[debugger:devtools_client] Error sending probe payload', err)
   })
 }
 

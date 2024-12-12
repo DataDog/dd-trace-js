@@ -4,13 +4,15 @@ const { hostname: getHostname } = require('os')
 const { stringify } = require('querystring')
 
 const config = require('./config')
+const JSONQueue = require('./queue')
 const request = require('../../exporters/common/request')
 const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../../plugins/util/tags')
+const log = require('../../log')
 const { version } = require('../../../../../package.json')
 
 module.exports = send
 
-const MAX_PAYLOAD_SIZE = 1024 * 1024 // 1MB
+const MAX_LOG_PAYLOAD_SIZE = 1024 * 1024 // 1MB
 
 const ddsource = 'dd_debugger'
 const hostname = getHostname()
@@ -27,14 +29,10 @@ const ddtags = [
 
 const path = `/debugger/v1/input?${stringify({ ddtags })}`
 
-function send (message, logger, dd, snapshot, cb) {
-  const opts = {
-    method: 'POST',
-    url: config.url,
-    path,
-    headers: { 'Content-Type': 'application/json; charset=utf-8' }
-  }
+let callbacks = []
+const queue = new JSONQueue({ size: config.maxTotalPayloadSize, timeout: 1000, onFlush })
 
+function send (message, logger, dd, snapshot, cb) {
   const payload = {
     ddsource,
     hostname,
@@ -46,8 +44,9 @@ function send (message, logger, dd, snapshot, cb) {
   }
 
   let json = JSON.stringify(payload)
+  let size = Buffer.byteLength(json)
 
-  if (Buffer.byteLength(json) > MAX_PAYLOAD_SIZE) {
+  if (size > MAX_LOG_PAYLOAD_SIZE) {
     // TODO: This is a very crude way to handle large payloads. Proper pruning will be implemented later (DEBUG-2624)
     const line = Object.values(payload['debugger.snapshot'].captures.lines)[0]
     line.locals = {
@@ -55,7 +54,26 @@ function send (message, logger, dd, snapshot, cb) {
       size: Object.keys(line.locals).length
     }
     json = JSON.stringify(payload)
+    size = Buffer.byteLength(json)
   }
 
-  request(json, opts, cb)
+  queue.add(json, size)
+  callbacks.push(cb)
+}
+
+function onFlush (payload) {
+  const opts = {
+    method: 'POST',
+    url: config.url,
+    path,
+    headers: { 'Content-Type': 'application/json; charset=utf-8' }
+  }
+
+  const _callbacks = callbacks
+  callbacks = []
+
+  request(payload, opts, (err) => {
+    if (err) log.error('Could not send debugger payload', err)
+    else _callbacks.forEach(cb => cb())
+  })
 }

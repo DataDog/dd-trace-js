@@ -9,7 +9,8 @@ const config = module.exports = {
   service: parentConfig.service,
   commitSHA: parentConfig.commitSHA,
   repositoryUrl: parentConfig.repositoryUrl,
-  parentThreadId
+  parentThreadId,
+  maxTotalPayloadSize: 5 * 1024 * 1024 // 5MB
 }
 
 updateUrl(parentConfig)
