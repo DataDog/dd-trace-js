@@ -1,19 +1,12 @@
 'use strict'
 
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
-const Chunk = require('./chunk')
+const { Chunk, MsgpackEncoder } = require('../msgpack')
 const log = require('../log')
 const { isTrue } = require('../util')
 const coalesce = require('koalas')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
-
-const float64Array = new Float64Array(1)
-const uInt8Float64Array = new Uint8Array(float64Array.buffer)
-
-float64Array[0] = -1
-
-const bigEndian = uInt8Float64Array[7] === 0
 
 function formatSpan (span) {
   return normalizeSpan(truncateSpan(span, false))
@@ -21,6 +14,7 @@ function formatSpan (span) {
 
 class AgentEncoder {
   constructor (writer, limit = SOFT_LIMIT) {
+    this._msgpack = new MsgpackEncoder()
     this._limit = limit
     this._traceBytes = new Chunk()
     this._stringBytes = new Chunk()
@@ -84,11 +78,11 @@ class AgentEncoder {
       bytes.reserve(1)
 
       if (span.type && span.meta_struct) {
-        bytes.buffer[bytes.length++] = 0x8d
+        bytes.buffer[bytes.length - 1] = 0x8d
       } else if (span.type || span.meta_struct) {
-        bytes.buffer[bytes.length++] = 0x8c
+        bytes.buffer[bytes.length - 1] = 0x8c
       } else {
-        bytes.buffer[bytes.length++] = 0x8b
+        bytes.buffer[bytes.length - 1] = 0x8b
       }
 
       if (span.type) {
@@ -135,43 +129,31 @@ class AgentEncoder {
     this._cacheString('')
   }
 
+  _encodeBuffer (bytes, buffer) {
+    this._msgpack.encodeBin(bytes, buffer)
+  }
+
+  _encodeBool (bytes, value) {
+    this._msgpack.encodeBoolean(bytes, value)
+  }
+
   _encodeArrayPrefix (bytes, value) {
-    const length = value.length
-    const offset = bytes.length
-
-    bytes.reserve(5)
-    bytes.length += 5
-
-    bytes.buffer[offset] = 0xdd
-    bytes.buffer[offset + 1] = length >> 24
-    bytes.buffer[offset + 2] = length >> 16
-    bytes.buffer[offset + 3] = length >> 8
-    bytes.buffer[offset + 4] = length
+    this._msgpack.encodeArrayPrefix(bytes, value)
   }
 
   _encodeMapPrefix (bytes, keysLength) {
-    const offset = bytes.length
-
-    bytes.reserve(5)
-    bytes.length += 5
-    bytes.buffer[offset] = 0xdf
-    bytes.buffer[offset + 1] = keysLength >> 24
-    bytes.buffer[offset + 2] = keysLength >> 16
-    bytes.buffer[offset + 3] = keysLength >> 8
-    bytes.buffer[offset + 4] = keysLength
+    this._msgpack.encodeMapPrefix(bytes, keysLength)
   }
 
   _encodeByte (bytes, value) {
-    bytes.reserve(1)
-
-    bytes.buffer[bytes.length++] = value
+    this._msgpack.encodeByte(bytes, value)
   }
 
+  // TODO: Use BigInt instead.
   _encodeId (bytes, id) {
     const offset = bytes.length
 
     bytes.reserve(9)
-    bytes.length += 9
 
     id = id.toArray()
 
@@ -186,36 +168,16 @@ class AgentEncoder {
     bytes.buffer[offset + 8] = id[7]
   }
 
+  _encodeNumber (bytes, value) {
+    this._msgpack.encodeNumber(bytes, value)
+  }
+
   _encodeInteger (bytes, value) {
-    const offset = bytes.length
-
-    bytes.reserve(5)
-    bytes.length += 5
-
-    bytes.buffer[offset] = 0xce
-    bytes.buffer[offset + 1] = value >> 24
-    bytes.buffer[offset + 2] = value >> 16
-    bytes.buffer[offset + 3] = value >> 8
-    bytes.buffer[offset + 4] = value
+    this._msgpack.encodeInteger(bytes, value)
   }
 
   _encodeLong (bytes, value) {
-    const offset = bytes.length
-    const hi = (value / Math.pow(2, 32)) >> 0
-    const lo = value >>> 0
-
-    bytes.reserve(9)
-    bytes.length += 9
-
-    bytes.buffer[offset] = 0xcf
-    bytes.buffer[offset + 1] = hi >> 24
-    bytes.buffer[offset + 2] = hi >> 16
-    bytes.buffer[offset + 3] = hi >> 8
-    bytes.buffer[offset + 4] = hi
-    bytes.buffer[offset + 5] = lo >> 24
-    bytes.buffer[offset + 6] = lo >> 16
-    bytes.buffer[offset + 7] = lo >> 8
-    bytes.buffer[offset + 8] = lo
+    this._msgpack.encodeLong(bytes, value)
   }
 
   _encodeMap (bytes, value) {
@@ -252,23 +214,7 @@ class AgentEncoder {
   }
 
   _encodeFloat (bytes, value) {
-    float64Array[0] = value
-
-    const offset = bytes.length
-    bytes.reserve(9)
-    bytes.length += 9
-
-    bytes.buffer[offset] = 0xcb
-
-    if (bigEndian) {
-      for (let i = 0; i <= 7; i++) {
-        bytes.buffer[offset + i + 1] = uInt8Float64Array[i]
-      }
-    } else {
-      for (let i = 7; i >= 0; i--) {
-        bytes.buffer[bytes.length - i - 1] = uInt8Float64Array[i]
-      }
-    }
+    this._msgpack.encodeFloat(bytes, value)
   }
 
   _encodeMetaStruct (bytes, value) {
@@ -294,7 +240,6 @@ class AgentEncoder {
     const offset = bytes.length
 
     bytes.reserve(prefixLength)
-    bytes.length += prefixLength
 
     this._encodeObject(bytes, value)
 
