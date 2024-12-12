@@ -1,4 +1,4 @@
-This creates 150 HTTP requests from client to server.
+This benchmarks HTTP requests from client to server.
 
 The variants are:
 - control tracer with non vulnerable endpoint without iast 
