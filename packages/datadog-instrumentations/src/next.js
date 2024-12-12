@@ -214,7 +214,7 @@ addHook({
 
 addHook({
   name: 'next',
-  versions: ['>=11.1'],
+  versions: ['>=11.1 <12.0.0', '>=12.2.0'],
   file: 'dist/server/serve-static.js'
 }, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
 
@@ -224,7 +224,7 @@ addHook({
   file: 'dist/next-server/server/serve-static.js'
 }, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
 
-addHook({ name: 'next', versions: ['>=11.1'], file: 'dist/server/next-server.js' }, nextServer => {
+addHook({ name: 'next', versions: ['>=11.1 <12.0.0', '>=12.2.0'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
 
   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
@@ -247,7 +247,7 @@ addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js'
   return nextServer
 })
 
-addHook({ name: 'next', versions: ['>=11.1 <13.2'], file: 'dist/server/next-server.js' }, nextServer => {
+addHook({ name: 'next', versions: ['>=11.1 <12.0.0', '>=12.2.0 <13.2'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequest)
   return nextServer
