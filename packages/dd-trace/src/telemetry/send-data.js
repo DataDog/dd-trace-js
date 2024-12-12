@@ -57,7 +57,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     try {
       url = url || new URL(getAgentlessTelemetryEndpoint(config.site))
     } catch (err) {
-      log.error(err)
+      log.error('Telemetry endpoint url is invalid', err)
       // No point to do the request if the URL is invalid
       return cb(err, { payload, reqType })
     }
@@ -100,7 +100,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
         path: '/api/v2/apmtelemetry'
       }
       if (backendUrl) {
-        request(data, backendOptions, (error) => { log.error(error) })
+        request(data, backendOptions, (error) => { log.error('Error sending telemetry data', error) })
       } else {
         log.error('Invalid Telemetry URL')
       }

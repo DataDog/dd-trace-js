@@ -39,7 +39,7 @@ function patch (http, methodName) {
       try {
         args = normalizeArgs.apply(null, arguments)
       } catch (e) {
-        log.error(e)
+        log.error('Error normalising http req arguments', e)
         return request.apply(this, arguments)
       }
 
