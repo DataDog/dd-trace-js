@@ -12,6 +12,6 @@ describe('Dynamic Instrumentation', function () {
       assert.strictEqual(code, 0)
       done()
     })
-    t.axios.get('/')
+    t.axios.get(t.breakpoint.url)
   })
 })
