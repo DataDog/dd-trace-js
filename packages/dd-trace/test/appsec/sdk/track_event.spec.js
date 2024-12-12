@@ -103,6 +103,7 @@ describe('track_event', () => {
           {
             'appsec.events.users.login.success.track': 'true',
             '_dd.appsec.events.users.login.success.sdk': 'true',
+            'appsec.events.users.login.success.usr.login': 'user_id',
             'appsec.events.users.login.success.metakey1': 'metaValue1',
             'appsec.events.users.login.success.metakey2': 'metaValue2',
             'appsec.events.users.login.success.metakey3': 'metaValue3'
@@ -128,7 +129,8 @@ describe('track_event', () => {
         expect(setUserTags).to.have.been.calledOnceWithExactly(user, rootSpan)
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.users.login.success.track': 'true',
-          '_dd.appsec.events.users.login.success.sdk': 'true'
+          '_dd.appsec.events.users.login.success.sdk': 'true',
+          'appsec.events.users.login.success.usr.login': 'user_id',
         })
         expect(prioritySampler.setPriority)
           .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
@@ -151,7 +153,8 @@ describe('track_event', () => {
         expect(setUserTags).to.have.been.calledOnceWithExactly(user, rootSpan)
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.users.login.success.track': 'true',
-          '_dd.appsec.events.users.login.success.sdk': 'true'
+          '_dd.appsec.events.users.login.success.sdk': 'true',
+          'appsec.events.users.login.success.usr.login': 'user_login',
         })
         expect(prioritySampler.setPriority)
           .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
@@ -203,6 +206,7 @@ describe('track_event', () => {
           'appsec.events.users.login.failure.track': 'true',
           '_dd.appsec.events.users.login.failure.sdk': 'true',
           'appsec.events.users.login.failure.usr.id': 'user_id',
+          'appsec.events.users.login.failure.usr.login': 'user_id',
           'appsec.events.users.login.failure.usr.exists': 'true',
           'appsec.events.users.login.failure.metakey1': 'metaValue1',
           'appsec.events.users.login.failure.metakey2': 'metaValue2',
@@ -232,6 +236,7 @@ describe('track_event', () => {
           'appsec.events.users.login.failure.track': 'true',
           '_dd.appsec.events.users.login.failure.sdk': 'true',
           'appsec.events.users.login.failure.usr.id': 'user_id',
+          'appsec.events.users.login.failure.usr.login': 'user_id',
           'appsec.events.users.login.failure.usr.exists': 'false',
           'appsec.events.users.login.failure.metakey1': 'metaValue1',
           'appsec.events.users.login.failure.metakey2': 'metaValue2',
@@ -257,6 +262,7 @@ describe('track_event', () => {
           'appsec.events.users.login.failure.track': 'true',
           '_dd.appsec.events.users.login.failure.sdk': 'true',
           'appsec.events.users.login.failure.usr.id': 'user_id',
+          'appsec.events.users.login.failure.usr.login': 'user_id',
           'appsec.events.users.login.failure.usr.exists': 'true'
         })
         expect(prioritySampler.setPriority)
