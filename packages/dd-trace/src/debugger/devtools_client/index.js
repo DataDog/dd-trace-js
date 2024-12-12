@@ -18,23 +18,47 @@ require('./remote_config')
 const threadId = parentThreadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${parentThreadId}`
 const threadName = parentThreadId === 0 ? 'MainThread' : `WorkerThread:${parentThreadId}`
 
+// WARNING: The code above the line `await session.post('Debugger.resume')` is highly optimized. Please edit with care!
 session.on('Debugger.paused', async ({ params }) => {
   const start = process.hrtime.bigint()
-  const timestamp = Date.now()
 
   let captureSnapshotForProbe = null
   let maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength
-  const probes = params.hitBreakpoints.map((id) => {
+
+  // V8 doesn't allow seting more than one breakpoint at a specific location, however, it's possible to set two
+  // breakpoints just next to eachother that will "snap" to the same logical location, which in turn will be hit at the
+  // same time. E.g. index.js:1:1 and index.js:1:2.
+  // TODO: Investigate if it will improve performance to create a fast-path for when there's only a single breakpoint
+  let sampled = false
+  const length = params.hitBreakpoints.length
+  let probes = new Array(length)
+  for (let i = 0; i < length; i++) {
+    const id = params.hitBreakpoints[i]
     const probe = breakpoints.get(id)
-    if (probe.captureSnapshot) {
+
+    if (start - probe.lastCaptureNs < probe.sampling.nsBetweenSampling) {
+      continue
+    }
+
+    sampled = true
+    probe.lastCaptureNs = start
+
+    if (probe.captureSnapshot === true) {
       captureSnapshotForProbe = probe
       maxReferenceDepth = highestOrUndefined(probe.capture.maxReferenceDepth, maxReferenceDepth)
       maxCollectionSize = highestOrUndefined(probe.capture.maxCollectionSize, maxCollectionSize)
       maxFieldCount = highestOrUndefined(probe.capture.maxFieldCount, maxFieldCount)
       maxLength = highestOrUndefined(probe.capture.maxLength, maxLength)
     }
-    return probe
-  })
+
+    probes[i] = probe
+  }
+
+  if (sampled === false) {
+    return session.post('Debugger.resume')
+  }
+
+  const timestamp = Date.now()
 
   let processLocalState
   if (captureSnapshotForProbe !== null) {
@@ -55,6 +79,9 @@ session.on('Debugger.paused', async ({ params }) => {
   const diff = process.hrtime.bigint() - start // TODO: Recored as telemetry (DEBUG-2858)
 
   log.debug(`Finished processing breakpoints - main thread paused for: ${Number(diff) / 1000000} ms`)
+
+  // Due to the highly optimized algorithm above, the `probes` array might have gaps
+  probes = probes.filter((probe) => !!probe)
 
   const logger = {
     // We can safely use `location.file` from the first probe in the array, since all probes hit by `hitBreakpoints`
@@ -93,7 +120,7 @@ session.on('Debugger.paused', async ({ params }) => {
 
     // TODO: Process template (DEBUG-2628)
     send(probe.template, logger, snapshot, (err) => {
-      if (err) log.error(err)
+      if (err) log.error('Debugger error', err)
       else ackEmitting(probe)
     })
   }
