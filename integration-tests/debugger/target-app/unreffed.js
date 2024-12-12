@@ -4,7 +4,7 @@ require('dd-trace/init')
 const http = require('http')
 
 const server = http.createServer((req, res) => {
-  res.end('hello world') // BREAKPOINT
+  res.end('hello world') // BREAKPOINT: /
   setImmediate(() => {
     server.close()
   })

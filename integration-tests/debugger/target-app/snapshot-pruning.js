@@ -14,7 +14,7 @@ fastify.get('/:name', function handler (request) {
   // eslint-disable-next-line no-unused-vars
   const obj = generateObjectWithJSONSizeLargerThan1MB()
 
-  return { hello: request.params.name } // BREAKPOINT
+  return { hello: request.params.name } // BREAKPOINT: /foo
 })
 
 fastify.listen({ port: process.env.APP_PORT }, (err) => {
