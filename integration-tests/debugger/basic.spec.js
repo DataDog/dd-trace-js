@@ -338,6 +338,45 @@ describe('Dynamic Instrumentation', function () {
     })
   })
 
+  describe('sampling', function () {
+    it('should respect sampling rate for single probe', function (done) {
+      let start, timer
+      let payloadsReceived = 0
+      const rcConfig = t.generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
+
+      function triggerBreakpointContinuously () {
+        t.axios.get(t.breakpoint.url).catch(done)
+        timer = setTimeout(triggerBreakpointContinuously, 10)
+      }
+
+      t.agent.on('debugger-diagnostics', ({ payload }) => {
+        if (payload.debugger.diagnostics.status === 'INSTALLED') triggerBreakpointContinuously()
+      })
+
+      t.agent.on('debugger-input', () => {
+        payloadsReceived++
+        if (payloadsReceived === 1) {
+          start = Date.now()
+        } else if (payloadsReceived === 2) {
+          const duration = Date.now() - start
+          clearTimeout(timer)
+
+          // Allow for a variance of -5/+50ms (time will tell if this is enough)
+          assert.isAbove(duration, 995)
+          assert.isBelow(duration, 1050)
+
+          // Wait at least a full sampling period, to see if we get any more payloads
+          timer = setTimeout(done, 1250)
+        } else {
+          clearTimeout(timer)
+          done(new Error('Too many payloads received!'))
+        }
+      })
+
+      t.agent.addRemoteConfig(rcConfig)
+    })
+  })
+
   describe('race conditions', function () {
     it('should remove the last breakpoint completely before trying to add a new one', function (done) {
       const rcConfig2 = t.generateRemoteConfig()
