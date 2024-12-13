@@ -169,13 +169,16 @@ function normalizeClientConfig (config) {
   const propagationFilter = getFilter({ blocklist: config.propagationBlocklist })
   const headers = getHeaders(config)
   const hooks = getHooks(config)
+  const enablePropagationWithAmazonHeaders = config.enablePropagationWithAmazonHeaders ||
+    process.env.DD_TRACE_FORCE_AWS_PROPAGATION === 'true'
 
   return Object.assign({}, config, {
     validateStatus,
     filter,
     propagationFilter,
     headers,
-    hooks
+    hooks,
+    enablePropagationWithAmazonHeaders
   })
 }
 
