@@ -49,13 +49,14 @@ const zeroTraceId = '0000000000000000'
 // AWS X-Ray specific constants
 const xrayHeaderKey = 'x-amzn-trace-id'
 const xrayRootKey = 'root'
-const xrayRootPrefix = '1-00000000'
+const xrayRootPrefix = '1-'
+const xrayTraceIdPadding = '-00000000'
 const xrayParentKey = 'parent'
 const xraySampledKey = 'sampled'
 const xrayE2EStartTimeKey = 't0'
 const xraySelfKey = 'self'
 const xrayOriginKey = '_dd.origin'
-const XRAY_MAX_ADDITIONAL_BYTES = 256;
+const xrayMaxAdditionalBytes = 256;
 
 class TextMapPropagator {
   constructor (config) {
@@ -70,6 +71,7 @@ class TextMapPropagator {
     this._injectB3MultipleHeaders(spanContext, carrier)
     this._injectB3SingleHeader(spanContext, carrier)
     this._injectTraceparent(spanContext, carrier)
+    this._injectAwsXrayContext(spanContext, carrier)
 
     if (injectCh.hasSubscribers) {
       injectCh.publish({ spanContext, carrier })
@@ -262,52 +264,61 @@ class TextMapPropagator {
     carrier.tracestate = ts.toString()
   }
 
-  _injectAwsXrayHeader (spanContext, carrier) {
-    const e2eStart = spanContext.start_ms;
+  _injectAwsXrayContext (spanContext, carrier) {
+    if (!this._hasPropagationStyle('inject', 'xray')) return
+
+    const e2eStart = _getEndToEndStartTime(spanContext.start_ms)
     
     let str = (
-        ROOT_PREFIX +
-        String(NANOSECONDS.toSeconds(e2eStart && e2eStart > 0 ? e2eStart : Date.now() / 1000)) +
-        TRACE_ID_PADDING +
-        context._traceId.toString(16).padStart(16, '0') +
-        ';' + PARENT_PREFIX + 
-        context._spanId.toString(16).padStart(8, '0')
+      xrayRootPrefix +
+      e2eStart +
+      xrayTraceIdPadding +
+      context._traceId.toString(16).padStart(16, '0') +
+      ';' + xrayParentKey +
+      context._spanId.toString(16).padStart(8, '0')
     )
 
-    if (context.lockSamplingPriority()) {
-        str += ';' + SAMPLED_PREFIX + convertSamplingPriority(context._sampling);
+    if (context._sampling !== null || context._sampling !== undefined) {
+      str += ';' + xraySampledKey + _convertSamplingPriority(context._sampling)
     }
 
-    const maxCapacity = str.length + XRAY_MAX_ADDITIONAL_BYTES;
+    const maxAdditionalCapacity = xrayMaxAdditionalBytes - str.length 
 
     const origin = context._trace.origin;
     if (origin) {
-        additionalPart(str, ORIGIN_KEY, origin, maxCapacity);
+        _additionalPart(str, xrayOriginKey, origin, maxAdditionalCapacity)
     }
     if (e2eStart > 0) {
-        additionalPart(str, E2E_START_KEY, e2eStart.toString(), maxCapacity);
+        _additionalPart(str, xrayE2EStartTimeKey, e2eStart.toString(), maxAdditionalCapacity)
     }
 
     for (const [key, value] of context._baggageItems) {
-        if (!isReserved(key)) {
-            additionalPart(str, key, value, maxCapacity);
+        if (!_isReservedXrayKey(key)) {
+            _additionalPart(str, key, value, maxAdditionalCapacity)
         }
     }
 
-    carrier['X-Amzn-Trace-Id'] = str;
+    carrier['X-Amzn-Trace-Id'] = str
   }
 
-  _isReserved(key) {
-    return [ROOT_PREFIX, PARENT_PREFIX, SAMPLED_PREFIX].includes(key);
+  _getEndToEndStartTime (start) {
+    if (!start) return "00000000"
+      
+    const e2eStart = start > 0 ? start : Date.now() / 1000
+    return e2eStart.toString().padStart(8, '0')
   }
 
-  _convertSamplingPriority(samplingPriority) {
-    return samplingPriority > 0 ? '1' : '0';
+  _isReservedXrayKey (key) {
+    return [xrayRootKey, xrayParentKey, xrayOriginKey, xrayE2EStartTimeKey, xraySampledKey].includes(key)
   }
 
-  _additionalPart(str, key, value, maxCapacity) {
+  _convertSamplingPriority (samplingPriority) {
+    return samplingPriority > 0 ? '1' : '0'
+  }
+
+  _additionalPart (str, key, value, maxCapacity) {
     if (str.length + key.length + value.length + 2 <= maxCapacity) {
-        str += `;${key}=${value}`;
+        str += `;${key}=${value}`
     }
   } 
 
@@ -362,7 +373,7 @@ class TextMapPropagator {
         case 'b3 single header': // TODO: delete in major after singular "b3"
           extractedContext = this._extractB3SingleContext(carrier)
           break
-        case 'aws xray':
+        case 'xray':
           spanContext = this._extractAwsXrayContext(carrier)
           break
         case 'b3':
@@ -804,7 +815,7 @@ class TextMapPropagator {
           traceId: id(traceId, 16),
           spanId: id(spanId, 16),
           sampling: { samplingPriority },
-          baggage: baggage
+          baggage
         })
         if (ddOrigin) {
           spanContext._trace.origin = ddOrigin
