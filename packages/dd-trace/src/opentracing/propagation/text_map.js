@@ -55,6 +55,7 @@ const xraySampledKey = 'sampled'
 const xrayE2EStartTimeKey = 't0'
 const xraySelfKey = 'self'
 const xrayOriginKey = '_dd.origin'
+const XRAY_MAX_ADDITIONAL_BYTES = 256;
 
 class TextMapPropagator {
   constructor (config) {
@@ -260,6 +261,55 @@ class TextMapPropagator {
 
     carrier.tracestate = ts.toString()
   }
+
+  _injectAwsXrayHeader (spanContext, carrier) {
+    const e2eStart = spanContext.start_ms;
+    
+    let str = (
+        ROOT_PREFIX +
+        String(NANOSECONDS.toSeconds(e2eStart && e2eStart > 0 ? e2eStart : Date.now() / 1000)) +
+        TRACE_ID_PADDING +
+        context._traceId.toString(16).padStart(16, '0') +
+        ';' + PARENT_PREFIX + 
+        context._spanId.toString(16).padStart(8, '0')
+    )
+
+    if (context.lockSamplingPriority()) {
+        str += ';' + SAMPLED_PREFIX + convertSamplingPriority(context._sampling);
+    }
+
+    const maxCapacity = str.length + XRAY_MAX_ADDITIONAL_BYTES;
+
+    const origin = context._trace.origin;
+    if (origin) {
+        additionalPart(str, ORIGIN_KEY, origin, maxCapacity);
+    }
+    if (e2eStart > 0) {
+        additionalPart(str, E2E_START_KEY, e2eStart.toString(), maxCapacity);
+    }
+
+    for (const [key, value] of context._baggageItems) {
+        if (!isReserved(key)) {
+            additionalPart(str, key, value, maxCapacity);
+        }
+    }
+
+    carrier['X-Amzn-Trace-Id'] = str;
+  }
+
+  _isReserved(key) {
+    return [ROOT_PREFIX, PARENT_PREFIX, SAMPLED_PREFIX].includes(key);
+  }
+
+  _convertSamplingPriority(samplingPriority) {
+    return samplingPriority > 0 ? '1' : '0';
+  }
+
+  _additionalPart(str, key, value, maxCapacity) {
+    if (str.length + key.length + value.length + 2 <= maxCapacity) {
+        str += `;${key}=${value}`;
+    }
+  } 
 
   _hasPropagationStyle (mode, name) {
     return this._config.tracePropagationStyle[mode].includes(name)
@@ -743,7 +793,7 @@ class TextMapPropagator {
           // self is added by load balancers and should be ignored
           continue
         } else if (key === xrayE2EStartTimeKey) {
-          // startTime = parseInt(value)
+          baggage[endToEndStartTime] = parseInt(value)
         } else {
           baggage[key] = value
         }
