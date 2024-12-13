@@ -66,6 +66,7 @@
     "@datadog/native-metrics": "^1.5.0",
     "@datadog/pprof": "^2.0.0",
     "@datadog/sketches-js": "^2.1.0",
+    "@msgpack/msgpack": "^3.0.0-beta2",
     "crypto-randomuuid": "^1.0.0",
     "diagnostics_channel": "^1.1.0",
     "ignore": "^5.2.0",

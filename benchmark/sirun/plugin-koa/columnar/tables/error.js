@@ -7,10 +7,10 @@ class ExceptionTable extends Table {
     super({
       segment_id: BigUint64Array,
       span_id: BigUint64Array,
-      error_name: Uint16Array,
-      error_message: Uint16Array,
-      error_stack: Uint16Array
-    })
+      name: Uint16Array,
+      message: Uint16Array,
+      stack: Uint16Array
+    }, ['name', 'message', 'stack'])
   }
 
   insert (error = null, spanContext) {
@@ -18,9 +18,9 @@ class ExceptionTable extends Table {
 
     this.columns.segment_id[this.length] = spanContext.segment.segmentId
     this.columns.span_id[this.length] = spanContext.spanId
-    this.columns.error_name[this.length] = this._cache(error?.name)
-    this.columns.error_message[this.length] = this._cache(error?.message)
-    this.columns.error_stack[this.length] = this._cache(error?.stack)
+    this.columns.name[this.length] = this._cache('name', error?.name)
+    this.columns.message[this.length] = this._cache('message', error?.message)
+    this.columns.stack[this.length] = this._cache('stack', error?.stack)
 
     this.length++
   }

@@ -1,40 +1,34 @@
 'use strict'
 
-const { MsgpackEncoder } = require('./msgpack/encoder')
-const Chunk = require('./msgpack/chunk')
-
-const msgpack = new MsgpackEncoder()
+const msgpack = require('@msgpack/msgpack')
 
 // const service = process.env.DD_SERVICE || 'unnamed-node-app'
 
 class Encoder {
   encode (tables) {
-    const bytes = new Chunk()
-    const tableEntries = Object.entries(tables)
+    const tableEntries = Object.entries(tables).filter(([_, table]) => table.length > 0)
+    const formattedTables = []
 
-    msgpack.encodeMapPrefix(bytes, 1)
-
-    msgpack.encodeString(bytes, 'tables')
-    msgpack.encodeMapPrefix(bytes, tableEntries.length)
-
-    for (const [type, table] of tableEntries) {
-      const columnEntries = Object.entries(table.columns)
-
-      msgpack.encodeShort(bytes, Number(type)) // TODO: signed int
-      msgpack.encodeMapPrefix(bytes, 2)
-
-      msgpack.encodeString(bytes, 'dictionary')
-      msgpack.encodeArrayPrefix(bytes, table.dictionary.length)
-      msgpack.encodeRaw(bytes, table.dictionary.data)
-
-      msgpack.encodeString(bytes, 'columns')
-      msgpack.encodeMapPrefix(bytes, columnEntries.length)
-
-      for (const [name, column] of columnEntries) {
-        msgpack.encodeString(bytes, name)
-        msgpack.encodeBin(bytes, column.subarray(0, table.length))
+    for (const [type, rawTable] of tableEntries) {
+      const table = {
+        event_type: Number(type),
+        size: rawTable.length,
+        dictionaries: {},
+        columns: {}
       }
+
+      for (const [name, dictionary] of Object.entries(rawTable.dictionaries)) {
+        table.dictionaries[name] = dictionary._strings
+      }
+
+      for (const [name, column] of Object.entries(rawTable.columns)) {
+        table.columns[name] = column.subarray(0, rawTable.length)
+      }
+
+      formattedTables.push(table)
     }
+
+    const bytes = msgpack.encode(formattedTables)
 
     return bytes
   }

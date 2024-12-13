@@ -19,14 +19,14 @@ class Chunk {
       this.reserve(maxLength + 2)
       this.length += 2
       this.buffer[offset] = 0xd9
-      const written = textEncoder.encodeInto(value, this.buffer.subarray(this.length))
+      const written = textEncoder.encodeInto(value, this.buffer.subarray(this.length)).written
       this.buffer[offset + 1] = written
       this.length += written
     } else if (maxLength <= 0xFFFF) { // str 16
       this.reserve(maxLength + 3)
       this.length += 3
       this.buffer[offset] = 0xda
-      const written = textEncoder.encodeInto(value, this.buffer.subarray(this.length))
+      const written = textEncoder.encodeInto(value, this.buffer.subarray(this.length)).written
       this.buffer[offset + 1] = written >> 8
       this.buffer[offset + 2] = written
       this.length += written
@@ -34,7 +34,7 @@ class Chunk {
       this.reserve(maxLength + 5)
       this.length += 5
       this.buffer[offset] = 0xdb
-      const written = textEncoder.encodeInto(value, this.buffer.subarray(this.length))
+      const written = textEncoder.encodeInto(value, this.buffer.subarray(this.length)).written
       this.buffer[offset + 1] = written >> 24
       this.buffer[offset + 2] = written >> 16
       this.buffer[offset + 3] = written >> 8

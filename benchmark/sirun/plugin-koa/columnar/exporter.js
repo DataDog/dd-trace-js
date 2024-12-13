@@ -5,16 +5,18 @@ const tables = require('./tables')
 const { Encoder } = require('./encoder')
 const {
   ERROR,
-  EVENT_TYPE,
   SEGMENT_START,
   SPAN_FINISH,
   MYSQL_QUERY_START,
   WEB_REQUEST_FINISH,
-  WEB_REQUEST_START
+  WEB_REQUEST_START,
+  PROCESS_INFO,
+  CONFIG,
+  EVENT
 } = require('./events')
-const { EventTypeTable } = require('./tables/event')
+const { EventTable } = require('./tables/event')
+const binding = require('../../../../../dd-trace-collector/wasm')
 
-// const service = process.env.DD_SERVICE || 'unnamed-node-app'
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 const MAX_EVENTS = 65536
 const flushInterval = 2000
@@ -27,12 +29,28 @@ class Exporter {
     this._encoder = new Encoder()
     this._types = new Uint16Array(MAX_EVENTS)
     this._tables = {
-      [EVENT_TYPE]: new EventTypeTable()
+      [EVENT]: new EventTable()
     }
 
     this.reset()
+    this.processInfo()
+    this.config({
+      host: process.env.DD_AGENT_HOST
+    })
 
     process.once('beforeExit', () => this.flush())
+  }
+
+  processInfo () {
+    this._beforeEncode(PROCESS_INFO)
+    this._tables[PROCESS_INFO].insert()
+    this._afterEncode(PROCESS_INFO)
+  }
+
+  config (options) {
+    this._beforeEncode(CONFIG)
+    this._tables[CONFIG].insert(options)
+    this._afterEncode(CONFIG)
   }
 
   exception (error, spanContext) {
@@ -76,7 +94,7 @@ class Exporter {
 
     const data = this._encoder.encode(this._tables)
 
-    // console.log(data.length)
+    binding.write(data)
 
     this.reset()
 
@@ -104,7 +122,7 @@ class Exporter {
   }
 
   _afterEncode (eventType) {
-    this._tables[EVENT_TYPE].insert(eventType)
+    this._tables[EVENT].insert(eventType)
 
     if (++this._eventCount >= MAX_EVENTS) {
       this.flush()

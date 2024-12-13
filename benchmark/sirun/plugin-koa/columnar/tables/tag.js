@@ -9,7 +9,7 @@ class AddTagTable extends Table {
       span_id: BigUint64Array,
       key: Uint16Array,
       value: Uint16Array
-    })
+    }, ['key', 'value'])
   }
 
   insert (key, value, spanContext) {
@@ -17,8 +17,8 @@ class AddTagTable extends Table {
 
     this.columns.segment_id[this.length] = spanContext.segment.segmentId
     this.columns.span_id[this.length] = spanContext.spanId
-    this.columns.key[this.length] = this._cache(key)
-    this.columns.value[this.length] = this._cache(value)
+    this.columns.key[this.length] = this._cache('key', key)
+    this.columns.value[this.length] = this._cache('value', value)
 
     this.length++
   }
@@ -31,7 +31,7 @@ class AddMetricTable extends Table {
       span_id: BigUint64Array,
       key: Uint16Array,
       value: Float64Array
-    })
+    }, ['key'])
   }
 
   insert (key, value, spanContext) {
@@ -39,7 +39,7 @@ class AddMetricTable extends Table {
 
     this.columns.segment_id[this.length] = spanContext.segment.segmentId
     this.columns.span_id[this.length] = spanContext.spanId
-    this.columns.key[this.length] = this._cache(key)
+    this.columns.key[this.length] = this._cache('key', key)
     this.columns.value[this.length] = value
 
     this.length++

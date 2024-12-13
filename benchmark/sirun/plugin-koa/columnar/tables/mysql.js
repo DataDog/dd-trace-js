@@ -14,7 +14,7 @@ class MysqlQueryStartTable extends Table {
       sql_user: Uint16Array,
       sql_host: Uint16Array,
       sql_port: Uint16Array
-    })
+    }, ['sql_query', 'sql_db', 'sql_user', 'sql_host'])
   }
 
   insert (query, spanContext) {
@@ -24,11 +24,11 @@ class MysqlQueryStartTable extends Table {
     this.columns.segment_id[this.length] = spanContext.segment.segmentId
     this.columns.span_id[this.length] = spanContext.spanId
     this.columns.parent_id[this.length] = spanContext.parentId
-    this.columns.sql_query[this.length] = this._cache(query.sql)
-    this.columns.sql_db[this.length] = this._cache(query.database)
-    this.columns.sql_user[this.length] = this._cache(query.user)
-    this.columns.sql_host[this.length] = this._cache(query.host)
-    this.columns.sql_port[this.length] = this._cache(query.port)
+    this.columns.sql_query[this.length] = this._cache('sql_query', query.sql)
+    this.columns.sql_db[this.length] = this._cache('sql_db', query.database)
+    this.columns.sql_user[this.length] = this._cache('sql_user', query.user)
+    this.columns.sql_host[this.length] = this._cache('sql_host', query.host)
+    this.columns.sql_port[this.length] = query.port
 
     this.length++
   }

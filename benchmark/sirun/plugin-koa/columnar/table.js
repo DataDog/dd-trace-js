@@ -3,9 +3,9 @@
 const { Dictionary } = require('./dictionary')
 
 class Table {
-  constructor (columnTypes) {
+  constructor (columnTypes, dictionaries = []) {
     this.columns = {}
-    this.dictionary = new Dictionary()
+    this.dictionaries = {}
     this.length = 0
     this.width = 0
 
@@ -15,6 +15,10 @@ class Table {
       this.columns[name] = new TypedArray(this._capacity)
       this.width += TypedArray.BYTES_PER_ELEMENT
     }
+
+    for (const dictionary of dictionaries) {
+      this.dictionaries[dictionary] = new Dictionary()
+    }
   }
 
   get byteLength () {
@@ -23,7 +27,10 @@ class Table {
 
   reset () {
     this.length = 0
-    this.dictionary.reset()
+
+    for (const dictionary of Object.values(this.dictionaries)) {
+      dictionary.reset()
+    }
   }
 
   reserve (count = 1) {
@@ -37,8 +44,8 @@ class Table {
     }
   }
 
-  _cache (value) {
-    return this.dictionary.get(value)
+  _cache (column, value) {
+    return this.dictionaries[column].get(value)
   }
 }
 

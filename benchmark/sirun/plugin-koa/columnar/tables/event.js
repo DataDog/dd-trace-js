@@ -2,20 +2,20 @@
 
 const { Table } = require('../table')
 
-class EventTypeTable extends Table {
+class EventTable extends Table {
   constructor () {
     super({
-      type: Uint8Array
+      event_type: Uint16Array
     })
   }
 
   insert (type) {
     this.reserve()
 
-    this.columns.type[this.length] = type
+    this.columns.event_type[this.length] = type
 
     this.length++
   }
 }
 
-module.exports = { EventTypeTable }
+module.exports = { EventTable }

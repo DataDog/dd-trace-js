@@ -13,7 +13,7 @@ class WebRequestStartTable extends Table {
       http_method: Uint16Array,
       http_route: Uint16Array,
       http_url: Uint16Array
-    })
+    }, ['component', 'http_method', 'http_url', 'http_route'])
   }
 
   insert (req, component, spanContext) {
@@ -23,10 +23,10 @@ class WebRequestStartTable extends Table {
     this.columns.segment_id[this.length] = spanContext.segment.segmentId
     this.columns.span_id[this.length] = spanContext.spanId
     this.columns.parent_id[this.length] = spanContext.parentId
-    this.columns.component[this.length] = this._cache(component)
-    this.columns.http_method[this.length] = this._cache(req.method)
-    this.columns.http_url[this.length] = this._cache(req.url)
-    this.columns.http_route[this.length] = this._cache(req.url)
+    this.columns.component[this.length] = this._cache('component', component)
+    this.columns.http_method[this.length] = this._cache('http_method', req.method)
+    this.columns.http_url[this.length] = this._cache('http_url', req.url)
+    this.columns.http_route[this.length] = this._cache('http_route', req.url)
 
     this.length++
   }

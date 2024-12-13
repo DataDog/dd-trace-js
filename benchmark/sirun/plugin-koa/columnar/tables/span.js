@@ -12,8 +12,8 @@ class SpanStartTable extends Table {
       name: Uint16Array,
       service: Uint16Array,
       resource: Uint16Array,
-      type: Uint16Array
-    })
+      span_type: Uint16Array
+    }, ['name', 'service', 'resource', 'span_type'])
   }
 
   insert (spanContext, name, service, resource, type) {
@@ -26,7 +26,7 @@ class SpanStartTable extends Table {
     this.columns.name[this.length] = name
     this.columns.service[this.length] = service
     this.columns.resource[this.length] = resource
-    this.columns.type[this.length] = type
+    this.columns.span_type[this.length] = type
 
     this.length++
   }
