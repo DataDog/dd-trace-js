@@ -92,9 +92,11 @@ class Exporter {
   flush (done = noop) {
     if (this._eventCount === 0) return
 
-    const data = this._encoder.encode(this._tables)
+    if (process.env.DD_EXPORTING_ENABLED === 'true') {
+      const data = this._encoder.encode(this._tables)
 
-    binding.write(data)
+      binding.write(data)
+    }
 
     this.reset()
 
