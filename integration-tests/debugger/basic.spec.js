@@ -14,7 +14,7 @@ describe('Dynamic Instrumentation', function () {
   it('base case: target app should work as expected if no test probe has been added', async function () {
     const response = await t.axios.get(t.breakpoint.url)
     assert.strictEqual(response.status, 200)
-    assert.deepStrictEqual(response.data, { hello: 'foo' })
+    assert.deepStrictEqual(response.data, { hello: 'bar' })
   })
 
   describe('diagnostics messages', function () {
@@ -54,7 +54,7 @@ describe('Dynamic Instrumentation', function () {
           t.axios.get(t.breakpoint.url)
             .then((response) => {
               assert.strictEqual(response.status, 200)
-              assert.deepStrictEqual(response.data, { hello: 'foo' })
+              assert.deepStrictEqual(response.data, { hello: 'bar' })
             })
             .catch(done)
         } else {
@@ -245,7 +245,7 @@ describe('Dynamic Instrumentation', function () {
           message: 'Hello World!',
           logger: {
             name: t.breakpoint.file,
-            method: 'handler',
+            method: 'fooHandler',
             version,
             thread_name: 'MainThread'
           },
@@ -279,7 +279,7 @@ describe('Dynamic Instrumentation', function () {
         const topFrame = payload['debugger.snapshot'].stack[0]
         // path seems to be prefeixed with `/private` on Mac
         assert.match(topFrame.fileName, new RegExp(`${t.appFile}$`))
-        assert.strictEqual(topFrame.function, 'handler')
+        assert.strictEqual(topFrame.function, 'fooHandler')
         assert.strictEqual(topFrame.lineNumber, t.breakpoint.line)
         assert.strictEqual(topFrame.columnNumber, 3)
 
@@ -374,6 +374,61 @@ describe('Dynamic Instrumentation', function () {
       })
 
       t.agent.addRemoteConfig(rcConfig)
+    })
+
+    it('should adhere to individual probes sample rate', function (done) {
+      const rcConfig1 = t.breakpoints[0].generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
+      const rcConfig2 = t.breakpoints[1].generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
+      const state = {
+        [rcConfig1.config.id]: {
+          payloadsReceived: 0,
+          tiggerBreakpointContinuously () {
+            t.axios.get(t.breakpoints[0].url).catch(done)
+            this.timer = setTimeout(this.tiggerBreakpointContinuously.bind(this), 10)
+          }
+        },
+        [rcConfig2.config.id]: {
+          payloadsReceived: 0,
+          tiggerBreakpointContinuously () {
+            t.axios.get(t.breakpoints[1].url).catch(done)
+            this.timer = setTimeout(this.tiggerBreakpointContinuously.bind(this), 10)
+          }
+        }
+      }
+
+      t.agent.on('debugger-diagnostics', ({ payload }) => {
+        const { probeId, status } = payload.debugger.diagnostics
+        if (status === 'INSTALLED') state[probeId].tiggerBreakpointContinuously()
+      })
+
+      t.agent.on('debugger-input', ({ payload }) => {
+        const _state = state[payload['debugger.snapshot'].probe.id]
+        _state.payloadsReceived++
+        if (_state.payloadsReceived === 1) {
+          _state.start = Date.now()
+        } else if (_state.payloadsReceived === 2) {
+          const duration = Date.now() - _state.start
+          clearTimeout(_state.timer)
+
+          // Allow for a variance of -5/+50ms (time will tell if this is enough)
+          assert.isAbove(duration, 995)
+          assert.isBelow(duration, 1050)
+
+          // Wait at least a full sampling period, to see if we get any more payloads
+          _state.timer = setTimeout(doneWhenCalledTwice, 1250)
+        } else {
+          clearTimeout(_state.timer)
+          done(new Error('Too many payloads received!'))
+        }
+      })
+
+      t.agent.addRemoteConfig(rcConfig1)
+      t.agent.addRemoteConfig(rcConfig2)
+
+      function doneWhenCalledTwice () {
+        if (doneWhenCalledTwice.calledOnce) return done()
+        doneWhenCalledTwice.calledOnce = true
+      }
     })
   })
 
