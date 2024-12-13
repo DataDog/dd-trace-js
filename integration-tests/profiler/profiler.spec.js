@@ -133,6 +133,7 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args
   const events = []
   for (const sample of profile.sample) {
     let ts, event, host, address, port, name, spanId, localRootSpanId
+    const unexpectedLabels = []
     for (const label of sample.label) {
       switch (label.key) {
         case tsKey: ts = label.num; break
@@ -143,23 +144,28 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args
         case portKey: port = label.num; break
         case spanIdKey: spanId = label.str; break
         case localRootSpanIdKey: localRootSpanId = label.str; break
-        default: assert.fail(`Unexpected label key ${label.key} ${strings.strings[label.key]} ${encoded}`)
+        default: unexpectedLabels.push(label.key)
       }
-    }
-    // Timestamp must be defined and be between process start and end time
-    assert.isDefined(ts, encoded)
-    assert.isTrue(ts <= procEnd, encoded)
-    assert.isTrue(ts >= procStart, encoded)
-    if (process.platform !== 'win32') {
-      assert.isDefined(spanId, encoded)
-      assert.isDefined(localRootSpanId, encoded)
-    } else {
-      assert.isUndefined(spanId, encoded)
-      assert.isUndefined(localRootSpanId, encoded)
     }
     // Gather only DNS events; ignore sporadic GC events
     if (event === eventValue) {
+      // Timestamp must be defined and be between process start and end time
+      assert.isDefined(ts, encoded)
+      assert.isTrue(ts <= procEnd, encoded)
+      assert.isTrue(ts >= procStart, encoded)
+      if (process.platform !== 'win32') {
+        assert.isDefined(spanId, encoded)
+        assert.isDefined(localRootSpanId, encoded)
+      } else {
+        assert.isUndefined(spanId, encoded)
+        assert.isUndefined(localRootSpanId, encoded)
+      }
       assert.isDefined(name, encoded)
+      if (unexpectedLabels.length > 0) {
+        const labelsStr = JSON.stringify(unexpectedLabels)
+        const labelsStrStr = unexpectedLabels.map(k => strings.strings[k]).join(',')
+        assert.fail(`Unexpected labels: ${labelsStr}\n${labelsStrStr}\n${encoded}`)
+      }
       // Exactly one of these is defined
       assert.isTrue(!!address !== !!host, encoded)
       const ev = { name: strings.strings[name] }
