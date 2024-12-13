@@ -73,18 +73,13 @@ module.exports = class Plugin {
   }
 
   addSub (channelName, handler) {
-    const levels = ['low', 'medium', 'high', 'error']
-    const inputLevel = 'low'
+    const levels = ['debug', 'low', 'medium', 'high', 'error']
+    const inputLevel = this._tracerConfig.traceSpanLevel
 
     const startIndex = levels.indexOf(inputLevel)
     if (startIndex === -1) {
       console.error(`Invalid level: ${inputLevel}`)
       return
-    }
-
-    if (channelName.includes('mysql')) {
-      // pass
-      console.log(channelName)
     }
 
     const plugin = this
@@ -118,8 +113,8 @@ module.exports = class Plugin {
   }
 
   addBind (channelName, transform) {
-    const levels = ['low', 'medium', 'high', 'error']
-    const inputLevel = 'low'
+    const levels = ['debug', 'low', 'medium', 'high', 'error']
+    const inputLevel = this._tracerConfig.traceSpanLevel
 
     const startIndex = levels.indexOf(inputLevel)
     if (startIndex === -1) {

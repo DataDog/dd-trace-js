@@ -49,7 +49,6 @@ class DatadogTracer {
   }
 
   startSpan (name, options = {}) {
-
     const parent = options.childOf
       ? getContext(options.childOf)
       : getParent(options.references)
@@ -59,23 +58,18 @@ class DatadogTracer {
       'service.name': options?.tags?.service ? String(options.tags.service) : this._service
     }
 
-    const traceLevels = ['low', 'medium', 'high', 'error']
+    const traceLevels = ['debug', 'low', 'medium', 'high', 'error']
 
     // trace levels with level of high ,medium low error
-    const configTraceLevel = 'error'
+    const configTraceLevel = this._config.traceSpanLevel
     const configTraceLevelIndex = traceLevels.indexOf(configTraceLevel)
 
-    const currentOperationTraceLevel = options?.traceLevel ?? 'low'
+    const currentOperationTraceLevel = options?.traceLevel ?? 'debug'
 
     // this is a lower span level than our config trace level, so we will create a no-op span
     if (traceLevels.indexOf(currentOperationTraceLevel) < configTraceLevelIndex) {
       if (parent) {
-        let metaIndex
-        if (parent instanceof Span) {
-          metaIndex = updateParentSpan(null, options.childOf, options, name)
-        } else if (parent instanceof SpanContext) {
-          metaIndex = updateParentSpan(null, options.childOf, options, name)
-        }
+        const metaIndex = 0
         return new NoopSpan(this, parent, { keepParent: true, metaIndex })
       } else {
         return new NoopSpan(this, null, { keepParent: false, metaIndex: 0 })

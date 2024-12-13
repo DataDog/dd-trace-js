@@ -48,8 +48,8 @@ function patchResolveShorthands (prototype) {
 }
 
 function wrap (prefix, fn, expectedArgs, rrtype) {
-  const startCh = channel(prefix + ':start:low')
-  const finishCh = channel(prefix + ':finish:low')
+  const startCh = channel(prefix + ':start:debug')
+  const finishCh = channel(prefix + ':finish:debug')
   const errorCh = channel(prefix + ':error:error')
 
   const wrapped = function () {

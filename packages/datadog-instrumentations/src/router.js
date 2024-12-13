@@ -6,9 +6,9 @@ const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 
 function createWrapRouterMethod (name) {
-  const enterChannel = channel(`apm:${name}:middleware:enter:medium`)
-  const exitChannel = channel(`apm:${name}:middleware:exit:medium`)
-  const finishChannel = channel(`apm:${name}:middleware:finish:medium`)
+  const enterChannel = channel(`apm:${name}:middleware:enter:low`)
+  const exitChannel = channel(`apm:${name}:middleware:exit:low`)
+  const finishChannel = channel(`apm:${name}:middleware:finish:low`)
   const errorChannel = channel(`apm:${name}:middleware:error:error`)
   const nextChannel = channel(`apm:${name}:middleware:next:high`)
 
