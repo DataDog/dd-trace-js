@@ -4,6 +4,7 @@ const BaseAwsSdkPlugin = require('../base')
 
 class EventBridge extends BaseAwsSdkPlugin {
   static get id () { return 'eventbridge' }
+  static get isPayloadReporter () { return true }
 
   generateTags (params, operation, response) {
     if (!params || !params.source) return {}
@@ -44,7 +45,7 @@ class EventBridge extends BaseAwsSdkPlugin {
         }
         request.params.Entries[0].Detail = finalData
       } catch (e) {
-        log.error(e)
+        log.error('EventBridge error injecting request', e)
       }
     }
   }

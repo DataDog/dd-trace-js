@@ -6,10 +6,12 @@ const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
 const { errors } = require('../startup-log')
 const { manager: metricsManager } = require('./metrics')
-const logs = require('./logs')
+const telemetryLogger = require('./logs')
+const logger = require('../log')
 
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
 const telemetryStopChannel = dc.channel('datadog:telemetry:stop')
+const telemetryAppClosingChannel = dc.channel('datadog:telemetry:app-closing')
 
 let config
 let pluginManager
@@ -87,7 +89,7 @@ function getProducts (config) {
     },
     profiler: {
       version: tracerVersion,
-      enabled: config.profiling.enabled
+      enabled: profilingEnabledToBoolean(config.profiling.enabled)
     }
   }
   if (errors.profilingError) {
@@ -129,12 +131,13 @@ function appClosing () {
   if (!config?.telemetry?.enabled) {
     return
   }
+  // Give chance to listeners to update metrics before shutting down.
+  telemetryAppClosingChannel.publish()
   const { reqType, payload } = createPayload('app-closing')
   sendData(config, application, host, reqType, payload)
-  // we flush before shutting down. Only in CI Visibility
-  if (config.isCiVisibility) {
-    metricsManager.send(config, application, host)
-  }
+  // We flush before shutting down.
+  metricsManager.send(config, application, host)
+  telemetryLogger.send(config, application, host)
 }
 
 function onBeforeExit () {
@@ -210,7 +213,7 @@ function createPayload (currReqType, currPayload = {}) {
 function heartbeat (config, application, host) {
   heartbeatTimeout = setTimeout(() => {
     metricsManager.send(config, application, host)
-    logs.send(config, application, host)
+    telemetryLogger.send(config, application, host)
 
     const { reqType, payload } = createPayload('app-heartbeat')
     sendData(config, application, host, reqType, payload, updateRetryData)
@@ -234,6 +237,10 @@ function extendedHeartbeat (config) {
 
 function start (aConfig, thePluginManager) {
   if (!aConfig.telemetry.enabled) {
+    if (aConfig.sca?.enabled) {
+      logger.warn('DD_APPSEC_SCA_ENABLED requires enabling telemetry to work.')
+    }
+
     return
   }
   config = aConfig
@@ -244,7 +251,7 @@ function start (aConfig, thePluginManager) {
   integrations = getIntegrations()
 
   dependencies.start(config, application, host, getRetryData, updateRetryData)
-  logs.start(config)
+  telemetryLogger.start(config)
 
   sendData(config, application, host, 'app-started', appStarted(config))
 
@@ -307,24 +314,43 @@ function updateConfig (changes, config) {
     sampleRate: 'DD_TRACE_SAMPLE_RATE',
     logInjection: 'DD_LOG_INJECTION',
     headerTags: 'DD_TRACE_HEADER_TAGS',
-    tags: 'DD_TAGS'
+    tags: 'DD_TAGS',
+    'sampler.rules': 'DD_TRACE_SAMPLING_RULES',
+    traceEnabled: 'DD_TRACE_ENABLED',
+    url: 'DD_TRACE_AGENT_URL',
+    'sampler.rateLimit': 'DD_TRACE_RATE_LIMIT',
+    queryStringObfuscation: 'DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP',
+    version: 'DD_VERSION',
+    env: 'DD_ENV',
+    service: 'DD_SERVICE',
+    clientIpHeader: 'DD_TRACE_CLIENT_IP_HEADER',
+    'grpc.client.error.statuses': 'DD_GRPC_CLIENT_ERROR_STATUSES',
+    'grpc.server.error.statuses': 'DD_GRPC_SERVER_ERROR_STATUSES'
   }
 
-  const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping'])
+  const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
 
   const configuration = []
   const names = [] // list of config names whose values have been changed
 
   for (const change of changes) {
     const name = nameMapping[change.name] || change.name
+
     names.push(name)
     const { origin, value } = change
     const entry = { name, value, origin }
 
-    if (Array.isArray(value)) entry.value = value.join(',')
-    if (namesNeedFormatting.has(entry.name)) entry.value = formatMapForTelemetry(entry.value)
-    if (entry.name === 'url' && entry.value) entry.value = entry.value.toString()
-
+    if (namesNeedFormatting.has(entry.name)) {
+      entry.value = formatMapForTelemetry(entry.value)
+    } else if (entry.name === 'url') {
+      if (entry.value) {
+        entry.value = entry.value.toString()
+      }
+    } else if (entry.name === 'DD_TRACE_SAMPLING_RULES') {
+      entry.value = JSON.stringify(entry.value)
+    } else if (Array.isArray(entry.value)) {
+      entry.value = value.join(',')
+    }
     configuration.push(entry)
   }
 
@@ -341,6 +367,19 @@ function updateConfig (changes, config) {
     const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
     sendData(config, application, host, reqType, payload, updateRetryData)
   }
+}
+
+function profilingEnabledToBoolean (profilingEnabled) {
+  if (typeof profilingEnabled === 'boolean') {
+    return profilingEnabled
+  }
+  if (['auto', 'true'].includes(profilingEnabled)) {
+    return true
+  }
+  if (profilingEnabled === 'false') {
+    return false
+  }
+  return undefined
 }
 
 module.exports = {

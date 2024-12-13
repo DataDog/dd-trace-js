@@ -65,6 +65,27 @@ describe('encode 0.5', () => {
     expect(stringMap[trace[0][11]]).to.equal('') // unset
   })
 
+  it('should encode span events', () => {
+    const encodedLink = '[{"name":"Something went so wrong","time_unix_nano":1000000},' +
+    '{"name":"I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx","time_unix_nano":1633023102000000,' +
+    '"attributes":{"emotion":"happy","rating":9.8,"other":[1,9.5,1],"idol":false}}]'
+
+    data[0].meta.events = encodedLink
+
+    encoder.encode(data)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer, { codec })
+    const stringMap = decoded[0]
+    const trace = decoded[1][0]
+    expect(stringMap).to.include('events')
+    expect(stringMap).to.include(encodedLink)
+    expect(trace[0][9]).to.include({
+      [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
+      [stringMap.indexOf('events')]: stringMap.indexOf(encodedLink)
+    })
+  })
+
   it('should encode span links', () => {
     const traceIdHigh = id('10')
     const traceId = id('1234abcd1234abcd')
@@ -188,5 +209,32 @@ describe('encode 0.5', () => {
     expect(payload).to.have.length(12)
     expect(payload[5]).to.equal(1)
     expect(payload[11]).to.equal(0)
+  })
+
+  it('should ignore meta_struct property', () => {
+    data[0].meta_struct = { foo: 'bar' }
+
+    encoder.encode(data)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer, { codec })
+    const stringMap = decoded[0]
+    const trace = decoded[1][0]
+
+    expect(trace).to.be.instanceof(Array)
+    expect(trace[0]).to.be.instanceof(Array)
+    expect(stringMap[trace[0][0]]).to.equal(data[0].service)
+    expect(stringMap[trace[0][1]]).to.equal(data[0].name)
+    expect(stringMap[trace[0][2]]).to.equal(data[0].resource)
+    expect(trace[0][3].toString(16)).to.equal(data[0].trace_id.toString())
+    expect(trace[0][4].toString(16)).to.equal(data[0].span_id.toString())
+    expect(trace[0][5].toString(16)).to.equal(data[0].parent_id.toString())
+    expect(trace[0][6].toNumber()).to.equal(data[0].start)
+    expect(trace[0][7].toNumber()).to.equal(data[0].duration)
+    expect(trace[0][8]).to.equal(0)
+    expect(trace[0][9]).to.deep.equal({ [stringMap.indexOf('bar')]: stringMap.indexOf('baz') })
+    expect(trace[0][10]).to.deep.equal({ [stringMap.indexOf('example')]: 1 })
+    expect(stringMap[trace[0][11]]).to.equal('') // unset
+    expect(trace[0][12]).to.be.undefined // Everything works the same as without meta_struct, and nothing else is added
   })
 })

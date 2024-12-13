@@ -2,14 +2,20 @@
 
 const NoopTracer = require('./tracer')
 const NoopAppsecSdk = require('../appsec/sdk/noop')
+const NoopDogStatsDClient = require('./dogstatsd')
+const NoopLLMObsSDK = require('../llmobs/noop')
 
 const noop = new NoopTracer()
 const noopAppsec = new NoopAppsecSdk()
+const noopDogStatsDClient = new NoopDogStatsDClient()
+const noopLLMObs = new NoopLLMObsSDK(noop)
 
 class Tracer {
   constructor () {
     this._tracer = noop
     this.appsec = noopAppsec
+    this.dogstatsd = noopDogStatsDClient
+    this.llmobs = noopLLMObs
   }
 
   init () {

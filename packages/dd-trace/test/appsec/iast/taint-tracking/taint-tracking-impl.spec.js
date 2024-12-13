@@ -11,21 +11,28 @@ const { clearCache } = require('../../../../src/appsec/iast/vulnerability-report
 const { expect } = require('chai')
 
 const propagationFns = [
-  'concatSuffix',
-  'insertStr',
   'appendStr',
-  'trimStr',
-  'trimStartStr',
+  'arrayInVariableJoin',
+  'arrayJoin',
+  'arrayProtoJoin',
+  'concatProtoStr',
+  'concatStr',
+  'concatSuffix',
+  'concatTaintedStr',
+  'insertStr',
+  'replaceRegexStr',
+  'replaceStr',
+  'sliceStr',
+  'substrStr',
+  'substringStr',
+  'templateLiteralEndingWithNumberParams',
+  'templateLiteralWithTaintedAtTheEnd',
+  'toLowerCaseStr',
+  'toUpperCaseStr',
   'trimEndStr',
   'trimProtoStr',
-  'concatStr',
-  'concatTaintedStr',
-  'concatProtoStr',
-  'substringStr',
-  'substrStr',
-  'sliceStr',
-  'replaceStr',
-  'replaceRegexStr'
+  'trimStartStr',
+  'trimStr'
 ]
 
 const commands = [
@@ -43,6 +50,7 @@ const propagationFunctions = require(propagationFunctionsFile)
 
 describe('TaintTracking', () => {
   let instrumentedFunctionsFile
+
   beforeEach(() => {
     instrumentedFunctionsFile = copyFileToTmp(propagationFunctionsFile)
   })
@@ -122,7 +130,17 @@ describe('TaintTracking', () => {
   })
 
   describe('should not catch original Error', () => {
-    const filtered = ['concatSuffix', 'insertStr', 'appendStr', 'concatTaintedStr']
+    const filtered = [
+      'appendStr',
+      'arrayInVariableJoin',
+      'arrayJoin',
+      'arrayProtoJoin',
+      'concatSuffix',
+      'concatTaintedStr',
+      'insertStr',
+      'templateLiteralEndingWithNumberParams',
+      'templateLiteralWithTaintedAtTheEnd'
+    ]
     propagationFns.forEach((propFn) => {
       if (filtered.includes(propFn)) return
       it(`invoking ${propFn} with null argument`, () => {

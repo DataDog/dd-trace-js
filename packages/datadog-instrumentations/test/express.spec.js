@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const getPort = require('get-port')
 const axios = require('axios')
 const dc = require('dc-polyfill')
 
@@ -13,20 +12,20 @@ withVersions('express', 'express', version => {
     before(() => {
       return agent.load(['express', 'body-parser'], { client: false })
     })
+
     before((done) => {
-      const express = require('../../../versions/express').get()
+      const express = require(`../../../versions/express@${version}`).get()
       const app = express()
       app.get('/', (req, res) => {
         requestBody()
         res.end('DONE')
       })
-      getPort().then(newPort => {
-        port = newPort
-        server = app.listen(port, () => {
-          done()
-        })
+      server = app.listen(0, () => {
+        port = server.address().port
+        done()
       })
     })
+
     beforeEach(async () => {
       requestBody = sinon.stub()
     })

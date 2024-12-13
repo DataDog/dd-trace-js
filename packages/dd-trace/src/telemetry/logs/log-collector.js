@@ -1,8 +1,9 @@
 'use strict'
 
 const log = require('../../log')
+const { calculateDDBasePath } = require('../../util')
 
-const logs = new Map()
+const logs = new Map() // hash -> log
 
 // NOTE: Is this a reasonable number?
 let maxEntries = 10000
@@ -29,6 +30,38 @@ function isValid (logEntry) {
   return logEntry?.level && logEntry.message
 }
 
+const ddBasePath = calculateDDBasePath(__dirname)
+const EOL = '\n'
+const STACK_FRAME_LINE_REGEX = /^\s*at\s/gm
+
+function sanitize (logEntry) {
+  const stack = logEntry.stack_trace
+  if (!stack) return logEntry
+
+  let stackLines = stack.split(EOL)
+
+  const firstIndex = stackLines.findIndex(l => l.match(STACK_FRAME_LINE_REGEX))
+
+  const isDDCode = firstIndex > -1 && stackLines[firstIndex].includes(ddBasePath)
+  stackLines = stackLines
+    .filter((line, index) => (isDDCode && index < firstIndex) || line.includes(ddBasePath))
+    .map(line => line.replace(ddBasePath, ''))
+
+  if (!isDDCode && logEntry.errorType && stackLines.length) {
+    stackLines = [`${logEntry.errorType}: redacted`, ...stackLines]
+  }
+
+  delete logEntry.errorType
+
+  logEntry.stack_trace = stackLines.join(EOL)
+  if (logEntry.stack_trace === '' && (!logEntry.message || logEntry.message === 'Generic Error')) {
+    // If entire stack was removed and there is no message we'd rather not log it at all.
+    return null
+  }
+
+  return logEntry
+}
+
 const logCollector = {
   add (logEntry) {
     try {
@@ -37,18 +70,29 @@ const logCollector = {
       // NOTE: should errors have higher priority? and discard log entries with lower priority?
       if (logs.size >= maxEntries) {
         overflowedCount++
-        return
+        return false
       }
 
+      logEntry = sanitize(logEntry)
+      if (!logEntry) {
+        return false
+      }
       const hash = createHash(logEntry)
       if (!logs.has(hash)) {
-        logs.set(hash, logEntry)
+        logs.set(hash, errorCopy(logEntry))
         return true
+      } else {
+        logs.get(hash).count++
       }
     } catch (e) {
-      log.error(`Unable to add log to logCollector: ${e.message}`)
+      log.error('Unable to add log to logCollector: %s', e.message)
     }
     return false
+  },
+
+  // Used for testing
+  hasEntry (logEntry) {
+    return logs.has(createHash(logEntry))
   },
 
   drain () {
@@ -76,6 +120,19 @@ const logCollector = {
       maxEntries = max
     }
   }
+}
+
+// clone an Error object to later serialize and transmit
+// { ...error } doesn't work
+// also users can add arbitrary fields to an error
+function errorCopy (error) {
+  const keys = Object.getOwnPropertyNames(error)
+  const obj = {}
+  for (const key of keys) {
+    obj[key] = error[key]
+  }
+  obj.count = 1
+  return obj
 }
 
 logCollector.reset()

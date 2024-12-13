@@ -11,14 +11,14 @@ const {
   getTestSuitePath,
   getTestParametersString,
   addEfdStringToTestName,
-  removeEfdStringFromTestName
+  removeEfdStringFromTestName,
+  getIsFaultyEarlyFlakeDetection
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   getFormattedJestTestParameters,
   getJestTestName,
   getJestSuitesToRun
 } = require('../../datadog-plugin-jest/src/util')
-const { DD_MAJOR } = require('../../../version')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
@@ -49,6 +49,9 @@ const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 const CHILD_MESSAGE_CALL = 1
 // Maximum time we'll wait for the tracer to flush
 const FLUSH_TIMEOUT = 10000
+// eslint-disable-next-line
+// https://github.com/jestjs/jest/blob/41f842a46bb2691f828c3a5f27fc1d6290495b82/packages/jest-circus/src/types.ts#L9C8-L9C54
+const RETRY_TIMES = Symbol.for('RETRY_TIMES')
 
 let skippableSuites = []
 let knownTests = {}
@@ -61,17 +64,11 @@ let hasUnskippableSuites = false
 let hasForcedToRunSuites = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
+let earlyFlakeDetectionFaultyThreshold = 30
+let isEarlyFlakeDetectionFaulty = false
 let hasFilteredSkippableSuites = false
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
-
-const specStatusToTestStatus = {
-  pending: 'skip',
-  disabled: 'skip',
-  todo: 'skip',
-  passed: 'pass',
-  failed: 'fail'
-}
 
 const asyncResources = new WeakMap()
 const originalTestFns = new WeakMap()
@@ -121,6 +118,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.testSuite = getTestSuitePath(context.testPath, rootDir)
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
+      this.hasSnapshotTests = undefined
 
       this.displayName = config.projectConfig?.displayName?.name
       this.testEnvironmentOptions = getTestEnvironmentOptions(config)
@@ -129,9 +127,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       if (repositoryRoot) {
         this.testSourceFile = getTestSuitePath(context.testPath, repositoryRoot)
+        this.repositoryRoot = repositoryRoot
       }
 
       this.isEarlyFlakeDetectionEnabled = this.testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled
+      this.isFlakyTestRetriesEnabled = this.testEnvironmentOptions._ddIsFlakyTestRetriesEnabled
+      this.flakyTestRetriesCount = this.testEnvironmentOptions._ddFlakyTestRetriesCount
 
       if (this.isEarlyFlakeDetectionEnabled) {
         const hasKnownTests = !!knownTests.jest
@@ -145,6 +146,28 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           this.isEarlyFlakeDetectionEnabled = false
         }
       }
+
+      if (this.isFlakyTestRetriesEnabled) {
+        const currentNumRetries = this.global[RETRY_TIMES]
+        if (!currentNumRetries) {
+          this.global[RETRY_TIMES] = this.flakyTestRetriesCount
+        }
+      }
+    }
+
+    getHasSnapshotTests () {
+      if (this.hasSnapshotTests !== undefined) {
+        return this.hasSnapshotTests
+      }
+      let hasSnapshotTests = true
+      try {
+        const { _snapshotData } = this.getVmContext().expect.getState().snapshotState
+        hasSnapshotTests = Object.keys(_snapshotData).length > 0
+      } catch (e) {
+        // if we can't be sure, we'll err on the side of caution and assume it has snapshots
+      }
+      this.hasSnapshotTests = hasSnapshotTests
+      return hasSnapshotTests
     }
 
     // Function that receives a list of known tests for a test service and
@@ -208,17 +231,18 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             retriedTestsToNumAttempts.set(originalTestName, numEfdRetry + 1)
           }
         }
+        const isJestRetry = event.test?.invocations > 1
         asyncResource.runInAsyncScope(() => {
           testStartCh.publish({
             name: removeEfdStringFromTestName(testName),
             suite: this.testSuite,
             testSourceFile: this.testSourceFile,
-            runner: 'jest-circus',
             displayName: this.displayName,
             testParameters,
             frameworkVersion: jestVersion,
             isNew: isNewTest,
-            isEfdRetry: numEfdRetry > 0
+            isEfdRetry: numEfdRetry > 0,
+            isJestRetry
           })
           originalTestFns.set(event.test, event.test.fn)
           event.test.fn = asyncResource.bind(event.test.fn)
@@ -231,6 +255,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const isSkipped = event.mode === 'todo' || event.mode === 'skip'
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testName)) {
             retriedTestsToNumAttempts.set(testName, 0)
+            // Retrying snapshots has proven to be problematic, so we'll skip them for now
+            // We'll still detect new tests, but we won't retry them.
+            // TODO: do not bail out of EFD with the whole test suite
+            if (this.getHasSnapshotTests()) {
+              log.warn('Early flake detection is disabled for suites with snapshots')
+              return
+            }
             for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
               if (this.global.test) {
                 this.global.test(addEfdStringToTestName(event.testName, retryIndex), event.fn, event.timeout)
@@ -242,13 +273,18 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
       }
       if (event.name === 'test_done') {
+        const probe = {}
         const asyncResource = asyncResources.get(event.test)
         asyncResource.runInAsyncScope(() => {
           let status = 'pass'
           if (event.test.errors && event.test.errors.length) {
             status = 'fail'
-            const formattedError = formatJestError(event.test.errors[0])
-            testErrCh.publish(formattedError)
+            const numRetries = this.global[RETRY_TIMES]
+            const numTestExecutions = event.test?.invocations
+            const willBeRetried = numRetries > 0 && numTestExecutions - 1 < numRetries
+
+            const error = formatJestError(event.test.errors[0])
+            testErrCh.publish({ error, willBeRetried, probe, numTestExecutions })
           }
           testRunFinishCh.publish({
             status,
@@ -270,6 +306,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             }
           }
         })
+        if (probe.setProbePromise) {
+          await probe.setProbePromise
+        }
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
         const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -278,7 +317,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             name: getJestTestName(event.test),
             suite: this.testSuite,
             testSourceFile: this.testSourceFile,
-            runner: 'jest-circus',
             displayName: this.displayName,
             frameworkVersion: jestVersion,
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
@@ -312,7 +350,7 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
   numSkippedSuites = jestSuitesToRun.skippedSuites.length
 
   itrSkippedSuitesCh.publish({ skippedSuites: jestSuitesToRun.skippedSuites, frameworkVersion })
-  skippableSuites = []
+
   return jestSuitesToRun.suitesToRun
 }
 
@@ -373,7 +411,7 @@ addHook({
 
 addHook({
   name: '@jest/test-sequencer',
-  versions: ['>=24.8.0']
+  versions: ['>=28']
 }, (sequencerPackage, frameworkVersion) => {
   shimmer.wrap(sequencerPackage.default.prototype, 'shard', shard => function () {
     const shardedTests = shard.apply(this, arguments)
@@ -410,9 +448,10 @@ function cliWrapper (cli, jestVersion) {
         isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+        earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
       }
     } catch (err) {
-      log.error(err)
+      log.error('Jest library configuration error', err)
     }
 
     if (isEarlyFlakeDetectionEnabled) {
@@ -433,7 +472,7 @@ function cliWrapper (cli, jestVersion) {
           isEarlyFlakeDetectionEnabled = false
         }
       } catch (err) {
-        log.error(err)
+        log.error('Jest known tests error', err)
       }
     }
 
@@ -452,7 +491,7 @@ function cliWrapper (cli, jestVersion) {
           skippableSuites = receivedSkippableSuites
         }
       } catch (err) {
-        log.error(err)
+        log.error('Jest test-suite skippable error', err)
       }
     }
 
@@ -524,6 +563,7 @@ function cliWrapper (cli, jestVersion) {
         hasForcedToRunSuites,
         error,
         isEarlyFlakeDetectionEnabled,
+        isEarlyFlakeDetectionFaulty,
         onDone
       })
     })
@@ -570,10 +610,13 @@ function coverageReporterWrapper (coverageReporter) {
 
   /**
    * If ITR is active, we're running fewer tests, so of course the total code coverage is reduced.
-   * This calculation adds no value, so we'll skip it.
+   * This calculation adds no value, so we'll skip it, as long as the user has not manually opted in to code coverage,
+   * in which case we'll leave it.
    */
   shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => async function () {
-    if (isSuitesSkippingEnabled) {
+    // If the user has added coverage manually, they're willing to pay the price of this execution, so
+    // we will not skip it.
+    if (isSuitesSkippingEnabled && !isUserCodeCoverageEnabled) {
       return Promise.resolve()
     }
     return addUntestedFiles.apply(this, arguments)
@@ -602,7 +645,7 @@ addHook({
 
 function jestAdapterWrapper (jestAdapter, jestVersion) {
   const adapter = jestAdapter.default ? jestAdapter.default : jestAdapter
-  const newAdapter = shimmer.wrap(adapter, function () {
+  const newAdapter = shimmer.wrapFunction(adapter, adapter => function () {
     const environment = arguments[2]
     if (!environment) {
       return adapter.apply(this, arguments)
@@ -612,6 +655,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
       testSuiteStartCh.publish({
         testSuite: environment.testSuite,
         testEnvironmentOptions: environment.testEnvironmentOptions,
+        testSourceFile: environment.testSourceFile,
         displayName: environment.displayName,
         frameworkVersion: jestVersion
       })
@@ -630,10 +674,13 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
          * controls whether coverage is reported.
         */
         if (environment.testEnvironmentOptions?._ddTestCodeCoverageEnabled) {
+          const root = environment.repositoryRoot || environment.rootDir
+
           const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
-            .map(filename => getTestSuitePath(filename, environment.rootDir))
+            .map(filename => getTestSuitePath(filename, root))
+
           asyncResource.runInAsyncScope(() => {
-            testSuiteCodeCoverageCh.publish({ coverageFiles, testSuite: environment.testSuite })
+            testSuiteCodeCoverageCh.publish({ coverageFiles, testSuite: environment.testSourceFile })
           })
         }
         testSuiteFinishCh.publish({ status, errorMessage })
@@ -729,6 +776,7 @@ addHook({
       _ddTestModuleId,
       _ddTestSessionId,
       _ddTestCommand,
+      _ddTestSessionName,
       _ddForcedToRun,
       _ddUnskippable,
       _ddItrCorrelationId,
@@ -736,6 +784,8 @@ addHook({
       _ddIsEarlyFlakeDetectionEnabled,
       _ddEarlyFlakeDetectionNumRetries,
       _ddRepositoryRoot,
+      _ddIsFlakyTestRetriesEnabled,
+      _ddFlakyTestRetriesCount,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 
@@ -760,13 +810,26 @@ addHook({
   const SearchSource = searchSourcePackage.default ? searchSourcePackage.default : searchSourcePackage
 
   shimmer.wrap(SearchSource.prototype, 'getTestPaths', getTestPaths => async function () {
-    if (!isSuitesSkippingEnabled || !skippableSuites.length) {
-      return getTestPaths.apply(this, arguments)
-    }
-
+    const testPaths = await getTestPaths.apply(this, arguments)
     const [{ rootDir, shard }] = arguments
 
-    if (shard?.shardCount > 1) {
+    if (isEarlyFlakeDetectionEnabled) {
+      const projectSuites = testPaths.tests.map(test => getTestSuitePath(test.path, test.context.config.rootDir))
+      const isFaulty =
+        getIsFaultyEarlyFlakeDetection(projectSuites, knownTests.jest || {}, earlyFlakeDetectionFaultyThreshold)
+      if (isFaulty) {
+        log.error('Early flake detection is disabled because the number of new suites is too high.')
+        isEarlyFlakeDetectionEnabled = false
+        const testEnvironmentOptions = testPaths.tests[0]?.context?.config?.testEnvironmentOptions
+        // Project config is shared among all tests, so we can modify it here
+        if (testEnvironmentOptions) {
+          testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled = false
+        }
+        isEarlyFlakeDetectionFaulty = true
+      }
+    }
+
+    if (shard?.shardCount > 1 || !isSuitesSkippingEnabled || !skippableSuites.length) {
       // If the user is using jest sharding, we want to apply the filtering of tests in the shard process.
       // The reason for this is the following:
       // The tests for different shards are likely being run in different CI jobs so
@@ -774,10 +837,8 @@ addHook({
       // If the skippable endpoint is returning different suites and we filter the list of tests here,
       // the base list of tests that is used for sharding might be different,
       // causing the shards to potentially run the same suite.
-      return getTestPaths.apply(this, arguments)
+      return testPaths
     }
-
-    const testPaths = await getTestPaths.apply(this, arguments)
     const { tests } = testPaths
 
     const suitesToRun = applySuiteSkipping(tests, rootDir, frameworkVersion)
@@ -798,44 +859,40 @@ addHook({
   versions: ['24.8.0 - 24.9.0']
 }, jestConfigSyncWrapper)
 
-function jasmineAsyncInstallWraper (jasmineAsyncInstallExport, jestVersion) {
-  log.warn('jest-jasmine2 support is removed from dd-trace@v4. Consider changing to jest-circus as `testRunner`.')
-  return function (globalConfig, globalInput) {
-    globalInput._ddtrace = global._ddtrace
-    shimmer.wrap(globalInput.jasmine.Spec.prototype, 'execute', execute => function (onComplete) {
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-      asyncResource.runInAsyncScope(() => {
-        const testSuite = getTestSuitePath(this.result.testPath, globalConfig.rootDir)
-        testStartCh.publish({
-          name: this.getFullName(),
-          suite: testSuite,
-          runner: 'jest-jasmine2',
-          frameworkVersion: jestVersion
-        })
-        const spec = this
-        const callback = asyncResource.bind(function () {
-          if (spec.result.failedExpectations && spec.result.failedExpectations.length) {
-            const formattedError = formatJestError(spec.result.failedExpectations[0].error)
-            testErrCh.publish(formattedError)
-          }
-          testRunFinishCh.publish({ status: specStatusToTestStatus[spec.result.status] })
-          onComplete.apply(this, arguments)
-        })
-        arguments[0] = callback
-        execute.apply(this, arguments)
-      })
-    })
-    return jasmineAsyncInstallExport.default(globalConfig, globalInput)
-  }
+const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = [
+  'selenium-webdriver',
+  'selenium-webdriver/chrome',
+  'selenium-webdriver/edge',
+  'selenium-webdriver/safari',
+  'selenium-webdriver/firefox',
+  'selenium-webdriver/ie',
+  'selenium-webdriver/chromium',
+  'winston'
+]
+
+function shouldBypassJestRequireEngine (moduleName) {
+  return (
+    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.includes(moduleName)
+  )
 }
 
-if (DD_MAJOR < 4) {
-  addHook({
-    name: 'jest-jasmine2',
-    versions: ['>=24.8.0'],
-    file: 'build/jasmineAsyncInstall.js'
-  }, jasmineAsyncInstallWraper)
-}
+addHook({
+  name: 'jest-runtime',
+  versions: ['>=24.8.0']
+}, (runtimePackage) => {
+  const Runtime = runtimePackage.default ? runtimePackage.default : runtimePackage
+
+  shimmer.wrap(Runtime.prototype, 'requireModuleOrMock', requireModuleOrMock => function (from, moduleName) {
+    // TODO: do this for every library that we instrument
+    if (shouldBypassJestRequireEngine(moduleName)) {
+      // To bypass jest's own require engine
+      return this._requireCoreModule(moduleName)
+    }
+    return requireModuleOrMock.apply(this, arguments)
+  })
+
+  return runtimePackage
+})
 
 addHook({
   name: 'jest-worker',

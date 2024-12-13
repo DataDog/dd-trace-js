@@ -1,6 +1,5 @@
 'use strict'
 
-const getPort = require('get-port')
 const agent = require('../plugins/agent')
 const {
   schema,
@@ -41,10 +40,9 @@ withVersions('apollo-server-core', 'express', '>=4', expressVersion => {
 
       server.applyMiddleware({ app })
 
-      config.port = await getPort()
-
       return new Promise(resolve => {
         expressServer = app.listen({ port: config.port }, () => {
+          config.port = expressServer.address().port
           resolve()
         })
       })

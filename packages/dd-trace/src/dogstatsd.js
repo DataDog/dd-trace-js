@@ -12,6 +12,7 @@ const MAX_BUFFER_SIZE = 1024 // limit from the agent
 const TYPE_COUNTER = 'c'
 const TYPE_GAUGE = 'g'
 const TYPE_DISTRIBUTION = 'd'
+const TYPE_HISTOGRAM = 'h'
 
 class DogStatsDClient {
   constructor (options = {}) {
@@ -46,6 +47,10 @@ class DogStatsDClient {
     this._add(stat, value, TYPE_DISTRIBUTION, tags)
   }
 
+  histogram (stat, value, tags) {
+    this._add(stat, value, TYPE_HISTOGRAM, tags)
+  }
+
   flush () {
     const queue = this._enqueue()
 
@@ -66,7 +71,7 @@ class DogStatsDClient {
     const buffer = Buffer.concat(queue)
     request(buffer, this._httpOptions, (err) => {
       if (err) {
-        log.error('HTTP error from agent: ' + err.stack)
+        log.error('DogStatsDClient: HTTP error from agent: %s', err.message, err)
         if (err.status === 404) {
           // Inside this if-block, we have connectivity to the agent, but
           // we're not getting a 200 from the proxy endpoint. If it's a 404,
@@ -84,7 +89,7 @@ class DogStatsDClient {
       this._sendUdpFromQueue(queue, this._host, this._family)
     } else {
       lookup(this._host, (err, address, family) => {
-        if (err) return log.error(err)
+        if (err) return log.error('DogStatsDClient: Host not found', err)
         this._sendUdpFromQueue(queue, address, family)
       })
     }
@@ -180,16 +185,6 @@ class DogStatsDClient {
   }
 }
 
-class NoopDogStatsDClient {
-  gauge () { }
-
-  increment () { }
-
-  distribution () { }
-
-  flush () { }
-}
-
 // This is a simplified user-facing proxy to the underlying DogStatsDClient instance
 class CustomMetrics {
   constructor (config) {
@@ -229,6 +224,14 @@ class CustomMetrics {
     )
   }
 
+  histogram (stat, value, tags) {
+    return this.dogstatsd.histogram(
+      stat,
+      value,
+      CustomMetrics.tagTranslator(tags)
+    )
+  }
+
   flush () {
     return this.dogstatsd.flush()
   }
@@ -252,6 +255,5 @@ class CustomMetrics {
 
 module.exports = {
   DogStatsDClient,
-  NoopDogStatsDClient,
   CustomMetrics
 }

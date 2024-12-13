@@ -29,6 +29,10 @@ const web = {
     lambda: {
       opName: () => 'aws.lambda.invoke',
       serviceName: identityService
+    },
+    undici: {
+      opName: () => 'undici.request',
+      serviceName: httpPluginClientService
     }
   },
   server: {

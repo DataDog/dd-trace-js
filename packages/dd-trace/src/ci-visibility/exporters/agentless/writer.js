@@ -12,8 +12,7 @@ const {
   TELEMETRY_ENDPOINT_PAYLOAD_BYTES,
   TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_MS,
   TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
-  TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
-  getErrorTypeFromStatusCode
+  TELEMETRY_ENDPOINT_PAYLOAD_DROPPED
 } = require('../../../ci-visibility/telemetry')
 
 class Writer extends BaseWriter {
@@ -57,22 +56,25 @@ class Writer extends BaseWriter {
         Date.now() - startRequestTime
       )
       if (err) {
-        const errorType = getErrorTypeFromStatusCode(statusCode)
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
-          { endpoint: 'test_cycle', errorType }
+          { endpoint: 'test_cycle', statusCode }
         )
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
           { endpoint: 'test_cycle' }
         )
-        log.error(err)
+        log.error('Error sending CI agentless payload', err)
         done()
         return
       }
       log.debug(`Response from the intake: ${res}`)
       done()
     })
+  }
+
+  setMetadataTags (tags) {
+    this._encoder.setMetadataTags(tags)
   }
 }
 

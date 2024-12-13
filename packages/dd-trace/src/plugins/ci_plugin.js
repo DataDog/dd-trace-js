@@ -1,5 +1,6 @@
 const {
   getTestEnvironmentMetadata,
+  getTestSessionName,
   getCodeOwnersFileEntries,
   getTestParentSpan,
   getTestCommonTags,
@@ -13,10 +14,16 @@ const {
   TEST_SESSION_ID,
   TEST_COMMAND,
   TEST_MODULE,
+  TEST_SESSION_NAME,
   getTestSuiteCommonTags,
   TEST_STATUS,
   TEST_SKIPPED_BY_ITR,
-  ITR_CORRELATION_ID
+  ITR_CORRELATION_ID,
+  TEST_SOURCE_FILE,
+  TEST_LEVEL_EVENT_TYPES,
+  TEST_SUITE,
+  getFileAndLineNumberFromError,
+  getTestSuitePath
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -42,7 +49,7 @@ module.exports = class CiPlugin extends Plugin {
       }
       this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
         if (err) {
-          log.error(`Library configuration could not be fetched. ${err.message}`)
+          log.error('Library configuration could not be fetched. %s', err.message)
         } else {
           this.libraryConfig = libraryConfig
         }
@@ -56,7 +63,7 @@ module.exports = class CiPlugin extends Plugin {
       }
       this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites, itrCorrelationId) => {
         if (err) {
-          log.error(`Skippable suites could not be fetched. ${err.message}`)
+          log.error('Skippable suites could not be fetched. %s', err.message)
         } else {
           this.itrCorrelationId = itrCorrelationId
         }
@@ -74,6 +81,19 @@ module.exports = class CiPlugin extends Plugin {
       // only for playwright
       this.rootDir = rootDir
 
+      const testSessionName = getTestSessionName(this.config, this.command, this.testEnvironmentMetadata)
+
+      const metadataTags = {}
+      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+        metadataTags[testLevel] = {
+          [TEST_SESSION_NAME]: testSessionName
+        }
+      }
+      // tracer might not be initialized correctly
+      if (this.tracer._exporter.setMetadataTags) {
+        this.tracer._exporter.setMetadataTags(metadataTags)
+      }
+
       this.testSessionSpan = this.tracer.startSpan(`${this.constructor.id}.test_session`, {
         childOf,
         tags: {
@@ -82,7 +102,9 @@ module.exports = class CiPlugin extends Plugin {
           ...testSessionSpanMetadata
         }
       })
+      // TODO: add telemetry tag when we can add `is_agentless_log_submission_enabled` for agentless log submission
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
+
       this.testModuleSpan = this.tracer.startSpan(`${this.constructor.id}.test_module`, {
         childOf: this.testSessionSpan,
         tags: {
@@ -91,6 +113,14 @@ module.exports = class CiPlugin extends Plugin {
           ...testModuleSpanMetadata
         }
       })
+      // only for vitest
+      // These are added for the worker threads to use
+      if (this.constructor.id === 'vitest') {
+        process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()
+        process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()
+        process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command
+      }
+
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
     })
 
@@ -122,7 +152,7 @@ module.exports = class CiPlugin extends Plugin {
       }
       this.tracer._exporter.getKnownTests(this.testConfiguration, (err, knownTests) => {
         if (err) {
-          log.error(`Known tests could not be fetched. ${err.message}`)
+          log.error('Known tests could not be fetched. %s', err.message)
           this.libraryConfig.isEarlyFlakeDetectionEnabled = false
         }
         onDone({ err, knownTests })
@@ -137,7 +167,7 @@ module.exports = class CiPlugin extends Plugin {
         incrementCountMetric(name, {
           testLevel,
           testFramework,
-          isUnsupportedCIProvider: this.isUnsupportedCIProvider,
+          isUnsupportedCIProvider: !this.ciProviderName,
           ...tags
         })
       },
@@ -152,6 +182,12 @@ module.exports = class CiPlugin extends Plugin {
 
   configure (config) {
     super.configure(config)
+
+    if (config.isTestDynamicInstrumentationEnabled) {
+      const testVisibilityDynamicInstrumentation = require('../ci-visibility/dynamic-instrumentation')
+      this.di = testVisibilityDynamicInstrumentation
+    }
+
     this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.id, this.config)
 
     const {
@@ -171,7 +207,7 @@ module.exports = class CiPlugin extends Plugin {
 
     this.codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
 
-    this.isUnsupportedCIProvider = !ciProviderName
+    this.ciProviderName = ciProviderName
 
     this.testConfiguration = {
       repositoryUrl,
@@ -184,6 +220,19 @@ module.exports = class CiPlugin extends Plugin {
       branch,
       testLevel: 'suite'
     }
+  }
+
+  getCodeOwners (tags) {
+    const {
+      [TEST_SOURCE_FILE]: testSourceFile,
+      [TEST_SUITE]: testSuite
+    } = tags
+    // We'll try with the test source file if available (it could be different from the test suite)
+    let codeOwners = getCodeOwnersForFilename(testSourceFile, this.codeOwnersEntries)
+    if (!codeOwners) {
+      codeOwners = getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
+    }
+    return codeOwners
   }
 
   startTestSpan (testName, testSuite, testSuiteSpan, extraTags = {}) {
@@ -200,7 +249,7 @@ module.exports = class CiPlugin extends Plugin {
       ...extraTags
     }
 
-    const codeOwners = getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
+    const codeOwners = this.getCodeOwners(testTags)
     if (codeOwners) {
       testTags[TEST_CODE_OWNERS] = codeOwners
     }
@@ -241,5 +290,40 @@ module.exports = class CiPlugin extends Plugin {
     testSpan.context()._trace.origin = CI_APP_ORIGIN
 
     return testSpan
+  }
+
+  // TODO: If the test finishes and the probe is not hit, we should remove the breakpoint
+  addDiProbe (err, probe) {
+    const [file, line] = getFileAndLineNumberFromError(err)
+
+    const relativePath = getTestSuitePath(file, this.repositoryRoot)
+
+    const [
+      snapshotId,
+      setProbePromise,
+      hitProbePromise
+    ] = this.di.addLineProbe({ file: relativePath, line })
+
+    if (probe) { // not all frameworks may sync with the set probe promise
+      probe.setProbePromise = setProbePromise
+    }
+
+    hitProbePromise.then(({ snapshot }) => {
+      // TODO: handle race conditions for this.retriedTestIds
+      const { traceId, spanId } = this.retriedTestIds
+      this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
+        debugger: { snapshot },
+        dd: {
+          trace_id: traceId,
+          span_id: spanId
+        }
+      })
+    })
+
+    return {
+      snapshotId,
+      file: relativePath,
+      line
+    }
   }
 }

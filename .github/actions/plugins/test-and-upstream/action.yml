@@ -1,0 +1,20 @@
+name: Plugin Tests
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/testagent/start
+    - uses: ./.github/actions/node/setup
+    - uses: ./.github/actions/install
+    - uses: ./.github/actions/node/oldest
+    - run: yarn test:plugins:ci
+      shell: bash
+    - run: yarn test:plugins:upstream
+      shell: bash
+    - uses: ./.github/actions/node/latest
+    - run: yarn test:plugins:ci
+      shell: bash
+    - run: yarn test:plugins:upstream
+      shell: bash
+    - uses: codecov/codecov-action@v3
+    - if: always()
+      uses: ./.github/actions/testagent/logs

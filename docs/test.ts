@@ -115,8 +115,27 @@ tracer.init({
     },
     apiSecurity: {
       enabled: true,
-      requestSampling: 1.0
+    },
+    rasp: {
+      enabled: true
+    },
+    stackTrace: {
+      enabled: true,
+      maxStackTraces: 5,
+      maxDepth: 42
     }
+  },
+  iast: {
+    enabled: true,
+    cookieFilterPattern: '.*',
+    requestSampling: 50,
+    maxConcurrentRequests: 4,
+    maxContextOperations: 30,
+    deduplicationEnabled: true,
+    redactionEnabled: true,
+    redactionNamePattern: 'password',
+    redactionValuePattern: 'bearer',
+    telemetryVerbosity: 'OFF'
   }
 });
 
@@ -124,13 +143,20 @@ tracer.init({
   experimental: {
     iast: {
       enabled: true,
+      cookieFilterPattern: '.*',
       requestSampling: 50,
       maxConcurrentRequests: 4,
       maxContextOperations: 30,
       deduplicationEnabled: true,
       redactionEnabled: true,
       redactionNamePattern: 'password',
-      redactionValuePattern: 'bearer'
+      redactionValuePattern: 'bearer',
+      telemetryVerbosity: 'OFF'
+    },
+    appsec: {
+      standalone: {
+        enabled: true
+      }
     }
   }
 })
@@ -214,6 +240,7 @@ const elasticsearchOptions: plugins.elasticsearch = {
 const awsSdkOptions: plugins.aws_sdk = {
   service: 'test',
   splitByAwsService: false,
+  batchPropagationEnabled: false,
   hooks: {
     request: (span?: Span, response?) => {},
   },
@@ -255,11 +282,14 @@ const openSearchOptions: plugins.opensearch = {
 
 tracer.use('amqp10');
 tracer.use('amqplib');
+tracer.use('avsc');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
+tracer.use('azure-functions');
 tracer.use('bunyan');
 tracer.use('couchbase');
 tracer.use('cassandra-driver');
+tracer.use('child_process');
 tracer.use('connect');
 tracer.use('connect', httpServerOptions);
 tracer.use('cypress');
@@ -312,6 +342,7 @@ tracer.use('kafkajs');
 tracer.use('knex');
 tracer.use('koa');
 tracer.use('koa', httpServerOptions);
+tracer.use('langchain');
 tracer.use('mariadb', { service: () => `my-custom-mariadb` })
 tracer.use('memcached');
 tracer.use('microgateway-core');
@@ -338,15 +369,20 @@ tracer.use('playwright');
 tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });
 tracer.use('pino');
+tracer.use('protobufjs');
 tracer.use('redis');
 tracer.use('redis', redisOptions);
 tracer.use('restify');
 tracer.use('restify', httpServerOptions);
 tracer.use('rhea');
 tracer.use('router');
+tracer.use('selenium');
 tracer.use('sharedb');
 tracer.use('sharedb', sharedbOptions);
 tracer.use('tedious');
+tracer.use('undici');
+tracer.use('vitest');
+tracer.use('vitest', { service: 'vitest-service' });
 tracer.use('winston');
 
 tracer.use('express', false)
@@ -503,3 +539,80 @@ const otelTraceId: string = spanContext.traceId
 const otelSpanId: string = spanContext.spanId
 const otelTraceFlags: number = spanContext.traceFlags
 const otelTraceState: opentelemetry.TraceState = spanContext.traceState!
+
+// -- LLM Observability --
+const llmobsEnableOptions = {
+  mlApp: 'mlApp',
+  agentlessEnabled: true
+}
+tracer.init({
+  llmobs: llmobsEnableOptions,
+})
+const llmobs = tracer.llmobs
+const enabled = llmobs.enabled
+
+// manually enable
+llmobs.enable({
+  mlApp: 'mlApp',
+  agentlessEnabled: true
+})
+
+// manually disable
+llmobs.disable()
+
+// trace block of code
+llmobs.trace({ name: 'name', kind: 'llm' }, () => {})
+llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, () => {})
+llmobs.trace({ name: 'name', kind: 'llm' }, (span, cb) => {
+  llmobs.annotate(span, {})
+  span.setTag('foo', 'bar')
+  cb(new Error('boom'))
+})
+
+// wrap a function
+llmobs.wrap({ kind: 'llm' }, function myLLM () {})()
+llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction () {})()
+
+// export a span
+llmobs.enable({ mlApp: 'myApp' })
+llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
+  const llmobsSpanCtx = llmobs.exportSpan(span)
+  llmobsSpanCtx.traceId;
+  llmobsSpanCtx.spanId;
+
+  // submit evaluation
+  llmobs.disable()
+  llmobs.submitEvaluation(llmobsSpanCtx, {
+    label: 'my-eval-metric',
+    metricType: 'categorical',
+    value: 'good',
+    mlApp: 'myApp',
+    tags: {},
+    timestampMs: Date.now()
+  })
+})
+
+// annotate a span
+llmobs.annotate({
+  inputData: 'input',
+  outputData: 'output',
+  metadata: {},
+  metrics: {
+    inputTokens: 10,
+    outputTokens: 5,
+    totalTokens: 15
+  },
+  tags: {}
+})
+llmobs.annotate(span, {
+  inputData: 'input',
+  outputData: 'output',
+  metadata: {},
+  metrics: {},
+  tags: {}
+})
+
+
+
+// flush
+llmobs.flush()

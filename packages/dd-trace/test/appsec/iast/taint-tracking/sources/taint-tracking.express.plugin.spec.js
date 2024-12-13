@@ -1,7 +1,6 @@
 'use strict'
 
 const axios = require('axios')
-const getPort = require('get-port')
 const semver = require('semver')
 const agent = require('../../../../plugins/agent')
 const Config = require('../../../../../src/config')
@@ -47,9 +46,10 @@ describe('URI sourcing with express', () => {
       iast.disable()
     })
 
-    it('should taint uri', done => {
+    it('should taint uri', (done) => {
       const app = express()
-      app.get('/path/*', (req, res) => {
+      const pathPattern = semver.intersects(version, '>=5.0.0') ? '/path/*splat' : '/path/*'
+      app.get(pathPattern, (req, res) => {
         const store = storage.getStore()
         const iastContext = iastContextFunctions.getIastContext(store)
         const isPathTainted = isTainted(iastContext, req.url)
@@ -59,13 +59,13 @@ describe('URI sourcing with express', () => {
         res.status(200).send()
       })
 
-      getPort().then(port => {
-        appListener = app.listen(port, 'localhost', () => {
-          axios
-            .get(`http://localhost:${port}/path/vulnerable`)
-            .then(() => done())
-            .catch(done)
-        })
+      appListener = app.listen(0, 'localhost', () => {
+        const port = appListener.address().port
+
+        axios
+          .get(`http://localhost:${port}/path/vulnerable`)
+          .then(() => done())
+          .catch(done)
       })
     })
   })
@@ -77,11 +77,11 @@ describe('Path params sourcing with express', () => {
   let appListener
 
   withVersions('express', 'express', version => {
-    const checkParamIsTaintedAndNext = (req, res, next, param) => {
+    const checkParamIsTaintedAndNext = (req, res, next, param, name) => {
       const store = storage.getStore()
       const iastContext = iastContextFunctions.getIastContext(store)
 
-      const pathParamValue = param
+      const pathParamValue = name ? req.params[name] : req.params
       const isParameterTainted = isTainted(iastContext, pathParamValue)
       expect(isParameterTainted).to.be.true
       const taintedParameterValueRanges = getRanges(iastContext, pathParamValue)
@@ -137,13 +137,13 @@ describe('Path params sourcing with express', () => {
         res.status(200).send()
       })
 
-      getPort().then(port => {
-        appListener = app.listen(port, 'localhost', () => {
-          axios
-            .get(`http://localhost:${port}/tainted1/tainted2`)
-            .then(() => done())
-            .catch(done)
-        })
+      appListener = app.listen(0, 'localhost', () => {
+        const port = appListener.address().port
+
+        axios
+          .get(`http://localhost:${port}/tainted1/tainted2`)
+          .then(() => done())
+          .catch(done)
       })
     })
 
@@ -172,13 +172,13 @@ describe('Path params sourcing with express', () => {
 
       app.use('/:parameterParent', nestedRouter)
 
-      getPort().then(port => {
-        appListener = app.listen(port, 'localhost', () => {
-          axios
-            .get(`http://localhost:${port}/tainted1/tainted2`)
-            .then(() => done())
-            .catch(done)
-        })
+      appListener = app.listen(0, 'localhost', () => {
+        const port = appListener.address().port
+
+        axios
+          .get(`http://localhost:${port}/tainted1/tainted2`)
+          .then(() => done())
+          .catch(done)
       })
     })
 
@@ -189,20 +189,22 @@ describe('Path params sourcing with express', () => {
         res.status(200).send()
       })
 
-      app.param('parameter1', checkParamIsTaintedAndNext)
-      app.param('parameter2', checkParamIsTaintedAndNext)
+      app.param(['parameter1', 'parameter2'], checkParamIsTaintedAndNext)
 
-      getPort().then(port => {
-        appListener = app.listen(port, 'localhost', () => {
-          axios
-            .get(`http://localhost:${port}/tainted1/tainted2`)
-            .then(() => done())
-            .catch(done)
-        })
+      appListener = app.listen(0, 'localhost', () => {
+        const port = appListener.address().port
+
+        axios
+          .get(`http://localhost:${port}/tainted1/tainted2`)
+          .then(() => done())
+          .catch(done)
       })
     })
 
     it('should taint path param on router.params callback with custom implementation', function (done) {
+      if (!semver.satisfies(expressVersion, '4')) {
+        this.skip()
+      }
       const app = express()
 
       app.use('/:parameter1/:parameter2', (req, res) => {
@@ -216,13 +218,13 @@ describe('Path params sourcing with express', () => {
       app.param('parameter1')
       app.param('parameter2')
 
-      getPort().then(port => {
-        appListener = app.listen(port, 'localhost', () => {
-          axios
-            .get(`http://localhost:${port}/tainted1/tainted2`)
-            .then(() => done())
-            .catch(done)
-        })
+      appListener = app.listen(0, 'localhost', () => {
+        const port = appListener.address().port
+
+        axios
+          .get(`http://localhost:${port}/tainted1/tainted2`)
+          .then(() => done())
+          .catch(done)
       })
     })
   })

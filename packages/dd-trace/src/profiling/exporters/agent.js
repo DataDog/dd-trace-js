@@ -3,24 +3,52 @@
 const retry = require('retry')
 const { request: httpRequest } = require('http')
 const { request: httpsRequest } = require('https')
+const { EventSerializer } = require('./event_serializer')
 
 // TODO: avoid using dd-trace internals. Make this a separate module?
 const docker = require('../../exporters/common/docker')
 const FormData = require('../../exporters/common/form-data')
 const { storage } = require('../../../../datadog-core')
 const version = require('../../../../../package.json').version
-const os = require('os')
+const { urlToHttpOptions } = require('url')
 const perf = require('perf_hooks').performance
 
+const telemetryMetrics = require('../../telemetry/metrics')
+const profilersNamespace = telemetryMetrics.manager.namespace('profilers')
+
 const containerId = docker.id()
+
+const statusCodeCounters = []
+const requestCounter = profilersNamespace.count('profile_api.requests', [])
+const sizeDistribution = profilersNamespace.distribution('profile_api.bytes', [])
+const durationDistribution = profilersNamespace.distribution('profile_api.ms', [])
+const statusCodeErrorCounter = profilersNamespace.count('profile_api.errors', ['type:status_code'])
+const networkErrorCounter = profilersNamespace.count('profile_api.errors', ['type:network'])
+// TODO: implement timeout error counter when we have a way to track timeouts
+// const timeoutErrorCounter = profilersNamespace.count('profile_api.errors', ['type:timeout'])
+
+function countStatusCode (statusCode) {
+  let counter = statusCodeCounters[statusCode]
+  if (counter === undefined) {
+    counter = statusCodeCounters[statusCode] = profilersNamespace.count(
+      'profile_api.responses', [`status_code:${statusCode}`]
+    )
+  }
+  counter.inc()
+}
 
 function sendRequest (options, form, callback) {
   const request = options.protocol === 'https:' ? httpsRequest : httpRequest
 
   const store = storage.getStore()
   storage.enterWith({ noop: true })
+  requestCounter.inc()
+  const start = perf.now()
   const req = request(options, res => {
+    durationDistribution.track(perf.now() - start)
+    countStatusCode(res.statusCode)
     if (res.statusCode >= 400) {
+      statusCodeErrorCounter.inc()
       const error = new Error(`HTTP Error ${res.statusCode}`)
       error.status = res.statusCode
       callback(error)
@@ -28,14 +56,24 @@ function sendRequest (options, form, callback) {
       callback(null, res)
     }
   })
-  req.on('error', callback)
-  if (form) form.pipe(req)
+
+  req.on('error', (err) => {
+    networkErrorCounter.inc()
+    callback(err)
+  })
+  if (form) {
+    sizeDistribution.track(form.size())
+    form.pipe(req)
+  }
   storage.enterWith(store)
 }
 
 function getBody (stream, callback) {
   const chunks = []
-  stream.on('error', callback)
+  stream.on('error', (err) => {
+    networkErrorCounter.inc()
+    callback(err)
+  })
   stream.on('data', chunk => chunks.push(chunk))
   stream.on('end', () => {
     callback(null, Buffer.concat(chunks))
@@ -51,8 +89,10 @@ function computeRetries (uploadTimeout) {
   return [tries, Math.floor(uploadTimeout)]
 }
 
-class AgentExporter {
-  constructor ({ url, logger, uploadTimeout, env, host, service, version } = {}) {
+class AgentExporter extends EventSerializer {
+  constructor (config = {}) {
+    super(config)
+    const { url, logger, uploadTimeout } = config
     this._url = url
     this._logger = logger
 
@@ -60,68 +100,13 @@ class AgentExporter {
 
     this._backoffTime = backoffTime
     this._backoffTries = backoffTries
-    this._env = env
-    this._host = host
-    this._service = service
-    this._appVersion = version
   }
 
-  export ({ profiles, start, end, tags }) {
+  export (exportSpec) {
+    const { profiles } = exportSpec
     const fields = []
 
-    function typeToFile (type) {
-      return `${type}.pprof`
-    }
-
-    const event = JSON.stringify({
-      attachments: Object.keys(profiles).map(typeToFile),
-      start: start.toISOString(),
-      end: end.toISOString(),
-      family: 'node',
-      version: '4',
-      tags_profiler: [
-        'language:javascript',
-        'runtime:nodejs',
-        `runtime_arch:${process.arch}`,
-        `runtime_os:${process.platform}`,
-        `runtime_version:${process.version}`,
-        `process_id:${process.pid}`,
-        `profiler_version:${version}`,
-        'format:pprof',
-        ...Object.entries(tags).map(([key, value]) => `${key}:${value}`)
-      ].join(','),
-      info: {
-        application: {
-          env: this._env,
-          service: this._service,
-          start_time: new Date(perf.nodeTiming.nodeStart + perf.timeOrigin).toISOString(),
-          version: this._appVersion
-        },
-        platform: {
-          hostname: this._host,
-          kernel_name: os.type(),
-          kernel_release: os.release(),
-          kernel_version: os.version()
-        },
-        profiler: {
-          version
-        },
-        runtime: {
-          // Using `nodejs` for consistency with the existing `runtime` tag.
-          // Note that the event `family` property uses `node`, as that's what's
-          // proscribed by the Intake API, but that's an internal enum and is
-          // not customer visible.
-          engine: 'nodejs',
-          // strip off leading 'v'. This makes the format consistent with other
-          // runtimes (e.g. Ruby) but not with the existing `runtime_version` tag.
-          // We'll keep it like this as we want cross-engine consistency. We
-          // also aren't changing the format of the existing tag as we don't want
-          // to break it.
-          version: process.version.substring(1)
-        }
-      }
-    })
-
+    const event = this.getEventJSON(exportSpec)
     fields.push(['event', event, {
       filename: 'event.json',
       contentType: 'application/json'
@@ -137,7 +122,7 @@ class AgentExporter {
         return `Adding ${type} profile to agent export: ` + bytes
       })
 
-      const filename = typeToFile(type)
+      const filename = this.typeToFile(type)
       fields.push([filename, buffer, {
         filename,
         contentType: 'application/octet-stream'
@@ -177,9 +162,10 @@ class AgentExporter {
         if (this._url.protocol === 'unix:') {
           options.socketPath = this._url.pathname
         } else {
-          options.protocol = this._url.protocol
-          options.hostname = this._url.hostname
-          options.port = this._url.port
+          const httpOptions = urlToHttpOptions(this._url)
+          options.protocol = httpOptions.protocol
+          options.hostname = httpOptions.hostname
+          options.port = httpOptions.port
         }
 
         this._logger.debug(() => {
@@ -187,17 +173,19 @@ class AgentExporter {
         })
 
         sendRequest(options, form, (err, response) => {
-          if (operation.retry(err)) {
-            this._logger.error(`Error from the agent: ${err.message}`)
-            return
-          } else if (err) {
-            reject(new Error('Profiler agent export back-off period expired'))
+          if (err) {
+            const { status } = err
+            if ((typeof status !== 'number' || status >= 500 || status === 429) && operation.retry(err)) {
+              this._logger.warn(`Error from the agent: ${err.message}`)
+            } else {
+              reject(err)
+            }
             return
           }
 
           getBody(response, (err, body) => {
             if (err) {
-              this._logger.error(`Error reading agent response: ${err.message}`)
+              this._logger.warn(`Error reading agent response: ${err.message}`)
             } else {
               this._logger.debug(() => {
                 const bytes = (body.toString('hex').match(/../g) || []).join(' ')

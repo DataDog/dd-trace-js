@@ -1,7 +1,5 @@
 const os = require('os')
 const pkg = require('../../../../package.json')
-// Message pack int encoding is done in big endian, but data streams uses little endian
-const Uint64 = require('int64-buffer').Uint64BE
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 const { DsmPathwayCodec } = require('./pathway')
@@ -9,6 +7,9 @@ const { DataStreamsWriter } = require('./writer')
 const { computePathwayHash } = require('./pathway')
 const { types } = require('util')
 const { PATHWAY_HASH } = require('../../../../ext/tags')
+const { SchemaBuilder } = require('./schemas/schema_builder')
+const { SchemaSampler } = require('./schemas/schema_sampler')
+const log = require('../log')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
@@ -16,8 +17,8 @@ const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
-    this.hash = new Uint64(hash)
-    this.parentHash = new Uint64(parentHash)
+    this.hash = hash.readBigUInt64BE()
+    this.parentHash = parentHash.readBigUInt64BE()
     this.edgeTags = edgeTags
     this.edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
     this.pathwayLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
@@ -132,7 +133,7 @@ function getSizeOrZero (obj) {
     })
     return payloadSize
   }
-  if (typeof obj === 'object') {
+  if (obj !== null && typeof obj === 'object') {
     try {
       return getHeadersSize(obj)
     } catch {
@@ -194,6 +195,7 @@ class DataStreamsProcessor {
     this.version = version || ''
     this.sequence = 0
     this.flushInterval = flushInterval
+    this._schemaSamplers = {}
 
     if (this.enabled) {
       this.timer = setInterval(this.onInterval.bind(this), flushInterval)
@@ -211,7 +213,8 @@ class DataStreamsProcessor {
       Stats,
       TracerVersion: pkg.version,
       Version: this.version,
-      Lang: 'javascript'
+      Lang: 'javascript',
+      Tags: Object.entries(this.tags).map(([key, value]) => `${key}:${value}`)
     }
     this.writer.flush(payload)
   }
@@ -268,6 +271,11 @@ class DataStreamsProcessor {
         closestOppositeDirectionHash = parentHash
         closestOppositeDirectionEdgeStart = edgeStartNs
       }
+      log.debug(
+        () => `Setting DSM Checkpoint from extracted parent context with hash: ${parentHash} and edge tags: ${edgeTags}`
+      )
+    } else {
+      log.debug(() => 'Setting DSM Checkpoint with empty parent context.')
     }
     const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash)
     const edgeLatencyNs = nowNs - edgeStartNs
@@ -334,8 +342,8 @@ class DataStreamsProcessor {
         backlogs.push(backlog.encode())
       }
       serializedBuckets.push({
-        Start: new Uint64(timeNs),
-        Duration: new Uint64(this.bucketSizeNs),
+        Start: BigInt(timeNs),
+        Duration: BigInt(this.bucketSizeNs),
         Stats: points,
         Backlogs: backlogs
       })
@@ -350,6 +358,32 @@ class DataStreamsProcessor {
 
   setUrl (url) {
     this.writer.setUrl(url)
+  }
+
+  trySampleSchema (topic) {
+    const nowMs = Date.now()
+
+    if (!this._schemaSamplers[topic]) {
+      this._schemaSamplers[topic] = new SchemaSampler()
+    }
+
+    const sampler = this._schemaSamplers[topic]
+    return sampler.trySample(nowMs)
+  }
+
+  canSampleSchema (topic) {
+    const nowMs = Date.now()
+
+    if (!this._schemaSamplers[topic]) {
+      this._schemaSamplers[topic] = new SchemaSampler()
+    }
+
+    const sampler = this._schemaSamplers[topic]
+    return sampler.canSample(nowMs)
+  }
+
+  getSchema (schemaName, iterator) {
+    return SchemaBuilder.getSchema(schemaName, iterator)
   }
 }
 

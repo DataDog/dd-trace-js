@@ -23,7 +23,7 @@ function maybeStartServerlessMiniAgent (config) {
   try {
     require('child_process').spawn(rustBinaryPath, { stdio: 'inherit' })
   } catch (err) {
-    log.error(`Error spawning mini agent process: ${err}`)
+    log.error('Error spawning mini agent process: %s', err.message)
   }
 }
 
@@ -53,18 +53,16 @@ function getIsGCPFunction () {
   return isDeprecatedGCPFunction || isNewerGCPFunction
 }
 
-function getIsAzureFunctionConsumptionPlan () {
+function getIsAzureFunction () {
   const isAzureFunction =
     process.env.FUNCTIONS_EXTENSION_VERSION !== undefined && process.env.FUNCTIONS_WORKER_RUNTIME !== undefined
-  const azureWebsiteSKU = process.env.WEBSITE_SKU
-  const isConsumptionPlan = azureWebsiteSKU === undefined || azureWebsiteSKU === 'Dynamic'
 
-  return isAzureFunction && isConsumptionPlan
+  return isAzureFunction
 }
 
 module.exports = {
   maybeStartServerlessMiniAgent,
   getIsGCPFunction,
-  getIsAzureFunctionConsumptionPlan,
+  getIsAzureFunction,
   getRustBinaryPath
 }

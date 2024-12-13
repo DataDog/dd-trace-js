@@ -7,6 +7,9 @@ const sinon = require('sinon')
 
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const WallProfiler = require('../../src/profiling/profilers/wall')
+const EventsProfiler = require('../../src/profiling/profilers/events')
+
+const samplingContextsAvailable = process.platform !== 'win32'
 
 describe('profiler', function () {
   let Profiler
@@ -137,12 +140,12 @@ describe('profiler', function () {
     it('should allow configuring profilers by string or string arrays', async () => {
       const checks = [
         ['space', SpaceProfiler],
-        ['wall', WallProfiler],
-        ['space,wall', SpaceProfiler, WallProfiler],
-        ['wall,space', WallProfiler, SpaceProfiler],
-        [['space', 'wall'], SpaceProfiler, WallProfiler],
-        [['wall', 'space'], WallProfiler, SpaceProfiler]
-      ]
+        ['wall', WallProfiler, EventsProfiler],
+        ['space,wall', SpaceProfiler, WallProfiler, EventsProfiler],
+        ['wall,space', WallProfiler, SpaceProfiler, EventsProfiler],
+        [['space', 'wall'], SpaceProfiler, WallProfiler, EventsProfiler],
+        [['wall', 'space'], WallProfiler, SpaceProfiler, EventsProfiler]
+      ].map(profilers => profilers.filter(profiler => samplingContextsAvailable || profiler !== EventsProfiler))
 
       for (const [profilers, ...expected] of checks) {
         await profiler._start({
@@ -178,6 +181,21 @@ describe('profiler', function () {
     })
 
     it('should stop when capturing failed', async () => {
+      wallProfiler.profile.throws(new Error('boom'))
+
+      await profiler._start({ profilers, exporters, logger })
+
+      clock.tick(interval)
+
+      sinon.assert.calledOnce(wallProfiler.stop)
+      sinon.assert.calledOnce(spaceProfiler.stop)
+      sinon.assert.calledOnce(consoleLogger.error)
+      sinon.assert.notCalled(wallProfiler.encode)
+      sinon.assert.notCalled(spaceProfiler.encode)
+      sinon.assert.notCalled(exporter.export)
+    })
+
+    it('should not stop when encoding failed', async () => {
       const rejected = Promise.reject(new Error('boom'))
       wallProfiler.encode.returns(rejected)
 
@@ -187,9 +205,25 @@ describe('profiler', function () {
 
       await rejected.catch(() => {})
 
-      sinon.assert.calledOnce(wallProfiler.stop)
-      sinon.assert.calledOnce(spaceProfiler.stop)
+      sinon.assert.notCalled(wallProfiler.stop)
+      sinon.assert.notCalled(spaceProfiler.stop)
       sinon.assert.calledOnce(consoleLogger.error)
+      sinon.assert.calledOnce(exporter.export)
+    })
+
+    it('should not stop when exporting failed', async () => {
+      const rejected = Promise.reject(new Error('boom'))
+      exporter.export.returns(rejected)
+
+      await profiler._start({ profilers, exporters, logger })
+
+      clock.tick(interval)
+
+      await rejected.catch(() => {})
+
+      sinon.assert.notCalled(wallProfiler.stop)
+      sinon.assert.notCalled(spaceProfiler.stop)
+      sinon.assert.calledOnce(exporter.export)
     })
 
     it('should flush when the interval is reached', async () => {
@@ -229,13 +263,6 @@ describe('profiler', function () {
       expect(tags).to.have.property('foo', 'foo')
     })
 
-    it('should not start when disabled', async () => {
-      await profiler._start({ profilers, exporters, enabled: false })
-
-      sinon.assert.notCalled(wallProfiler.start)
-      sinon.assert.notCalled(spaceProfiler.start)
-    })
-
     it('should log exporter errors', async () => {
       exporter.export.rejects(new Error('boom'))
 
@@ -245,7 +272,7 @@ describe('profiler', function () {
 
       await waitForExport()
 
-      sinon.assert.calledOnce(consoleLogger.error)
+      sinon.assert.calledOnce(consoleLogger.warn)
     })
 
     it('should log encoded profile', async () => {
@@ -272,17 +299,6 @@ describe('profiler', function () {
       expect(collectSpace.args[0]()).to.match(/^Collected space profile: /)
 
       sinon.assert.calledWithMatch(submit, 'Submitted profiles')
-    })
-
-    it('should skip submit with no profiles', async () => {
-      const start = new Date()
-      const end = new Date()
-      try {
-        await profiler._submit({}, start, end)
-        throw new Error('should have got exception from _submit')
-      } catch (err) {
-        expect(err.message).to.equal('No profiles to submit')
-      }
     })
 
     it('should have a new start time for each capture', async () => {

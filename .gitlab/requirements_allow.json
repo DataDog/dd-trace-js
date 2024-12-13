@@ -1,0 +1,19 @@
+[
+  {"name": "min glibc x64", "filepath": "/some/path", "args": [], "envars": [], "host": {"os": "linux", "arch": "x64", "libc": "glibc:2.17"}},
+  {"name": "ok glibc x64", "filepath": "/some/path", "args": [], "envars": [], "host": {"os": "linux", "arch": "x64", "libc": "glibc:2.23"}},
+  {"name": "high glibc x64", "filepath": "/some/path", "args": [], "envars": [], "host": {"os": "linux", "arch": "x64", "libc": "glibc:3.0"}},
+  {"name": "musl x64", "filepath": "/some/path", "args": [], "envars": [], "host": {"os": "linux", "arch": "x64", "libc": "musl:1.2.2"}},
+  {"name": "min glibc arm64", "filepath": "/some/path", "args": [], "envars": [], "host": {"os": "linux", "arch": "arm64", "libc": "glibc:2.17"}},
+  {"name": "ok glibc arm64", "filepath": "/some/path", "args": [], "envars": [], "host": {"os": "linux", "arch": "arm64", "libc": "glibc:2.27"}},
+  {"name": "glibc x86","filepath": "/some/path", "args": [], "envars": [], "host": {"os": "linux", "arch": "x86", "libc": "glibc:2.19"}},
+  {"name": "musl arm","filepath": "/some/path", "args": [], "envars": [], "host": {"os": "linux", "arch": "arm", "libc": "musl:1.2.2"}},
+  {"name": "musl arm64", "filepath": "/some/path", "args": [], "envars": [], "host": {"os": "linux", "arch": "arm64", "libc": "musl:1.2.2"}},
+  {"name": "musl x64", "filepath": "/some/path", "args": [], "envars": [], "host": {"os": "linux", "arch": "x64", "libc": "musl:1.2.2"}},
+  {"name": "musl x86", "filepath": "/some/path", "args": [], "envars": [], "host": {"os": "linux", "arch": "x86", "libc": "musl:1.2.2"}},
+  {"name": "windows x64", "filepath": "/some/path", "args": [], "envars": [], "host": {"os": "windows", "arch": "x64"}},
+  {"name": "windows x86", "filepath": "/some/path", "args": [], "envars": [], "host": {"os": "windows", "arch": "x86"}},
+  {"name": "macos x64", "filepath": "/some/path", "args": [], "envars": [], "host": {"os": "darwin", "arch": "x64"}},
+  {"name": "macos arm64", "filepath": "/some/path", "args": [], "envars": [], "host": {"os": "darwin", "arch": "arm64"}},
+  {"name": "node app", "filepath": "/pathto/node", "args": ["/pathto/node", "./app.js"], "envars": [], "host": {"os": "linux", "arch": "x64", "libc": "glibc:2.40"}},
+  {"name": "ts-node app", "filepath": "/pathto/ts-node", "args": ["/pathto/ts-node", "./app.js"], "envars": [], "host": {"os": "linux", "arch": "x64", "libc": "glibc:2.40"}}
+]

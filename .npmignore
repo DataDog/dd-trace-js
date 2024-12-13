@@ -12,6 +12,7 @@
 !index.js
 !esbuild.js
 !init.js
+!initialize.mjs
 !loader-hook.mjs
 !register.js
 !package.json

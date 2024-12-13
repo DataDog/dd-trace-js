@@ -6,18 +6,17 @@ const taintTrackingOperations = require('../../../../src/appsec/iast/taint-track
 const dc = require('dc-polyfill')
 const {
   HTTP_REQUEST_COOKIE_VALUE,
-  HTTP_REQUEST_COOKIE_NAME,
-  HTTP_REQUEST_HEADER_NAME,
   HTTP_REQUEST_HEADER_VALUE,
   HTTP_REQUEST_PATH_PARAM,
   HTTP_REQUEST_URI
 } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 
 const middlewareNextChannel = dc.channel('apm:express:middleware:next')
-const queryParseFinishChannel = dc.channel('datadog:qs:parse:finish')
+const queryReadFinishChannel = dc.channel('datadog:query:read:finish')
 const bodyParserFinishChannel = dc.channel('datadog:body-parser:read:finish')
 const cookieParseFinishCh = dc.channel('datadog:cookie:parse:finish')
 const processParamsStartCh = dc.channel('datadog:express:process_params:start')
+const routerParamStartCh = dc.channel('datadog:router:param:start')
 
 describe('IAST Taint tracking plugin', () => {
   let taintTrackingPlugin
@@ -44,13 +43,18 @@ describe('IAST Taint tracking plugin', () => {
   })
 
   it('Should subscribe to body parser, qs, cookie and process_params channel', () => {
-    expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(6)
+    expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(11)
     expect(taintTrackingPlugin._subscriptions[0]._channel.name).to.equals('datadog:body-parser:read:finish')
-    expect(taintTrackingPlugin._subscriptions[1]._channel.name).to.equals('datadog:qs:parse:finish')
-    expect(taintTrackingPlugin._subscriptions[2]._channel.name).to.equals('apm:express:middleware:next')
-    expect(taintTrackingPlugin._subscriptions[3]._channel.name).to.equals('datadog:cookie:parse:finish')
-    expect(taintTrackingPlugin._subscriptions[4]._channel.name).to.equals('datadog:express:process_params:start')
-    expect(taintTrackingPlugin._subscriptions[5]._channel.name).to.equals('apm:graphql:resolve:start')
+    expect(taintTrackingPlugin._subscriptions[1]._channel.name).to.equals('datadog:multer:read:finish')
+    expect(taintTrackingPlugin._subscriptions[2]._channel.name).to.equals('datadog:query:read:finish')
+    expect(taintTrackingPlugin._subscriptions[3]._channel.name).to.equals('datadog:express:query:finish')
+    expect(taintTrackingPlugin._subscriptions[4]._channel.name).to.equals('apm:express:middleware:next')
+    expect(taintTrackingPlugin._subscriptions[5]._channel.name).to.equals('datadog:cookie:parse:finish')
+    expect(taintTrackingPlugin._subscriptions[6]._channel.name).to.equals('datadog:express:process_params:start')
+    expect(taintTrackingPlugin._subscriptions[7]._channel.name).to.equals('datadog:router:param:start')
+    expect(taintTrackingPlugin._subscriptions[8]._channel.name).to.equals('apm:graphql:resolve:start')
+    expect(taintTrackingPlugin._subscriptions[9]._channel.name).to.equals('datadog:url:parse:finish')
+    expect(taintTrackingPlugin._subscriptions[10]._channel.name).to.equals('datadog:url:getter:finish')
   })
 
   describe('taint sources', () => {
@@ -135,7 +139,7 @@ describe('IAST Taint tracking plugin', () => {
         }
       }
 
-      queryParseFinishChannel.publish({ qs: req.query })
+      queryReadFinishChannel.publish({ query: req.query })
 
       expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
         iastContext,
@@ -204,13 +208,11 @@ describe('IAST Taint tracking plugin', () => {
       expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
         iastContext,
         cookies,
-        HTTP_REQUEST_COOKIE_VALUE,
-        true,
-        HTTP_REQUEST_COOKIE_NAME
+        HTTP_REQUEST_COOKIE_VALUE
       )
     })
 
-    it('Should taint request params when process params event is published', () => {
+    it('Should taint request params when process params event is published with processParamsStartCh', () => {
       const req = {
         params: {
           parameter1: 'tainted1'
@@ -218,6 +220,21 @@ describe('IAST Taint tracking plugin', () => {
       }
 
       processParamsStartCh.publish({ req })
+      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+        iastContext,
+        req.params,
+        HTTP_REQUEST_PATH_PARAM
+      )
+    })
+
+    it('Should taint request params when process params event is published with routerParamStartCh', () => {
+      const req = {
+        params: {
+          parameter1: 'tainted1'
+        }
+      }
+
+      routerParamStartCh.publish({ req })
       expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
         iastContext,
         req.params,
@@ -244,9 +261,7 @@ describe('IAST Taint tracking plugin', () => {
       expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
         iastContext,
         req.headers,
-        HTTP_REQUEST_HEADER_VALUE,
-        true,
-        HTTP_REQUEST_HEADER_NAME
+        HTTP_REQUEST_HEADER_VALUE
       )
 
       expect(taintTrackingOperations.newTaintedString).to.be.calledOnceWith(

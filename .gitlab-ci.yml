@@ -1,99 +1,34 @@
 stages:
-  - package
-  - deploy
+  - shared-pipeline
   - benchmarks
   - benchmarks-pr-comment
+  - single-step-instrumentation-tests
+  - macrobenchmarks
 
 include:
-  - remote: https://gitlab-templates.ddbuild.io/apm/packaging.yml
+  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include/one-pipeline.yml
   - local: ".gitlab/benchmarks.yml"
+  - local: ".gitlab/macrobenchmarks.yml"
 
 variables:
-  JS_PACKAGE_VERSION:
-    description: "Version to build for .deb and .rpm. Must be already published in NPM"
-  DOWNSTREAM_BRANCH:
-    value: "master"
-    description: "Run a specific datadog-reliability-env branch downstream"
+  # dd-trace-js has some exceptions to the default names
+  AGENT_REPO_PRODUCT_NAME: auto_inject-node
+  SYSTEM_TESTS_LIBRARY: nodejs
 
-.common: &common
-  tags: [ "runner:main", "size:large" ]
+onboarding_tests_installer:
+  parallel:
+    matrix:
+      - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs,test-app-nodejs-container]
+        SCENARIO: [ SIMPLE_INSTALLER_AUTO_INJECTION, SIMPLE_AUTO_INJECTION_PROFILING ]
 
-package:
-  extends: .package
-  rules:
-  - if: $JS_PACKAGE_VERSION
-    when: on_success
-  - if: '$CI_COMMIT_TAG =~ /^v.*/'
-    when: on_success
-  script:
-    - ../.gitlab/build-deb-rpm.sh
-
-package-arm:
-  extends: .package-arm
-  rules:
-  - if: $JS_PACKAGE_VERSION
-    when: on_success
-  - if: '$CI_COMMIT_TAG =~ /^v.*/'
-    when: on_success
-  script:
-    - ../.gitlab/build-deb-rpm.sh
-
-.release-package:
-  stage: deploy
+onboarding_tests_k8s_injection:
   variables:
-    PRODUCT_NAME: auto_inject-node
-    PACKAGE_FILTER: js # product name is "node" but package name ends "js"
+    WEBLOG_VARIANT: sample-app
 
-deploy_to_reliability_env:
-  stage: deploy
+requirements_json_test:
   rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: on_success
-    - when: manual
-      allow_failure: true
-  trigger:
-    project: DataDog/apm-reliability/datadog-reliability-env
-    branch: $DOWNSTREAM_BRANCH
+    - when: on_success
   variables:
-    UPSTREAM_BRANCH: $CI_COMMIT_REF_NAME
-    UPSTREAM_PROJECT_ID: $CI_PROJECT_ID
-    UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
-    UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA
+    REQUIREMENTS_BLOCK_JSON_PATH: ".gitlab/requirements_block.json"
+    REQUIREMENTS_ALLOW_JSON_PATH: ".gitlab/requirements_allow.json"
 
-deploy_to_docker_registries:
-  stage: deploy
-  needs: []
-  rules:
-    - if: '$CI_COMMIT_TAG =~ /^v.*/ || $CI_COMMIT_TAG == "dev"'
-      when: on_success
-    - when: manual
-      allow_failure: true
-  trigger:
-    project: DataDog/public-images
-    branch: main
-    strategy: depend
-  variables:
-    IMG_SOURCES: ghcr.io/datadog/dd-trace-js/dd-lib-js-init:$CI_COMMIT_TAG
-    IMG_DESTINATIONS: dd-lib-js-init:$CI_COMMIT_TAG
-    IMG_SIGNING: "false"
-    RETRY_COUNT: 5
-    RETRY_DELAY: 300
-
-deploy_latest_to_docker_registries:
-  stage: deploy
-  needs: []
-  rules:
-    - if: '$CI_COMMIT_TAG =~ /^v.*/'
-      when: on_success
-    - when: manual
-      allow_failure: true
-  trigger:
-    project: DataDog/public-images
-    branch: main
-    strategy: depend
-  variables:
-    IMG_SOURCES: ghcr.io/datadog/dd-trace-js/dd-lib-js-init:$CI_COMMIT_TAG
-    IMG_DESTINATIONS: dd-lib-js-init:latest
-    IMG_SIGNING: "false"
-    RETRY_COUNT: 5
-    RETRY_DELAY: 300

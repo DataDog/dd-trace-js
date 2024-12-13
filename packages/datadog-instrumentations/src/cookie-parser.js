@@ -1,13 +1,12 @@
 'use strict'
 
-const { AbortController } = require('node-abort-controller') // AbortController is not available in node <15
 const shimmer = require('../../datadog-shimmer')
 const { channel, addHook } = require('./helpers/instrument')
 
 const cookieParserReadCh = channel('datadog:cookie-parser:read:finish')
 
 function publishRequestCookieAndNext (req, res, next) {
-  return function cookieParserWrapper () {
+  return shimmer.wrapFunction(next, next => function cookieParserWrapper () {
     if (cookieParserReadCh.hasSubscribers && req) {
       const abortController = new AbortController()
 
@@ -19,17 +18,17 @@ function publishRequestCookieAndNext (req, res, next) {
     }
 
     return next.apply(this, arguments)
-  }
+  })
 }
 
 addHook({
   name: 'cookie-parser',
   versions: ['>=1.0.0']
 }, cookieParser => {
-  return shimmer.wrap(cookieParser, function () {
+  return shimmer.wrapFunction(cookieParser, cookieParser => function () {
     const cookieMiddleware = cookieParser.apply(this, arguments)
 
-    return shimmer.wrap(cookieMiddleware, function (req, res, next) {
+    return shimmer.wrapFunction(cookieMiddleware, cookieMiddleware => function (req, res, next) {
       arguments[2] = publishRequestCookieAndNext(req, res, next)
       return cookieMiddleware.apply(this, arguments)
     })

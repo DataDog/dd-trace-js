@@ -6,7 +6,7 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const web = require('../../dd-trace/src/plugins/util/web')
 
-const errorPages = ['/404', '/500', '/_error', '/_not-found']
+const errorPages = ['/404', '/500', '/_error', '/_not-found', '/_not-found/page']
 
 class NextPlugin extends ServerPlugin {
   static get id () {
@@ -120,7 +120,6 @@ class NextPlugin extends ServerPlugin {
       'resource.name': `${req.method} ${page}`.trim(),
       'next.page': page
     })
-
     web.setRoute(req, page)
   }
 

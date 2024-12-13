@@ -2,7 +2,6 @@
 
 const axios = require('axios')
 const http = require('http')
-const getPort = require('get-port')
 const os = require('os')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -22,7 +21,11 @@ describe('Plugin', () => {
     const api = http.createServer((req, res) => res.end('OK'))
 
     api.listen(apiPort, function () {
+      const apiPort = api.address().port
+
       proxy.listen(proxyPort, function () {
+        const proxyPort = proxy.address().port
+
         gateway = Gateway({
           edgemicro: {
             port: gatewayPort,
@@ -34,7 +37,10 @@ describe('Plugin', () => {
           ]
         })
 
-        gateway.start(cb)
+        gateway.start((err, server) => {
+          gatewayPort = server.address().port
+          cb(err)
+        })
       })
     })
   }
@@ -47,12 +53,6 @@ describe('Plugin', () => {
 
   describe('microgateway-core', () => {
     withVersions('microgateway-core', 'microgateway-core', (version) => {
-      beforeEach(async () => {
-        gatewayPort = await getPort()
-        proxyPort = await getPort()
-        apiPort = await getPort()
-      })
-
       afterEach(() => {
         stopGateway()
       })

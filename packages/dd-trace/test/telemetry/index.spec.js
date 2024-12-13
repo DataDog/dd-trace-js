@@ -3,7 +3,7 @@
 require('../setup/tap')
 
 const tracerVersion = require('../../../../package.json').version
-const proxyquire = require('proxyquire')
+const proxyquire = require('proxyquire').noPreserveCache()
 const http = require('http')
 const { once } = require('events')
 const { storage } = require('../../../datadog-core')
@@ -70,7 +70,7 @@ describe('telemetry', () => {
       },
       circularObject,
       appsec: { enabled: true },
-      profiling: { enabled: true },
+      profiling: { enabled: 'true' },
       peerServiceMapping: {
         service_1: 'remapped_service_1',
         service_2: 'remapped_service_2'
@@ -203,6 +203,7 @@ describe('telemetry app-heartbeat', () => {
     telemetry.stop()
     traceAgent.close()
   })
+
   it('should send heartbeat in uniform intervals', (done) => {
     let beats = 0 // to keep track of the amont of times extendedHeartbeat is called
     const sendDataRequest = {
@@ -386,6 +387,36 @@ describe('Telemetry extended heartbeat', () => {
     telemetry.updateConfig(changeNeedingNameRemapping, config)
     clock.tick(86400000)
     expect(configuration).to.deep.equal(expectedConfigList)
+
+    const samplingRule = [
+      {
+        name: 'sampler.rules', // one of the config names that require a remapping
+        value: [
+          { service: '*', sampling_rate: 1 },
+          {
+            service: 'svc*',
+            resource: '*abc',
+            name: 'op-??',
+            tags: { 'tag-a': 'ta-v*', 'tag-b': 'tb-v?', 'tag-c': 'tc-v' },
+            sample_rate: 0.5
+          }
+        ],
+        origin: 'code'
+      }
+    ]
+    const expectedConfigListWithSamplingRules =
+      expectedConfigList.concat([
+        {
+          name: 'DD_TRACE_SAMPLING_RULES',
+          value:
+          // eslint-disable-next-line @stylistic/js/max-len
+          '[{"service":"*","sampling_rate":1},{"service":"svc*","resource":"*abc","name":"op-??","tags":{"tag-a":"ta-v*","tag-b":"tb-v?","tag-c":"tc-v"},"sample_rate":0.5}]',
+          origin: 'code'
+        }
+      ])
+    telemetry.updateConfig(samplingRule, config)
+    clock.tick(86400000)
+    expect(configuration).to.deep.equal(expectedConfigListWithSamplingRules)
     done()
   })
 })
@@ -409,6 +440,7 @@ describe('Telemetry retry', () => {
       bar2: { _enabled: false }
     }
   })
+
   afterEach(() => {
     clock.restore()
   })
@@ -765,6 +797,137 @@ describe('Telemetry retry', () => {
         { name: 'foo2', enabled: true, auto_enabled: true },
         { name: 'bar2', enabled: false, auto_enabled: true }
       ]
+    })
+  })
+})
+
+describe('AVM OSS', () => {
+  describe('SCA configuration in telemetry messages', () => {
+    let telemetry
+    let telemetryConfig
+    let clock
+
+    const HEARTBEAT_INTERVAL = 86410000
+
+    const suite = [
+      {
+        scaValue: true,
+        scaValueOrigin: 'env_var',
+        testDescription: 'should send when env var is true'
+      },
+      {
+        scaValue: false,
+        scaValueOrigin: 'env_var',
+        testDescription: 'should send when env var is false'
+      },
+      {
+        scaValue: null,
+        scaValueOrigin: 'default',
+        testDescription: 'should send null (default) when no env var is set'
+      }
+    ]
+
+    suite.forEach(({ scaValue, scaValueOrigin, testDescription }) => {
+      describe(testDescription, () => {
+        before((done) => {
+          clock = sinon.useFakeTimers()
+
+          storage.run({ noop: true }, () => {
+            traceAgent = http.createServer(async (req, res) => {
+              const chunks = []
+              for await (const chunk of req) {
+                chunks.push(chunk)
+              }
+              req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+              traceAgent.reqs.push(req)
+              traceAgent.emit('handled-req')
+              res.end()
+            }).listen(0, done)
+          })
+
+          traceAgent.reqs = []
+
+          delete require.cache[require.resolve('../../src/telemetry/send-data')]
+          delete require.cache[require.resolve('../../src/telemetry')]
+          telemetry = require('../../src/telemetry')
+
+          telemetryConfig = {
+            telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+            hostname: 'localhost',
+            port: traceAgent.address().port,
+            service: 'test service',
+            version: '1.2.3-beta4',
+            env: 'preprod',
+            tags: {
+              'runtime-id': '1a2b3c'
+            },
+            appsec: { enabled: false },
+            profiling: { enabled: false }
+          }
+        })
+
+        before(() => {
+          telemetry.updateConfig(
+            [{ name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin }],
+            telemetryConfig
+          )
+          telemetry.start(telemetryConfig, { _pluginsByName: {} })
+        })
+
+        after((done) => {
+          clock.restore()
+          telemetry.stop()
+          traceAgent.close(done)
+        })
+
+        it('in app-started message', () => {
+          return testSeq(1, 'app-started', payload => {
+            expect(payload).to.have.property('configuration').that.deep.equal([
+              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin }
+            ])
+          }, true)
+        })
+
+        it('in app-extended-heartbeat message', () => {
+          // Skip a full day
+          clock.tick(86400000)
+          return testSeq(2, 'app-extended-heartbeat', payload => {
+            expect(payload).to.have.property('configuration').that.deep.equal([
+              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin }
+            ])
+          }, true)
+        })
+      })
+    })
+  })
+
+  describe('Telemetry and SCA misconfiguration', () => {
+    let telemetry
+
+    const logSpy = {
+      warn: sinon.spy()
+    }
+
+    before(() => {
+      telemetry = proxyquire('../../src/telemetry', {
+        '../log': logSpy
+      })
+    })
+
+    after(() => {
+      telemetry.stop()
+      sinon.restore()
+    })
+
+    it('should log a warning when sca is enabled and telemetry no', () => {
+      telemetry.start(
+        {
+          telemetry: { enabled: false },
+          sca: { enabled: true }
+        }
+      )
+
+      expect(logSpy.warn).to.have.been.calledOnceWith('DD_APPSEC_SCA_ENABLED requires enabling telemetry to work.')
     })
   })
 })

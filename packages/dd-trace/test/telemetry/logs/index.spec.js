@@ -4,6 +4,7 @@ require('../../setup/tap')
 
 const { match } = require('sinon')
 const proxyquire = require('proxyquire')
+const { Log } = require('../../../src/log/log')
 
 describe('telemetry logs', () => {
   let defaultConfig
@@ -40,7 +41,7 @@ describe('telemetry logs', () => {
 
       logs.start(defaultConfig)
 
-      expect(telemetryLog.subscribe).to.have.been.calledOnce
+      expect(telemetryLog.subscribe).to.have.been.calledTwice
     })
 
     it('should be subscribe only once', () => {
@@ -52,7 +53,7 @@ describe('telemetry logs', () => {
       logs.start(defaultConfig)
       logs.start(defaultConfig)
 
-      expect(telemetryLog.subscribe).to.have.been.calledOnce
+      expect(telemetryLog.subscribe).to.have.been.calledTwice
     })
 
     it('should be disabled and not subscribe if DD_TELEMETRY_LOG_COLLECTION_ENABLED = false', () => {
@@ -76,7 +77,7 @@ describe('telemetry logs', () => {
 
       logs.stop()
 
-      expect(telemetryLog.unsubscribe).to.have.been.calledOnce
+      expect(telemetryLog.unsubscribe).to.have.been.calledTwice
     })
   })
 
@@ -84,9 +85,11 @@ describe('telemetry logs', () => {
     const dc = require('dc-polyfill')
     let logCollectorAdd
     let telemetryLog
+    let errorLog
 
     beforeEach(() => {
       telemetryLog = dc.channel('datadog:telemetry:log')
+      errorLog = dc.channel('datadog:log:error')
 
       logCollectorAdd = sinon.stub()
       const logs = proxyquire('../../../src/telemetry/logs', {
@@ -133,6 +136,44 @@ describe('telemetry logs', () => {
       telemetryLog.publish({ message: 'message', level: 'INFO' })
 
       expect(logCollectorAdd).to.not.be.called
+    })
+
+    describe('datadog:log:error', () => {
+      it('should be called when an Error object is published to datadog:log:error', () => {
+        const error = new Error('message')
+        const stack = error.stack
+        errorLog.publish({ cause: error })
+
+        expect(logCollectorAdd)
+          .to.be.calledOnceWith(match({
+            message: 'Generic Error',
+            level: 'ERROR',
+            errorType: 'Error',
+            stack_trace: stack
+          }))
+      })
+
+      it('should be called when an error string is published to datadog:log:error', () => {
+        errorLog.publish({ message: 'custom error message' })
+
+        expect(logCollectorAdd).to.be.calledOnceWith(match({
+          message: 'custom error message',
+          level: 'ERROR',
+          stack_trace: undefined
+        }))
+      })
+
+      it('should not be called when an invalid object is published to datadog:log:error', () => {
+        errorLog.publish({ invalid: 'field' })
+
+        expect(logCollectorAdd).not.to.be.called
+      })
+
+      it('should not be called when an object without message and stack is published to datadog:log:error', () => {
+        errorLog.publish(Log.parse(() => new Error('error')))
+
+        expect(logCollectorAdd).not.to.be.called
+      })
     })
   })
 

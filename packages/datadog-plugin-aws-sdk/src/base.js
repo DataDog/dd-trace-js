@@ -4,9 +4,12 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
 const { isTrue } = require('../../dd-trace/src/util')
+const coalesce = require('koalas')
+const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
 
 class BaseAwsSdkPlugin extends ClientPlugin {
   static get id () { return 'aws' }
+  static get isPayloadReporter () { return false }
 
   get serviceIdentifier () {
     const id = this.constructor.id.toLowerCase()
@@ -17,6 +20,14 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       value: id
     })
     return id
+  }
+
+  get cloudTaggingConfig () {
+    return this._tracerConfig.cloudPayloadTagging
+  }
+
+  get payloadTaggingRules () {
+    return this.cloudTaggingConfig.rules.aws?.[this.constructor.id]
   }
 
   constructor (...args) {
@@ -50,6 +61,12 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
       this.requestInject(span, request)
 
+      if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.requestsEnabled) {
+        const maxDepth = this.cloudTaggingConfig.maxDepth
+        const requestTags = tagsFromRequest(this.payloadTaggingRules, request.params, { maxDepth })
+        span.addTags(requestTags)
+      }
+
       const store = storage.getStore()
 
       this.enter(span, store)
@@ -64,18 +81,29 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       span.setTag('region', region)
     })
 
-    this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ({ response }) => {
+    this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ({ response, cbExists = false }) => {
       const store = storage.getStore()
       if (!store) return
       const { span } = store
       if (!span) return
+      // try to extract DSM context from response if no callback exists as extraction normally happens in CB
+      if (!cbExists && this.serviceIdentifier === 'sqs') {
+        const params = response.request.params
+        const operation = response.request.operation
+        this.responseExtractDSMContext(operation, params, response.data ?? response, span)
+      }
       this.addResponseTags(span, response)
+      this.addSpanPointers(span, response)
       this.finish(span, response, response.error)
     })
   }
 
   requestInject (span, request) {
     // implemented by subclasses, or not
+  }
+
+  addSpanPointers (span, response) {
+    // Optionally implemented by subclasses, for services where we're unable to inject trace context
   }
 
   operationFromRequest (request) {
@@ -109,6 +137,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     const params = response.request.params
     const operation = response.request.operation
     const extraTags = this.generateTags(params, operation, response) || {}
+
     const tags = Object.assign({
       'aws.response.request_id': response.requestId,
       'resource.name': operation,
@@ -116,6 +145,22 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     }, extraTags)
 
     span.addTags(tags)
+
+    if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.responsesEnabled) {
+      const maxDepth = this.cloudTaggingConfig.maxDepth
+      const responseBody = this.extractResponseBody(response)
+      const responseTags = tagsFromResponse(this.payloadTaggingRules, responseBody, { maxDepth })
+      span.addTags(responseTags)
+    }
+  }
+
+  extractResponseBody (response) {
+    if (response.hasOwnProperty('data')) {
+      return response.data
+    }
+    return Object.fromEntries(
+      Object.entries(response).filter(([key]) => !['request', 'requestId', 'error', '$metadata'].includes(key))
+    )
   }
 
   generateTags () {
@@ -157,8 +202,22 @@ function normalizeConfig (config, serviceIdentifier) {
       break
   }
 
+  // check if AWS batch propagation or AWS_[SERVICE] batch propagation is enabled via env variable
+  const serviceId = serviceIdentifier.toUpperCase()
+  const batchPropagationEnabled = isTrue(
+    coalesce(
+      specificConfig.batchPropagationEnabled,
+      process.env[`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`],
+      config.batchPropagationEnabled,
+      process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED,
+      false
+    )
+  )
+
+  // Merge the specific config back into the main config
   return Object.assign({}, config, specificConfig, {
     splitByAwsService: config.splitByAwsService !== false,
+    batchPropagationEnabled,
     hooks
   })
 }

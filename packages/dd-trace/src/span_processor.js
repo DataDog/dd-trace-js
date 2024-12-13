@@ -10,6 +10,9 @@ const { SpanStatsProcessor } = require('./span_stats')
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
+const { channel } = require('dc-polyfill')
+const spanProcessCh = channel('dd-trace:span:process')
+
 class SpanProcessor {
   constructor (exporter, prioritySampler, config) {
     this._exporter = exporter
@@ -45,6 +48,8 @@ class SpanProcessor {
           const formattedSpan = format(span)
           this._stats.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
+
+          spanProcessCh.publish({ span })
         } else {
           active.push(span)
         }
@@ -82,22 +87,22 @@ class SpanProcessor {
         const id = context.toSpanId()
 
         if (finished.has(span)) {
-          log.error(`Span was already finished in the same trace: ${span}`)
+          log.error('Span was already finished in the same trace: %s', span)
         } else {
           finished.add(span)
 
           if (finishedIds.has(id)) {
-            log.error(`Another span with the same ID was already finished in the same trace: ${span}`)
+            log.error('Another span with the same ID was already finished in the same trace: %s', span)
           } else {
             finishedIds.add(id)
           }
 
           if (context._trace !== trace) {
-            log.error(`A span was finished in the wrong trace: ${span}.`)
+            log.error('A span was finished in the wrong trace: %s', span)
           }
 
           if (finishedSpans.has(span)) {
-            log.error(`Span was already finished in a different trace: ${span}`)
+            log.error('Span was already finished in a different trace: %s', span)
           } else {
             finishedSpans.add(span)
           }
@@ -109,35 +114,35 @@ class SpanProcessor {
         const id = context.toSpanId()
 
         if (started.has(span)) {
-          log.error(`Span was already started in the same trace: ${span}`)
+          log.error('Span was already started in the same trace: %s', span)
         } else {
           started.add(span)
 
           if (startedIds.has(id)) {
-            log.error(`Another span with the same ID was already started in the same trace: ${span}`)
+            log.error('Another span with the same ID was already started in the same trace: %s', span)
           } else {
             startedIds.add(id)
           }
 
           if (context._trace !== trace) {
-            log.error(`A span was started in the wrong trace: ${span}.`)
+            log.error('A span was started in the wrong trace: %s', span)
           }
 
           if (startedSpans.has(span)) {
-            log.error(`Span was already started in a different trace: ${span}`)
+            log.error('Span was already started in a different trace: %s', span)
           } else {
             startedSpans.add(span)
           }
         }
 
         if (!finished.has(span)) {
-          log.error(`Span started in one trace but was finished in another trace: ${span}`)
+          log.error('Span started in one trace but was finished in another trace: %s', span)
         }
       }
 
       for (const span of trace.finished) {
         if (!started.has(span)) {
-          log.error(`Span finished in one trace but was started in another trace: ${span}`)
+          log.error('Span finished in one trace but was started in another trace: %s', span)
         }
       }
     }

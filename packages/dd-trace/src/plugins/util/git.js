@@ -61,7 +61,7 @@ function sanitizedExec (
         exitCode: err.status || err.errno
       })
     }
-    log.error(err)
+    log.error('Git plugin error executing command', err)
     return ''
   } finally {
     storage.enterWith(store)
@@ -73,6 +73,18 @@ function isDirectory (path) {
     const stats = fs.statSync(path)
     return stats.isDirectory()
   } catch (e) {
+    return false
+  }
+}
+
+function isGitAvailable () {
+  const isWindows = os.platform() === 'win32'
+  const command = isWindows ? 'where' : 'which'
+  try {
+    cp.execFileSync(command, ['git'], { stdio: 'pipe' })
+    return true
+  } catch (e) {
+    incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'check_git', exitCode: 'missing' })
     return false
   }
 }
@@ -132,7 +144,7 @@ function unshallowRepository () {
     ], { stdio: 'pipe' })
   } catch (err) {
     // If the local HEAD is a commit that has not been pushed to the remote, the above command will fail.
-    log.error(err)
+    log.error('Git plugin error executing git command', err)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
@@ -145,7 +157,7 @@ function unshallowRepository () {
       ], { stdio: 'pipe' })
     } catch (err) {
       // If the CI is working on a detached HEAD or branch tracking hasn’t been set up, the above command will fail.
-      log.error(err)
+      log.error('Git plugin error executing fallback git command', err)
       incrementCountMetric(
         TELEMETRY_GIT_COMMAND_ERRORS,
         { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
@@ -184,7 +196,7 @@ function getLatestCommits () {
     distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_local_commits' }, Date.now() - startTime)
     return result
   } catch (err) {
-    log.error(`Get latest commits failed: ${err.message}`)
+    log.error('Get latest commits failed: %s', err.message)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'get_local_commits', errorType: err.status }
@@ -217,7 +229,7 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
       .split('\n')
       .filter(commit => commit)
   } catch (err) {
-    log.error(`Get commits to upload failed: ${err.message}`)
+    log.error('Get commits to upload failed: %s', err.message)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'get_objects', errorType: err.code, exitCode: err.status || err.errno } // err.status might be null
@@ -260,7 +272,7 @@ function generatePackFilesForCommits (commitsToUpload) {
   try {
     result = execGitPackObjects(temporaryPath)
   } catch (err) {
-    log.error(err)
+    log.error('Git plugin error executing git pack-objects command', err)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'pack_objects', exitCode: err.status || err.errno, errorType: err.code }
@@ -280,7 +292,7 @@ function generatePackFilesForCommits (commitsToUpload) {
     try {
       result = execGitPackObjects(cwdPath)
     } catch (err) {
-      log.error(err)
+      log.error('Git plugin error executing fallback git pack-objects command', err)
       incrementCountMetric(
         TELEMETRY_GIT_COMMAND_ERRORS,
         { command: 'pack_objects', exitCode: err.status || err.errno, errorType: err.code }
@@ -342,5 +354,6 @@ module.exports = {
   getCommitsRevList,
   GIT_REV_LIST_MAX_BUFFER,
   isShallowRepository,
-  unshallowRepository
+  unshallowRepository,
+  isGitAvailable
 }

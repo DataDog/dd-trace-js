@@ -21,7 +21,8 @@ addHook({
   name: 'mongoose',
   versions: ['>=4.6.4 <5', '5', '6', '>=7']
 }, mongoose => {
-  if (mongoose.Promise !== global.Promise) {
+  // As of Mongoose 7, custom promise libraries are no longer supported and mongoose.Promise may be undefined
+  if (mongoose.Promise && mongoose.Promise !== global.Promise) {
     shimmer.wrap(mongoose.Promise.prototype, 'then', wrapThen)
   }
 
@@ -127,22 +128,21 @@ addHook({
                     const resolve = arguments[0]
                     const reject = arguments[1]
 
-                    // not using shimmer here because resolve/reject could be empty
-                    arguments[0] = function wrappedResolve () {
+                    arguments[0] = shimmer.wrapFunction(resolve, resolve => function wrappedResolve () {
                       finish()
 
                       if (resolve) {
                         return resolve.apply(this, arguments)
                       }
-                    }
+                    })
 
-                    arguments[1] = function wrappedReject () {
+                    arguments[1] = shimmer.wrapFunction(reject, reject => function wrappedReject () {
                       finish()
 
                       if (reject) {
                         return reject.apply(this, arguments)
                       }
-                    }
+                    })
 
                     return originalThen.apply(this, arguments)
                   }
@@ -168,7 +168,7 @@ addHook({
   versions: ['6', '>=7'],
   file: 'lib/helpers/query/sanitizeFilter.js'
 }, sanitizeFilter => {
-  return shimmer.wrap(sanitizeFilter, function wrappedSanitizeFilter () {
+  return shimmer.wrapFunction(sanitizeFilter, sanitizeFilter => function wrappedSanitizeFilter () {
     const sanitizedObject = sanitizeFilter.apply(this, arguments)
 
     if (sanitizeFilterFinishCh.hasSubscribers) {

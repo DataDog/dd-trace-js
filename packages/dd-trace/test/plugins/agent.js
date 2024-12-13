@@ -4,7 +4,6 @@ const http = require('http')
 const bodyParser = require('body-parser')
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
-const getPort = require('get-port')
 const express = require('express')
 const path = require('path')
 const ritm = require('../../src/ritm')
@@ -38,20 +37,52 @@ function ciVisRequestHandler (request, response) {
   })
 }
 
-function dsmStatsExist (agent, expectedHash) {
+function dsmStatsExist (agent, expectedHash, expectedEdgeTags) {
   const dsmStats = agent.getDsmStats()
   let hashFound = false
   if (dsmStats.length !== 0) {
-    dsmStats.forEach((statsTimeBucket) => {
-      statsTimeBucket.Stats.forEach((statsBucket) => {
-        statsBucket.Stats.forEach((stats) => {
+    for (const statsTimeBucket of dsmStats) {
+      for (const statsBucket of statsTimeBucket.Stats) {
+        for (const stats of statsBucket.Stats) {
           if (stats.Hash.toString() === expectedHash) {
+            if (expectedEdgeTags) {
+              if (expectedEdgeTags.length !== stats.EdgeTags.length) {
+                return false
+              }
+
+              const expected = expectedEdgeTags.slice().sort()
+              const actual = stats.EdgeTags.slice().sort()
+
+              for (let i = 0; i < expected.length; i++) {
+                if (expected[i] !== actual[i]) {
+                  return false
+                }
+              }
+            }
             hashFound = true
             return hashFound
           }
-        })
-      })
-    })
+        }
+      }
+    }
+  }
+  return hashFound
+}
+
+function dsmStatsExistWithParentHash (agent, expectedParentHash) {
+  const dsmStats = agent.getDsmStats()
+  let hashFound = false
+  if (dsmStats.length !== 0) {
+    for (const statsTimeBucket of dsmStats) {
+      for (const statsBucket of statsTimeBucket.Stats) {
+        for (const stats of statsBucket.Stats) {
+          if (stats.ParentHash.toString() === expectedParentHash) {
+            hashFound = true
+            return hashFound
+          }
+        }
+      }
+    }
   }
   return hashFound
 }
@@ -161,7 +192,6 @@ function getDsmStats () {
 }
 
 const DEFAULT_AVAILABLE_ENDPOINTS = ['/evp_proxy/v2']
-
 let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
 
 /**
@@ -185,7 +215,7 @@ function runCallback (callback, options, handlers) {
     deferred.reject = reject
   })
 
-  const timeoutMs = options && typeof options === 'object' && options.timeoutMs ? options.timeoutMs : 1000
+  const timeoutMs = options !== null && typeof options === 'object' && options.timeoutMs ? options.timeoutMs : 1000
 
   const timeout = setTimeout(() => {
     if (error) {
@@ -198,10 +228,10 @@ function runCallback (callback, options, handlers) {
 
   function handler () {
     try {
-      callback.apply(null, arguments)
+      const result = callback.apply(null, arguments)
       handlers.delete(handlerPayload)
       clearTimeout(timeout)
-      deferred.resolve()
+      deferred.resolve(result)
     } catch (e) {
       if (options && options.rejectFirst) {
         clearTimeout(timeout)
@@ -270,8 +300,6 @@ module.exports = {
       res.status(200).send()
     })
 
-    const port = await getPort()
-
     const server = this.server = http.createServer(agent)
     const emit = server.emit
 
@@ -283,7 +311,25 @@ module.exports = {
     server.on('connection', socket => sockets.push(socket))
 
     const promise = new Promise((resolve, reject) => {
-      listener = server.listen(port, () => resolve())
+      listener = server.listen(0, () => {
+        const port = listener.address().port
+
+        tracer.init(Object.assign({}, {
+          service: 'test',
+          env: 'tester',
+          port,
+          flushInterval: 0,
+          plugins: false
+        }, tracerConfig))
+
+        tracer.setUrl(`http://127.0.0.1:${port}`)
+
+        for (let i = 0, l = pluginName.length; i < l; i++) {
+          tracer.use(pluginName[i], config[i])
+        }
+
+        resolve()
+      })
     })
 
     pluginName = [].concat(pluginName)
@@ -294,20 +340,6 @@ module.exports = {
       tracer = null
       dsmStats = []
     })
-
-    tracer.init(Object.assign({}, {
-      service: 'test',
-      env: 'tester',
-      port,
-      flushInterval: 0,
-      plugins: false
-    }, tracerConfig))
-
-    tracer.setUrl(`http://127.0.0.1:${port}`)
-
-    for (let i = 0, l = pluginName.length; i < l; i++) {
-      tracer.use(pluginName[i], config[i])
-    }
 
     return promise
   },
@@ -410,5 +442,6 @@ module.exports = {
   tracer,
   testedPlugins,
   getDsmStats,
-  dsmStatsExist
+  dsmStatsExist,
+  dsmStatsExistWithParentHash
 }

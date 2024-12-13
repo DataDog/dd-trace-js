@@ -3,7 +3,6 @@
 const proxyquire = require('proxyquire')
 const agent = require('../../plugins/agent')
 const tracer = require('../../../../../index')
-const getPort = require('get-port')
 const axios = require('axios')
 
 describe('set_user', () => {
@@ -33,14 +32,14 @@ describe('set_user', () => {
     describe('setUser', () => {
       it('should not call setTag when no user is passed', () => {
         setUser(tracer)
-        expect(log.warn).to.have.been.calledOnceWithExactly('Invalid user provided to setUser')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Invalid user provided to setUser')
         expect(rootSpan.setTag).to.not.have.been.called
       })
 
       it('should not call setTag when user is empty', () => {
         const user = {}
         setUser(tracer, user)
-        expect(log.warn).to.have.been.calledOnceWithExactly('Invalid user provided to setUser')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Invalid user provided to setUser')
         expect(rootSpan.setTag).to.not.have.been.called
       })
 
@@ -49,7 +48,7 @@ describe('set_user', () => {
 
         setUser(tracer, { id: 'user' })
         expect(getRootSpan).to.be.calledOnceWithExactly(tracer)
-        expect(log.warn).to.have.been.calledOnceWithExactly('Root span not available in setUser')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Root span not available in setUser')
         expect(rootSpan.setTag).to.not.have.been.called
       })
 
@@ -83,7 +82,6 @@ describe('set_user', () => {
     }
 
     before(async () => {
-      port = await getPort()
       await agent.load('http')
       http = require('http')
     })
@@ -91,7 +89,10 @@ describe('set_user', () => {
     before(done => {
       const server = new http.Server(listener)
       appListener = server
-        .listen(port, 'localhost', () => done())
+        .listen(port, 'localhost', () => {
+          port = appListener.address().port
+          done()
+        })
     })
 
     after(() => {

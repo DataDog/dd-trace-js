@@ -1,6 +1,5 @@
 'use strict'
 
-const { AbortController } = require('node-abort-controller')
 const dc = require('dc-polyfill')
 
 const { addHook } = require('./helpers/instrument')
@@ -56,7 +55,7 @@ function apolloExpress4Hook (express4) {
     return function expressMiddleware (server, options) {
       const originalMiddleware = originalExpressMiddleware.apply(this, arguments)
 
-      return shimmer.wrap(originalMiddleware, function (req, res, next) {
+      return shimmer.wrapFunction(originalMiddleware, originalMiddleware => function (req, res, next) {
         if (!graphqlMiddlewareChannel.start.hasSubscribers) {
           return originalMiddleware.apply(this, arguments)
         }

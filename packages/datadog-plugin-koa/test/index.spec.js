@@ -2,7 +2,6 @@
 
 const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
-const getPort = require('get-port')
 const semver = require('semver')
 const { ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -16,14 +15,9 @@ describe('Plugin', () => {
 
   describe('koa', () => {
     withVersions('koa', 'koa', version => {
-      let port
-
       beforeEach(() => {
         tracer = require('../../dd-trace')
         Koa = require(`../../../versions/koa@${version}`).get()
-        return getPort().then(newPort => {
-          port = newPort
-        })
       })
 
       afterEach(done => {
@@ -32,6 +26,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => agent.load(['koa', 'http'], [{}, { client: false }]))
+
         after(() => agent.close({ ritmReset: false }))
 
         it('should do automatic instrumentation on 2.x middleware', done => {
@@ -41,29 +36,31 @@ describe('Plugin', () => {
             ctx.body = ''
           })
 
-          agent
-            .use(traces => {
-              const spans = sort(traces[0])
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
 
-              expect(spans[0]).to.have.property('name', 'koa.request')
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('type', 'web')
-              expect(spans[0]).to.have.property('resource', 'GET')
-              expect(spans[0].meta).to.have.property('span.kind', 'server')
-              expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-              expect(spans[0].meta).to.have.property('http.method', 'GET')
-              expect(spans[0].meta).to.have.property('http.status_code', '200')
-              expect(spans[0].meta).to.have.property('component', 'koa')
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
 
-              expect(spans[1]).to.have.property('name', 'koa.middleware')
-              expect(spans[1]).to.have.property('service', 'test')
-              expect(spans[1]).to.have.property('resource', 'handle')
-              expect(spans[1].meta).to.have.property('component', 'koa')
-            })
-            .then(done)
-            .catch(done)
+                expect(spans[0]).to.have.property('name', 'koa.request')
+                expect(spans[0]).to.have.property('service', 'test')
+                expect(spans[0]).to.have.property('type', 'web')
+                expect(spans[0]).to.have.property('resource', 'GET')
+                expect(spans[0].meta).to.have.property('span.kind', 'server')
+                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+                expect(spans[0].meta).to.have.property('http.method', 'GET')
+                expect(spans[0].meta).to.have.property('http.status_code', '200')
+                expect(spans[0].meta).to.have.property('component', 'koa')
 
-          appListener = app.listen(port, 'localhost', () => {
+                expect(spans[1]).to.have.property('name', 'koa.middleware')
+                expect(spans[1]).to.have.property('service', 'test')
+                expect(spans[1]).to.have.property('resource', 'handle')
+                expect(spans[1].meta).to.have.property('component', 'koa')
+              })
+              .then(done)
+              .catch(done)
+
             axios
               .get(`http://localhost:${port}/user`)
               .catch(done)
@@ -78,29 +75,31 @@ describe('Plugin', () => {
             yield next
           })
 
-          agent
-            .use(traces => {
-              const spans = sort(traces[0])
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
 
-              expect(spans[0]).to.have.property('name', 'koa.request')
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('type', 'web')
-              expect(spans[0]).to.have.property('resource', 'GET')
-              expect(spans[0].meta).to.have.property('span.kind', 'server')
-              expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-              expect(spans[0].meta).to.have.property('http.method', 'GET')
-              expect(spans[0].meta).to.have.property('http.status_code', '200')
-              expect(spans[0].meta).to.have.property('component', 'koa')
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
 
-              expect(spans[1]).to.have.property('name', 'koa.middleware')
-              expect(spans[1]).to.have.property('service', 'test')
-              expect(spans[1]).to.have.property('resource', 'converted')
-              expect(spans[1].meta).to.have.property('component', 'koa')
-            })
-            .then(done)
-            .catch(done)
+                expect(spans[0]).to.have.property('name', 'koa.request')
+                expect(spans[0]).to.have.property('service', 'test')
+                expect(spans[0]).to.have.property('type', 'web')
+                expect(spans[0]).to.have.property('resource', 'GET')
+                expect(spans[0].meta).to.have.property('span.kind', 'server')
+                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+                expect(spans[0].meta).to.have.property('http.method', 'GET')
+                expect(spans[0].meta).to.have.property('http.status_code', '200')
+                expect(spans[0].meta).to.have.property('component', 'koa')
 
-          appListener = app.listen(port, 'localhost', () => {
+                expect(spans[1]).to.have.property('name', 'koa.middleware')
+                expect(spans[1]).to.have.property('service', 'test')
+                expect(spans[1]).to.have.property('resource', 'converted')
+                expect(spans[1].meta).to.have.property('component', 'koa')
+              })
+              .then(done)
+              .catch(done)
+
             axios
               .get(`http://localhost:${port}/user`)
               .catch(done)
@@ -123,7 +122,9 @@ describe('Plugin', () => {
               .catch(done)
           })
 
-          appListener = app.listen(port, 'localhost', () => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             axios
               .get(`http://localhost:${port}/app/user/123`)
               .catch(done)
@@ -151,11 +152,11 @@ describe('Plugin', () => {
             }
           })
 
-          getPort().then(port => {
-            appListener = app.listen(port, 'localhost', () => {
-              axios.get(`http://localhost:${port}/user`)
-                .catch(done)
-            })
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            axios.get(`http://localhost:${port}/user`)
+              .catch(done)
           })
         })
 
@@ -206,12 +207,12 @@ describe('Plugin', () => {
             return next()
           })
 
-          getPort().then(port => {
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/app/user/1`)
-                .catch(done)
-            })
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            axios
+              .get(`http://localhost:${port}/app/user/1`)
+              .catch(done)
           })
         })
 
@@ -232,17 +233,19 @@ describe('Plugin', () => {
             app
               .use(koaRouter.get('/user/:id', getUser))
 
-            agent
-              .use(traces => {
-                const spans = sort(traces[0])
+            appListener = app.listen(0, 'localhost', () => {
+              const port = appListener.address().port
 
-                expect(spans[0]).to.have.property('resource', 'GET /user/:id')
-                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
-              })
-              .then(done)
-              .catch(done)
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
 
-            appListener = app.listen(port, 'localhost', (e) => {
+                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+                })
+                .then(done)
+                .catch(done)
+
               axios
                 .get(`http://localhost:${port}/user/123`)
                 .catch(done)
@@ -269,21 +272,23 @@ describe('Plugin', () => {
               .use(router.routes())
               .use(router.allowedMethods())
 
-            agent
-              .use(traces => {
-                const spans = sort(traces[0])
-                expect(spans[0]).to.have.property('resource', 'GET /user/:id')
-                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+            appListener = app.listen(0, 'localhost', () => {
+              const port = appListener.address().port
 
-                expect(spans[1]).to.have.property('resource')
-                expect(spans[1].resource).to.match(/^dispatch/)
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
+                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
 
-                expect(spans[2]).to.have.property('resource', 'handle')
-              })
-              .then(done)
-              .catch(done)
+                  expect(spans[1]).to.have.property('resource')
+                  expect(spans[1].resource).to.match(/^dispatch/)
 
-            appListener = app.listen(port, 'localhost', (e) => {
+                  expect(spans[2]).to.have.property('resource', 'handle')
+                })
+                .then(done)
+                .catch(done)
+
               axios
                 .get(`http://localhost:${port}/user/123`)
                 .catch(done)
@@ -303,16 +308,18 @@ describe('Plugin', () => {
               .use(router.routes())
               .use(router.allowedMethods())
 
-            agent
-              .use(traces => {
-                const spans = sort(traces[0])
+            appListener = app.listen(0, 'localhost', () => {
+              const port = appListener.address().port
 
-                expect(spans[0]).to.have.property('resource', 'GET /user/:id')
-              })
-              .then(done)
-              .catch(done)
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
 
-            appListener = app.listen(port, 'localhost', (e) => {
+                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                })
+                .then(done)
+                .catch(done)
+
               axios
                 .get(`http://localhost:${port}/user/123`)
                 .catch(done)
@@ -332,16 +339,18 @@ describe('Plugin', () => {
               .use(router.routes())
               .use(router.allowedMethods())
 
-            agent
-              .use(traces => {
-                const spans = sort(traces[0])
+            appListener = app.listen(0, 'localhost', () => {
+              const port = appListener.address().port
 
-                expect(spans[0]).to.have.property('resource', 'GET /user/:id')
-              })
-              .then(done)
-              .catch(done)
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
 
-            appListener = app.listen(port, 'localhost', (e) => {
+                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                })
+                .then(done)
+                .catch(done)
+
               axios
                 .get(`http://localhost:${port}/user/123`)
                 .catch(done)
@@ -360,16 +369,18 @@ describe('Plugin', () => {
               .use(router.routes())
               .use(router.allowedMethods())
 
-            agent
-              .use(traces => {
-                const spans = sort(traces[0])
+            appListener = app.listen(0, 'localhost', () => {
+              const port = appListener.address().port
 
-                expect(spans[0]).to.have.property('resource', 'GET /user/:id')
-              })
-              .then(done)
-              .catch(done)
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
 
-            appListener = app.listen(port, 'localhost', (e) => {
+                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                })
+                .then(done)
+                .catch(done)
+
               axios
                 .get(`http://localhost:${port}/user/123`)
                 .catch(done)
@@ -390,16 +401,18 @@ describe('Plugin', () => {
 
             app.use(router1.routes())
 
-            agent
-              .use(traces => {
-                const spans = sort(traces[0])
+            appListener = app.listen(0, 'localhost', () => {
+              const port = appListener.address().port
 
-                expect(spans[0]).to.have.property('resource', 'GET /public/plop')
-              })
-              .then(done)
-              .catch(done)
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
 
-            appListener = app.listen(port, 'localhost', (e) => {
+                  expect(spans[0]).to.have.property('resource', 'GET /public/plop')
+                })
+                .then(done)
+                .catch(done)
+
               axios
                 .get(`http://localhost:${port}/public/plop`)
                 .catch(done)
@@ -422,18 +435,20 @@ describe('Plugin', () => {
 
             app.use(forums.routes())
 
-            agent
-              .use(traces => {
-                const spans = sort(traces[0])
+            appListener = app.listen(0, 'localhost', () => {
+              const port = appListener.address().port
 
-                expect(spans[0]).to.have.property('resource', 'GET /forums/:fid/discussions/:did/posts/:pid')
-                expect(spans[0].meta)
-                  .to.have.property('http.url', `http://localhost:${port}/forums/123/discussions/456/posts/789`)
-              })
-              .then(done)
-              .catch(done)
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
 
-            appListener = app.listen(port, 'localhost', () => {
+                  expect(spans[0]).to.have.property('resource', 'GET /forums/:fid/discussions/:did/posts/:pid')
+                  expect(spans[0].meta)
+                    .to.have.property('http.url', `http://localhost:${port}/forums/123/discussions/456/posts/789`)
+                })
+                .then(done)
+                .catch(done)
+
               axios
                 .get(`http://localhost:${port}/forums/123/discussions/456/posts/789`)
                 .catch(done)
@@ -457,18 +472,20 @@ describe('Plugin', () => {
               app.use(first.routes())
               app.use(second.routes())
 
-              agent
-                .use(traces => {
-                  const spans = sort(traces[0])
+              appListener = app.listen(0, 'localhost', () => {
+                const port = appListener.address().port
 
-                  expect(spans[0]).to.have.property('resource', 'GET /first/child')
-                  expect(spans[0].meta)
-                    .to.have.property('http.url', `http://localhost:${port}/first/child`)
-                })
-                .then(done)
-                .catch(done)
+                agent
+                  .use(traces => {
+                    const spans = sort(traces[0])
 
-              appListener = app.listen(port, 'localhost', () => {
+                    expect(spans[0]).to.have.property('resource', 'GET /first/child')
+                    expect(spans[0].meta)
+                      .to.have.property('http.url', `http://localhost:${port}/first/child`)
+                  })
+                  .then(done)
+                  .catch(done)
+
                 axios
                   .get(`http://localhost:${port}/first/child`)
                   .catch(done)
@@ -492,17 +509,19 @@ describe('Plugin', () => {
 
             app.use(forums.routes())
 
-            agent
-              .use(traces => {
-                const spans = sort(traces[0])
+            appListener = app.listen(0, 'localhost', () => {
+              const port = appListener.address().port
 
-                expect(spans[0]).to.have.property('resource', 'GET /forums/:fid/posts/:pid')
-                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/forums/123/posts/456`)
-              })
-              .then(done)
-              .catch(done)
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
 
-            appListener = app.listen(port, 'localhost', () => {
+                  expect(spans[0]).to.have.property('resource', 'GET /forums/:fid/posts/:pid')
+                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/forums/123/posts/456`)
+                })
+                .then(done)
+                .catch(done)
+
               axios
                 .get(`http://localhost:${port}/forums/123/posts/456`)
                 .catch(done)
@@ -523,17 +542,19 @@ describe('Plugin', () => {
               .use(router.routes())
               .use(router.allowedMethods())
 
-            agent
-              .use(traces => {
-                const spans = sort(traces[0])
+            appListener = app.listen(0, 'localhost', () => {
+              const port = appListener.address().port
 
-                expect(spans[0]).to.have.property('resource', 'GET /user/:id')
-                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
-              })
-              .then(done)
-              .catch(done)
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
 
-            appListener = app.listen(port, 'localhost', () => {
+                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+                })
+                .then(done)
+                .catch(done)
+
               axios
                 .get(`http://localhost:${port}/user/123`)
                 .catch(done)
@@ -556,26 +577,28 @@ describe('Plugin', () => {
               .use(router.routes())
               .use(router.allowedMethods())
 
-            agent
-              .use(traces => {
-                const spans = sort(traces[0])
+            appListener = app.listen(0, 'localhost', () => {
+              const port = appListener.address().port
 
-                expect(spans[0]).to.have.property('resource', 'GET /user/:id')
-                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
-                expect(spans[0].error).to.equal(1)
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
 
-                expect(spans[1]).to.have.property('resource')
-                expect(spans[1].resource).to.match(/^dispatch/)
-                expect(spans[1].meta).to.include({
-                  [ERROR_TYPE]: error.name,
-                  component: 'koa'
+                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+                  expect(spans[0].error).to.equal(1)
+
+                  expect(spans[1]).to.have.property('resource')
+                  expect(spans[1].resource).to.match(/^dispatch/)
+                  expect(spans[1].meta).to.include({
+                    [ERROR_TYPE]: error.name,
+                    component: 'koa'
+                  })
+                  expect(spans[1].error).to.equal(1)
                 })
-                expect(spans[1].error).to.equal(1)
-              })
-              .then(done)
-              .catch(done)
+                .then(done)
+                .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
               axios
                 .get(`http://localhost:${port}/user/123`)
                 .catch(() => {})
@@ -609,7 +632,9 @@ describe('Plugin', () => {
                 .use(router.routes())
                 .use(router.allowedMethods())
 
-              appListener = app.listen(port, 'localhost', () => {
+              appListener = app.listen(0, 'localhost', () => {
+                const port = appListener.address().port
+
                 ws = new WebSocket(`ws://localhost:${port}/message`)
                 ws.on('error', done)
                 ws.on('open', () => {
@@ -628,6 +653,7 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => agent.load(['koa', 'http'], [{ middleware: false }, { client: false }]))
+
         after(() => agent.close({ ritmReset: false }))
 
         describe('middleware set to false', () => {
@@ -638,26 +664,28 @@ describe('Plugin', () => {
               ctx.body = ''
             })
 
-            agent
-              .use(traces => {
-                const spans = sort(traces[0])
+            appListener = app.listen(0, 'localhost', () => {
+              const port = appListener.address().port
 
-                expect(spans[0]).to.have.property('name', 'koa.request')
-                expect(spans[0]).to.have.property('service', 'test')
-                expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0]).to.have.property('resource', 'GET')
-                expect(spans[0].meta).to.have.property('span.kind', 'server')
-                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-                expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '200')
-                expect(spans[0].meta).to.have.property('component', 'koa')
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
 
-                expect(spans).to.have.length(1)
-              })
-              .then(done)
-              .catch(done)
+                  expect(spans[0]).to.have.property('name', 'koa.request')
+                  expect(spans[0]).to.have.property('service', 'test')
+                  expect(spans[0]).to.have.property('type', 'web')
+                  expect(spans[0]).to.have.property('resource', 'GET')
+                  expect(spans[0].meta).to.have.property('span.kind', 'server')
+                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+                  expect(spans[0].meta).to.have.property('http.method', 'GET')
+                  expect(spans[0].meta).to.have.property('http.status_code', '200')
+                  expect(spans[0].meta).to.have.property('component', 'koa')
 
-            appListener = app.listen(port, 'localhost', () => {
+                  expect(spans).to.have.length(1)
+                })
+                .then(done)
+                .catch(done)
+
               axios
                 .get(`http://localhost:${port}/user`)
                 .catch(done)
@@ -672,26 +700,28 @@ describe('Plugin', () => {
               yield next
             })
 
-            agent
-              .use(traces => {
-                const spans = sort(traces[0])
+            appListener = app.listen(0, 'localhost', () => {
+              const port = appListener.address().port
 
-                expect(spans[0]).to.have.property('name', 'koa.request')
-                expect(spans[0]).to.have.property('service', 'test')
-                expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0]).to.have.property('resource', 'GET')
-                expect(spans[0].meta).to.have.property('span.kind', 'server')
-                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-                expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '200')
-                expect(spans[0].meta).to.have.property('component', 'koa')
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
 
-                expect(spans).to.have.length(1)
-              })
-              .then(done)
-              .catch(done)
+                  expect(spans[0]).to.have.property('name', 'koa.request')
+                  expect(spans[0]).to.have.property('service', 'test')
+                  expect(spans[0]).to.have.property('type', 'web')
+                  expect(spans[0]).to.have.property('resource', 'GET')
+                  expect(spans[0].meta).to.have.property('span.kind', 'server')
+                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+                  expect(spans[0].meta).to.have.property('http.method', 'GET')
+                  expect(spans[0].meta).to.have.property('http.status_code', '200')
+                  expect(spans[0].meta).to.have.property('component', 'koa')
 
-            appListener = app.listen(port, 'localhost', () => {
+                  expect(spans).to.have.length(1)
+                })
+                .then(done)
+                .catch(done)
+
               axios
                 .get(`http://localhost:${port}/user`)
                 .catch(done)
@@ -714,7 +744,9 @@ describe('Plugin', () => {
                 .catch(done)
             })
 
-            appListener = app.listen(port, 'localhost', () => {
+            appListener = app.listen(0, 'localhost', () => {
+              const port = appListener.address().port
+
               axios
                 .get(`http://localhost:${port}/app/user/123`)
                 .catch(done)
@@ -742,11 +774,11 @@ describe('Plugin', () => {
               }
             })
 
-            getPort().then(port => {
-              appListener = app.listen(port, 'localhost', () => {
-                axios.get(`http://localhost:${port}/user`)
-                  .catch(done)
-              })
+            appListener = app.listen(0, 'localhost', () => {
+              const port = appListener.address().port
+
+              axios.get(`http://localhost:${port}/user`)
+                .catch(done)
             })
           })
 
@@ -770,11 +802,11 @@ describe('Plugin', () => {
               }
             })
 
-            getPort().then(port => {
-              appListener = app.listen(port, 'localhost', () => {
-                axios.get(`http://localhost:${port}/user`)
-                  .catch(done)
-              })
+            appListener = app.listen(0, 'localhost', () => {
+              const port = appListener.address().port
+
+              axios.get(`http://localhost:${port}/user`)
+                .catch(done)
             })
           })
 
@@ -801,19 +833,21 @@ describe('Plugin', () => {
                 .use(router.routes())
                 .use(router.allowedMethods())
 
-              agent
-                .use(traces => {
-                  const spans = sort(traces[0])
+              appListener = app.listen(0, 'localhost', () => {
+                const port = appListener.address().port
 
-                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
-                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
-                  expect(spans[0].error).to.equal(1)
-                  expect(spans[0].meta).to.have.property('component', 'koa')
-                })
-                .then(done)
-                .catch(done)
+                agent
+                  .use(traces => {
+                    const spans = sort(traces[0])
 
-              appListener = app.listen(port, 'localhost', () => {
+                    expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                    expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+                    expect(spans[0].error).to.equal(1)
+                    expect(spans[0].meta).to.have.property('component', 'koa')
+                  })
+                  .then(done)
+                  .catch(done)
+
                 axios
                   .get(`http://localhost:${port}/user/123`)
                   .catch(() => {})

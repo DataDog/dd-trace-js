@@ -19,11 +19,14 @@ describe('Plugin', () => {
   describe('fs not instrumented without internal method call', () => {
     let fs
     let tracer
+
     afterEach(() => agent.close({ ritmReset: false }))
+
     beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
       tracer = require('../../dd-trace')
       fs = require('fs')
     }))
+
     describe('with parent span', () => {
       beforeEach((done) => {
         const parentSpan = tracer.startSpan('parent')
@@ -64,21 +67,26 @@ describe('Plugin', () => {
       })
     })
   })
+
   describe('fs', () => {
     let fs
     let tmpdir
     let tracer
+
     afterEach(() => agent.close({ ritmReset: false }))
+
     beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
       tracer = require('../../dd-trace')
       fs = require('fs')
       tracer.use('fs', { enabled: true })
     }))
+
     before(() => {
       tmpdir = realFS.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-js-test'))
       plugins.fs = require('../../datadog-plugin-fs/src')
       channel('dd-trace:instrumentation:load').publish({ name: 'fs' })
     })
+
     after((done) => {
       rimraf(tmpdir, realFS, done)
       delete plugins.fs
@@ -113,6 +121,7 @@ describe('Plugin', () => {
 
       describe('open', () => {
         let fd
+
         afterEach(() => {
           if (typeof fd === 'number') {
             realFS.closeSync(fd)
@@ -138,6 +147,7 @@ describe('Plugin', () => {
 
       describe('open', () => {
         let fd
+
         afterEach(() => {
           if (typeof fd === 'number') {
             realFS.closeSync(fd)
@@ -194,6 +204,7 @@ describe('Plugin', () => {
       if (realFS.promises) {
         describe('promises.open', () => {
           let fd
+
           afterEach(() => {
             if (typeof fd === 'number') {
               realFS.closeSync(fd)
@@ -248,6 +259,7 @@ describe('Plugin', () => {
 
       describe('openSync', () => {
         let fd
+
         afterEach(() => {
           if (typeof fd === 'number') {
             realFS.closeSync(fd)
@@ -699,9 +711,11 @@ describe('Plugin', () => {
 
       describe('createWriteStream', () => {
         let filename
+
         beforeEach(() => {
           filename = path.join(tmpdir, 'createWriteStream')
         })
+
         afterEach(done => {
           // swallow errors since we're causing a race condition in one of the tests
           realFS.unlink(filename, () => done())
@@ -1284,6 +1298,7 @@ describe('Plugin', () => {
 
       describe('mkdtemp', () => {
         let tmpdir
+
         afterEach(() => {
           try {
             realFS.rmdirSync(tmpdir)
@@ -1315,6 +1330,7 @@ describe('Plugin', () => {
 
       describe('mkdtempSync', () => {
         let tmpdir
+
         afterEach(() => {
           try {
             realFS.rmdirSync(tmpdir)
@@ -1423,6 +1439,7 @@ describe('Plugin', () => {
         describe('Dir', () => {
           let dirname
           let dir
+
           beforeEach(async () => {
             dirname = path.join(tmpdir, 'dir')
             fs.mkdirSync(dirname)
@@ -1431,6 +1448,7 @@ describe('Plugin', () => {
             fs.writeFileSync(path.join(dirname, '3'), '3')
             dir = await fs.promises.opendir(dirname)
           })
+
           afterEach(async () => {
             try {
               await dir.close()
@@ -1604,11 +1622,13 @@ describe('Plugin', () => {
         describe('FileHandle', () => {
           let filehandle
           let filename
+
           beforeEach(async () => {
             filename = path.join(os.tmpdir(), 'filehandle')
             fs.writeFileSync(filename, 'some data')
             filehandle = await fs.promises.open(filename, 'w+')
           })
+
           afterEach(async () => {
             try {
               await filehandle.close()
@@ -1717,6 +1737,7 @@ describe('Plugin', () => {
 
           describe('chmod', () => {
             let mode
+
             beforeEach(() => {
               mode = realFS.statSync(__filename).mode % 0o100000
             })
@@ -1740,6 +1761,7 @@ describe('Plugin', () => {
           describe('chown', () => {
             let uid
             let gid
+
             beforeEach(() => {
               const stats = realFS.statSync(filename)
               uid = stats.uid

@@ -4,27 +4,36 @@ const HttpClientPlugin = require('../../datadog-plugin-http/src/client')
 
 class FetchPlugin extends HttpClientPlugin {
   static get id () { return 'fetch' }
-  static get prefix () { return 'apm:fetch:request' }
+  static get prefix () { return 'tracing:apm:fetch:request' }
 
-  addTraceSub (eventName, handler) {
-    this.addSub(`apm:${this.constructor.id}:${this.operation}:${eventName}`, handler)
-  }
-
-  bindStart (message) {
-    const req = message.req
+  bindStart (ctx) {
+    const req = ctx.req
     const options = new URL(req.url)
     const headers = options.headers = Object.fromEntries(req.headers.entries())
 
     options.method = req.method
 
-    message.args = { options }
+    ctx.args = { options }
 
-    const store = super.bindStart(message)
+    const store = super.bindStart(ctx)
 
-    message.headers = headers
-    message.req = new globalThis.Request(req, { headers })
+    for (const name in headers) {
+      if (!req.headers.has(name)) {
+        req.headers.set(name, headers[name])
+      }
+    }
 
     return store
+  }
+
+  error (ctx) {
+    if (ctx.error.name === 'AbortError') return
+    return super.error(ctx)
+  }
+
+  asyncEnd (ctx) {
+    ctx.res = ctx.result
+    return this.finish(ctx)
   }
 }
 

@@ -1,7 +1,6 @@
 'use strict'
 
 const { assert } = require('chai')
-const getPort = require('get-port')
 const dc = require('dc-polyfill')
 const axios = require('axios')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -14,6 +13,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
     before(() => {
       return agent.load(['express', 'cookie-parser'], { client: false })
     })
+
     before((done) => {
       const express = require('../../../versions/express').get()
       const cookieParser = require(`../../../versions/cookie-parser@${version}`).get()
@@ -23,13 +23,12 @@ withVersions('cookie-parser', 'cookie-parser', version => {
         middlewareProcessCookieStub()
         res.end('DONE')
       })
-      getPort().then(newPort => {
-        port = newPort
-        server = app.listen(port, () => {
-          done()
-        })
+      server = app.listen(0, () => {
+        port = server.address().port
+        done()
       })
     })
+
     beforeEach(async () => {
       middlewareProcessCookieStub = sinon.stub()
     })

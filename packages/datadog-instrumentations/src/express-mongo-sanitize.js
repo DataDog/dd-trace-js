@@ -22,15 +22,15 @@ addHook({ name: 'express-mongo-sanitize', versions: ['>=1.0.0'] }, expressMongoS
     return sanitizedObject
   })
 
-  return shimmer.wrap(expressMongoSanitize, function () {
+  return shimmer.wrapFunction(expressMongoSanitize, expressMongoSanitize => function () {
     const middleware = expressMongoSanitize.apply(this, arguments)
 
-    return shimmer.wrap(middleware, function (req, res, next) {
+    return shimmer.wrapFunction(middleware, middleware => function (req, res, next) {
       if (!sanitizeMiddlewareFinished.hasSubscribers) {
         return middleware.apply(this, arguments)
       }
 
-      const wrappedNext = shimmer.wrap(next, function () {
+      const wrappedNext = shimmer.wrapFunction(next, next => function () {
         sanitizeMiddlewareFinished.publish({
           sanitizedProperties: propertiesToSanitize,
           req

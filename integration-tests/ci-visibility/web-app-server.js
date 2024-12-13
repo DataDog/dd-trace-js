@@ -8,6 +8,14 @@ module.exports = http.createServer((req, res) => {
   res.end(`
     <!DOCTYPE html>
     <html>
+      <title>Hello World</title>
+      <script>
+        window.DD_RUM = {
+          stopSession: () => {
+            return true
+          }
+        }
+      </script>
       <body>
         <div class="hello-world">Hello World</div>
       </body>

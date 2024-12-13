@@ -136,10 +136,23 @@ module.exports = class PluginManager {
       dbmPropagationMode,
       dsmEnabled,
       clientIpEnabled,
-      memcachedCommandEnabled
+      memcachedCommandEnabled,
+      ciVisibilityTestSessionName,
+      ciVisAgentlessLogSubmissionEnabled,
+      isTestDynamicInstrumentationEnabled
     } = this._tracerConfig
 
-    const sharedConfig = {}
+    const sharedConfig = {
+      dbmPropagationMode,
+      dsmEnabled,
+      memcachedCommandEnabled,
+      site,
+      url,
+      headers: headerTags || [],
+      ciVisibilityTestSessionName,
+      ciVisAgentlessLogSubmissionEnabled,
+      isTestDynamicInstrumentationEnabled
+    }
 
     if (logInjection !== undefined) {
       sharedConfig.logInjection = logInjection
@@ -149,10 +162,6 @@ module.exports = class PluginManager {
       sharedConfig.queryStringObfuscation = queryStringObfuscation
     }
 
-    sharedConfig.dbmPropagationMode = dbmPropagationMode
-    sharedConfig.dsmEnabled = dsmEnabled
-    sharedConfig.memcachedCommandEnabled = memcachedCommandEnabled
-
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]
     }
@@ -160,10 +169,6 @@ module.exports = class PluginManager {
     if (clientIpEnabled !== undefined) {
       sharedConfig.clientIpEnabled = clientIpEnabled
     }
-
-    sharedConfig.site = site
-    sharedConfig.url = url
-    sharedConfig.headers = headerTags || []
 
     return sharedConfig
   }

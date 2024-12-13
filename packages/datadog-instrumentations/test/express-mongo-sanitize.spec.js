@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const getPort = require('get-port')
 const { channel } = require('dc-polyfill')
 const axios = require('axios')
 describe('express-mongo-sanitize', () => {
@@ -25,11 +24,9 @@ describe('express-mongo-sanitize', () => {
           res.end()
         })
 
-        getPort().then(newPort => {
-          port = newPort
-          server = app.listen(port, () => {
-            done()
-          })
+        server = app.listen(0, () => {
+          port = server.address().port
+          done()
         })
       })
 

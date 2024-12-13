@@ -25,7 +25,7 @@ const DEFAULT_SUITES_TO_SKIP = []
 const DEFAULT_GIT_UPLOAD_STATUS = 200
 const DEFAULT_KNOWN_TESTS_UPLOAD_STATUS = 200
 const DEFAULT_INFO_RESPONSE = {
-  endpoints: ['/evp_proxy/v2']
+  endpoints: ['/evp_proxy/v2', '/debugger/v1/input']
 }
 const DEFAULT_CORRELATION_ID = '1234'
 const DEFAULT_KNOWN_TESTS = ['test-suite1.js.test-name1', 'test-suite2.js.test-name2']
@@ -205,6 +205,18 @@ class FakeCiVisIntake extends FakeAgent {
       this.emit('message', {
         headers: req.headers,
         url: req.url
+      })
+    })
+
+    app.post([
+      '/api/v2/logs',
+      '/debugger/v1/input'
+    ], express.json(), (req, res) => {
+      res.status(200).send('OK')
+      this.emit('message', {
+        headers: req.headers,
+        url: req.url,
+        logMessage: req.body
       })
     })
 

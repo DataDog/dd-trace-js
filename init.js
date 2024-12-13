@@ -1,7 +1,9 @@
 'use strict'
 
-const tracer = require('.')
+/* eslint-disable no-var */
 
-tracer.init()
+var guard = require('./packages/dd-trace/src/guardrails')
 
-module.exports = tracer
+module.exports = guard(function () {
+  return require('.').init()
+})

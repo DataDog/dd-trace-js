@@ -18,8 +18,16 @@ const {
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_EARLY_FLAKE_IS_ENABLED,
-  JEST_DISPLAY_NAME
+  TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
+  JEST_DISPLAY_NAME,
+  TEST_IS_RUM_ACTIVE,
+  TEST_BROWSER_DRIVER,
+  DI_ERROR_DEBUG_INFO_CAPTURED,
+  DI_DEBUG_ERROR_SNAPSHOT_ID,
+  DI_DEBUG_ERROR_FILE,
+  DI_DEBUG_ERROR_LINE,
+  TEST_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -31,10 +39,12 @@ const {
   TELEMETRY_ITR_FORCED_TO_RUN,
   TELEMETRY_CODE_COVERAGE_EMPTY,
   TELEMETRY_ITR_UNSKIPPABLE,
-  TELEMETRY_CODE_COVERAGE_NUM_FILES
+  TELEMETRY_CODE_COVERAGE_NUM_FILES,
+  TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
+const debuggerParameterPerTest = new Map()
 
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
@@ -89,6 +99,7 @@ class JestPlugin extends CiPlugin {
       hasForcedToRunSuites,
       error,
       isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
       onDone
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -115,7 +126,10 @@ class JestPlugin extends CiPlugin {
       )
 
       if (isEarlyFlakeDetectionEnabled) {
-        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
+      }
+      if (isEarlyFlakeDetectionFaulty) {
+        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
       }
 
       this.testModuleSpan.finish()
@@ -123,6 +137,8 @@ class JestPlugin extends CiPlugin {
       this.testSessionSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
+
+      this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
 
       this.tracer._exporter.flush(() => {
         if (onDone) {
@@ -143,10 +159,18 @@ class JestPlugin extends CiPlugin {
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
         config._ddEarlyFlakeDetectionNumRetries = this.libraryConfig?.earlyFlakeDetectionNumRetries ?? 0
         config._ddRepositoryRoot = this.repositoryRoot
+        config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
+        config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
       })
     })
 
-    this.addSub('ci:jest:test-suite:start', ({ testSuite, testEnvironmentOptions, frameworkVersion, displayName }) => {
+    this.addSub('ci:jest:test-suite:start', ({
+      testSuite,
+      testSourceFile,
+      testEnvironmentOptions,
+      frameworkVersion,
+      displayName
+    }) => {
       const {
         _ddTestSessionId: testSessionId,
         _ddTestCommand: testCommand,
@@ -183,6 +207,16 @@ class JestPlugin extends CiPlugin {
       }
       if (displayName) {
         testSuiteMetadata[JEST_DISPLAY_NAME] = displayName
+      }
+      if (testSourceFile) {
+        testSuiteMetadata[TEST_SOURCE_FILE] = testSourceFile
+        // Test suite is the whole test file, so we can use the first line as the start
+        testSuiteMetadata[TEST_SOURCE_START] = 1
+      }
+
+      const codeOwners = this.getCodeOwners(testSuiteMetadata)
+      if (codeOwners) {
+        testSuiteMetadata[TEST_CODE_OWNERS] = codeOwners
       }
 
       this.testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
@@ -273,6 +307,29 @@ class JestPlugin extends CiPlugin {
       const span = this.startTestSpan(test)
 
       this.enter(span, store)
+
+      const { name: testName } = test
+
+      const debuggerParameters = debuggerParameterPerTest.get(testName)
+
+      // If we have a debugger probe, we need to add the snapshot id to the span
+      if (debuggerParameters) {
+        const spanContext = span.context()
+
+        // TODO: handle race conditions with this.retriedTestIds
+        this.retriedTestIds = {
+          spanId: spanContext.toSpanId(),
+          traceId: spanContext.toTraceId()
+        }
+        const { snapshotId, file, line } = debuggerParameters
+
+        // TODO: should these be added on test:end if and only if the probe is hit?
+        // Sync issues: `hitProbePromise` might be resolved after the test ends
+        span.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+        span.setTag(DI_DEBUG_ERROR_SNAPSHOT_ID, snapshotId)
+        span.setTag(DI_DEBUG_ERROR_FILE, file)
+        span.setTag(DI_DEBUG_ERROR_LINE, line)
+      }
     })
 
     this.addSub('ci:jest:test:finish', ({ status, testStartLine }) => {
@@ -281,22 +338,36 @@ class JestPlugin extends CiPlugin {
       if (testStartLine) {
         span.setTag(TEST_SOURCE_START, testStartLine)
       }
-      span.finish()
+
+      const spanTags = span.context()._tags
       this.telemetry.ciVisEvent(
         TELEMETRY_EVENT_FINISHED,
         'test',
-        { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+        {
+          hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
+          isNew: spanTags[TEST_IS_NEW] === 'true',
+          isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
+          browserDriver: spanTags[TEST_BROWSER_DRIVER]
+        }
       )
+
+      span.finish()
       finishAllTraceSpans(span)
     })
 
-    this.addSub('ci:jest:test:err', (error) => {
+    this.addSub('ci:jest:test:err', ({ error, willBeRetried, probe }) => {
       if (error) {
         const store = storage.getStore()
         if (store && store.span) {
           const span = store.span
           span.setTag(TEST_STATUS, 'fail')
           span.setTag('error', error)
+          if (willBeRetried && this.di) {
+            // if we use numTestExecutions, we have to remove the breakpoint after each execution
+            const testName = span.context()._tags[TEST_NAME]
+            const debuggerParameters = this.addDiProbe(error, probe)
+            debuggerParameterPerTest.set(testName, debuggerParameters)
+          }
         }
       }
     })
@@ -312,18 +383,18 @@ class JestPlugin extends CiPlugin {
     const {
       suite,
       name,
-      runner,
       displayName,
       testParameters,
       frameworkVersion,
       testStartLine,
       testSourceFile,
       isNew,
-      isEfdRetry
+      isEfdRetry,
+      isJestRetry
     } = test
 
     const extraTags = {
-      [JEST_TEST_RUNNER]: runner,
+      [JEST_TEST_RUNNER]: 'jest-circus',
       [TEST_PARAMETERS]: testParameters,
       [TEST_FRAMEWORK_VERSION]: frameworkVersion
     }
@@ -342,6 +413,10 @@ class JestPlugin extends CiPlugin {
       if (isEfdRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
       }
+    }
+
+    if (isJestRetry) {
+      extraTags[TEST_IS_RETRY] = 'true'
     }
 
     return super.startTestSpan(name, suite, this.testSuiteSpan, extraTags)

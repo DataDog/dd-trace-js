@@ -4,6 +4,16 @@ let knownTestsForSuite = []
 let suiteTests = []
 let earlyFlakeDetectionNumRetries = 0
 
+// If the test is using multi domain with cy.origin, trying to access
+// window properties will result in a cross origin error.
+function safeGetRum (window) {
+  try {
+    return window.DD_RUM
+  } catch (e) {
+    return null
+  }
+}
+
 function isNewTest (test) {
   return !knownTestsForSuite.includes(test.fullTitle())
 }
@@ -51,7 +61,10 @@ beforeEach(function () {
 })
 
 before(function () {
-  cy.task('dd:testSuiteStart', Cypress.mocha.getRootSuite().file).then((suiteConfig) => {
+  cy.task('dd:testSuiteStart', {
+    testSuite: Cypress.mocha.getRootSuite().file,
+    testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute
+  }).then((suiteConfig) => {
     if (suiteConfig) {
       isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled
       knownTestsForSuite = suiteConfig.knownTestsForSuite
@@ -62,7 +75,7 @@ before(function () {
 
 after(() => {
   cy.window().then(win => {
-    if (win.DD_RUM) {
+    if (safeGetRum(win)) {
       win.dispatchEvent(new Event('beforeunload'))
     }
   })
@@ -75,6 +88,7 @@ afterEach(function () {
     const testInfo = {
       testName: currentTest.fullTitle(),
       testSuite: Cypress.mocha.getRootSuite().file,
+      testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
       state: currentTest.state,
       error: currentTest.err,
       isNew: currentTest._ddIsNew,
@@ -84,9 +98,15 @@ afterEach(function () {
       testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line
     } catch (e) {}
 
-    if (win.DD_RUM) {
+    if (safeGetRum(win)) {
       testInfo.isRUMActive = true
     }
-    cy.task('dd:afterEach', { test: testInfo, coverage: win.__coverage__ })
+    let coverage
+    try {
+      coverage = win.__coverage__
+    } catch (e) {
+      // ignore error and continue
+    }
+    cy.task('dd:afterEach', { test: testInfo, coverage })
   })
 })

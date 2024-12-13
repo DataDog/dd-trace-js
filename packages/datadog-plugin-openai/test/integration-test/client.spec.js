@@ -13,7 +13,9 @@ describe('esm', () => {
   let proc
   let sandbox
 
-  withVersions('openai', 'openai', version => {
+  // limit v4 tests while the IITM issue is resolved or a workaround is introduced
+  // issue link: https://github.com/DataDog/import-in-the-middle/issues/60
+  withVersions('openai', 'openai', '>=3 <4', version => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'openai@${version}'`, 'nock'], false, [

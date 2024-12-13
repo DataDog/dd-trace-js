@@ -2,9 +2,9 @@
 
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const { IAST_TRANSACTION_ID } = require('../iast-context')
-const iastLog = require('../iast-log')
+const log = require('../../../log')
 
-function taintObject (iastContext, object, type, keyTainting, keyType) {
+function taintObject (iastContext, object, type) {
   let result = object
   const transactionId = iastContext?.[IAST_TRANSACTION_ID]
   if (transactionId) {
@@ -22,9 +22,6 @@ function taintObject (iastContext, object, type, keyTainting, keyType) {
           const tainted = TaintedUtils.newTaintedString(transactionId, value, property, type)
           if (!parent) {
             result = tainted
-          } else if (keyTainting && key) {
-            const taintedProperty = TaintedUtils.newTaintedString(transactionId, key, property, keyType)
-            parent[taintedProperty] = tainted
           } else {
             parent[key] = tainted
           }
@@ -34,14 +31,9 @@ function taintObject (iastContext, object, type, keyTainting, keyType) {
           for (const key of Object.keys(value)) {
             queue.push({ parent: value, property: property ? `${property}.${key}` : key, value: value[key], key })
           }
-
-          if (parent && keyTainting && key) {
-            const taintedProperty = TaintedUtils.newTaintedString(transactionId, key, property, keyType)
-            parent[taintedProperty] = value
-          }
         }
       } catch (e) {
-        iastLog.error(`Error visiting property : ${property}`).errorAndPublish(e)
+        log.error('[ASM] Error in taintObject when visiting property : %s', property, e)
       }
     }
   }

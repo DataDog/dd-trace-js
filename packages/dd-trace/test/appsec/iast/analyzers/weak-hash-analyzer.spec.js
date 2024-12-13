@@ -66,6 +66,7 @@ describe('weak-hash-analyzer', () => {
 
   describe('some locations should be excluded', () => {
     let locationPrefix
+
     before(() => {
       if (process.platform === 'win32') {
         locationPrefix = 'C:\\path\\to\\project'
@@ -136,6 +137,11 @@ describe('weak-hash-analyzer', () => {
         line: 23
       }
       expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+    })
+
+    it('undefined location', () => {
+      const location = undefined
+      expect(weakHashAnalyzer._isExcluded(location)).to.be.false
     })
   })
 

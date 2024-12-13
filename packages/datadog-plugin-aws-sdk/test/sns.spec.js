@@ -1,4 +1,4 @@
-/* eslint-disable max-len */
+/* eslint-disable @stylistic/js/max-len */
 'use strict'
 
 const sinon = require('sinon')
@@ -7,7 +7,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
 
-describe('Sns', () => {
+describe('Sns', function () {
   setup()
 
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
@@ -25,7 +25,8 @@ describe('Sns', () => {
     const snsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sns' : 'aws-sdk'
     const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
 
-    const assertPropagation = done => {
+    let childSpansFound = 0
+    const assertPropagation = (done, childSpans = 1) => {
       agent.use(traces => {
         const span = traces[0][0]
 
@@ -37,7 +38,10 @@ describe('Sns', () => {
 
         expect(parentId).to.not.equal('0')
         expect(parentId).to.equal(spanId)
-      }).then(done, done)
+        childSpansFound += 1
+        expect(childSpansFound).to.equal(childSpans)
+        childSpansFound = 0
+      }, { timeoutMs: 10000 }).then(done, done)
     }
 
     function createResources (queueName, topicName, cb) {
@@ -80,18 +84,254 @@ describe('Sns', () => {
       })
     }
 
+    describe('with payload tagging', () => {
+      before(async () => {
+        await agent.load('aws-sdk')
+        await agent.close({ ritmReset: false, wipe: true })
+        await agent.load('aws-sdk', {}, {
+          cloudPayloadTagging: {
+            request: '$.MessageAttributes.foo,$.MessageAttributes.redacted.StringValue.foo',
+            response: '$.MessageId,$.Attributes.DisplayName',
+            maxDepth: 5
+          }
+        })
+      })
+
+      after(() => agent.close({ ritmReset: false, wipe: true }))
+
+      before(done => {
+        createResources('TestQueue', 'TestTopic', done)
+      })
+
+      after(done => {
+        sns.deleteTopic({ TopicArn }, done)
+      })
+
+      after(done => {
+        sqs.deleteQueue({ QueueUrl }, done)
+      })
+
+      it('adds request and response payloads as flattened tags', done => {
+        agent.use(traces => {
+          const span = traces[0][0]
+
+          expect(span.resource).to.equal(`publish ${TopicArn}`)
+          expect(span.meta).to.include({
+            'aws.sns.topic_arn': TopicArn,
+            topicname: 'TestTopic',
+            aws_service: 'SNS',
+            region: 'us-east-1',
+            'aws.request.body.TopicArn': TopicArn,
+            'aws.request.body.Message': 'message 1',
+            'aws.request.body.MessageAttributes.baz.DataType': 'String',
+            'aws.request.body.MessageAttributes.baz.StringValue': 'bar',
+            'aws.request.body.MessageAttributes.keyOne.DataType': 'String',
+            'aws.request.body.MessageAttributes.keyOne.StringValue': 'keyOne',
+            'aws.request.body.MessageAttributes.keyTwo.DataType': 'String',
+            'aws.request.body.MessageAttributes.keyTwo.StringValue': 'keyTwo',
+            'aws.response.body.MessageId': 'redacted'
+          })
+        }).then(done, done)
+
+        sns.publish({
+          TopicArn,
+          Message: 'message 1',
+          MessageAttributes: {
+            baz: { DataType: 'String', StringValue: 'bar' },
+            keyOne: { DataType: 'String', StringValue: 'keyOne' },
+            keyTwo: { DataType: 'String', StringValue: 'keyTwo' }
+          }
+        }, e => e && done(e))
+      })
+
+      it('expands and redacts keys identified as expandable', done => {
+        agent.use(traces => {
+          const span = traces[0][0]
+
+          expect(span.resource).to.equal(`publish ${TopicArn}`)
+          expect(span.meta).to.include({
+            'aws.sns.topic_arn': TopicArn,
+            topicname: 'TestTopic',
+            aws_service: 'SNS',
+            region: 'us-east-1',
+            'aws.request.body.TopicArn': TopicArn,
+            'aws.request.body.Message': 'message 1',
+            'aws.request.body.MessageAttributes.redacted.StringValue.foo': 'redacted',
+            'aws.request.body.MessageAttributes.unredacted.StringValue.foo': 'bar',
+            'aws.request.body.MessageAttributes.unredacted.StringValue.baz': 'yup',
+            'aws.response.body.MessageId': 'redacted'
+          })
+        }).then(done, done)
+
+        sns.publish({
+          TopicArn,
+          Message: 'message 1',
+          MessageAttributes: {
+            unredacted: { DataType: 'String', StringValue: '{"foo": "bar", "baz": "yup"}' },
+            redacted: { DataType: 'String', StringValue: '{"foo": "bar"}' }
+          }
+        }, e => e && done(e))
+      })
+
+      describe('user-defined redaction', () => {
+        it('redacts user-defined keys to suppress in request', done => {
+          agent.use(traces => {
+            const span = traces[0][0]
+
+            expect(span.resource).to.equal(`publish ${TopicArn}`)
+            expect(span.meta).to.include({
+              'aws.sns.topic_arn': TopicArn,
+              topicname: 'TestTopic',
+              aws_service: 'SNS',
+              region: 'us-east-1',
+              'aws.request.body.TopicArn': TopicArn,
+              'aws.request.body.Message': 'message 1',
+              'aws.request.body.MessageAttributes.foo': 'redacted',
+              'aws.request.body.MessageAttributes.keyOne.DataType': 'String',
+              'aws.request.body.MessageAttributes.keyOne.StringValue': 'keyOne',
+              'aws.request.body.MessageAttributes.keyTwo.DataType': 'String',
+              'aws.request.body.MessageAttributes.keyTwo.StringValue': 'keyTwo'
+            })
+            expect(span.meta).to.have.property('aws.response.body.MessageId')
+          }).then(done, done)
+
+          sns.publish({
+            TopicArn,
+            Message: 'message 1',
+            MessageAttributes: {
+              foo: { DataType: 'String', StringValue: 'bar' },
+              keyOne: { DataType: 'String', StringValue: 'keyOne' },
+              keyTwo: { DataType: 'String', StringValue: 'keyTwo' }
+            }
+          }, e => e && done(e))
+        })
+
+        // TODO add response tests
+        it('redacts user-defined keys to suppress in response', done => {
+          agent.use(traces => {
+            const span = traces[0][0]
+            expect(span.resource).to.equal(`getTopicAttributes ${TopicArn}`)
+            expect(span.meta).to.include({
+              'aws.sns.topic_arn': TopicArn,
+              topicname: 'TestTopic',
+              aws_service: 'SNS',
+              region: 'us-east-1',
+              'aws.request.body.TopicArn': TopicArn,
+              'aws.response.body.Attributes.DisplayName': 'redacted'
+            })
+          }).then(done, done)
+
+          sns.getTopicAttributes({ TopicArn }, e => e && done(e))
+        })
+      })
+
+      describe('redaction of internally suppressed keys', () => {
+        const supportsSMSNotification = (moduleName, version) => {
+          switch (moduleName) {
+            case 'aws-sdk':
+              // aws-sdk-js phone notifications introduced in c6d1bb1a
+              return semver.intersects(version, '>=2.10.0')
+            case '@aws-sdk/smithy-client':
+              return true
+            default:
+              return false
+          }
+        }
+
+        if (supportsSMSNotification(moduleName, version)) {
+          // TODO
+          describe.skip('phone number', () => {
+            before(done => {
+              sns.createSMSSandboxPhoneNumber({ PhoneNumber: '+33628606135' }, err => err && done(err))
+              sns.createSMSSandboxPhoneNumber({ PhoneNumber: '+33628606136' }, err => err && done(err))
+            })
+
+            after(done => {
+              sns.deleteSMSSandboxPhoneNumber({ PhoneNumber: '+33628606135' }, err => err && done(err))
+              sns.deleteSMSSandboxPhoneNumber({ PhoneNumber: '+33628606136' }, err => err && done(err))
+            })
+
+            it('redacts phone numbers in request', done => {
+              agent.use(traces => {
+                const span = traces[0][0]
+
+                expect(span.resource).to.equal('publish')
+                expect(span.meta).to.include({
+                  aws_service: 'SNS',
+                  region: 'us-east-1',
+                  'aws.request.body.PhoneNumber': 'redacted',
+                  'aws.request.body.Message': 'message 1'
+                })
+              }).then(done, done)
+
+              sns.publish({
+                PhoneNumber: '+33628606135',
+                Message: 'message 1'
+              }, e => e && done(e))
+            })
+
+            it('redacts phone numbers in response', done => {
+              agent.use(traces => {
+                const span = traces[0][0]
+
+                expect(span.resource).to.equal('publish')
+                expect(span.meta).to.include({
+                  aws_service: 'SNS',
+                  region: 'us-east-1',
+                  'aws.response.body.PhoneNumber': 'redacted'
+                })
+              }).then(done, done)
+
+              sns.listSMSSandboxPhoneNumbers({
+                PhoneNumber: '+33628606135',
+                Message: 'message 1'
+              }, e => e && done(e))
+            })
+          })
+        }
+
+        describe('subscription confirmation tokens', () => {
+          it('redacts tokens in request', done => {
+            agent.use(traces => {
+              const span = traces[0][0]
+
+              expect(span.resource).to.equal(`confirmSubscription ${TopicArn}`)
+              expect(span.meta).to.include({
+                aws_service: 'SNS',
+                'aws.sns.topic_arn': TopicArn,
+                topicname: 'TestTopic',
+                region: 'us-east-1',
+                'aws.request.body.Token': 'redacted',
+                'aws.request.body.TopicArn': TopicArn
+              })
+            }).then(done, done)
+
+            sns.confirmSubscription({
+              TopicArn,
+              Token: '1234'
+            }, () => {})
+          })
+
+          // TODO
+          it.skip('redacts tokens in response', () => {
+
+          })
+        })
+      })
+    })
+
     describe('no configuration', () => {
       before(() => {
         parentId = '0'
         spanId = '0'
 
-        return agent.load('aws-sdk', { sns: { dsmEnabled: false } }, { dsmEnabled: true })
+        return agent.load('aws-sdk', { sns: { dsmEnabled: false, batchPropagationEnabled: true } }, { dsmEnabled: true })
       })
 
       before(done => {
         process.env.DD_DATA_STREAMS_ENABLED = 'true'
         tracer = require('../../dd-trace')
-        tracer.use('aws-sdk', { sns: { dsmEnabled: false } })
+        tracer.use('aws-sdk', { sns: { dsmEnabled: false, batchPropagationEnabled: true } })
 
         createResources('TestQueue', 'TestTopic', done)
       })
@@ -166,6 +406,34 @@ describe('Sns', () => {
               PublishBatchRequestEntries: [
                 { Id: '1', Message: 'message 1' },
                 { Id: '2', Message: 'message 2' }
+              ]
+            }, e => e && done(e))
+          })
+        })
+
+        it('injects trace context to each message SNS publishBatch with batch propagation enabled', done => {
+          assertPropagation(done, 3)
+
+          sns.subscribe(subParams, (err, data) => {
+            if (err) return done(err)
+
+            sqs.receiveMessage(receiveParams, (err, data) => {
+              if (err) done(err)
+
+              for (const message in data.Messages) {
+                const recordData = JSON.parse(data.Messages[message].Body)
+                expect(recordData.MessageAttributes).to.have.property('_datadog')
+
+                const attributes = JSON.parse(Buffer.from(recordData.MessageAttributes._datadog.Value, 'base64'))
+                expect(attributes).to.have.property('x-datadog-trace-id')
+              }
+            })
+            sns.publishBatch({
+              TopicArn,
+              PublishBatchRequestEntries: [
+                { Id: '1', Message: 'message 1' },
+                { Id: '2', Message: 'message 2' },
+                { Id: '3', Message: 'message 3' }
               ]
             }, e => e && done(e))
           })
@@ -252,7 +520,7 @@ describe('Sns', () => {
       })
 
       after(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close({ ritmReset: false, wipe: true })
       })
 
       afterEach(() => {
@@ -261,7 +529,7 @@ describe('Sns', () => {
         } catch {
           // pass
         }
-        agent.reload('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
+        agent.reload('aws-sdk', { sns: { dsmEnabled: true, batchPropagationEnabled: true } }, { dsmEnabled: true })
       })
 
       it('injects DSM pathway hash to SNS publish span', done => {

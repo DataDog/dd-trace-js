@@ -5,7 +5,6 @@
 const axios = require('axios')
 const http = require('http')
 const { once } = require('events')
-const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
 const web = require('../../dd-trace/src/plugins/util/web')
 
@@ -72,8 +71,9 @@ describe('Plugin', () => {
           })
 
           router.use('/parent', childRouter)
-          expect(router.stack[0].handle.hello).to.equal('goodbye')
-          expect(router.stack[0].handle.foo).to.equal('bar')
+          const index = router.stack.length - 1
+          expect(router.stack[index].handle.hello).to.equal('goodbye')
+          expect(router.stack[index].handle.foo).to.equal('bar')
         })
 
         it('should add the route to the request span', done => {
@@ -87,7 +87,9 @@ describe('Plugin', () => {
 
           router.use('/parent', childRouter)
 
-          getPort().then(port => {
+          appListener = server(router).listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -97,11 +99,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = server(router).listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/parent/child/123`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/parent/child/123`)
+              .catch(done)
           })
         })
 
@@ -115,15 +115,15 @@ describe('Plugin', () => {
             res.end()
           })
 
-          const port = await getPort()
           const agentPromise = agent.use(traces => {
             for (const span of traces[0]) {
               expect(span.error).to.equal(0)
             }
           }, { rejectFirst: true })
 
-          const httpd = server(router).listen(port, 'localhost')
+          const httpd = server(router).listen(0, 'localhost')
           await once(httpd, 'listening')
+          const port = httpd.address().port
           const reqPromise = axios.get(`http://localhost:${port}/foo`)
 
           return Promise.all([agentPromise, reqPromise])
@@ -139,7 +139,6 @@ describe('Plugin', () => {
             res.end()
           })
 
-          const port = await getPort()
           const agentPromise = agent.use(traces => {
             for (const span of traces[0]) {
               expect(span.error).to.equal(0)
@@ -147,8 +146,9 @@ describe('Plugin', () => {
           }, { rejectFirst: true })
 
           // eslint-disable-next-line n/handle-callback-err
-          const httpd = server(router, (req, res) => err => res.end()).listen(port, 'localhost')
+          const httpd = server(router, (req, res) => err => res.end()).listen(0, 'localhost')
           await once(httpd, 'listening')
+          const port = httpd.address().port
           const reqPromise = axios.get(`http://localhost:${port}/foo`)
 
           return Promise.all([agentPromise, reqPromise])

@@ -76,6 +76,25 @@ describe('LogPropagator', () => {
       expect(carrier.dd).to.have.property('span_id', '456')
     })
 
+    it('should correctly inject 128 bit trace ids when _dd.p.tid is present', () => {
+      config.traceId128BitLoggingEnabled = true
+      const carrier = {}
+      const traceId = id('4e2a9c1573d240b1a3b7e3c1d4c2f9a7', 16)
+      const traceIdTag = '8765432187654321'
+      const spanContext = new SpanContext({
+        traceId,
+        spanId: id('456', 10)
+      })
+
+      spanContext._trace.tags['_dd.p.tid'] = traceIdTag
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier).to.have.property('dd')
+      expect(carrier.dd).to.have.property('trace_id', '4e2a9c1573d240b1a3b7e3c1d4c2f9a7')
+      expect(carrier.dd).to.have.property('span_id', '456')
+    })
+
     it('should not inject 128-bit trace IDs when disabled', () => {
       const carrier = {}
       const traceId = id('123', 10)

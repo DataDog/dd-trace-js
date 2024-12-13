@@ -3,22 +3,19 @@
 const { USER_ID } = require('../addresses')
 const waf = require('../waf')
 const { getRootSpan } = require('./utils')
-const { block } = require('../blocking')
+const { block, getBlockingAction } = require('../blocking')
 const { storage } = require('../../../../datadog-core')
 const { setUserTags } = require('./set_user')
 const log = require('../../log')
 
 function isUserBlocked (user) {
   const actions = waf.run({ persistent: { [USER_ID]: user.id } })
-
-  if (!actions) return false
-
-  return actions.includes('block')
+  return !!getBlockingAction(actions)
 }
 
 function checkUserAndSetUser (tracer, user) {
   if (!user || !user.id) {
-    log.warn('Invalid user provided to isUserBlocked')
+    log.warn('[ASM] Invalid user provided to isUserBlocked')
     return false
   }
 
@@ -28,7 +25,7 @@ function checkUserAndSetUser (tracer, user) {
       setUserTags(user, rootSpan)
     }
   } else {
-    log.warn('Root span not available in isUserBlocked')
+    log.warn('[ASM] Root span not available in isUserBlocked')
   }
 
   return isUserBlocked(user)
@@ -44,13 +41,13 @@ function blockRequest (tracer, req, res) {
   }
 
   if (!req || !res) {
-    log.warn('Requests or response object not available in blockRequest')
+    log.warn('[ASM] Requests or response object not available in blockRequest')
     return false
   }
 
   const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
-    log.warn('Root span not available in blockRequest')
+    log.warn('[ASM] Root span not available in blockRequest')
     return false
   }
 

@@ -1,6 +1,6 @@
 'use strict'
 
-const BlockList = require('./ip_blocklist')
+const { BlockList } = require('net')
 const net = require('net')
 
 const ipHeaderList = [
@@ -8,7 +8,6 @@ const ipHeaderList = [
   'x-real-ip',
   'true-client-ip',
   'x-client-ip',
-  'x-forwarded',
   'forwarded-for',
   'x-cluster-client-ip',
   'fastly-client-ip',

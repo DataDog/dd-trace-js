@@ -9,6 +9,7 @@ const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
 class Sqs extends BaseAwsSdkPlugin {
   static get id () { return 'sqs' }
   static get peerServicePrecursors () { return ['queuename'] }
+  static get isPayloadReporter () { return true }
 
   constructor (...args) {
     super(...args)
@@ -23,7 +24,7 @@ class Sqs extends BaseAwsSdkPlugin {
       const plugin = this
       const contextExtraction = this.responseExtract(request.params, request.operation, response)
       let span
-      let parsedMessageAttributes
+      let parsedMessageAttributes = null
       if (contextExtraction && contextExtraction.datadogContext) {
         obj.needsFinish = true
         const options = {
@@ -39,8 +40,9 @@ class Sqs extends BaseAwsSdkPlugin {
         this.enter(span, store)
       }
       // extract DSM context after as we might not have a parent-child but may have a DSM context
+
       this.responseExtractDSMContext(
-        request.operation, request.params, response, span || null, parsedMessageAttributes || null
+        request.operation, request.params, response, span || null, { parsedAttributes: parsedMessageAttributes }
       )
     })
 
@@ -156,16 +158,17 @@ class Sqs extends BaseAwsSdkPlugin {
       if (attributes.StringValue) {
         const textMap = attributes.StringValue
         return JSON.parse(textMap)
-      } else if (attributes.Type === 'Binary') {
-        const buffer = Buffer.from(attributes.Value, 'base64')
+      } else if (attributes.Type === 'Binary' || attributes.DataType === 'Binary') {
+        const buffer = Buffer.from(attributes.Value ?? attributes.BinaryValue, 'base64')
         return JSON.parse(buffer)
       }
     } catch (e) {
-      log.error(e)
+      log.error('Sqs error parsing DD attributes', e)
     }
   }
 
-  responseExtractDSMContext (operation, params, response, span, parsedAttributes) {
+  responseExtractDSMContext (operation, params, response, span, kwargs = {}) {
+    let { parsedAttributes } = kwargs
     if (!this.config.dsmEnabled) return
     if (operation !== 'receiveMessage') return
     if (!response || !response.Messages || !response.Messages[0]) return
@@ -188,20 +191,20 @@ class Sqs extends BaseAwsSdkPlugin {
             // SQS to SQS
           }
         }
-        if (message.MessageAttributes && message.MessageAttributes._datadog) {
+        if (!parsedAttributes && message.MessageAttributes && message.MessageAttributes._datadog) {
           parsedAttributes = this.parseDatadogAttributes(message.MessageAttributes._datadog)
         }
       }
-      if (parsedAttributes && DsmPathwayCodec.contextExists(parsedAttributes)) {
-        const payloadSize = getHeadersSize({
-          Body: message.Body,
-          MessageAttributes: message.MessageAttributes
-        })
-        const queue = params.QueueUrl.split('/').pop()
+      const payloadSize = getHeadersSize({
+        Body: message.Body,
+        MessageAttributes: message.MessageAttributes
+      })
+      const queue = params.QueueUrl.split('/').pop()
+      if (parsedAttributes) {
         this.tracer.decodeDataStreamsContext(parsedAttributes)
-        this.tracer
-          .setCheckpoint(['direction:in', `topic:${queue}`, 'type:sqs'], span, payloadSize)
       }
+      this.tracer
+        .setCheckpoint(['direction:in', `topic:${queue}`, 'type:sqs'], span, payloadSize)
     })
   }
 
@@ -216,7 +219,23 @@ class Sqs extends BaseAwsSdkPlugin {
         break
       case 'sendMessageBatch':
         for (let i = 0; i < params.Entries.length; i++) {
-          this.injectToMessage(span, params.Entries[i], params.QueueUrl, i === 0)
+          this.injectToMessage(
+            span,
+            params.Entries[i],
+            params.QueueUrl,
+            i === 0 || (this.config.batchPropagationEnabled)
+          )
+        }
+        break
+      case 'receiveMessage':
+        if (!params.MessageAttributeNames) {
+          params.MessageAttributeNames = ['_datadog']
+        } else if (
+          !params.MessageAttributeNames.includes('_datadog') &&
+          !params.MessageAttributeNames.includes('.*') &&
+          !params.MessageAttributeNames.includes('All')
+        ) {
+          params.MessageAttributeNames.push('_datadog')
         }
         break
     }

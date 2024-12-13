@@ -3,20 +3,30 @@
 const proxyquire = require('proxyquire')
 const { storage } = require('../../../datadog-core')
 const zlib = require('zlib')
+const { SAMPLING_MECHANISM_APPSEC } = require('../../src/constants')
+const { USER_KEEP } = require('../../../../ext/priority')
 
 describe('reporter', () => {
   let Reporter
   let span
   let web
   let telemetry
+  let sample
+  let prioritySampler
 
   beforeEach(() => {
+    prioritySampler = {
+      setPriority: sinon.stub()
+    }
+
     span = {
+      _prioritySampler: prioritySampler,
       context: sinon.stub().returns({
         _tags: {}
       }),
       addTags: sinon.stub(),
-      setTag: sinon.stub()
+      setTag: sinon.stub(),
+      keep: sinon.stub()
     }
 
     web = {
@@ -26,13 +36,20 @@ describe('reporter', () => {
     telemetry = {
       incrementWafInitMetric: sinon.stub(),
       updateWafRequestsMetricTags: sinon.stub(),
+      updateRaspRequestsMetricTags: sinon.stub(),
       incrementWafUpdatesMetric: sinon.stub(),
-      incrementWafRequestsMetric: sinon.stub()
+      incrementWafRequestsMetric: sinon.stub(),
+      getRequestMetrics: sinon.stub()
     }
+
+    sample = sinon.stub()
 
     Reporter = proxyquire('../../src/appsec/reporter', {
       '../plugins/util/web': web,
-      './telemetry': telemetry
+      './telemetry': telemetry,
+      './standalone': {
+        sample
+      }
     })
   })
 
@@ -97,7 +114,6 @@ describe('reporter', () => {
       expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.error_count')).to.be.eq(1)
       expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.errors'))
         .to.be.eq(JSON.stringify(diagnosticsRules.errors))
-      expect(Reporter.metricsQueue.get('manual.keep')).to.be.eq('true')
     })
 
     it('should call incrementWafInitMetric', () => {
@@ -141,17 +157,21 @@ describe('reporter', () => {
     })
 
     it('should set duration metrics if set', () => {
-      Reporter.reportMetrics({ duration: 1337 })
+      const metrics = { duration: 1337 }
+      Reporter.reportMetrics(metrics)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.waf.duration', 1337)
+      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
+      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
     })
 
     it('should set ext duration metrics if set', () => {
-      Reporter.reportMetrics({ durationExt: 42 })
+      const metrics = { durationExt: 42 }
+      Reporter.reportMetrics(metrics)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.waf.duration_ext', 42)
+      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
+      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
     })
 
     it('should set rulesVersion if set', () => {
@@ -159,6 +179,7 @@ describe('reporter', () => {
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
       expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.event_rules.version', '1.2.3')
+      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
     })
 
     it('should call updateWafRequestsMetricTags', () => {
@@ -168,6 +189,17 @@ describe('reporter', () => {
       Reporter.reportMetrics(metrics)
 
       expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req)
+      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
+    })
+
+    it('should call updateRaspRequestsMetricTags when ruleType if provided', () => {
+      const metrics = { rulesVersion: '1.2.3' }
+      const store = storage.getStore()
+
+      Reporter.reportMetrics(metrics, 'rule_type')
+
+      expect(telemetry.updateRaspRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req, 'rule_type')
+      expect(telemetry.updateWafRequestsMetricTags).to.not.have.been.called
     })
   })
 
@@ -191,6 +223,22 @@ describe('reporter', () => {
       storage.disable()
     })
 
+    it('should add tags to request span when socket is not there', () => {
+      delete req.socket
+
+      const result = Reporter.reportAttack('[{"rule":{},"rule_matches":[{}]}]')
+
+      expect(result).to.not.be.false
+      expect(web.root).to.have.been.calledOnceWith(req)
+
+      expect(span.addTags).to.have.been.calledOnceWithExactly({
+        'appsec.event': 'true',
+        '_dd.origin': 'appsec',
+        '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}'
+      })
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+    })
+
     it('should add tags to request span', () => {
       const result = Reporter.reportAttack('[{"rule":{},"rule_matches":[{}]}]')
       expect(result).to.not.be.false
@@ -198,14 +246,11 @@ describe('reporter', () => {
 
       expect(span.addTags).to.have.been.calledOnceWithExactly({
         'appsec.event': 'true',
-        'manual.keep': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}',
-        'http.request.headers.host': 'localhost',
-        'http.request.headers.user-agent': 'arachni',
-        'http.useragent': 'arachni',
         'network.client.ip': '8.8.8.8'
       })
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
     })
 
     it('should not add manual.keep when rate limit is reached', (done) => {
@@ -213,26 +258,25 @@ describe('reporter', () => {
       const params = {}
 
       expect(Reporter.reportAttack('', params)).to.not.be.false
-      expect(addTags.getCall(0).firstArg).to.have.property('manual.keep').that.equals('true')
       expect(Reporter.reportAttack('', params)).to.not.be.false
-      expect(addTags.getCall(1).firstArg).to.have.property('manual.keep').that.equals('true')
       expect(Reporter.reportAttack('', params)).to.not.be.false
-      expect(addTags.getCall(2).firstArg).to.have.property('manual.keep').that.equals('true')
+
+      expect(prioritySampler.setPriority).to.have.callCount(3)
 
       Reporter.setRateLimit(1)
 
       expect(Reporter.reportAttack('', params)).to.not.be.false
       expect(addTags.getCall(3).firstArg).to.have.property('appsec.event').that.equals('true')
-      expect(addTags.getCall(3).firstArg).to.have.property('manual.keep').that.equals('true')
+      expect(prioritySampler.setPriority).to.have.callCount(4)
       expect(Reporter.reportAttack('', params)).to.not.be.false
       expect(addTags.getCall(4).firstArg).to.have.property('appsec.event').that.equals('true')
-      expect(addTags.getCall(4).firstArg).to.not.have.property('manual.keep')
+      expect(prioritySampler.setPriority).to.have.callCount(4)
 
       setTimeout(() => {
         expect(Reporter.reportAttack('', params)).to.not.be.false
-        expect(addTags.getCall(5).firstArg).to.have.property('manual.keep').that.equals('true')
+        expect(prioritySampler.setPriority).to.have.callCount(5)
         done()
-      }, 1e3)
+      }, 1020)
     })
 
     it('should not overwrite origin tag', () => {
@@ -243,14 +287,11 @@ describe('reporter', () => {
       expect(web.root).to.have.been.calledOnceWith(req)
 
       expect(span.addTags).to.have.been.calledOnceWithExactly({
-        'http.request.headers.host': 'localhost',
-        'http.request.headers.user-agent': 'arachni',
         'appsec.event': 'true',
-        'manual.keep': 'true',
         '_dd.appsec.json': '{"triggers":[]}',
-        'http.useragent': 'arachni',
         'network.client.ip': '8.8.8.8'
       })
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
     })
 
     it('should merge attacks json', () => {
@@ -261,15 +302,31 @@ describe('reporter', () => {
       expect(web.root).to.have.been.calledOnceWith(req)
 
       expect(span.addTags).to.have.been.calledOnceWithExactly({
-        'http.request.headers.host': 'localhost',
-        'http.request.headers.user-agent': 'arachni',
         'appsec.event': 'true',
-        'manual.keep': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
-        'http.useragent': 'arachni',
         'network.client.ip': '8.8.8.8'
       })
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+    })
+
+    it('should call standalone sample', () => {
+      span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
+
+      const result = Reporter.reportAttack('[{"rule":{}},{"rule":{},"rule_matches":[{}]}]')
+      expect(result).to.not.be.false
+      expect(web.root).to.have.been.calledOnceWith(req)
+
+      expect(span.addTags).to.have.been.calledOnceWithExactly({
+        'appsec.event': 'true',
+        '_dd.origin': 'appsec',
+        '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
+        'network.client.ip': '8.8.8.8'
+      })
+
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+
+      expect(sample).to.have.been.calledOnceWithExactly(span)
     })
   })
 
@@ -281,20 +338,24 @@ describe('reporter', () => {
     })
   })
 
-  describe('reportSchemas', () => {
+  describe('reportDerivatives', () => {
     it('should not call addTags if parameter is undefined', () => {
-      Reporter.reportSchemas(undefined)
+      Reporter.reportDerivatives(undefined)
       expect(span.addTags).not.to.be.called
     })
 
     it('should call addTags with an empty array', () => {
-      Reporter.reportSchemas([])
+      Reporter.reportDerivatives([])
       expect(span.addTags).to.be.calledOnceWithExactly({})
     })
 
     it('should call addTags', () => {
       const schemaValue = [{ key: [8] }]
       const derivatives = {
+        '_dd.appsec.fp.http.endpoint': 'endpoint_fingerprint',
+        '_dd.appsec.fp.http.header': 'header_fingerprint',
+        '_dd.appsec.fp.http.network': 'network_fingerprint',
+        '_dd.appsec.fp.session': 'session_fingerprint',
         '_dd.appsec.s.req.headers': schemaValue,
         '_dd.appsec.s.req.query': schemaValue,
         '_dd.appsec.s.req.params': schemaValue,
@@ -303,10 +364,14 @@ describe('reporter', () => {
         'custom.processor.output': schemaValue
       }
 
-      Reporter.reportSchemas(derivatives)
+      Reporter.reportDerivatives(derivatives)
 
       const schemaEncoded = zlib.gzipSync(JSON.stringify(schemaValue)).toString('base64')
       expect(span.addTags).to.be.calledOnceWithExactly({
+        '_dd.appsec.fp.http.endpoint': 'endpoint_fingerprint',
+        '_dd.appsec.fp.http.header': 'header_fingerprint',
+        '_dd.appsec.fp.http.network': 'network_fingerprint',
+        '_dd.appsec.fp.session': 'session_fingerprint',
         '_dd.appsec.s.req.headers': schemaEncoded,
         '_dd.appsec.s.req.query': schemaEncoded,
         '_dd.appsec.s.req.params': schemaEncoded,
@@ -319,6 +384,33 @@ describe('reporter', () => {
 
   describe('finishRequest', () => {
     let wafContext
+
+    const requestHeadersToTrackOnEvent = [
+      'x-forwarded-for',
+      'x-real-ip',
+      'true-client-ip',
+      'x-client-ip',
+      'x-forwarded',
+      'forwarded-for',
+      'x-cluster-client-ip',
+      'fastly-client-ip',
+      'cf-connecting-ip',
+      'cf-connecting-ipv6',
+      'forwarded',
+      'via',
+      'content-length',
+      'content-encoding',
+      'content-language',
+      'host',
+      'accept-encoding',
+      'accept-language'
+    ]
+    const requestHeadersAndValuesToTrackOnEvent = {}
+    const expectedRequestTagsToTrackOnEvent = {}
+    requestHeadersToTrackOnEvent.forEach((header, index) => {
+      requestHeadersAndValuesToTrackOnEvent[header] = `val-${index}`
+      expectedRequestTagsToTrackOnEvent[`http.request.headers.${header}`] = `val-${index}`
+    })
 
     beforeEach(() => {
       wafContext = {
@@ -353,7 +445,7 @@ describe('reporter', () => {
       expect(Reporter.metricsQueue).to.be.empty
     })
 
-    it('should only add identification headers when no attack was previously found', () => {
+    it('should only add mandatory headers when no attack or event was previously found', () => {
       const req = {
         headers: {
           'not-included': 'hello',
@@ -364,7 +456,10 @@ describe('reporter', () => {
           'x-appgw-trace-id': 'e',
           'x-sigsci-requestid': 'f',
           'x-sigsci-tags': 'g',
-          'akamai-user-risk': 'h'
+          'akamai-user-risk': 'h',
+          'content-type': 'i',
+          accept: 'j',
+          'user-agent': 'k'
         }
       }
 
@@ -378,7 +473,10 @@ describe('reporter', () => {
         'http.request.headers.x-appgw-trace-id': 'e',
         'http.request.headers.x-sigsci-requestid': 'f',
         'http.request.headers.x-sigsci-tags': 'g',
-        'http.request.headers.akamai-user-risk': 'h'
+        'http.request.headers.akamai-user-risk': 'h',
+        'http.request.headers.content-type': 'i',
+        'http.request.headers.accept': 'j',
+        'http.request.headers.user-agent': 'k'
       })
     })
 
@@ -439,12 +537,145 @@ describe('reporter', () => {
       })
     })
 
+    it('should add http request data inside request span when appsec.event is true', () => {
+      const req = {
+        headers: {
+          'user-agent': 'arachni',
+          ...requestHeadersAndValuesToTrackOnEvent
+        }
+      }
+      const res = {
+        getHeaders: () => {
+          return {}
+        }
+      }
+      span.context()._tags['appsec.event'] = 'true'
+
+      Reporter.finishRequest(req, res)
+
+      expect(span.addTags).to.have.been.calledWithExactly({
+        'http.request.headers.user-agent': 'arachni'
+      })
+
+      expect(span.addTags).to.have.been.calledWithExactly(expectedRequestTagsToTrackOnEvent)
+    })
+
+    it('should add http request data inside request span when user login success is tracked', () => {
+      const req = {
+        headers: {
+          'user-agent': 'arachni',
+          ...requestHeadersAndValuesToTrackOnEvent
+        }
+      }
+      const res = {
+        getHeaders: () => {
+          return {}
+        }
+      }
+
+      span.context()
+        ._tags['appsec.events.users.login.success.track'] = 'true'
+
+      Reporter.finishRequest(req, res)
+
+      expect(span.addTags).to.have.been.calledWithExactly({
+        'http.request.headers.user-agent': 'arachni'
+      })
+
+      expect(span.addTags).to.have.been.calledWithExactly(expectedRequestTagsToTrackOnEvent)
+    })
+
+    it('should add http request data inside request span when user login failure is tracked', () => {
+      const req = {
+        headers: {
+          'user-agent': 'arachni',
+          ...requestHeadersAndValuesToTrackOnEvent
+        }
+      }
+      const res = {
+        getHeaders: () => {
+          return {}
+        }
+      }
+
+      span.context()
+        ._tags['appsec.events.users.login.failure.track'] = 'true'
+
+      Reporter.finishRequest(req, res)
+
+      expect(span.addTags).to.have.been.calledWithExactly({
+        'http.request.headers.user-agent': 'arachni'
+      })
+
+      expect(span.addTags).to.have.been.calledWithExactly(expectedRequestTagsToTrackOnEvent)
+    })
+
+    it('should add http request data inside request span when user custom event is tracked', () => {
+      const req = {
+        headers: {
+          'user-agent': 'arachni',
+          ...requestHeadersAndValuesToTrackOnEvent
+        }
+      }
+      const res = {
+        getHeaders: () => {
+          return {}
+        }
+      }
+
+      span.context()
+        ._tags['appsec.events.custon.event.track'] = 'true'
+
+      Reporter.finishRequest(req, res)
+
+      expect(span.addTags).to.have.been.calledWithExactly({
+        'http.request.headers.user-agent': 'arachni'
+      })
+
+      expect(span.addTags).to.have.been.calledWithExactly(expectedRequestTagsToTrackOnEvent)
+    })
+
     it('should call incrementWafRequestsMetric', () => {
       const req = {}
       const res = {}
       Reporter.finishRequest(req, res)
 
       expect(telemetry.incrementWafRequestsMetric).to.be.calledOnceWithExactly(req)
+    })
+
+    it('should set waf.duration tags if there are metrics stored', () => {
+      telemetry.getRequestMetrics.returns({ duration: 1337, durationExt: 42 })
+
+      Reporter.finishRequest({}, {})
+
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.duration', 1337)
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.duration_ext', 42)
+      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.rasp.duration')
+      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.rasp.duration_ext')
+      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.rasp.rule.eval')
+    })
+
+    it('should set rasp.duration tags if there are metrics stored', () => {
+      telemetry.getRequestMetrics.returns({ raspDuration: 123, raspDurationExt: 321, raspEvalCount: 3 })
+
+      Reporter.finishRequest({}, {})
+
+      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.waf.duration')
+      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.waf.duration_ext')
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.duration', 123)
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.duration_ext', 321)
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.rule.eval', 3)
+    })
+
+    it('should keep span if there are metrics', () => {
+      const req = {}
+
+      Reporter.metricsQueue.set('a', 1)
+      Reporter.metricsQueue.set('b', 2)
+
+      Reporter.finishRequest(req, wafContext, {})
+
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
     })
   })
 })
