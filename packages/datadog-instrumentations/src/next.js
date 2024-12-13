@@ -247,7 +247,14 @@ addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js'
   return nextServer
 })
 
-addHook({ name: 'next', versions: ['>=11.1 <12.0.0', '>=12.2.0 <13.2'], file: 'dist/server/next-server.js' }, nextServer => {
+addHook({
+  name: 'next',
+  versions: [
+    '>=11.1 <12.0.0',
+    '>=12.2.0 <13.2'
+  ],
+  file: 'dist/server/next-server.js'
+}, nextServer => {
   const Server = nextServer.default
   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequest)
   return nextServer
