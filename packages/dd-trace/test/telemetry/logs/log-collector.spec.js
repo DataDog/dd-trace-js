@@ -128,11 +128,9 @@ describe('telemetry log collector', () => {
     })
 
     it('duplicated errors should send incremented count values', () => {
-      const err1 = new Error('oh no')
-      err1.level = 'ERROR'
+      const err1 = { message: 'oh no', level: 'ERROR', count: 1 }
 
-      const err2 = new Error('foo buzz')
-      err2.level = 'ERROR'
+      const err2 = { message: 'foo buzz', level: 'ERROR', count: 1 }
 
       logCollector.add(err1)
       logCollector.add(err2)
