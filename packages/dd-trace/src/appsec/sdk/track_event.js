@@ -26,7 +26,7 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
 
   const login = user.login ?? user.id
 
-  metadata = Object.assign({ 'usr.login': login }, metadata)
+  metadata = { 'usr.login': login, ...metadata }
 
   trackEvent('users.login.success', metadata, 'trackUserLoginSuccessEvent', rootSpan)
 
