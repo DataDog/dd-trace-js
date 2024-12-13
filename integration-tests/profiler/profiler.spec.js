@@ -75,6 +75,12 @@ function processExitPromise (proc, timeout, expectBadExit = false) {
 }
 
 async function getLatestProfile (cwd, pattern) {
+  const pprofGzipped = await readLatestFile(cwd, pattern)
+  const pprofUnzipped = zlib.gunzipSync(pprofGzipped)
+  return { profile: Profile.decode(pprofUnzipped), encoded: pprofGzipped.toString('base64') }
+}
+
+async function readLatestFile (cwd, pattern) {
   const dirEntries = await fs.readdir(cwd)
   // Get the latest file matching the pattern
   const pprofEntries = dirEntries.filter(name => pattern.test(name))
@@ -83,9 +89,7 @@ async function getLatestProfile (cwd, pattern) {
     .map(name => ({ name, modified: fsync.statSync(path.join(cwd, name), { bigint: true }).mtimeNs }))
     .reduce((a, b) => a.modified > b.modified ? a : b)
     .name
-  const pprofGzipped = await fs.readFile(path.join(cwd, pprofEntry))
-  const pprofUnzipped = zlib.gunzipSync(pprofGzipped)
-  return { profile: Profile.decode(pprofUnzipped), encoded: pprofGzipped.toString('base64') }
+  return await fs.readFile(path.join(cwd, pprofEntry))
 }
 
 function expectTimeout (messagePromise, allowErrors = false) {
@@ -105,10 +109,9 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args
   const proc = fork(path.join(cwd, scriptFilePath), args, {
     cwd,
     env: {
-      DD_PROFILING_PROFILERS: 'wall',
       DD_PROFILING_EXPORTERS: 'file',
       DD_PROFILING_ENABLED: 1,
-      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED: 1
+      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: 0 // capture all events
     }
   })
 
@@ -205,17 +208,17 @@ describe('profiler', () => {
       const proc = fork(path.join(cwd, 'profiler/codehotspots.js'), {
         cwd,
         env: {
-          DD_PROFILING_PROFILERS: 'wall',
           DD_PROFILING_EXPORTERS: 'file',
-          DD_PROFILING_ENABLED: 1,
-          DD_PROFILING_CODEHOTSPOTS_ENABLED: 1,
-          DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: 1,
-          DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED: 1
+          DD_PROFILING_ENABLED: 1
         }
       })
 
       await processExitPromise(proc, 30000)
       const procEnd = BigInt(Date.now() * 1000000)
+
+      // Must've counted the number of times each endpoint was hit
+      const event = JSON.parse((await readLatestFile(cwd, /^event_.+\.json$/)).toString())
+      assert.deepEqual(event.endpoint_counts, { 'endpoint-0': 1, 'endpoint-1': 1, 'endpoint-2': 1 })
 
       const { profile, encoded } = await getLatestProfile(cwd, /^wall_.+\.pprof$/)
 

@@ -294,6 +294,7 @@ jobs:
       PLUGINS: couchbase
       SERVICES: couchbase
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
+      DD_INJECT_FORCE: 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -828,6 +829,7 @@ jobs:
       PLUGINS: oracledb
       SERVICES: oracledb
       DD_TEST_AGENT_URL: http://testagent:9126
+      DD_INJECT_FORCE: 'true'
       # Needed to fix issue with `actions/checkout@v3: https://github.com/actions/checkout/issues/1590
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:

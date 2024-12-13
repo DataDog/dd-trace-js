@@ -1,14 +1,15 @@
-const { AsyncLocalStorage } = require('async_hooks')
+const { storage } = require('../../../../../datadog-core')
 const TracingPlugin = require('../../../plugins/tracing')
 const { performance } = require('perf_hooks')
 
 // We are leveraging the TracingPlugin class for its functionality to bind
 // start/error/finish methods to the appropriate diagnostic channels.
 class EventPlugin extends TracingPlugin {
-  constructor (eventHandler) {
+  constructor (eventHandler, eventFilter) {
     super()
     this.eventHandler = eventHandler
-    this.store = new AsyncLocalStorage()
+    this.eventFilter = eventFilter
+    this.store = storage('profiling')
     this.entryType = this.constructor.entryType
   }
 
@@ -36,17 +37,20 @@ class EventPlugin extends TracingPlugin {
     }
     const duration = performance.now() - startTime
 
-    const context = this.activeSpan?.context()
-    const _ddSpanId = context?.toSpanId()
-    const _ddRootSpanId = context?._trace.started[0]?.context().toSpanId() || _ddSpanId
-
     const event = {
       entryType: this.entryType,
       startTime,
-      duration,
-      _ddSpanId,
-      _ddRootSpanId
+      duration
     }
+
+    if (!this.eventFilter(event)) {
+      return
+    }
+
+    const context = this.activeSpan?.context()
+    event._ddSpanId = context?.toSpanId()
+    event._ddRootSpanId = context?._trace.started[0]?.context().toSpanId() || event._ddSpanId
+
     this.eventHandler(this.extendEvent(event, startEvent))
   }
 }

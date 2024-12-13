@@ -47,8 +47,7 @@ function onErrorLog (msg) {
 
   if (cause) {
     telLog.stack_trace = cause.stack
-    const errorType = cause.name ?? 'Error'
-    telLog.message = `${errorType}: ${telLog.message}`
+    telLog.errorType = cause.constructor.name
   }
 
   onLog(telLog)

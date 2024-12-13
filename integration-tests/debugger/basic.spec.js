@@ -12,7 +12,7 @@ describe('Dynamic Instrumentation', function () {
   const t = setup()
 
   it('base case: target app should work as expected if no test probe has been added', async function () {
-    const response = await t.axios.get('/foo')
+    const response = await t.axios.get(t.breakpoint.url)
     assert.strictEqual(response.status, 200)
     assert.deepStrictEqual(response.data, { hello: 'foo' })
   })
@@ -24,15 +24,15 @@ describe('Dynamic Instrumentation', function () {
       const expectedPayloads = [{
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, version: 0, status: 'RECEIVED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'RECEIVED' } }
       }, {
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, version: 0, status: 'INSTALLED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'INSTALLED' } }
       }, {
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, version: 0, status: 'EMITTING' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'EMITTING' } }
       }]
 
       t.agent.on('remote-config-ack-update', (id, version, state, error) => {
@@ -51,7 +51,7 @@ describe('Dynamic Instrumentation', function () {
         assertUUID(payload.debugger.diagnostics.runtimeId)
 
         if (payload.debugger.diagnostics.status === 'INSTALLED') {
-          t.axios.get('/foo')
+          t.axios.get(t.breakpoint.url)
             .then((response) => {
               assert.strictEqual(response.status, 200)
               assert.deepStrictEqual(response.data, { hello: 'foo' })
@@ -75,19 +75,19 @@ describe('Dynamic Instrumentation', function () {
       const expectedPayloads = [{
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, version: 0, status: 'RECEIVED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'RECEIVED' } }
       }, {
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, version: 0, status: 'INSTALLED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'INSTALLED' } }
       }, {
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, version: 1, status: 'RECEIVED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 1, status: 'RECEIVED' } }
       }, {
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, version: 1, status: 'INSTALLED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 1, status: 'INSTALLED' } }
       }]
       const triggers = [
         () => {
@@ -128,11 +128,11 @@ describe('Dynamic Instrumentation', function () {
       const expectedPayloads = [{
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, version: 0, status: 'RECEIVED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'RECEIVED' } }
       }, {
         ddsource: 'dd_debugger',
         service: 'node',
-        debugger: { diagnostics: { probeId, version: 0, status: 'INSTALLED' } }
+        debugger: { diagnostics: { probeId, probeVersion: 0, status: 'INSTALLED' } }
       }]
 
       t.agent.on('remote-config-ack-update', (id, version, state, error) => {
@@ -201,7 +201,7 @@ describe('Dynamic Instrumentation', function () {
         }, {
           ddsource: 'dd_debugger',
           service: 'node',
-          debugger: { diagnostics: customErrorDiagnosticsObj ?? { probeId, version: 0, status: 'ERROR' } }
+          debugger: { diagnostics: customErrorDiagnosticsObj ?? { probeId, probeVersion: 0, status: 'ERROR' } }
         }]
 
         t.agent.on('debugger-diagnostics', ({ payload }) => {
@@ -293,13 +293,13 @@ describe('Dynamic Instrumentation', function () {
       const expectedMessages = ['Hello World!', 'Hello Updated World!']
       const triggers = [
         async () => {
-          await t.axios.get('/foo')
+          await t.axios.get(t.breakpoint.url)
           t.rcConfig.config.version++
           t.rcConfig.config.template = 'Hello Updated World!'
           t.agent.updateRemoteConfig(t.rcConfig.id, t.rcConfig.config)
         },
         async () => {
-          await t.axios.get('/foo')
+          await t.axios.get(t.breakpoint.url)
         }
       ]
 
@@ -316,29 +316,17 @@ describe('Dynamic Instrumentation', function () {
     })
 
     it('should not trigger if probe is deleted', function (done) {
-      t.agent.on('debugger-diagnostics', async ({ payload }) => {
-        try {
-          if (payload.debugger.diagnostics.status === 'INSTALLED') {
-            t.agent.once('remote-confg-responded', async () => {
-              try {
-                await t.axios.get('/foo')
-                // We want to wait enough time to see if the client triggers on the breakpoint so that the test can fail
-                // if it does, but not so long that the test times out.
-                // TODO: Is there some signal we can use instead of a timer?
-                setTimeout(done, pollInterval * 2 * 1000) // wait twice as long as the RC poll interval
-              } catch (err) {
-                // Nessecary hack: Any errors thrown inside of an async function is invisible to Mocha unless the outer
-                // `it` callback is also `async` (which we can't do in this case since we rely on the `done` callback).
-                done(err)
-              }
-            })
+      t.agent.on('debugger-diagnostics', ({ payload }) => {
+        if (payload.debugger.diagnostics.status === 'INSTALLED') {
+          t.agent.once('remote-confg-responded', async () => {
+            await t.axios.get(t.breakpoint.url)
+            // We want to wait enough time to see if the client triggers on the breakpoint so that the test can fail
+            // if it does, but not so long that the test times out.
+            // TODO: Is there some signal we can use instead of a timer?
+            setTimeout(done, pollInterval * 2 * 1000) // wait twice as long as the RC poll interval
+          })
 
-            t.agent.removeRemoteConfig(t.rcConfig.id)
-          }
-        } catch (err) {
-          // Nessecary hack: Any errors thrown inside of an async function is invisible to Mocha unless the outer `it`
-          // callback is also `async` (which we can't do in this case since we rely on the `done` callback).
-          done(err)
+          t.agent.removeRemoteConfig(t.rcConfig.id)
         }
       })
 
@@ -347,6 +335,45 @@ describe('Dynamic Instrumentation', function () {
       })
 
       t.agent.addRemoteConfig(t.rcConfig)
+    })
+  })
+
+  describe('sampling', function () {
+    it('should respect sampling rate for single probe', function (done) {
+      let start, timer
+      let payloadsReceived = 0
+      const rcConfig = t.generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
+
+      function triggerBreakpointContinuously () {
+        t.axios.get(t.breakpoint.url).catch(done)
+        timer = setTimeout(triggerBreakpointContinuously, 10)
+      }
+
+      t.agent.on('debugger-diagnostics', ({ payload }) => {
+        if (payload.debugger.diagnostics.status === 'INSTALLED') triggerBreakpointContinuously()
+      })
+
+      t.agent.on('debugger-input', () => {
+        payloadsReceived++
+        if (payloadsReceived === 1) {
+          start = Date.now()
+        } else if (payloadsReceived === 2) {
+          const duration = Date.now() - start
+          clearTimeout(timer)
+
+          // Allow for a variance of -5/+50ms (time will tell if this is enough)
+          assert.isAbove(duration, 995)
+          assert.isBelow(duration, 1050)
+
+          // Wait at least a full sampling period, to see if we get any more payloads
+          timer = setTimeout(done, 1250)
+        } else {
+          clearTimeout(timer)
+          done(new Error('Too many payloads received!'))
+        }
+      })
+
+      t.agent.addRemoteConfig(rcConfig)
     })
   })
 
@@ -380,7 +407,7 @@ describe('Dynamic Instrumentation', function () {
           })
 
           // Perform HTTP request to try and trigger the probe
-          t.axios.get('/foo').catch((err) => {
+          t.axios.get(t.breakpoint.url).catch((err) => {
             // If the request hasn't fully completed by the time the tests ends and the target app is destroyed, Axios
             // will complain with a "socket hang up" error. Hence this sanity check before calling `done(err)`. If we
             // later add more tests below this one, this shouuldn't be an issue.

@@ -429,7 +429,7 @@ describe('request', function () {
           'accept-encoding': 'gzip'
         }
       }, (err, res) => {
-        expect(log.error).to.have.been.calledWith('Could not gunzip response: unexpected end of file')
+        expect(log.error).to.have.been.calledWith('Could not gunzip response: %s', 'unexpected end of file')
         expect(res).to.equal('')
         done(err)
       })
