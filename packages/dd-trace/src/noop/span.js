@@ -2,13 +2,24 @@
 
 const NoopSpanContext = require('./span_context')
 const id = require('../id')
+const { performance } = require('perf_hooks')
+const now = performance.now.bind(performance)
+const dateNow = Date.now
 const { storage } = require('../../../datadog-core') // TODO: noop storage?
 
 class NoopSpan {
-  constructor (tracer, parent) {
+  constructor (tracer, parent, options) {
     this._store = storage.getStore()
     this._noopTracer = tracer
-    this._noopContext = this._createContext(parent)
+    this._noopContext = this._createContext(parent, options)
+    this._options = options
+    this._startTime = this._getTime()
+  }
+
+  _getTime () {
+    const startTime = dateNow() + now()
+
+    return startTime
   }
 
   context () { return this._noopContext }
@@ -27,10 +38,14 @@ class NoopSpan {
   logEvent () {}
   finish (finishTime) {}
 
-  _createContext (parent) {
+  _createContext (parent, options) {
     const spanId = id()
 
     if (parent) {
+      if (options.keepParent) {
+        return parent
+      }
+
       return new NoopSpanContext({
         noop: this,
         traceId: parent._traceId,
