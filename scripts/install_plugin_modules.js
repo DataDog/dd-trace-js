@@ -9,6 +9,7 @@ const exec = require('./helpers/exec')
 const childProcess = require('child_process')
 const externals = require('../packages/dd-trace/test/plugins/externals')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
+const { getIdeallyTestedVersions } = require('../packages/dd-trace/test/setup/helpers/version-utils')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
@@ -63,24 +64,14 @@ async function assertVersions () {
 }
 
 async function assertInstrumentation (instrumentation, external) {
-  const versions = process.env.PACKAGE_VERSION_RANGE && !external
-    ? [process.env.PACKAGE_VERSION_RANGE]
-    : [].concat(instrumentation.versions || [])
+  const versions = getIdeallyTestedVersions(instrumentation.name, instrumentation.versions)
 
-  for (const version of versions) {
-    if (version) {
-      if (version !== '*') {
-        await assertModules(instrumentation.name, semver.coerce(version).version, external)
-      }
-
-      await assertModules(instrumentation.name, version, external)
-    }
+  for (const entry of versions) {
+    await assertModules(instrumentation.name, entry.version, external)
   }
 }
 
 async function assertModules (name, version, external) {
-  const range = process.env.RANGE
-  if (range && !semver.subset(version, range)) return
   addFolder(name)
   addFolder(name, version)
   assertFolder(name)
