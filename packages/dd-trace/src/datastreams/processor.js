@@ -61,7 +61,7 @@ class Backlog {
   encode () {
     return {
       Tags: this.tags,
-      Value: this.offset
+      Value: Math.floor(this.offset)
     }
   }
 }
