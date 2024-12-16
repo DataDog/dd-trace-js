@@ -11,6 +11,9 @@ const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')
 const { schemaDefinitions } = require('../../src/service-naming/schemas')
+const { getInstrumentation } = require('./helpers/load-inst')
+const { getIdeallyTestedVersions } = require('./helpers/version-utils')
+const fs = require('fs')
 
 global.withVersions = withVersions
 global.withExports = withExports
@@ -18,38 +21,6 @@ global.withNamingSchema = withNamingSchema
 global.withPeerService = withPeerService
 
 const testedPlugins = agent.testedPlugins
-
-function loadInst (plugin) {
-  const instrumentations = []
-
-  try {
-    loadInstFile(`${plugin}/server.js`, instrumentations)
-    loadInstFile(`${plugin}/client.js`, instrumentations)
-  } catch (e) {
-    try {
-      loadInstFile(`${plugin}/main.js`, instrumentations)
-    } catch (e) {
-      loadInstFile(`${plugin}.js`, instrumentations)
-    }
-  }
-
-  return instrumentations
-}
-
-function loadInstFile (file, instrumentations) {
-  const instrument = {
-    addHook (instrumentation) {
-      instrumentations.push(instrumentation)
-    }
-  }
-
-  const instPath = path.join(__dirname, `../../../datadog-instrumentations/src/${file}`)
-
-  proxyquire.noPreserveCache()(instPath, {
-    './helpers/instrument': instrument,
-    '../helpers/instrument': instrument
-  })
-}
 
 function withNamingSchema (
   spanProducerFn,
@@ -174,7 +145,7 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
 }
 
 function withVersions (plugin, modules, range, cb) {
-  const instrumentations = typeof plugin === 'string' ? loadInst(plugin) : [].concat(plugin)
+  const instrumentations = typeof plugin === 'string' ? getInstrumentation(plugin) : [].concat(plugin)
   const names = instrumentations.map(instrumentation => instrumentation.name)
 
   modules = [].concat(modules)
@@ -199,38 +170,31 @@ function withVersions (plugin, modules, range, cb) {
       if (!packages.includes(moduleName)) return
     }
 
-    const testVersions = new Map()
+    const testVersions = []
 
     instrumentations
       .filter(instrumentation => instrumentation.name === moduleName)
       .forEach(instrumentation => {
-        const versions = process.env.PACKAGE_VERSION_RANGE
-          ? [process.env.PACKAGE_VERSION_RANGE]
-          : instrumentation.versions
-        versions
-          .filter(version => !process.env.RANGE || semver.subset(version, process.env.RANGE))
-          .forEach(version => {
-            if (version !== '*') {
-              const min = semver.coerce(version).version
-
-              testVersions.set(min, { range: version, test: min })
-            }
-
-            const max = require(`../../../../versions/${moduleName}@${version}`).version()
-
-            testVersions.set(max, { range: version, test: version })
-          })
+        const versionRanges = instrumentation.versions
+        const ideallyTestedVersions = getIdeallyTestedVersions(moduleName, versionRanges)
+        testVersions.push(...ideallyTestedVersions)
       })
 
-    Array.from(testVersions)
-      .filter(v => !range || semver.satisfies(v[0], range))
-      .sort(v => v[0].localeCompare(v[0]))
-      .map(v => Object.assign({}, v[1], { version: v[0] }))
+    // TODO this isn't the best way to dedupe
+    Array.from(new Set(testVersions.map(x => JSON.stringify(x))))
+      .map(x => JSON.parse(x))
+      // TODO range is nonsense since it can only work if there's only one module
+      .filter(v => !range || semver.satisfies(v.version, range))
+      .sort(v => v.version.localeCompare(v.version)) // What??? comparing with itself???
       .forEach(v => {
-        const versionPath = path.resolve(
+        let versionPath = path.resolve(
           __dirname, '../../../../versions/',
-          `${moduleName}@${v.test}/node_modules`
+          `${moduleName}@${v.version}`
         )
+        if (!fs.existsSync(versionPath)) {
+          throw new Error(`Version path does not exist "${versionPath}". Try running \`yarn services\``)
+        }
+        versionPath = `${versionPath}/node_modules`
 
         describe(`with ${moduleName} ${v.range} (${v.version})`, () => {
           let nodePath
@@ -251,7 +215,10 @@ function withVersions (plugin, modules, range, cb) {
             require('module').Module._initPaths()
           })
 
-          cb(v.test, moduleName, v.version)
+          const context = { moduleName, ...v }
+          withVersions.context = context
+          cb(v.version, moduleName, v.version) // TODO get rid of 3rd param here
+          delete withVersions.context
 
           after(() => {
             process.env.NODE_PATH = nodePath

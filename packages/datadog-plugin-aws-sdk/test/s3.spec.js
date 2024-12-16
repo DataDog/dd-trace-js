@@ -5,6 +5,7 @@ const { setup } = require('./spec_helpers')
 const axios = require('axios')
 const { rawExpectedSchema } = require('./s3-naming')
 const { S3_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/constants')
+const { getEquivVersion } = require('../../dd-trace/test/setup/helpers/version-utils')
 
 const bucketName = 's3-bucket-name-test'
 
@@ -27,6 +28,8 @@ describe('Plugin', () => {
       let s3
       let tracer
 
+      const versionCtx = withVersions.context
+
       const s3ClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-s3' : 'aws-sdk'
       describe('with configuration', () => {
         before(() => {
@@ -36,7 +39,8 @@ describe('Plugin', () => {
         })
 
         before(done => {
-          AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
+          const clientVersion = getEquivVersion(s3ClientName, versionCtx)
+          AWS = require(`../../../versions/${s3ClientName}@${clientVersion}`).get()
           s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:4566', s3ForcePathStyle: true, region: 'us-east-1' })
 
           // Fix for LocationConstraint issue - only for SDK v2

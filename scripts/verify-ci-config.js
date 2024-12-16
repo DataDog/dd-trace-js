@@ -4,39 +4,19 @@
 const fs = require('fs')
 const path = require('path')
 const util = require('util')
-const proxyquire = require('proxyquire')
 const yaml = require('yaml')
 const semver = require('semver')
 const { execSync } = require('child_process')
 const Module = require('module')
+const { getAllInstrumentations } = require('../packages/dd-trace/test/setup/helpers/load-inst')
+
 if (!Module.isBuiltin) {
   Module.isBuiltin = mod => Module.builtinModules.includes(mod)
 }
 
 const nodeMajor = Number(process.versions.node.split('.')[0])
 
-const names = fs.readdirSync(path.join(__dirname, '..', 'packages', 'datadog-instrumentations', 'src'))
-  .filter(file => file.endsWith('.js'))
-  .map(file => file.slice(0, -3))
-
-const instrumentations = names.reduce((acc, key) => {
-  let instrumentations = []
-  const name = key
-
-  try {
-    loadInstFile(`${name}/server.js`, instrumentations)
-    loadInstFile(`${name}/client.js`, instrumentations)
-  } catch (e) {
-    loadInstFile(`${name}.js`, instrumentations)
-  }
-
-  instrumentations = instrumentations.filter(i => i.versions)
-  if (instrumentations.length) {
-    acc[key] = instrumentations
-  }
-
-  return acc
-}, {})
+const instrumentations = getAllInstrumentations()
 
 const versions = {}
 
@@ -82,21 +62,6 @@ Note that versions may be dependent on Node.js version. This is Node.js v${color
 > for ${pluginName} to see that the version ranges match.`.trim())
     }
   }
-}
-
-function loadInstFile (file, instrumentations) {
-  const instrument = {
-    addHook (instrumentation) {
-      instrumentations.push(instrumentation)
-    }
-  }
-
-  const instPath = path.join(__dirname, `../packages/datadog-instrumentations/src/${file}`)
-
-  proxyquire.noPreserveCache()(instPath, {
-    './helpers/instrument': instrument,
-    '../helpers/instrument': instrument
-  })
 }
 
 function getRangesFromYaml (job) {

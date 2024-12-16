@@ -5,10 +5,11 @@ const os = require('os')
 const path = require('path')
 const crypto = require('crypto')
 const semver = require('semver')
-const proxyquire = require('proxyquire')
 const exec = require('./helpers/exec')
 const childProcess = require('child_process')
 const externals = require('../packages/dd-trace/test/plugins/externals')
+const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
+const { getIdeallyTestedVersions } = require('../packages/dd-trace/test/setup/helpers/version-utils')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
@@ -47,19 +48,7 @@ async function run () {
 
 async function assertVersions () {
   const internals = names
-    .map(key => {
-      const instrumentations = []
-      const name = key
-
-      try {
-        loadInstFile(`${name}/server.js`, instrumentations)
-        loadInstFile(`${name}/client.js`, instrumentations)
-      } catch (e) {
-        loadInstFile(`${name}.js`, instrumentations)
-      }
-
-      return instrumentations
-    })
+    .map(getInstrumentation)
     .reduce((prev, next) => prev.concat(next), [])
 
   for (const inst of internals) {
@@ -75,24 +64,14 @@ async function assertVersions () {
 }
 
 async function assertInstrumentation (instrumentation, external) {
-  const versions = process.env.PACKAGE_VERSION_RANGE && !external
-    ? [process.env.PACKAGE_VERSION_RANGE]
-    : [].concat(instrumentation.versions || [])
+  const versions = getIdeallyTestedVersions(instrumentation.name, instrumentation.versions)
 
-  for (const version of versions) {
-    if (version) {
-      if (version !== '*') {
-        await assertModules(instrumentation.name, semver.coerce(version).version, external)
-      }
-
-      await assertModules(instrumentation.name, version, external)
-    }
+  for (const entry of versions) {
+    await assertModules(instrumentation.name, entry.version, external)
   }
 }
 
 async function assertModules (name, version, external) {
-  const range = process.env.RANGE
-  if (range && !semver.subset(version, range)) return
   addFolder(name)
   addFolder(name, version)
   assertFolder(name)
@@ -117,10 +96,10 @@ function assertFolder (name, version) {
   }
 }
 
-async function assertPackage (name, version, dependency, external) {
-  const dependencies = { [name]: dependency }
+async function assertPackage (name, version, dependencyVersionRange, external) {
+  const dependencies = { [name]: dependencyVersionRange }
   if (deps[name]) {
-    await addDependencies(dependencies, name, dependency)
+    await addDependencies(dependencies, name, dependencyVersionRange)
   }
   const pkg = {
     name: [name, sha1(name).substr(0, 8), sha1(version)].filter(val => val).join('-'),
@@ -239,19 +218,4 @@ function sha1 (str) {
   const shasum = crypto.createHash('sha1')
   shasum.update(str)
   return shasum.digest('hex')
-}
-
-function loadInstFile (file, instrumentations) {
-  const instrument = {
-    addHook (instrumentation) {
-      instrumentations.push(instrumentation)
-    }
-  }
-
-  const instPath = path.join(__dirname, `../packages/datadog-instrumentations/src/${file}`)
-
-  proxyquire.noPreserveCache()(instPath, {
-    './helpers/instrument': instrument,
-    '../helpers/instrument': instrument
-  })
 }

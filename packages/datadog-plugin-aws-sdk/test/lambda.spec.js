@@ -4,6 +4,7 @@ const JSZip = require('jszip')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./lambda-naming')
+const { getEquivVersion } = require('../../dd-trace/test/setup/helpers/version-utils')
 
 const zip = new JSZip()
 
@@ -19,6 +20,7 @@ describe('Plugin', () => {
       let tracer
 
       const lambdaClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-lambda' : 'aws-sdk'
+      const lambdaClientVersion = getEquivVersion(lambdaClientName, withVersions.context)
 
       const parsePayload = payload => {
         if (typeof payload !== 'string') {
@@ -38,7 +40,7 @@ describe('Plugin', () => {
         })
 
         before(done => {
-          AWS = require(`../../../versions/${lambdaClientName}@${version}`).get()
+          AWS = require(`../../../versions/${lambdaClientName}@${lambdaClientVersion}`).get()
 
           lambda = new AWS.Lambda({ endpoint: 'http://127.0.0.1:4567', region: 'us-east-1' })
           lambda.createFunction({

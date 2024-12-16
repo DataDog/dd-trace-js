@@ -5,6 +5,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const semver = require('semver')
 const { rawExpectedSchema } = require('./sqs-naming')
+const { getEquivVersion } = require('../../dd-trace/test/setup/helpers/version-utils')
 
 const queueName = 'SQS_QUEUE_NAME'
 const queueNameDSM = 'SQS_QUEUE_NAME_DSM'
@@ -36,6 +37,7 @@ describe('Plugin', () => {
       let tracer
 
       const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
+      const clientVersion = getEquivVersion(sqsClientName, withVersions.context)
 
       describe('without configuration', () => {
         before(() => {
@@ -49,7 +51,7 @@ describe('Plugin', () => {
         })
 
         before(done => {
-          AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
+          AWS = require(`../../../versions/${sqsClientName}@${clientVersion}`).get()
 
           sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
           sqs.createQueue(queueOptions, (err, res) => {
@@ -314,7 +316,8 @@ describe('Plugin', () => {
         })
 
         before(done => {
-          AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
+          const clientVersion = getEquivVersion(sqsClientName, versionCtx)
+          AWS = require(`../../../versions/${sqsClientName}@${clientVersion}`).get()
 
           sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
           sqs.createQueue(queueOptions, (err, res) => {
@@ -405,7 +408,8 @@ describe('Plugin', () => {
         })
 
         before(done => {
-          AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
+          const clientVersion = getEquivVersion(sqsClientName, versionCtx)
+          AWS = require(`../../../versions/${sqsClientName}@${clientVersion}`).get()
 
           sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
           sqs.createQueue(queueOptionsDsm, (err, res) => {
@@ -416,7 +420,8 @@ describe('Plugin', () => {
         })
 
         before(done => {
-          AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
+          const clientVersion = getEquivVersion(sqsClientName, versionCtx)
+          AWS = require(`../../../versions/${sqsClientName}@${clientVersion}`).get()
 
           sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
           sqs.createQueue(queueOptionsDsmConsumerOnly, (err, res) => {
