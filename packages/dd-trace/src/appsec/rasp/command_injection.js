@@ -38,9 +38,7 @@ function analyzeCommandInjection ({ file, fileArgs, shell, abortController }) {
   if (shell) {
     persistent[addresses.SHELL_COMMAND] = params
     raspRule.variant = 'shell'
-  }
-
-  if (!shell) {
+  } else {
     const commandParams = Array.isArray(params) ? params : [params]
     persistent[addresses.EXEC_COMMAND] = commandParams
     raspRule.variant = 'exec'

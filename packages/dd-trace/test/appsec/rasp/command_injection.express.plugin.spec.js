@@ -384,6 +384,7 @@ describe('RASP - command_injection', () => {
           beforeEach(() => {
             app = (req, res) => {
               const childProcess = require('child_process')
+
               const child = childProcess.spawn('sh', ['-c', req.query.dir])
               child.on('error', (e) => {
                 if (e.name === 'DatadogRaspAbortError') {
