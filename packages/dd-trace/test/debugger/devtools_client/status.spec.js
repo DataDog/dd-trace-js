@@ -3,14 +3,14 @@
 require('../../setup/mocha')
 
 const { expectWithin, getRequestOptions } = require('./utils')
-const JSONQueue = require('../../../src/debugger/devtools_client/queue')
+const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
 
 const ddsource = 'dd_debugger'
 const service = 'my-service'
 const runtimeId = 'my-runtime-id'
 
 describe('diagnostic message http requests', function () {
-  let statusproxy, request, queue
+  let statusproxy, request, jsonBuffer
 
   const acks = [
     ['ackReceived', 'RECEIVED'],
@@ -23,17 +23,17 @@ describe('diagnostic message http requests', function () {
     request = sinon.spy()
     request['@noCallThru'] = true
 
-    class JSONQueueSpy extends JSONQueue {
+    class JSONBufferSpy extends JSONBuffer {
       constructor (...args) {
         super(...args)
-        queue = this
-        sinon.spy(this, 'add')
+        jsonBuffer = this
+        sinon.spy(this, 'write')
       }
     }
 
     statusproxy = proxyquire('../src/debugger/devtools_client/status', {
       './config': { service, runtimeId, '@noCallThru': true },
-      './queue': JSONQueueSpy,
+      './json-buffer': JSONBufferSpy,
       '../../exporters/common/request': request
     })
   })
@@ -57,51 +57,51 @@ describe('diagnostic message http requests', function () {
         }
       })
 
-      it('should queue instead of calling request directly', function () {
+      it('should buffer instead of calling request directly', function () {
         ackFn({ id: 'foo', version: 0 })
         expect(request).to.not.have.been.called
-        expect(queue.add).to.have.been.calledOnceWith(
+        expect(jsonBuffer.write).to.have.been.calledOnceWith(
           JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }))
         )
       })
 
-      it('should only add to queue once if no change', function () {
+      it('should only add to buffer once if no change', function () {
         ackFn({ id: 'foo', version: 0 })
-        expect(queue.add).to.have.been.calledOnceWith(
+        expect(jsonBuffer.write).to.have.been.calledOnceWith(
           JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }))
         )
 
         ackFn({ id: 'foo', version: 0 })
-        expect(queue.add).to.have.been.calledOnce
+        expect(jsonBuffer.write).to.have.been.calledOnce
       })
 
-      it('should add to queue again if version changes', function () {
+      it('should add to buffer again if version changes', function () {
         ackFn({ id: 'foo', version: 0 })
-        expect(queue.add).to.have.been.calledOnceWith(
+        expect(jsonBuffer.write).to.have.been.calledOnceWith(
           JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }))
         )
 
         ackFn({ id: 'foo', version: 1 })
-        expect(queue.add).to.have.been.calledTwice
-        expect(queue.add.lastCall).to.have.been.calledWith(
+        expect(jsonBuffer.write).to.have.been.calledTwice
+        expect(jsonBuffer.write.lastCall).to.have.been.calledWith(
           JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 1, status, exception }))
         )
       })
 
-      it('should add to queue again if probeId changes', function () {
+      it('should add to buffer again if probeId changes', function () {
         ackFn({ id: 'foo', version: 0 })
-        expect(queue.add).to.have.been.calledOnceWith(
+        expect(jsonBuffer.write).to.have.been.calledOnceWith(
           JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }))
         )
 
         ackFn({ id: 'bar', version: 0 })
-        expect(queue.add).to.have.been.calledTwice
-        expect(queue.add.lastCall).to.have.been.calledWith(
+        expect(jsonBuffer.write).to.have.been.calledTwice
+        expect(jsonBuffer.write.lastCall).to.have.been.calledWith(
           JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'bar', version: 0, status, exception }))
         )
       })
 
-      it('should call request with the expected payload once the queue is flushed', function (done) {
+      it('should call request with the expected payload once the buffer is flushed', function (done) {
         ackFn({ id: 'foo', version: 0 })
         ackFn({ id: 'foo', version: 1 })
         ackFn({ id: 'bar', version: 0 })

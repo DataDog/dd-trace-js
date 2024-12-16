@@ -2,7 +2,7 @@
 
 const LRUCache = require('lru-cache')
 const config = require('./config')
-const JSONQueue = require('./queue')
+const JSONBuffer = require('./json-buffer')
 const request = require('../../exporters/common/request')
 const FormData = require('../../exporters/common/form-data')
 const log = require('../../log')
@@ -26,7 +26,7 @@ const cache = new LRUCache({
   ttlAutopurge: true
 })
 
-const queue = new JSONQueue({ size: config.maxTotalPayloadSize, timeout: 1000, onFlush })
+const jsonBuffer = new JSONBuffer({ size: config.maxTotalPayloadSize, timeout: 1000, onFlush })
 
 const STATUSES = {
   RECEIVED: 'RECEIVED',
@@ -74,7 +74,7 @@ function ackError (err, { id: probeId, version }) {
 }
 
 function send (payload) {
-  queue.add(JSON.stringify(payload))
+  jsonBuffer.write(JSON.stringify(payload))
 }
 
 function onFlush (payload) {
