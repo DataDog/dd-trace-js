@@ -28,7 +28,7 @@ const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { isBlocked, block, setTemplates, getBlockingAction } = require('./blocking')
-const { passportTrackEvent } = require('./passport')
+const UserTracking = require('./user_tracking')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
 const rasp = require('./rasp')
@@ -59,11 +59,14 @@ function enable (_config) {
 
     apiSecuritySampler.configure(_config.appsec)
 
+    UserTracking.setCollectionMode(_config.appsec.eventTracking.mode, false)
+
     bodyParser.subscribe(onRequestBodyParsed)
     multerParser.subscribe(onRequestBodyParsed)
     cookieParser.subscribe(onRequestCookieParser)
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
+    passportVerify.subscribe(onPassportVerify) // possible optimization: only subscribe if collection mode is enabled
     queryParser.subscribe(onRequestQueryParsed)
     nextBodyParsed.subscribe(onRequestBodyParsed)
     nextQueryParsed.subscribe(onRequestQueryParsed)
@@ -72,10 +75,6 @@ function enable (_config) {
     responseBody.subscribe(onResponseBody)
     responseWriteHead.subscribe(onResponseWriteHead)
     responseSetHeader.subscribe(onResponseSetHeader)
-
-    if (_config.appsec.eventTracking.enabled) {
-      passportVerify.subscribe(onPassportVerify)
-    }
 
     isEnabled = true
     config = _config
@@ -184,7 +183,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   Reporter.finishRequest(req, res)
 }
 
-function onPassportVerify ({ credentials, user }) {
+function onPassportVerify ({ framework, login, user, success, abortController }) {
   const store = storage.getStore()
   const rootSpan = store?.req && web.root(store.req)
 
@@ -193,7 +192,9 @@ function onPassportVerify ({ credentials, user }) {
     return
   }
 
-  passportTrackEvent(credentials, user, rootSpan, config.appsec.eventTracking.mode)
+  const results = UserTracking.trackLogin(framework, login, user, success, rootSpan)
+
+  handleResults(results, store.req, store.req.res, rootSpan, abortController)
 }
 
 function onRequestQueryParsed ({ req, res, query, abortController }) {
