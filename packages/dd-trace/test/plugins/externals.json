@@ -45,6 +45,10 @@
     {
       "name": "@aws-sdk/node-http-handler",
       "versions": [">=3"]
+    },
+    {
+      "name": "@aws-sdk/client-bedrock-runtime",
+      "versions": [">=3"]
     }
   ],
   "body-parser": [
