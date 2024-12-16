@@ -43,12 +43,25 @@ function extractRequestParams (params, provider) {
   const modelId = params.modelId
 
   if (provider === AI21) {
+    const temperature = requestBody.temperature || ''
+    const topP = requestBody.topP || ''
+    const maxTokens = requestBody.maxTokens || ''
+    const stopSequences = requestBody.stopSequences || []
+    let prompt = requestBody.prompt
+
+    if (modelId.includes('jamba')) {
+      for (const message of requestBody.messages) {
+        if (message.role === 'user') {
+          prompt = message.content // Return the content of the first user message
+        }
+      }
+    }
     return {
-      prompt: requestBody.prompt,
-      temperature: requestBody.temperature || '',
-      top_p: requestBody.topP || '',
-      max_tokens: requestBody.maxTokens || '',
-      stop_sequences: requestBody.stopSequences || []
+      prompt,
+      temperature,
+      top_p: topP,
+      max_tokens: maxTokens,
+      stop_sequences: stopSequences
     }
   } else if (provider === AMAZON && modelId.includes('embed')) {
     return { prompt: requestBody.inputText }
