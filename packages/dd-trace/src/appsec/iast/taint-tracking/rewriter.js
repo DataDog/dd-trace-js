@@ -145,7 +145,7 @@ function enableRewriter (telemetryVerbosity) {
   }
 }
 
-function enableEsmRewriter (telemetryVerbosity) {
+function enableEsmRewriter () {
   if (isMainThread && Module.register) {
     const { port1, port2 } = new MessageChannel();
     port1.on('message', (message) => {
@@ -155,11 +155,16 @@ function enableEsmRewriter (telemetryVerbosity) {
     const entryPoint = path.resolve(process.argv[1])
 
     process.nextTick(() => {
-      Module.register('./rewriter-esm.mjs', {
-        parentURL: pathToFileURL(__filename),
-        data: { port2, entryPoint },
-        transferList: [port2]
-      })
+      try {
+        Module.register('./rewriter-esm.mjs', {
+          parentURL: pathToFileURL(__filename),
+          data: { port2, entryPoint },
+          transferList: [port2]
+        })
+      } catch (e) {
+        console.error('e.message', e.message)
+        log.error('[ASM] Error enabling ESM Rewriter', e)
+      }
     })
   }
 }
