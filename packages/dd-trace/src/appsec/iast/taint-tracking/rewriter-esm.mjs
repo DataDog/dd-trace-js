@@ -9,19 +9,16 @@ const ddTraceDir = path.join(currentUrl.pathname, '..', '..', '..', '..', '..', 
 let idCounter = 1
 let initialized = false
 
-
-let port, entryPoint
+let port
 
 export async function initialize (data) {
   if (initialized) return Promise.reject(new Error('ALREADY INITIALIZED'))
   initialized = true
 
   port = data.port2
-  entryPoint = data.entryPoint
 }
 
-export async function load(url, context, nextLoad) {
-  console.log('load?', url)
+export async function load (url, context, nextLoad) {
   const result = await nextLoad(url, context)
 
   if (!port) return result

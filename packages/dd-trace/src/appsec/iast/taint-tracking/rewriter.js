@@ -2,7 +2,7 @@
 
 const Module = require('module')
 const { pathToFileURL } = require('url')
-const { MessageChannel } = require('worker_threads');
+const { MessageChannel } = require('worker_threads')
 const shimmer = require('../../../../../datadog-shimmer')
 const { isPrivateModule, isNotLibraryFile } = require('./filter')
 const { csiMethods } = require('./csi-methods')
@@ -17,6 +17,7 @@ const hardcodedSecretCh = dc.channel('datadog:secrets:result')
 let rewriter
 let getPrepareStackTrace
 let kSymbolPrepareStackTrace
+let esmRewriterEnabled = false
 
 let getRewriterOriginalPathAndLineFromSourceMap = function (path, line, column) {
   return { path, line, column }
@@ -146,8 +147,9 @@ function enableRewriter (telemetryVerbosity) {
 }
 
 function enableEsmRewriter () {
-  if (isMainThread && Module.register) {
-    const { port1, port2 } = new MessageChannel();
+  if (isMainThread && Module.register && !esmRewriterEnabled) {
+    esmRewriterEnabled = true
+    const { port1, port2 } = new MessageChannel()
     port1.on('message', (message) => {
       message.source = rewriteForESM(message.source, message.url)
       port1.postMessage(message)
@@ -162,7 +164,6 @@ function enableEsmRewriter () {
           transferList: [port2]
         })
       } catch (e) {
-        console.error('e.message', e.message)
         log.error('[ASM] Error enabling ESM Rewriter', e)
       }
     })
