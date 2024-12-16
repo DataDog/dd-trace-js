@@ -154,13 +154,14 @@ function enableEsmRewriter () {
       message.source = rewriteForESM(message.source, message.url)
       port1.postMessage(message)
     })
-    const entryPoint = path.resolve(process.argv[1])
+    port1.unref()
+    port2.unref()
 
     process.nextTick(() => {
       try {
         Module.register('./rewriter-esm.mjs', {
           parentURL: pathToFileURL(__filename),
-          data: { port2, entryPoint },
+          data: { port2 },
           transferList: [port2]
         })
       } catch (e) {
