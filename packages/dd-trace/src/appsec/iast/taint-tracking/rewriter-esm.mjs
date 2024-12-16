@@ -33,6 +33,7 @@ export async function load (url, context, nextLoad) {
         resolve(result)
       }
     }, 20)
+    timeout.unref()
 
     function waitAndResolve (data) {
       if (!data || data.id !== id) return
