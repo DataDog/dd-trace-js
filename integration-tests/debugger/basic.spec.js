@@ -366,7 +366,9 @@ describe('Dynamic Instrumentation', function () {
       }
 
       t.agent.on('debugger-diagnostics', ({ payload }) => {
-        if (payload.debugger.diagnostics.status === 'INSTALLED') triggerBreakpointContinuously()
+        payload.forEach((event) => {
+          if (event.debugger.diagnostics.status === 'INSTALLED') triggerBreakpointContinuously()
+        })
       })
 
       t.agent.on('debugger-input', () => {
