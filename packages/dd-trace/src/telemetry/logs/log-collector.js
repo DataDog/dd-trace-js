@@ -79,7 +79,7 @@ const logCollector = {
       }
       const hash = createHash(logEntry)
       if (!logs.has(hash)) {
-        logs.set(hash, errorCopy(logEntry))
+        logs.set(hash, logEntry)
         return true
       } else {
         logs.get(hash).count++
@@ -120,19 +120,6 @@ const logCollector = {
       maxEntries = max
     }
   }
-}
-
-// clone an Error object to later serialize and transmit
-// { ...error } doesn't work
-// also users can add arbitrary fields to an error
-function errorCopy (error) {
-  const keys = Object.getOwnPropertyNames(error)
-  const obj = {}
-  for (const key of keys) {
-    obj[key] = error[key]
-  }
-  obj.count = 1
-  return obj
 }
 
 logCollector.reset()
