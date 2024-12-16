@@ -733,6 +733,42 @@ describe('TextMapPropagator', () => {
       expect(spanContext._sampling.samplingPriority).to.equal(sampled)
     })
 
+    it(`should not extract AWSTraceHeader X-Amzn-Trace-Id if in an unexpected format or missing data`, () => {
+      const traceId = '4ef684dbd03d632e'
+      const spanId = '7e8d56262375628a'
+      const sampled = 1
+
+      // All necessary fields included but trace id root segment is not formatted properly
+      let unparsedHeader = `Root=${traceId};Parent=${spanId};Sampled=${sampled}`
+      const carrier = {
+        'x-amzn-trace-id': unparsedHeader
+      }
+
+      config.tracePropagationStyle.extract = ['xray']
+
+      let spanContext = propagator.extract(carrier)
+
+      expect(spanContext).to.be.null
+
+      // Missing necessary parent field
+      unparsedHeader = `Root=1-6583199d-00000000${traceId};Sampled=${sampled}`
+
+      config.tracePropagationStyle.extract = ['xray']
+
+      spanContext = propagator.extract(carrier)
+
+      expect(spanContext).to.be.null
+
+      // Missing necessary root field
+      unparsedHeader = `Parent=${spanId};Sampled=${sampled}`
+
+      config.tracePropagationStyle.extract = ['xray']
+
+      spanContext = propagator.extract(carrier)
+
+      expect(spanContext).to.be.null
+    })
+
     it(`should extract AWSTraceHeader X-Amzn-Trace-Id with origin and baggage`, () => {
       const traceId = '4ef684dbd03d632e'
       const spanId = '7e8d56262375628a'
