@@ -69,9 +69,27 @@ function getIdeallyTestedVersions (name, ranges) {
   }, [])
 }
 
+// For a given module name, get the version of it corresponding to the same
+// range as the currently tested module from `withVersions`. Note that this
+// should only be used when a module and a support module have the same version
+// range, but not necessarily the same versions within that range.
+// You should always pass `withVersions.context` into this funciton as `orig`,
+// and always capture it in the first scope inside the `withVersions` callback.
+function getEquivVersion (name, orig) {
+  if (!orig) {
+    throw new Error('No context found to get equiv version')
+  }
+
+  const origVersions = getIdeallyTestedVersions(orig.moduleName, [orig.range])
+  const isFirst = origVersions[0].version === orig.version
+  const otherModuleVersions = getIdeallyTestedVersions(name, [orig.range])
+  return otherModuleVersions[isFirst ? 0 : otherModuleVersions.length - 1].version
+}
+
 module.exports = {
   getAllVersions,
   getAllVersionsMatching,
   getIdeallyTestedVersionRanges,
-  getIdeallyTestedVersions
+  getIdeallyTestedVersions,
+  getEquivVersion
 }

@@ -4,6 +4,7 @@
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
+const { getEquivVersion } = require('../../dd-trace/test/setup/helpers/version-utils')
 
 const helloWorldSMD = {
   Comment: 'A Hello World example of the Amazon States Language using a Pass state',
@@ -23,6 +24,7 @@ describe('Sfn', () => {
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
     let stateMachineArn
     let client
+    const versionCtx = withVersions.context
 
     setup()
 
@@ -33,7 +35,8 @@ describe('Sfn', () => {
     function getClient () {
       const params = { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' }
       if (moduleName === '@aws-sdk/smithy-client') {
-        const lib = require(`../../../versions/@aws-sdk/client-sfn@${version}`).get()
+        const sfnVersion = getEquivVersion('@aws-sdk/client-sfn', versionCtx)
+        const lib = require(`../../../versions/@aws-sdk/client-sfn@${sfnVersion}`).get()
         const client = new lib.SFNClient(params)
         return {
           client,

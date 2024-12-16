@@ -6,6 +6,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
+const { getEquivVersion } = require('../../dd-trace/test/setup/helpers/version-utils')
 
 describe('Kinesis', function () {
   this.timeout(10000)
@@ -19,9 +20,11 @@ describe('Kinesis', function () {
     const streamName = 'MyStream'
     const streamNameDSM = 'MyStreamDSM'
     const kinesisClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-kinesis' : 'aws-sdk'
+    const versionCtx = withVersions.context
 
     function createResources (streamName, cb) {
-      AWS = require(`../../../versions/${kinesisClientName}@${version}`).get()
+      const clientVersion = getEquivVersion(kinesisClientName, versionCtx)
+      AWS = require(`../../../versions/${kinesisClientName}@${clientVersion}`).get()
 
       const params = {
         endpoint: 'http://127.0.0.1:4566',
@@ -29,7 +32,8 @@ describe('Kinesis', function () {
       }
 
       if (moduleName === '@aws-sdk/smithy-client') {
-        const { NodeHttpHandler } = require(`../../../versions/@aws-sdk/node-http-handler@${version}`).get()
+        const handlerVersion = getEquivVersion('@aws-sdk/node-http-handler', versionCtx)
+        const { NodeHttpHandler } = require(`../../../versions/@aws-sdk/node-http-handler@${handlerVersion}`).get()
 
         params.requestHandler = new NodeHttpHandler()
       }

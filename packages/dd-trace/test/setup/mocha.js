@@ -215,8 +215,10 @@ function withVersions (plugin, modules, range, cb) {
             require('module').Module._initPaths()
           })
 
-          withVersions.range = v.range
+          const context = { moduleName, ...v }
+          withVersions.context = context
           cb(v.version, moduleName, v.version) // TODO get rid of 3rd param here
+          delete withVersions.context
 
           after(() => {
             process.env.NODE_PATH = nodePath

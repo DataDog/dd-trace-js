@@ -4,6 +4,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup, sort } = require('./spec_helpers')
 const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
+const { getEquivVersion } = require('../../dd-trace/test/setup/helpers/version-utils')
 
 describe('Plugin', () => {
   // TODO: use the Request class directly for generic tests
@@ -75,6 +76,7 @@ describe('Plugin', () => {
 
       const s3ClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-s3' : 'aws-sdk'
       const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
+      const versionCtx = withVersions.context
 
       describe('without configuration', () => {
         before(() => {
@@ -82,7 +84,8 @@ describe('Plugin', () => {
         })
 
         before(() => {
-          AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
+          const clientVersion = getEquivVersion(s3ClientName, versionCtx)
+          AWS = require(`../../../versions/${s3ClientName}@${clientVersion}`).get()
           s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', s3ForcePathStyle: true })
           tracer = require('../../dd-trace')
         })
@@ -225,7 +228,8 @@ describe('Plugin', () => {
         })
 
         before(() => {
-          AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
+          const clientVersion = getEquivVersion(s3ClientName, versionCtx)
+          AWS = require(`../../../versions/${s3ClientName}@${clientVersion}`).get()
           s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:5000', region: 'us-east-1', s3ForcePathStyle: true })
           tracer = require('../../dd-trace')
         })
@@ -262,8 +266,10 @@ describe('Plugin', () => {
         })
 
         before(() => {
-          const { S3 } = require(`../../../versions/${s3ClientName}@${version}`).get()
-          const { SQS } = require(`../../../versions/${sqsClientName}@${version}`).get()
+          const s3Version = getEquivVersion(s3ClientName, versionCtx)
+          const { S3 } = require(`../../../versions/${s3ClientName}@${s3Version}`).get()
+          const sqsVersion = getEquivVersion(s3ClientName, versionCtx)
+          const { SQS } = require(`../../../versions/${sqsClientName}@${sqsVersion}`).get()
 
           s3 = new S3({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', s3ForcePathStyle: true })
           sqs = new SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })

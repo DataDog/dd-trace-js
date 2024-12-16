@@ -6,6 +6,7 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
+const { getEquivVersion } = require('../../dd-trace/test/setup/helpers/version-utils')
 
 describe('Sns', function () {
   setup()
@@ -24,6 +25,8 @@ describe('Sns', function () {
 
     const snsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sns' : 'aws-sdk'
     const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
+    const snsVersion = getEquivVersion(snsClientName, withVersions.context)
+    const sqsVersion = getEquivVersion(sqsClientName, withVersions.context)
 
     let childSpansFound = 0
     const assertPropagation = (done, childSpans = 1) => {
@@ -45,8 +48,8 @@ describe('Sns', function () {
     }
 
     function createResources (queueName, topicName, cb) {
-      const { SNS } = require(`../../../versions/${snsClientName}@${version}`).get()
-      const { SQS } = require(`../../../versions/${sqsClientName}@${version}`).get()
+      const { SNS } = require(`../../../versions/${snsClientName}@${snsVersion}`).get()
+      const { SQS } = require(`../../../versions/${sqsClientName}@${sqsVersion}`).get()
 
       sns = new SNS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
       sqs = new SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })

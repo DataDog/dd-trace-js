@@ -2,7 +2,7 @@
 
 const { useEnv } = require('../../../integration-tests/helpers')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { getIdeallyTestedVersions } = require('../../dd-trace/test/setup/helpers/version-utils')
+const { getEquivVersion } = require('../../dd-trace/test/setup/helpers/version-utils')
 
 const nock = require('nock')
 
@@ -34,12 +34,8 @@ describe('Plugin', () => {
 
   describe('langchain', () => {
     withVersions('langchain', ['@langchain/core'], version => {
-      const coreVersions = getIdeallyTestedVersions('@langchain/core', [withVersions.range])
-      const isFirst = coreVersions[0].version === version
-      const openAiVersions = getIdeallyTestedVersions('@langchain/openai', [withVersions.range])
-      const openAiVersion = (openAiVersions[isFirst ? 0 : openAiVersions.length - 1]).version
-      const anthropicVersions = getIdeallyTestedVersions('@langchain/anthropic', [withVersions.range])
-      const anthropicVersion = (anthropicVersions[isFirst ? 0 : anthropicVersions.length - 1]).version
+      const openAiVersion = getEquivVersion('@langchain/openai', withVersions.context)
+      const anthropicVersion = getEquivVersion('@langchain/anthropic', withVersions.context)
 
       beforeEach(() => {
         return agent.load('langchain')
