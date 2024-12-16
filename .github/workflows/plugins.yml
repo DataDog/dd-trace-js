@@ -15,54 +15,30 @@ concurrency:
 
 
 jobs:
-  aerospike-node-16:
-    runs-on: ubuntu-latest
-    services:
-      aerospike:
-        image: aerospike:ce-5.7.0.15
-        ports:
-          - "127.0.0.1:3000-3002:3000-3002"
-    env:
-      PLUGINS: aerospike
-      SERVICES: aerospike
-      PACKAGE_VERSION_RANGE: '>=4.0.0 <5.2.0'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/setup
-      - id: pkg
-        run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
-      - id: extract
-        run: |
-          version="${{fromJson(steps.pkg.outputs.json).version}}"
-          majorVersion=$(echo "$version" | cut -d '.' -f 1)
-          echo "Major Version: $majorVersion"
-          echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
-      - uses: ./.github/actions/node/oldest
-      - name: Install dependencies
-        if: env.MAJOR_VERSION == '4'
-        uses: ./.github/actions/install
-      - name: Run tests
-        if: env.MAJOR_VERSION == '4'
-        run: yarn test:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-      - uses: codecov/codecov-action@v3
-
-  aerospike-node-18-20:
+  aerospike:
     strategy:
       matrix:
-        node-version: [18]
-        range: ['5.2.0 - 5.7.0']
+        node-version: [16]
+        range: ['>=4.0.0 <5.2.0']
+        aerospike-image: [ce-5.7.0.15]
+        test-image: [ubuntu-latest]
         include:
+          - node-version: 18
+            range: '>=5.2.0'
+            aerospike-image: ce-6.4.0.3
+            test-image: ubuntu-latest
           - node-version: 20
-            range: '>=5.8.0'
-    runs-on: ubuntu-latest
+            range: '>=5.5.0'
+            aerospike-image: ce-6.4.0.3
+            test-image: ubuntu-latest
+          - node-version: 22
+            range: '>=5.12.1'
+            aerospike-image: ce-6.4.0.3
+            test-image: ubuntu-latest
+    runs-on: ${{ matrix.test-image }}
     services:
       aerospike:
-        image: aerospike:ce-6.4.0.3
+        image: aerospike:${{ matrix.aerospike-image }}
         ports:
           - "127.0.0.1:3000-3002:3000-3002"
     env:
@@ -73,24 +49,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - id: pkg
-        run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
-      - id: extract
-        run: |
-          version="${{fromJson(steps.pkg.outputs.json).version}}"
-          majorVersion=$(echo "$version" | cut -d '.' -f 1)
-          echo "Major Version: $majorVersion"
-          echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
+      - run: yarn config set ignore-engines true
       - name: Install dependencies
-        if: env.MAJOR_VERSION == '5'
         uses: ./.github/actions/install
       - name: Run tests
-        if: env.MAJOR_VERSION == '5'
         run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
@@ -759,7 +724,7 @@ jobs:
         version:
           - 18
           - latest
-        range: ['9.5.0', '11.1.4', '13.2.0', '>=14.0.0 <=14.2.6', '>=14.2.7 <15', '>=15.0.0']
+        range: ['>=10.2.0 <11', '>=11.0.0 <13', '11.1.4', '>=13.0.0 <14', '13.2.0', '>=14.0.0 <=14.2.6', '>=14.2.7 <15', '>=15.0.0']
     runs-on: ubuntu-latest
     env:
       PLUGINS: next

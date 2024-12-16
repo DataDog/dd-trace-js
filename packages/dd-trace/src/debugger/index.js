@@ -18,7 +18,7 @@ module.exports = {
 function start (config, rc) {
   if (worker !== null) return
 
-  log.debug('Starting Dynamic Instrumentation client...')
+  log.debug('[debugger] Starting Dynamic Instrumentation client...')
 
   const rcAckCallbacks = new Map()
   const rcChannel = new MessageChannel()
@@ -33,14 +33,14 @@ function start (config, rc) {
     const ack = rcAckCallbacks.get(ackId)
     if (ack === undefined) {
       // This should never happen, but just in case something changes in the future, we should guard against it
-      log.error('Received an unknown ackId: %s', ackId)
-      if (error) log.error('Error starting Dynamic Instrumentation client', error)
+      log.error('[debugger] Received an unknown ackId: %s', ackId)
+      if (error) log.error('[debugger] Error starting Dynamic Instrumentation client', error)
       return
     }
     ack(error)
     rcAckCallbacks.delete(ackId)
   })
-  rcChannel.port2.on('messageerror', (err) => log.error('Debugger RC messageerror', err))
+  rcChannel.port2.on('messageerror', (err) => log.error('[debugger] received "messageerror" on RC port', err))
 
   worker = new Worker(
     join(__dirname, 'devtools_client', 'index.js'),
@@ -58,16 +58,16 @@ function start (config, rc) {
   )
 
   worker.on('online', () => {
-    log.debug(`Dynamic Instrumentation worker thread started successfully (thread id: ${worker.threadId})`)
+    log.debug('[debugger] Dynamic Instrumentation worker thread started successfully (thread id: %d)', worker.threadId)
   })
 
-  worker.on('error', (err) => log.error('Debugger worker error', err))
-  worker.on('messageerror', (err) => log.error('Debugger worker messageerror', err))
+  worker.on('error', (err) => log.error('[debugger] worker thread error', err))
+  worker.on('messageerror', (err) => log.error('[debugger] received "messageerror" from worker', err))
 
   worker.on('exit', (code) => {
     const error = new Error(`Dynamic Instrumentation worker thread exited unexpectedly with code ${code}`)
 
-    log.error('Debugger worker exited unexpectedly', error)
+    log.error('[debugger] worker thread exited unexpectedly', error)
 
     // Be nice, clean up now that the worker thread encounted an issue and we can't continue
     rc.removeProductHandler('LIVE_DEBUGGING')

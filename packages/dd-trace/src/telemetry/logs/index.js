@@ -40,6 +40,7 @@ function onErrorLog (msg) {
 
   const telLog = {
     level: 'ERROR',
+    count: 1,
 
     // existing log.error(err) without message will be reported as 'Generic Error'
     message: message ?? 'Generic Error'
