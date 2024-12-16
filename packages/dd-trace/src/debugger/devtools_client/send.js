@@ -4,7 +4,7 @@ const { hostname: getHostname } = require('os')
 const { stringify } = require('querystring')
 
 const config = require('./config')
-const JSONQueue = require('./queue')
+const JSONBuffer = require('./json-buffer')
 const request = require('../../exporters/common/request')
 const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../../plugins/util/tags')
 const log = require('../../log')
@@ -30,7 +30,7 @@ const ddtags = [
 const path = `/debugger/v1/input?${stringify({ ddtags })}`
 
 let callbacks = []
-const queue = new JSONQueue({ size: config.maxTotalPayloadSize, timeout: 1000, onFlush })
+const jsonBuffer = new JSONBuffer({ size: config.maxTotalPayloadSize, timeout: 1000, onFlush })
 
 function send (message, logger, dd, snapshot, cb) {
   const payload = {
@@ -57,7 +57,7 @@ function send (message, logger, dd, snapshot, cb) {
     size = Buffer.byteLength(json)
   }
 
-  queue.add(json, size)
+  jsonBuffer.write(json, size)
   callbacks.push(cb)
 }
 

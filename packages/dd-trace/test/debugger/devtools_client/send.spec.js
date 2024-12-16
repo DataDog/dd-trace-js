@@ -4,7 +4,7 @@ require('../../setup/mocha')
 
 const { hostname: getHostname } = require('os')
 const { expectWithin, getRequestOptions } = require('./utils')
-const JSONQueue = require('../../../src/debugger/devtools_client/queue')
+const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
 const { version } = require('../../../../../package.json')
 
 process.env.DD_ENV = 'my-env'
@@ -21,39 +21,39 @@ const dd = { dd: true }
 const snapshot = { snapshot: true }
 
 describe('input message http requests', function () {
-  let send, request, queue
+  let send, request, jsonBuffer
 
   beforeEach(function () {
     request = sinon.spy()
     request['@noCallThru'] = true
 
-    class JSONQueueSpy extends JSONQueue {
+    class JSONBufferSpy extends JSONBuffer {
       constructor (...args) {
         super(...args)
-        queue = this
-        sinon.spy(this, 'add')
+        jsonBuffer = this
+        sinon.spy(this, 'write')
       }
     }
 
     send = proxyquire('../src/debugger/devtools_client/send', {
       './config': { service, commitSHA, repositoryUrl, url, '@noCallThru': true },
-      './queue': JSONQueueSpy,
+      './json-buffer': JSONBufferSpy,
       '../../exporters/common/request': request
     })
   })
 
-  it('should queue instead of calling request directly', function () {
+  it('should buffer instead of calling request directly', function () {
     const callback = sinon.spy()
 
     send(message, logger, dd, snapshot, callback)
     expect(request).to.not.have.been.called
-    expect(queue.add).to.have.been.calledOnceWith(
+    expect(jsonBuffer.write).to.have.been.calledOnceWith(
       JSON.stringify(getPayload())
     )
     expect(callback).to.not.have.been.called
   })
 
-  it('should call request with the expected payload once the queue is flushed', function (done) {
+  it('should call request with the expected payload once the buffer is flushed', function (done) {
     const callback1 = sinon.spy()
     const callback2 = sinon.spy()
     const callback3 = sinon.spy()
