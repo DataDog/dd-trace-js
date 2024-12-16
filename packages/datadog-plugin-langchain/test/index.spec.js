@@ -2,6 +2,7 @@
 
 const { useEnv } = require('../../../integration-tests/helpers')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { getIdeallyTestedVersions } = require('../../dd-trace/test/setup/helpers/version-utils')
 
 const nock = require('nock')
 
@@ -33,6 +34,13 @@ describe('Plugin', () => {
 
   describe('langchain', () => {
     withVersions('langchain', ['@langchain/core'], version => {
+      const coreVersions = getIdeallyTestedVersions('@langchain/core', [withVersions.range])
+      const isFirst = coreVersions[0].version === version
+      const openAiVersions = getIdeallyTestedVersions('@langchain/openai', [withVersions.range])
+      const openAiVersion = (openAiVersions[isFirst ? 0 : openAiVersions.length - 1]).version
+      const anthropicVersions = getIdeallyTestedVersions('@langchain/anthropic', [withVersions.range])
+      const anthropicVersion = (anthropicVersions[isFirst ? 0 : anthropicVersions.length - 1]).version
+
       beforeEach(() => {
         return agent.load('langchain')
       })
@@ -43,8 +51,8 @@ describe('Plugin', () => {
       })
 
       beforeEach(() => {
-        langchainOpenai = require(`../../../versions/@langchain/openai@${version}`).get()
-        langchainAnthropic = require(`../../../versions/@langchain/anthropic@${version}`).get()
+        langchainOpenai = require(`../../../versions/@langchain/openai@${openAiVersion}`).get()
+        langchainAnthropic = require(`../../../versions/@langchain/anthropic@${anthropicVersion}`).get()
 
         // need to specify specific import in `get(...)`
         langchainMessages = require(`../../../versions/@langchain/core@${version}`).get('@langchain/core/messages')

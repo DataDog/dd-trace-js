@@ -215,6 +215,7 @@ function withVersions (plugin, modules, range, cb) {
             require('module').Module._initPaths()
           })
 
+          withVersions.range = v.range
           cb(v.version, moduleName, v.version) // TODO get rid of 3rd param here
 
           after(() => {
