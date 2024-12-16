@@ -21,7 +21,7 @@ jobs:
         node-version: [16]
         range: ['>=4.0.0 <5.2.0']
         aerospike-image: [ce-5.7.0.15]
-        test-image: [ubuntu-latest]
+        test-image: [ubuntu-22.04]
         include:
           - node-version: 18
             range: '>=5.2.0'
