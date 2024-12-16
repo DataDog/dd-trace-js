@@ -1,7 +1,7 @@
 'use strict'
 
 const { storage } = require('../../../datadog-core')
-const { trace, ROOT_CONTEXT } = require('@opentelemetry/api')
+const { trace, ROOT_CONTEXT, propagation } = require('@opentelemetry/api')
 const DataDogSpanContext = require('../opentracing/span_context')
 
 const SpanContext = require('./span_context')
@@ -21,14 +21,25 @@ class ContextManager {
       return context
     }
 
+    let otelBaggages
+    const baggages = JSON.parse(activeSpan.getAllBaggageItems())
+    if (Object.keys(baggages).length) {
+      const entries = {}
+      for (const [key, value] of Object.entries(baggages)) {
+        entries[key] = { value }
+      }
+      otelBaggages = propagation.createBaggage(entries)
+    }
+
     if (!context._otelSpanContext) {
       const newSpanContext = new SpanContext(context)
       context._otelSpanContext = newSpanContext
     }
     if (store && trace.getSpanContext(store) === context._otelSpanContext) {
-      return store
+      return otelBaggages ? propagation.setBaggage(store, otelBaggages) : store
     }
-    return trace.setSpanContext(store || ROOT_CONTEXT, context._otelSpanContext)
+    const wrappedContext = trace.setSpanContext(store || ROOT_CONTEXT, context._otelSpanContext)
+    return otelBaggages ? propagation.setBaggage(wrappedContext, otelBaggages) : wrappedContext
   }
 
   with (context, fn, thisArg, ...args) {
@@ -39,6 +50,18 @@ class ContextManager {
       return this._store.run(context, cb, ...args)
     }
     if (span && span._ddSpan) {
+      // remove all baggage items?
+      const baggages = propagation.getBaggage(context)
+      if (baggages) {
+        const baggageItems = baggages.getAllEntries()
+        if (baggageItems.length) {
+          for (const baggage of baggageItems) {
+            const key = baggage[0]
+            const value = baggage[1].value
+            span._ddSpan.setBaggageItem(key, value)
+          }
+        }
+      }
       return ddScope.activate(span._ddSpan, run)
     }
     return run()

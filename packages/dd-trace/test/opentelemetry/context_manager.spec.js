@@ -4,8 +4,17 @@ require('../setup/tap')
 
 const { expect } = require('chai')
 const ContextManager = require('../../src/opentelemetry/context_manager')
-const { ROOT_CONTEXT } = require('@opentelemetry/api')
+const TracerProvider = require('../../src/opentelemetry/tracer_provider')
+const { context, propagation, trace, ROOT_CONTEXT } = require('@opentelemetry/api')
 const api = require('@opentelemetry/api')
+const tracer = require('../../').init()
+
+function makeSpan (...args) {
+  const tracerProvider = new TracerProvider()
+  tracerProvider.register()
+  const tracer = tracerProvider.getTracer()
+  return tracer.startSpan(...args)
+}
 
 describe('OTel Context Manager', () => {
   let contextManager
@@ -114,4 +123,61 @@ describe('OTel Context Manager', () => {
     })
     expect(ret).to.equal('return value')
   })
+
+  it('should propagate baggage from an otel span to a datadog span', () => {
+    const entries = {
+      foo : { value: 'bar' }
+    }
+    const baggage = propagation.createBaggage(entries)
+    const contextWithBaggage = propagation.setBaggage(context.active(), baggage)
+    const span = makeSpan('otel-to-dd')
+    const contextWithSpan = trace.setSpan(contextWithBaggage, span)
+    api.context.with(contextWithSpan, () => {
+      expect(span._ddSpan.getBaggageItem('foo')).to.be.equal('bar')
+    })
+  })
+
+  it('should propagate baggage from a datadog span to an otel span', () => {
+    const baggageKey = 'raccoon'
+    const baggageVal = 'chunky'
+    const ddSpan = tracer.startSpan('dd-to-otel')
+    ddSpan.setBaggageItem(baggageKey, baggageVal)
+    tracer.scope().activate(ddSpan, () => {
+      const baggages = propagation.getBaggage(api.context.active()).getAllEntries()
+      expect(baggages.length).to.equal(1)
+      const baggage = baggages[0]
+      expect(baggage[0]).to.equal(baggageKey)
+      expect(baggage[1].value).to.equal(baggageVal)
+    })
+  })
+
+  // it('should handle dd-otel baggage conflict on a datadog span', () => {
+  //   // const ddSpan = tracer.startSpan('dd')
+  //   // ddSpan.setBaggageItem('key', 'dd')
+  //   // let baggageContext
+  //   // tracer.scope().activate(ddSpan, () => {
+  //   //   const entries = {
+  //   //     key : { value: 'otel' },
+  //   //   }
+  //   //   const baggage = propagation.createBaggage(entries)
+  //   //   baggageContext = propagation.setBaggage(api.context.active(), baggage)
+  //   // })
+  //   // const otelSpan = makeSpan('otel')
+  //   // const contextWithSpan = trace.setSpan(baggageContext, otelSpan)
+  //   // api.context.with(contextWithSpan, () => {
+  //   //   expect(span._ddSpan.getBaggageItem('foo')).to.be.equal('bar')
+  //   // })
+  //   tracer.trace('ddSpan', (ddSpan) => {
+  //     ddSpan.setBaggageItem('key', 'dd')
+  //     const otelSpan = makeSpan('otelSpan')
+  //     const entries = {
+  //       key : { value: 'otel' },
+  //     }
+  //     const baggage = propagation.createBaggage(entries)
+  //     baggageContext = propagation.setBaggage(otelSpan.spanContext(), baggage)
+  //     // api.context.with(baggageContext, () => {
+  //     //   console.log(ddSpan.context())
+  //     // })
+  //   })
+  // })
 })
