@@ -392,6 +392,42 @@ describe('TextMapPropagator', () => {
         injectCh.unsubscribe(onSpanInject)
       }
     })
+
+    it('should skip injection of aws xray header without the feature flag', () => {
+      const carrier = {}
+      const spanContext = createContext({
+        traceId: id('0000000000000123'),
+        spanId: id('0000000000000456')
+      })
+
+      config.tracePropagationStyle.inject = []
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier).to.not.have.property('x-amzn-trace-id')
+    })
+
+    it(`should inject AWSTraceHeader X-Amzn-Trace-Id when configured`, () => {
+      const baggageItems = {
+        bool: true,
+        a: "b"
+      }
+      const spanContext = createContext({ baggageItems, sampling: {
+        priority: 1
+      }})
+
+      config.tracePropagationStyle.inject = ['xray']
+
+      const traceId = spanContext._traceId.toString().padStart(24, '0')
+      const spanId = spanContext._spanId.toString().padStart(16, '0')
+      const expectedHeader = `root=1-00000000-${traceId};parent=${spanId};sampled=1`
+      const additionalParts = `;bool=true;a=b`
+      const carrier = {}
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier['x-amzn-trace-id']).to.equal(expectedHeader + additionalParts)
+    })
   })
 
   describe('extract', () => {
@@ -663,18 +699,62 @@ describe('TextMapPropagator', () => {
       expect(spanContext._tracestate).to.be.undefined
     })
 
-    it(`should extract AWSTraceHeader`, () => {
+    it(`should not extract AWSTraceHeader X-Amzn-Trace-Id when not configured`, () => {
       const traceId = '4ef684dbd03d632e'
       const spanId = '7e8d56262375628a'
       const sampled = 1
       const unparsedHeader = `Root=1-6583199d-00000000${traceId};Parent=${spanId};Sampled=${sampled}`
-      const carrier = BaseAwsSdkPlugin.prototype.parseAWSTraceHeader(unparsedHeader)
+      const carrier = {
+        'x-amzn-trace-id': unparsedHeader
+      }
+
+      config.tracePropagationStyle.extract = []
+
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext).to.be.null
+    })
+
+    it(`should extract AWSTraceHeader X-Amzn-Trace-Id when configured`, () => {
+      const traceId = '4ef684dbd03d632e'
+      const spanId = '7e8d56262375628a'
+      const sampled = 1
+      const unparsedHeader = `Root=1-6583199d-00000000${traceId};Parent=${spanId};Sampled=${sampled}`
+      const carrier = {
+        'x-amzn-trace-id': unparsedHeader
+      }
+
+      config.tracePropagationStyle.extract = ['xray']
 
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext.toTraceId()).to.equal(id(traceId, 16).toString(10))
       expect(spanContext.toSpanId()).to.equal(id(spanId, 16).toString(10))
       expect(spanContext._sampling.samplingPriority).to.equal(sampled)
+    })
+
+    it(`should extract AWSTraceHeader X-Amzn-Trace-Id with origin and baggage`, () => {
+      const traceId = '4ef684dbd03d632e'
+      const spanId = '7e8d56262375628a'
+      const sampled = 1
+      const unparsedHeader = `Root=1-6583199d-00000000${traceId};Parent=${spanId};Sampled=${sampled}`
+      const additionalParts = `;_dd.origin=localhost;baggage_key=baggage_value;foo=bar`
+      const carrier = {
+        'x-amzn-trace-id': unparsedHeader + additionalParts
+      }
+
+      config.tracePropagationStyle.extract = ['xray']
+
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext.toTraceId()).to.equal(id(traceId, 16).toString(10))
+      expect(spanContext.toSpanId()).to.equal(id(spanId, 16).toString(10))
+      expect(spanContext._sampling.samplingPriority).to.equal(sampled)
+
+      expect(spanContext._baggageItems).to.deep.equal({ 
+        baggage_key: "baggage_value", foo: "bar"
+      })
+      expect(spanContext._trace.origin).to.equal('localhost')
     })
 
     it('extracts span_id from tracecontext headers and stores datadog parent-id in trace_distributed_tags', () => {
