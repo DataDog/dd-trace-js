@@ -356,8 +356,7 @@ describe('Dynamic Instrumentation', function () {
 
   describe('sampling', function () {
     it('should respect sampling rate for single probe', function (done) {
-      let start, timer
-      let payloadsReceived = 0
+      let prev, timer
       const rcConfig = t.generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
 
       function triggerBreakpointContinuously () {
@@ -371,24 +370,21 @@ describe('Dynamic Instrumentation', function () {
         })
       })
 
-      t.agent.on('debugger-input', () => {
-        payloadsReceived++
-        if (payloadsReceived === 1) {
-          start = Date.now()
-        } else if (payloadsReceived === 2) {
-          const duration = Date.now() - start
-          clearTimeout(timer)
+      t.agent.on('debugger-input', ({ payload }) => {
+        payload.forEach(({ 'debugger.snapshot': { timestamp } }) => {
+          if (prev !== undefined) {
+            const duration = timestamp - prev
+            clearTimeout(timer)
 
-          // Allow for a variance of -5/+50ms (time will tell if this is enough)
-          assert.isAbove(duration, 995)
-          assert.isBelow(duration, 1050)
+            // Allow for a variance of +50ms (time will tell if this is enough)
+            assert.isAtLeast(duration, 1000)
+            assert.isBelow(duration, 1050)
 
-          // Wait at least a full sampling period, to see if we get any more payloads
-          timer = setTimeout(done, 1250)
-        } else {
-          clearTimeout(timer)
-          done(new Error('Too many payloads received!'))
-        }
+            // Wait at least a full sampling period, to see if we get any more payloads
+            timer = setTimeout(done, 1250)
+          }
+          prev = timestamp
+        })
       })
 
       t.agent.addRemoteConfig(rcConfig)
@@ -399,14 +395,12 @@ describe('Dynamic Instrumentation', function () {
       const rcConfig2 = t.breakpoints[1].generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
       const state = {
         [rcConfig1.config.id]: {
-          payloadsReceived: 0,
           tiggerBreakpointContinuously () {
             t.axios.get(t.breakpoints[0].url).catch(done)
             this.timer = setTimeout(this.tiggerBreakpointContinuously.bind(this), 10)
           }
         },
         [rcConfig2.config.id]: {
-          payloadsReceived: 0,
           tiggerBreakpointContinuously () {
             t.axios.get(t.breakpoints[1].url).catch(done)
             this.timer = setTimeout(this.tiggerBreakpointContinuously.bind(this), 10)
@@ -415,29 +409,29 @@ describe('Dynamic Instrumentation', function () {
       }
 
       t.agent.on('debugger-diagnostics', ({ payload }) => {
-        const { probeId, status } = payload.debugger.diagnostics
-        if (status === 'INSTALLED') state[probeId].tiggerBreakpointContinuously()
+        payload.forEach((event) => {
+          const { probeId, status } = event.debugger.diagnostics
+          if (status === 'INSTALLED') state[probeId].tiggerBreakpointContinuously()
+        })
       })
 
       t.agent.on('debugger-input', ({ payload }) => {
-        const _state = state[payload['debugger.snapshot'].probe.id]
-        _state.payloadsReceived++
-        if (_state.payloadsReceived === 1) {
-          _state.start = Date.now()
-        } else if (_state.payloadsReceived === 2) {
-          const duration = Date.now() - _state.start
-          clearTimeout(_state.timer)
+        payload.forEach((result) => {
+          const _state = state[result['debugger.snapshot'].probe.id]
+          const { timestamp } = result['debugger.snapshot']
+          if (_state.prev !== undefined) {
+            const duration = timestamp - _state.prev
+            clearTimeout(_state.timer)
 
-          // Allow for a variance of -5/+50ms (time will tell if this is enough)
-          assert.isAbove(duration, 995)
-          assert.isBelow(duration, 1050)
+            // Allow for a variance of +50ms (time will tell if this is enough)
+            assert.isAtLeast(duration, 1000)
+            assert.isBelow(duration, 1050)
 
-          // Wait at least a full sampling period, to see if we get any more payloads
-          _state.timer = setTimeout(doneWhenCalledTwice, 1250)
-        } else {
-          clearTimeout(_state.timer)
-          done(new Error('Too many payloads received!'))
-        }
+            // Wait at least a full sampling period, to see if we get any more payloads
+            _state.timer = setTimeout(doneWhenCalledTwice, 1250)
+          }
+          _state.prev = timestamp
+        })
       })
 
       t.agent.addRemoteConfig(rcConfig1)
