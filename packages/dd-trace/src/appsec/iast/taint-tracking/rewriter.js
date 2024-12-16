@@ -10,7 +10,6 @@ const { getName } = require('../telemetry/verbosity')
 const { getRewriteFunction } = require('./rewriter-telemetry')
 const dc = require('dc-polyfill')
 const log = require('../../../log')
-const path = require('path')
 const { isMainThread } = require('worker_threads')
 
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')
