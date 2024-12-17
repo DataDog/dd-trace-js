@@ -8,21 +8,20 @@ describe('ldap-injection-analyzer', () => {
   const TAINTED_QUERY = 'vulnerable query'
 
   const TaintTrackingMock = {
-    isTainted: (iastContext, string) => {
-      return string === TAINTED_QUERY
-    },
     getRanges: (iastContext, string) => {
-      return [
-        {
-          start: 0,
-          end: string.length,
-          iinfo: {
-            parameterName: 'param',
-            parameterValue: string,
-            type: HTTP_REQUEST_PARAMETER
-          }
-        }
-      ]
+      return string === TAINTED_QUERY
+        ? [
+            {
+              start: 0,
+              end: string.length,
+              iinfo: {
+                parameterName: 'param',
+                parameterValue: string,
+                type: HTTP_REQUEST_PARAMETER
+              }
+            }
+          ]
+        : []
     }
   }
 
