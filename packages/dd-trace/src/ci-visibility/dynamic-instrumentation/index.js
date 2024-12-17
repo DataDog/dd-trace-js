@@ -73,8 +73,7 @@ class TestVisDynamicInstrumentation {
     // Allow the parent to exit even if the worker is still running
     this.worker.unref()
 
-    this.breakpointSetChannel.port2.on('message', (message) => {
-      const { probeId } = message
+    this.breakpointSetChannel.port2.on('message', ({ probeId }) => {
       const resolve = probeIdToResolveBreakpointSet.get(probeId)
       if (resolve) {
         resolve()
@@ -82,8 +81,7 @@ class TestVisDynamicInstrumentation {
       }
     }).unref()
 
-    this.breakpointHitChannel.port2.on('message', (message) => {
-      const { snapshot } = message
+    this.breakpointHitChannel.port2.on('message', ({ snapshot }) => {
       const { probe: { id: probeId } } = snapshot
       const resolve = probeIdToResolveBreakpointHit.get(probeId)
       if (resolve) {
@@ -91,6 +89,9 @@ class TestVisDynamicInstrumentation {
         probeIdToResolveBreakpointHit.delete(probeId)
       }
     }).unref()
+
+    this.worker.on('error', (err) => log.error('ci-visibility DI worker error', err))
+    this.worker.on('messageerror', (err) => log.error('ci-visibility DI worker messageerror', err))
   }
 }
 

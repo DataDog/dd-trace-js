@@ -2,7 +2,6 @@
 
 const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const { DD_MAJOR } = require('../../../version')
 
 const startChannel = channel('apm:next:request:start')
 const finishChannel = channel('apm:next:request:finish')
@@ -221,7 +220,7 @@ addHook({
 
 addHook({
   name: 'next',
-  versions: DD_MAJOR >= 4 ? ['>=10.2 <11.1'] : ['>=9.5 <11.1'],
+  versions: ['>=10.2 <11.1'],
   file: 'dist/next-server/server/serve-static.js'
 }, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
 
@@ -248,7 +247,11 @@ addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js'
   return nextServer
 })
 
-addHook({ name: 'next', versions: ['>=11.1 <13.2'], file: 'dist/server/next-server.js' }, nextServer => {
+addHook({
+  name: 'next',
+  versions: ['>=11.1 <13.2'],
+  file: 'dist/server/next-server.js'
+}, nextServer => {
   const Server = nextServer.default
   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequest)
   return nextServer
@@ -256,7 +259,7 @@ addHook({ name: 'next', versions: ['>=11.1 <13.2'], file: 'dist/server/next-serv
 
 addHook({
   name: 'next',
-  versions: DD_MAJOR >= 4 ? ['>=10.2 <11.1'] : ['>=9.5 <11.1'],
+  versions: ['>=10.2 <11.1'],
   file: 'dist/next-server/server/next-server.js'
 }, nextServer => {
   const Server = nextServer.default

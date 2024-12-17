@@ -26,7 +26,12 @@ const {
   TEST_MODULE,
   TEST_MODULE_ID,
   TEST_SUITE,
-  CUCUMBER_IS_PARALLEL
+  CUCUMBER_IS_PARALLEL,
+  TEST_NAME,
+  DI_ERROR_DEBUG_INFO_CAPTURED,
+  DI_DEBUG_ERROR_SNAPSHOT_ID,
+  DI_DEBUG_ERROR_FILE,
+  DI_DEBUG_ERROR_LINE
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -46,6 +51,7 @@ const {
 const id = require('../../dd-trace/src/id')
 
 const isCucumberWorker = !!process.env.CUCUMBER_WORKER_ID
+const debuggerParameterPerTest = new Map()
 
 function getTestSuiteTags (testSuiteSpan) {
   const suiteTags = {
@@ -220,13 +226,39 @@ class CucumberPlugin extends CiPlugin {
       const testSpan = this.startTestSpan(testName, testSuite, extraTags)
 
       this.enter(testSpan, store)
+
+      const debuggerParameters = debuggerParameterPerTest.get(testName)
+
+      if (debuggerParameters) {
+        const spanContext = testSpan.context()
+
+        // TODO: handle race conditions with this.retriedTestIds
+        this.retriedTestIds = {
+          spanId: spanContext.toSpanId(),
+          traceId: spanContext.toTraceId()
+        }
+        const { snapshotId, file, line } = debuggerParameters
+
+        // TODO: should these be added on test:end if and only if the probe is hit?
+        // Sync issues: `hitProbePromise` might be resolved after the test ends
+        testSpan.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+        testSpan.setTag(DI_DEBUG_ERROR_SNAPSHOT_ID, snapshotId)
+        testSpan.setTag(DI_DEBUG_ERROR_FILE, file)
+        testSpan.setTag(DI_DEBUG_ERROR_LINE, line)
+      }
     })
 
-    this.addSub('ci:cucumber:test:retry', (isFlakyRetry) => {
+    this.addSub('ci:cucumber:test:retry', ({ isRetry, error }) => {
       const store = storage.getStore()
       const span = store.span
-      if (isFlakyRetry) {
+      if (isRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
+      }
+      span.setTag('error', error)
+      if (this.di && error) {
+        const testName = span.context()._tags[TEST_NAME]
+        const debuggerParameters = this.addDiProbe(error)
+        debuggerParameterPerTest.set(testName, debuggerParameters)
       }
       span.setTag(TEST_STATUS, 'fail')
       span.finish()
@@ -281,6 +313,7 @@ class CucumberPlugin extends CiPlugin {
       isStep,
       status,
       skipReason,
+      error,
       errorMessage,
       isNew,
       isEfdRetry,
@@ -302,7 +335,9 @@ class CucumberPlugin extends CiPlugin {
         span.setTag(TEST_SKIP_REASON, skipReason)
       }
 
-      if (errorMessage) {
+      if (error) {
+        span.setTag('error', error)
+      } else if (errorMessage) { // we can't get a full error in cucumber steps
         span.setTag(ERROR_MESSAGE, errorMessage)
       }
 

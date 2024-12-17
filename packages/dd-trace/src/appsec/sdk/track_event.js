@@ -24,9 +24,13 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
 
   setUserTags(user, rootSpan)
 
+  const login = user.login ?? user.id
+
+  metadata = { 'usr.login': login, ...metadata }
+
   trackEvent('users.login.success', metadata, 'trackUserLoginSuccessEvent', rootSpan)
 
-  runWaf('users.login.success', { id: user.id, login: user.login ?? user.id })
+  runWaf('users.login.success', { id: user.id, login })
 }
 
 function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
@@ -37,6 +41,7 @@ function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
 
   const fields = {
     'usr.id': userId,
+    'usr.login': userId,
     'usr.exists': exists ? 'true' : 'false',
     ...metadata
   }

@@ -112,7 +112,6 @@ module.exports = {
   protobufjs: () => require('../protobufjs'),
   pug: () => require('../pug'),
   q: () => require('../q'),
-  qs: () => require('../qs'),
   redis: () => require('../redis'),
   restify: () => require('../restify'),
   rhea: () => require('../rhea'),

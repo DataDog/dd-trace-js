@@ -3,8 +3,6 @@
 const { storage } = require('../../../../datadog-core')
 
 const dc = require('dc-polyfill')
-const { HTTP_METHOD, HTTP_ROUTE, RESOURCE_NAME, SPAN_TYPE } = require('../../../../../ext/tags')
-const { WEB } = require('../../../../../ext/types')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
 const {
@@ -14,6 +12,8 @@ const {
   getNonJSThreadsLabels,
   getThreadLabels
 } = require('./shared')
+
+const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
 
 const beforeCh = dc.channel('dd-trace:storage:before')
 const enterCh = dc.channel('dd-trace:storage:enter')
@@ -27,21 +27,6 @@ let kSampleCount
 function getActiveSpan () {
   const store = storage.getStore()
   return store && store.span
-}
-
-function getStartedSpans (context) {
-  return context._trace.started
-}
-
-function isWebServerSpan (tags) {
-  return tags[SPAN_TYPE] === WEB
-}
-
-function endpointNameFromTags (tags) {
-  return tags[RESOURCE_NAME] || [
-    tags[HTTP_METHOD],
-    tags[HTTP_ROUTE]
-  ].filter(v => v).join(' ')
 }
 
 let channelsActivated = false

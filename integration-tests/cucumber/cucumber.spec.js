@@ -37,7 +37,11 @@ const {
   TEST_SUITE,
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
-  TEST_LEVEL_EVENT_TYPES
+  TEST_LEVEL_EVENT_TYPES,
+  DI_ERROR_DEBUG_INFO_CAPTURED,
+  DI_DEBUG_ERROR_FILE,
+  DI_DEBUG_ERROR_SNAPSHOT_ID,
+  DI_DEBUG_ERROR_LINE
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
@@ -86,10 +90,11 @@ versions.forEach(version => {
 
     reportMethods.forEach((reportMethod) => {
       context(`reporting via ${reportMethod}`, () => {
-        let envVars, isAgentless
+        let envVars, isAgentless, logsEndpoint
         beforeEach(() => {
           isAgentless = reportMethod === 'agentless'
           envVars = isAgentless ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
+          logsEndpoint = isAgentless ? '/api/v2/logs' : '/debugger/v1/input'
         })
         const runModes = ['serial']
 
@@ -1531,6 +1536,191 @@ versions.forEach(version => {
 
               childProcess.on('exit', () => {
                 eventsPromise.then(() => {
+                  done()
+                }).catch(done)
+              })
+            })
+          })
+          // Dynamic instrumentation only supported from >=8.0.0
+          context('dynamic instrumentation', () => {
+            it('does not activate if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
+              const eventsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                  const events = payloads.flatMap(({ payload }) => payload.events)
+
+                  const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                  const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+                  assert.equal(retriedTests.length, 1)
+                  const [retriedTest] = retriedTests
+
+                  assert.notProperty(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
+                  assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_FILE)
+                  assert.notProperty(retriedTest.metrics, DI_DEBUG_ERROR_LINE)
+                  assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_SNAPSHOT_ID)
+                })
+              const logsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url === logsEndpoint, (payloads) => {
+                  if (payloads.length > 0) {
+                    throw new Error('Unexpected logs')
+                  }
+                }, 5000)
+
+              childProcess = exec(
+                './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature --retry 1',
+                {
+                  cwd,
+                  env: envVars,
+                  stdio: 'pipe'
+                }
+              )
+
+              childProcess.on('exit', () => {
+                Promise.all([eventsPromise, logsPromise]).then(() => {
+                  done()
+                }).catch(done)
+              })
+            })
+
+            it('runs retries with dynamic instrumentation', (done) => {
+              receiver.setSettings({
+                itr_enabled: false,
+                code_coverage: false,
+                tests_skipping: false,
+                early_flake_detection: {
+                  enabled: false
+                },
+                flaky_test_retries_enabled: false
+              })
+              let snapshotIdByTest, snapshotIdByLog
+              let spanIdByTest, spanIdByLog, traceIdByTest, traceIdByLog
+
+              const eventsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                  const events = payloads.flatMap(({ payload }) => payload.events)
+
+                  const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                  const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+                  assert.equal(retriedTests.length, 1)
+                  const [retriedTest] = retriedTests
+
+                  assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+                  assert.propertyVal(
+                    retriedTest.meta,
+                    DI_DEBUG_ERROR_FILE,
+                    'ci-visibility/features-di/support/sum.js'
+                  )
+                  assert.equal(retriedTest.metrics[DI_DEBUG_ERROR_LINE], 4)
+                  assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
+
+                  snapshotIdByTest = retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID]
+                  spanIdByTest = retriedTest.span_id.toString()
+                  traceIdByTest = retriedTest.trace_id.toString()
+                })
+
+              const logsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url === logsEndpoint, (payloads) => {
+                  const [{ logMessage: [diLog] }] = payloads
+                  assert.deepInclude(diLog, {
+                    ddsource: 'dd_debugger',
+                    level: 'error'
+                  })
+                  assert.equal(diLog.debugger.snapshot.language, 'javascript')
+                  assert.deepInclude(diLog.debugger.snapshot.captures.lines['4'].locals, {
+                    a: {
+                      type: 'number',
+                      value: '11'
+                    },
+                    b: {
+                      type: 'number',
+                      value: '3'
+                    },
+                    localVariable: {
+                      type: 'number',
+                      value: '2'
+                    }
+                  })
+                  spanIdByLog = diLog.dd.span_id
+                  traceIdByLog = diLog.dd.trace_id
+                  snapshotIdByLog = diLog.debugger.snapshot.id
+                })
+
+              childProcess = exec(
+                './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature --retry 1',
+                {
+                  cwd,
+                  env: {
+                    ...envVars,
+                    DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+                  },
+                  stdio: 'pipe'
+                }
+              )
+
+              childProcess.on('exit', () => {
+                Promise.all([eventsPromise, logsPromise]).then(() => {
+                  assert.equal(snapshotIdByTest, snapshotIdByLog)
+                  assert.equal(spanIdByTest, spanIdByLog)
+                  assert.equal(traceIdByTest, traceIdByLog)
+                  done()
+                }).catch(done)
+              })
+            })
+
+            it('does not crash if the retry does not hit the breakpoint', (done) => {
+              receiver.setSettings({
+                itr_enabled: false,
+                code_coverage: false,
+                tests_skipping: false,
+                early_flake_detection: {
+                  enabled: false
+                },
+                flaky_test_retries_enabled: false
+              })
+
+              const eventsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                  const events = payloads.flatMap(({ payload }) => payload.events)
+
+                  const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                  const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+                  assert.equal(retriedTests.length, 1)
+                  const [retriedTest] = retriedTests
+
+                  assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+                  assert.propertyVal(
+                    retriedTest.meta,
+                    DI_DEBUG_ERROR_FILE,
+                    'ci-visibility/features-di/support/sum.js'
+                  )
+                  assert.equal(retriedTest.metrics[DI_DEBUG_ERROR_LINE], 4)
+                  assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
+                })
+              const logsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+                  if (payloads.length > 0) {
+                    throw new Error('Unexpected logs')
+                  }
+                }, 5000)
+
+              childProcess = exec(
+                './node_modules/.bin/cucumber-js ci-visibility/features-di/test-not-hit-breakpoint.feature --retry 1',
+                {
+                  cwd,
+                  env: {
+                    ...envVars,
+                    DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+                  },
+                  stdio: 'pipe'
+                }
+              )
+
+              childProcess.on('exit', (exitCode) => {
+                Promise.all([eventsPromise, logsPromise]).then(() => {
+                  assert.equal(exitCode, 0)
                   done()
                 }).catch(done)
               })

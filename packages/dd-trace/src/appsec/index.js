@@ -17,7 +17,8 @@ const {
   expressProcessParams,
   responseBody,
   responseWriteHead,
-  responseSetHeader
+  responseSetHeader,
+  routerParam
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -72,6 +73,7 @@ function enable (_config) {
     nextBodyParsed.subscribe(onRequestBodyParsed)
     nextQueryParsed.subscribe(onRequestQueryParsed)
     expressProcessParams.subscribe(onRequestProcessParams)
+    routerParam.subscribe(onRequestProcessParams)
     responseBody.subscribe(onResponseBody)
     responseWriteHead.subscribe(onResponseWriteHead)
     responseSetHeader.subscribe(onResponseSetHeader)
@@ -164,8 +166,10 @@ function incomingHttpEndTranslator ({ req, res }) {
     persistent[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
 
-  if (req.query !== null && typeof req.query === 'object') {
-    persistent[addresses.HTTP_INCOMING_QUERY] = req.query
+  // we need to keep this to support nextjs
+  const query = req.query
+  if (query !== null && typeof query === 'object') {
+    persistent[addresses.HTTP_INCOMING_QUERY] = query
   }
 
   if (apiSecuritySampler.sampleRequest(req, res, true)) {
@@ -324,6 +328,7 @@ function disable () {
   if (nextBodyParsed.hasSubscribers) nextBodyParsed.unsubscribe(onRequestBodyParsed)
   if (nextQueryParsed.hasSubscribers) nextQueryParsed.unsubscribe(onRequestQueryParsed)
   if (expressProcessParams.hasSubscribers) expressProcessParams.unsubscribe(onRequestProcessParams)
+  if (routerParam.hasSubscribers) routerParam.unsubscribe(onRequestProcessParams)
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
   if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
   if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseSetHeader)

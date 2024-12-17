@@ -6,7 +6,7 @@ const { channel } = require('./helpers/instrument')
 const passportVerifyChannel = channel('datadog:passport:verify:finish')
 
 function wrapVerifiedAndPublish (framework, username, verified) {
-  return shimmer.wrapFunction(verified, function wrapVerify (verified) {
+  return shimmer.wrapFunction(verified, function wrapVerified (verified) {
     return function wrappedVerified (err, user) {
       // if there is an error, it's neither an auth success nor a failure
       if (!err) {

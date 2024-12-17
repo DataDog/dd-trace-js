@@ -8,6 +8,7 @@ let rc
 let RemoteConfigManager
 let RuleManager
 let UserTracking
+let log
 let appsec
 let remoteConfig
 
@@ -40,6 +41,10 @@ describe('Remote Config index', () => {
       setCollectionMode: sinon.stub()
     }
 
+    log = {
+      error: sinon.stub()
+    }
+
     appsec = {
       enable: sinon.spy(),
       disable: sinon.spy()
@@ -49,6 +54,7 @@ describe('Remote Config index', () => {
       './manager': RemoteConfigManager,
       '../rule_manager': RuleManager,
       '../user_tracking': UserTracking,
+      '../../log': log,
       '..': appsec
     })
   })
@@ -113,8 +119,8 @@ describe('Remote Config index', () => {
         expect(appsec.enable).to.have.been.called
       })
 
-      it('should disable appsec when listener is called with unnaply and enabled', () => {
-        listener('unnaply', { asm: { enabled: true } })
+      it('should disable appsec when listener is called with unapply and enabled', () => {
+        listener('unapply', { asm: { enabled: true } })
 
         expect(appsec.disable).to.have.been.calledOnce
       })
@@ -144,6 +150,9 @@ describe('Remote Config index', () => {
           listener('apply', rcConfig, configId)
 
           expect(() => listener('apply', rcConfig, 'anotherId')).to.throw()
+          expect(log.error).to.have.been.calledOnceWithExactly(
+            '[RC] Multiple auto_user_instrum received in ASM_FEATURES. Discarding config'
+          )
         })
 
         it('should update collection mode when called with apply', () => {

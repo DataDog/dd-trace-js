@@ -107,7 +107,7 @@ withVersions('passport-http', 'passport-http', version => {
       const res = await axios.get(`http://localhost:${port}/`, {
         headers: {
           // error:1234
-          Authorization: 'Basic ZXJyb3I6MTIzNAo='
+          Authorization: 'Basic ZXJyb3I6MTIzNA=='
         }
       })
 

@@ -25,9 +25,13 @@ describe('exporters/file', () => {
     const profiles = {
       test: buffer
     }
-    await exporter.export({ profiles, end: new Date('2023-02-10T21:03:05Z') })
+    await exporter.export({
+      profiles,
+      start: new Date('2023-02-10T21:02:05Z'),
+      end: new Date('2023-02-10T21:03:05Z')
+    })
 
-    sinon.assert.calledOnce(fs.writeFile)
+    sinon.assert.calledTwice(fs.writeFile)
     sinon.assert.calledWith(fs.writeFile, 'test_worker_0_20230210T210305Z.pprof', buffer)
   })
 
@@ -37,9 +41,13 @@ describe('exporters/file', () => {
     const profiles = {
       test: buffer
     }
-    await exporter.export({ profiles, end: new Date('2023-02-10T21:03:05Z') })
+    await exporter.export({
+      profiles,
+      start: new Date('2023-02-10T21:02:05Z'),
+      end: new Date('2023-02-10T21:03:05Z')
+    })
 
-    sinon.assert.calledOnce(fs.writeFile)
+    sinon.assert.calledTwice(fs.writeFile)
     sinon.assert.calledWith(fs.writeFile, 'myprefix_test_worker_0_20230210T210305Z.pprof', buffer)
   })
 })
