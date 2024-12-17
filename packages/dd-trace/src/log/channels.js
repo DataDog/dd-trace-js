@@ -3,7 +3,7 @@
 const { channel } = require('dc-polyfill')
 
 const Level = {
-  trace: 20,
+  trace: 10,
   debug: 20,
   info: 30,
   warn: 40,
@@ -70,7 +70,7 @@ class LogChannel {
 
 module.exports = {
   LogChannel,
-
+  traceChannel,
   debugChannel,
   infoChannel,
   warnChannel,
