@@ -74,7 +74,7 @@ describe('RASP - command_injection - integration', () => {
         const namespace = payload.payload.namespace
 
         // Only check telemetry received in appsec namespace and ignore others
-        if (namespace, 'appsec') {
+        if (namespace === 'appsec') {
           appsecTelemetryReceived = true
           const series = payload.payload.series
           const evalSerie = series.find(s => s.metric === 'rasp.rule.eval')
@@ -90,7 +90,6 @@ describe('RASP - command_injection - integration', () => {
           assert.include(matchSerie.tags, `rule_variant:${variant}`)
           assert.strictEqual(matchSerie.type, 'count')
         }
-
       }, 30_000, 'generate-metrics', 2)
 
       const checks = await Promise.all([checkMessages, checkTelemetry])
@@ -126,7 +125,9 @@ describe('RASP - command_injection - integration', () => {
     })
 
     it('should block using execFileSync and unhandled exception', async () => {
-      await testRequestBlocked('/cmdi/execFileSync/out-of-express-scope?command=cat /etc/passwd 1>&2 ; echo .', 4, 'exec')
+      await testRequestBlocked(
+        '/cmdi/execFileSync/out-of-express-scope?command=cat /etc/passwd 1>&2 ; echo .', 4, 'exec'
+      )
     })
   })
 })
