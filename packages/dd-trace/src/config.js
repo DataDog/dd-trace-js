@@ -466,7 +466,7 @@ class Config {
     this._setValue(defaults, 'ciVisibilityTestSessionName', '')
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
-    this._setValue(defaults, 'crashtracking.enabled', false)
+    this._setValue(defaults, 'crashtracking.enabled', true)
     this._setValue(defaults, 'codeOriginForSpans.enabled', false)
     this._setValue(defaults, 'dbmPropagationMode', 'disabled')
     this._setValue(defaults, 'dogstatsd.hostname', '127.0.0.1')
@@ -1135,10 +1135,6 @@ class Config {
     if (defaultPropagationStyle.length > 2) {
       calc['tracePropagationStyle.inject'] = calc['tracePropagationStyle.inject'] || defaultPropagationStyle
       calc['tracePropagationStyle.extract'] = calc['tracePropagationStyle.extract'] || defaultPropagationStyle
-    }
-
-    if (this._env.injectionEnabled?.length > 0) {
-      this._setBoolean(calc, 'crashtracking.enabled', true)
     }
   }
 
