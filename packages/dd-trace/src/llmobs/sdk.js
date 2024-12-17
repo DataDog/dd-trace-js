@@ -385,7 +385,7 @@ class LLMObs extends NoopLLMObs {
     return store?.span
   }
 
-  _activate (span, options = {}, fn) {
+  _activate (span, options, fn) {
     const parent = this._active()
     if (this.enabled) storage.enterWith({ span })
 
