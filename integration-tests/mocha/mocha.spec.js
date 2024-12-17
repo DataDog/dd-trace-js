@@ -2158,8 +2158,8 @@ describe('mocha CommonJS', function () {
         flaky_test_retries_enabled: false,
         early_flake_detection: {
           enabled: false
-        }
-        // di_enabled: true // TODO
+        },
+        di_enabled: true
       })
 
       const eventsPromise = receiver
@@ -2207,6 +2207,64 @@ describe('mocha CommonJS', function () {
       })
     })
 
+    it('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: false,
+        early_flake_detection: {
+          enabled: false
+        },
+        di_enabled: false
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+          assert.equal(retriedTests.length, 1)
+          const [retriedTest] = retriedTests
+
+          assert.notProperty(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
+          assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_FILE)
+          assert.notProperty(retriedTest.metrics, DI_DEBUG_ERROR_LINE)
+          assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_SNAPSHOT_ID)
+        })
+
+      const logsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+          if (payloads.length > 0) {
+            throw new Error('Unexpected logs')
+          }
+        }, 5000)
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './dynamic-instrumentation/test-hit-breakpoint'
+            ]),
+            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', (code) => {
+        Promise.all([eventsPromise, logsPromise]).then(() => {
+          assert.equal(code, 0)
+          done()
+        }).catch(done)
+      })
+    })
+
     it('runs retries with dynamic instrumentation', (done) => {
       receiver.setSettings({
         itr_enabled: false,
@@ -2215,8 +2273,8 @@ describe('mocha CommonJS', function () {
         flaky_test_retries_enabled: false,
         early_flake_detection: {
           enabled: false
-        }
-        // di_enabled: true // TODO
+        },
+        di_enabled: true
       })
 
       let snapshotIdByTest, snapshotIdByLog
@@ -2310,8 +2368,8 @@ describe('mocha CommonJS', function () {
         flaky_test_retries_enabled: false,
         early_flake_detection: {
           enabled: false
-        }
-        // di_enabled: true // TODO
+        },
+        di_enabled: true
       })
 
       const eventsPromise = receiver
