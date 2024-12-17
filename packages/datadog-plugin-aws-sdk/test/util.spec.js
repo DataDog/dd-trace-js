@@ -123,37 +123,31 @@ describe('encodeValue', () => {
 
 describe('extractPrimaryKeys', () => {
   describe('single key table', () => {
-    it('handles string key with Set input', () => {
+    it('handles string key', () => {
       const keySet = new Set(['userId'])
       const item = { userId: { S: 'user123' } }
       const result = extractPrimaryKeys(keySet, item)
       expect(result).to.deep.equal(['userId', Buffer.from('user123'), '', ''])
     })
 
-    it('handles number key with Set input', () => {
+    it('handles number key', () => {
       const keySet = new Set(['timestamp'])
       const item = { timestamp: { N: '1234567' } }
       const result = extractPrimaryKeys(keySet, item)
       expect(result).to.deep.equal(['timestamp', Buffer.from('1234567'), '', ''])
     })
 
-    it('handles binary key with Set input', () => {
+    it('handles binary key', () => {
       const keySet = new Set(['binaryId'])
       const binaryData = Buffer.from([1, 2, 3])
       const item = { binaryId: { B: binaryData } }
       const result = extractPrimaryKeys(keySet, item)
       expect(result).to.deep.equal(['binaryId', binaryData, '', ''])
     })
-
-    it('handles string key with Object input', () => {
-      const keyObj = { userId: { S: 'user123' } }
-      const result = extractPrimaryKeys(keyObj, keyObj)
-      expect(result).to.deep.equal(['userId', Buffer.from('user123'), '', ''])
-    })
   })
 
   describe('double key table', () => {
-    it('handles and sorts string-string composite key', () => {
+    it('handles and sorts string-string keys', () => {
       const keySet = new Set(['userId', 'email'])
       const item = {
         userId: { S: 'user123' },
@@ -163,22 +157,13 @@ describe('extractPrimaryKeys', () => {
       expect(result).to.deep.equal(['email', Buffer.from('test@example.com'), 'userId', Buffer.from('user123')])
     })
 
-    it('handles and sorts string-number composite key', () => {
+    it('handles and sorts string-number keys', () => {
       const keySet = new Set(['timestamp', 'userId'])
       const item = {
         timestamp: { N: '1234567' },
         userId: { S: 'user123' }
       }
       const result = extractPrimaryKeys(keySet, item)
-      expect(result).to.deep.equal(['timestamp', Buffer.from('1234567'), 'userId', Buffer.from('user123')])
-    })
-
-    it('handles and sorts composite key with Object input', () => {
-      const keyObj = {
-        userId: { S: 'user123' },
-        timestamp: { N: '1234567' }
-      }
-      const result = extractPrimaryKeys(keyObj, keyObj)
       expect(result).to.deep.equal(['timestamp', Buffer.from('1234567'), 'userId', Buffer.from('user123')])
     })
   })

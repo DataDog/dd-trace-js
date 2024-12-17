@@ -184,19 +184,20 @@ class DynamoDb extends BaseAwsSdkPlugin {
   /**
    * Calculates a hash for DynamoDB operations that have keys provided (UpdateItem, DeleteItem).
    * @param {string} tableName - Name of the DynamoDB table.
-   * @param {Object} keys - Object containing primary key/value attributes in DynamoDB format.
+   * @param {Object} keysObject - Object containing primary key/value attributes in DynamoDB format.
    *                       (e.g., { userId: { S: "123" }, sortKey: { N: "456" } })
    * @returns {string|undefined} Hash value combining table name and primary key/value pairs, or undefined if unable.
    *
    * @example
    * calculateHashWithKnownKeys('UserTable', { userId: { S: "user123" }, timestamp: { N: "1234567" } })
    */
-  static calculateHashWithKnownKeys (tableName, keys) {
-    if (!tableName || !keys) {
+  static calculateHashWithKnownKeys (tableName, keysObject) {
+    if (!tableName || !keysObject) {
       log.debug('Unable to calculate hash because missing parameters')
       return
     }
-    const keyValues = extractPrimaryKeys(keys, keys)
+    const keyNamesSet = new Set(Object.keys(keysObject))
+    const keyValues = extractPrimaryKeys(keyNamesSet, keysObject)
     if (keyValues) {
       return generatePointerHash([tableName, ...keyValues])
     }

@@ -54,7 +54,7 @@ function encodeValue (valueObject) {
  * Extracts and encodes primary key values from a DynamoDB item.
  * Handles tables with single-key and two-key scenarios.
  *
- * @param {Set<string>|Object} keySet - Set of key names or object of key names/value pairs.
+ * @param {Set<string>} keySet - Set of primary key names.
  * @param {Object} keyValuePairs - Object containing key/value pairs.
  * @returns {Array|undefined} [key1Name, key1Value, key2Name, key2Value], or undefined if invalid input.
  *                            key2 entries are empty strings in the single-key case.
@@ -65,9 +65,7 @@ function encodeValue (valueObject) {
  * // Returns ["timestamp", Buffer.from("1234"), "userId", Buffer.from("user123")]
  */
 const extractPrimaryKeys = (keySet, keyValuePairs) => {
-  const keyNames = keySet instanceof Set
-    ? Array.from(keySet)
-    : Object.keys(keySet)
+  const keyNames = Array.from(keySet)
   if (keyNames.length === 0) {
     return
   }
