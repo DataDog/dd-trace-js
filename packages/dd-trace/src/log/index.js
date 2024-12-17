@@ -58,10 +58,9 @@ const log = {
 
   trace (...args) {
     if (traceChannel.hasSubscribers) {
-      traceChannel.publish(Log.parse(...args))
-      const stackTrace = {}
-      Error.captureStackTrace(stackTrace)
-      traceChannel.publish(stackTrace.stack)
+      const logRecord = { args }
+      Error.captureStackTrace(logRecord)
+      traceChannel.publish(JSON.stringify(logRecord))
     }
     return this
   },

@@ -45,19 +45,21 @@ class PrioritySampler {
     this.update({})
   }
 
-  configure (env, options = {}) {
-    const { sampleRate, provenance = undefined, rateLimit = 100, rules = [] } = options
+  configure (env, opts = {}) {
+    const { sampleRate, provenance = undefined, rateLimit = 100, rules = [] } = opts
     this._env = env
     this._rules = this._normalizeRules(rules, sampleRate, rateLimit, provenance)
     this._limiter = new RateLimiter(rateLimit)
 
-    log.trace(() => `PrioritySampler.configure called on options=${JSON.stringify(options)}`)
+    log.trace(env, opts)
+    // log.trace(() => `PrioritySampler.configure called on options=${JSON.stringify(options)}`)
     setSamplingRules(this._rules)
   }
 
   isSampled (span) {
     const priority = this._getPriorityFromAuto(span)
-    log.trace(() => `PrioritySampler.isSampled called on span ${span.toString()} at ${priority} priority`)
+    log.trace(span)
+    // log.trace(() => `PrioritySampler.isSampled called on span ${span.toString()} at ${priority} priority`)
     return priority === USER_KEEP || priority === AUTO_KEEP
   }
 
@@ -71,7 +73,8 @@ class PrioritySampler {
     if (context._sampling.priority !== undefined) return
     if (!root) return // noop span
 
-    log.trace(() => `PrioritySampler.sample called on span=${span.toString()} with auto=${auto}`)
+    log.trace(span, auto)
+    // log.trace(() => `PrioritySampler.sample called on span=${span.toString()} with auto=${auto}`)
 
     const tag = this._getPriorityFromTags(context._tags, context)
 
@@ -101,7 +104,8 @@ class PrioritySampler {
 
     this._samplers = samplers
 
-    log.trace(() => `PrioritySampler.update called on rates=${JSON.stringify(rates)}`)
+    log.trace(rates)
+    // log.trace(() => `PrioritySampler.update called on rates=${JSON.stringify(rates)}`)
   }
 
   validate (samplingPriority) {
@@ -126,8 +130,8 @@ class PrioritySampler {
 
     const root = context._trace.started[0]
 
-    // eslint-disable-next-line max-len
-    log.trace(() => `PrioritySampler.setPriority called on span=${span} with samplingPriority=${samplingPriority} and mechanism=${mechanism}`)
+    log.trace(span, samplingPriority, mechanism)
+    // log.trace(() => `PrioritySampler.setPriority called on span=${span} with samplingPriority=${samplingPriority} and mechanism=${mechanism}`)
     this._addDecisionMaker(root)
   }
 
