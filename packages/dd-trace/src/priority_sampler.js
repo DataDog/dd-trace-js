@@ -45,22 +45,19 @@ class PrioritySampler {
     this.update({})
   }
 
-  configure (env, { sampleRate, provenance = undefined, rateLimit = 100, rules = [] } = {}) {
+  configure (env, options={}) {
+    const { sampleRate, provenance = undefined, rateLimit = 100, rules = [] } = options
     this._env = env
     this._rules = this._normalizeRules(rules, sampleRate, rateLimit, provenance)
     this._limiter = new RateLimiter(rateLimit)
 
-    if (process.env.DD_PRIORITY_SAMPLER_TRACKING === 'true') {
-        log.debug(
-          () => `PrioritySampler configuration rules=${JSON.stringify(rules)}`
-            // console.trace?
-        )
-    }
+    log.trace(() => `PrioritySampler.configure called on options=${JSON.stringify(options)}`)
     setSamplingRules(this._rules)
   }
 
   isSampled (span) {
     const priority = this._getPriorityFromAuto(span)
+    log.trace(() => `PrioritySampler.isSampled called on span ${span.toString()} at ${priority} priority`)
     return priority === USER_KEEP || priority === AUTO_KEEP
   }
 
@@ -73,6 +70,8 @@ class PrioritySampler {
     // TODO: remove the decision maker tag when priority is less than AUTO_KEEP
     if (context._sampling.priority !== undefined) return
     if (!root) return // noop span
+
+    log.trace(() => `PrioritySampler.sample called on span=${span.toString()} with auto=${auto}`)
 
     const tag = this._getPriorityFromTags(context._tags, context)
 
@@ -102,12 +101,7 @@ class PrioritySampler {
 
     this._samplers = samplers
 
-    if (process.env.DD_PRIORITY_SAMPLER_TRACKING === 'true') {
-      log.debug(
-        () => `PrioritySampler update rates=${JSON.stringify(rates)}`
-          // console.trace?
-      )
-    }
+    log.trace(() => `PrioritySampler.update called on rates=${JSON.stringify(rates)}`)
   }
 
   validate (samplingPriority) {
@@ -131,6 +125,13 @@ class PrioritySampler {
     context._sampling.mechanism = mechanism
 
     const root = context._trace.started[0]
+
+    if (process.env.DD_PRIORITY_SAMPLER_TRACKING === 'true') {
+      log.debug(
+        () => `Set sampling priority of ${samplingPriority} on span ${span.toString} with mechanism ${mechanism}`
+          // console.trace?
+      )
+    }
     this._addDecisionMaker(root)
   }
 

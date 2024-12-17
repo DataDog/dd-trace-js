@@ -2,7 +2,7 @@
 
 const coalesce = require('koalas')
 const { isTrue } = require('../util')
-const { debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
+const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
 const { Log } = require('./log')
 
@@ -53,6 +53,16 @@ const log = {
       return true
     })
 
+    return this
+  },
+
+  trace (...args) {
+    if (traceChannel.hasSubscribers) {
+      traceChannel.publish(Log.parse(...args))
+      const stackTrace = {}
+      Error.captureStackTrace(stackTrace)
+      traceChannel.publish(stackTrace.stack)
+    }
     return this
   },
 
