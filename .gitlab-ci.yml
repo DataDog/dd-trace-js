@@ -20,7 +20,7 @@ onboarding_tests_installer:
     matrix:
       - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs,test-app-nodejs-container]
         SCENARIO: [ SIMPLE_INSTALLER_AUTO_INJECTION, SIMPLE_AUTO_INJECTION_PROFILING ]
-#new scenario
+#new scenario.
 onboarding_tests_k8s_injection:
   variables:
     WEBLOG_VARIANT: sample-app
