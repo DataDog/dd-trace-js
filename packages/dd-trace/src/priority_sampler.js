@@ -45,7 +45,7 @@ class PrioritySampler {
     this.update({})
   }
 
-  configure (env, options={}) {
+  configure (env, options = {}) {
     const { sampleRate, provenance = undefined, rateLimit = 100, rules = [] } = options
     this._env = env
     this._rules = this._normalizeRules(rules, sampleRate, rateLimit, provenance)
@@ -126,6 +126,7 @@ class PrioritySampler {
 
     const root = context._trace.started[0]
 
+    // eslint-disable-next-line max-len
     log.trace(() => `PrioritySampler.setPriority called on span=${span} with samplingPriority=${samplingPriority} and mechanism=${mechanism}`)
     this._addDecisionMaker(root)
   }
