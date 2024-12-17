@@ -59,7 +59,9 @@ const log = {
   trace (...args) {
     if (traceChannel.hasSubscribers) {
       const logRecord = { args }
-      Error.captureStackTrace(logRecord)
+      Error.captureStackTrace(logRecord, this.trace)
+      logRecord.name = 'Trace'
+      logRecord.message = logRecord.stack.split('\n')[1].replace(/^\s+at ([^\s]) .+/, '$1')
       traceChannel.publish(JSON.stringify(logRecord))
     }
     return this
