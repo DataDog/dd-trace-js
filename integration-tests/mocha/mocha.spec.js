@@ -2152,13 +2152,7 @@ describe('mocha CommonJS', function () {
   context('dynamic instrumentation', () => {
     it('does not activate dynamic instrumentation if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
-        flaky_test_retries_enabled: false,
-        early_flake_detection: {
-          enabled: false
-        },
+        flaky_test_retries_enabled: true,
         di_enabled: true
       })
 
@@ -2209,13 +2203,7 @@ describe('mocha CommonJS', function () {
 
     it('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
-        flaky_test_retries_enabled: false,
-        early_flake_detection: {
-          enabled: false
-        },
+        flaky_test_retries_enabled: true,
         di_enabled: false
       })
 
@@ -2267,13 +2255,7 @@ describe('mocha CommonJS', function () {
 
     it('runs retries with dynamic instrumentation', (done) => {
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
-        flaky_test_retries_enabled: false,
-        early_flake_detection: {
-          enabled: false
-        },
+        flaky_test_retries_enabled: true,
         di_enabled: true
       })
 
@@ -2362,13 +2344,7 @@ describe('mocha CommonJS', function () {
 
     it('does not crash if the retry does not hit the breakpoint', (done) => {
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
-        flaky_test_retries_enabled: false,
-        early_flake_detection: {
-          enabled: false
-        },
+        flaky_test_retries_enabled: true,
         di_enabled: true
       })
 

@@ -161,6 +161,7 @@ class JestPlugin extends CiPlugin {
         config._ddRepositoryRoot = this.repositoryRoot
         config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
         config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
+        config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
       })
     })
 
@@ -355,14 +356,14 @@ class JestPlugin extends CiPlugin {
       finishAllTraceSpans(span)
     })
 
-    this.addSub('ci:jest:test:err', ({ error, willBeRetried, probe }) => {
+    this.addSub('ci:jest:test:err', ({ error, willBeRetried, probe, isDiEnabled }) => {
       if (error) {
         const store = storage.getStore()
         if (store && store.span) {
           const span = store.span
           span.setTag(TEST_STATUS, 'fail')
           span.setTag('error', error)
-          if (willBeRetried && this.di) {
+          if (willBeRetried && this.di && isDiEnabled) {
             // if we use numTestExecutions, we have to remove the breakpoint after each execution
             const testName = span.context()._tags[TEST_NAME]
             const debuggerParameters = this.addDiProbe(error, probe)

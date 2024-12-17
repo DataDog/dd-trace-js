@@ -1545,12 +1545,7 @@ versions.forEach(version => {
           context('dynamic instrumentation', () => {
             it('does not activate if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
               receiver.setSettings({
-                itr_enabled: false,
-                code_coverage: false,
-                tests_skipping: false,
-                early_flake_detection: {
-                  enabled: false
-                },
+                flaky_test_retries_enabled: true,
                 di_enabled: true
               })
 
@@ -1594,12 +1589,7 @@ versions.forEach(version => {
 
             it('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
               receiver.setSettings({
-                itr_enabled: false,
-                code_coverage: false,
-                tests_skipping: false,
-                early_flake_detection: {
-                  enabled: false
-                },
+                flaky_test_retries_enabled: true,
                 di_enabled: false
               })
 
@@ -1646,13 +1636,7 @@ versions.forEach(version => {
 
             it('runs retries with dynamic instrumentation', (done) => {
               receiver.setSettings({
-                itr_enabled: false,
-                code_coverage: false,
-                tests_skipping: false,
-                early_flake_detection: {
-                  enabled: false
-                },
-                flaky_test_retries_enabled: false,
+                flaky_test_retries_enabled: true,
                 di_enabled: true
               })
 
@@ -1735,13 +1719,7 @@ versions.forEach(version => {
 
             it('does not crash if the retry does not hit the breakpoint', (done) => {
               receiver.setSettings({
-                itr_enabled: false,
-                code_coverage: false,
-                tests_skipping: false,
-                early_flake_detection: {
-                  enabled: false
-                },
-                flaky_test_retries_enabled: false,
+                flaky_test_retries_enabled: true,
                 di_enabled: true
               })
 
