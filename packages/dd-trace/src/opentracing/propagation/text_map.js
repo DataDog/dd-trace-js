@@ -55,7 +55,7 @@ const xraySampledKey = 'sampled'
 const xrayE2EStartTimeKey = 't0'
 const xraySelfKey = 'self'
 const xrayOriginKey = '_dd.origin'
-const xrayMaxAdditionalBytes = 256;
+const xrayMaxAdditionalBytes = 256
 
 class TextMapPropagator {
   constructor (config) {
@@ -272,23 +272,23 @@ class TextMapPropagator {
 
     // TODO: Do we have access to a start time? Java does
     const e2eStart = this._getEndToEndStartTime(spanContext.start_ms)
-    
+
     let str = (
-      xrayRootKey + "=" +
+      xrayRootKey + '=' +
       xrayRootPrefix +
-      e2eStart + "-" +
+      e2eStart + '-' +
       spanContext._traceId.toString().padStart(24, '0') +
-      ';' + xrayParentKey + "=" +
+      ';' + xrayParentKey + '=' +
       spanContext._spanId.toString().padStart(16, '0')
     )
 
     if (spanContext?._sampling?.priority) {
-      str += ';' + xraySampledKey + "=" + (spanContext._sampling.priority > 0 ? '1' : '0')
+      str += ';' + xraySampledKey + '=' + (spanContext._sampling.priority > 0 ? '1' : '0')
     }
 
-    const maxAdditionalCapacity = xrayMaxAdditionalBytes - str.length 
+    const maxAdditionalCapacity = xrayMaxAdditionalBytes - str.length
 
-    const origin = spanContext._trace.origin;
+    const origin = spanContext._trace.origin
     if (origin) {
       this._addXrayBaggage(str, xrayOriginKey, origin, maxAdditionalCapacity)
     }
@@ -306,8 +306,8 @@ class TextMapPropagator {
   }
 
   _getEndToEndStartTime (start) {
-    if (!start) return "00000000"
-      
+    if (!start) return '00000000'
+
     const e2eStart = start > 0 ? start : Date.now() / 1000
     return e2eStart.toString().padStart(8, '0')
   }
@@ -318,10 +318,10 @@ class TextMapPropagator {
 
   _addXrayBaggage (str, key, value, maxCapacity) {
     if (str.length + key.length + value.toString().length + 2 <= maxCapacity) {
-        str += `;${key}=${value}`
+      str += `;${key}=${value}`
     }
     return str
-  } 
+  }
 
   _hasPropagationStyle (mode, name) {
     return this._config.tracePropagationStyle[mode].includes(name)
@@ -777,18 +777,18 @@ class TextMapPropagator {
       const baggage = {}
 
       if (!(
-          xrayRootKey in parsedHeader &&
-          // Regex check to ensure received header is in the same format as expected
-          // Format: 
-          //   'Root=1-'
-          //   8 hexadecimal characters representing start time
-          //   '-'
-          //   24 hexadecimal characters representing trace id
-          //   ';'
-          //   'Parent='
-          //   16 hexadecimal characters representing parent span id
-          /^(?=.*Root=1-[0-9a-f]{8}-[0-9a-f]{24})(?=.*Parent=[0-9a-f]{16}).*$/i.test(carrier[xrayHeaderKey])
-        )) {
+        xrayRootKey in parsedHeader &&
+        // Regex check to ensure received header is in the same format as expected
+        // Format:
+        //   'Root=1-'
+        //   8 hexadecimal characters representing start time
+        //   '-'
+        //   24 hexadecimal characters representing trace id
+        //   ';'
+        //   'Parent='
+        //   16 hexadecimal characters representing parent span id
+        /^(?=.*Root=1-[0-9a-f]{8}-[0-9a-f]{24})(?=.*Parent=[0-9a-f]{16}).*$/i.test(carrier[xrayHeaderKey])
+      )) {
         // header doesn't match formatting
         return null
       }
@@ -817,7 +817,7 @@ class TextMapPropagator {
           // self is added by load balancers and should be ignored
           continue
         } else if (key === xrayE2EStartTimeKey) {
-          baggage[endToEndStartTime] = parseInt(value)
+          baggage.startMs = parseInt(value)
         } else {
           baggage[key] = value
         }
@@ -852,7 +852,7 @@ class TextMapPropagator {
     })
     return obj
   }
-  
+
   static _convertOtelContextToDatadog (traceId, spanId, traceFlag, ts, meta = {}) {
     const origin = null
     let samplingPriority = traceFlag

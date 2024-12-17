@@ -6,7 +6,6 @@ const Config = require('../../../src/config')
 const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 const TraceState = require('../../../src/opentracing/propagation/tracestate')
-const BaseAwsSdkPlugin = require('../../../../datadog-plugin-aws-sdk/src/base')
 const { channel } = require('dc-polyfill')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
@@ -407,21 +406,24 @@ describe('TextMapPropagator', () => {
       expect(carrier).to.not.have.property('x-amzn-trace-id')
     })
 
-    it(`should inject AWSTraceHeader X-Amzn-Trace-Id when configured`, () => {
+    it('should inject AWSTraceHeader X-Amzn-Trace-Id when configured', () => {
       const baggageItems = {
         bool: true,
-        a: "b"
+        a: 'b'
       }
-      const spanContext = createContext({ baggageItems, sampling: {
-        priority: 1
-      }})
+      const spanContext = createContext({
+        baggageItems,
+        sampling: {
+          priority: 1
+        }
+      })
 
       config.tracePropagationStyle.inject = ['xray']
 
       const traceId = spanContext._traceId.toString().padStart(24, '0')
       const spanId = spanContext._spanId.toString().padStart(16, '0')
       const expectedHeader = `root=1-00000000-${traceId};parent=${spanId};sampled=1`
-      const additionalParts = `;bool=true;a=b`
+      const additionalParts = ';bool=true;a=b'
       const carrier = {}
 
       propagator.inject(spanContext, carrier)
@@ -699,7 +701,7 @@ describe('TextMapPropagator', () => {
       expect(spanContext._tracestate).to.be.undefined
     })
 
-    it(`should not extract AWSTraceHeader X-Amzn-Trace-Id when not configured`, () => {
+    it('should not extract AWSTraceHeader X-Amzn-Trace-Id when not configured', () => {
       const traceId = '4ef684dbd03d632e'
       const spanId = '7e8d56262375628a'
       const sampled = 1
@@ -715,7 +717,7 @@ describe('TextMapPropagator', () => {
       expect(spanContext).to.be.null
     })
 
-    it(`should extract AWSTraceHeader X-Amzn-Trace-Id when configured`, () => {
+    it('should extract AWSTraceHeader X-Amzn-Trace-Id when configured', () => {
       const traceId = '4ef684dbd03d632e'
       const spanId = '7e8d56262375628a'
       const sampled = 1
@@ -733,7 +735,7 @@ describe('TextMapPropagator', () => {
       expect(spanContext._sampling.samplingPriority).to.equal(sampled)
     })
 
-    it(`should not extract AWSTraceHeader X-Amzn-Trace-Id if in an unexpected format or missing data`, () => {
+    it('should not extract AWSTraceHeader X-Amzn-Trace-Id if in an unexpected format or missing data', () => {
       const traceId = '4ef684dbd03d632e'
       const spanId = '7e8d56262375628a'
       const sampled = 1
@@ -769,12 +771,12 @@ describe('TextMapPropagator', () => {
       expect(spanContext).to.be.null
     })
 
-    it(`should extract AWSTraceHeader X-Amzn-Trace-Id with origin and baggage`, () => {
+    it('should extract AWSTraceHeader X-Amzn-Trace-Id with origin and baggage', () => {
       const traceId = '4ef684dbd03d632e'
       const spanId = '7e8d56262375628a'
       const sampled = 1
       const unparsedHeader = `Root=1-6583199d-00000000${traceId};Parent=${spanId};Sampled=${sampled}`
-      const additionalParts = `;_dd.origin=localhost;baggage_key=baggage_value;foo=bar`
+      const additionalParts = ';_dd.origin=localhost;baggage_key=baggage_value;foo=bar'
       const carrier = {
         'x-amzn-trace-id': unparsedHeader + additionalParts
       }
@@ -787,8 +789,8 @@ describe('TextMapPropagator', () => {
       expect(spanContext.toSpanId()).to.equal(id(spanId, 16).toString(10))
       expect(spanContext._sampling.samplingPriority).to.equal(sampled)
 
-      expect(spanContext._baggageItems).to.deep.equal({ 
-        baggage_key: "baggage_value", foo: "bar"
+      expect(spanContext._baggageItems).to.deep.equal({
+        baggage_key: 'baggage_value', foo: 'bar'
       })
       expect(spanContext._trace.origin).to.equal('localhost')
     })
