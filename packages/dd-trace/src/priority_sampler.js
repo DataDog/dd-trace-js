@@ -1,5 +1,6 @@
 'use strict'
 
+const log = require('./log')
 const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
 const { setSamplingRules } = require('./startup-log')
@@ -49,6 +50,12 @@ class PrioritySampler {
     this._rules = this._normalizeRules(rules, sampleRate, rateLimit, provenance)
     this._limiter = new RateLimiter(rateLimit)
 
+    if (process.env.DD_PRIORITY_SAMPLER_TRACKING === 'true') {
+        log.debug(
+          () => `PrioritySampler configuration rules=${JSON.stringify(rules)}`
+            // console.trace?
+        )
+    }
     setSamplingRules(this._rules)
   }
 
@@ -94,6 +101,13 @@ class PrioritySampler {
     samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || defaultSampler
 
     this._samplers = samplers
+
+    if (process.env.DD_PRIORITY_SAMPLER_TRACKING === 'true') {
+      log.debug(
+        () => `PrioritySampler update rates=${JSON.stringify(rates)}`
+          // console.trace?
+      )
+    }
   }
 
   validate (samplingPriority) {
