@@ -63,6 +63,8 @@ describe('RASP - command_injection - integration', () => {
 
       assert.strictEqual(e.response.status, 403)
 
+      let appsecTelemetryReceived = false
+
       const checkMessages = await agent.assertMessageReceived(({ headers, payload }) => {
         assert.property(payload[0][0].meta, '_dd.appsec.json')
         assert.include(payload[0][0].meta['_dd.appsec.json'], `"rasp-command_injection-rule-id-${ruleId}"`)
@@ -70,24 +72,31 @@ describe('RASP - command_injection - integration', () => {
 
       const checkTelemetry = await agent.assertTelemetryReceived(({ headers, payload }) => {
         const namespace = payload.payload.namespace
-        assert.equal(namespace, 'appsec')
 
-        const series = payload.payload.series
-        const evalSerie = series.find(s => s.metric === 'rasp.rule.eval')
-        const matchSerie = series.find(s => s.metric === 'rasp.rule.match')
+        // Only check telemetry received in appsec namespace and ignore others
+        if (namespace, 'appsec') {
+          appsecTelemetryReceived = true
+          const series = payload.payload.series
+          const evalSerie = series.find(s => s.metric === 'rasp.rule.eval')
+          const matchSerie = series.find(s => s.metric === 'rasp.rule.match')
 
-        assert.exists(evalSerie, 'eval serie should exist')
-        assert.include(evalSerie.tags, 'rule_type:command_injection')
-        assert.include(evalSerie.tags, `rule_variant:${variant}`)
-        assert.strictEqual(evalSerie.type, 'count')
+          assert.exists(evalSerie, 'eval serie should exist')
+          assert.include(evalSerie.tags, 'rule_type:command_injection')
+          assert.include(evalSerie.tags, `rule_variant:${variant}`)
+          assert.strictEqual(evalSerie.type, 'count')
 
-        assert.exists(matchSerie, 'match serie should exist')
-        assert.include(matchSerie.tags, 'rule_type:command_injection')
-        assert.include(matchSerie.tags, `rule_variant:${variant}`)
-        assert.strictEqual(matchSerie.type, 'count')
-      }, 30_000, 'generate-metrics', 1, true)
+          assert.exists(matchSerie, 'match serie should exist')
+          assert.include(matchSerie.tags, 'rule_type:command_injection')
+          assert.include(matchSerie.tags, `rule_variant:${variant}`)
+          assert.strictEqual(matchSerie.type, 'count')
+        }
 
-      return Promise.all([checkMessages, checkTelemetry])
+      }, 30_000, 'generate-metrics', 2)
+
+      const checks = await Promise.all([checkMessages, checkTelemetry])
+      assert.equal(appsecTelemetryReceived, true)
+
+      return checks
     }
 
     throw new Error('Request should be blocked')
@@ -113,19 +122,11 @@ describe('RASP - command_injection - integration', () => {
 
   describe('without shell', () => {
     it('should block using execFileSync and exception handled by express', async () => {
-      await testRequestBlocked('/cmdi/execFileSync?dir=cat /etc/passwd 1>&2 ; echo .', 4, 'exec')
+      await testRequestBlocked('/cmdi/execFileSync?command=cat /etc/passwd 1>&2 ; echo .', 4, 'exec')
     })
 
     it('should block using execFileSync and unhandled exception', async () => {
-      await testRequestBlocked('/cmdi/execFileSync/out-of-express-scope?dir=cat /etc/passwd 1>&2 ; echo .', 4, 'exec')
-    })
-
-    it('should block using spawnSync and exception handled by express', async () => {
-      await testRequestBlocked('/cmdi/spawnSync?dir=cat /etc/passwd 1>&2 ; echo .', 4, 'exec')
-    })
-
-    it('should block using spawnSync and exception handled', async () => {
-      await testRequestBlocked('/cmdi/spawnSync/out-of-express-scope?dir=cat /etc/passwd 1>&2 ; echo .', 4, 'exec')
+      await testRequestBlocked('/cmdi/execFileSync/out-of-express-scope?command=cat /etc/passwd 1>&2 ; echo .', 4, 'exec')
     })
   })
 })

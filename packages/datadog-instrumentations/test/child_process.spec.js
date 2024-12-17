@@ -614,7 +614,7 @@ describe('child process', () => {
             childProcessChannel.unsubscribe({ start: abort })
           })
 
-          ;['execFileSync', 'execSync', 'spawnSync'].forEach((methodName) => {
+          ;['execFileSync', 'execSync'].forEach((methodName) => {
             describe(`method ${methodName}`, () => {
               it('should throw the expected error', () => {
                 try {
@@ -626,6 +626,22 @@ describe('child process', () => {
                 }
 
                 throw new Error('Expected to fail')
+              })
+            })
+          })
+
+          describe('method spawnSync', () => {
+            it('should return error field', () => {
+              const result = childProcess.spawnSync('aborted_command')
+
+              expect(result).to.be.deep.equal({
+                error: abortError,
+                status: null,
+                signal: null,
+                output: null,
+                stdout: null,
+                stderr: null,
+                pid: 0
               })
             })
           })

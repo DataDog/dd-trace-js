@@ -146,7 +146,7 @@ module.exports = class FakeAgent extends EventEmitter {
     return resultPromise
   }
 
-  assertTelemetryReceived (fn, timeout, requestType, expectedMessageCount = 1, resolveAtFirstSuccess) {
+  assertTelemetryReceived (fn, timeout, requestType, expectedMessageCount = 1) {
     timeout = timeout || 30000
     let resultResolve
     let resultReject
@@ -174,12 +174,14 @@ module.exports = class FakeAgent extends EventEmitter {
       msgCount += 1
       try {
         fn(msg)
-        if (resolveAtFirstSuccess || msgCount === expectedMessageCount) {
+        if (msgCount === expectedMessageCount) {
           resultResolve()
-          this.removeListener('message', messageHandler)
         }
       } catch (e) {
         errors.push(e)
+      }
+      if (msgCount === expectedMessageCount) {
+        this.removeListener('telemetry', messageHandler)
       }
     }
     this.on('telemetry', messageHandler)

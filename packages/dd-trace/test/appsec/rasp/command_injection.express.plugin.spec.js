@@ -36,7 +36,7 @@ describe('RASP - command_injection', () => {
     function testNonShellBlockingAndSafeRequests () {
       it('should block the threat', async () => {
         try {
-          await axios.get('/?dir=/usr/bin/reboot')
+          await axios.get('/?command=/usr/bin/reboot')
         } catch (e) {
           if (!e.response) {
             throw e
@@ -49,7 +49,7 @@ describe('RASP - command_injection', () => {
       })
 
       it('should not block safe request', async () => {
-        await axios.get('/?dir=.')
+        await axios.get('/?command=.')
 
         return checkRaspExecutedAndNotThreat(agent)
       })
@@ -262,7 +262,7 @@ describe('RASP - command_injection', () => {
             app = (req, res) => {
               const childProcess = require('child_process')
 
-              childProcess.execFile(req.query.dir, function (e) {
+              childProcess.execFile(req.query.command, function (e) {
                 if (e?.name === 'DatadogRaspAbortError') {
                   res.writeHead(500)
                 }
@@ -282,7 +282,7 @@ describe('RASP - command_injection', () => {
               const execFile = util.promisify(require('child_process').execFile)
 
               try {
-                await execFile([req.query.dir])
+                await execFile([req.query.command])
               } catch (e) {
                 if (e.name === 'DatadogRaspAbortError') {
                   res.writeHead(500)
@@ -300,7 +300,7 @@ describe('RASP - command_injection', () => {
           beforeEach(() => {
             app = (req, res) => {
               const childProcess = require('child_process')
-              const child = childProcess.execFile(req.query.dir)
+              const child = childProcess.execFile(req.query.command)
               child.on('error', (e) => {
                 if (e.name === 'DatadogRaspAbortError') {
                   res.writeHead(500)
@@ -322,7 +322,7 @@ describe('RASP - command_injection', () => {
               const childProcess = require('child_process')
 
               try {
-                childProcess.execFileSync([req.query.dir])
+                childProcess.execFileSync([req.query.command])
               } catch (e) {
                 if (e.name === 'DatadogRaspAbortError') {
                   res.writeHead(500)
@@ -385,7 +385,7 @@ describe('RASP - command_injection', () => {
             app = (req, res) => {
               const childProcess = require('child_process')
 
-              const child = childProcess.spawn(req.query.dir)
+              const child = childProcess.spawn(req.query.command)
               child.on('error', (e) => {
                 if (e.name === 'DatadogRaspAbortError') {
                   res.writeHead(500)
@@ -406,7 +406,7 @@ describe('RASP - command_injection', () => {
             app = (req, res) => {
               const childProcess = require('child_process')
 
-              const child = childProcess.spawnSync(req.query.dir)
+              const child = childProcess.spawnSync(req.query.command)
               if (child.error?.name === 'DatadogRaspAbortError') {
                 res.writeHead(500)
               }

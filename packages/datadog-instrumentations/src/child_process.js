@@ -19,14 +19,32 @@ const names = ['child_process', 'node:child_process']
 // child_process and node:child_process returns the same object instance, we only want to add hooks once
 let patched = false
 
+function throwSyncError (error) {
+  throw error
+}
+
+function returnSpawnSyncError (error, context) {
+  context.result = {
+    error,
+    status: null,
+    signal: null,
+    output: null,
+    stdout: null,
+    stderr: null,
+    pid: 0
+  }
+
+  return context.result
+}
+
 names.forEach(name => {
   addHook({ name }, childProcess => {
     if (!patched) {
       patched = true
       shimmer.massWrap(childProcess, execAsyncMethods, wrapChildProcessAsyncMethod(childProcess.ChildProcess))
-      shimmer.wrap(childProcess, 'execSync', wrapChildProcessSyncMethod(true))
-      shimmer.wrap(childProcess, 'execFileSync', wrapChildProcessSyncMethod())
-      shimmer.wrap(childProcess, 'spawnSync', wrapChildProcessSyncMethod())
+      shimmer.wrap(childProcess, 'execSync', wrapChildProcessSyncMethod(throwSyncError, true))
+      shimmer.wrap(childProcess, 'execFileSync', wrapChildProcessSyncMethod(throwSyncError))
+      shimmer.wrap(childProcess, 'spawnSync', wrapChildProcessSyncMethod(returnSpawnSyncError))
     }
 
     return childProcess
@@ -71,7 +89,7 @@ function createContextFromChildProcessInfo (childProcessInfo) {
   return context
 }
 
-function wrapChildProcessSyncMethod (shell = false) {
+function wrapChildProcessSyncMethod (returnError, shell = false) {
   return function wrapMethod (childProcessMethod) {
     return function () {
       if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
@@ -90,7 +108,8 @@ function wrapChildProcessSyncMethod (shell = false) {
         try {
           if (abortController.signal.aborted) {
             const error = abortController.signal.reason || new Error('Aborted')
-            throw error
+            // expected behaviors on error are different
+            return returnError(error, context)
           }
 
           const result = childProcessMethod.apply(this, arguments)

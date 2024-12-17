@@ -40,28 +40,14 @@ app.get('/shi/execSync/out-of-express-scope', async (req, res) => {
 })
 
 app.get('/cmdi/execFileSync', async (req, res) => {
-  childProcess.execFileSync('sh', ['-c', req.query.dir])
+  childProcess.execFileSync('sh', ['-c', req.query.command])
 
   res.end('OK')
 })
 
 app.get('/cmdi/execFileSync/out-of-express-scope', async (req, res) => {
   process.nextTick(() => {
-    childProcess.execFileSync('sh', ['-c', req.query.dir])
-
-    res.end('OK')
-  })
-})
-
-app.get('/cmdi/spawnSync', async (req, res) => {
-  childProcess.spawnSync('sh', ['-c', req.query.dir])
-
-  res.end('OK')
-})
-
-app.get('/cmdi/spawnSync/out-of-express-scope', async (req, res) => {
-  process.nextTick(() => {
-    childProcess.spawnSync('sh', ['-c', req.query.dir])
+    childProcess.execFileSync('sh', ['-c', req.query.command])
 
     res.end('OK')
   })
