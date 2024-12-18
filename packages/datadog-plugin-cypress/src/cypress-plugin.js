@@ -223,7 +223,7 @@ class CypressPlugin {
     this.libraryConfigurationPromise = getLibraryConfiguration(this.tracer, this.testConfiguration)
       .then((libraryConfigurationResponse) => {
         if (libraryConfigurationResponse.err) {
-          log.error(libraryConfigurationResponse.err)
+          log.error('Cypress plugin library config response error', libraryConfigurationResponse.err)
         } else {
           const {
             libraryConfig: {
@@ -360,7 +360,7 @@ class CypressPlugin {
         this.testConfiguration
       )
       if (knownTestsResponse.err) {
-        log.error(knownTestsResponse.err)
+        log.error('Cypress known tests response error', knownTestsResponse.err)
         this.isEarlyFlakeDetectionEnabled = false
       } else {
         // We use TEST_FRAMEWORK_NAME for the name of the module
@@ -374,7 +374,7 @@ class CypressPlugin {
         this.testConfiguration
       )
       if (skippableTestsResponse.err) {
-        log.error(skippableTestsResponse.err)
+        log.error('Cypress skippable tests response error', skippableTestsResponse.err)
       } else {
         const { skippableTests, correlationId } = skippableTestsResponse
         this.testsToSkip = skippableTests || []
@@ -658,10 +658,22 @@ class CypressPlugin {
           log.warn('There is no active test span in dd:afterEach handler')
           return null
         }
-        const { state, error, isRUMActive, testSourceLine, testSuite, testName, isNew, isEfdRetry } = test
+        const {
+          state,
+          error,
+          isRUMActive,
+          testSourceLine,
+          testSuite,
+          testSuiteAbsolutePath,
+          testName,
+          isNew,
+          isEfdRetry
+        } = test
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
-          const relativeCoverageFiles = coverageFiles.map(file => getTestSuitePath(file, this.rootDir))
+          const relativeCoverageFiles = [...coverageFiles, testSuiteAbsolutePath].map(
+            file => getTestSuitePath(file, this.repositoryRoot || this.rootDir)
+          )
           if (!relativeCoverageFiles.length) {
             incrementCountMetric(TELEMETRY_CODE_COVERAGE_EMPTY)
           }

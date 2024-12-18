@@ -28,6 +28,14 @@ describe('Config', () => {
   const BLOCKED_TEMPLATE_GRAPHQL_PATH = require.resolve('./fixtures/config/appsec-blocked-graphql-template.json')
   const BLOCKED_TEMPLATE_GRAPHQL = readFileSync(BLOCKED_TEMPLATE_GRAPHQL_PATH, { encoding: 'utf8' })
   const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
+  const CONFIG_NORM_RULES_PATH = require.resolve('./fixtures/telemetry/config_norm_rules.json')
+  const CONFIG_NORM_RULES = readFileSync(CONFIG_NORM_RULES_PATH, { encoding: 'utf8' })
+  const CONFIG_PREFIX_BLOCK_LIST_PATH = require.resolve('./fixtures/telemetry/config_prefix_block_list.json')
+  const CONFIG_PREFIX_BLOCK_LIST = readFileSync(CONFIG_PREFIX_BLOCK_LIST_PATH, { encoding: 'utf8' })
+  const CONFIG_AGGREGATION_LIST_PATH = require.resolve('./fixtures/telemetry/config_aggregation_list.json')
+  const CONFIG_AGGREGATION_LIST = readFileSync(CONFIG_AGGREGATION_LIST_PATH, { encoding: 'utf8' })
+  const NODEJS_CONFIG_RULES_PATH = require.resolve('./fixtures/telemetry/nodejs_config_rules.json')
+  const NODEJS_CONFIG_RULES = readFileSync(NODEJS_CONFIG_RULES_PATH, { encoding: 'utf8' })
 
   function reloadLoggerAndConfig () {
     log = proxyquire('../src/log', {})
@@ -162,7 +170,7 @@ describe('Config', () => {
 
   it('should correctly map OTEL_RESOURCE_ATTRIBUTES', () => {
     process.env.OTEL_RESOURCE_ATTRIBUTES =
-    'deployment.environment=test1,service.name=test2,service.version=5,foo=bar1,baz=qux1'
+      'deployment.environment=test1,service.name=test2,service.version=5,foo=bar1,baz=qux1'
     const config = new Config()
 
     expect(config).to.have.property('env', 'test1')
@@ -212,7 +220,7 @@ describe('Config', () => {
     expect(config).to.have.property('queryStringObfuscation').with.length(626)
     expect(config).to.have.property('clientIpEnabled', false)
     expect(config).to.have.property('clientIpHeader', null)
-    expect(config).to.have.nested.property('crashtracking.enabled', false)
+    expect(config).to.have.nested.property('crashtracking.enabled', true)
     expect(config).to.have.property('sampleRate', undefined)
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config.tags).to.have.property('service', 'node')
@@ -251,10 +259,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', undefined)
-    expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
-    expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
+    expect(config).to.have.nested.property('appsec.eventTracking.mode', 'identification')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
-    expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
+    expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 30)
     expect(config).to.have.nested.property('appsec.sca.enabled', null)
     expect(config).to.have.nested.property('appsec.standalone.enabled', undefined)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
@@ -277,15 +284,16 @@ describe('Config', () => {
       { name: 'appsec.blockedTemplateHtml', value: undefined, origin: 'default' },
       { name: 'appsec.blockedTemplateJson', value: undefined, origin: 'default' },
       { name: 'appsec.enabled', value: undefined, origin: 'default' },
+      { name: 'appsec.eventTracking.mode', value: 'identification', origin: 'default' },
       {
         name: 'appsec.obfuscatorKeyRegex',
-        // eslint-disable-next-line max-len
+        // eslint-disable-next-line @stylistic/js/max-len
         value: '(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt',
         origin: 'default'
       },
       {
         name: 'appsec.obfuscatorValueRegex',
-        // eslint-disable-next-line max-len
+        // eslint-disable-next-line @stylistic/js/max-len
         value: '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\\.net(?:[_-]|-)sessionid|sid|jwt)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}',
         origin: 'default'
       },
@@ -316,6 +324,7 @@ describe('Config', () => {
       { name: 'headerTags', value: [], origin: 'default' },
       { name: 'hostname', value: '127.0.0.1', origin: 'default' },
       { name: 'iast.cookieFilterPattern', value: '.{32,}', origin: 'default' },
+      { name: 'iast.dbRowsToTaint', value: 1, origin: 'default' },
       { name: 'iast.deduplicationEnabled', value: true, origin: 'default' },
       { name: 'iast.enabled', value: false, origin: 'default' },
       { name: 'iast.maxConcurrentRequests', value: 2, origin: 'default' },
@@ -334,6 +343,8 @@ describe('Config', () => {
       { name: 'isGitUploadEnabled', value: false, origin: 'default' },
       { name: 'isIntelligentTestRunnerEnabled', value: false, origin: 'default' },
       { name: 'isManualApiEnabled', value: false, origin: 'default' },
+      { name: 'langchain.spanCharLimit', value: 128, origin: 'default' },
+      { name: 'langchain.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' },
       { name: 'llmobs.agentlessEnabled', value: false, origin: 'default' },
       { name: 'llmobs.mlApp', value: undefined, origin: 'default' },
       { name: 'ciVisibilityTestSessionName', value: '', origin: 'default' },
@@ -352,7 +363,7 @@ describe('Config', () => {
       { name: 'protocolVersion', value: '0.4', origin: 'default' },
       {
         name: 'queryStringObfuscation',
-        // eslint-disable-next-line max-len
+        // eslint-disable-next-line @stylistic/js/max-len
         value: '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}',
         origin: 'default'
       },
@@ -378,7 +389,7 @@ describe('Config', () => {
       { name: 'telemetry.dependencyCollection', value: true, origin: 'default' },
       { name: 'telemetry.enabled', value: true, origin: 'env_var' },
       { name: 'telemetry.heartbeatInterval', value: 60000, origin: 'default' },
-      { name: 'telemetry.logCollection', value: false, origin: 'default' },
+      { name: 'telemetry.logCollection', value: true, origin: 'default' },
       { name: 'telemetry.metrics', value: true, origin: 'default' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'default' },
       { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' },
@@ -441,7 +452,7 @@ describe('Config', () => {
     process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = '.*'
     process.env.DD_TRACE_CLIENT_IP_ENABLED = 'true'
     process.env.DD_TRACE_CLIENT_IP_HEADER = 'x-true-client-ip'
-    process.env.DD_CRASHTRACKING_ENABLED = 'true'
+    process.env.DD_CRASHTRACKING_ENABLED = 'false'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
     process.env.DD_ENV = 'test'
@@ -494,6 +505,7 @@ describe('Config', () => {
     process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
     process.env.DD_IAST_COOKIE_FILTER_PATTERN = '.*'
+    process.env.DD_IAST_DB_ROWS_TO_TAINT = 2
     process.env.DD_IAST_DEDUPLICATION_ENABLED = false
     process.env.DD_IAST_REDACTION_ENABLED = false
     process.env.DD_IAST_REDACTION_NAME_PATTERN = 'REDACTION_NAME_PATTERN'
@@ -504,11 +516,13 @@ describe('Config', () => {
     process.env.DD_PROFILING_ENABLED = 'true'
     process.env.DD_INJECTION_ENABLED = 'profiler'
     process.env.DD_API_SECURITY_ENABLED = 'true'
-    process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE = 1
+    process.env.DD_API_SECURITY_SAMPLE_DELAY = '25'
     process.env.DD_INSTRUMENTATION_INSTALL_ID = '68e75c48-57ca-4a12-adfc-575c4b05fcbe'
     process.env.DD_INSTRUMENTATION_INSTALL_TYPE = 'k8s_single_step'
     process.env.DD_INSTRUMENTATION_INSTALL_TIME = '1703188212'
     process.env.DD_INSTRUMENTATION_CONFIG_ID = 'abcdef123'
+    process.env.DD_LANGCHAIN_SPAN_CHAR_LIMIT = 50
+    process.env.DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE = 0.5
     process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
     process.env.DD_LLMOBS_ML_APP = 'myMlApp'
     process.env.DD_TRACE_ENABLED = 'true'
@@ -531,7 +545,7 @@ describe('Config', () => {
     expect(config).to.have.property('queryStringObfuscation', '.*')
     expect(config).to.have.property('clientIpEnabled', true)
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
-    expect(config).to.have.nested.property('crashtracking.enabled', true)
+    expect(config).to.have.nested.property('crashtracking.enabled', false)
     expect(config.grpc.client.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
     expect(config.grpc.server.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
     expect(config).to.have.property('runtimeMetrics', true)
@@ -591,10 +605,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', BLOCKED_TEMPLATE_HTML)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', BLOCKED_TEMPLATE_GRAPHQL)
-    expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'extended')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
-    expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1)
+    expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 25)
     expect(config).to.have.nested.property('appsec.sca.enabled', true)
     expect(config).to.have.nested.property('appsec.standalone.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
@@ -604,6 +617,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 3)
     expect(config).to.have.nested.property('iast.maxContextOperations', 4)
     expect(config).to.have.nested.property('iast.cookieFilterPattern', '.*')
+    expect(config).to.have.nested.property('iast.dbRowsToTaint', 2)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
@@ -623,6 +637,7 @@ describe('Config', () => {
       { name: 'appsec.blockedTemplateHtml', value: BLOCKED_TEMPLATE_HTML_PATH, origin: 'env_var' },
       { name: 'appsec.blockedTemplateJson', value: BLOCKED_TEMPLATE_JSON_PATH, origin: 'env_var' },
       { name: 'appsec.enabled', value: true, origin: 'env_var' },
+      { name: 'appsec.eventTracking.mode', value: 'extended', origin: 'env_var' },
       { name: 'appsec.obfuscatorKeyRegex', value: '.*', origin: 'env_var' },
       { name: 'appsec.obfuscatorValueRegex', value: '.*', origin: 'env_var' },
       { name: 'appsec.rateLimit', value: '42', origin: 'env_var' },
@@ -636,7 +651,7 @@ describe('Config', () => {
       { name: 'appsec.wafTimeout', value: '42', origin: 'env_var' },
       { name: 'clientIpEnabled', value: true, origin: 'env_var' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'env_var' },
-      { name: 'crashtracking.enabled', value: true, origin: 'env_var' },
+      { name: 'crashtracking.enabled', value: false, origin: 'env_var' },
       { name: 'codeOriginForSpans.enabled', value: true, origin: 'env_var' },
       { name: 'dogstatsd.hostname', value: 'dsd-agent', origin: 'env_var' },
       { name: 'dogstatsd.port', value: '5218', origin: 'env_var' },
@@ -647,6 +662,7 @@ describe('Config', () => {
       { name: 'experimental.runtimeId', value: true, origin: 'env_var' },
       { name: 'hostname', value: 'agent', origin: 'env_var' },
       { name: 'iast.cookieFilterPattern', value: '.*', origin: 'env_var' },
+      { name: 'iast.dbRowsToTaint', value: 2, origin: 'env_var' },
       { name: 'iast.deduplicationEnabled', value: false, origin: 'env_var' },
       { name: 'iast.enabled', value: true, origin: 'env_var' },
       { name: 'iast.maxConcurrentRequests', value: '3', origin: 'env_var' },
@@ -684,7 +700,9 @@ describe('Config', () => {
       { name: 'tracing', value: false, origin: 'env_var' },
       { name: 'version', value: '1.0.0', origin: 'env_var' },
       { name: 'llmobs.mlApp', value: 'myMlApp', origin: 'env_var' },
-      { name: 'llmobs.agentlessEnabled', value: true, origin: 'env_var' }
+      { name: 'llmobs.agentlessEnabled', value: true, origin: 'env_var' },
+      { name: 'langchain.spanCharLimit', value: 50, origin: 'env_var' },
+      { name: 'langchain.spanPromptCompletionSampleRate', value: 0.5, origin: 'env_var' }
     ])
   })
 
@@ -757,6 +775,15 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config).to.have.nested.deep.property('crashtracking.enabled', false)
+  })
+
+  it('should prioritize DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE over DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING', () => {
+    process.env.DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE = 'anonymous'
+    process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
+
+    const config = new Config()
+
+    expect(config).to.have.nested.property('appsec.eventTracking.mode', 'anonymous')
   })
 
   it('should initialize from the options', () => {
@@ -834,6 +861,7 @@ describe('Config', () => {
           maxConcurrentRequests: 4,
           maxContextOperations: 5,
           cookieFilterPattern: '.*',
+          dbRowsToTaint: 2,
           deduplicationEnabled: false,
           redactionEnabled: false,
           redactionNamePattern: 'REDACTION_NAME_PATTERN',
@@ -906,6 +934,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 4)
     expect(config).to.have.nested.property('iast.maxContextOperations', 5)
     expect(config).to.have.nested.property('iast.cookieFilterPattern', '.*')
+    expect(config).to.have.nested.property('iast.dbRowsToTaint', 2)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
@@ -953,6 +982,7 @@ describe('Config', () => {
       { name: 'flushMinSpans', value: 500, origin: 'code' },
       { name: 'hostname', value: 'agent', origin: 'code' },
       { name: 'iast.cookieFilterPattern', value: '.*', origin: 'code' },
+      { name: 'iast.dbRowsToTaint', value: 2, origin: 'code' },
       { name: 'iast.deduplicationEnabled', value: false, origin: 'code' },
       { name: 'iast.enabled', value: true, origin: 'code' },
       { name: 'iast.maxConcurrentRequests', value: 4, origin: 'code' },
@@ -1173,11 +1203,12 @@ describe('Config', () => {
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = BLOCKED_TEMPLATE_JSON_PATH // note the inversion between
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_HTML_PATH // json and html here
     process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_JSON_PATH // json and html here
+    process.env.DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE = 'disabled'
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'disabled'
     process.env.DD_API_SECURITY_ENABLED = 'false'
-    process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE = 0.5
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
+    process.env.DD_IAST_DB_ROWS_TO_TAINT = '2'
     process.env.DD_IAST_COOKIE_FILTER_PATTERN = '.*'
     process.env.DD_IAST_REDACTION_NAME_PATTERN = 'name_pattern_to_be_overriden_by_options'
     process.env.DD_IAST_REDACTION_VALUE_PATTERN = 'value_pattern_to_be_overriden_by_options'
@@ -1238,11 +1269,10 @@ describe('Config', () => {
         blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH,
         blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL_PATH,
         eventTracking: {
-          mode: 'safe'
+          mode: 'anonymous'
         },
         apiSecurity: {
-          enabled: true,
-          requestSampling: 1.0
+          enabled: true
         },
         rasp: {
           enabled: false
@@ -1256,6 +1286,7 @@ describe('Config', () => {
       iast: {
         enabled: true,
         cookieFilterPattern: '.{10,}',
+        dbRowsToTaint: 3,
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
         redactionValuePattern: 'REDACTION_VALUE_PATTERN'
       },
@@ -1317,15 +1348,14 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', BLOCKED_TEMPLATE_HTML)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', BLOCKED_TEMPLATE_GRAPHQL)
-    expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
-    expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
+    expect(config).to.have.nested.property('appsec.eventTracking.mode', 'anonymous')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
-    expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1.0)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 2)
     expect(config).to.have.nested.property('iast.maxContextOperations', 2)
+    expect(config).to.have.nested.property('iast.dbRowsToTaint', 3)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', true)
     expect(config).to.have.nested.property('iast.cookieFilterPattern', '.{10,}')
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
@@ -1351,8 +1381,7 @@ describe('Config', () => {
           mode: 'disabled'
         },
         apiSecurity: {
-          enabled: true,
-          requestSampling: 1.0
+          enabled: true
         },
         rasp: {
           enabled: false
@@ -1364,6 +1393,7 @@ describe('Config', () => {
         maxConcurrentRequests: 3,
         maxContextOperations: 4,
         cookieFilterPattern: '.*',
+        dbRowsToTaint: 3,
         deduplicationEnabled: false,
         redactionEnabled: false,
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
@@ -1382,11 +1412,10 @@ describe('Config', () => {
           blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH,
           blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL_PATH,
           eventTracking: {
-            mode: 'safe'
+            mode: 'anonymous'
           },
           apiSecurity: {
-            enabled: false,
-            requestSampling: 0.5
+            enabled: false
           },
           rasp: {
             enabled: true
@@ -1398,6 +1427,7 @@ describe('Config', () => {
           maxConcurrentRequests: 6,
           maxContextOperations: 7,
           cookieFilterPattern: '.{10,}',
+          dbRowsToTaint: 2,
           deduplicationEnabled: true,
           redactionEnabled: true,
           redactionNamePattern: 'IGNORED_REDACTION_NAME_PATTERN',
@@ -1418,12 +1448,11 @@ describe('Config', () => {
       blockedTemplateJson: undefined,
       blockedTemplateGraphql: undefined,
       eventTracking: {
-        enabled: false,
         mode: 'disabled'
       },
       apiSecurity: {
         enabled: true,
-        requestSampling: 1.0
+        sampleDelay: 30
       },
       sca: {
         enabled: null
@@ -1447,6 +1476,7 @@ describe('Config', () => {
       maxConcurrentRequests: 3,
       maxContextOperations: 4,
       cookieFilterPattern: '.*',
+      dbRowsToTaint: 3,
       deduplicationEnabled: false,
       redactionEnabled: false,
       redactionNamePattern: 'REDACTION_NAME_PATTERN',
@@ -1576,7 +1606,7 @@ describe('Config', () => {
     expect(config.telemetry).to.not.be.undefined
     expect(config.telemetry.enabled).to.be.true
     expect(config.telemetry.heartbeatInterval).to.eq(60000)
-    expect(config.telemetry.logCollection).to.be.false
+    expect(config.telemetry.logCollection).to.be.true
     expect(config.telemetry.debug).to.be.false
     expect(config.telemetry.metrics).to.be.true
   })
@@ -1614,7 +1644,7 @@ describe('Config', () => {
     process.env.DD_TELEMETRY_METRICS_ENABLED = origTelemetryMetricsEnabledValue
   })
 
-  it('should not set DD_TELEMETRY_LOG_COLLECTION_ENABLED', () => {
+  it('should disable log collection if DD_TELEMETRY_LOG_COLLECTION_ENABLED is false', () => {
     const origLogsValue = process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED
     process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = 'false'
 
@@ -1623,17 +1653,6 @@ describe('Config', () => {
     expect(config.telemetry.logCollection).to.be.false
 
     process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = origLogsValue
-  })
-
-  it('should set DD_TELEMETRY_LOG_COLLECTION_ENABLED if DD_IAST_ENABLED', () => {
-    const origIastEnabledValue = process.env.DD_IAST_ENABLED
-    process.env.DD_IAST_ENABLED = 'true'
-
-    const config = new Config()
-
-    expect(config.telemetry.logCollection).to.be.true
-
-    process.env.DD_IAST_ENABLED = origIastEnabledValue
   })
 
   it('should set DD_TELEMETRY_DEBUG', () => {
@@ -1791,9 +1810,12 @@ describe('Config', () => {
     })
 
     expect(log.error).to.be.callCount(3)
-    expect(log.error.firstCall).to.have.been.calledWithExactly(error)
-    expect(log.error.secondCall).to.have.been.calledWithExactly(error)
-    expect(log.error.thirdCall).to.have.been.calledWithExactly(error)
+    expect(log.error.firstCall)
+      .to.have.been.calledWithExactly('Error reading file %s', 'DOES_NOT_EXIST.json', error)
+    expect(log.error.secondCall)
+      .to.have.been.calledWithExactly('Error reading file %s', 'DOES_NOT_EXIST.html', error)
+    expect(log.error.thirdCall)
+      .to.have.been.calledWithExactly('Error reading file %s', 'DOES_NOT_EXIST.json', error)
 
     expect(config.appsec.enabled).to.be.true
     expect(config.appsec.rules).to.eq('path/to/rules.json')
@@ -1825,6 +1847,15 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config.appsec.apiSecurity.enabled).to.be.true
+  })
+
+  it('should prioritize DD_DOGSTATSD_HOST over DD_DOGSTATSD_HOSTNAME', () => {
+    process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
+    process.env.DD_DOGSTATSD_HOST = 'localhost'
+
+    const config = new Config()
+
+    expect(config).to.have.nested.property('dogstatsd.hostname', 'localhost')
   })
 
   context('auto configuration w/ unix domain sockets', () => {
@@ -2180,35 +2211,6 @@ describe('Config', () => {
     })
   })
 
-  it('should sanitize values for API Security sampling between 0 and 1', () => {
-    expect(new Config({
-      appsec: {
-        apiSecurity: {
-          enabled: true,
-          requestSampling: 5
-        }
-      }
-    })).to.have.nested.property('appsec.apiSecurity.requestSampling', 1)
-
-    expect(new Config({
-      appsec: {
-        apiSecurity: {
-          enabled: true,
-          requestSampling: -5
-        }
-      }
-    })).to.have.nested.property('appsec.apiSecurity.requestSampling', 0)
-
-    expect(new Config({
-      appsec: {
-        apiSecurity: {
-          enabled: true,
-          requestSampling: 0.1
-        }
-      }
-    })).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
-  })
-
   context('payload tagging', () => {
     let env
 
@@ -2285,6 +2287,77 @@ describe('Config', () => {
       expect(taggingConfig).to.have.property('requestsEnabled', true)
       expect(taggingConfig).to.have.property('responsesEnabled', true)
       expect(taggingConfig).to.have.property('maxDepth', 7)
+    })
+
+    it('config_norm_rules completeness', () => {
+      // ⚠️ Did this test just fail? Read here! ⚠️
+      //
+      // Some files are manually copied from dd-go from/to the following paths
+      // from: https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/
+      // to: packages/dd-trace/test/fixtures/telemetry/
+      // files:
+      // - config_norm_rules.json
+      // - config_prefix_block_list.json
+      // - config_aggregation_list.json
+      // - nodejs_config_rules.json
+      //
+      // If this test fails, it means that a telemetry key was found in config.js that does not
+      // exist in any of the files listed above in dd-go
+      // The impact is that telemetry will not be reported to the Datadog backend won't be unusable
+      //
+      // To fix this, you must update dd-go to either
+      // 1) Add an exact config key to match config_norm_rules.json
+      // 2) Add a prefix that matches the config keys to config_prefix_block_list.json
+      // 3) Add a prefix rule that fits an existing prefix to config_aggregation_list.json
+      // 4) (Discouraged) Add a language-specific rule to nodejs_config_rules.json
+      //
+      // Once dd-go is updated, you can copy over the files to this repo and merge them in as part of your changes
+
+      function getKeysInDotNotation (obj, parentKey = '') {
+        const keys = []
+
+        for (const key in obj) {
+          if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            const fullKey = parentKey ? `${parentKey}.${key}` : key
+
+            if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
+              keys.push(...getKeysInDotNotation(obj[key], fullKey))
+            } else {
+              keys.push(fullKey)
+            }
+          }
+        }
+
+        return keys
+      }
+
+      const config = new Config()
+
+      const libraryConfigKeys = getKeysInDotNotation(config).sort()
+
+      const nodejsConfigRules = JSON.parse(NODEJS_CONFIG_RULES)
+      const configNormRules = JSON.parse(CONFIG_NORM_RULES)
+      const configPrefixBlockList = JSON.parse(CONFIG_PREFIX_BLOCK_LIST)
+      const configAggregationList = JSON.parse(CONFIG_AGGREGATION_LIST)
+
+      const allowedConfigKeys = [
+        ...Object.keys(configNormRules),
+        ...Object.keys(nodejsConfigRules.normalization_rules)
+      ]
+      const blockedConfigKeyPrefixes = [...configPrefixBlockList, ...nodejsConfigRules.prefix_block_list]
+      const configAggregationPrefixes = [
+        ...Object.keys(configAggregationList),
+        ...Object.keys(nodejsConfigRules.reduce_rules)
+      ]
+
+      const missingConfigKeys = libraryConfigKeys.filter(key => {
+        const isAllowed = allowedConfigKeys.includes(key)
+        const isBlocked = blockedConfigKeyPrefixes.some(prefix => key.startsWith(prefix))
+        const isReduced = configAggregationPrefixes.some(prefix => key.startsWith(prefix))
+        return !isAllowed && !isBlocked && !isReduced
+      })
+
+      expect(missingConfigKeys).to.be.empty
     })
   })
 })

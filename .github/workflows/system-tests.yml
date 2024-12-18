@@ -26,21 +26,21 @@ jobs:
           name: system_tests_binaries
           path: ./binaries/**/*
 
-  get-essential-scenarios:
+  get-scenarios:
     name: Get parameters
     uses: DataDog/system-tests/.github/workflows/compute-workflow-parameters.yml@main
     with:
       library: nodejs
-      scenarios_groups: essentials
+      scenarios_groups: essentials,appsec_rasp
 
   system-tests:
     runs-on: ${{ contains(fromJSON('["CROSSED_TRACING_LIBRARIES", "INTEGRATIONS"]'), matrix.scenario) && 'ubuntu-latest-16-cores' || 'ubuntu-latest' }}
     needs:
-      - get-essential-scenarios
+      - get-scenarios
     strategy:
       matrix:
-        weblog-variant: ${{fromJson(needs.get-essential-scenarios.outputs.endtoend_weblogs)}}
-        scenario: ${{fromJson(needs.get-essential-scenarios.outputs.endtoend_scenarios)}}
+        weblog-variant: ${{fromJson(needs.get-scenarios.outputs.endtoend_weblogs)}}
+        scenario: ${{fromJson(needs.get-scenarios.outputs.endtoend_scenarios)}}
 
     env:
       TEST_LIBRARY: nodejs

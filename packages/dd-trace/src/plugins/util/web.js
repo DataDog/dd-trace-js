@@ -267,7 +267,7 @@ const web = {
       }
     }
 
-    const span = tracer.startSpan(name, { childOf })
+    const span = tracer.startSpan(name, { childOf, links: childOf?._links })
 
     return span
   },
@@ -546,7 +546,7 @@ function getHeadersToRecord (config) {
         .map(h => h.split(':'))
         .map(([key, tag]) => [key.toLowerCase(), tag])
     } catch (err) {
-      log.error(err)
+      log.error('Web plugin error getting headers', err)
     }
   } else if (config.hasOwnProperty('headers')) {
     log.error('Expected `headers` to be an array of strings.')
@@ -595,7 +595,7 @@ function getQsObfuscator (config) {
     try {
       return new RegExp(obfuscator, 'gi')
     } catch (err) {
-      log.error(err)
+      log.error('Web plugin error getting qs obfuscator', err)
     }
   }
 

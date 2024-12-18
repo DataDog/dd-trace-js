@@ -108,7 +108,7 @@ describe('TextMapPropagator', () => {
       const spanContext = createContext({ baggageItems })
 
       propagator.inject(spanContext, carrier)
-      // eslint-disable-next-line max-len
+      // eslint-disable-next-line @stylistic/js/max-len
       expect(carrier.baggage).to.be.equal('%22%2C%3B%5C%28%29%2F%3A%3C%3D%3E%3F%40%5B%5D%7B%7D%F0%9F%90%B6%C3%A9%E6%88%91=%22%2C%3B%5C%F0%9F%90%B6%C3%A9%E6%88%91')
     })
 
@@ -406,7 +406,6 @@ describe('TextMapPropagator', () => {
     })
 
     it('should extract otel baggage items with special characters', () => {
-      process.env.DD_TRACE_BAGGAGE_ENABLED = true
       config = new Config()
       propagator = new TextMapPropagator(config)
       const carrier = {
@@ -450,6 +449,20 @@ describe('TextMapPropagator', () => {
       }
       const spanContextD = propagator.extract(carrierD)
       expect(spanContextD._baggageItems).to.deep.equal({})
+    })
+
+    it('should extract baggage when it is the only propagation style', () => {
+      config = new Config({
+        tracePropagationStyle: {
+          extract: ['baggage']
+        }
+      })
+      propagator = new TextMapPropagator(config)
+      const carrier = {
+        baggage: 'foo=bar'
+      }
+      const spanContext = propagator.extract(carrier)
+      expect(spanContext._baggageItems).to.deep.equal({ foo: 'bar' })
     })
 
     it('should convert signed IDs to unsigned', () => {
@@ -690,6 +703,23 @@ describe('TextMapPropagator', () => {
       } finally {
         extractCh.unsubscribe(onSpanExtract)
       }
+    })
+
+    it('should create span links when traces have inconsistent traceids', () => {
+      // Add a traceparent header and it will prioritize it
+      const traceId = '1111aaaa2222bbbb3333cccc4444dddd'
+      const spanId = '5555eeee6666ffff'
+      textMap.traceparent = `00-${traceId}-${spanId}-01`
+
+      config.tracePropagationStyle.extract = ['tracecontext', 'datadog']
+
+      const first = propagator.extract(textMap)
+
+      expect(first._links.length).to.equal(1)
+      expect(first._links[0].context.toTraceId()).to.equal(textMap['x-datadog-trace-id'])
+      expect(first._links[0].context.toSpanId()).to.equal(textMap['x-datadog-parent-id'])
+      expect(first._links[0].attributes.reason).to.equal('terminated_context')
+      expect(first._links[0].attributes.context_headers).to.equal('datadog')
     })
 
     describe('with B3 propagation as multiple headers', () => {

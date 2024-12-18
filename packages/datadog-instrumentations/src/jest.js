@@ -127,11 +127,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       if (repositoryRoot) {
         this.testSourceFile = getTestSuitePath(context.testPath, repositoryRoot)
+        this.repositoryRoot = repositoryRoot
       }
 
       this.isEarlyFlakeDetectionEnabled = this.testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled
       this.isFlakyTestRetriesEnabled = this.testEnvironmentOptions._ddIsFlakyTestRetriesEnabled
       this.flakyTestRetriesCount = this.testEnvironmentOptions._ddFlakyTestRetriesCount
+      this.isDiEnabled = this.testEnvironmentOptions._ddIsDiEnabled
 
       if (this.isEarlyFlakeDetectionEnabled) {
         const hasKnownTests = !!knownTests.jest
@@ -236,7 +238,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             name: removeEfdStringFromTestName(testName),
             suite: this.testSuite,
             testSourceFile: this.testSourceFile,
-            runner: 'jest-circus',
             displayName: this.displayName,
             testParameters,
             frameworkVersion: jestVersion,
@@ -273,13 +274,23 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
       }
       if (event.name === 'test_done') {
+        const probe = {}
         const asyncResource = asyncResources.get(event.test)
         asyncResource.runInAsyncScope(() => {
           let status = 'pass'
           if (event.test.errors && event.test.errors.length) {
             status = 'fail'
-            const formattedError = formatJestError(event.test.errors[0])
-            testErrCh.publish(formattedError)
+            const numRetries = this.global[RETRY_TIMES]
+            const numTestExecutions = event.test?.invocations
+            const willBeRetried = numRetries > 0 && numTestExecutions - 1 < numRetries
+
+            const error = formatJestError(event.test.errors[0])
+            testErrCh.publish({
+              error,
+              willBeRetried,
+              probe,
+              isDiEnabled: this.isDiEnabled
+            })
           }
           testRunFinishCh.publish({
             status,
@@ -301,6 +312,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             }
           }
         })
+        if (probe.setProbePromise) {
+          await probe.setProbePromise
+        }
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
         const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -309,7 +323,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             name: getJestTestName(event.test),
             suite: this.testSuite,
             testSourceFile: this.testSourceFile,
-            runner: 'jest-circus',
             displayName: this.displayName,
             frameworkVersion: jestVersion,
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
@@ -444,7 +457,7 @@ function cliWrapper (cli, jestVersion) {
         earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
       }
     } catch (err) {
-      log.error(err)
+      log.error('Jest library configuration error', err)
     }
 
     if (isEarlyFlakeDetectionEnabled) {
@@ -465,7 +478,7 @@ function cliWrapper (cli, jestVersion) {
           isEarlyFlakeDetectionEnabled = false
         }
       } catch (err) {
-        log.error(err)
+        log.error('Jest known tests error', err)
       }
     }
 
@@ -484,7 +497,7 @@ function cliWrapper (cli, jestVersion) {
           skippableSuites = receivedSkippableSuites
         }
       } catch (err) {
-        log.error(err)
+        log.error('Jest test-suite skippable error', err)
       }
     }
 
@@ -667,10 +680,13 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
          * controls whether coverage is reported.
         */
         if (environment.testEnvironmentOptions?._ddTestCodeCoverageEnabled) {
+          const root = environment.repositoryRoot || environment.rootDir
+
           const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
-            .map(filename => getTestSuitePath(filename, environment.rootDir))
+            .map(filename => getTestSuitePath(filename, root))
+
           asyncResource.runInAsyncScope(() => {
-            testSuiteCodeCoverageCh.publish({ coverageFiles, testSuite: environment.testSuite })
+            testSuiteCodeCoverageCh.publish({ coverageFiles, testSuite: environment.testSourceFile })
           })
         }
         testSuiteFinishCh.publish({ status, errorMessage })
@@ -776,6 +792,7 @@ addHook({
       _ddRepositoryRoot,
       _ddIsFlakyTestRetriesEnabled,
       _ddFlakyTestRetriesCount,
+      _ddIsDiEnabled,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 
@@ -851,12 +868,18 @@ addHook({
 
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = [
   'selenium-webdriver',
+  'selenium-webdriver/chrome',
+  'selenium-webdriver/edge',
+  'selenium-webdriver/safari',
+  'selenium-webdriver/firefox',
+  'selenium-webdriver/ie',
+  'selenium-webdriver/chromium',
   'winston'
 ]
 
 function shouldBypassJestRequireEngine (moduleName) {
   return (
-    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.some(library => moduleName.includes(library))
+    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.includes(moduleName)
   )
 }
 

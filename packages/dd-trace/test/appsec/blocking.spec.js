@@ -58,7 +58,7 @@ describe('blocking', () => {
       block(req, res, rootSpan)
 
       expect(log.warn).to.have.been
-        .calledOnceWithExactly('Cannot send blocking response when headers have already been sent')
+        .calledOnceWithExactly('[ASM] Cannot send blocking response when headers have already been sent')
       expect(rootSpan.addTags).to.not.have.been.called
       expect(res.setHeader).to.not.have.been.called
       expect(res.end).to.not.have.been.called

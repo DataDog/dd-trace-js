@@ -29,7 +29,7 @@ function wrapResponseJson (json) {
         obj = arguments[1]
       }
 
-      responseJsonChannel.publish({ req: this.req, body: obj })
+      responseJsonChannel.publish({ req: this.req, res: this, body: obj })
     }
 
     return json.apply(this, arguments)
@@ -59,12 +59,24 @@ function wrapResponseRender (render) {
 
 addHook({ name: 'express', versions: ['>=4'] }, express => {
   shimmer.wrap(express.application, 'handle', wrapHandle)
-  shimmer.wrap(express.Router, 'use', wrapRouterMethod)
-  shimmer.wrap(express.Router, 'route', wrapRouterMethod)
 
   shimmer.wrap(express.response, 'json', wrapResponseJson)
   shimmer.wrap(express.response, 'jsonp', wrapResponseJson)
   shimmer.wrap(express.response, 'render', wrapResponseRender)
+
+  return express
+})
+
+addHook({ name: 'express', versions: ['4'] }, express => {
+  shimmer.wrap(express.Router, 'use', wrapRouterMethod)
+  shimmer.wrap(express.Router, 'route', wrapRouterMethod)
+
+  return express
+})
+
+addHook({ name: 'express', versions: ['>=5.0.0'] }, express => {
+  shimmer.wrap(express.Router.prototype, 'use', wrapRouterMethod)
+  shimmer.wrap(express.Router.prototype, 'route', wrapRouterMethod)
 
   return express
 })
@@ -88,7 +100,7 @@ function publishQueryParsedAndNext (req, res, next) {
 
 addHook({
   name: 'express',
-  versions: ['>=4'],
+  versions: ['4'],
   file: 'lib/middleware/query.js'
 }, query => {
   return shimmer.wrapFunction(query, query => function () {
@@ -129,7 +141,29 @@ addHook({ name: 'express', versions: ['>=4.0.0 <4.3.0'] }, express => {
   return express
 })
 
-addHook({ name: 'express', versions: ['>=4.3.0'] }, express => {
+addHook({ name: 'express', versions: ['>=4.3.0 <5.0.0'] }, express => {
   shimmer.wrap(express.Router, 'process_params', wrapProcessParamsMethod(2))
   return express
+})
+
+const queryReadCh = channel('datadog:express:query:finish')
+
+addHook({ name: 'express', file: ['lib/request.js'], versions: ['>=5.0.0'] }, request => {
+  const requestDescriptor = Object.getOwnPropertyDescriptor(request, 'query')
+
+  shimmer.wrap(requestDescriptor, 'get', function (originalGet) {
+    return function wrappedGet () {
+      const query = originalGet.apply(this, arguments)
+
+      if (queryReadCh.hasSubscribers && query) {
+        queryReadCh.publish({ query })
+      }
+
+      return query
+    }
+  })
+
+  Object.defineProperty(request, 'query', requestDescriptor)
+
+  return request
 })

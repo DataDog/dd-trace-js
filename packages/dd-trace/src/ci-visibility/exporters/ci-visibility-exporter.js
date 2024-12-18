@@ -73,6 +73,9 @@ class CiVisibilityExporter extends AgentInfoExporter {
       if (this._coverageWriter) {
         this._coverageWriter.flush()
       }
+      if (this._logsWriter) {
+        this._logsWriter.flush()
+      }
     })
   }
 
@@ -193,7 +196,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       isEarlyFlakeDetectionEnabled,
       earlyFlakeDetectionNumRetries,
       earlyFlakeDetectionFaultyThreshold,
-      isFlakyTestRetriesEnabled
+      isFlakyTestRetriesEnabled,
+      isDiEnabled
     } = remoteConfiguration
     return {
       isCodeCoverageEnabled,
@@ -204,7 +208,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       earlyFlakeDetectionNumRetries,
       earlyFlakeDetectionFaultyThreshold,
       isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && this._config.isFlakyTestRetriesEnabled,
-      flakyTestRetriesCount: this._config.flakyTestRetriesCount
+      flakyTestRetriesCount: this._config.flakyTestRetriesCount,
+      isDiEnabled: isDiEnabled && this._config.isTestDynamicInstrumentationEnabled
     }
   }
 
@@ -222,7 +227,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
         repositoryUrl,
         (err) => {
           if (err) {
-            log.error(`Error uploading git metadata: ${err.message}`)
+            log.error('Error uploading git metadata: %s', err.message)
           } else {
             log.debug('Successfully uploaded git metadata')
           }
@@ -302,13 +307,28 @@ class CiVisibilityExporter extends AgentInfoExporter {
     if (!this._isInitialized) {
       return done()
     }
-    this._writer.flush(() => {
-      if (this._coverageWriter) {
-        this._coverageWriter.flush(done)
-      } else {
+
+    // TODO: safe to do them at once? Or do we want to do them one by one?
+    const writers = [
+      this._writer,
+      this._coverageWriter,
+      this._logsWriter
+    ].filter(writer => writer)
+
+    let remaining = writers.length
+
+    if (remaining === 0) {
+      return done()
+    }
+
+    const onFlushComplete = () => {
+      remaining -= 1
+      if (remaining === 0) {
         done()
       }
-    })
+    }
+
+    writers.forEach(writer => writer.flush(onFlushComplete))
   }
 
   exportUncodedCoverages () {
@@ -327,7 +347,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
       this._writer.setUrl(url)
       this._coverageWriter.setUrl(coverageUrl)
     } catch (e) {
-      log.error(e)
+      log.error('Error setting CI exporter url', e)
     }
   }
 

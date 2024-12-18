@@ -1,61 +1,84 @@
 'use strict'
 
+const TTLCache = require('@isaacs/ttlcache')
+const web = require('../plugins/util/web')
 const log = require('../log')
+const { AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
+
+const MAX_SIZE = 4096
 
 let enabled
-let requestSampling
+let sampledRequests
 
-const sampledRequests = new WeakSet()
+class NoopTTLCache {
+  clear () { }
+  set (key) { return undefined }
+  has (key) { return false }
+}
 
 function configure ({ apiSecurity }) {
   enabled = apiSecurity.enabled
-  setRequestSampling(apiSecurity.requestSampling)
+  sampledRequests = apiSecurity.sampleDelay === 0
+    ? new NoopTTLCache()
+    : new TTLCache({ max: MAX_SIZE, ttl: apiSecurity.sampleDelay * 1000 })
 }
 
 function disable () {
   enabled = false
+  sampledRequests?.clear()
 }
 
-function setRequestSampling (sampling) {
-  requestSampling = parseRequestSampling(sampling)
-}
+function sampleRequest (req, res, force = false) {
+  if (!enabled) return false
 
-function parseRequestSampling (requestSampling) {
-  let parsed = parseFloat(requestSampling)
+  const key = computeKey(req, res)
+  if (!key || isSampled(key)) return false
 
-  if (isNaN(parsed)) {
-    log.warn(`Incorrect API Security request sampling value: ${requestSampling}`)
+  const rootSpan = web.root(req)
+  if (!rootSpan) return false
 
-    parsed = 0
-  } else {
-    parsed = Math.min(1, Math.max(0, parsed))
+  let priority = getSpanPriority(rootSpan)
+  if (!priority) {
+    rootSpan._prioritySampler?.sample(rootSpan)
+    priority = getSpanPriority(rootSpan)
   }
 
-  return parsed
-}
-
-function sampleRequest (req) {
-  if (!enabled || !requestSampling) {
+  if (priority === AUTO_REJECT || priority === USER_REJECT) {
     return false
   }
 
-  const shouldSample = Math.random() <= requestSampling
-
-  if (shouldSample) {
-    sampledRequests.add(req)
+  if (force) {
+    sampledRequests.set(key)
   }
 
-  return shouldSample
+  return true
 }
 
-function isSampled (req) {
-  return sampledRequests.has(req)
+function isSampled (key) {
+  return sampledRequests.has(key)
+}
+
+function computeKey (req, res) {
+  const route = web.getContext(req)?.paths?.join('') || ''
+  const method = req.method
+  const status = res.statusCode
+
+  if (!method || !status) {
+    log.warn('[ASM] Unsupported groupkey for API security')
+    return null
+  }
+  return method + route + status
+}
+
+function getSpanPriority (span) {
+  const spanContext = span.context?.()
+  return spanContext._sampling?.priority
 }
 
 module.exports = {
   configure,
   disable,
-  setRequestSampling,
   sampleRequest,
-  isSampled
+  isSampled,
+  computeKey
 }

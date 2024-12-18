@@ -148,7 +148,9 @@ function reportAttack (attackData) {
     newTags['_dd.appsec.json'] = '{"triggers":' + attackData + '}'
   }
 
-  newTags['network.client.ip'] = req.socket.remoteAddress
+  if (req.socket) {
+    newTags['network.client.ip'] = req.socket.remoteAddress
+  }
 
   rootSpan.addTags(newTags)
 }

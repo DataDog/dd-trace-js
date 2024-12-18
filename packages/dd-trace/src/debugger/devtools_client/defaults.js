@@ -1,0 +1,6 @@
+'use strict'
+
+module.exports = {
+  MAX_SNAPSHOTS_PER_SECOND_PER_PROBE: 1,
+  MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE: 5_000
+}

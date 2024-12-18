@@ -7,15 +7,19 @@ let config
 let rc
 let RemoteConfigManager
 let RuleManager
+let UserTracking
+let log
 let appsec
 let remoteConfig
-let apiSecuritySampler
 
 describe('Remote Config index', () => {
   beforeEach(() => {
     config = {
       appsec: {
-        enabled: undefined
+        enabled: undefined,
+        eventTracking: {
+          mode: 'identification'
+        }
       }
     }
 
@@ -33,9 +37,12 @@ describe('Remote Config index', () => {
       updateWafFromRC: sinon.stub()
     }
 
-    apiSecuritySampler = {
-      configure: sinon.stub(),
-      setRequestSampling: sinon.stub()
+    UserTracking = {
+      setCollectionMode: sinon.stub()
+    }
+
+    log = {
+      error: sinon.stub()
     }
 
     appsec = {
@@ -46,72 +53,55 @@ describe('Remote Config index', () => {
     remoteConfig = proxyquire('../src/appsec/remote_config', {
       './manager': RemoteConfigManager,
       '../rule_manager': RuleManager,
-      '../api_security_sampler': apiSecuritySampler,
+      '../user_tracking': UserTracking,
+      '../../log': log,
       '..': appsec
     })
   })
 
   describe('enable', () => {
     it('should listen to remote config when appsec is not explicitly configured', () => {
-      config.appsec = { enabled: undefined }
+      config.appsec.enabled = undefined
 
       remoteConfig.enable(config)
 
       expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
       expect(rc.updateCapabilities).to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ACTIVATION, true)
+      expect(rc.updateCapabilities)
+        .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
       expect(rc.setProductHandler).to.have.been.calledWith('ASM_FEATURES')
       expect(rc.setProductHandler.firstCall.args[1]).to.be.a('function')
     })
 
     it('should listen to remote config when appsec is explicitly configured as enabled=true', () => {
-      config.appsec = { enabled: true }
+      config.appsec.enabled = true
 
       remoteConfig.enable(config)
 
       expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
-      expect(rc.updateCapabilities).to.not.have.been.calledWith('ASM_ACTIVATION')
+      expect(rc.updateCapabilities).to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_ACTIVATION)
+      expect(rc.updateCapabilities)
+        .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
       expect(rc.setProductHandler).to.have.been.calledOnceWith('ASM_FEATURES')
       expect(rc.setProductHandler.firstCall.args[1]).to.be.a('function')
     })
 
     it('should not listen to remote config when appsec is explicitly configured as enabled=false', () => {
-      config.appsec = { enabled: false }
+      config.appsec.enabled = false
 
       remoteConfig.enable(config)
 
       expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
       expect(rc.updateCapabilities).to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_ACTIVATION, true)
+      expect(rc.updateCapabilities)
+        .to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
       expect(rc.setProductHandler).to.not.have.been.called
-    })
-
-    it('should listen ASM_API_SECURITY_SAMPLE_RATE when appsec.enabled=undefined and appSecurity.enabled=true', () => {
-      config.appsec = { enabled: undefined, apiSecurity: { enabled: true } }
-
-      remoteConfig.enable(config)
-
-      expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
-      expect(rc.updateCapabilities)
-        .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ACTIVATION, true)
-      expect(rc.updateCapabilities)
-        .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
-    })
-
-    it('should listen ASM_API_SECURITY_SAMPLE_RATE when appsec.enabled=true and appSecurity.enabled=true', () => {
-      config.appsec = { enabled: true, apiSecurity: { enabled: true } }
-
-      remoteConfig.enable(config)
-
-      expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
-      expect(rc.updateCapabilities)
-        .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
     })
 
     describe('ASM_FEATURES remote config listener', () => {
       let listener
 
       beforeEach(() => {
-        config.appsec = { enabled: undefined }
-
         remoteConfig.enable(config, appsec)
 
         listener = rc.setProductHandler.firstCall.args[1]
@@ -129,8 +119,8 @@ describe('Remote Config index', () => {
         expect(appsec.enable).to.have.been.called
       })
 
-      it('should disable appsec when listener is called with unnaply and enabled', () => {
-        listener('unnaply', { asm: { enabled: true } })
+      it('should disable appsec when listener is called with unapply and enabled', () => {
+        listener('unapply', { asm: { enabled: true } })
 
         expect(appsec.disable).to.have.been.calledOnce
       })
@@ -141,104 +131,58 @@ describe('Remote Config index', () => {
         expect(appsec.enable).to.not.have.been.called
         expect(appsec.disable).to.not.have.been.called
       })
-    })
 
-    describe('API Security Request Sampling', () => {
-      describe('OneClick', () => {
-        let listener
+      describe('auto_user_instrum', () => {
+        const rcConfig = { auto_user_instrum: { mode: 'anonymous' } }
+        const configId = 'collectionModeId'
 
-        beforeEach(() => {
-          config = {
-            appsec: {
-              enabled: undefined,
-              apiSecurity: {
-                requestSampling: 0.1
-              }
-            }
-          }
-
-          remoteConfig.enable(config)
-
-          listener = rc.setProductHandler.firstCall.args[1]
+        afterEach(() => {
+          listener('unapply', rcConfig, configId)
         })
 
-        it('should update apiSecuritySampler config', () => {
-          listener('apply', {
-            api_security: {
-              request_sample_rate: 0.5
-            }
-          })
+        it('should not update collection mode when not a string', () => {
+          listener('apply', { auto_user_instrum: { mode: 123 } }, configId)
 
-          expect(apiSecuritySampler.setRequestSampling).to.be.calledOnceWithExactly(0.5)
+          expect(UserTracking.setCollectionMode).to.not.have.been.called
         })
 
-        it('should update apiSecuritySampler config and disable it', () => {
-          listener('apply', {
-            api_security: {
-              request_sample_rate: 0
-            }
-          })
+        it('should throw when called two times with different config ids', () => {
+          listener('apply', rcConfig, configId)
 
-          expect(apiSecuritySampler.setRequestSampling).to.be.calledOnceWithExactly(0)
+          expect(() => listener('apply', rcConfig, 'anotherId')).to.throw()
+          expect(log.error).to.have.been.calledOnceWithExactly(
+            '[RC] Multiple auto_user_instrum received in ASM_FEATURES. Discarding config'
+          )
         })
 
-        it('should not update apiSecuritySampler config with values greater than 1', () => {
-          listener('apply', {
-            api_security: {
-              request_sample_rate: 5
-            }
-          })
+        it('should update collection mode when called with apply', () => {
+          listener('apply', rcConfig, configId)
 
-          expect(apiSecuritySampler.configure).to.not.be.called
+          expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly(rcConfig.auto_user_instrum.mode)
         })
 
-        it('should not update apiSecuritySampler config with values less than 0', () => {
-          listener('apply', {
-            api_security: {
-              request_sample_rate: -0.4
-            }
-          })
+        it('should update collection mode when called with modify', () => {
+          listener('modify', rcConfig, configId)
 
-          expect(apiSecuritySampler.configure).to.not.be.called
+          expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly(rcConfig.auto_user_instrum.mode)
         })
 
-        it('should not update apiSecuritySampler config with incorrect values', () => {
-          listener('apply', {
-            api_security: {
-              request_sample_rate: 'not_a_number'
-            }
-          })
+        it('should revert collection mode when called with unapply', () => {
+          listener('apply', rcConfig, configId)
+          UserTracking.setCollectionMode.resetHistory()
 
-          expect(apiSecuritySampler.configure).to.not.be.called
-        })
-      })
+          listener('unapply', rcConfig, configId)
 
-      describe('Enabled', () => {
-        let listener
-
-        beforeEach(() => {
-          config = {
-            appsec: {
-              enabled: true,
-              apiSecurity: {
-                requestSampling: 0.1
-              }
-            }
-          }
-
-          remoteConfig.enable(config)
-
-          listener = rc.setProductHandler.firstCall.args[1]
+          expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly(config.appsec.eventTracking.mode)
         })
 
-        it('should update config apiSecurity.requestSampling property value', () => {
-          listener('apply', {
-            api_security: {
-              request_sample_rate: 0.5
-            }
-          })
+        it('should not revert collection mode when called with unapply and unknown id', () => {
+          listener('apply', rcConfig, configId)
+          UserTracking.setCollectionMode.resetHistory()
 
-          expect(apiSecuritySampler.setRequestSampling).to.be.calledOnceWithExactly(0.5)
+          listener('unapply', rcConfig, 'unknownId')
+
+          expect(UserTracking.setCollectionMode).to.not.have.been.called
         })
       })
     })

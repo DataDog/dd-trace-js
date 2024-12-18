@@ -2,7 +2,6 @@
 
 const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const { DD_MAJOR } = require('../../../version')
 
 const startChannel = channel('apm:next:request:start')
 const finishChannel = channel('apm:next:request:finish')
@@ -14,7 +13,13 @@ const queryParsedChannel = channel('apm:next:query-parsed')
 const requests = new WeakSet()
 const nodeNextRequestsToNextRequests = new WeakMap()
 
+// Next.js <= 14.2.6
 const MIDDLEWARE_HEADER = 'x-middleware-invoke'
+
+// Next.js >= 14.2.7
+const NEXT_REQUEST_META = Symbol.for('NextInternalRequestMeta')
+const META_IS_MIDDLEWARE = 'middlewareInvoke'
+const encounteredMiddleware = new WeakSet()
 
 function wrapHandleRequest (handleRequest) {
   return function (req, res, pathname, query) {
@@ -111,6 +116,11 @@ function getPageFromPath (page, dynamicRoutes = []) {
   return getPagePath(page)
 }
 
+function getRequestMeta (req, key) {
+  const meta = req[NEXT_REQUEST_META] || {}
+  return typeof key === 'string' ? meta[key] : meta
+}
+
 function instrument (req, res, error, handler) {
   if (typeof error === 'function') {
     handler = error
@@ -121,8 +131,9 @@ function instrument (req, res, error, handler) {
   res = res.originalResponse || res
 
   // TODO support middleware properly in the future?
-  const isMiddleware = req.headers[MIDDLEWARE_HEADER]
-  if (isMiddleware || requests.has(req)) {
+  const isMiddleware = req.headers[MIDDLEWARE_HEADER] || getRequestMeta(req, META_IS_MIDDLEWARE)
+  if ((isMiddleware && !encounteredMiddleware.has(req)) || requests.has(req)) {
+    encounteredMiddleware.add(req)
     if (error) {
       errorChannel.publish({ error })
     }
@@ -188,7 +199,7 @@ function finish (ctx, result, err) {
 // however, it is not provided as a class function or exported property
 addHook({
   name: 'next',
-  versions: ['>=13.3.0 <14.2.7'],
+  versions: ['>=13.3.0'],
   file: 'dist/server/web/spec-extension/adapters/next-request.js'
 }, NextRequestAdapter => {
   shimmer.wrap(NextRequestAdapter.NextRequestAdapter, 'fromNodeNextRequest', fromNodeNextRequest => {
@@ -203,17 +214,17 @@ addHook({
 
 addHook({
   name: 'next',
-  versions: ['>=11.1 <14.2.7'],
+  versions: ['>=11.1'],
   file: 'dist/server/serve-static.js'
 }, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
 
 addHook({
   name: 'next',
-  versions: DD_MAJOR >= 4 ? ['>=10.2 <11.1'] : ['>=9.5 <11.1'],
+  versions: ['>=10.2 <11.1'],
   file: 'dist/next-server/server/serve-static.js'
 }, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
 
-addHook({ name: 'next', versions: ['>=11.1 <14.2.7'], file: 'dist/server/next-server.js' }, nextServer => {
+addHook({ name: 'next', versions: ['>=11.1'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
 
   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
@@ -230,13 +241,17 @@ addHook({ name: 'next', versions: ['>=11.1 <14.2.7'], file: 'dist/server/next-se
 })
 
 // `handleApiRequest` changes parameters/implementation at 13.2.0
-addHook({ name: 'next', versions: ['>=13.2 <14.2.7'], file: 'dist/server/next-server.js' }, nextServer => {
+addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
   return nextServer
 })
 
-addHook({ name: 'next', versions: ['>=11.1 <13.2'], file: 'dist/server/next-server.js' }, nextServer => {
+addHook({
+  name: 'next',
+  versions: ['>=11.1 <13.2'],
+  file: 'dist/server/next-server.js'
+}, nextServer => {
   const Server = nextServer.default
   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequest)
   return nextServer
@@ -244,7 +259,7 @@ addHook({ name: 'next', versions: ['>=11.1 <13.2'], file: 'dist/server/next-serv
 
 addHook({
   name: 'next',
-  versions: DD_MAJOR >= 4 ? ['>=10.2 <11.1'] : ['>=9.5 <11.1'],
+  versions: ['>=10.2 <11.1'],
   file: 'dist/next-server/server/next-server.js'
 }, nextServer => {
   const Server = nextServer.default
@@ -264,7 +279,7 @@ addHook({
 
 addHook({
   name: 'next',
-  versions: ['>=13 <14.2.7'],
+  versions: ['>=13'],
   file: 'dist/server/web/spec-extension/request.js'
 }, request => {
   const nextUrlDescriptor = Object.getOwnPropertyDescriptor(request.NextRequest.prototype, 'nextUrl')
