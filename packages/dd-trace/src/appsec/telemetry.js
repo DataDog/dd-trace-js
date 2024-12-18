@@ -177,6 +177,15 @@ function addRaspRequestMetrics (store, { duration, durationExt }) {
   store[DD_TELEMETRY_REQUEST_METRICS].raspEvalCount++
 }
 
+function incrementMissingUserLoginMetric (framework, eventType) {
+  if (!enabled) return
+
+  appsecMetrics.count('instrum.user_auth.missing_user_login', {
+    framework,
+    event_type: eventType
+  }).inc()
+}
+
 function getRequestMetrics (req) {
   if (req) {
     const store = getStore(req)
@@ -193,6 +202,7 @@ module.exports = {
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,
+  incrementMissingUserLoginMetric,
 
   getRequestMetrics
 }
