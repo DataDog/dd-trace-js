@@ -235,7 +235,17 @@ describe('Dynamic Instrumentation', function () {
 
   describe('input messages', function () {
     it('should capture and send expected payload when a log line probe is triggered', function (done) {
+      let traceId, spanId, dd
+
       t.triggerBreakpoint()
+
+      t.agent.on('message', ({ payload }) => {
+        const span = payload.find((arr) => arr[0].name === 'fastify.request')[0]
+        traceId = span.trace_id.toString()
+        spanId = span.span_id.toString()
+
+        assertDD()
+      })
 
       t.agent.on('debugger-input', ({ payload }) => {
         const expected = {
@@ -260,7 +270,17 @@ describe('Dynamic Instrumentation', function () {
         }
 
         assertObjectContains(payload, expected)
+
         assert.match(payload.logger.thread_id, /^pid:\d+$/)
+
+        assert.isObject(payload.dd)
+        assert.hasAllKeys(payload.dd, ['trace_id', 'span_id'])
+        assert.typeOf(payload.dd.trace_id, 'string')
+        assert.typeOf(payload.dd.span_id, 'string')
+        assert.isAbove(payload.dd.trace_id.length, 0)
+        assert.isAbove(payload.dd.span_id.length, 0)
+        dd = payload.dd
+
         assertUUID(payload['debugger.snapshot'].id)
         assert.isNumber(payload['debugger.snapshot'].timestamp)
         assert.isTrue(payload['debugger.snapshot'].timestamp > Date.now() - 1000 * 60)
@@ -283,10 +303,17 @@ describe('Dynamic Instrumentation', function () {
         assert.strictEqual(topFrame.lineNumber, t.breakpoint.line)
         assert.strictEqual(topFrame.columnNumber, 3)
 
-        done()
+        assertDD()
       })
 
       t.agent.addRemoteConfig(t.rcConfig)
+
+      function assertDD () {
+        if (!traceId || !spanId || !dd) return
+        assert.strictEqual(dd.trace_id, traceId)
+        assert.strictEqual(dd.span_id, spanId)
+        done()
+      }
     })
 
     it('should respond with updated message if probe message is updated', function (done) {
