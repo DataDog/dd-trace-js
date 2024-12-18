@@ -138,6 +138,7 @@ suiteDescribe('runtimeMetrics', () => {
       expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.count')
 
       expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.max')
+      // expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.max')
       expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.min')
       expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.sum')
       expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.avg')
