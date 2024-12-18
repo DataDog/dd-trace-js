@@ -133,6 +133,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.isEarlyFlakeDetectionEnabled = this.testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled
       this.isFlakyTestRetriesEnabled = this.testEnvironmentOptions._ddIsFlakyTestRetriesEnabled
       this.flakyTestRetriesCount = this.testEnvironmentOptions._ddFlakyTestRetriesCount
+      this.isDiEnabled = this.testEnvironmentOptions._ddIsDiEnabled
 
       if (this.isEarlyFlakeDetectionEnabled) {
         const hasKnownTests = !!knownTests.jest
@@ -284,7 +285,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             const willBeRetried = numRetries > 0 && numTestExecutions - 1 < numRetries
 
             const error = formatJestError(event.test.errors[0])
-            testErrCh.publish({ error, willBeRetried, probe, numTestExecutions })
+            testErrCh.publish({
+              error,
+              willBeRetried,
+              probe,
+              isDiEnabled: this.isDiEnabled
+            })
           }
           testRunFinishCh.publish({
             status,
@@ -786,6 +792,7 @@ addHook({
       _ddRepositoryRoot,
       _ddIsFlakyTestRetriesEnabled,
       _ddFlakyTestRetriesCount,
+      _ddIsDiEnabled,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 
