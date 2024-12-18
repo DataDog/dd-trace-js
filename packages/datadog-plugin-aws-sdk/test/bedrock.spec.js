@@ -13,7 +13,7 @@ const COHERE = 'COHERE'
 const META = 'META'
 const MISTRAL = 'MISTRAL'
 
-describe('Plugin', () => {
+describe.only('Plugin', () => {
   describe('aws-sdk (bedrock)', function () {
     setup()
 
@@ -29,7 +29,8 @@ describe('Plugin', () => {
         })
 
         before(done => {
-          AWS = require(`../../../versions/${bedrockRuntimeClientName}@${version}`).get()
+          const requireVersion = version === '3.0.0' ? '3.422.0' : '>=3.422.0'
+          AWS = require(`../../../versions/${bedrockRuntimeClientName}@${requireVersion}`).get()
           bedrockRuntimeClient = new AWS.BedrockRuntimeClient(
             { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', ServiceId: serviceName }
           )
@@ -51,6 +52,7 @@ describe('Plugin', () => {
           {
             provider: AMAZON,
             modelId: 'amazon.titan-text-lite-v1',
+            userPrompt: prompt,
             requestBody: {
               inputText: prompt,
               textGenerationConfig: {
@@ -78,6 +80,7 @@ describe('Plugin', () => {
           {
             provider: AI21,
             modelId: 'ai21.jamba-1-5-mini-v1',
+            userPrompt: prompt,
             requestBody: {
               messages: [
                 {
@@ -112,6 +115,7 @@ describe('Plugin', () => {
           {
             provider: ANTHROPIC,
             modelId: 'anthropic.claude-v2',
+            userPrompt: `\n\nHuman:${prompt}\n\nAssistant:`,
             requestBody: {
               prompt: `\n\nHuman:${prompt}\n\nAssistant:`,
               temperature: temperature,
@@ -129,6 +133,7 @@ describe('Plugin', () => {
           {
             provider: COHERE,
             modelId: 'cohere.command-light-text-v14',
+            userPrompt: prompt,
             requestBody: {
               prompt: prompt,
               temperature: temperature,
@@ -152,6 +157,7 @@ describe('Plugin', () => {
           {
             provider: META,
             modelId: 'meta.llama3-70b-instruct-v1',
+            userPrompt: prompt,
             requestBody: {
               prompt: prompt,
               temperature: temperature,
@@ -168,6 +174,7 @@ describe('Plugin', () => {
           {
             provider: MISTRAL,
             modelId: 'mistral.mistral-7b-instruct-v0',
+            userPrompt: prompt,
             requestBody: {
               prompt: prompt,
               max_tokens: maxTokens,
@@ -175,7 +182,14 @@ describe('Plugin', () => {
               top_p: topP,
               top_k: topK
             },
-            response: {}
+            response: {
+              outputs: [
+                {
+                  text: 'The capital of France is Paris.',
+                  stop_reason: 'stop'
+                }
+              ]
+            }
           }
         ]
 
@@ -196,25 +210,23 @@ describe('Plugin', () => {
 
             const command = new AWS.InvokeModelCommand(request)
 
-            // TODO mock the send command to return a specific response
+            agent.use(traces => {
+              const span = traces[0][0]
+              expect(span.meta).to.include({
+                'aws.operation': 'invokeModel',
+                'aws.bedrock.request.model': model.modelId.split('.')[1],
+                'aws.bedrock.request.model_provider': model.provider,
+                'aws.bedrock.request.prompt': model.userPrompt
+              })
+              expect(span.metrics).to.include({
+                'aws.bedrock.request.temperature': temperature,
+                'aws.bedrock.request.top_p': topP,
+                'aws.bedrock.request.max_tokens': maxTokens
+              })
+            }).then(done).catch(done)
+
             bedrockRuntimeClient.send(command, (err) => {
               if (err) return done(err)
-
-              agent.use(traces => {
-                const span = traces[0][0]
-                expect(span.meta).to.include({
-                  'aws.operation': 'invokeModel',
-                  'aws.bedrock.request.model': model.modelId.split('.')[1],
-                  'aws.bedrock.request.model_provider': `${model.provider}`,
-                  'aws.bedrock.request.prompt': prompt
-                })
-                expect(span.metrics).to.include({
-                  'aws.bedrock.request.temperature': temperature,
-                  'aws.bedrock.request.top_p': topP,
-                  'aws.bedrock.request.max_tokens': maxTokens
-                })
-              }).catch(done)
-              done()
             })
           })
         })

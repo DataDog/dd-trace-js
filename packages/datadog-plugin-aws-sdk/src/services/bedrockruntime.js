@@ -11,8 +11,19 @@ const META = 'META'
 const STABILITY = 'STABILITY'
 const MISTRAL = 'MISTRAL'
 
+const enabledOperations = ['invokeModel'] // TODO check if this is the correct operation
+
 class BedrockRuntime extends BaseAwsSdkPlugin {
   static get id () { return 'bedrock runtime' }
+
+  isEnabled (request) {
+    const operation = request.operation
+    if (!enabledOperations.includes(operation)) {
+      return false
+    }
+
+    return super.isEnabled(request)
+  }
 
   generateTags (params, operation, response) {
     let tags = {}
@@ -44,15 +55,15 @@ function extractRequestParams (params, provider) {
 
   if (provider === AI21) {
     const temperature = requestBody.temperature || ''
-    const topP = requestBody.topP || ''
-    const maxTokens = requestBody.maxTokens || ''
-    const stopSequences = requestBody.stopSequences || []
+    const topP = requestBody.top_p || ''
+    const maxTokens = requestBody.max_tokens || ''
+    const stopSequences = requestBody.stop_sequences || []
     let prompt = requestBody.prompt
 
     if (modelId.includes('jamba')) {
       for (const message of requestBody.messages) {
         if (message.role === 'user') {
-          prompt = message.content // Return the content of the first user message
+          prompt = message.content // Return the content of the most recent user message
         }
       }
     }
@@ -119,7 +130,6 @@ function extractRequestParams (params, provider) {
       top_k: requestBody.top_k || ''
     }
   } else if (provider === STABILITY) {
-    // TODO: request/response formats are different for image-based models. Defer for now
     return {}
   }
   return {}
@@ -131,10 +141,20 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
 
   try {
     if (provider === AI21) {
+      if (modelName.includes('jamba')) {
+        const generations = body.choices || []
+        generations.forEach(generation => {
+          textAndResponseReasons.push({
+            text: generation.message || '',
+            finish_reason: generation.finish_reason || '',
+            choice_id: shouldSetChoiceIds ? generation.id : undefined
+          })
+        })
+      }
       const completions = body.completions || []
       completions.forEach(completion => {
         textAndResponseReasons.push({
-          text: completion.data ? completion.data.text : '',
+          text: completion.data?.text || '',
           finish_reason: completion.finishReason || '',
           choice_id: shouldSetChoiceIds ? completion.id : undefined
         })
@@ -191,10 +211,10 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
         })
       })
     } else if (provider === STABILITY) {
-      // TODO: request/response formats are different for image-based models. Defer for now
+      // No text/finish_reason to extract
     }
   } catch (error) {
-    log.error('Unable to extract text/finish_reason from response body. Defaulting to empty text/finish_reason.')
+    log.warn('Unable to extract text/finish_reason from response body. Defaulting to empty text/finish_reason.')
     textAndResponseReasons.push({
       text: '',
       finish_reason: '',
@@ -209,7 +229,7 @@ function buildTagsFromParams (requestParams, textAndResponseReasons, modelProvid
   const tags = {}
 
   // add request tags
-  tags['resource.name'] = `${operation}`
+  tags['resource.name'] = operation
   tags['aws.bedrock.request.model'] = modelName
   tags['aws.bedrock.request.model_provider'] = modelProvider
   tags['aws.bedrock.request.prompt'] = requestParams.prompt
@@ -219,16 +239,14 @@ function buildTagsFromParams (requestParams, textAndResponseReasons, modelProvid
   tags['aws.bedrock.request.stop_sequences'] = requestParams.stop_sequences
 
   // add response tags
-  textAndResponseReasons.forEach((textAndResponseReason, index) => {
-    if (modelName.includes('embed')) {
-      tags['aws.bedrock.response.embedding_length'] = textAndResponseReason.text.length
-    }
-    if (textAndResponseReason.choice_id) {
-      tags[`aws.bedrock.response.choices.${index}.id`] = textAndResponseReason.choice_id
-    }
-    tags[`aws.bedrock.response.choices.${index}.text`] = textAndResponseReason.text
-    tags[`aws.bedrock.response.choices.${index}.finish_reason`] = textAndResponseReason.finish_reason
-  })
+  if (modelName.includes('embed')) {
+    tags['aws.bedrock.response.embedding_length'] = textAndResponseReasons[0].text.length
+  }
+  if (textAndResponseReasons[0].choice_id) {
+    tags['aws.bedrock.response.choices.id'] = textAndResponseReasons[0].choice_id
+  }
+  tags['aws.bedrock.response.choices.text'] = textAndResponseReasons[0].text
+  tags['aws.bedrock.response.choices.finish_reason'] = textAndResponseReasons[0].finish_reason
 
   return tags
 }
