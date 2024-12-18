@@ -255,7 +255,7 @@ class CucumberPlugin extends CiPlugin {
         span.setTag(TEST_IS_RETRY, 'true')
       }
       span.setTag('error', error)
-      if (this.di && error) {
+      if (this.di && error && this.libraryConfig?.isDiEnabled) {
         const testName = span.context()._tags[TEST_NAME]
         const debuggerParameters = this.addDiProbe(error)
         debuggerParameterPerTest.set(testName, debuggerParameters)
