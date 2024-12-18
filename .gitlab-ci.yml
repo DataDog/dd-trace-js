@@ -22,7 +22,7 @@ onboarding_tests_installer:
         SCENARIO: [ SIMPLE_INSTALLER_AUTO_INJECTION, SIMPLE_AUTO_INJECTION_PROFILING ]
 
 onboarding_tests_k8s_injection:
- variables:
+  variables:
     WEBLOG_VARIANT: sample-app
   #parallel:
   #  matrix:
