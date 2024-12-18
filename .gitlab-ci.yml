@@ -24,7 +24,7 @@ onboarding_tests_installer:
 onboarding_tests_k8s_injection:
   variables:
     WEBLOG_VARIANT: sample-app
-  ###parallel:
+  ####parallel:
   #  matrix:
   #    - WEBLOG_VARIANT: [sample-app]
   #      SCENARIO: [K8S_LIB_INJECTION, K8S_LIB_INJECTION_UDS, K8S_LIB_INJECTION_NO_AC, K8S_LIB_INJECTION_NO_AC_UDS, K8S_LIB_INJECTION_PROFILING_DISABLED, K8S_LIB_INJECTION_PROFILING_ENABLED, K8S_LIB_INJECTION_PROFILING_OVERRIDE]
