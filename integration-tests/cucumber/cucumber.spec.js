@@ -1544,6 +1544,11 @@ versions.forEach(version => {
           // Dynamic instrumentation only supported from >=8.0.0
           context('dynamic instrumentation', () => {
             it('does not activate if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
+              receiver.setSettings({
+                flaky_test_retries_enabled: true,
+                di_enabled: true
+              })
+
               const eventsPromise = receiver
                 .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
@@ -1582,16 +1587,59 @@ versions.forEach(version => {
               })
             })
 
+            it('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
+              receiver.setSettings({
+                flaky_test_retries_enabled: true,
+                di_enabled: false
+              })
+
+              const eventsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                  const events = payloads.flatMap(({ payload }) => payload.events)
+
+                  const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                  const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+                  assert.equal(retriedTests.length, 1)
+                  const [retriedTest] = retriedTests
+
+                  assert.notProperty(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
+                  assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_FILE)
+                  assert.notProperty(retriedTest.metrics, DI_DEBUG_ERROR_LINE)
+                  assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_SNAPSHOT_ID)
+                })
+              const logsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url === logsEndpoint, (payloads) => {
+                  if (payloads.length > 0) {
+                    throw new Error('Unexpected logs')
+                  }
+                }, 5000)
+
+              childProcess = exec(
+                './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature --retry 1',
+                {
+                  cwd,
+                  env: {
+                    ...envVars,
+                    DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+                  },
+                  stdio: 'pipe'
+                }
+              )
+
+              childProcess.on('exit', () => {
+                Promise.all([eventsPromise, logsPromise]).then(() => {
+                  done()
+                }).catch(done)
+              })
+            })
+
             it('runs retries with dynamic instrumentation', (done) => {
               receiver.setSettings({
-                itr_enabled: false,
-                code_coverage: false,
-                tests_skipping: false,
-                early_flake_detection: {
-                  enabled: false
-                },
-                flaky_test_retries_enabled: false
+                flaky_test_retries_enabled: true,
+                di_enabled: true
               })
+
               let snapshotIdByTest, snapshotIdByLog
               let spanIdByTest, spanIdByLog, traceIdByTest, traceIdByLog
 
@@ -1671,13 +1719,8 @@ versions.forEach(version => {
 
             it('does not crash if the retry does not hit the breakpoint', (done) => {
               receiver.setSettings({
-                itr_enabled: false,
-                code_coverage: false,
-                tests_skipping: false,
-                early_flake_detection: {
-                  enabled: false
-                },
-                flaky_test_retries_enabled: false
+                flaky_test_retries_enabled: true,
+                di_enabled: true
               })
 
               const eventsPromise = receiver

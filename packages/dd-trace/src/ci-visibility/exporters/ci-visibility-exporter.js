@@ -196,7 +196,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       isEarlyFlakeDetectionEnabled,
       earlyFlakeDetectionNumRetries,
       earlyFlakeDetectionFaultyThreshold,
-      isFlakyTestRetriesEnabled
+      isFlakyTestRetriesEnabled,
+      isDiEnabled
     } = remoteConfiguration
     return {
       isCodeCoverageEnabled,
@@ -207,7 +208,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       earlyFlakeDetectionNumRetries,
       earlyFlakeDetectionFaultyThreshold,
       isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && this._config.isFlakyTestRetriesEnabled,
-      flakyTestRetriesCount: this._config.flakyTestRetriesCount
+      flakyTestRetriesCount: this._config.flakyTestRetriesCount,
+      isDiEnabled: isDiEnabled && this._config.isTestDynamicInstrumentationEnabled
     }
   }
 
