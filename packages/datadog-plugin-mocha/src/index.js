@@ -294,7 +294,7 @@ class MochaPlugin extends CiPlugin {
             browserDriver: spanTags[TEST_BROWSER_DRIVER]
           }
         )
-        if (willBeRetried && this.di) {
+        if (willBeRetried && this.di && this.libraryConfig?.isDiEnabled) {
           const testName = span.context()._tags[TEST_NAME]
           const debuggerParameters = this.addDiProbe(err)
           debuggerParameterPerTest.set(testName, debuggerParameters)
