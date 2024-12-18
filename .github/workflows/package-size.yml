@@ -20,7 +20,7 @@ jobs:
         uses: actions/setup-node@v2
         with:
           node-version: '18'
-      - run: yarn
+      - run: yarn --ignore-engines
       - name: Compute module size tree and report
         uses: qard/heaviest-objects-in-the-universe@v1
         with:
