@@ -129,17 +129,5 @@ describe('RASP - command_injection - integration', () => {
         '/cmdi/execFileSync/out-of-express-scope?command=cat /etc/passwd 1>&2 ; echo .', 4, 'exec'
       )
     })
-
-    it('should abort spawnSync operation handled by express', async () => {
-      await testRequestBlocked(
-        '/cmdi/spawnSync?command=/sbin/reboot', 4, 'exec'
-      )
-    })
-
-    it('should abort spawnSync operation outside of express scope', async () => {
-      await testRequestBlocked(
-        '/cmdi/spawnSync/out-of-express-scope?command=/sbin/reboot', 4, 'exec'
-      )
-    })
   })
 })

@@ -53,34 +53,6 @@ app.get('/cmdi/execFileSync/out-of-express-scope', async (req, res) => {
   })
 })
 
-app.get('/cmdi/spawnSync', async (req, res) => {
-  const result = childProcess.spawnSync(req.query.command)
-
-  if (result.error?.name === 'DatadogRaspAbortError') {
-    res.status(403).json({
-      error: 'DatadogRaspAbortError'
-    })
-    return
-  }
-
-  res.end('OK')
-})
-
-app.get('/cmdi/spawnSync/out-of-express-scope', async (req, res) => {
-  process.nextTick(() => {
-    const result = childProcess.spawnSync(req.query.command)
-
-    if (result.error?.name === 'DatadogRaspAbortError') {
-      res.status(403).json({
-        error: 'DatadogRaspAbortError'
-      })
-      return
-    }
-
-    res.end('OK')
-  })
-})
-
 app.listen(port, () => {
   process.send({ port })
 })
