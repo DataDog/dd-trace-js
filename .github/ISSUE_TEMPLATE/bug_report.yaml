@@ -40,6 +40,13 @@ body:
     validations:
       required: false
 
+  - type: textarea
+    attributes:
+      label: Tracer Config
+      description: "Please provide the `tracer.init(config)` object and any applicable tracer environment variables"
+    validations:
+      required: false
+
   - type: input
     attributes:
       label: Operating System
