@@ -46,20 +46,22 @@ describe('Dynamic Instrumentation', function () {
       })
 
       t.agent.on('debugger-diagnostics', ({ payload }) => {
-        const expected = expectedPayloads.shift()
-        assertObjectContains(payload, expected)
-        assertUUID(payload.debugger.diagnostics.runtimeId)
+        payload.forEach((event) => {
+          const expected = expectedPayloads.shift()
+          assertObjectContains(event, expected)
+          assertUUID(event.debugger.diagnostics.runtimeId)
 
-        if (payload.debugger.diagnostics.status === 'INSTALLED') {
-          t.axios.get(t.breakpoint.url)
-            .then((response) => {
-              assert.strictEqual(response.status, 200)
-              assert.deepStrictEqual(response.data, { hello: 'bar' })
-            })
-            .catch(done)
-        } else {
-          endIfDone()
-        }
+          if (event.debugger.diagnostics.status === 'INSTALLED') {
+            t.axios.get(t.breakpoint.url)
+              .then((response) => {
+                assert.strictEqual(response.status, 200)
+                assert.deepStrictEqual(response.data, { hello: 'bar' })
+              })
+              .catch(done)
+          } else {
+            endIfDone()
+          }
+        })
       })
 
       t.agent.addRemoteConfig(t.rcConfig)
@@ -107,11 +109,13 @@ describe('Dynamic Instrumentation', function () {
       })
 
       t.agent.on('debugger-diagnostics', ({ payload }) => {
-        const expected = expectedPayloads.shift()
-        assertObjectContains(payload, expected)
-        assertUUID(payload.debugger.diagnostics.runtimeId)
-        if (payload.debugger.diagnostics.status === 'INSTALLED') triggers.shift()()
-        endIfDone()
+        payload.forEach((event) => {
+          const expected = expectedPayloads.shift()
+          assertObjectContains(event, expected)
+          assertUUID(event.debugger.diagnostics.runtimeId)
+          if (event.debugger.diagnostics.status === 'INSTALLED') triggers.shift()()
+          endIfDone()
+        })
       })
 
       t.agent.addRemoteConfig(t.rcConfig)
@@ -146,18 +150,20 @@ describe('Dynamic Instrumentation', function () {
       })
 
       t.agent.on('debugger-diagnostics', ({ payload }) => {
-        const expected = expectedPayloads.shift()
-        assertObjectContains(payload, expected)
-        assertUUID(payload.debugger.diagnostics.runtimeId)
+        payload.forEach((event) => {
+          const expected = expectedPayloads.shift()
+          assertObjectContains(event, expected)
+          assertUUID(event.debugger.diagnostics.runtimeId)
 
-        if (payload.debugger.diagnostics.status === 'INSTALLED') {
-          t.agent.removeRemoteConfig(t.rcConfig.id)
-          // Wait a little to see if we get any follow-up `debugger-diagnostics` messages
-          setTimeout(() => {
-            payloadsProcessed = true
-            endIfDone()
-          }, pollInterval * 2 * 1000) // wait twice as long as the RC poll interval
-        }
+          if (event.debugger.diagnostics.status === 'INSTALLED') {
+            t.agent.removeRemoteConfig(t.rcConfig.id)
+            // Wait a little to see if we get any follow-up `debugger-diagnostics` messages
+            setTimeout(() => {
+              payloadsProcessed = true
+              endIfDone()
+            }, pollInterval * 2 * 1000) // wait twice as long as the RC poll interval
+          }
+        })
       })
 
       t.agent.addRemoteConfig(t.rcConfig)
@@ -205,19 +211,21 @@ describe('Dynamic Instrumentation', function () {
         }]
 
         t.agent.on('debugger-diagnostics', ({ payload }) => {
-          const expected = expectedPayloads.shift()
-          assertObjectContains(payload, expected)
-          const { diagnostics } = payload.debugger
-          assertUUID(diagnostics.runtimeId)
+          payload.forEach((event) => {
+            const expected = expectedPayloads.shift()
+            assertObjectContains(event, expected)
+            const { diagnostics } = event.debugger
+            assertUUID(diagnostics.runtimeId)
 
-          if (diagnostics.status === 'ERROR') {
-            assert.property(diagnostics, 'exception')
-            assert.hasAllKeys(diagnostics.exception, ['message', 'stacktrace'])
-            assert.typeOf(diagnostics.exception.message, 'string')
-            assert.typeOf(diagnostics.exception.stacktrace, 'string')
-          }
+            if (diagnostics.status === 'ERROR') {
+              assert.property(diagnostics, 'exception')
+              assert.hasAllKeys(diagnostics.exception, ['message', 'stacktrace'])
+              assert.typeOf(diagnostics.exception.message, 'string')
+              assert.typeOf(diagnostics.exception.stacktrace, 'string')
+            }
 
-          endIfDone()
+            endIfDone()
+          })
         })
 
         t.agent.addRemoteConfig({
@@ -238,6 +246,10 @@ describe('Dynamic Instrumentation', function () {
       t.triggerBreakpoint()
 
       t.agent.on('debugger-input', ({ payload }) => {
+        assert.isArray(payload)
+        assert.lengthOf(payload, 1)
+        payload = payload[0]
+
         const expected = {
           ddsource: 'dd_debugger',
           hostname: os.hostname(),
@@ -304,10 +316,12 @@ describe('Dynamic Instrumentation', function () {
       ]
 
       t.agent.on('debugger-diagnostics', ({ payload }) => {
-        if (payload.debugger.diagnostics.status === 'INSTALLED') triggers.shift()().catch(done)
+        payload.forEach((event) => {
+          if (event.debugger.diagnostics.status === 'INSTALLED') triggers.shift()().catch(done)
+        })
       })
 
-      t.agent.on('debugger-input', ({ payload }) => {
+      t.agent.on('debugger-input', ({ payload: [payload] }) => {
         assert.strictEqual(payload.message, expectedMessages.shift())
         if (expectedMessages.length === 0) done()
       })
@@ -317,17 +331,19 @@ describe('Dynamic Instrumentation', function () {
 
     it('should not trigger if probe is deleted', function (done) {
       t.agent.on('debugger-diagnostics', ({ payload }) => {
-        if (payload.debugger.diagnostics.status === 'INSTALLED') {
-          t.agent.once('remote-confg-responded', async () => {
-            await t.axios.get(t.breakpoint.url)
-            // We want to wait enough time to see if the client triggers on the breakpoint so that the test can fail
-            // if it does, but not so long that the test times out.
-            // TODO: Is there some signal we can use instead of a timer?
-            setTimeout(done, pollInterval * 2 * 1000) // wait twice as long as the RC poll interval
-          })
+        payload.forEach((event) => {
+          if (event.debugger.diagnostics.status === 'INSTALLED') {
+            t.agent.once('remote-confg-responded', async () => {
+              await t.axios.get(t.breakpoint.url)
+              // We want to wait enough time to see if the client triggers on the breakpoint so that the test can fail
+              // if it does, but not so long that the test times out.
+              // TODO: Is there some signal we can use instead of a timer?
+              setTimeout(done, pollInterval * 2 * 1000) // wait twice as long as the RC poll interval
+            })
 
-          t.agent.removeRemoteConfig(t.rcConfig.id)
-        }
+            t.agent.removeRemoteConfig(t.rcConfig.id)
+          }
+        })
       })
 
       t.agent.on('debugger-input', () => {
@@ -340,8 +356,7 @@ describe('Dynamic Instrumentation', function () {
 
   describe('sampling', function () {
     it('should respect sampling rate for single probe', function (done) {
-      let start, timer
-      let payloadsReceived = 0
+      let prev, timer
       const rcConfig = t.generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
 
       function triggerBreakpointContinuously () {
@@ -350,27 +365,26 @@ describe('Dynamic Instrumentation', function () {
       }
 
       t.agent.on('debugger-diagnostics', ({ payload }) => {
-        if (payload.debugger.diagnostics.status === 'INSTALLED') triggerBreakpointContinuously()
+        payload.forEach((event) => {
+          if (event.debugger.diagnostics.status === 'INSTALLED') triggerBreakpointContinuously()
+        })
       })
 
-      t.agent.on('debugger-input', () => {
-        payloadsReceived++
-        if (payloadsReceived === 1) {
-          start = Date.now()
-        } else if (payloadsReceived === 2) {
-          const duration = Date.now() - start
-          clearTimeout(timer)
+      t.agent.on('debugger-input', ({ payload }) => {
+        payload.forEach(({ 'debugger.snapshot': { timestamp } }) => {
+          if (prev !== undefined) {
+            const duration = timestamp - prev
+            clearTimeout(timer)
 
-          // Allow for a variance of -5/+50ms (time will tell if this is enough)
-          assert.isAbove(duration, 995)
-          assert.isBelow(duration, 1050)
+            // Allow for a variance of +50ms (time will tell if this is enough)
+            assert.isAtLeast(duration, 1000)
+            assert.isBelow(duration, 1050)
 
-          // Wait at least a full sampling period, to see if we get any more payloads
-          timer = setTimeout(done, 1250)
-        } else {
-          clearTimeout(timer)
-          done(new Error('Too many payloads received!'))
-        }
+            // Wait at least a full sampling period, to see if we get any more payloads
+            timer = setTimeout(done, 1250)
+          }
+          prev = timestamp
+        })
       })
 
       t.agent.addRemoteConfig(rcConfig)
@@ -381,14 +395,12 @@ describe('Dynamic Instrumentation', function () {
       const rcConfig2 = t.breakpoints[1].generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
       const state = {
         [rcConfig1.config.id]: {
-          payloadsReceived: 0,
           tiggerBreakpointContinuously () {
             t.axios.get(t.breakpoints[0].url).catch(done)
             this.timer = setTimeout(this.tiggerBreakpointContinuously.bind(this), 10)
           }
         },
         [rcConfig2.config.id]: {
-          payloadsReceived: 0,
           tiggerBreakpointContinuously () {
             t.axios.get(t.breakpoints[1].url).catch(done)
             this.timer = setTimeout(this.tiggerBreakpointContinuously.bind(this), 10)
@@ -397,29 +409,29 @@ describe('Dynamic Instrumentation', function () {
       }
 
       t.agent.on('debugger-diagnostics', ({ payload }) => {
-        const { probeId, status } = payload.debugger.diagnostics
-        if (status === 'INSTALLED') state[probeId].tiggerBreakpointContinuously()
+        payload.forEach((event) => {
+          const { probeId, status } = event.debugger.diagnostics
+          if (status === 'INSTALLED') state[probeId].tiggerBreakpointContinuously()
+        })
       })
 
       t.agent.on('debugger-input', ({ payload }) => {
-        const _state = state[payload['debugger.snapshot'].probe.id]
-        _state.payloadsReceived++
-        if (_state.payloadsReceived === 1) {
-          _state.start = Date.now()
-        } else if (_state.payloadsReceived === 2) {
-          const duration = Date.now() - _state.start
-          clearTimeout(_state.timer)
+        payload.forEach((result) => {
+          const _state = state[result['debugger.snapshot'].probe.id]
+          const { timestamp } = result['debugger.snapshot']
+          if (_state.prev !== undefined) {
+            const duration = timestamp - _state.prev
+            clearTimeout(_state.timer)
 
-          // Allow for a variance of -5/+50ms (time will tell if this is enough)
-          assert.isAbove(duration, 995)
-          assert.isBelow(duration, 1050)
+            // Allow for a variance of +50ms (time will tell if this is enough)
+            assert.isAtLeast(duration, 1000)
+            assert.isBelow(duration, 1050)
 
-          // Wait at least a full sampling period, to see if we get any more payloads
-          _state.timer = setTimeout(doneWhenCalledTwice, 1250)
-        } else {
-          clearTimeout(_state.timer)
-          done(new Error('Too many payloads received!'))
-        }
+            // Wait at least a full sampling period, to see if we get any more payloads
+            _state.timer = setTimeout(doneWhenCalledTwice, 1250)
+          }
+          _state.prev = timestamp
+        })
       })
 
       t.agent.addRemoteConfig(rcConfig1)
@@ -436,39 +448,42 @@ describe('Dynamic Instrumentation', function () {
     it('should remove the last breakpoint completely before trying to add a new one', function (done) {
       const rcConfig2 = t.generateRemoteConfig()
 
-      t.agent.on('debugger-diagnostics', ({ payload: { debugger: { diagnostics: { status, probeId } } } }) => {
-        if (status !== 'INSTALLED') return
+      t.agent.on('debugger-diagnostics', ({ payload }) => {
+        payload.forEach((event) => {
+          const { status, probeId } = event.debugger.diagnostics
+          if (status !== 'INSTALLED') return
 
-        if (probeId === t.rcConfig.config.id) {
-          // First INSTALLED payload: Try to trigger the race condition.
-          t.agent.removeRemoteConfig(t.rcConfig.id)
-          t.agent.addRemoteConfig(rcConfig2)
-        } else {
-          // Second INSTALLED payload: Perform an HTTP request to see if we successfully handled the race condition.
-          let finished = false
+          if (probeId === t.rcConfig.config.id) {
+            // First INSTALLED payload: Try to trigger the race condition.
+            t.agent.removeRemoteConfig(t.rcConfig.id)
+            t.agent.addRemoteConfig(rcConfig2)
+          } else {
+            // Second INSTALLED payload: Perform an HTTP request to see if we successfully handled the race condition.
+            let finished = false
 
-          // If the race condition occurred, the debugger will have been detached from the main thread and the new
-          // probe will never trigger. If that's the case, the following timer will fire:
-          const timer = setTimeout(() => {
-            done(new Error('Race condition occurred!'))
-          }, 1000)
+            // If the race condition occurred, the debugger will have been detached from the main thread and the new
+            // probe will never trigger. If that's the case, the following timer will fire:
+            const timer = setTimeout(() => {
+              done(new Error('Race condition occurred!'))
+            }, 2000)
 
-          // If we successfully handled the race condition, the probe will trigger, we'll get a probe result and the
-          // following event listener will be called:
-          t.agent.once('debugger-input', () => {
-            clearTimeout(timer)
-            finished = true
-            done()
-          })
+            // If we successfully handled the race condition, the probe will trigger, we'll get a probe result and the
+            // following event listener will be called:
+            t.agent.once('debugger-input', () => {
+              clearTimeout(timer)
+              finished = true
+              done()
+            })
 
-          // Perform HTTP request to try and trigger the probe
-          t.axios.get(t.breakpoint.url).catch((err) => {
-            // If the request hasn't fully completed by the time the tests ends and the target app is destroyed, Axios
-            // will complain with a "socket hang up" error. Hence this sanity check before calling `done(err)`. If we
-            // later add more tests below this one, this shouuldn't be an issue.
-            if (!finished) done(err)
-          })
-        }
+            // Perform HTTP request to try and trigger the probe
+            t.axios.get(t.breakpoint.url).catch((err) => {
+              // If the request hasn't fully completed by the time the tests ends and the target app is destroyed, Axios
+              // will complain with a "socket hang up" error. Hence this sanity check before calling `done(err)`. If we
+              // later add more tests below this one, this shouuldn't be an issue.
+              if (!finished) done(err)
+            })
+          }
+        })
       })
 
       t.agent.addRemoteConfig(t.rcConfig)
