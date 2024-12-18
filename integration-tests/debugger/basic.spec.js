@@ -9,7 +9,17 @@ const { ACKNOWLEDGED, ERROR } = require('../../packages/dd-trace/src/appsec/remo
 const { version } = require('../../package.json')
 
 describe('Dynamic Instrumentation', function () {
-  const t = setup()
+  describe('DD_TRACING_ENABLED=true', function () {
+    testWithTracingEnabled()
+  })
+
+  describe('DD_TRACING_ENABLED=false', function () {
+    testWithTracingEnabled(false)
+  })
+})
+
+function testWithTracingEnabled (tracingEnabled = true) {
+  const t = setup({ DD_TRACING_ENABLED: tracingEnabled })
 
   it('base case: target app should work as expected if no test probe has been added', async function () {
     const response = await t.axios.get(t.breakpoint.url)
@@ -273,13 +283,17 @@ describe('Dynamic Instrumentation', function () {
 
         assert.match(payload.logger.thread_id, /^pid:\d+$/)
 
-        assert.isObject(payload.dd)
-        assert.hasAllKeys(payload.dd, ['trace_id', 'span_id'])
-        assert.typeOf(payload.dd.trace_id, 'string')
-        assert.typeOf(payload.dd.span_id, 'string')
-        assert.isAbove(payload.dd.trace_id.length, 0)
-        assert.isAbove(payload.dd.span_id.length, 0)
-        dd = payload.dd
+        if (tracingEnabled) {
+          assert.isObject(payload.dd)
+          assert.hasAllKeys(payload.dd, ['trace_id', 'span_id'])
+          assert.typeOf(payload.dd.trace_id, 'string')
+          assert.typeOf(payload.dd.span_id, 'string')
+          assert.isAbove(payload.dd.trace_id.length, 0)
+          assert.isAbove(payload.dd.span_id.length, 0)
+          dd = payload.dd
+        } else {
+          assert.doesNotHaveAnyKeys(payload, ['dd'])
+        }
 
         assertUUID(payload['debugger.snapshot'].id)
         assert.isNumber(payload['debugger.snapshot'].timestamp)
@@ -303,7 +317,11 @@ describe('Dynamic Instrumentation', function () {
         assert.strictEqual(topFrame.lineNumber, t.breakpoint.line)
         assert.strictEqual(topFrame.columnNumber, 3)
 
-        assertDD()
+        if (tracingEnabled) {
+          assertDD()
+        } else {
+          done()
+        }
       })
 
       t.agent.addRemoteConfig(t.rcConfig)
@@ -501,4 +519,4 @@ describe('Dynamic Instrumentation', function () {
       t.agent.addRemoteConfig(t.rcConfig)
     })
   })
-})
+}
