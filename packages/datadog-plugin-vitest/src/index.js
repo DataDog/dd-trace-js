@@ -137,12 +137,12 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:test:error', ({ duration, error, willBeRetried, probe }) => {
+    this.addSub('ci:vitest:test:error', ({ duration, error, willBeRetried, probe, isDiEnabled }) => {
       const store = storage.getStore()
       const span = store?.span
 
       if (span) {
-        if (willBeRetried && this.di) {
+        if (willBeRetried && this.di && isDiEnabled) {
           const testName = span.context()._tags[TEST_NAME]
           const debuggerParameters = this.addDiProbe(error, probe)
           debuggerParameterPerTest.set(testName, debuggerParameters)

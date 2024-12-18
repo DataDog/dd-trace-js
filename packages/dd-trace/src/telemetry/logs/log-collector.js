@@ -3,7 +3,7 @@
 const log = require('../../log')
 const { calculateDDBasePath } = require('../../util')
 
-const logs = new Map()
+const logs = new Map() // hash -> log
 
 // NOTE: Is this a reasonable number?
 let maxEntries = 10000
@@ -81,6 +81,8 @@ const logCollector = {
       if (!logs.has(hash)) {
         logs.set(hash, logEntry)
         return true
+      } else {
+        logs.get(hash).count++
       }
     } catch (e) {
       log.error('Unable to add log to logCollector: %s', e.message)

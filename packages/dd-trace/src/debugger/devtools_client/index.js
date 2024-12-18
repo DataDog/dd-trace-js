@@ -13,6 +13,12 @@ const { version } = require('../../../../../package.json')
 
 require('./remote_config')
 
+// Expression to run on a call frame of the paused thread to get its active trace and span id.
+const expression = `
+  const context = global.require('dd-trace').scope().active()?.context();
+  ({ trace_id: context?.toTraceId(), span_id: context?.toSpanId() })
+`
+
 // There doesn't seem to be an official standard for the content of these fields, so we're just populating them with
 // something that should be useful to a Node.js developer.
 const threadId = parentThreadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${parentThreadId}`
@@ -59,6 +65,7 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   const timestamp = Date.now()
+  const dd = await getDD(params.callFrames[0].callFrameId)
 
   let processLocalState
   if (captureSnapshotForProbe !== null) {
@@ -78,7 +85,10 @@ session.on('Debugger.paused', async ({ params }) => {
   await session.post('Debugger.resume')
   const diff = process.hrtime.bigint() - start // TODO: Recored as telemetry (DEBUG-2858)
 
-  log.debug(`Finished processing breakpoints - main thread paused for: ${Number(diff) / 1000000} ms`)
+  log.debug(
+    '[debugger:devtools_client] Finished processing breakpoints - main thread paused for: %d ms',
+    Number(diff) / 1000000
+  )
 
   // Due to the highly optimized algorithm above, the `probes` array might have gaps
   probes = probes.filter((probe) => !!probe)
@@ -119,7 +129,7 @@ session.on('Debugger.paused', async ({ params }) => {
     }
 
     // TODO: Process template (DEBUG-2628)
-    send(probe.template, logger, snapshot, (err) => {
+    send(probe.template, logger, dd, snapshot, (err) => {
       if (err) log.error('Debugger error', err)
       else ackEmitting(probe)
     })
@@ -128,4 +138,22 @@ session.on('Debugger.paused', async ({ params }) => {
 
 function highestOrUndefined (num, max) {
   return num === undefined ? max : Math.max(num, max ?? 0)
+}
+
+async function getDD (callFrameId) {
+  const { result } = await session.post('Debugger.evaluateOnCallFrame', {
+    callFrameId,
+    expression,
+    returnByValue: true,
+    includeCommandLineAPI: true
+  })
+
+  if (result?.value?.trace_id === undefined) {
+    if (result?.subtype === 'error') {
+      log.error('[debugger:devtools_client] Error getting trace/span id:', result.description)
+    }
+    return
+  }
+
+  return result.value
 }

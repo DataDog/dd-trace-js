@@ -449,8 +449,7 @@ class Config {
     this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
     this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
     this._setValue(defaults, 'appsec.enabled', undefined)
-    this._setValue(defaults, 'appsec.eventTracking.enabled', true)
-    this._setValue(defaults, 'appsec.eventTracking.mode', 'safe')
+    this._setValue(defaults, 'appsec.eventTracking.mode', 'identification')
     this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultWafObfuscatorKeyRegex)
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
     this._setValue(defaults, 'appsec.rasp.enabled', true)
@@ -467,7 +466,7 @@ class Config {
     this._setValue(defaults, 'ciVisibilityTestSessionName', '')
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
-    this._setValue(defaults, 'crashtracking.enabled', false)
+    this._setValue(defaults, 'crashtracking.enabled', true)
     this._setValue(defaults, 'codeOriginForSpans.enabled', false)
     this._setValue(defaults, 'dbmPropagationMode', 'disabled')
     this._setValue(defaults, 'dogstatsd.hostname', '127.0.0.1')
@@ -486,6 +485,7 @@ class Config {
     this._setValue(defaults, 'headerTags', [])
     this._setValue(defaults, 'hostname', '127.0.0.1')
     this._setValue(defaults, 'iast.cookieFilterPattern', '.{32,}')
+    this._setValue(defaults, 'iast.dbRowsToTaint', 1)
     this._setValue(defaults, 'iast.deduplicationEnabled', true)
     this._setValue(defaults, 'iast.enabled', false)
     this._setValue(defaults, 'iast.maxConcurrentRequests', 2)
@@ -575,6 +575,7 @@ class Config {
       DD_AGENT_HOST,
       DD_API_SECURITY_ENABLED,
       DD_API_SECURITY_SAMPLE_DELAY,
+      DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
       DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
       DD_APPSEC_ENABLED,
       DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON,
@@ -607,6 +608,7 @@ class Config {
       DD_GRPC_SERVER_ERROR_STATUSES,
       JEST_WORKER_ID,
       DD_IAST_COOKIE_FILTER_PATTERN,
+      DD_IAST_DB_ROWS_TO_TAINT,
       DD_IAST_DEDUPLICATION_ENABLED,
       DD_IAST_ENABLED,
       DD_IAST_MAX_CONCURRENT_REQUESTS,
@@ -714,11 +716,10 @@ class Config {
     this._setValue(env, 'appsec.blockedTemplateJson', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON))
     this._envUnprocessed['appsec.blockedTemplateJson'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
     this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
-    if (DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING) {
-      this._setValue(env, 'appsec.eventTracking.enabled',
-        ['extended', 'safe'].includes(DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING.toLowerCase()))
-      this._setValue(env, 'appsec.eventTracking.mode', DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING.toLowerCase())
-    }
+    this._setString(env, 'appsec.eventTracking.mode', coalesce(
+      DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
+      DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING // TODO: remove in next major
+    ))
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setBoolean(env, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
@@ -760,6 +761,7 @@ class Config {
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
     this._setString(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
     this._setString(env, 'iast.cookieFilterPattern', DD_IAST_COOKIE_FILTER_PATTERN)
+    this._setValue(env, 'iast.dbRowsToTaint', maybeInt(DD_IAST_DB_ROWS_TO_TAINT))
     this._setBoolean(env, 'iast.deduplicationEnabled', DD_IAST_DEDUPLICATION_ENABLED)
     this._setBoolean(env, 'iast.enabled', DD_IAST_ENABLED)
     this._setValue(env, 'iast.maxConcurrentRequests', maybeInt(DD_IAST_MAX_CONCURRENT_REQUESTS))
@@ -898,12 +900,7 @@ class Config {
     this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(options.appsec.blockedTemplateJson))
     this._optsUnprocessed['appsec.blockedTemplateJson'] = options.appsec.blockedTemplateJson
     this._setBoolean(opts, 'appsec.enabled', options.appsec.enabled)
-    let eventTracking = options.appsec.eventTracking?.mode
-    if (eventTracking) {
-      eventTracking = eventTracking.toLowerCase()
-      this._setValue(opts, 'appsec.eventTracking.enabled', ['extended', 'safe'].includes(eventTracking))
-      this._setValue(opts, 'appsec.eventTracking.mode', eventTracking)
-    }
+    this._setString(opts, 'appsec.eventTracking.mode', options.appsec.eventTracking?.mode)
     this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
     this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
     this._setBoolean(opts, 'appsec.rasp.enabled', options.appsec.rasp?.enabled)
@@ -941,6 +938,7 @@ class Config {
     this._setArray(opts, 'headerTags', options.headerTags)
     this._setString(opts, 'hostname', options.hostname)
     this._setString(opts, 'iast.cookieFilterPattern', options.iast?.cookieFilterPattern)
+    this._setValue(opts, 'iast.dbRowsToTaint', maybeInt(options.iast?.dbRowsToTaint))
     this._setBoolean(opts, 'iast.deduplicationEnabled', options.iast && options.iast.deduplicationEnabled)
     this._setBoolean(opts, 'iast.enabled',
       options.iast && (options.iast === true || options.iast.enabled === true))
@@ -1144,10 +1142,6 @@ class Config {
     if (defaultPropagationStyle.length > 2) {
       calc['tracePropagationStyle.inject'] = calc['tracePropagationStyle.inject'] || defaultPropagationStyle
       calc['tracePropagationStyle.extract'] = calc['tracePropagationStyle.extract'] || defaultPropagationStyle
-    }
-
-    if (this._env.injectionEnabled?.length > 0) {
-      this._setBoolean(calc, 'crashtracking.enabled', true)
     }
   }
 

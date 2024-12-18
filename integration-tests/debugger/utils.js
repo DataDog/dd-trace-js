@@ -18,30 +18,45 @@ module.exports = {
   setup
 }
 
-function setup () {
+function setup (env) {
   let sandbox, cwd, appPort
-  const breakpoint = getBreakpointInfo(1) // `1` to disregard the `setup` function
+  const breakpoints = getBreakpointInfo(1) // `1` to disregard the `setup` function
   const t = {
-    breakpoint,
+    breakpoint: breakpoints[0],
+    breakpoints,
+
     axios: null,
     appFile: null,
     agent: null,
+
+    // Default to the first breakpoint in the file (normally there's only one)
     rcConfig: null,
-    triggerBreakpoint,
-    generateRemoteConfig,
-    generateProbeConfig
+    triggerBreakpoint: triggerBreakpoint.bind(null, breakpoints[0].url),
+    generateRemoteConfig: generateRemoteConfig.bind(null, breakpoints[0]),
+    generateProbeConfig: generateProbeConfig.bind(null, breakpoints[0])
   }
 
-  function triggerBreakpoint () {
+  // Allow specific access to each breakpoint
+  for (let i = 0; i < breakpoints.length; i++) {
+    t.breakpoints[i] = {
+      rcConfig: null,
+      triggerBreakpoint: triggerBreakpoint.bind(null, breakpoints[i].url),
+      generateRemoteConfig: generateRemoteConfig.bind(null, breakpoints[i]),
+      generateProbeConfig: generateProbeConfig.bind(null, breakpoints[i]),
+      ...breakpoints[i]
+    }
+  }
+
+  function triggerBreakpoint (url) {
     // Trigger the breakpoint once probe is successfully installed
     t.agent.on('debugger-diagnostics', ({ payload }) => {
       if (payload.debugger.diagnostics.status === 'INSTALLED') {
-        t.axios.get(breakpoint.url)
+        t.axios.get(url)
       }
     })
   }
 
-  function generateRemoteConfig (overrides = {}) {
+  function generateRemoteConfig (breakpoint, overrides = {}) {
     overrides.id = overrides.id || randomUUID()
     return {
       product: 'LIVE_DEBUGGING',
@@ -54,7 +69,7 @@ function setup () {
     sandbox = await createSandbox(['fastify']) // TODO: Make this dynamic
     cwd = sandbox.folder
     // The sandbox uses the `integration-tests` folder as its root
-    t.appFile = join(cwd, 'debugger', breakpoint.file)
+    t.appFile = join(cwd, 'debugger', breakpoints[0].file)
   })
 
   after(async function () {
@@ -62,7 +77,11 @@ function setup () {
   })
 
   beforeEach(async function () {
-    t.rcConfig = generateRemoteConfig(breakpoint)
+    // Default to the first breakpoint in the file (normally there's only one)
+    t.rcConfig = generateRemoteConfig(breakpoints[0])
+    // Allow specific access to each breakpoint
+    t.breakpoints.forEach((breakpoint) => { breakpoint.rcConfig = generateRemoteConfig(breakpoint) })
+
     appPort = await getPort()
     t.agent = await new FakeAgent().start()
     t.proc = await spawnProc(t.appFile, {
@@ -72,7 +91,8 @@ function setup () {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
         DD_TRACE_AGENT_PORT: t.agent.port,
         DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG, // inherit to make debugging the sandbox easier
-        DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: pollInterval
+        DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: pollInterval,
+        ...env
       }
     })
     t.axios = Axios.create({
@@ -96,16 +116,19 @@ function getBreakpointInfo (stackIndex = 0) {
     .slice(0, -1)
     .split(':')[0]
 
-  // Then, find the corresponding file in which the breakpoint exists
+  // Then, find the corresponding file in which the breakpoint(s) exists
   const file = join('target-app', basename(testFile).replace('.spec', ''))
 
-  // Finally, find the line number of the breakpoint
+  // Finally, find the line number(s) of the breakpoint(s)
   const lines = readFileSync(join(__dirname, file), 'utf8').split('\n')
+  const result = []
   for (let i = 0; i < lines.length; i++) {
     const index = lines[i].indexOf(BREAKPOINT_TOKEN)
     if (index !== -1) {
       const url = lines[i].slice(index + BREAKPOINT_TOKEN.length + 1).trim()
-      return { file, line: i + 1, url }
+      result.push({ file, line: i + 1, url })
     }
   }
+
+  return result
 }

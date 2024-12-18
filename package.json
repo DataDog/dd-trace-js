@@ -81,11 +81,11 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@datadog/libdatadog": "^0.2.2",
+    "@datadog/libdatadog": "^0.3.0",
     "@datadog/native-appsec": "8.3.0",
-    "@datadog/native-iast-rewriter": "2.6.0",
+    "@datadog/native-iast-rewriter": "2.6.1",
     "@datadog/native-iast-taint-tracking": "3.2.0",
-    "@datadog/native-metrics": "^3.0.1",
+    "@datadog/native-metrics": "^3.1.0",
     "@datadog/pprof": "5.4.1",
     "@datadog/sketches-js": "^2.1.0",
     "@isaacs/ttlcache": "^1.4.1",
@@ -95,7 +95,6 @@
     "dc-polyfill": "^0.1.4",
     "ignore": "^5.2.4",
     "import-in-the-middle": "1.11.2",
-    "int64-buffer": "^0.1.9",
     "istanbul-lib-coverage": "3.2.0",
     "jest-docblock": "^29.7.0",
     "koalas": "^1.0.2",
@@ -103,7 +102,6 @@
     "lodash.sortby": "^4.7.0",
     "lru-cache": "^7.14.0",
     "module-details-from-path": "^1.0.3",
-    "msgpack-lite": "^0.1.26",
     "opentracing": ">=0.12.1",
     "path-to-regexp": "^0.1.12",
     "pprof-format": "^2.1.0",
@@ -143,10 +141,12 @@
     "glob": "^7.1.6",
     "globals": "^15.10.0",
     "graphql": "0.13.2",
+    "int64-buffer": "^0.1.9",
     "jszip": "^3.5.0",
     "knex": "^2.4.2",
     "mkdirp": "^3.0.1",
     "mocha": "^9",
+    "msgpack-lite": "^0.1.26",
     "multer": "^1.4.5-lts.1",
     "nock": "^11.3.3",
     "nyc": "^15.1.0",
@@ -155,6 +155,7 @@
     "sinon": "^16.1.3",
     "sinon-chai": "^3.7.0",
     "tap": "^16.3.7",
-    "tiktoken": "^1.0.15"
+    "tiktoken": "^1.0.15",
+    "yaml": "^2.5.0"
   }
 }

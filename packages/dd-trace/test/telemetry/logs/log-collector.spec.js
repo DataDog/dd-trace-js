@@ -126,5 +126,22 @@ describe('telemetry log collector', () => {
       expect(logs.length).to.be.equal(4)
       expect(logs[3]).to.deep.eq({ message: 'Omitted 2 entries due to overflowing', level: 'ERROR' })
     })
+
+    it('duplicated errors should send incremented count values', () => {
+      const err1 = { message: 'oh no', level: 'ERROR', count: 1 }
+
+      const err2 = { message: 'foo buzz', level: 'ERROR', count: 1 }
+
+      logCollector.add(err1)
+      logCollector.add(err2)
+      logCollector.add(err1)
+      logCollector.add(err2)
+      logCollector.add(err1)
+
+      const drainedErrors = logCollector.drain()
+      expect(drainedErrors.length).to.be.equal(2)
+      expect(drainedErrors[0].count).to.be.equal(3)
+      expect(drainedErrors[1].count).to.be.equal(2)
+    })
   })
 })

@@ -420,6 +420,10 @@
     {
       "name": "express",
       "versions": [">=4"]
+    },
+    {
+      "name": "sqlite3",
+      "versions": ["^5.0.8"]
     }
   ]
 }
