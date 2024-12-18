@@ -13,7 +13,7 @@ const COHERE = 'COHERE'
 const META = 'META'
 const MISTRAL = 'MISTRAL'
 
-describe.only('Plugin', () => {
+describe('Plugin', () => {
   describe('aws-sdk (bedrock)', function () {
     setup()
 
