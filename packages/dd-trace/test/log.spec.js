@@ -148,10 +148,14 @@ describe('log', () => {
 
       it('should log to console after setting log level to trace', function foo () {
         log.toggle(true, 'trace')
-        log.trace('argument', { hello: 'world' })
+        log.trace('argument', { hello: 'world' }, {
+          toString: () => 'string'
+        }, { foo: 'bar' })
 
         expect(console.debug).to.have.been.calledOnce
-        expect(console.debug.firstCall.args[0]).to.match(/^Trace: Test.foo\("argument", {"hello":"world"}\)/)
+        expect(console.debug.firstCall.args[0]).to.match(
+          /^Trace: Test.foo\('argument', { hello: 'world' }, string, { foo: 'bar' }\)/
+        )
         expect(console.debug.firstCall.args[0].split('\n').length).to.be.gte(3)
       })
     })

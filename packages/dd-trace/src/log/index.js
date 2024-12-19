@@ -1,6 +1,7 @@
 'use strict'
 
 const coalesce = require('koalas')
+const { inspect } = require('util')
 const { isTrue } = require('../util')
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
@@ -63,7 +64,11 @@ const log = {
       Error.captureStackTrace(logRecord, this.trace)
 
       const fn = logRecord.stack.split('\n')[1].replace(/^\s+at ([^\s]+) .+/, '$1')
-      const params = args.map(a => JSON.stringify(a)).join(', ')
+      const params = args.map(a => {
+        return a && a.hasOwnProperty('toString') && typeof a.toString === 'function'
+          ? a.toString()
+          : inspect(a, { depth: 5, breakLength: Infinity, compact: true })
+      }).join(', ')
       const formatted = logRecord.stack.replace('Error: ', `Trace: ${fn}(${params})`)
 
       traceChannel.publish(Log.parse(formatted))
