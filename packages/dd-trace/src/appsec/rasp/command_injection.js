@@ -33,13 +33,14 @@ function analyzeCommandInjection ({ file, fileArgs, shell, abortController }) {
 
   const persistent = {}
   const raspRule = { type: RULE_TYPES.COMMAND_INJECTION }
-  const params = fileArgs ? [file, ...fileArgs] : [file]
+  const params = fileArgs ? [file, ...fileArgs] : file
 
   if (shell) {
     persistent[addresses.SHELL_COMMAND] = params
     raspRule.variant = 'shell'
   } else {
-    persistent[addresses.EXEC_COMMAND] = params
+    const commandParams = Array.isArray(params) ? params : [params]
+    persistent[addresses.EXEC_COMMAND] = commandParams
     raspRule.variant = 'exec'
   }
 
