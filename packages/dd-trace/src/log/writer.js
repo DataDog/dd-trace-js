@@ -4,6 +4,7 @@ const { storage } = require('../../../datadog-core')
 const { LogChannel } = require('./channels')
 const { Log } = require('./log')
 const defaultLogger = {
+  trace: msg => console.trace(msg), /* eslint-disable-line no-console */
   debug: msg => console.debug(msg), /* eslint-disable-line no-console */
   info: msg => console.info(msg), /* eslint-disable-line no-console */
   warn: msg => console.warn(msg), /* eslint-disable-line no-console */
@@ -23,7 +24,7 @@ function withNoop (fn) {
 }
 
 function unsubscribeAll () {
-  logChannel.unsubscribe({ debug: onDebug, info: onInfo, warn: onWarn, error: onError })
+  logChannel.unsubscribe({ trace: onTrace, debug: onDebug, info: onInfo, warn: onWarn, error: onError })
 }
 
 function toggleSubscription (enable, level) {
@@ -31,7 +32,7 @@ function toggleSubscription (enable, level) {
 
   if (enable) {
     logChannel = new LogChannel(level)
-    logChannel.subscribe({ debug: onDebug, info: onInfo, warn: onWarn, error: onError })
+    logChannel.subscribe({ trace: onTrace, debug: onDebug, info: onInfo, warn: onWarn, error: onError })
   }
 }
 
@@ -88,6 +89,12 @@ function onDebug (log) {
   if (cause) withNoop(() => logger.debug(cause))
 }
 
+function onTrace (log) {
+  const { formatted, cause } = getErrorLog(log)
+  if (formatted) withNoop(() => logger.trace(formatted))
+  if (cause) withNoop(() => logger.trace(cause))
+}
+
 function error (...args) {
   onError(Log.parse(...args))
 }
@@ -110,4 +117,8 @@ function debug (...args) {
   onDebug(Log.parse(...args))
 }
 
-module.exports = { use, toggle, reset, error, warn, info, debug }
+function trace (...args) {
+  onTrace(Log.parse(...args))
+}
+
+module.exports = { use, toggle, reset, error, warn, info, debug, trace }
