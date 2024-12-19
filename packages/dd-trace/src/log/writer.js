@@ -4,7 +4,6 @@ const { storage } = require('../../../datadog-core')
 const { LogChannel } = require('./channels')
 const { Log } = require('./log')
 const defaultLogger = {
-  trace: msg => console.trace(msg), /* eslint-disable-line no-console */
   debug: msg => console.debug(msg), /* eslint-disable-line no-console */
   info: msg => console.info(msg), /* eslint-disable-line no-console */
   warn: msg => console.warn(msg), /* eslint-disable-line no-console */
@@ -91,8 +90,10 @@ function onDebug (log) {
 
 function onTrace (log) {
   const { formatted, cause } = getErrorLog(log)
-  if (formatted) withNoop(() => logger.trace(formatted))
-  if (cause) withNoop(() => logger.trace(cause))
+  // Using logger.debug() because not all loggers have trace level,
+  // and console.trace() has a completely different meaning.
+  if (formatted) withNoop(() => logger.debug(formatted))
+  if (cause) withNoop(() => logger.debug(cause))
 }
 
 function error (...args) {
