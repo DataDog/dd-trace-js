@@ -4,6 +4,7 @@ require('./setup/tap')
 
 const { expect } = require('chai')
 const { storage } = require('../../datadog-core')
+const { channel } = require('dc-polyfill')
 
 /* eslint-disable no-console */
 
@@ -86,6 +87,7 @@ describe('log', () => {
       sinon.stub(console, 'error')
       sinon.stub(console, 'warn')
       sinon.stub(console, 'debug')
+      sinon.stub(console, 'trace')
 
       error = new Error()
 
@@ -104,6 +106,7 @@ describe('log', () => {
       console.error.restore()
       console.warn.restore()
       console.debug.restore()
+      console.trace.restore()
     })
 
     it('should support chaining', () => {
@@ -136,6 +139,21 @@ describe('log', () => {
         log.debug(() => 'debug')
 
         expect(console.debug).to.have.been.calledWith('debug')
+      })
+    })
+
+    describe('trace', () => {
+      it('should not log to console by default', () => {
+        log.trace('trace')
+
+        expect(console.trace).to.not.have.been.called
+      })
+
+      it('should log to console after setting log level to trace', () => {
+        log.toggle(true, 'trace')
+        log.trace('argument')
+
+        expect(console.trace).to.have.been.calledTwice
       })
     })
 
