@@ -153,10 +153,94 @@ class FilesystemDecorator {
   }
 }
 
+class CryptoDecorator {
+  constructor (stringTable) {
+    this.stringTable = stringTable
+    this.operationKey = stringTable.dedup('operation')
+    this.typeKey = stringTable.dedup('type')
+    this.sizeKey = stringTable.dedup('size')
+    this.digestKey = stringTable.dedup('digest')
+    this.keyLenKey = stringTable.dedup('keylen')
+    this.iterationsKey = stringTable.dedup('iterations')
+    this.offsetKey = stringTable.dedup('offset')
+    this.minKey = stringTable.dedup('min')
+    this.maxKey = stringTable.dedup('max')
+    this.algorithmKey = stringTable.dedup('algorithm')
+  }
+
+  decorateSample (sampleInput, item) {
+    const labels = sampleInput.label
+    const stringTable = this.stringTable
+    const detail = item.detail
+    const operation = detail.operation
+
+    function pushDetailStr (key, index) {
+      labels.push(labelFromStrStr(stringTable, key, detail.args[index]))
+    }
+
+    function pushDetailNum (key, index) {
+      labels.push(new Label({ key, num: detail.args[index] }))
+    }
+
+    labels.push(labelFromStr(stringTable, this.operationKey, operation))
+    switch (operation) {
+      case 'checkPrime':
+        break
+      case 'generateKey':
+        pushDetailStr(this.typeKey, 0)
+        break
+      case 'generateKeyPair':
+        pushDetailStr(this.typeKey, 0)
+        break
+      case 'generatePrime':
+        pushDetailNum(this.sizeKey, 0)
+        break
+      case 'hkdf':
+        pushDetailStr(this.digestKey, 0)
+        pushDetailNum(this.keyLenKey, 4)
+        break
+      case 'pbkdf2':
+        pushDetailNum(this.iterationsKey, 2)
+        pushDetailNum(this.keyLenKey, 3)
+        pushDetailStr(this.digestKey, 4)
+        break
+      case 'randomBytes':
+        pushDetailNum(this.sizeKey, 0)
+        break
+      case 'randomFill':
+        if (typeof detail.args[1] === 'number') {
+          pushDetailNum(this.offsetKey, 1)
+          if (typeof detail.args[2] === 'number') {
+            pushDetailNum(this.sizeKey, 2)
+          }
+        }
+        break
+      case 'randomInt':
+        if (typeof detail.args[0] === 'number') {
+          if (typeof detail.args[0] === 'number') {
+            pushDetailNum(this.minKey, 0)
+            pushDetailNum(this.maxKey, 1)
+          } else {
+            pushDetailNum(this.maxKey, 0)
+          }
+        }
+        break
+      case 'scrypt':
+        pushDetailNum(this.keyLenKey, 2)
+        break
+      case 'sign':
+      case 'verify':
+        pushDetailStr(this.algorithmKey, 0)
+        break
+    }
+  }
+}
+
 // Keys correspond to PerformanceEntry.entryType, values are constructor
 // functions for type-specific decorators.
 const decoratorTypes = {
   fs: FilesystemDecorator,
+  crypto: CryptoDecorator,
   dns: DNSDecorator,
   gc: GCDecorator,
   net: NetDecorator
