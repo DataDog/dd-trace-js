@@ -41,9 +41,9 @@ class BedrockRuntime extends BaseAwsSdkPlugin {
     const shouldSetChoiceIds = modelProvider === COHERE && !modelName.includes('embed')
 
     const requestParams = extractRequestParams(params, modelProvider)
-    const textAndResponseReasons = extractTextAndResponseReason(response, modelProvider, modelName, shouldSetChoiceIds)
+    const textAndResponseReason = extractTextAndResponseReason(response, modelProvider, modelName, shouldSetChoiceIds)
 
-    tags = buildTagsFromParams(requestParams, textAndResponseReasons, modelProvider, modelName, operation)
+    tags = buildTagsFromParams(requestParams, textAndResponseReason, modelProvider, modelName, operation)
 
     return tags
   }
@@ -137,95 +137,112 @@ function extractRequestParams (params, provider) {
 
 function extractTextAndResponseReason (response, provider, modelName, shouldSetChoiceIds) {
   const body = JSON.parse(Buffer.from(response.body).toString('utf8'))
-  const textAndResponseReasons = []
 
   try {
     if (provider === AI21) {
       if (modelName.includes('jamba')) {
         const generations = body.choices || []
-        generations.forEach(generation => {
-          textAndResponseReasons.push({
+        if (generations.length > 0) {
+          const generation = generations[0]
+          return {
             text: generation.message || '',
             finish_reason: generation.finish_reason || '',
             choice_id: shouldSetChoiceIds ? generation.id : undefined
-          })
-        })
+          }
+        }
       }
       const completions = body.completions || []
-      completions.forEach(completion => {
-        textAndResponseReasons.push({
+      if (completions.length > 0) {
+        const completion = completions[0]
+        return {
           text: completion.data?.text || '',
           finish_reason: completion.finishReason || '',
           choice_id: shouldSetChoiceIds ? completion.id : undefined
-        })
-      })
+        }
+      }
     } else if (provider === AMAZON && modelName.includes('embed')) {
-      textAndResponseReasons.push({
-        text: body.embedding || [],
+      return {
+        text: body.embedding || '',
         finish_reason: '',
         choice_id: undefined
-      })
+      }
     } else if (provider === AMAZON) {
-      (body.results || []).forEach(result => {
-        textAndResponseReasons.push({
+      const results = body.results || []
+      if (results.length > 0) {
+        const result = results[0]
+        return {
           text: result.outputText || '',
           finish_reason: result.completionReason || '',
           choice_id: undefined
-        })
-      })
+        }
+      }
     } else if (provider === ANTHROPIC) {
-      textAndResponseReasons.push({
+      return {
         text: body.completion || body.content || '',
         finish_reason: body.stop_reason || '',
         choice_id: undefined
-      })
+      }
     } else if (provider === COHERE && modelName.includes('embed')) {
-      (body.embeddings || [[]]).forEach(embedding => {
-        textAndResponseReasons.push({
-          text: embedding,
+      const embeddings = body.embeddings || [[]]
+      if (embeddings.length > 0) {
+        return {
+          text: embeddings[0],
           finish_reason: '',
           choice_id: undefined
-        })
-      })
+        }
+      }
     } else if (provider === COHERE) {
       const generations = body.generations || []
-      generations.forEach(generation => {
-        textAndResponseReasons.push({
+      if (generations.length > 0) {
+        const generation = generations[0]
+        return {
           text: generation.text,
           finish_reason: generation.finish_reason,
           choice_id: shouldSetChoiceIds ? generation.id : undefined
-        })
-      })
+        }
+      }
     } else if (provider === META) {
-      textAndResponseReasons.push({
+      return {
         text: body.generation || '',
         finish_reason: body.stop_reason || '',
         choice_id: undefined
-      })
+      }
     } else if (provider === MISTRAL) {
       const generations = body.outputs || []
-      generations.forEach(generation => {
-        textAndResponseReasons.push({
-          text: generation.text,
-          finish_reason: generation.stop_reason
-        })
-      })
+      if (generations.length > 0) {
+        const generation = generations[0]
+        return {
+          text: generation.text || '',
+          finish_reason: generation.stop_reason || '',
+          choice_id: undefined
+        }
+      }
     } else if (provider === STABILITY) {
-      // No text/finish_reason to extract
+      // No text/finish_reason to extract return empty response if needed.
+      return {
+        text: '',
+        finish_reason: '',
+        choice_id: undefined
+      }
     }
   } catch (error) {
     log.warn('Unable to extract text/finish_reason from response body. Defaulting to empty text/finish_reason.')
-    textAndResponseReasons.push({
+    return {
       text: '',
       finish_reason: '',
       choice_id: undefined
-    })
+    }
   }
 
-  return textAndResponseReasons
+  // Default return in case nothing matches
+  return {
+    text: '',
+    finish_reason: '',
+    choice_id: undefined
+  }
 }
 
-function buildTagsFromParams (requestParams, textAndResponseReasons, modelProvider, modelName, operation) {
+function buildTagsFromParams (requestParams, textAndResponseReason, modelProvider, modelName, operation) {
   const tags = {}
 
   // add request tags
@@ -240,13 +257,13 @@ function buildTagsFromParams (requestParams, textAndResponseReasons, modelProvid
 
   // add response tags
   if (modelName.includes('embed')) {
-    tags['aws.bedrock.response.embedding_length'] = textAndResponseReasons[0].text.length
+    tags['aws.bedrock.response.embedding_length'] = textAndResponseReason.text.length
   }
-  if (textAndResponseReasons[0].choice_id) {
-    tags['aws.bedrock.response.choices.id'] = textAndResponseReasons[0].choice_id
+  if (textAndResponseReason.choice_id) {
+    tags['aws.bedrock.response.choices.id'] = textAndResponseReason.choice_id
   }
-  tags['aws.bedrock.response.choices.text'] = textAndResponseReasons[0].text
-  tags['aws.bedrock.response.choices.finish_reason'] = textAndResponseReasons[0].finish_reason
+  tags['aws.bedrock.response.choices.text'] = textAndResponseReason.text
+  tags['aws.bedrock.response.choices.finish_reason'] = textAndResponseReason.finish_reason
 
   return tags
 }
