@@ -22,7 +22,7 @@ const ddtags = [
 
 const path = `/debugger/v1/input?${stringify({ ddtags })}`
 
-function send (message, logger, snapshot, cb) {
+function send (message, logger, dd, snapshot, cb) {
   const opts = {
     method: 'POST',
     url: config.url,
@@ -36,6 +36,7 @@ function send (message, logger, snapshot, cb) {
     service,
     message,
     logger,
+    dd,
     'debugger.snapshot': snapshot
   }
 

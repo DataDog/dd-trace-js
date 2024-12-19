@@ -18,7 +18,7 @@ module.exports = {
   setup
 }
 
-function setup () {
+function setup (env) {
   let sandbox, cwd, appPort
   const breakpoints = getBreakpointInfo(1) // `1` to disregard the `setup` function
   const t = {
@@ -91,7 +91,8 @@ function setup () {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
         DD_TRACE_AGENT_PORT: t.agent.port,
         DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG, // inherit to make debugging the sandbox easier
-        DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: pollInterval
+        DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: pollInterval,
+        ...env
       }
     })
     t.axios = Axios.create({
