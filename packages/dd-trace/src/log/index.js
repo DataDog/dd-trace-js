@@ -67,7 +67,7 @@ const log = {
       const params = args.map(a => {
         return a && a.hasOwnProperty('toString') && typeof a.toString === 'function'
           ? a.toString()
-          : inspect(a, { depth: 5, breakLength: Infinity, compact: true })
+          : inspect(a, { depth: 3, breakLength: Infinity, compact: true })
       }).join(', ')
       const formatted = logRecord.stack.replace('Error: ', `Trace: ${fn}(${params})`)
 
