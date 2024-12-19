@@ -1113,8 +1113,7 @@ describe('Plugin', () => {
 
           app.get('/', (req, res) => {
             try {
-              expect(req.get('x-datadog-trace-id')).to.be.a('string')
-              expect(req.get('x-datadog-parent-id')).to.be.a('string')
+              expect(req.get('x-amzn-trace-id')).to.be.a('string')
 
               res.status(200).send()
 

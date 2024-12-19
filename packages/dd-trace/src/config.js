@@ -61,7 +61,7 @@ const otelDdEnvMapping = {
   OTEL_LOGS_EXPORTER: undefined
 }
 
-const VALID_PROPAGATION_STYLES = new Set(['datadog', 'tracecontext', 'b3', 'b3 single header', 'none'])
+const VALID_PROPAGATION_STYLES = new Set(['datadog', 'tracecontext', 'b3', 'b3 single header', 'xray', 'none'])
 
 const VALID_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error'])
 

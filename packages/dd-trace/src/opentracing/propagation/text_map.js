@@ -55,7 +55,7 @@ const xraySampledKey = 'sampled'
 const xrayE2EStartTimeKey = 't0'
 const xraySelfKey = 'self'
 const xrayOriginKey = '_dd.origin'
-const xrayMaxAdditionalBytes = 256
+const xrayMaxAdditionalBaggageBytes = 256
 
 class TextMapPropagator {
   constructor (config) {
@@ -265,8 +265,21 @@ class TextMapPropagator {
 
   _injectAwsXrayContext (spanContext, carrier) {
     // injects AWS Trace Header (X-Amzn-Trace-Id) to carrier
-    // ex: 'Root=1-00000000-00000000fffffffffffffffe;Parent=ffffffffffffffff;Sampled=1;_dd.origin=fakeOrigin;
-
+    //
+    // ex: 'Root=1-00000000-00000000fffffffffffffffe;Parent=ffffffffffffffff;Sampled=1;_dd.origin=fakeOrigin;baggage_k=baggage_v...;
+    //
+    // Header Format:
+    //   'Root=1-' (always uses '1-')
+    //   8 hexadecimal characters representing start time of the operation
+    //   '-'
+    //   24 hexadecimal characters representing trace id
+    //   ';'
+    //   'Parent='
+    //   16 hexadecimal characters representing parent span id
+    //   'Sampled='
+    //   int of [0, 1] representing sampling decision
+    //   Additional baggage in k=v pairs separated by ';' delimiter/
+    //
     // based off: https://docs.aws.amazon.com/xray/latest/devguide/xray-concepts.html#xray-concepts-tracingheader
     if (!this._hasPropagationStyle('inject', 'xray')) return
 
@@ -286,7 +299,8 @@ class TextMapPropagator {
       str += ';' + xraySampledKey + '=' + (spanContext._sampling.priority > 0 ? '1' : '0')
     }
 
-    const maxAdditionalCapacity = xrayMaxAdditionalBytes - str.length
+    // limit trace header size to the size of the necessary bytes plus 256
+    const maxAdditionalCapacity = str.length + xrayMaxAdditionalBaggageBytes
 
     const origin = spanContext._trace.origin
     if (origin) {
@@ -767,6 +781,10 @@ class TextMapPropagator {
   }
 
   _extractAwsXrayContext (carrier) {
+    if (!this._hasPropagationStyle('inject', 'xray')) {
+      return null
+    }
+
     if (carrier[xrayHeaderKey]) {
       const parsedHeader = this._parseAWSTraceHeader(carrier[xrayHeaderKey])
 
