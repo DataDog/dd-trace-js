@@ -6,7 +6,6 @@ const { storage } = require('../storage')
 const TracingPlugin = require('../../plugins/tracing')
 const LLMObsTagger = require('../tagger')
 
-// we make this a `Plugin` so we don't have to worry about `finish` being called
 class LLMObsPlugin extends TracingPlugin {
   constructor (...args) {
     super(...args)
@@ -14,24 +13,46 @@ class LLMObsPlugin extends TracingPlugin {
     this._tagger = new LLMObsTagger(this._tracerConfig, true)
   }
 
-  getName () {}
-
   setLLMObsTags (ctx) {
     throw new Error('setLLMObsTags must be implemented by the subclass')
   }
 
-  getLLMObsSPanRegisterOptions (ctx) {
+  getLLMObsSpanRegisterOptions (ctx) {
     throw new Error('getLLMObsSPanRegisterOptions must be implemented by the subclass')
   }
 
   start (ctx) {
-    const oldStore = storage.getStore()
-    const parent = oldStore?.span
+    // even though llmobs span events won't be enqueued if llmobs is disabled
+    // we should avoid doing any computations here (these listeners aren't disabled)
+    const enabled = this._tracerConfig.llmobs.enabled
+    if (!enabled) return
+
+    const parent = this.getLLMObsParent(ctx)
     const span = ctx.currentStore?.span
 
-    const registerOptions = this.getLLMObsSPanRegisterOptions(ctx)
+    const registerOptions = this.getLLMObsSpanRegisterOptions(ctx)
 
-    this._tagger.registerLLMObsSpan(span, { parent, ...registerOptions })
+    // register options may not be set for operations we do not trace with llmobs
+    // ie OpenAI fine tuning jobs, file jobs, etc.
+    if (registerOptions) {
+      ctx.llmobs = {} // initialize context-based namespace
+      storage.enterWith({ span })
+      ctx.llmobs.parent = parent
+
+      this._tagger.registerLLMObsSpan(span, { parent, ...registerOptions })
+    }
+  }
+
+  end (ctx) {
+    const enabled = this._tracerConfig.llmobs.enabled
+    if (!enabled) return
+
+    // only attempt to restore the context if the current span was an LLMObs span
+    const span = ctx.currentStore?.span
+    if (!LLMObsTagger.tagMap.has(span)) return
+
+    const parent = ctx.llmobs.parent
+    storage.enterWith({ span: parent })
   }
 
   asyncEnd (ctx) {
@@ -59,6 +80,11 @@ class LLMObsPlugin extends TracingPlugin {
       config = typeof config === 'boolean' ? false : { ...config, enabled: false } // override to false
     }
     super.configure(config)
+  }
+
+  getLLMObsParent () {
+    const store = storage.getStore()
+    return store?.span
   }
 }
 
