@@ -137,7 +137,7 @@ describe('Remote Config index', () => {
         const configId = 'collectionModeId'
 
         afterEach(() => {
-          listener('unapply', rcConfig, configId)
+          listener('unnaply', rcConfig, configId)
         })
 
         it('should not update collection mode when not a string', () => {
@@ -167,20 +167,20 @@ describe('Remote Config index', () => {
           expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly(rcConfig.auto_user_instrum.mode)
         })
 
-        it('should revert collection mode when called with unapply', () => {
+        it('should revert collection mode when called with unnaply', () => {
           listener('apply', rcConfig, configId)
           UserTracking.setCollectionMode.resetHistory()
 
-          listener('unapply', rcConfig, configId)
+          listener('unnaply', rcConfig, configId)
 
           expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly(config.appsec.eventTracking.mode)
         })
 
-        it('should not revert collection mode when called with unapply and unknown id', () => {
+        it('should not revert collection mode when called with unnaply and unknown id', () => {
           listener('apply', rcConfig, configId)
           UserTracking.setCollectionMode.resetHistory()
 
-          listener('unapply', rcConfig, 'unknownId')
+          listener('unnaply', rcConfig, 'unknownId')
 
           expect(UserTracking.setCollectionMode).to.not.have.been.called
         })
