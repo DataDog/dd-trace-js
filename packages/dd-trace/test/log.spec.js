@@ -4,7 +4,6 @@ require('./setup/tap')
 
 const { expect } = require('chai')
 const { storage } = require('../../datadog-core')
-const { channel } = require('dc-polyfill')
 
 /* eslint-disable no-console */
 
