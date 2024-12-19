@@ -57,7 +57,7 @@ class PrioritySampler {
 
   isSampled (span) {
     const priority = this._getPriorityFromAuto(span)
-    log.trace(span)
+    log.trace(span.toString())
     return priority === USER_KEEP || priority === AUTO_KEEP
   }
 
@@ -71,7 +71,7 @@ class PrioritySampler {
     if (context._sampling.priority !== undefined) return
     if (!root) return // noop span
 
-    log.trace(span, auto)
+    log.trace(span.toString(), auto)
 
     const tag = this._getPriorityFromTags(context._tags, context)
 
@@ -126,7 +126,7 @@ class PrioritySampler {
 
     const root = context._trace.started[0]
 
-    log.trace(span, samplingPriority, mechanism)
+    log.trace(span.toString(), samplingPriority, mechanism)
     this._addDecisionMaker(root)
   }
 

@@ -86,7 +86,6 @@ describe('log', () => {
       sinon.stub(console, 'error')
       sinon.stub(console, 'warn')
       sinon.stub(console, 'debug')
-      sinon.stub(console, 'trace')
 
       error = new Error()
 
@@ -105,7 +104,6 @@ describe('log', () => {
       console.error.restore()
       console.warn.restore()
       console.debug.restore()
-      console.trace.restore()
     })
 
     it('should support chaining', () => {
@@ -145,14 +143,16 @@ describe('log', () => {
       it('should not log to console by default', () => {
         log.trace('trace')
 
-        expect(console.trace).to.not.have.been.called
+        expect(console.debug).to.not.have.been.called
       })
 
-      it('should log to console after setting log level to trace', () => {
+      it('should log to console after setting log level to trace', function foo () {
         log.toggle(true, 'trace')
-        log.trace('argument')
+        log.trace('argument', { hello: 'world' })
 
-        expect(console.trace).to.have.been.calledTwice
+        expect(console.debug).to.have.been.calledOnce
+        expect(console.debug.firstCall.args[0]).to.match(/^Trace: Test.foo\("argument", {"hello":"world"}\)/)
+        expect(console.debug.firstCall.args[0].split('\n').length).to.be.gte(3)
       })
     })
 
