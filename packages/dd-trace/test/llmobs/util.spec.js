@@ -3,7 +3,8 @@
 const {
   encodeUnicode,
   getFunctionArguments,
-  validateKind
+  validateKind,
+  spanHasError
 } = require('../../src/llmobs/util')
 
 describe('util', () => {
@@ -137,6 +138,40 @@ describe('util', () => {
 
         expect(getFunctionArguments(foo, ['fn', 'ctx'])).to.deep.equal({ fn: 'fn', ctx: 'ctx' })
       })
+    })
+  })
+
+  describe('spanHasError', () => {
+    let Span
+    let ps
+
+    before(() => {
+      Span = require('../../src/opentracing/span')
+      ps = {
+        sample () {}
+      }
+    })
+
+    it('returns false when there is no error', () => {
+      const span = new Span(null, null, ps, {})
+      expect(spanHasError(span)).to.equal(false)
+    })
+
+    it('returns true if the span has an "error" tag', () => {
+      const span = new Span(null, null, ps, {})
+      span.setTag('error', true)
+      expect(spanHasError(span)).to.equal(true)
+    })
+
+    it('returns true if the span has the error properties as tags', () => {
+      const err = new Error('boom')
+      const span = new Span(null, null, ps, {})
+
+      span.setTag('error.type', err.name)
+      span.setTag('error.msg', err.message)
+      span.setTag('error.stack', err.stack)
+
+      expect(spanHasError(span)).to.equal(true)
     })
   })
 })
