@@ -55,6 +55,7 @@ const xraySampledKey = 'sampled'
 const xrayE2EStartTimeKey = 't0'
 const xraySelfKey = 'self'
 const xrayOriginKey = '_dd.origin'
+const xrayDefaultE2EStartTime = '00000000'
 const xrayMaxAdditionalBaggageBytes = 256
 
 class TextMapPropagator {
@@ -306,7 +307,7 @@ class TextMapPropagator {
     if (origin) {
       this._addXrayBaggage(str, xrayOriginKey, origin, maxAdditionalCapacity)
     }
-    if (e2eStart !== '00000000') {
+    if (e2eStart !== xrayDefaultStartTime) {
       this._addXrayBaggage(str, xrayE2EStartTimeKey, e2eStart.toString(), maxAdditionalCapacity)
     }
 
@@ -320,7 +321,7 @@ class TextMapPropagator {
   }
 
   _getEndToEndStartTime (start) {
-    if (!start) return '00000000'
+    if (!start) return xrayDefaultE2EStartTime
 
     const e2eStart = start > 0 ? start : Date.now() / 1000
     return e2eStart.toString().padStart(8, '0')
@@ -794,20 +795,7 @@ class TextMapPropagator {
       let ddOrigin
       const baggage = {}
 
-      if (!(
-        xrayRootKey in parsedHeader &&
-        // Regex check to ensure received header is in the same format as expected
-        // Format:
-        //   'Root=1-'
-        //   8 hexadecimal characters representing start time
-        //   '-'
-        //   24 hexadecimal characters representing trace id
-        //   ';'
-        //   'Parent='
-        //   16 hexadecimal characters representing parent span id
-        /^(?=.*Root=1-[0-9a-f]{8}-[0-9a-f]{24})(?=.*Parent=[0-9a-f]{16}).*$/i.test(carrier[xrayHeaderKey])
-      )) {
-        // header doesn't match formatting
+      if (!(xrayRootKey in parsedHeader)) {
         return null
       }
 

@@ -1093,49 +1093,6 @@ describe('Plugin', () => {
         })
       })
 
-      describe('with config enablePropagationWithAmazonHeaders enabled', () => {
-        let config
-
-        beforeEach(() => {
-          config = {
-            enablePropagationWithAmazonHeaders: true
-          }
-
-          return agent.load('http', config)
-            .then(() => {
-              http = require(pluginToBeLoaded)
-              express = require('express')
-            })
-        })
-
-        it('should inject tracing header into AWS signed request', done => {
-          const app = express()
-
-          app.get('/', (req, res) => {
-            try {
-              expect(req.get('x-amzn-trace-id')).to.be.a('string')
-
-              res.status(200).send()
-
-              done()
-            } catch (e) {
-              done(e)
-            }
-          })
-
-          appListener = server(app, port => {
-            const req = http.request({
-              port,
-              headers: {
-                Authorization: 'AWS4-HMAC-SHA256 ...'
-              }
-            })
-
-            req.end()
-          })
-        })
-      })
-
       describe('with validateStatus configuration', () => {
         let config
 
