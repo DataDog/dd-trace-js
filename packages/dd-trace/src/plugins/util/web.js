@@ -39,12 +39,12 @@ const web = {
   TYPE: WEB,
 
   // Ensure the configuration has the correct structure and defaults.
-  normalizeConfig (config) {
+  normalizeConfig (config, tracerConfig) {
     const headers = getHeadersToRecord(config)
     const validateStatus = getStatusValidator(config)
     const hooks = getHooks(config)
     const filter = urlFilter.getFilter(config)
-    const middleware = getMiddlewareSetting(config)
+    const middleware = getMiddlewareSetting(config, tracerConfig)
     const queryStringObfuscation = getQsObfuscator(config)
 
     return {
@@ -542,11 +542,16 @@ function getHooks (config) {
   return { request }
 }
 
-function getMiddlewareSetting (config) {
-  if (config && typeof config.middleware === 'boolean') {
-    return config.middleware
-  } else if (config && config.hasOwnProperty('middleware')) {
-    log.error('Expected `middleware` to be a boolean.')
+function getMiddlewareSetting (config, tracerConfig) {
+  if (config) {
+    if (typeof config.middleware === 'boolean') {
+      return config.middleware
+    } else if (config.hasOwnProperty('middleware')) {
+      log.error('Expected `middleware` to be a boolean.')
+    }
+  }
+  if (tracerConfig && tracerConfig.middleware === false) {
+    return false
   }
 
   return true
