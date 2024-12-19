@@ -307,7 +307,7 @@ class TextMapPropagator {
     if (origin) {
       this._addXrayBaggage(str, xrayOriginKey, origin, maxAdditionalCapacity)
     }
-    if (e2eStart !== xrayDefaultStartTime) {
+    if (e2eStart !== xrayDefaultE2EStartTime) {
       this._addXrayBaggage(str, xrayE2EStartTimeKey, e2eStart.toString(), maxAdditionalCapacity)
     }
 
@@ -782,7 +782,7 @@ class TextMapPropagator {
   }
 
   _extractAwsXrayContext (carrier) {
-    if (!this._hasPropagationStyle('inject', 'xray')) {
+    if (!this._hasPropagationStyle('extract', 'xray')) {
       return null
     }
 

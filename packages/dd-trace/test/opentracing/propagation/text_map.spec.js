@@ -430,6 +430,33 @@ describe('TextMapPropagator', () => {
 
       expect(carrier['x-amzn-trace-id']).to.equal(expectedHeader + additionalParts)
     })
+
+    it('should inject skip adding baggage to the X-Amzn-Trace-Id when exceeding the 256 byte limit', () => {
+      const baggageItems = {
+        bool: true,
+        a: 'b',
+        mySuperLongBaggageIReallyShouldLearnToPackLighter: 'datadog'.repeat(50),
+        shortBaggage: 'thisFits'
+      }
+      const spanContext = createContext({
+        baggageItems,
+        sampling: {
+          priority: 1
+        }
+      })
+
+      config.tracePropagationStyle.inject = ['xray']
+
+      const traceId = spanContext._traceId.toString().padStart(24, '0')
+      const spanId = spanContext._spanId.toString().padStart(16, '0')
+      const expectedHeader = `root=1-00000000-${traceId};parent=${spanId};sampled=1`
+      const additionalParts = ';bool=true;a=b;shortBaggage=thisFits'
+      const carrier = {}
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier['x-amzn-trace-id']).to.equal(expectedHeader + additionalParts)
+    })
   })
 
   describe('extract', () => {
