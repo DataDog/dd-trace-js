@@ -1,5 +1,6 @@
 'use strict'
 
+const log = require('./log')
 const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
 const { setSamplingRules } = require('./startup-log')
@@ -44,16 +45,19 @@ class PrioritySampler {
     this.update({})
   }
 
-  configure (env, { sampleRate, provenance = undefined, rateLimit = 100, rules = [] } = {}) {
+  configure (env, opts = {}) {
+    const { sampleRate, provenance = undefined, rateLimit = 100, rules = [] } = opts
     this._env = env
     this._rules = this._normalizeRules(rules, sampleRate, rateLimit, provenance)
     this._limiter = new RateLimiter(rateLimit)
 
+    log.trace(env, opts)
     setSamplingRules(this._rules)
   }
 
   isSampled (span) {
     const priority = this._getPriorityFromAuto(span)
+    log.trace(span)
     return priority === USER_KEEP || priority === AUTO_KEEP
   }
 
@@ -66,6 +70,8 @@ class PrioritySampler {
     // TODO: remove the decision maker tag when priority is less than AUTO_KEEP
     if (context._sampling.priority !== undefined) return
     if (!root) return // noop span
+
+    log.trace(span, auto)
 
     const tag = this._getPriorityFromTags(context._tags, context)
 
@@ -94,6 +100,8 @@ class PrioritySampler {
     samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || defaultSampler
 
     this._samplers = samplers
+
+    log.trace(rates)
   }
 
   validate (samplingPriority) {
@@ -117,6 +125,8 @@ class PrioritySampler {
     context._sampling.mechanism = mechanism
 
     const root = context._trace.started[0]
+
+    log.trace(span, samplingPriority, mechanism)
     this._addDecisionMaker(root)
   }
 
