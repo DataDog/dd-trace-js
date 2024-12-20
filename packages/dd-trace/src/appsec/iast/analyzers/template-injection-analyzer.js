@@ -13,6 +13,10 @@ class TemplateInjectionAnalyzer extends InjectionAnalyzer {
     this.addSub('datadog:handlebars:register-partial:start', ({ partial }) => this.analyze(partial))
     this.addSub('datadog:pug:compile:start', ({ source }) => this.analyze(source))
   }
+
+  _areRangesVulnerable () {
+    return true
+  }
 }
 
 module.exports = new TemplateInjectionAnalyzer()

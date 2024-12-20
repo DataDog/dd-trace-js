@@ -1,6 +1,6 @@
 'use strict'
 
-const { AsyncLocalStorage } = require('async_hooks')
+const { storage } = require('../../../datadog-core')
 const { trace, ROOT_CONTEXT } = require('@opentelemetry/api')
 const DataDogSpanContext = require('../opentracing/span_context')
 
@@ -9,7 +9,7 @@ const tracer = require('../../')
 
 class ContextManager {
   constructor () {
-    this._store = new AsyncLocalStorage()
+    this._store = storage('opentelemetry')
   }
 
   active () {

@@ -67,14 +67,14 @@ describe('agentless-ci-visibility-encode', () => {
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { codec })
 
-    expect(decodedTrace.version.toNumber()).to.equal(1)
+    expect(decodedTrace.version).to.equal(1)
     expect(decodedTrace.metadata['*']).to.contain({
       language: 'javascript',
       library_version: ddTraceVersion
     })
     const spanEvent = decodedTrace.events[0]
     expect(spanEvent.type).to.equal('span')
-    expect(spanEvent.version.toNumber()).to.equal(1)
+    expect(spanEvent.version).to.equal(1)
     expect(spanEvent.content.trace_id.toString(10)).to.equal(trace[0].trace_id.toString(10))
     expect(spanEvent.content.span_id.toString(10)).to.equal(trace[0].span_id.toString(10))
     expect(spanEvent.content.parent_id.toString(10)).to.equal(trace[0].parent_id.toString(10))
@@ -84,9 +84,9 @@ describe('agentless-ci-visibility-encode', () => {
       service: 'test-s',
       type: 'foo'
     })
-    expect(spanEvent.content.error.toNumber()).to.equal(0)
-    expect(spanEvent.content.start.toNumber()).to.equal(123)
-    expect(spanEvent.content.duration.toNumber()).to.equal(456)
+    expect(spanEvent.content.error).to.equal(0)
+    expect(spanEvent.content.start).to.equal(123)
+    expect(spanEvent.content.duration).to.equal(456)
 
     expect(spanEvent.content.meta).to.eql({
       bar: 'baz'
@@ -276,6 +276,6 @@ describe('agentless-ci-visibility-encode', () => {
     const decodedTrace = msgpack.decode(buffer, { codec })
     const spanEvent = decodedTrace.events[0]
     expect(spanEvent.type).to.equal('span')
-    expect(spanEvent.version.toNumber()).to.equal(1)
+    expect(spanEvent.version).to.equal(1)
   })
 })

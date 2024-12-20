@@ -101,7 +101,7 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
   incrementWafInitMetric(wafVersion, rulesVersion)
 }
 
-function reportMetrics (metrics, raspRuleType) {
+function reportMetrics (metrics, raspRule) {
   const store = storage.getStore()
   const rootSpan = store?.req && web.root(store.req)
   if (!rootSpan) return
@@ -109,8 +109,8 @@ function reportMetrics (metrics, raspRuleType) {
   if (metrics.rulesVersion) {
     rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
   }
-  if (raspRuleType) {
-    updateRaspRequestsMetricTags(metrics, store.req, raspRuleType)
+  if (raspRule) {
+    updateRaspRequestsMetricTags(metrics, store.req, raspRule)
   } else {
     updateWafRequestsMetricTags(metrics, store.req)
   }
@@ -148,7 +148,9 @@ function reportAttack (attackData) {
     newTags['_dd.appsec.json'] = '{"triggers":' + attackData + '}'
   }
 
-  newTags['network.client.ip'] = req.socket.remoteAddress
+  if (req.socket) {
+    newTags['network.client.ip'] = req.socket.remoteAddress
+  }
 
   rootSpan.addTags(newTags)
 }

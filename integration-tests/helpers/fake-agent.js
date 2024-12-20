@@ -326,6 +326,7 @@ function buildExpressServer (agent) {
     res.status(200).send()
     agent.emit('debugger-input', {
       headers: req.headers,
+      query: req.query,
       payload: req.body
     })
   })
@@ -360,6 +361,14 @@ function buildExpressServer (agent) {
     agent.emit('llmobs', {
       headers: req.headers,
       payload: req.body
+    })
+  })
+
+  // Ensure that any failure inside of Express isn't swallowed and returned as a 500, but instead crashes the test
+  app.use((err, req, res, next) => {
+    if (!err) next()
+    process.nextTick(() => {
+      throw err
     })
   })
 
