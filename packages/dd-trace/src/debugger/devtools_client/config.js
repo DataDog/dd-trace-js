@@ -5,6 +5,8 @@ const { format } = require('node:url')
 const log = require('../../log')
 
 const config = module.exports = {
+  dynamicInstrumentationRedactedIdentifiers: parentConfig.dynamicInstrumentationRedactedIdentifiers,
+  dynamicInstrumentationRedactionExcludedIdentifiers: parentConfig.dynamicInstrumentationRedactionExcludedIdentifiers,
   runtimeId: parentConfig.tags['runtime-id'],
   service: parentConfig.service,
   commitSHA: parentConfig.commitSHA,
