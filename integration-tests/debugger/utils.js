@@ -18,9 +18,9 @@ module.exports = {
   setup
 }
 
-function setup (env) {
+function setup ({ env, testApp } = {}) {
   let sandbox, cwd, appPort
-  const breakpoints = getBreakpointInfo(1) // `1` to disregard the `setup` function
+  const breakpoints = getBreakpointInfo({ file: testApp, stackIndex: 1 }) // `1` to disregard the `setup` function
   const t = {
     breakpoint: breakpoints[0],
     breakpoints,
@@ -108,16 +108,18 @@ function setup (env) {
   return t
 }
 
-function getBreakpointInfo (stackIndex = 0) {
-  // First, get the filename of file that called this function
-  const testFile = new Error().stack
-    .split('\n')[stackIndex + 2] // +2 to skip this function + the first line, which is the error message
-    .split(' (')[1]
-    .slice(0, -1)
-    .split(':')[0]
+function getBreakpointInfo ({ file, stackIndex = 0 }) {
+  if (!file) {
+    // First, get the filename of file that called this function
+    const testFile = new Error().stack
+      .split('\n')[stackIndex + 2] // +2 to skip this function + the first line, which is the error message
+      .split(' (')[1]
+      .slice(0, -1)
+      .split(':')[0]
 
-  // Then, find the corresponding file in which the breakpoint(s) exists
-  const file = join('target-app', basename(testFile).replace('.spec', ''))
+    // Then, find the corresponding file in which the breakpoint(s) exists
+    file = join('target-app', basename(testFile).replace('.spec', ''))
+  }
 
   // Finally, find the line number(s) of the breakpoint(s)
   const lines = readFileSync(join(__dirname, file), 'utf8').split('\n')
