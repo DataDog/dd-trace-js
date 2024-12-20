@@ -141,6 +141,8 @@ function highestOrUndefined (num, max) {
 }
 
 async function getDD (callFrameId) {
+  // TODO: Consider if an `objectGroup` should be used, so it can be explicitly released using
+  // `Runtime.releaseObjectGroup`
   const { result } = await session.post('Debugger.evaluateOnCallFrame', {
     callFrameId,
     expression,
