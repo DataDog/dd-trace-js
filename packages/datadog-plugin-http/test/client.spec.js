@@ -1137,6 +1137,94 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with DD_TRACE_FORCE_AWS_PROPAGATION=true', () => {
+        describe('set to true', () => {
+          beforeEach(() => {
+            process.env.DD_TRACE_FORCE_AWS_PROPAGATION = 'true'
+            return agent.load('http', {})
+              .then(() => {
+                http = require(pluginToBeLoaded)
+                express = require('express')
+              })
+          })
+
+          afterEach(() => {
+            delete process.env.DD_TRACE_FORCE_AWS_PROPAGATION
+          })
+
+          it('should inject tracing header into AWS signed request', done => {
+            const app = express()
+
+            app.get('/', (req, res) => {
+              try {
+                expect(req.get('x-datadog-trace-id')).to.be.a('string')
+                expect(req.get('x-datadog-parent-id')).to.be.a('string')
+
+                res.status(200).send()
+
+                done()
+              } catch (e) {
+                done(e)
+              }
+            })
+
+            appListener = server(app, port => {
+              const req = http.request({
+                port,
+                headers: {
+                  Authorization: 'AWS4-HMAC-SHA256 ...'
+                }
+              })
+
+              req.end()
+            })
+          })
+        })
+
+        describe('set to false', () => {
+          beforeEach(() => {
+            process.env.DD_TRACE_FORCE_AWS_PROPAGATION = 'false'
+            return agent.load('http', {})
+              .then(() => {
+                http = require(pluginToBeLoaded)
+                express = require('express')
+              })
+          })
+
+          afterEach(() => {
+            delete process.env.DD_TRACE_FORCE_AWS_PROPAGATION
+          })
+
+          it('should not inject tracing header into AWS signed request', done => {
+            const app = express()
+
+            app.get('/', (req, res) => {
+              try {
+                expect(req.get('x-datadog-trace-id')).to.be.undefined
+                expect(req.get('x-datadog-parent-id')).to.be.undefined
+
+                res.status(200).send()
+
+                done()
+              } catch (e) {
+                done(e)
+              }
+            })
+
+            appListener = server(app, port => {
+              const req = http.request({
+                port,
+                headers: {
+                  Authorization: 'AWS4-HMAC-SHA256 ...'
+                }
+              })
+
+              req.end()
+            })
+          })
+        })
+      })
+
       describe('with validateStatus configuration', () => {
         let config
 
