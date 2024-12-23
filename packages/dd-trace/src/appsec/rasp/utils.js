@@ -1,7 +1,7 @@
 'use strict'
 
 const web = require('../../plugins/util/web')
-const { reportStackTrace } = require('../stack_trace')
+const { getCallSiteList, reportStackTrace } = require('../stack_trace')
 const { getBlockingAction } = require('../blocking')
 const log = require('../../log')
 
@@ -30,13 +30,19 @@ class DatadogRaspAbortError extends Error {
 
 function handleResult (actions, req, res, abortController, config) {
   const generateStackTraceAction = actions?.generate_stack
+
+  const { maxDepth, maxStackTraces } = config.appsec.stackTrace
+
+  const callSiteList = getCallSiteList(maxDepth)
+
   if (generateStackTraceAction && config.appsec.stackTrace.enabled) {
     const rootSpan = web.root(req)
     reportStackTrace(
       rootSpan,
       generateStackTraceAction.stack_id,
-      config.appsec.stackTrace.maxDepth,
-      config.appsec.stackTrace.maxStackTraces
+      maxDepth,
+      maxStackTraces,
+      callSiteList
     )
   }
 

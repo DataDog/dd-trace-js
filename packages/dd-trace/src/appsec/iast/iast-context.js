@@ -9,6 +9,17 @@ function getIastContext (store, topContext) {
   return iastContext
 }
 
+function getIastStackTraceId (iastContext) {
+  if (!iastContext) return 0
+
+  if (!iastContext.iastStackTraceId) {
+    iastContext.iastStackTraceId = 0
+  }
+
+  iastContext.iastStackTraceId += 1
+  return iastContext.iastStackTraceId
+}
+
 /* TODO Fix storage problem when the close event is called without
         finish event to remove `topContext` references
   We have to save the context in two places, because
@@ -51,6 +62,7 @@ module.exports = {
   getIastContext,
   saveIastContext,
   cleanIastContext,
+  getIastStackTraceId,
   IAST_CONTEXT_KEY,
   IAST_TRANSACTION_ID
 }
