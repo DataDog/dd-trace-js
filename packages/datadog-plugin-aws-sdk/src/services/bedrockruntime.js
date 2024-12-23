@@ -3,13 +3,15 @@
 const BaseAwsSdkPlugin = require('../base')
 const log = require('../../../dd-trace/src/log')
 
-const AI21 = 'AI21'
-const AMAZON = 'AMAZON'
-const ANTHROPIC = 'ANTHROPIC'
-const COHERE = 'COHERE'
-const META = 'META'
-const STABILITY = 'STABILITY'
-const MISTRAL = 'MISTRAL'
+const PROVIDER = {
+  AI21: 'AI21',
+  AMAZON : 'AMAZON',
+  ANTHROPIC : 'ANTHROPIC',
+  COHERE : 'COHERE',
+  META : 'META',
+  STABILITY : 'STABILITY',
+  MISTRAL : 'MISTRAL'
+};
 
 const enabledOperations = ['invokeModel']
 
@@ -38,7 +40,7 @@ class BedrockRuntime extends BaseAwsSdkPlugin {
       modelProvider = modelProvider.toUpperCase()
     }
 
-    const shouldSetChoiceIds = modelProvider === COHERE && !modelName.includes('embed')
+    const shouldSetChoiceIds = modelProvider === PROVIDER.COHERE && !modelName.includes('embed')
 
     const requestParams = extractRequestParams(params, modelProvider)
     const textAndResponseReason = extractTextAndResponseReason(response, modelProvider, modelName, shouldSetChoiceIds)
@@ -53,7 +55,7 @@ function extractRequestParams (params, provider) {
   const requestBody = JSON.parse(params.body)
   const modelId = params.modelId
 
-  if (provider === AI21) {
+  if (provider === PROVIDER.AI21) {
     const temperature = requestBody.temperature || ''
     const topP = requestBody.top_p || ''
     const maxTokens = requestBody.max_tokens || ''
@@ -74,9 +76,9 @@ function extractRequestParams (params, provider) {
       max_tokens: maxTokens,
       stop_sequences: stopSequences
     }
-  } else if (provider === AMAZON && modelId.includes('embed')) {
+  } else if (provider === PROVIDER.AMAZON && modelId.includes('embed')) {
     return { prompt: requestBody.inputText }
-  } else if (provider === AMAZON) {
+  } else if (provider === PROVIDER.AMAZON) {
     const textGenerationConfig = requestBody.textGenerationConfig || {}
     return {
       prompt: requestBody.inputText,
@@ -85,7 +87,7 @@ function extractRequestParams (params, provider) {
       max_tokens: textGenerationConfig.maxTokenCount || '',
       stop_sequences: textGenerationConfig.stopSequences || []
     }
-  } else if (provider === ANTHROPIC) {
+  } else if (provider === PROVIDER.ANTHROPIC) {
     const prompt = requestBody.prompt || ''
     const messages = requestBody.messages || ''
     return {
@@ -96,13 +98,13 @@ function extractRequestParams (params, provider) {
       max_tokens: requestBody.max_tokens_to_sample || '',
       stop_sequences: requestBody.stop_sequences || []
     }
-  } else if (provider === COHERE && modelId.includes('embed')) {
+  } else if (provider === PROVIDER.COHERE && modelId.includes('embed')) {
     return {
       prompt: requestBody.texts,
       input_type: requestBody.input_type || '',
       truncate: requestBody.truncate || ''
     }
-  } else if (provider === COHERE) {
+  } else if (provider === PROVIDER.COHERE) {
     return {
       prompt: requestBody.prompt,
       temperature: requestBody.temperature || '',
@@ -113,14 +115,14 @@ function extractRequestParams (params, provider) {
       stream: requestBody.stream || '',
       n: requestBody.num_generations || ''
     }
-  } else if (provider === META) {
+  } else if (provider === PROVIDER.META) {
     return {
       prompt: requestBody.prompt,
       temperature: requestBody.temperature || '',
       top_p: requestBody.top_p || '',
       max_tokens: requestBody.max_gen_len || ''
     }
-  } else if (provider === MISTRAL) {
+  } else if (provider === PROVIDER.MISTRAL) {
     return {
       prompt: requestBody.prompt,
       max_tokens: requestBody.max_tokens || '',
@@ -129,7 +131,7 @@ function extractRequestParams (params, provider) {
       top_p: requestBody.top_p || '',
       top_k: requestBody.top_k || ''
     }
-  } else if (provider === STABILITY) {
+  } else if (provider === PROVIDER.STABILITY) {
     return {}
   }
   return {}
@@ -139,7 +141,7 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
   const body = JSON.parse(Buffer.from(response.body).toString('utf8'))
 
   try {
-    if (provider === AI21) {
+    if (provider === PROVIDER.AI21) {
       if (modelName.includes('jamba')) {
         const generations = body.choices || []
         if (generations.length > 0) {
@@ -160,13 +162,13 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
           choice_id: shouldSetChoiceIds ? completion.id : undefined
         }
       }
-    } else if (provider === AMAZON && modelName.includes('embed')) {
+    } else if (provider === PROVIDER.AMAZON && modelName.includes('embed')) {
       return {
         text: body.embedding || '',
         finish_reason: '',
         choice_id: undefined
       }
-    } else if (provider === AMAZON) {
+    } else if (provider === PROVIDER.AMAZON) {
       const results = body.results || []
       if (results.length > 0) {
         const result = results[0]
@@ -176,13 +178,13 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
           choice_id: undefined
         }
       }
-    } else if (provider === ANTHROPIC) {
+    } else if (provider === PROVIDER.ANTHROPIC) {
       return {
         text: body.completion || body.content || '',
         finish_reason: body.stop_reason || '',
         choice_id: undefined
       }
-    } else if (provider === COHERE && modelName.includes('embed')) {
+    } else if (provider === PROVIDER.COHERE && modelName.includes('embed')) {
       const embeddings = body.embeddings || [[]]
       if (embeddings.length > 0) {
         return {
@@ -191,7 +193,7 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
           choice_id: undefined
         }
       }
-    } else if (provider === COHERE) {
+    } else if (provider === PROVIDER.COHERE) {
       const generations = body.generations || []
       if (generations.length > 0) {
         const generation = generations[0]
@@ -201,13 +203,13 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
           choice_id: shouldSetChoiceIds ? generation.id : undefined
         }
       }
-    } else if (provider === META) {
+    } else if (provider === PROVIDER.META) {
       return {
         text: body.generation || '',
         finish_reason: body.stop_reason || '',
         choice_id: undefined
       }
-    } else if (provider === MISTRAL) {
+    } else if (provider === PROVIDER.MISTRAL) {
       const generations = body.outputs || []
       if (generations.length > 0) {
         const generation = generations[0]
@@ -217,7 +219,7 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
           choice_id: undefined
         }
       }
-    } else if (provider === STABILITY) {
+    } else if (provider === PROVIDER.STABILITY) {
       // No text/finish_reason to extract return empty response if needed.
       return {
         text: '',

@@ -6,12 +6,14 @@ const { setup } = require('./spec_helpers')
 
 const serviceName = 'bedrock-service-name-test'
 
-const AI21 = 'AI21'
-const AMAZON = 'AMAZON'
-const ANTHROPIC = 'ANTHROPIC'
-const COHERE = 'COHERE'
-const META = 'META'
-const MISTRAL = 'MISTRAL'
+const PROVIDER = {
+  AI21: 'AI21',
+  AMAZON: 'AMAZON',
+  ANTHROPIC: 'ANTHROPIC',
+  COHERE: 'COHERE',
+  META: 'META',
+  MISTRAL: 'MISTRAL'
+}
 
 describe('Plugin', () => {
   describe('aws-sdk (bedrock)', function () {
@@ -50,7 +52,7 @@ describe('Plugin', () => {
 
         const models = [
           {
-            provider: AMAZON,
+            provider: PROVIDER.AMAZON,
             modelId: 'amazon.titan-text-lite-v1',
             userPrompt: prompt,
             requestBody: {
@@ -78,7 +80,7 @@ describe('Plugin', () => {
             }
           },
           {
-            provider: AI21,
+            provider: PROVIDER.AI21,
             modelId: 'ai21.jamba-1-5-mini-v1',
             userPrompt: prompt,
             requestBody: {
@@ -113,7 +115,7 @@ describe('Plugin', () => {
             }
           },
           {
-            provider: ANTHROPIC,
+            provider: PROVIDER.ANTHROPIC,
             modelId: 'anthropic.claude-v2',
             userPrompt: `\n\nHuman:${prompt}\n\nAssistant:`,
             requestBody: {
@@ -131,7 +133,7 @@ describe('Plugin', () => {
             }
           },
           {
-            provider: COHERE,
+            provider: PROVIDER.COHERE,
             modelId: 'cohere.command-light-text-v14',
             userPrompt: prompt,
             requestBody: {
@@ -155,7 +157,7 @@ describe('Plugin', () => {
 
           },
           {
-            provider: META,
+            provider: PROVIDER.META,
             modelId: 'meta.llama3-70b-instruct-v1',
             userPrompt: prompt,
             requestBody: {
@@ -172,7 +174,7 @@ describe('Plugin', () => {
             }
           },
           {
-            provider: MISTRAL,
+            provider: PROVIDER.MISTRAL,
             modelId: 'mistral.mistral-7b-instruct-v0',
             userPrompt: prompt,
             requestBody: {
