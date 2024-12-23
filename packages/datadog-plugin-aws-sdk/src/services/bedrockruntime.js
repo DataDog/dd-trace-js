@@ -55,177 +55,197 @@ function extractRequestParams (params, provider) {
   const requestBody = JSON.parse(params.body)
   const modelId = params.modelId
 
-  if (provider === PROVIDER.AI21) {
-    const temperature = requestBody.temperature || ''
-    const topP = requestBody.top_p || ''
-    const maxTokens = requestBody.max_tokens || ''
-    const stopSequences = requestBody.stop_sequences || []
-    let prompt = requestBody.prompt
+  switch (provider) {
+    case PROVIDER.AI21:
+      const temperature = requestBody.temperature || ''
+      const topP = requestBody.top_p || ''
+      const maxTokens = requestBody.max_tokens || ''
+      const stopSequences = requestBody.stop_sequences || []
+      let userPrompt = requestBody.prompt
 
-    if (modelId.includes('jamba')) {
-      for (const message of requestBody.messages) {
-        if (message.role === 'user') {
-          prompt = message.content // Return the content of the most recent user message
+      if (modelId.includes('jamba')) {
+        for (const message of requestBody.messages) {
+          if (message.role === 'user') {
+            userPrompt = message.content // Return the content of the most recent user message
+          }
         }
       }
-    }
-    return {
-      prompt,
-      temperature,
-      top_p: topP,
-      max_tokens: maxTokens,
-      stop_sequences: stopSequences
-    }
-  } else if (provider === PROVIDER.AMAZON && modelId.includes('embed')) {
-    return { prompt: requestBody.inputText }
-  } else if (provider === PROVIDER.AMAZON) {
-    const textGenerationConfig = requestBody.textGenerationConfig || {}
-    return {
-      prompt: requestBody.inputText,
-      temperature: textGenerationConfig.temperature || '',
-      top_p: textGenerationConfig.topP || '',
-      max_tokens: textGenerationConfig.maxTokenCount || '',
-      stop_sequences: textGenerationConfig.stopSequences || []
-    }
-  } else if (provider === PROVIDER.ANTHROPIC) {
-    const prompt = requestBody.prompt || ''
-    const messages = requestBody.messages || ''
-    return {
-      prompt: prompt || messages,
-      temperature: requestBody.temperature || '',
-      top_p: requestBody.top_p || '',
-      top_k: requestBody.top_k || '',
-      max_tokens: requestBody.max_tokens_to_sample || '',
-      stop_sequences: requestBody.stop_sequences || []
-    }
-  } else if (provider === PROVIDER.COHERE && modelId.includes('embed')) {
-    return {
-      prompt: requestBody.texts,
-      input_type: requestBody.input_type || '',
-      truncate: requestBody.truncate || ''
-    }
-  } else if (provider === PROVIDER.COHERE) {
-    return {
-      prompt: requestBody.prompt,
-      temperature: requestBody.temperature || '',
-      top_p: requestBody.p || '',
-      top_k: requestBody.k || '',
-      max_tokens: requestBody.max_tokens || '',
-      stop_sequences: requestBody.stop_sequences || [],
-      stream: requestBody.stream || '',
-      n: requestBody.num_generations || ''
-    }
-  } else if (provider === PROVIDER.META) {
-    return {
-      prompt: requestBody.prompt,
-      temperature: requestBody.temperature || '',
-      top_p: requestBody.top_p || '',
-      max_tokens: requestBody.max_gen_len || ''
-    }
-  } else if (provider === PROVIDER.MISTRAL) {
-    return {
-      prompt: requestBody.prompt,
-      max_tokens: requestBody.max_tokens || '',
-      stop_sequences: requestBody.stop || [],
-      temperature: requestBody.temperature || '',
-      top_p: requestBody.top_p || '',
-      top_k: requestBody.top_k || ''
-    }
-  } else if (provider === PROVIDER.STABILITY) {
-    return {}
+      return {
+        userPrompt,
+        temperature,
+        top_p: topP,
+        max_tokens: maxTokens,
+        stop_sequences: stopSequences
+      }
+    case PROVIDER.AMAZON:
+      if (modelId.includes('embed')) {
+        return { prompt: requestBody.inputText }
+      }
+      const textGenerationConfig = requestBody.textGenerationConfig || {}
+      return {
+        prompt: requestBody.inputText,
+        temperature: textGenerationConfig.temperature || '',
+        top_p: textGenerationConfig.topP || '',
+        max_tokens: textGenerationConfig.maxTokenCount || '',
+        stop_sequences: textGenerationConfig.stopSequences || []
+      }
+    case PROVIDER.ANTHROPIC:
+      const prompt = requestBody.prompt || ''
+      const messages = requestBody.messages || ''
+      return {
+        prompt: prompt || messages,
+        temperature: requestBody.temperature || '',
+        top_p: requestBody.top_p || '',
+        top_k: requestBody.top_k || '',
+        max_tokens: requestBody.max_tokens_to_sample || '',
+        stop_sequences: requestBody.stop_sequences || []
+      }
+    case PROVIDER.COHERE:
+      if (modelId.includes('embed')) {
+        return {
+          prompt: requestBody.texts,
+          input_type: requestBody.input_type || '',
+          truncate: requestBody.truncate || ''
+        }
+      }
+      return {
+        prompt: requestBody.prompt,
+        temperature: requestBody.temperature || '',
+        top_p: requestBody.p || '',
+        top_k: requestBody.k || '',
+        max_tokens: requestBody.max_tokens || '',
+        stop_sequences: requestBody.stop_sequences || [],
+        stream: requestBody.stream || '',
+        n: requestBody.num_generations || ''
+      }
+    case PROVIDER.META:
+      return {
+        prompt: requestBody.prompt,
+        temperature: requestBody.temperature || '',
+        top_p: requestBody.top_p || '',
+        max_tokens: requestBody.max_gen_len || ''
+      }
+    case PROVIDER.MISTRAL:
+      return {
+        prompt: requestBody.prompt,
+        max_tokens: requestBody.max_tokens || '',
+        stop_sequences: requestBody.stop || [],
+        temperature: requestBody.temperature || '',
+        top_p: requestBody.top_p || '',
+        top_k: requestBody.top_k || ''
+      }
+    case PROVIDER.STABILITY:
+      return {}
+    default:
+      return {}
   }
-  return {}
 }
 
 function extractTextAndResponseReason (response, provider, modelName, shouldSetChoiceIds) {
   const body = JSON.parse(Buffer.from(response.body).toString('utf8'))
 
   try {
-    if (provider === PROVIDER.AI21) {
-      if (modelName.includes('jamba')) {
-        const generations = body.choices || []
-        if (generations.length > 0) {
-          const generation = generations[0]
-          return {
-            text: generation.message || '',
-            finish_reason: generation.finish_reason || '',
-            choice_id: shouldSetChoiceIds ? generation.id : undefined
+    switch (provider) {
+      case PROVIDER.AI21:
+        if (modelName.includes('jamba')) {
+          const generations = body.choices || []
+          if (generations.length > 0) {
+            const generation = generations[0]
+            return {
+              text: generation.message || '',
+              finish_reason: generation.finish_reason || '',
+              choice_id: shouldSetChoiceIds ? generation.id : undefined
+            }
           }
         }
-      }
-      const completions = body.completions || []
-      if (completions.length > 0) {
-        const completion = completions[0]
-        return {
-          text: completion.data?.text || '',
-          finish_reason: completion.finishReason || '',
-          choice_id: shouldSetChoiceIds ? completion.id : undefined
+        const completions = body.completions || []
+        if (completions.length > 0) {
+          const completion = completions[0]
+          return {
+            text: completion.data?.text || '',
+            finish_reason: completion?.finishReason || '',
+            choice_id: shouldSetChoiceIds ? completion?.id : undefined
+          }
         }
-      }
-    } else if (provider === PROVIDER.AMAZON && modelName.includes('embed')) {
-      return {
-        text: body.embedding || '',
-        finish_reason: '',
-        choice_id: undefined
-      }
-    } else if (provider === PROVIDER.AMAZON) {
-      const results = body.results || []
-      if (results.length > 0) {
-        const result = results[0]
         return {
-          text: result.outputText || '',
-          finish_reason: result.completionReason || '',
-          choice_id: undefined
-        }
-      }
-    } else if (provider === PROVIDER.ANTHROPIC) {
-      return {
-        text: body.completion || body.content || '',
-        finish_reason: body.stop_reason || '',
-        choice_id: undefined
-      }
-    } else if (provider === PROVIDER.COHERE && modelName.includes('embed')) {
-      const embeddings = body.embeddings || [[]]
-      if (embeddings.length > 0) {
-        return {
-          text: embeddings[0],
+          text: '',
           finish_reason: '',
           choice_id: undefined
         }
-      }
-    } else if (provider === PROVIDER.COHERE) {
-      const generations = body.generations || []
-      if (generations.length > 0) {
-        const generation = generations[0]
-        return {
-          text: generation.text,
-          finish_reason: generation.finish_reason,
-          choice_id: shouldSetChoiceIds ? generation.id : undefined
+      case PROVIDER.AMAZON:
+        if (modelName.includes('embed')) {
+          return {
+            text: body.embedding || '',
+            finish_reason: '',
+            choice_id: undefined
+          }
         }
-      }
-    } else if (provider === PROVIDER.META) {
-      return {
-        text: body.generation || '',
-        finish_reason: body.stop_reason || '',
-        choice_id: undefined
-      }
-    } else if (provider === PROVIDER.MISTRAL) {
-      const generations = body.outputs || []
-      if (generations.length > 0) {
-        const generation = generations[0]
+        const results = body.results || []
+        if (results.length > 0) {
+          const result = results[0]
+          return {
+            text: result.outputText || '',
+            finish_reason: result.completionReason || '',
+            choice_id: undefined
+          }
+        }
+        break
+      case PROVIDER.ANTHROPIC:
         return {
-          text: generation.text || '',
-          finish_reason: generation.stop_reason || '',
+          text: body.completion || body.content || '',
+          finish_reason: body.stop_reason || '',
           choice_id: undefined
         }
-      }
-    } else if (provider === PROVIDER.STABILITY) {
-      // No text/finish_reason to extract return empty response if needed.
-      return {
-        text: '',
-        finish_reason: '',
-        choice_id: undefined
-      }
+      case PROVIDER.COHERE:
+        if (modelName.includes('embed')) {
+          const embeddings = body.embeddings || [[]]
+          if (embeddings.length > 0) {
+            return {
+              text: embeddings[0],
+              finish_reason: '',
+              choice_id: undefined
+            }
+          }
+        }
+        const generations = body.generations || []
+        if (generations.length > 0) {
+          const generation = generations[0]
+          return {
+            text: generation.text,
+            finish_reason: generation.finish_reason,
+            choice_id: shouldSetChoiceIds ? generation.id : undefined
+          }
+        }
+        break
+      case PROVIDER.META:
+        return {
+          text: body.generation || '',
+          finish_reason: body.stop_reason || '',
+          choice_id: undefined
+        }
+      case PROVIDER.MISTRAL:
+        const mistralGenerations = body.outputs || []
+        if (mistralGenerations.length > 0) {
+          const generation = mistralGenerations[0]
+          return {
+            text: generation.text || '',
+            finish_reason: generation.stop_reason || '',
+            choice_id: undefined
+          }
+        }
+        break
+      case PROVIDER.STABILITY:
+        return {
+          text: '',
+          finish_reason: '',
+          choice_id: undefined
+        }
+      default:
+        return {
+          text: '',
+          finish_reason: '',
+          choice_id: undefined
+        }
     }
   } catch (error) {
     log.warn('Unable to extract text/finish_reason from response body. Defaulting to empty text/finish_reason.')
@@ -236,7 +256,6 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
     }
   }
 
-  // Default return in case nothing matches
   return {
     text: '',
     finish_reason: '',
