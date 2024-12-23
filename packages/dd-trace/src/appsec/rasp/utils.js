@@ -31,11 +31,11 @@ class DatadogRaspAbortError extends Error {
 function handleResult (actions, req, res, abortController, config) {
   const generateStackTraceAction = actions?.generate_stack
 
-  const { maxDepth, maxStackTraces } = config.appsec.stackTrace
+  const { enabled, maxDepth, maxStackTraces } = config.appsec.stackTrace
 
   const callSiteList = getCallSiteList(maxDepth)
 
-  if (generateStackTraceAction && config.appsec.stackTrace.enabled) {
+  if (generateStackTraceAction && enabled) {
     const rootSpan = web.root(req)
     reportStackTrace(
       rootSpan,

@@ -12,9 +12,7 @@ const STACK_TRACE_NAMESPACES = {
 }
 
 function getCallSiteList (maxDepth = 100) {
-  if (maxDepth < 1) {
-    maxDepth = Infinity
-  }
+  if (maxDepth < 1) maxDepth = Infinity
 
   const previousPrepareStackTrace = Error.prepareStackTrace
   const previousStackTraceLimit = Error.stackTraceLimit
@@ -68,6 +66,7 @@ function reportStackTrace (
   if (!rootSpan) return
 
   if (maxStackTraces < 1 || (rootSpan.meta_struct?.['_dd.stack']?.[namespace]?.length ?? 0) < maxStackTraces) {
+    if (maxDepth < 1) maxDepth = Infinity
     if (!Array.isArray(callSiteList)) return
 
     if (!rootSpan.meta_struct) {
