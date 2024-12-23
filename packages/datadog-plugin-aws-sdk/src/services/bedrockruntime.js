@@ -5,12 +5,12 @@ const log = require('../../../dd-trace/src/log')
 
 const PROVIDER = {
   AI21: 'AI21',
-  AMAZON : 'AMAZON',
-  ANTHROPIC : 'ANTHROPIC',
-  COHERE : 'COHERE',
-  META : 'META',
-  STABILITY : 'STABILITY',
-  MISTRAL : 'MISTRAL'
+  AMAZON: 'AMAZON',
+  ANTHROPIC: 'ANTHROPIC',
+  COHERE: 'COHERE',
+  META: 'META',
+  STABILITY: 'STABILITY',
+  MISTRAL: 'MISTRAL'
 };
 
 const enabledOperations = ['invokeModel']
