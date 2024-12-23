@@ -117,6 +117,7 @@ function getSortWrapper (sort) {
     let isEarlyFlakeDetectionEnabled = false
     let earlyFlakeDetectionNumRetries = 0
     let isEarlyFlakeDetectionFaulty = false
+    let isDiEnabled = false
     let knownTests = {}
 
     try {
@@ -126,10 +127,12 @@ function getSortWrapper (sort) {
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+        isDiEnabled = libraryConfig.isDiEnabled
       }
     } catch (e) {
       isFlakyTestRetriesEnabled = false
       isEarlyFlakeDetectionEnabled = false
+      isDiEnabled = false
     }
 
     if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
@@ -166,6 +169,15 @@ function getSortWrapper (sort) {
         }
       } else {
         isEarlyFlakeDetectionEnabled = false
+      }
+    }
+
+    if (isDiEnabled) {
+      try {
+        const workspaceProject = this.ctx.getCoreWorkspaceProject()
+        workspaceProject._provided._ddIsDiEnabled = isDiEnabled
+      } catch (e) {
+        log.warn('Could not send Dynamic Instrumentation configuration to workers.')
       }
     }
 
@@ -298,13 +310,16 @@ addHook({
     const testName = getTestName(task)
     let isNew = false
     let isEarlyFlakeDetectionEnabled = false
+    let isDiEnabled = false
 
     try {
       const {
-        _ddIsEarlyFlakeDetectionEnabled
+        _ddIsEarlyFlakeDetectionEnabled,
+        _ddIsDiEnabled
       } = globalThis.__vitest_worker__.providedContext
 
       isEarlyFlakeDetectionEnabled = _ddIsEarlyFlakeDetectionEnabled
+      isDiEnabled = _ddIsDiEnabled
 
       if (isEarlyFlakeDetectionEnabled) {
         isNew = newTasks.has(task)
@@ -316,12 +331,22 @@ addHook({
 
     // We finish the previous test here because we know it has failed already
     if (numAttempt > 0) {
+      const probe = {}
       const asyncResource = taskToAsync.get(task)
       const testError = task.result?.errors?.[0]
       if (asyncResource) {
         asyncResource.runInAsyncScope(() => {
-          testErrorCh.publish({ error: testError })
+          testErrorCh.publish({
+            error: testError,
+            willBeRetried: true,
+            probe,
+            isDiEnabled
+          })
         })
+        // We wait for the probe to be set
+        if (probe.setProbePromise) {
+          await probe.setProbePromise
+        }
       }
     }
 

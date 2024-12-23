@@ -106,6 +106,13 @@ const TEST_LEVEL_EVENT_TYPES = [
   'test_session_end'
 ]
 
+// Dynamic instrumentation - Test optimization integration tags
+const DI_ERROR_DEBUG_INFO_CAPTURED = 'error.debug_info_captured'
+// TODO: for the moment we'll only use a single snapshot id, so `0` is hardcoded
+const DI_DEBUG_ERROR_SNAPSHOT_ID = '_dd.debug.error.0.snapshot_id'
+const DI_DEBUG_ERROR_FILE = '_dd.debug.error.0.file'
+const DI_DEBUG_ERROR_LINE = '_dd.debug.error.0.line'
+
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
@@ -181,7 +188,12 @@ module.exports = {
   TEST_BROWSER_VERSION,
   getTestSessionName,
   TEST_LEVEL_EVENT_TYPES,
-  getNumFromKnownTests
+  getNumFromKnownTests,
+  getFileAndLineNumberFromError,
+  DI_ERROR_DEBUG_INFO_CAPTURED,
+  DI_DEBUG_ERROR_SNAPSHOT_ID,
+  DI_DEBUG_ERROR_FILE,
+  DI_DEBUG_ERROR_LINE
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -206,13 +218,13 @@ function removeInvalidMetadata (metadata) {
   return Object.keys(metadata).reduce((filteredTags, tag) => {
     if (tag === GIT_REPOSITORY_URL) {
       if (!validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
-        log.error(`Repository URL is not a valid repository URL: ${metadata[GIT_REPOSITORY_URL]}.`)
+        log.error('Repository URL is not a valid repository URL: %s.', metadata[GIT_REPOSITORY_URL])
         return filteredTags
       }
     }
     if (tag === GIT_COMMIT_SHA) {
       if (!validateGitCommitSha(metadata[GIT_COMMIT_SHA])) {
-        log.error(`Git commit SHA must be a full-length git SHA: ${metadata[GIT_COMMIT_SHA]}.`)
+        log.error('Git commit SHA must be a full-length git SHA: %s.', metadata[GIT_COMMIT_SHA])
         return filteredTags
       }
     }
@@ -636,4 +648,25 @@ function getNumFromKnownTests (knownTests) {
   }
 
   return totalNumTests
+}
+
+function getFileAndLineNumberFromError (error) {
+  // Split the stack trace into individual lines
+  const stackLines = error.stack.split('\n')
+
+  // The top frame is usually the second line
+  const topFrame = stackLines[1]
+
+  // Regular expression to match the file path, line number, and column number
+  const regex = /\s*at\s+(?:.*\()?(.+):(\d+):(\d+)\)?/
+  const match = topFrame.match(regex)
+
+  if (match) {
+    const filePath = match[1]
+    const lineNumber = Number(match[2])
+    const columnNumber = Number(match[3])
+
+    return [filePath, lineNumber, columnNumber]
+  }
+  return []
 }

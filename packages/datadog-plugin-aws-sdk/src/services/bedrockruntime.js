@@ -11,7 +11,7 @@ const META = 'META'
 const STABILITY = 'STABILITY'
 const MISTRAL = 'MISTRAL'
 
-const enabledOperations = ['invokeModel'] // TODO check if this is the correct operation
+const enabledOperations = ['invokeModel']
 
 class BedrockRuntime extends BaseAwsSdkPlugin {
   static get id () { return 'bedrock runtime' }

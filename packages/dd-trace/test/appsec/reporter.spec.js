@@ -192,13 +192,15 @@ describe('reporter', () => {
       expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
     })
 
-    it('should call updateRaspRequestsMetricTags when ruleType if provided', () => {
+    it('should call updateRaspRequestsMetricTags when raspRule is provided', () => {
       const metrics = { rulesVersion: '1.2.3' }
       const store = storage.getStore()
 
-      Reporter.reportMetrics(metrics, 'rule_type')
+      const raspRule = { type: 'rule_type', variant: 'rule_variant' }
 
-      expect(telemetry.updateRaspRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req, 'rule_type')
+      Reporter.reportMetrics(metrics, raspRule)
+
+      expect(telemetry.updateRaspRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req, raspRule)
       expect(telemetry.updateWafRequestsMetricTags).to.not.have.been.called
     })
   })
@@ -221,6 +223,22 @@ describe('reporter', () => {
 
     afterEach(() => {
       storage.disable()
+    })
+
+    it('should add tags to request span when socket is not there', () => {
+      delete req.socket
+
+      const result = Reporter.reportAttack('[{"rule":{},"rule_matches":[{}]}]')
+
+      expect(result).to.not.be.false
+      expect(web.root).to.have.been.calledOnceWith(req)
+
+      expect(span.addTags).to.have.been.calledOnceWithExactly({
+        'appsec.event': 'true',
+        '_dd.origin': 'appsec',
+        '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}'
+      })
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
     })
 
     it('should add tags to request span', () => {

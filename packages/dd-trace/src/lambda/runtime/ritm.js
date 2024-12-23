@@ -101,7 +101,7 @@ const registerLambdaHook = () => {
         try {
           moduleExports = hook(moduleExports)
         } catch (e) {
-          log.error(e)
+          log.error('Error executing lambda hook', e)
         }
       }
 
@@ -120,7 +120,7 @@ const registerLambdaHook = () => {
           try {
             moduleExports = hook(moduleExports)
           } catch (e) {
-            log.error(e)
+            log.error('Error executing lambda hook for datadog-lambda-js', e)
           }
         }
       }
