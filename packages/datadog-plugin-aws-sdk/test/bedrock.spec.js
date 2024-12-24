@@ -58,8 +58,8 @@ describe('Plugin', () => {
             requestBody: {
               inputText: prompt,
               textGenerationConfig: {
-                temperature: temperature,
-                topP: topP,
+                temperature,
+                topP,
                 maxTokenCount: maxTokens
               }
             },
@@ -91,7 +91,7 @@ describe('Plugin', () => {
                 }
               ],
               max_tokens: maxTokens,
-              temperature: temperature,
+              temperature,
               top_p: topP,
               top_k: topK
             },
@@ -120,7 +120,7 @@ describe('Plugin', () => {
             userPrompt: `\n\nHuman:${prompt}\n\nAssistant:`,
             requestBody: {
               prompt: `\n\nHuman:${prompt}\n\nAssistant:`,
-              temperature: temperature,
+              temperature,
               top_p: topP,
               top_k: topK,
               max_tokens_to_sample: maxTokens
@@ -137,8 +137,8 @@ describe('Plugin', () => {
             modelId: 'cohere.command-light-text-v14',
             userPrompt: prompt,
             requestBody: {
-              prompt: prompt,
-              temperature: temperature,
+              prompt,
+              temperature,
               p: topP,
               k: topK,
               max_tokens: maxTokens
@@ -161,8 +161,8 @@ describe('Plugin', () => {
             modelId: 'meta.llama3-70b-instruct-v1',
             userPrompt: prompt,
             requestBody: {
-              prompt: prompt,
-              temperature: temperature,
+              prompt,
+              temperature,
               top_p: topP,
               max_gen_len: maxTokens
             },
@@ -178,9 +178,9 @@ describe('Plugin', () => {
             modelId: 'mistral.mistral-7b-instruct-v0',
             userPrompt: prompt,
             requestBody: {
-              prompt: prompt,
+              prompt,
               max_tokens: maxTokens,
-              temperature: temperature,
+              temperature,
               top_p: topP,
               top_k: topK
             },
