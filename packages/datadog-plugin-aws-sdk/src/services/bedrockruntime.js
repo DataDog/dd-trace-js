@@ -53,7 +53,8 @@ class BedrockRuntime extends BaseAwsSdkPlugin {
 
 class Generation {
   constructor({ message = '', finish_reason = '', choice_id = '' } = {}) {
-    this.message = message || ''
+    // stringify message as it could be a single generated message as well as a list of embeddings
+    this.message =  typeof prompt === 'string' ? prompt : JSON.stringify(prompt) || ''
     this.finish_reason = finish_reason || ''
     this.choice_id = choice_id || undefined
   }
