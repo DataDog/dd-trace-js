@@ -33,9 +33,9 @@ function handleResult (actions, req, res, abortController, config) {
 
   const { enabled, maxDepth, maxStackTraces } = config.appsec.stackTrace
 
-  const callSiteList = getCallSiteList(maxDepth)
-
   if (generateStackTraceAction && enabled) {
+    const callSiteList = getCallSiteList(maxDepth)
+
     const rootSpan = web.root(req)
     reportStackTrace(
       rootSpan,

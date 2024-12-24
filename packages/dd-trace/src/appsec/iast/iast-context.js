@@ -12,12 +12,12 @@ function getIastContext (store, topContext) {
 function getIastStackTraceId (iastContext) {
   if (!iastContext) return 0
 
-  if (!iastContext.iastStackTraceId) {
-    iastContext.iastStackTraceId = 0
+  if (!iastContext.stackTraceId) {
+    iastContext.stackTraceId = 0
   }
 
-  iastContext.iastStackTraceId += 1
-  return iastContext.iastStackTraceId
+  iastContext.stackTraceId += 1
+  return iastContext.stackTraceId
 }
 
 /* TODO Fix storage problem when the close event is called without

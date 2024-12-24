@@ -12,7 +12,7 @@ describe('RASP - utils.js', () => {
 
     stackTrace = {
       reportStackTrace: sinon.stub(),
-      getCallSiteList: sinon.stub().returns({})
+      getCallSiteList: sinon.stub().returns([])
     }
 
     utils = proxyquire('../../../src/appsec/rasp/utils', {
@@ -45,7 +45,7 @@ describe('RASP - utils.js', () => {
       web.root.returns(rootSpan)
 
       utils.handleResult(result, req, undefined, undefined, config)
-      sinon.assert.calledOnceWithExactly(stackTrace.reportStackTrace, rootSpan, stackId, 42, 2, {})
+      sinon.assert.calledOnceWithExactly(stackTrace.reportStackTrace, rootSpan, stackId, 42, 2, [])
     })
 
     it('should not report stack trace when no action is present in waf result', () => {
