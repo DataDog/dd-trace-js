@@ -57,6 +57,7 @@ class Generation {
     this.message =  typeof prompt === 'string' ? prompt : JSON.stringify(prompt) || ''
     this.finish_reason = finish_reason || ''
     this.choice_id = choice_id || undefined
+    this.message = typeof message === 'string' ? message : JSON.stringify(message) || ''
   }
 }
 
