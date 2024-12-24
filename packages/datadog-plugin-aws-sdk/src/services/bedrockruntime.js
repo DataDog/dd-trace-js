@@ -52,24 +52,26 @@ class BedrockRuntime extends BaseAwsSdkPlugin {
 }
 
 class Generation {
-  constructor(message, finish_reason, choice_id) {
+  constructor({ message = '', finish_reason = '', choice_id = '' } = {}) {
     this.message = message || ''
     this.finish_reason = finish_reason || ''
-    this.choice_id = choice_id
+    this.choice_id = choice_id || undefined
   }
 }
 
 class RequestParams {
-  constructor(prompt, temperature, top_p, max_tokens, stop_sequences, input_type, truncate, stream, n) {
-    this.prompt = prompt || ''
-    this.temperature = temperature || ''
-    this.top_p = top_p || ''
-    this.max_tokens = max_tokens || ''
+  constructor({ prompt = '', temperature = undefined, top_p = undefined, max_tokens = undefined, stop_sequences = [], input_type = '', truncate = '', stream = '', n = undefined } = {}) {
+    // TODO: set a truncation limit to prompt
+    // stringify prompt as it could be a single prompt as well as a list of message objects
+    this.prompt = typeof prompt === 'string' ? prompt : JSON.stringify(prompt) || ''
+    this.temperature = temperature !== undefined ? temperature : undefined
+    this.top_p = top_p !== undefined ? top_p : undefined
+    this.max_tokens = max_tokens !== undefined ? max_tokens : undefined
     this.stop_sequences = stop_sequences || []
     this.input_type = input_type || ''
     this.truncate = truncate || ''
     this.stream = stream || ''
-    this.n = n || ''
+    this.n = n !== undefined ? n : undefined
   }
 }
 
@@ -87,25 +89,25 @@ function extractRequestParams(params, provider) {
           }
         }
       }
-      return new RequestParams(userPrompt, requestBody.temperature, requestBody.top_p, requestBody.max_tokens, requestBody.stop_sequences)
+      return new RequestParams({ prompt: userPrompt, temperature: requestBody.temperature, top_p: requestBody.top_p, max_tokens: requestBody.max_tokens, stop_sequences: requestBody.stop_sequences })
     case PROVIDER.AMAZON:
       if (modelId.includes('embed')) {
-        return new RequestParams(requestBody.inputText)
+        return new RequestParams({ prompt: requestBody.inputText })
       }
       const textGenerationConfig = requestBody.textGenerationConfig || {}
-      return new RequestParams(requestBody.inputText, textGenerationConfig.temperature, textGenerationConfig.topP, textGenerationConfig.maxTokenCount, textGenerationConfig.stopSequences)
+      return new RequestParams({ prompt: requestBody.inputText, temperature: textGenerationConfig.temperature, top_p: textGenerationConfig.topP, max_tokens: textGenerationConfig.maxTokenCount, stop_sequences: textGenerationConfig.stopSequences })
     case PROVIDER.ANTHROPIC:
       const prompt = requestBody.prompt || requestBody.messages
-      return new RequestParams(prompt, requestBody.temperature, requestBody.top_p, requestBody.max_tokens_to_sample, requestBody.stop_sequences)
+      return new RequestParams({ prompt: prompt, temperature: requestBody.temperature, top_p: requestBody.top_p, max_tokens: requestBody.max_tokens_to_sample, stop_sequences: requestBody.stop_sequences })
     case PROVIDER.COHERE:
       if (modelId.includes('embed')) {
-        return new RequestParams(requestBody.texts, '', '', '', '', requestBody.input_type, requestBody.truncate)
+        return new RequestParams({ prompt: requestBody.texts, input_type: requestBody.input_type, truncate: requestBody.truncate })
       }
-      return new RequestParams(requestBody.prompt, requestBody.temperature, requestBody.p, requestBody.max_tokens, requestBody.stop_sequences, '', '', requestBody.stream, requestBody.num_generations)
+      return new RequestParams({ prompt: requestBody.prompt, temperature: requestBody.temperature, top_p: requestBody.p, max_tokens: requestBody.max_tokens, stop_sequences: requestBody.stop_sequences, stream: requestBody.stream, n: requestBody.num_generations })
     case PROVIDER.META:
-      return new RequestParams(requestBody.prompt, requestBody.temperature, requestBody.top_p, requestBody.max_gen_len)
+      return new RequestParams({ prompt: requestBody.prompt, temperature: requestBody.temperature, top_p: requestBody.top_p, max_tokens: requestBody.max_gen_len })
     case PROVIDER.MISTRAL:
-      return new RequestParams(requestBody.prompt, requestBody.temperature, requestBody.top_p, requestBody.max_tokens, requestBody.stop, '', '', '', '', requestBody.top_k)
+      return new RequestParams({ prompt: requestBody.prompt, temperature: requestBody.temperature, top_p: requestBody.top_p, max_tokens: requestBody.max_tokens, stop_sequences: requestBody.stop, top_k: requestBody.top_k })
     case PROVIDER.STABILITY:
       return new RequestParams()
     default:
@@ -123,60 +125,60 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
           const generations = body.choices || []
           if (generations.length > 0) {
             const generation = generations[0]
-            return new Generation(generation.message, generation.finish_reason, shouldSetChoiceIds ? generation.id : undefined)
+            return new Generation({ message: generation.message, finish_reason: generation.finish_reason, choice_id: shouldSetChoiceIds ? generation.id : undefined })
           }
         }
         const completions = body.completions || []
         if (completions.length > 0) {
           const completion = completions[0]
-          return new Generation(completion.data?.text, completion?.finishReason, shouldSetChoiceIds ? completion?.id : undefined)
+          return new Generation({ message: completion.data?.text, finish_reason: completion?.finishReason, choice_id: shouldSetChoiceIds ? completion?.id : undefined })
         }
-        return new Generation('', '', undefined)
+        return new Generation()
       case PROVIDER.AMAZON:
         if (modelName.includes('embed')) {
-          return new Generation(body.embedding, '', undefined)
+          return new Generation({ message: body.embedding })
         }
         const results = body.results || []
         if (results.length > 0) {
           const result = results[0]
-          return new Generation(result.outputText, result.completionReason, undefined)
+          return new Generation({ message: result.outputText, finish_reason: result.completionReason })
         }
         break
       case PROVIDER.ANTHROPIC:
-        return new Generation(body.completion || body.content, body.stop_reason, undefined)
+        return new Generation({ message: body.completion || body.content, finish_reason: body.stop_reason })
       case PROVIDER.COHERE:
         if (modelName.includes('embed')) {
           const embeddings = body.embeddings || [[]]
           if (embeddings.length > 0) {
-            return new Generation(embeddings[0], '', undefined)
+            return new Generation({ message: embeddings[0] })
           }
         }
         const generations = body.generations || []
         if (generations.length > 0) {
           const generation = generations[0]
-          return new Generation(generation.text, generation.finish_reason, shouldSetChoiceIds ? generation.id : undefined)
+          return new Generation({ message: generation.text, finish_reason: generation.finish_reason, choice_id: shouldSetChoiceIds ? generation.id : undefined })
         }
         break
       case PROVIDER.META:
-        return new Generation(body.generation, body.stop_reason, undefined)
+        return new Generation({ message: body.generation, finish_reason: body.stop_reason })
       case PROVIDER.MISTRAL:
         const mistralGenerations = body.outputs || []
         if (mistralGenerations.length > 0) {
           const generation = mistralGenerations[0]
-          return new Generation(generation.text, generation.stop_reason, undefined)
+          return new Generation({ message: generation.text, finish_reason: generation.stop_reason })
         }
         break
       case PROVIDER.STABILITY:
-        return new Generation('', '', undefined)
+        return new Generation()
       default:
-        return new Generation('', '', undefined)
+        return new Generation()
     }
   } catch (error) {
     log.warn('Unable to extract text/finish_reason from response body. Defaulting to empty text/finish_reason.')
-    return new Generation('', '', undefined)
+    return new Generation()
   }
 
-  return new Generation('', '', undefined)
+  return new Generation()
 }
 
 function buildTagsFromParams (requestParams, textAndResponseReason, modelProvider, modelName, operation) {
