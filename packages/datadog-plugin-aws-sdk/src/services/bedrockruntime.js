@@ -54,10 +54,9 @@ class BedrockRuntime extends BaseAwsSdkPlugin {
 class Generation {
   constructor({ message = '', finish_reason = '', choice_id = '' } = {}) {
     // stringify message as it could be a single generated message as well as a list of embeddings
-    this.message =  typeof prompt === 'string' ? prompt : JSON.stringify(prompt) || ''
-    this.finish_reason = finish_reason || ''
-    this.choice_id = choice_id || undefined
     this.message = typeof message === 'string' ? message : JSON.stringify(message) || ''
+    this.finishReason = finishReason || ''
+    this.choiceId = choiceId || undefined
   }
 }
 
@@ -195,6 +194,10 @@ function buildTagsFromParams (requestParams, textAndResponseReason, modelProvide
   tags['aws.bedrock.request.top_p'] = requestParams.top_p
   tags['aws.bedrock.request.max_tokens'] = requestParams.max_tokens
   tags['aws.bedrock.request.stop_sequences'] = requestParams.stop_sequences
+  tags['aws.bedrock.request.input_type'] = requestParams.inputType
+  tags['aws.bedrock.request.truncate'] = requestParams.truncate
+  tags['aws.bedrock.request.stream'] = requestParams.stream
+  tags['aws.bedrock.request.n'] = requestParams.n
 
   // add response tags
   if (modelName.includes('embed')) {
