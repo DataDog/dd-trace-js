@@ -191,9 +191,9 @@ function buildTagsFromParams (requestParams, textAndResponseReason, modelProvide
   tags['aws.bedrock.request.model_provider'] = modelProvider
   tags['aws.bedrock.request.prompt'] = requestParams.prompt
   tags['aws.bedrock.request.temperature'] = requestParams.temperature
-  tags['aws.bedrock.request.top_p'] = requestParams.top_p
-  tags['aws.bedrock.request.max_tokens'] = requestParams.max_tokens
-  tags['aws.bedrock.request.stop_sequences'] = requestParams.stop_sequences
+  tags['aws.bedrock.request.top_p'] = requestParams.topP
+  tags['aws.bedrock.request.max_tokens'] = requestParams.maxTokens
+  tags['aws.bedrock.request.stop_sequences'] = requestParams.stopSequences
   tags['aws.bedrock.request.input_type'] = requestParams.inputType
   tags['aws.bedrock.request.truncate'] = requestParams.truncate
   tags['aws.bedrock.request.stream'] = requestParams.stream
