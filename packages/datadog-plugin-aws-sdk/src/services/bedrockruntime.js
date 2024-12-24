@@ -51,18 +51,35 @@ class BedrockRuntime extends BaseAwsSdkPlugin {
   }
 }
 
-function extractRequestParams (params, provider) {
+class Generation {
+  constructor(message, finish_reason, choice_id) {
+    this.message = message || ''
+    this.finish_reason = finish_reason || ''
+    this.choice_id = choice_id
+  }
+}
+
+class RequestParams {
+  constructor(prompt, temperature, top_p, max_tokens, stop_sequences, input_type, truncate, stream, n) {
+    this.prompt = prompt || ''
+    this.temperature = temperature || ''
+    this.top_p = top_p || ''
+    this.max_tokens = max_tokens || ''
+    this.stop_sequences = stop_sequences || []
+    this.input_type = input_type || ''
+    this.truncate = truncate || ''
+    this.stream = stream || ''
+    this.n = n || ''
+  }
+}
+
+function extractRequestParams(params, provider) {
   const requestBody = JSON.parse(params.body)
   const modelId = params.modelId
 
   switch (provider) {
     case PROVIDER.AI21:
-      const temperature = requestBody.temperature || ''
-      const topP = requestBody.top_p || ''
-      const maxTokens = requestBody.max_tokens || ''
-      const stopSequences = requestBody.stop_sequences || []
       let userPrompt = requestBody.prompt
-
       if (modelId.includes('jamba')) {
         for (const message of requestBody.messages) {
           if (message.role === 'user') {
@@ -70,74 +87,29 @@ function extractRequestParams (params, provider) {
           }
         }
       }
-      return {
-        userPrompt,
-        temperature,
-        top_p: topP,
-        max_tokens: maxTokens,
-        stop_sequences: stopSequences
-      }
+      return new RequestParams(userPrompt, requestBody.temperature, requestBody.top_p, requestBody.max_tokens, requestBody.stop_sequences)
     case PROVIDER.AMAZON:
       if (modelId.includes('embed')) {
-        return { prompt: requestBody.inputText }
+        return new RequestParams(requestBody.inputText)
       }
       const textGenerationConfig = requestBody.textGenerationConfig || {}
-      return {
-        prompt: requestBody.inputText,
-        temperature: textGenerationConfig.temperature || '',
-        top_p: textGenerationConfig.topP || '',
-        max_tokens: textGenerationConfig.maxTokenCount || '',
-        stop_sequences: textGenerationConfig.stopSequences || []
-      }
+      return new RequestParams(requestBody.inputText, textGenerationConfig.temperature, textGenerationConfig.topP, textGenerationConfig.maxTokenCount, textGenerationConfig.stopSequences)
     case PROVIDER.ANTHROPIC:
-      const prompt = requestBody.prompt || ''
-      const messages = requestBody.messages || ''
-      return {
-        prompt: prompt || messages,
-        temperature: requestBody.temperature || '',
-        top_p: requestBody.top_p || '',
-        top_k: requestBody.top_k || '',
-        max_tokens: requestBody.max_tokens_to_sample || '',
-        stop_sequences: requestBody.stop_sequences || []
-      }
+      const prompt = requestBody.prompt || requestBody.messages
+      return new RequestParams(prompt, requestBody.temperature, requestBody.top_p, requestBody.max_tokens_to_sample, requestBody.stop_sequences)
     case PROVIDER.COHERE:
       if (modelId.includes('embed')) {
-        return {
-          prompt: requestBody.texts,
-          input_type: requestBody.input_type || '',
-          truncate: requestBody.truncate || ''
-        }
+        return new RequestParams(requestBody.texts, '', '', '', '', requestBody.input_type, requestBody.truncate)
       }
-      return {
-        prompt: requestBody.prompt,
-        temperature: requestBody.temperature || '',
-        top_p: requestBody.p || '',
-        top_k: requestBody.k || '',
-        max_tokens: requestBody.max_tokens || '',
-        stop_sequences: requestBody.stop_sequences || [],
-        stream: requestBody.stream || '',
-        n: requestBody.num_generations || ''
-      }
+      return new RequestParams(requestBody.prompt, requestBody.temperature, requestBody.p, requestBody.max_tokens, requestBody.stop_sequences, '', '', requestBody.stream, requestBody.num_generations)
     case PROVIDER.META:
-      return {
-        prompt: requestBody.prompt,
-        temperature: requestBody.temperature || '',
-        top_p: requestBody.top_p || '',
-        max_tokens: requestBody.max_gen_len || ''
-      }
+      return new RequestParams(requestBody.prompt, requestBody.temperature, requestBody.top_p, requestBody.max_gen_len)
     case PROVIDER.MISTRAL:
-      return {
-        prompt: requestBody.prompt,
-        max_tokens: requestBody.max_tokens || '',
-        stop_sequences: requestBody.stop || [],
-        temperature: requestBody.temperature || '',
-        top_p: requestBody.top_p || '',
-        top_k: requestBody.top_k || ''
-      }
+      return new RequestParams(requestBody.prompt, requestBody.temperature, requestBody.top_p, requestBody.max_tokens, requestBody.stop, '', '', '', '', requestBody.top_k)
     case PROVIDER.STABILITY:
-      return {}
+      return new RequestParams()
     default:
-      return {}
+      return new RequestParams()
   }
 }
 
@@ -151,116 +123,60 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
           const generations = body.choices || []
           if (generations.length > 0) {
             const generation = generations[0]
-            return {
-              text: generation.message || '',
-              finish_reason: generation.finish_reason || '',
-              choice_id: shouldSetChoiceIds ? generation.id : undefined
-            }
+            return new Generation(generation.message, generation.finish_reason, shouldSetChoiceIds ? generation.id : undefined)
           }
         }
         const completions = body.completions || []
         if (completions.length > 0) {
           const completion = completions[0]
-          return {
-            text: completion.data?.text || '',
-            finish_reason: completion?.finishReason || '',
-            choice_id: shouldSetChoiceIds ? completion?.id : undefined
-          }
+          return new Generation(completion.data?.text, completion?.finishReason, shouldSetChoiceIds ? completion?.id : undefined)
         }
-        return {
-          text: '',
-          finish_reason: '',
-          choice_id: undefined
-        }
+        return new Generation('', '', undefined)
       case PROVIDER.AMAZON:
         if (modelName.includes('embed')) {
-          return {
-            text: body.embedding || '',
-            finish_reason: '',
-            choice_id: undefined
-          }
+          return new Generation(body.embedding, '', undefined)
         }
         const results = body.results || []
         if (results.length > 0) {
           const result = results[0]
-          return {
-            text: result.outputText || '',
-            finish_reason: result.completionReason || '',
-            choice_id: undefined
-          }
+          return new Generation(result.outputText, result.completionReason, undefined)
         }
         break
       case PROVIDER.ANTHROPIC:
-        return {
-          text: body.completion || body.content || '',
-          finish_reason: body.stop_reason || '',
-          choice_id: undefined
-        }
+        return new Generation(body.completion || body.content, body.stop_reason, undefined)
       case PROVIDER.COHERE:
         if (modelName.includes('embed')) {
           const embeddings = body.embeddings || [[]]
           if (embeddings.length > 0) {
-            return {
-              text: embeddings[0],
-              finish_reason: '',
-              choice_id: undefined
-            }
+            return new Generation(embeddings[0], '', undefined)
           }
         }
         const generations = body.generations || []
         if (generations.length > 0) {
           const generation = generations[0]
-          return {
-            text: generation.text,
-            finish_reason: generation.finish_reason,
-            choice_id: shouldSetChoiceIds ? generation.id : undefined
-          }
+          return new Generation(generation.text, generation.finish_reason, shouldSetChoiceIds ? generation.id : undefined)
         }
         break
       case PROVIDER.META:
-        return {
-          text: body.generation || '',
-          finish_reason: body.stop_reason || '',
-          choice_id: undefined
-        }
+        return new Generation(body.generation, body.stop_reason, undefined)
       case PROVIDER.MISTRAL:
         const mistralGenerations = body.outputs || []
         if (mistralGenerations.length > 0) {
           const generation = mistralGenerations[0]
-          return {
-            text: generation.text || '',
-            finish_reason: generation.stop_reason || '',
-            choice_id: undefined
-          }
+          return new Generation(generation.text, generation.stop_reason, undefined)
         }
         break
       case PROVIDER.STABILITY:
-        return {
-          text: '',
-          finish_reason: '',
-          choice_id: undefined
-        }
+        return new Generation('', '', undefined)
       default:
-        return {
-          text: '',
-          finish_reason: '',
-          choice_id: undefined
-        }
+        return new Generation('', '', undefined)
     }
   } catch (error) {
     log.warn('Unable to extract text/finish_reason from response body. Defaulting to empty text/finish_reason.')
-    return {
-      text: '',
-      finish_reason: '',
-      choice_id: undefined
-    }
+    return new Generation('', '', undefined)
   }
 
-  return {
-    text: '',
-    finish_reason: '',
-    choice_id: undefined
-  }
+  return new Generation('', '', undefined)
 }
 
 function buildTagsFromParams (requestParams, textAndResponseReason, modelProvider, modelName, operation) {
@@ -278,12 +194,12 @@ function buildTagsFromParams (requestParams, textAndResponseReason, modelProvide
 
   // add response tags
   if (modelName.includes('embed')) {
-    tags['aws.bedrock.response.embedding_length'] = textAndResponseReason.text.length
+    tags['aws.bedrock.response.embedding_length'] = textAndResponseReason.message.length
   }
   if (textAndResponseReason.choice_id) {
     tags['aws.bedrock.response.choices.id'] = textAndResponseReason.choice_id
   }
-  tags['aws.bedrock.response.choices.text'] = textAndResponseReason.text
+  tags['aws.bedrock.response.choices.text'] = textAndResponseReason.message
   tags['aws.bedrock.response.choices.finish_reason'] = textAndResponseReason.finish_reason
 
   return tags
