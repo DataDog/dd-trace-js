@@ -457,6 +457,28 @@ describe('TextMapPropagator', () => {
 
       expect(carrier['x-amzn-trace-id']).to.equal(expectedHeader + additionalParts)
     })
+
+    it('should inject AWSTraceHeader X-Amzn-Trace-Id and Datatog context when configured', () => {
+      const spanContext = createContext({
+        sampling: {
+          priority: 1
+        },
+        baggageItems: null
+      })
+      const carrier = {}
+
+      config.tracePropagationStyle.inject = ['datadog', 'xray']
+
+      const traceId = spanContext._traceId.toString().padStart(24, '0')
+      const spanId = spanContext._spanId.toString().padStart(16, '0')
+      const expectedHeader = `root=1-00000000-${traceId};parent=${spanId};sampled=1`
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier).to.have.property('x-datadog-trace-id', '123')
+      expect(carrier).to.have.property('x-datadog-parent-id', '456')
+      expect(carrier).to.have.property('x-amzn-trace-id', expectedHeader)
+    })
   })
 
   describe('extract', () => {
@@ -820,6 +842,34 @@ describe('TextMapPropagator', () => {
         baggage_key: 'baggage_value', foo: 'bar'
       })
       expect(spanContext._trace.origin).to.equal('localhost')
+    })
+
+    it('should extract AWSTraceHeader X-Amzn-Trace-Id if no valid datadog context is found', () => {
+      const traceId = '4ef684dbd03d632e'
+      const spanId = '7e8d56262375628a'
+      const sampled = 1
+      const unparsedHeader = `Root=1-6583199d-00000000${traceId};Parent=${spanId};Sampled=${sampled}`
+      const carrier = {
+        'x-datadog-trace-id': '0',
+        'x-datadog-parent-id': '0'
+      }
+
+      config.tracePropagationStyle.extract = ['datadog', 'xray']
+
+      // try to extract a span context but there's no valid context
+      let spanContext = propagator.extract(carrier)
+
+      expect(spanContext).to.be.null
+
+      // add an AWS X-ray header with valid context value
+      carrier['x-amzn-trace-id'] = unparsedHeader
+
+      spanContext = propagator.extract(carrier)
+
+      // ensure context was extracted correctly
+      expect(spanContext.toTraceId()).to.equal(id(traceId, 16).toString(10))
+      expect(spanContext.toSpanId()).to.equal(id(spanId, 16).toString(10))
+      expect(spanContext._sampling.samplingPriority).to.equal(sampled)
     })
 
     it('extracts span_id from tracecontext headers and stores datadog parent-id in trace_distributed_tags', () => {
