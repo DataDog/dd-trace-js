@@ -49,9 +49,15 @@ function obfuscateIfNeeded (str) {
   }
 }
 
+// what if we have a stack of auth strategies and only last one is sucessful ? we shouldn't send a million failures
+// what if sdk is called after automated user, will the waf detect it ? will the tags be overriden ?
+
 // TODO: should we find other ways to get the user ID ?
 function getUserId (user) {
   if (!user) return
+
+  // should we iterate on user keyss instead to be case independent
+  // but if we iterate over user then we're missing the inherited props ?
 
   for (const field of USER_ID_FIELDS) {
     let id = user[field]
@@ -72,11 +78,6 @@ function getUserId (user) {
 
 function trackLogin (framework, login, user, success, rootSpan) {
   if (!collectionMode || collectionMode === 'disabled') return
-
-  if (!rootSpan) {
-    log.error('[ASM] No rootSpan found in AppSec trackLogin')
-    return
-  }
 
   if (typeof login !== 'string') {
     log.error('[ASM] Invalid login provided to AppSec trackLogin')
@@ -162,32 +163,38 @@ function trackLogin (framework, login, user, success, rootSpan) {
   return waf.run({ persistent })
 }
 
-function trackUser (user, abortController) {
+function trackUser (user, rootSpan) {
   if (!collectionMode || collectionMode === 'disabled') return
 
   const userId = getUserId(user)
 
-  // must get user ID with USER_ID_FIELDS
-
   if (!userId) {
-
+    log.error('[ASM] Invalid login provided to AppSec trackLogin')
+    return
   }
 
-  // ANONYMISE user id if needed
+  const currentTags = rootSpan.context()._tags
 
-  // don't override tags if already set by "sdk" but still add the _dd.appsec.usr.id
-  rootSpan.addTags({
-    'usr.id': userId,
+  // used to not overwrite tags set by SDK
+  function shouldSetTag (tag) {
+    return !(isSdkCalled && currentTags[tag])
+  }
+
+  const newTags = {
     '_dd.appsec.usr.id': userId, // always AND only send when automated
-    '_dd.appsec.user.collection_mode': collectionMode // short or long form ?
-  })
+    '_dd.appsec.user.collection_mode': collectionMode
+  }
 
-  // _dd.appsec.user.collection_mode: collectionMode // sdk/ident/anon
+  if (!currentTags['usr.id']) {
+    newTags['usr.id'] = userId
+  }
+
+  rootSpan.addTags(newTags)
 
   // If the user monitoring SDK has already resulted in a call to libddwaf before any automated instrumentation or collection method has been executed, no extra call should be made.
-  const results = waf.run({
+  return waf.run({
     persistent: {
-      [USER_ID]: userID
+      [addresses.USER_ID]: userId
     }
   })
 }

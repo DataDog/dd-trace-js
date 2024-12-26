@@ -9,8 +9,8 @@ const {
   multerParser,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
-  passportUser,
   passportVerify,
+  passportUser,
   queryParser,
   nextBodyParsed,
   nextQueryParsed,
@@ -67,8 +67,8 @@ function enable (_config) {
     cookieParser.subscribe(onRequestCookieParser)
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
-    passportUser.subscribe(onPassportDeserializeUser)
     passportVerify.subscribe(onPassportVerify) // possible optimization: only subscribe if collection mode is enabled
+    passportUser.subscribe(onPassportDeserializeUser)
     queryParser.subscribe(onRequestQueryParsed)
     nextBodyParsed.subscribe(onRequestBodyParsed)
     nextQueryParsed.subscribe(onRequestQueryParsed)
@@ -185,18 +185,6 @@ function incomingHttpEndTranslator ({ req, res }) {
   Reporter.finishRequest(req, res)
 }
 
-function onPassportDeserializeUser ({ req, user, sessionId, abordController }) {
-  UserTracking.trackUser(user)
-
-  if (sessionId && typeof sessionId === 'string') {
-    const results = waf.run({
-      persistent: {
-        'usr.session_id': sessionId
-      }
-    })
-  }
-}
-
 function onPassportVerify ({ framework, login, user, success, abortController }) {
   const store = storage.getStore()
   const rootSpan = store?.req && web.root(store.req)
@@ -207,6 +195,22 @@ function onPassportVerify ({ framework, login, user, success, abortController })
   }
 
   const results = UserTracking.trackLogin(framework, login, user, success, rootSpan)
+
+  handleResults(results, store.req, store.req.res, rootSpan, abortController)
+}
+
+function onPassportDeserializeUser ({ user, abortController }) {
+  const store = storage.getStore()
+  const rootSpan = store?.req && web.root(store.req)
+
+  if (!rootSpan) {
+    log.warn('[ASM] No rootSpan found in onPassportDeserializeUser')
+    return
+  }
+
+  const results = UserTracking.trackUser(user, rootSpan)
+
+  console.log(results)
 
   handleResults(results, store.req, store.req.res, rootSpan, abortController)
 }
@@ -324,6 +328,7 @@ function disable () {
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
+  if (passportUser.hasSubscribers) passportUser.unsubscribe(onPassportDeserializeUser)
   if (queryParser.hasSubscribers) queryParser.unsubscribe(onRequestQueryParsed)
   if (nextBodyParsed.hasSubscribers) nextBodyParsed.unsubscribe(onRequestBodyParsed)
   if (nextQueryParsed.hasSubscribers) nextQueryParsed.unsubscribe(onRequestQueryParsed)
