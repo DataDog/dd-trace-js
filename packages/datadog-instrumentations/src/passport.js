@@ -19,15 +19,13 @@ koa-passport
 
 const onPassportDeserializeUserChannel = channel('datadog:passport:deserializeUser:finish')
 
-function wrapDone (req, done) {
+function wrapDone (done) {
   // eslint-disable-next-line n/handle-callback-err
   return function wrappedDone (err, user) {
     if (user) {
       const abortController = new AbortController()
 
-      // express-session middleware sets req.sessionID, it's required to use passport sessions anyway so might as well use it ?
-      // what if session IDs are using rolling sessions or always changing or something idk ?
-      onPassportDeserializeUserChannel.publish({ req, user, sessionId: req.sessionID, abortController })
+      onPassportDeserializeUserChannel.publish({ user, abortController })
 
       if (abortController.signal.aborted) return
     }
@@ -38,9 +36,10 @@ function wrapDone (req, done) {
 
 function wrapDeserializeUser (deserializeUser) {
   return function wrappedDeserializeUser (fn, req, done) {
+    if (typeof fn === 'function') return deserializeUser.apply(this, arguments)
+
     if (typeof req === 'function') {
       done = req
-      // req = storage.getStore().get('req')
       arguments[1] = wrapDone(done)
     } else {
       arguments[2] = wrapDone(done)
@@ -50,38 +49,12 @@ function wrapDeserializeUser (deserializeUser) {
   }
 }
 
-
-const { block } = require('../../dd-trace/src/appsec/blocking')
-const { getRootSpan } = require('../../dd-trace/src/appsec/sdk/utils')
-
 addHook({
   name: 'passport',
   file: 'lib/authenticator.js',
-  versions: ['>=0.3.0'] // TODO
+  versions: ['>=0.2.0']
 }, Authenticator => {
   shimmer.wrap(Authenticator.prototype, 'deserializeUser', wrapDeserializeUser)
-
-  shimmer.wrap(Authenticator.prototype, 'authenticate', function wrapAuthenticate (authenticate) {
-    return function wrappedAuthenticate (name) {
-      const middleware = authenticate.apply(this, arguments)
-
-      const strategy = this._strategy(name)
-
-      strategy._verify
-
-      return function wrappedMiddleware (req, res, next) {
-        return middleware(req, res, function wrappedNext (err) {
-          console.log('NEW', req.user)
-          if (req.user?.name === 'bitch') {
-
-            return block(req, res, getRootSpan(global._ddtrace))
-          }
-
-          return next.apply(this, arguments)
-        })
-      }
-    }
-  })
 
   return Authenticator
 })
