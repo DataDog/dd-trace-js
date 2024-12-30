@@ -144,14 +144,14 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
   })
 }
 
-// function isVersionInRange(version, latestVersion) {
-//   if (!latestVersion) return true
-//   try {
-//     return semver.lte(version, latestVersion)
-//   } catch (e) {
-//     return true // TODO this is a bit of a hack, but I'm not sure what else to do
-//   }
-// }
+function isVersionInRange(version, latestVersion) {
+  if (!latestVersion) return true
+  try {
+    return semver.lte(version, latestVersion)
+  } catch (e) {
+    return true // Safety fallback for invalid semver strings
+  }
+}
 
 function withVersions (plugin, modules, range, cb) {
   const instrumentations = typeof plugin === 'string' ? getInstrumentation(plugin) : [].concat(plugin)
@@ -179,7 +179,7 @@ function withVersions (plugin, modules, range, cb) {
       if (!packages.includes(moduleName)) return
     }
 
-    const latestVersion = latestVersions[moduleName] // TODO is moduleName correct?
+    const latestVersion = latestVersions[moduleName]
 
     const testVersions = new Map()
 
@@ -198,28 +198,39 @@ function withVersions (plugin, modules, range, cb) {
               testVersions.set(min, { range: version, test: min })
             }
 
-            // TODO may run into issues with the latest version being greater than supported Node?
+            // attempt to find the latest version that satisfies the version range
             if (latestVersion && !process.env.PACKAGE_VERSION_RANGE) {
-              const testVersion = semver.lte(version, latestVersion) ? version : latestVersion
-              testVersions.set(testVersion, { range: version, test: testVersion })
+              if (semver.valid(version)) {
+                const testVersion = isVersionInRange(version, latestVersion) ? version : latestVersion
+                testVersions.set(testVersion, { range: version, test: testVersion })
+              } else if (semver.validRange(version)) {
+                const testVersion = semver.maxSatisfying([latestVersion], version)
+                if (testVersion) {
+                  testVersions.set(testVersion, { range: version, test: testVersion })
+                }
+              }
             } else if (latestVersion) {
               const range = process.env.PACKAGE_VERSION_RANGE
               const testVersion = semver.satisfies(latestVersion, range)
                 ? latestVersion
-                : semver.maxSatisfying([version, latestVersion], range)
+                : semver.maxSatisfying([latestVersion], range)
               if (testVersion) {
                 testVersions.set(testVersion, { range: version, test: testVersion })
               }
             } else {
-              const max = require(`../../../../versions/${moduleName}@${version}`).version()
-              testVersions.set(max, { range: version, test: version })
+              try {
+                const max = require(`../../../../versions/${moduleName}@${version}`).version()
+                testVersions.set(max, { range: version, test: version })
+              } catch (err) {
+                // FIX ME: how to log this error?
+              }
             }
           })
       })
 
     Array.from(testVersions)
       .filter(v => !range || semver.satisfies(v[0], range))
-      .sort(v => v[0].localeCompare(v[0]))
+      .sort((a, b) => semver.compare(a[0], b[0]))
       .map(v => Object.assign({}, v[1], { version: v[0] }))
       .forEach(v => {
         const versionPath = path.resolve(
