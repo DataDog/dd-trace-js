@@ -200,8 +200,13 @@ function withVersions (plugin, modules, range, cb) {
 
             // TODO may run into issues with the latest version being greater than supported Node?
             if (latestVersion && !process.env.PACKAGE_VERSION_RANGE) {
-              const testVersion = semver.lte(version, latestVersion) ? version : latestVersion
-              testVersions.set(testVersion, { range: version, test: testVersion })
+              if (semver.valid(version)) {
+                const testVersion = semver.lte(version, latestVersion) ? version : latestVersion
+                testVersions.set(testVersion, { range: version, test: testVersion })
+              } else if (semver.validRange(version)) {
+                const testVersion = semver.maxSatisfying([version, latestVersion], version)
+                testVersions.set(testVersion, { range: version, test: testVersion })
+              }
             } else if (latestVersion) {
               const range = process.env.PACKAGE_VERSION_RANGE
               const testVersion = semver.satisfies(latestVersion, range)
