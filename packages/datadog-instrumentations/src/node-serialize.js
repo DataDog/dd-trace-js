@@ -15,7 +15,7 @@ function wrapUnserialize (serialize) {
   }
 }
 
-addHook({ name: 'node-serialize', versions: ['0'] }, serialize => {
+addHook({ name: 'node-serialize', versions: ['0.0.4'] }, serialize => {
   shimmer.wrap(serialize, 'unserialize', wrapUnserialize)
 
   return serialize
