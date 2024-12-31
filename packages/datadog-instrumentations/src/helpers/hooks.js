@@ -88,6 +88,7 @@ module.exports = {
   mysql2: () => require('../mysql2'),
   net: () => require('../net'),
   next: () => require('../next'),
+  'node-serialize': () => require('../node-serialize'),
   'node:child_process': () => require('../child_process'),
   'node:crypto': () => require('../crypto'),
   'node:dns': () => require('../dns'),
