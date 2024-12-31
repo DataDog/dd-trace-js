@@ -431,5 +431,20 @@ describe('dogstatsd', () => {
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.histogram:10|h\n')
     })
+
+    it('should flush via interval', () => {
+      const clock = sinon.useFakeTimers()
+
+      client = new CustomMetrics({ dogstatsd: {} })
+
+      client.gauge('test.avg', 10, { foo: 'bar' })
+
+      expect(udp4.send).not.to.have.been.called
+
+      clock.tick(10 * 1000)
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g|#foo:bar\n')
+    })
   })
 })
