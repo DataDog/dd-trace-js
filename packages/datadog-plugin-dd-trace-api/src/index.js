@@ -76,23 +76,35 @@ module.exports = class DdTraceApiPlugin extends Plugin {
       })
     }
 
-    handleEvent('init')
-    // TODO(bengl) for API calls like this one that return an object created
-    // internally, care needs to be taken to ensure we're not breaking the
-    // calling API. We don't expect spans to change much, but if they do, this
-    // needs to be taken into account.
+    // handleEvent('configure')
     handleEvent('startSpan')
     handleEvent('wrap')
     handleEvent('trace')
     handleEvent('inject')
     handleEvent('extract')
     handleEvent('getRumData')
-    handleEvent('setUser')
     handleEvent('profilerStarted')
     handleEvent('span:context')
     handleEvent('span:setTag')
     handleEvent('span:addTags')
     handleEvent('span:finish')
     handleEvent('span:addLink')
+    handleEvent('scope')
+    handleEvent('scope:activate')
+    handleEvent('scope:active')
+    handleEvent('scope:bind')
+    handleEvent('appsec:blockRequest')
+    handleEvent('appsec:isUserBlocked')
+    handleEvent('appsec:setUser')
+    handleEvent('appsec:tracerCustomEvent')
+    handleEvent('appsec:trackUserLoginFailureEvent')
+    handleEvent('appsec:trackUserLoginSuccessEvent')
+    handleEvent('dogstatsd:decrement')
+    handleEvent('dogstatsd:distribution')
+    handleEvent('dogstatsd:flush')
+    handleEvent('dogstatsd:gauge')
+    handleEvent('dogstatsd:histogram')
+    handleEvent('dogstatsd:increment')
+    handleEvent('use')
   }
 }
