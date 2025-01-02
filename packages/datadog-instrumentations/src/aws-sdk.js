@@ -167,7 +167,8 @@ function getChannelSuffix (name) {
     'sns',
     'sqs',
     'states',
-    'stepfunctions'
+    'stepfunctions',
+    'bedrock runtime'
   ].includes(name)
     ? name
     : 'default'
