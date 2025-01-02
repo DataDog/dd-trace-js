@@ -181,8 +181,13 @@ class Tracer extends NoopProxy {
           )
         }
       }
+
+      if (config.isTestDynamicInstrumentationEnabled) {
+        const testVisibilityDynamicInstrumentation = require('./ci-visibility/dynamic-instrumentation')
+        testVisibilityDynamicInstrumentation.start()
+      }
     } catch (e) {
-      log.error(e)
+      log.error('Error initialising tracer', e)
     }
 
     return this
@@ -193,7 +198,7 @@ class Tracer extends NoopProxy {
     try {
       return require('./profiler').start(config)
     } catch (e) {
-      log.error(e)
+      log.error('Error starting profiler', e)
     }
   }
 

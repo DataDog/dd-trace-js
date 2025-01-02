@@ -20,7 +20,7 @@ class Crashtracker {
       binding.updateConfig(this._getConfig(config))
       binding.updateMetadata(this._getMetadata(config))
     } catch (e) {
-      log.error(e)
+      log.error('Error configuring crashtracker', e)
     }
   }
 
@@ -36,7 +36,7 @@ class Crashtracker {
         this._getMetadata(config)
       )
     } catch (e) {
-      log.error(e)
+      log.error('Error initialising crashtracker', e)
     }
   }
 
@@ -60,7 +60,7 @@ class Crashtracker {
         },
         timeout_ms: 3000
       },
-      timeout_ms: 0,
+      timeout_ms: 5000,
       // TODO: Use `EnabledWithSymbolsInReceiver` instead for Linux when fixed.
       resolve_frames: 'EnabledWithInprocessSymbols'
     }
@@ -79,6 +79,7 @@ class Crashtracker {
         'language:javascript',
         `library_version:${pkg.version}`,
         'runtime:nodejs',
+        `runtime_version:${process.versions.node}`,
         'severity:crash'
       ]
     }

@@ -21,9 +21,9 @@ class WAFContextWrapper {
     this.knownAddresses = knownAddresses
   }
 
-  run ({ persistent, ephemeral }, raspRuleType) {
+  run ({ persistent, ephemeral }, raspRule) {
     if (this.ddwafContext.disposed) {
-      log.warn('Calling run on a disposed context')
+      log.warn('[ASM] Calling run on a disposed context')
       return
     }
 
@@ -87,7 +87,7 @@ class WAFContextWrapper {
         blockTriggered,
         wafVersion: this.wafVersion,
         wafTimeout: result.timeout
-      }, raspRuleType)
+      }, raspRule)
 
       if (ruleTriggered) {
         Reporter.reportAttack(JSON.stringify(result.events))
@@ -101,8 +101,7 @@ class WAFContextWrapper {
 
       return result.actions
     } catch (err) {
-      log.error('Error while running the AppSec WAF')
-      log.error(err)
+      log.error('[ASM] Error while running the AppSec WAF', err)
     }
   }
 

@@ -40,6 +40,7 @@ function onErrorLog (msg) {
 
   const telLog = {
     level: 'ERROR',
+    count: 1,
 
     // existing log.error(err) without message will be reported as 'Generic Error'
     message: message ?? 'Generic Error'
@@ -47,8 +48,7 @@ function onErrorLog (msg) {
 
   if (cause) {
     telLog.stack_trace = cause.stack
-    const errorType = cause.name ?? 'Error'
-    telLog.message = `${errorType}: ${telLog.message}`
+    telLog.errorType = cause.constructor.name
   }
 
   onLog(telLog)

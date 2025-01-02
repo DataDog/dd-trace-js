@@ -2,16 +2,29 @@
 
 const proxyquire = require('proxyquire')
 
-const iastLog = require('../../../../src/appsec/iast/iast-log')
+const log = require('../../../../src/log')
 const dc = require('dc-polyfill')
+const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 
 describe('sql-injection-analyzer', () => {
   const NOT_TAINTED_QUERY = 'no vulnerable query'
   const TAINTED_QUERY = 'vulnerable query'
 
   const TaintTrackingMock = {
-    isTainted: (iastContext, string) => {
+    getRanges: (iastContext, string) => {
       return string === TAINTED_QUERY
+        ? [
+            {
+              start: 0,
+              end: string.length,
+              iinfo: {
+                parameterName: 'param',
+                parameterValue: string,
+                type: HTTP_REQUEST_PARAMETER
+              }
+            }
+          ]
+        : []
     }
   }
 
@@ -103,11 +116,11 @@ describe('sql-injection-analyzer', () => {
   })
 
   it('should not report an error when context is not initialized', () => {
-    sinon.stub(iastLog, 'errorAndPublish')
+    sinon.stub(log, 'error')
     sqlInjectionAnalyzer.configure(true)
     dc.channel('datadog:sequelize:query:finish').publish()
     sqlInjectionAnalyzer.configure(false)
-    expect(iastLog.errorAndPublish).not.to.be.called
+    expect(log.error).not.to.be.called
   })
 
   describe('analyze', () => {

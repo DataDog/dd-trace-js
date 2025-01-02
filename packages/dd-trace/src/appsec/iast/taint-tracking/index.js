@@ -18,10 +18,10 @@ module.exports = {
   enableTaintTracking (config, telemetryVerbosity) {
     enableRewriter(telemetryVerbosity)
     enableTaintOperations(telemetryVerbosity)
-    taintTrackingPlugin.enable()
+    taintTrackingPlugin.enable(config)
 
-    kafkaContextPlugin.enable()
-    kafkaConsumerPlugin.enable()
+    kafkaContextPlugin.enable(config)
+    kafkaConsumerPlugin.enable(config)
 
     setMaxTransactions(config.maxConcurrentRequests)
   },

@@ -7,11 +7,19 @@ const os = require('os')
 const { DogStatsDClient } = require('./dogstatsd')
 const log = require('./log')
 const Histogram = require('./histogram')
-const { performance } = require('perf_hooks')
+const { performance, PerformanceObserver } = require('perf_hooks')
 
+const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
 const INTERVAL = 10 * 1000
 
+// Node >=16 has PerformanceObserver with `gc` type, but <16.7 had a critical bug.
+// See: https://github.com/nodejs/node/issues/39548
+const hasGCObserver = NODE_MAJOR >= 18 || (NODE_MAJOR === 16 && NODE_MINOR >= 7)
+const hasGCProfiler = NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 15)
+
 let nativeMetrics = null
+let gcObserver = null
+let gcProfiler = null
 
 let interval
 let client
@@ -24,21 +32,29 @@ let elu
 
 reset()
 
-module.exports = {
+const runtimeMetrics = module.exports = {
   start (config) {
     const clientConfig = DogStatsDClient.generateClientConfig(config)
 
     try {
       nativeMetrics = require('@datadog/native-metrics')
-      nativeMetrics.start()
+
+      if (hasGCObserver) {
+        nativeMetrics.start('loop') // Only add event loop watcher and not GC.
+      } else {
+        nativeMetrics.start()
+      }
     } catch (e) {
-      log.error(e)
+      log.error('Error starting native metrics', e)
       nativeMetrics = null
     }
 
     client = new DogStatsDClient(clientConfig)
 
     time = process.hrtime()
+
+    startGCObserver()
+    startGCProfiler()
 
     if (nativeMetrics) {
       interval = setInterval(() => {
@@ -138,6 +154,10 @@ function reset () {
   counters = {}
   histograms = {}
   nativeMetrics = null
+  gcObserver && gcObserver.disconnect()
+  gcObserver = null
+  gcProfiler && gcProfiler.stop()
+  gcProfiler = null
 }
 
 function captureCpuUsage () {
@@ -202,6 +222,29 @@ function captureHeapSpace () {
     client.gauge('runtime.node.heap.physical_size.by.space', stats[i].physical_space_size, tags)
   }
 }
+function captureGCMetrics () {
+  if (!gcProfiler) return
+
+  const profile = gcProfiler.stop()
+  const pauseAll = new Histogram()
+  const pause = {}
+
+  for (const stat of profile.statistics) {
+    const type = stat.gcType.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase()
+
+    pause[type] = pause[type] || new Histogram()
+    pause[type].record(stat.cost)
+    pauseAll.record(stat.cost)
+  }
+
+  histogram('runtime.node.gc.pause', pauseAll)
+
+  for (const type in pause) {
+    histogram('runtime.node.gc.pause.by.type', pause[type], [`gc_type:${type}`])
+  }
+
+  gcProfiler.start()
+}
 
 function captureGauges () {
   Object.keys(gauges).forEach(name => {
@@ -256,6 +299,7 @@ function captureCommonMetrics () {
   captureCounters()
   captureHistograms()
   captureELU()
+  captureGCMetrics()
 }
 
 function captureNativeMetrics () {
@@ -297,6 +341,11 @@ function captureNativeMetrics () {
 function histogram (name, stats, tags) {
   tags = [].concat(tags)
 
+  // Stats can contain garbage data when a value was never recorded.
+  if (stats.count === 0) {
+    stats = { max: 0, min: 0, sum: 0, avg: 0, median: 0, p95: 0, count: 0 }
+  }
+
   client.gauge(`${name}.min`, stats.min, tags)
   client.gauge(`${name}.max`, stats.max, tags)
   client.increment(`${name}.sum`, stats.sum, tags)
@@ -305,4 +354,58 @@ function histogram (name, stats, tags) {
   client.increment(`${name}.count`, stats.count, tags)
   client.gauge(`${name}.median`, stats.median, tags)
   client.gauge(`${name}.95percentile`, stats.p95, tags)
+}
+
+function startGCObserver () {
+  if (gcObserver || hasGCProfiler || !hasGCObserver) return
+
+  gcObserver = new PerformanceObserver(list => {
+    for (const entry of list.getEntries()) {
+      const type = gcType(entry.detail?.kind || entry.kind)
+
+      runtimeMetrics.histogram('runtime.node.gc.pause.by.type', entry.duration, `gc_type:${type}`)
+      runtimeMetrics.histogram('runtime.node.gc.pause', entry.duration)
+    }
+  })
+
+  gcObserver.observe({ type: 'gc' })
+}
+
+function startGCProfiler () {
+  if (gcProfiler || !hasGCProfiler) return
+
+  gcProfiler = new v8.GCProfiler()
+  gcProfiler.start()
+}
+
+function gcType (kind) {
+  if (NODE_MAJOR >= 22) {
+    switch (kind) {
+      case 1: return 'scavenge'
+      case 2: return 'minor_mark_sweep'
+      case 4: return 'mark_sweep_compact' // Deprecated, might be removed soon.
+      case 8: return 'incremental_marking'
+      case 16: return 'process_weak_callbacks'
+      case 31: return 'all'
+    }
+  } else if (NODE_MAJOR >= 18) {
+    switch (kind) {
+      case 1: return 'scavenge'
+      case 2: return 'minor_mark_compact'
+      case 4: return 'mark_sweep_compact'
+      case 8: return 'incremental_marking'
+      case 16: return 'process_weak_callbacks'
+      case 31: return 'all'
+    }
+  } else {
+    switch (kind) {
+      case 1: return 'scavenge'
+      case 2: return 'mark_sweep_compact'
+      case 4: return 'incremental_marking'
+      case 8: return 'process_weak_callbacks'
+      case 15: return 'all'
+    }
+  }
+
+  return 'unknown'
 }

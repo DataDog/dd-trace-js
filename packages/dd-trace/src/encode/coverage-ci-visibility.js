@@ -1,6 +1,6 @@
 'use strict'
 const { AgentEncoder } = require('./0.4')
-const Chunk = require('./chunk')
+const { Chunk } = require('../msgpack')
 
 const {
   distributionMetric,
@@ -82,7 +82,6 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
     // Get offset of the coverages list to update the length of the array when calling `makePayload`
     this._coveragesOffset = bytes.length
     bytes.reserve(5)
-    bytes.length += 5
   }
 
   makePayload () {

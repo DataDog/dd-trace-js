@@ -306,7 +306,7 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort
   }
-  env = { ...env, ...additionalEnvArgs }
+  env = { ...process.env, ...env, ...additionalEnvArgs }
   return spawnProc(path.join(cwd, serverFile), {
     cwd,
     env

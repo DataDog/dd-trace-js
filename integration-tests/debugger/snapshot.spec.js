@@ -16,10 +16,10 @@ describe('Dynamic Instrumentation', function () {
           assert.deepEqual(Object.keys(captures.lines), [String(t.breakpoint.line)])
 
           const { locals } = captures.lines[t.breakpoint.line]
-          const { request, fastify, getSomeData } = locals
+          const { request, fastify, getUndefined } = locals
           delete locals.request
           delete locals.fastify
-          delete locals.getSomeData
+          delete locals.getUndefined
 
           // from block scope
           assert.deepEqual(locals, {
@@ -31,7 +31,7 @@ describe('Dynamic Instrumentation', function () {
             str: { type: 'string', value: 'foo' },
             lstr: {
               type: 'string',
-              // eslint-disable-next-line max-len
+              // eslint-disable-next-line @stylistic/js/max-len
               value: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor i',
               truncated: true,
               size: 445
@@ -67,18 +67,18 @@ describe('Dynamic Instrumentation', function () {
               }
             },
             emptyObj: { type: 'Object', fields: {} },
-            fn: {
-              type: 'Function',
-              fields: {
-                length: { type: 'number', value: '0' },
-                name: { type: 'string', value: 'fn' }
-              }
-            },
             p: {
               type: 'Promise',
               fields: {
                 '[[PromiseState]]': { type: 'string', value: 'fulfilled' },
                 '[[PromiseResult]]': { type: 'undefined' }
+              }
+            },
+            arrowFn: {
+              type: 'Function',
+              fields: {
+                length: { type: 'number', value: '0' },
+                name: { type: 'string', value: 'arrowFn' }
               }
             }
           })
@@ -99,11 +99,11 @@ describe('Dynamic Instrumentation', function () {
           assert.equal(fastify.type, 'Object')
           assert.typeOf(fastify.fields, 'Object')
 
-          assert.deepEqual(getSomeData, {
+          assert.deepEqual(getUndefined, {
             type: 'Function',
             fields: {
               length: { type: 'number', value: '0' },
-              name: { type: 'string', value: 'getSomeData' }
+              name: { type: 'string', value: 'getUndefined' }
             }
           })
 
@@ -118,7 +118,7 @@ describe('Dynamic Instrumentation', function () {
           const { locals } = captures.lines[t.breakpoint.line]
           delete locals.request
           delete locals.fastify
-          delete locals.getSomeData
+          delete locals.getUndefined
 
           assert.deepEqual(locals, {
             nil: { type: 'null', isNull: true },
@@ -129,7 +129,7 @@ describe('Dynamic Instrumentation', function () {
             str: { type: 'string', value: 'foo' },
             lstr: {
               type: 'string',
-              // eslint-disable-next-line max-len
+              // eslint-disable-next-line @stylistic/js/max-len
               value: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor i',
               truncated: true,
               size: 445
@@ -139,8 +139,8 @@ describe('Dynamic Instrumentation', function () {
             arr: { type: 'Array', notCapturedReason: 'depth' },
             obj: { type: 'Object', notCapturedReason: 'depth' },
             emptyObj: { type: 'Object', notCapturedReason: 'depth' },
-            fn: { type: 'Function', notCapturedReason: 'depth' },
-            p: { type: 'Promise', notCapturedReason: 'depth' }
+            p: { type: 'Promise', notCapturedReason: 'depth' },
+            arrowFn: { type: 'Function', notCapturedReason: 'depth' }
           })
 
           done()
@@ -212,7 +212,7 @@ describe('Dynamic Instrumentation', function () {
             // Up to 3 properties from the local scope
             'request', 'nil', 'undef',
             // Up to 3 properties from the closure scope
-            'fastify', 'getSomeData'
+            'fastify', 'getUndefined'
           ])
 
           assert.strictEqual(locals.request.type, 'Request')

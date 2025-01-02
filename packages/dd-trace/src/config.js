@@ -132,11 +132,11 @@ function checkIfBothOtelAndDdEnvVarSet () {
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
 
-// eslint-disable-next-line max-len
+// eslint-disable-next-line @stylistic/js/max-len
 const qsRegex = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}'
-// eslint-disable-next-line max-len
+// eslint-disable-next-line @stylistic/js/max-len
 const defaultWafObfuscatorKeyRegex = '(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt'
-// eslint-disable-next-line max-len
+// eslint-disable-next-line @stylistic/js/max-len
 const defaultWafObfuscatorValueRegex = '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\\.net(?:[_-]|-)sessionid|sid|jwt)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}'
 const runtimeId = uuid()
 
@@ -145,7 +145,7 @@ function maybeFile (filepath) {
   try {
     return fs.readFileSync(filepath, 'utf8')
   } catch (e) {
-    log.error(e)
+    log.error('Error reading file %s', filepath, e)
     return undefined
   }
 }
@@ -378,7 +378,7 @@ class Config {
         } catch (e) {
           // Only log error if the user has set a git.properties path
           if (process.env.DD_GIT_PROPERTIES_FILE) {
-            log.error(e)
+            log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', DD_GIT_PROPERTIES_FILE, e)
           }
         }
         if (gitPropertiesString) {
@@ -449,8 +449,7 @@ class Config {
     this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
     this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
     this._setValue(defaults, 'appsec.enabled', undefined)
-    this._setValue(defaults, 'appsec.eventTracking.enabled', true)
-    this._setValue(defaults, 'appsec.eventTracking.mode', 'safe')
+    this._setValue(defaults, 'appsec.eventTracking.mode', 'identification')
     this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultWafObfuscatorKeyRegex)
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
     this._setValue(defaults, 'appsec.rasp.enabled', true)
@@ -467,7 +466,7 @@ class Config {
     this._setValue(defaults, 'ciVisibilityTestSessionName', '')
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
-    this._setValue(defaults, 'crashtracking.enabled', false)
+    this._setValue(defaults, 'crashtracking.enabled', true)
     this._setValue(defaults, 'codeOriginForSpans.enabled', false)
     this._setValue(defaults, 'dbmPropagationMode', 'disabled')
     this._setValue(defaults, 'dogstatsd.hostname', '127.0.0.1')
@@ -486,6 +485,7 @@ class Config {
     this._setValue(defaults, 'headerTags', [])
     this._setValue(defaults, 'hostname', '127.0.0.1')
     this._setValue(defaults, 'iast.cookieFilterPattern', '.{32,}')
+    this._setValue(defaults, 'iast.dbRowsToTaint', 1)
     this._setValue(defaults, 'iast.deduplicationEnabled', true)
     this._setValue(defaults, 'iast.enabled', false)
     this._setValue(defaults, 'iast.maxConcurrentRequests', 2)
@@ -517,7 +517,7 @@ class Config {
     this._setValue(defaults, 'logInjection', false)
     this._setValue(defaults, 'lookup', undefined)
     this._setValue(defaults, 'inferredProxyServicesEnabled', false)
-    this._setValue(defaults, 'traceLevel', 3)
+    this._setValue(defaults, 'traceLevel', 'debug')
     this._setValue(defaults, 'memcachedCommandEnabled', false)
     this._setValue(defaults, 'openAiLogsEnabled', false)
     this._setValue(defaults, 'openaiSpanCharLimit', 128)
@@ -554,7 +554,7 @@ class Config {
     this._setValue(defaults, 'telemetry.dependencyCollection', true)
     this._setValue(defaults, 'telemetry.enabled', true)
     this._setValue(defaults, 'telemetry.heartbeatInterval', 60000)
-    this._setValue(defaults, 'telemetry.logCollection', false)
+    this._setValue(defaults, 'telemetry.logCollection', true)
     this._setValue(defaults, 'telemetry.metrics', true)
     this._setValue(defaults, 'traceEnabled', true)
     this._setValue(defaults, 'traceId128BitGenerationEnabled', true)
@@ -567,6 +567,7 @@ class Config {
     this._setValue(defaults, 'url', undefined)
     this._setValue(defaults, 'version', pkg.version)
     this._setValue(defaults, 'instrumentation_config_id', undefined)
+    this._setValue(defaults, 'aws.dynamoDb.tablePrimaryKeys', undefined)
   }
 
   _applyEnvironment () {
@@ -575,6 +576,7 @@ class Config {
       DD_AGENT_HOST,
       DD_API_SECURITY_ENABLED,
       DD_API_SECURITY_SAMPLE_DELAY,
+      DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
       DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
       DD_APPSEC_ENABLED,
       DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON,
@@ -590,11 +592,13 @@ class Config {
       DD_APPSEC_RASP_ENABLED,
       DD_APPSEC_TRACE_RATE_LIMIT,
       DD_APPSEC_WAF_TIMEOUT,
+      DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS,
       DD_CRASHTRACKING_ENABLED,
       DD_CODE_ORIGIN_FOR_SPANS_ENABLED,
       DD_DATA_STREAMS_ENABLED,
       DD_DBM_PROPAGATION_MODE,
       DD_DOGSTATSD_HOSTNAME,
+      DD_DOGSTATSD_HOST,
       DD_DOGSTATSD_PORT,
       DD_DYNAMIC_INSTRUMENTATION_ENABLED,
       DD_ENV,
@@ -605,6 +609,7 @@ class Config {
       DD_GRPC_SERVER_ERROR_STATUSES,
       JEST_WORKER_ID,
       DD_IAST_COOKIE_FILTER_PATTERN,
+      DD_IAST_DB_ROWS_TO_TAINT,
       DD_IAST_DEDUPLICATION_ENABLED,
       DD_IAST_ENABLED,
       DD_IAST_MAX_CONCURRENT_REQUESTS,
@@ -713,11 +718,10 @@ class Config {
     this._setValue(env, 'appsec.blockedTemplateJson', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON))
     this._envUnprocessed['appsec.blockedTemplateJson'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
     this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
-    if (DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING) {
-      this._setValue(env, 'appsec.eventTracking.enabled',
-        ['extended', 'safe'].includes(DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING.toLowerCase()))
-      this._setValue(env, 'appsec.eventTracking.mode', DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING.toLowerCase())
-    }
+    this._setString(env, 'appsec.eventTracking.mode', coalesce(
+      DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
+      DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING // TODO: remove in next major
+    ))
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setBoolean(env, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
@@ -741,7 +745,7 @@ class Config {
     this._setBoolean(env, 'crashtracking.enabled', DD_CRASHTRACKING_ENABLED)
     this._setBoolean(env, 'codeOriginForSpans.enabled', DD_CODE_ORIGIN_FOR_SPANS_ENABLED)
     this._setString(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
-    this._setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOSTNAME)
+    this._setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOST || DD_DOGSTATSD_HOSTNAME)
     this._setString(env, 'dogstatsd.port', DD_DOGSTATSD_PORT)
     this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
     this._setBoolean(env, 'dynamicInstrumentationEnabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
@@ -759,6 +763,7 @@ class Config {
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
     this._setString(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
     this._setString(env, 'iast.cookieFilterPattern', DD_IAST_COOKIE_FILTER_PATTERN)
+    this._setValue(env, 'iast.dbRowsToTaint', maybeInt(DD_IAST_DB_ROWS_TO_TAINT))
     this._setBoolean(env, 'iast.deduplicationEnabled', DD_IAST_DEDUPLICATION_ENABLED)
     this._setBoolean(env, 'iast.enabled', DD_IAST_ENABLED)
     this._setValue(env, 'iast.maxConcurrentRequests', maybeInt(DD_IAST_MAX_CONCURRENT_REQUESTS))
@@ -878,7 +883,8 @@ class Config {
     this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
     this._setString(env, 'version', DD_VERSION || tags.version)
     this._setBoolean(env, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
-    this._setBoolean(env, 'traceLevel', maybeInt(DD_TRACE_LEVEL))
+    this._setString(env, 'traceLevel', DD_TRACE_LEVEL)
+    this._setString(env, 'aws.dynamoDb.tablePrimaryKeys', DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS)
   }
 
   _applyOptions (options) {
@@ -897,12 +903,7 @@ class Config {
     this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(options.appsec.blockedTemplateJson))
     this._optsUnprocessed['appsec.blockedTemplateJson'] = options.appsec.blockedTemplateJson
     this._setBoolean(opts, 'appsec.enabled', options.appsec.enabled)
-    let eventTracking = options.appsec.eventTracking?.mode
-    if (eventTracking) {
-      eventTracking = eventTracking.toLowerCase()
-      this._setValue(opts, 'appsec.eventTracking.enabled', ['extended', 'safe'].includes(eventTracking))
-      this._setValue(opts, 'appsec.eventTracking.mode', eventTracking)
-    }
+    this._setString(opts, 'appsec.eventTracking.mode', options.appsec.eventTracking?.mode)
     this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
     this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
     this._setBoolean(opts, 'appsec.rasp.enabled', options.appsec.rasp?.enabled)
@@ -940,6 +941,7 @@ class Config {
     this._setArray(opts, 'headerTags', options.headerTags)
     this._setString(opts, 'hostname', options.hostname)
     this._setString(opts, 'iast.cookieFilterPattern', options.iast?.cookieFilterPattern)
+    this._setValue(opts, 'iast.dbRowsToTaint', maybeInt(options.iast?.dbRowsToTaint))
     this._setBoolean(opts, 'iast.deduplicationEnabled', options.iast && options.iast.deduplicationEnabled)
     this._setBoolean(opts, 'iast.enabled',
       options.iast && (options.iast === true || options.iast.enabled === true))
@@ -997,7 +999,7 @@ class Config {
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
     this._setString(opts, 'version', options.version || tags.version)
     this._setBoolean(opts, 'inferredProxyServicesEnabled', options.inferredProxyServicesEnabled)
-    this._setBoolean(opts, 'traceLevel', maybeInt(options.traceLevel))
+    this._setString(opts, 'traceLevel', options.traceLevel)
 
     // For LLMObs, we want the environment variable to take precedence over the options.
     // This is reliant on environment config being set before options.
@@ -1145,16 +1147,6 @@ class Config {
       calc['tracePropagationStyle.inject'] = calc['tracePropagationStyle.inject'] || defaultPropagationStyle
       calc['tracePropagationStyle.extract'] = calc['tracePropagationStyle.extract'] || defaultPropagationStyle
     }
-
-    const iastEnabled = coalesce(this._options['iast.enabled'], this._env['iast.enabled'])
-    const profilingEnabled = coalesce(this._options['profiling.enabled'], this._env['profiling.enabled'])
-    const injectionIncludesProfiler = (this._env.injectionEnabled || []).includes('profiler')
-    if (iastEnabled || ['auto', 'true'].includes(profilingEnabled) || injectionIncludesProfiler) {
-      this._setBoolean(calc, 'telemetry.logCollection', true)
-    }
-    if (this._env.injectionEnabled?.length > 0) {
-      this._setBoolean(calc, 'crashtracking.enabled', true)
-    }
   }
 
   _applyRemote (options) {
@@ -1292,7 +1284,7 @@ class Config {
   // TODO: Deeply merge configurations.
   // TODO: Move change tracking to telemetry.
   // for telemetry reporting, `name`s in `containers` need to be keys from:
-  // eslint-disable-next-line max-len
+  // eslint-disable-next-line @stylistic/js/max-len
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
   _merge () {
     const containers = [this._remote, this._options, this._env, this._calculated, this._defaults]

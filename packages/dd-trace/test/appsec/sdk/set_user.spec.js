@@ -32,14 +32,14 @@ describe('set_user', () => {
     describe('setUser', () => {
       it('should not call setTag when no user is passed', () => {
         setUser(tracer)
-        expect(log.warn).to.have.been.calledOnceWithExactly('Invalid user provided to setUser')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Invalid user provided to setUser')
         expect(rootSpan.setTag).to.not.have.been.called
       })
 
       it('should not call setTag when user is empty', () => {
         const user = {}
         setUser(tracer, user)
-        expect(log.warn).to.have.been.calledOnceWithExactly('Invalid user provided to setUser')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Invalid user provided to setUser')
         expect(rootSpan.setTag).to.not.have.been.called
       })
 
@@ -48,7 +48,7 @@ describe('set_user', () => {
 
         setUser(tracer, { id: 'user' })
         expect(getRootSpan).to.be.calledOnceWithExactly(tracer)
-        expect(log.warn).to.have.been.calledOnceWithExactly('Root span not available in setUser')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Root span not available in setUser')
         expect(rootSpan.setTag).to.not.have.been.called
       })
 
