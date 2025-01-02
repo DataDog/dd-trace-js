@@ -4,6 +4,7 @@ require('../setup/tap')
 
 const Config = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
+const { propagation, context } = require('@opentelemetry/api')
 
 const { channel } = require('dc-polyfill')
 const startCh = channel('dd-trace:span:start')
@@ -218,6 +219,19 @@ describe('Span', () => {
 
       expect(span.context()._baggageItems).to.have.property('foo', 'bar')
       expect(parent._baggageItems).to.not.have.property('foo', 'bar')
+      const otelBaggages = propagation.getActiveBaggage().getAllEntries()
+      expect(otelBaggages.length).to.equal(1)
+      expect(otelBaggages[0][0]).to.equal('foo')
+      expect(otelBaggages[0][1].value).to.equal('bar')
+      span.setBaggageItem('penguin', 'chunky')
+      expect(span._spanContext._baggageItems).to.deep.equal({
+        foo: 'bar',
+        penguin: 'chunky'
+      })
+      expect(propagation.getActiveBaggage().getAllEntries()).to.deep.equal([
+        ['foo', { value: 'bar' }],
+        ['penguin', { value: 'chunky' }]
+      ])
     })
 
     it('should pass baggage items to future causal spans', () => {
@@ -375,6 +389,25 @@ describe('Span', () => {
 
       expect(span.getBaggageItem('foo')).to.equal('bar')
     })
+
+    it('should get a baggage item following otel baggage operation', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      const entries = {
+        test: { value: 'test1' }
+      }
+      const bag = propagation.createBaggage(entries)
+      const otelContext = propagation.setBaggage(context.active(), bag)
+      context.disable()
+      context.setGlobalContextManager({
+        active: () => otelContext,
+        disable: () => {}
+      })
+      const currentBaggage = propagation.getActiveBaggage().getAllEntries()[0]
+      const currentBaggageKey = currentBaggage[0]
+      const currentBaggageValue = currentBaggage[1].value
+      expect(span.getBaggageItem(currentBaggageKey)).to.equal(currentBaggageValue)
+      expect(span._spanContext._baggageItems).to.deep.equal({ test: 'test1' })
+    })
   })
 
   describe('getAllBaggageItems', () => {
@@ -399,14 +432,22 @@ describe('Span', () => {
       span.removeBaggageItem('foo')
       expect(span.getBaggageItem('foo')).to.be.undefined
     })
+
+    it('should remove a baggage item with opentelemetry api', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      span.setBaggageItem('foo', 'bar')
+      expect(propagation.getActiveBaggage().getEntry('foo').value).to.equal('bar')
+      span.removeBaggageItem('foo')
+      expect(propagation.getActiveBaggage().getEntry('foo')).to.be.undefined
+    })
   })
 
   describe('removeAllBaggageItems', () => {
     it('should remove all baggage items', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
-      span._spanContext._baggageItems.foo = 'bar'
-      span._spanContext._baggageItems.raccoon = 'cute'
+      span.setBaggageItem('raccoon', 'cute')
       span.removeAllBaggageItems()
+      expect(propagation.getActiveBaggage()).to.be.undefined
       expect(span._spanContext._baggageItems).to.deep.equal({})
     })
   })
