@@ -37,8 +37,8 @@ class SensitiveHandler {
     this._sensitiveAnalyzers.set(vulnerabilities.SQL_INJECTION, sqlSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.SSRF, urlSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.TEMPLATE_INJECTION, taintedRangeBasedSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.UNVALIDATED_REDIRECT, urlSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.UNTRUSTED_DESERIALIZATION, taintedRangeBasedSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.UNVALIDATED_REDIRECT, urlSensitiveAnalyzer)
   }
 
   isSensibleName (name) {
