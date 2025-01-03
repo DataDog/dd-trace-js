@@ -58,7 +58,7 @@ class HttpClientPlugin extends ClientPlugin {
       span._spanContext._trace.record = false
     }
 
-    if (!this.config.propagationFilter(uri)) {
+    if (this.config.propagationFilter(uri)) {
       this.tracer.inject(span, HTTP_HEADERS, options.headers)
     }
 
@@ -209,10 +209,6 @@ function extractSessionDetails (options) {
   const port = options.port
 
   return { host, port }
-}
-
-function startsWith (searchString) {
-  return value => String(value).startsWith(searchString)
 }
 
 module.exports = HttpClientPlugin

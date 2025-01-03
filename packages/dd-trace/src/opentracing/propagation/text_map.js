@@ -267,7 +267,8 @@ class TextMapPropagator {
   _injectAwsXrayContext (spanContext, carrier) {
     // injects AWS Trace Header (X-Amzn-Trace-Id) to carrier
     //
-    // ex: 'Root=1-00000000-00000000fffffffffffffffe;Parent=ffffffffffffffff;Sampled=1;_dd.origin=fakeOrigin;baggage_k=baggage_v...;
+    // ex: 'Root=1-00000000-00000000fffffffffffffffe;Parent=ffffffffffffffff;...
+    //      ...Sampled=1;_dd.origin=fakeOrigin;baggage_k=baggage_v...;
     //
     // Header Format:
     //   'Root=1-' (always uses '1-')
