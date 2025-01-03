@@ -3,7 +3,6 @@
 const path = require('path')
 const process = require('process')
 const { calculateDDBasePath } = require('../../util')
-const { getCallSiteList } = require('../stack_trace')
 const pathLine = {
   getFirstNonDDPathAndLine,
   getNodeModulesPaths,
@@ -73,8 +72,8 @@ function isExcluded (callsite, externallyExcludedPaths) {
   return false
 }
 
-function getFirstNonDDPathAndLine (externallyExcludedPaths) {
-  return getFirstNonDDPathAndLineFromCallsites(getCallSiteList(), externallyExcludedPaths)
+function getFirstNonDDPathAndLine (callSiteList, externallyExcludedPaths) {
+  return getFirstNonDDPathAndLineFromCallsites(callSiteList, externallyExcludedPaths)
 }
 
 function getNodeModulesPaths (...paths) {
