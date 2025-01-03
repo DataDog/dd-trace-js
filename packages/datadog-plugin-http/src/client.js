@@ -72,7 +72,7 @@ class HttpClientPlugin extends ClientPlugin {
   }
 
   shouldInjectTraceHeaders (options, uri) {
-    if (hasAmazonSignature(options) && !this.config.tracePropagationStyle.inject.includes('xray')) {
+    if (hasAmazonSignature(options) && !this.tracer._config.tracePropagationStyle.inject.includes('xray')) {
       log.debug(
         'AWS Signature detected on HTTP request, skipping injecting headers. To enable header injection' +
         ' for signed AWS requests, please set DD_TRACE_PROPAGATION_STYLE=["xray", "datadog"]'
