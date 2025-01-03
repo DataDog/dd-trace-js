@@ -11,10 +11,6 @@ class UntrustedDeserializationAnalyzer extends InjectionAnalyzer {
   onConfigure () {
     this.addSub('datadog:node-serialize:unserialize:start', ({ obj }) => this.analyze(obj))
   }
-
-  _areRangesVulnerable () {
-    return true
-  }
 }
 
 module.exports = new UntrustedDeserializationAnalyzer()
