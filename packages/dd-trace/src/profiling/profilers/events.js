@@ -14,7 +14,7 @@ const pprofValueUnit = 'nanoseconds'
 const dateOffset = BigInt(Math.round(performance.timeOrigin * MS_TO_NS))
 
 function labelFromStr (stringTable, key, valStr) {
-  return new Label({ key, str: stringTable.dedup(valStr) })
+  return new Label({ key, str: stringTable.dedup(String(valStr)) })
 }
 
 function labelFromStrStr (stringTable, keyStr, valStr) {
