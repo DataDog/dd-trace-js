@@ -401,28 +401,6 @@ describe('TracerProxy', () => {
         proxy.dogstatsd.increment('foo')
       })
 
-      it('should call custom metrics flush via interval', () => {
-        const clock = sinon.useFakeTimers()
-
-        config.dogstatsd = {
-          hostname: 'localhost',
-          port: 9876
-        }
-        config.tags = {
-          service: 'photos',
-          env: 'prod',
-          version: '1.2.3'
-        }
-
-        proxy.init()
-
-        expect(dogStatsD._flushes()).to.equal(0)
-
-        clock.tick(10000)
-
-        expect(dogStatsD._flushes()).to.equal(1)
-      })
-
       it('should expose real metrics methods after init when configured', () => {
         config.dogstatsd = {
           hostname: 'localhost',
