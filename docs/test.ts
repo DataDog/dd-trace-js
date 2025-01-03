@@ -111,7 +111,7 @@ tracer.init({
     blockedTemplateJson: './blocked.json',
     blockedTemplateGraphql: './blockedgraphql.json',
     eventTracking: {
-      mode: 'safe'
+      mode: 'anon'
     },
     apiSecurity: {
       enabled: true,
@@ -131,6 +131,7 @@ tracer.init({
     requestSampling: 50,
     maxConcurrentRequests: 4,
     maxContextOperations: 30,
+    dbRowsToTaint: 12,
     deduplicationEnabled: true,
     redactionEnabled: true,
     redactionNamePattern: 'password',
@@ -147,6 +148,7 @@ tracer.init({
       requestSampling: 50,
       maxConcurrentRequests: 4,
       maxContextOperations: 30,
+      dbRowsToTaint: 6,
       deduplicationEnabled: true,
       redactionEnabled: true,
       redactionNamePattern: 'password',
