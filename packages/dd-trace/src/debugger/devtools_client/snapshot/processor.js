@@ -1,6 +1,7 @@
 'use strict'
 
 const { collectionSizeSym, fieldCountSym } = require('./symbols')
+const { normalizeName, REDACTED_IDENTIFIERS } = require('./redaction')
 
 module.exports = {
   processRawState: processProperties
@@ -24,7 +25,14 @@ function processProperties (props, maxLength) {
   return result
 }
 
+// TODO: Improve performance of redaction algorithm.
+// This algorithm is probably slower than if we embedded the redaction logic inside the functions below.
+// That way we didn't have to traverse objects that will just be redacted anyway.
 function getPropertyValue (prop, maxLength) {
+  return redact(prop, getPropertyValueRaw(prop, maxLength))
+}
+
+function getPropertyValueRaw (prop, maxLength) {
   // Special case for getters and setters which does not have a value property
   if ('get' in prop) {
     const hasGet = prop.get.type !== 'undefined'
@@ -185,8 +193,11 @@ function toMap (type, pairs, maxLength) {
     // `pair.value` is a special wrapper-object with subtype `internal#entry`. This can be skipped and we can go
     // directly to its children, of which there will always be exactly two, the first containing the key, and the
     // second containing the value of this entry of the Map.
+    const shouldRedact = shouldRedactMapValue(pair.value.properties[0])
     const key = getPropertyValue(pair.value.properties[0], maxLength)
-    const val = getPropertyValue(pair.value.properties[1], maxLength)
+    const val = shouldRedact
+      ? notCapturedRedacted(pair.value.properties[1].value.type)
+      : getPropertyValue(pair.value.properties[1], maxLength)
     result.entries[i++] = [key, val]
   }
 
@@ -240,6 +251,25 @@ function arrayBufferToString (bytes, size) {
   return buf.toString()
 }
 
+function redact (prop, obj) {
+  const name = getNormalizedNameFromProp(prop)
+  return REDACTED_IDENTIFIERS.has(name) ? notCapturedRedacted(obj.type) : obj
+}
+
+function shouldRedactMapValue (key) {
+  const isSymbol = key.value.type === 'symbol'
+  if (!isSymbol && key.value.type !== 'string') return false // WeakMaps uses objects as keys
+  const name = normalizeName(
+    isSymbol ? key.value.description : key.value.value,
+    isSymbol
+  )
+  return REDACTED_IDENTIFIERS.has(name)
+}
+
+function getNormalizedNameFromProp (prop) {
+  return normalizeName(prop.name, 'symbol' in prop)
+}
+
 function setNotCaptureReasonOnCollection (result, collection) {
   if (collectionSizeSym in collection) {
     result.notCapturedReason = 'collectionSize'
@@ -249,4 +279,8 @@ function setNotCaptureReasonOnCollection (result, collection) {
 
 function notCapturedDepth (type) {
   return { type, notCapturedReason: 'depth' }
+}
+
+function notCapturedRedacted (type) {
+  return { type, notCapturedReason: 'redactedIdent' }
 }
