@@ -2,6 +2,7 @@
 
 const os = require('os')
 const Span = require('./span')
+const NoopSpan = require('../noop/span')
 const SpanProcessor = require('../span_processor')
 const PrioritySampler = require('../priority_sampler')
 const TextMapPropagator = require('./propagation/text_map')
@@ -57,6 +58,13 @@ class DatadogTracer {
       'service.name': options?.tags?.service ? String(options.tags.service) : this._service
     }
 
+    if (this._config.traceLevel !== 'debug') {
+      const traceLevelSpan = this._useTraceLevel(parent, options)
+      if (traceLevelSpan) {
+        return traceLevelSpan
+      }
+    }
+
     // As per unified service tagging spec if a span is created with a service name different from the global
     // service name it will not inherit the global version value
     if (options?.tags?.service && options.tags.service !== this._service) {
@@ -81,7 +89,7 @@ class DatadogTracer {
   }
 
   inject (context, format, carrier) {
-    if (context instanceof Span) {
+    if (context instanceof Span || context instanceof NoopSpan) {
       context = context.context()
     }
 
@@ -105,10 +113,48 @@ class DatadogTracer {
       return null
     }
   }
+
+  _useTraceLevel (parent, options) {
+    // service trace level indicates service exit / entry spans only
+    if (this._config.traceLevel === 'service') {
+      // if the parent is a SpanContext, this is a distributed trace and should create a child span
+      // if the parent is a Span or NoopSpan, this is from the same service
+      if (
+        parent instanceof Span || parent instanceof NoopSpan ||
+        options.childOf instanceof Span || options.childOf instanceof NoopSpan
+      ) {
+        return new NoopSpan(this, parent, { keepParent: true })
+      }
+    } else if (this._config.traceLevel === 'span.kind') {
+      // span.kind trace level indicates eliminates repeated spans with the same span.kind
+      if (parent) {
+        if (
+          options?.tags && parent._tags && options?.tags['span.kind'] &&
+          parent._tags['span.kind'] === options.tags['span.kind']
+        ) {
+          return new NoopSpan(this, parent, { keepParent: true })
+        }
+      }
+    } else if (this._config.traceLevel === 'integration') {
+      // integration trace level indicates eliminates repeated spans from the same integration
+      if (parent) {
+        if (options?.tags?.component && parent?._tags?.component === options?.tags?.component) {
+          return new NoopSpan(this, parent, { keepParent: true })
+        }
+      }
+    } else {
+      log.warn(`Received invalid Datadog Trace Level Configuration: ${this._config.traceLevel}`)
+      return null
+    }
+  }
 }
 
 function getContext (spanContext) {
   if (spanContext instanceof Span) {
+    spanContext = spanContext.context()
+  }
+
+  if (spanContext instanceof NoopSpan) {
     spanContext = spanContext.context()
   }
 

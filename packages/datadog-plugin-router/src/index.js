@@ -29,9 +29,11 @@ class RouterPlugin extends WebPlugin {
         context.middleware.push(span)
       }
 
-      const store = storage.getStore()
-      this._storeStack.push(store)
-      this.enter(span, store)
+      if (span.constructor.name !== 'NoopSpan') {
+        const store = storage.getStore()
+        this._storeStack.push(store)
+        this.enter(span, store)
+      }
 
       web.patch(req)
       web.setRoute(req, context.route)
@@ -89,6 +91,9 @@ class RouterPlugin extends WebPlugin {
 
     if (!context) return
     if (context.middleware.length === 0) return context.span
+
+    // if the span is no-op then use the OG request span
+    if (context.middleware[context.middleware.length - 1].constructor.name === 'NoopSpan') return context.span
 
     return context.middleware[context.middleware.length - 1]
   }
