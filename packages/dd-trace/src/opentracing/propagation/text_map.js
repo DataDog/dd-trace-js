@@ -46,6 +46,17 @@ const tracestateTagKeyFilter = /[^\x21-\x2b\x2d-\x3c\x3e-\x7e]/g
 const tracestateTagValueFilter = /[^\x20-\x2b\x2d-\x3a\x3c-\x7d]/g
 const invalidSegment = /^0+$/
 const zeroTraceId = '0000000000000000'
+// AWS X-Ray specific constants
+const xrayHeaderKey = 'x-amzn-trace-id'
+const xrayRootKey = 'root'
+const xrayRootPrefix = '1-'
+const xrayParentKey = 'parent'
+const xraySampledKey = 'sampled'
+const xrayE2EStartTimeKey = 't0'
+const xraySelfKey = 'self'
+const xrayOriginKey = '_dd.origin'
+const xrayDefaultE2EStartTime = '00000000'
+const xrayMaxAdditionalBaggageBytes = 256
 
 class TextMapPropagator {
   constructor (config) {
@@ -60,6 +71,7 @@ class TextMapPropagator {
     this._injectB3MultipleHeaders(spanContext, carrier)
     this._injectB3SingleHeader(spanContext, carrier)
     this._injectTraceparent(spanContext, carrier)
+    this._injectAwsXrayContext(spanContext, carrier)
 
     if (injectCh.hasSubscribers) {
       injectCh.publish({ spanContext, carrier })
@@ -252,6 +264,81 @@ class TextMapPropagator {
     carrier.tracestate = ts.toString()
   }
 
+  _injectAwsXrayContext (spanContext, carrier) {
+    // injects AWS Trace Header (X-Amzn-Trace-Id) to carrier
+    //
+    // ex: 'Root=1-00000000-00000000fffffffffffffffe;Parent=ffffffffffffffff;...
+    //      ...Sampled=1;_dd.origin=fakeOrigin;baggage_k=baggage_v...;
+    //
+    // Header Format:
+    //   'Root=1-' (always uses '1-')
+    //   8 hexadecimal characters representing start time of the operation
+    //   '-'
+    //   24 hexadecimal characters representing trace id
+    //   ';'
+    //   'Parent='
+    //   16 hexadecimal characters representing parent span id
+    //   'Sampled='
+    //   int of [0, 1] representing sampling decision
+    //   Additional baggage in k=v pairs separated by ';' delimiter/
+    //
+    // based off: https://docs.aws.amazon.com/xray/latest/devguide/xray-concepts.html#xray-concepts-tracingheader
+    if (!this._hasPropagationStyle('inject', 'xray')) return
+
+    // TODO: Do we have access to a start time? Java does
+    const e2eStart = this._getEndToEndStartTime(spanContext.start_ms)
+
+    let str = (
+      xrayRootKey + '=' +
+      xrayRootPrefix +
+      e2eStart + '-' +
+      spanContext._traceId.toString().padStart(24, '0') +
+      ';' + xrayParentKey + '=' +
+      spanContext._spanId.toString().padStart(16, '0')
+    )
+
+    if (spanContext?._sampling?.priority) {
+      str += ';' + xraySampledKey + '=' + (spanContext._sampling.priority > 0 ? '1' : '0')
+    }
+
+    // limit trace header size to the size of the necessary bytes plus 256
+    const maxAdditionalCapacity = str.length + xrayMaxAdditionalBaggageBytes
+
+    const origin = spanContext._trace.origin
+    if (origin) {
+      this._addXrayBaggage(str, xrayOriginKey, origin, maxAdditionalCapacity)
+    }
+    if (e2eStart !== xrayDefaultE2EStartTime) {
+      this._addXrayBaggage(str, xrayE2EStartTimeKey, e2eStart.toString(), maxAdditionalCapacity)
+    }
+
+    for (const [key, value] of Object.entries(spanContext._baggageItems)) {
+      if (!this._isReservedXrayKey(key)) {
+        str = this._addXrayBaggage(str, key, value, maxAdditionalCapacity)
+      }
+    }
+
+    carrier[xrayHeaderKey] = str
+  }
+
+  _getEndToEndStartTime (start) {
+    if (!start) return xrayDefaultE2EStartTime
+
+    const e2eStart = start > 0 ? start : Date.now() / 1000
+    return e2eStart.toString().padStart(8, '0')
+  }
+
+  _isReservedXrayKey (key) {
+    return [xrayRootKey, xrayParentKey, xrayOriginKey, xrayE2EStartTimeKey, xraySampledKey].includes(key.toLowerCase())
+  }
+
+  _addXrayBaggage (str, key, value, maxCapacity) {
+    if (str.length + key.length + value.toString().length + 2 <= maxCapacity) {
+      str += `;${key}=${value}`
+    }
+    return str
+  }
+
   _hasPropagationStyle (mode, name) {
     return this._config.tracePropagationStyle[mode].includes(name)
   }
@@ -302,6 +389,9 @@ class TextMapPropagator {
           break
         case 'b3 single header': // TODO: delete in major after singular "b3"
           extractedContext = this._extractB3SingleContext(carrier)
+          break
+        case 'xray':
+          extractedContext = this._extractAwsXrayContext(carrier)
           break
         case 'b3':
           if (this._config.tracePropagationStyle.otelPropagators) {
@@ -690,6 +780,84 @@ class TextMapPropagator {
     }
 
     return spanContext._traceId.toString(16)
+  }
+
+  _extractAwsXrayContext (carrier) {
+    if (!this._hasPropagationStyle('extract', 'xray')) {
+      return null
+    }
+
+    if (carrier[xrayHeaderKey]) {
+      const parsedHeader = this._parseAWSTraceHeader(carrier[xrayHeaderKey])
+
+      let traceId
+      let spanId
+      let samplingPriority
+      let ddOrigin
+      const baggage = {}
+
+      if (!(xrayRootKey in parsedHeader)) {
+        return null
+      }
+
+      for (const key in parsedHeader) {
+        const value = parsedHeader[key]
+        if (key === xrayRootKey) {
+          const awsTraceIdSegments = value.split('-')
+          for (let i = 0; i < awsTraceIdSegments.length; i++) {
+            if (awsTraceIdSegments[i] === '1') {
+              continue
+            } else if (i === 1 && awsTraceIdSegments.length === 3) {
+              continue
+            } else if (i === 2 && awsTraceIdSegments.length === 3) {
+              // trace id padded by: "00000000"
+              traceId = awsTraceIdSegments[i].substring(8)
+            }
+          }
+        } else if (key === xrayParentKey) {
+          spanId = value
+        } else if (key === xraySampledKey) {
+          samplingPriority = parseInt(value)
+        } else if (key === xrayOriginKey) {
+          ddOrigin = String(value)
+        } else if (key === xraySelfKey) {
+          // self is added by load balancers and should be ignored
+          continue
+        } else if (key === xrayE2EStartTimeKey) {
+          baggage.startMs = parseInt(value)
+        } else {
+          baggage[key] = value
+        }
+      }
+
+      if (traceId && spanId) {
+        const spanContext = new DatadogSpanContext({
+          traceId: id(traceId, 16),
+          spanId: id(spanId, 16),
+          sampling: { samplingPriority },
+          baggageItems: baggage
+        })
+        if (ddOrigin) {
+          spanContext._trace.origin = ddOrigin
+        }
+        return spanContext
+      }
+      return null
+    } else {
+      return null
+    }
+  }
+
+  _parseAWSTraceHeader (header) {
+    // parses AWSTraceHeader string to object
+    // ex: 'Root=1-00000000-00000000fffffffffffffffe;Parent=ffffffffffffffff;Sampled=1;_dd.origin=fakeOrigin;
+    const obj = {}
+    const keyValuePairs = header.split(';')
+    keyValuePairs.forEach(pair => {
+      const [key, value] = pair.split('=')
+      obj[key.toLowerCase()] = value.toLowerCase()
+    })
+    return obj
   }
 
   static _convertOtelContextToDatadog (traceId, spanId, traceFlag, ts, meta = {}) {
