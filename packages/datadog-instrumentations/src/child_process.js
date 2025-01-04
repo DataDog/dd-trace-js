@@ -17,7 +17,7 @@ const execAsyncMethods = ['execFile', 'spawn']
 const names = ['child_process', 'node:child_process']
 
 // child_process and node:child_process returns the same object instance, we only want to add hooks once
-let patched = false
+const patched = new WeakSet()
 
 function throwSyncError (error) {
   throw error
@@ -39,8 +39,8 @@ function returnSpawnSyncError (error, context) {
 
 names.forEach(name => {
   addHook({ name }, childProcess => {
-    if (!patched) {
-      patched = true
+    if (!patched.has(childProcess)) {
+      patched.add(childProcess)
       shimmer.massWrap(childProcess, execAsyncMethods, wrapChildProcessAsyncMethod(childProcess.ChildProcess))
       shimmer.wrap(childProcess, 'execSync', wrapChildProcessSyncMethod(throwSyncError, true))
       shimmer.wrap(childProcess, 'execFileSync', wrapChildProcessSyncMethod(throwSyncError))
