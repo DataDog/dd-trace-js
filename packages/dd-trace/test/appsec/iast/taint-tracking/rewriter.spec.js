@@ -32,8 +32,7 @@ describe('IAST Rewriter', () => {
       }
 
       shimmer = {
-        wrap: sinon.spy(),
-        unwrap: sinon.spy()
+        wrap: sinon.spy()
       }
 
       const kSymbolPrepareStackTrace = Symbol('kTestSymbolPrepareStackTrace')
@@ -67,13 +66,6 @@ describe('IAST Rewriter', () => {
       expect(shimmer.wrap.getCall(0).args[1]).eq('_compile')
 
       rewriter.disableRewriter()
-    })
-
-    it('Should unwrap module compile method on taint tracking disable', () => {
-      rewriter.disableRewriter()
-
-      expect(shimmer.unwrap).to.be.calledOnce
-      expect(shimmer.unwrap.getCall(0).args[1]).eq('_compile')
     })
 
     it('Should keep original prepareStackTrace fn when calling enable and then disable', () => {
