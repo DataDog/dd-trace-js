@@ -27,6 +27,10 @@ class NoopTracer {
     return ''
   }
 
+  flush (done = () => {}) {
+    done()
+  }
+
   setUrl () {
   }
 
