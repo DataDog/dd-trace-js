@@ -32,25 +32,26 @@ class ContextManager {
       return context
     }
 
-    let otelBaggages
     const baggages = JSON.parse(activeSpan.getAllBaggageItems())
     const entries = {}
     for (const [key, value] of Object.entries(baggages)) {
       entries[key] = { value }
     }
-    otelBaggages = propagation.createBaggage(entries)
+    const otelBaggages = propagation.createBaggage(entries)
 
     if (!context._otelSpanContext) {
       const newSpanContext = new SpanContext(context)
       context._otelSpanContext = newSpanContext
     }
     if (store && trace.getSpanContext(store) === context._otelSpanContext) {
-      return otelBaggages ? propagation.setBaggage(store, otelBaggages)
-                          : store
+      return otelBaggages
+        ? propagation.setBaggage(store, otelBaggages)
+        : store
     }
     const wrappedContext = trace.setSpanContext(store || ROOT_CONTEXT, context._otelSpanContext)
-    return otelBaggages ? propagation.setBaggage(wrappedContext, otelBaggages)
-                        : wrappedContext
+    return otelBaggages
+      ? propagation.setBaggage(wrappedContext, otelBaggages)
+      : wrappedContext
   }
 
   with (context, fn, thisArg, ...args) {

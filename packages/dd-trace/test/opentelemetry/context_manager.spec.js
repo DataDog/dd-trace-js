@@ -161,14 +161,14 @@ describe('OTel Context Manager', () => {
       baggages = baggages.setEntry('key2', { value: 'otel2' })
       contextWithUpdatedBaggages = propagation.setBaggage(api.context.active(), baggages)
     })
-    expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal({ 'key1': 'dd1' })
+    expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal({ key1: 'dd1' })
     api.context.with(contextWithUpdatedBaggages, () => {
       expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal(
-        { 'key1': 'otel1', 'key2': 'otel2' }
+        { key1: 'otel1', key2: 'otel2' }
       )
       ddSpan.setBaggageItem('key2', 'dd2')
       expect(propagation.getActiveBaggage().getAllEntries()).to.deep.equal(
-        [ [ 'key1', { value: 'otel1' } ], [ 'key2', { value: 'dd2' } ] ]
+        [['key1', { value: 'otel1' }], ['key2', { value: 'dd2' }]]
       )
     })
   })
@@ -184,11 +184,11 @@ describe('OTel Context Manager', () => {
       contextWithUpdatedBaggages = propagation.setBaggage(api.context.active(), baggages)
     })
     expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal(
-      { 'key1': 'dd1', 'key2': 'dd2' }
+      { key1: 'dd1', key2: 'dd2' }
     )
     api.context.with(contextWithUpdatedBaggages, () => {
       expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal(
-        { 'key2': 'dd2' }
+        { key2: 'dd2' }
       )
       ddSpan.removeBaggageItem('key2')
       expect(propagation.getActiveBaggage().getAllEntries()).to.deep.equal([])
