@@ -18,28 +18,39 @@ class ContextManager {
     const context = (activeSpan && activeSpan.context()) || store || ROOT_CONTEXT
 
     if (!(context instanceof DataDogSpanContext)) {
+      const span = trace.getSpan(context)
+      // span instanceof NonRecordingSpan
+      if (span && span._spanContext && span._spanContext._ddContext && span._spanContext._ddContext._baggageItems) {
+        const baggages = span._spanContext._ddContext._baggageItems
+        const entries = {}
+        for (const [key, value] of Object.entries(baggages)) {
+          entries[key] = { value }
+        }
+        const otelBaggages = propagation.createBaggage(entries)
+        return propagation.setBaggage(context, otelBaggages)
+      }
       return context
     }
 
     let otelBaggages
     const baggages = JSON.parse(activeSpan.getAllBaggageItems())
-    if (Object.keys(baggages).length) {
-      const entries = {}
-      for (const [key, value] of Object.entries(baggages)) {
-        entries[key] = { value }
-      }
-      otelBaggages = propagation.createBaggage(entries)
+    const entries = {}
+    for (const [key, value] of Object.entries(baggages)) {
+      entries[key] = { value }
     }
+    otelBaggages = propagation.createBaggage(entries)
 
     if (!context._otelSpanContext) {
       const newSpanContext = new SpanContext(context)
       context._otelSpanContext = newSpanContext
     }
     if (store && trace.getSpanContext(store) === context._otelSpanContext) {
-      return otelBaggages ? propagation.setBaggage(store, otelBaggages) : store
+      return otelBaggages ? propagation.setBaggage(store, otelBaggages)
+                          : store
     }
     const wrappedContext = trace.setSpanContext(store || ROOT_CONTEXT, context._otelSpanContext)
-    return otelBaggages ? propagation.setBaggage(wrappedContext, otelBaggages) : wrappedContext
+    return otelBaggages ? propagation.setBaggage(wrappedContext, otelBaggages)
+                        : wrappedContext
   }
 
   with (context, fn, thisArg, ...args) {
@@ -49,20 +60,25 @@ class ContextManager {
       const cb = thisArg == null ? fn : fn.bind(thisArg)
       return this._store.run(context, cb, ...args)
     }
+    const baggages = propagation.getBaggage(context)
+    let baggageItems = []
+    if (baggages) {
+      baggageItems = baggages.getAllEntries()
+    }
     if (span && span._ddSpan) {
-      // remove all baggage items?
-      const baggages = propagation.getBaggage(context)
-      if (baggages) {
-        const baggageItems = baggages.getAllEntries()
-        if (baggageItems.length) {
-          for (const baggage of baggageItems) {
-            const key = baggage[0]
-            const value = baggage[1].value
-            span._ddSpan.setBaggageItem(key, value)
-          }
-        }
+      // does otel always override datadog?
+      span._ddSpan.removeAllBaggageItems()
+      for (const baggage of baggageItems) {
+        span._ddSpan.setBaggageItem(baggage[0], baggage[1].value)
       }
       return ddScope.activate(span._ddSpan, run)
+    }
+    // span instanceof NonRecordingSpan
+    if (span && span._spanContext && span._spanContext._ddContext && span._spanContext._ddContext._baggageItems) {
+      span._spanContext._ddContext._baggageItems = {}
+      for (const baggage of baggageItems) {
+        span._spanContext._ddContext._baggageItems[baggage[0]] = baggage[1].value
+      }
     }
     return run()
   }

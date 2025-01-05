@@ -126,7 +126,7 @@ describe('OTel Context Manager', () => {
 
   it('should propagate baggage from an otel span to a datadog span', () => {
     const entries = {
-      foo : { value: 'bar' }
+      foo: { value: 'bar' }
     }
     const baggage = propagation.createBaggage(entries)
     const contextWithBaggage = propagation.setBaggage(context.active(), baggage)
@@ -151,33 +151,47 @@ describe('OTel Context Manager', () => {
     })
   })
 
-  // it('should handle dd-otel baggage conflict on a datadog span', () => {
-  //   // const ddSpan = tracer.startSpan('dd')
-  //   // ddSpan.setBaggageItem('key', 'dd')
-  //   // let baggageContext
-  //   // tracer.scope().activate(ddSpan, () => {
-  //   //   const entries = {
-  //   //     key : { value: 'otel' },
-  //   //   }
-  //   //   const baggage = propagation.createBaggage(entries)
-  //   //   baggageContext = propagation.setBaggage(api.context.active(), baggage)
-  //   // })
-  //   // const otelSpan = makeSpan('otel')
-  //   // const contextWithSpan = trace.setSpan(baggageContext, otelSpan)
-  //   // api.context.with(contextWithSpan, () => {
-  //   //   expect(span._ddSpan.getBaggageItem('foo')).to.be.equal('bar')
-  //   // })
-  //   tracer.trace('ddSpan', (ddSpan) => {
-  //     ddSpan.setBaggageItem('key', 'dd')
-  //     const otelSpan = makeSpan('otelSpan')
-  //     const entries = {
-  //       key : { value: 'otel' },
-  //     }
-  //     const baggage = propagation.createBaggage(entries)
-  //     baggageContext = propagation.setBaggage(otelSpan.spanContext(), baggage)
-  //     // api.context.with(baggageContext, () => {
-  //     //   console.log(ddSpan.context())
-  //     // })
-  //   })
-  // })
+  it('should handle dd-otel baggage conflict', () => {
+    const ddSpan = tracer.startSpan('dd')
+    ddSpan.setBaggageItem('key1', 'dd1')
+    let contextWithUpdatedBaggages
+    tracer.scope().activate(ddSpan, () => {
+      let baggages = propagation.getBaggage(api.context.active())
+      baggages = baggages.setEntry('key1', { value: 'otel1' })
+      baggages = baggages.setEntry('key2', { value: 'otel2' })
+      contextWithUpdatedBaggages = propagation.setBaggage(api.context.active(), baggages)
+    })
+    expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal({ 'key1': 'dd1' })
+    api.context.with(contextWithUpdatedBaggages, () => {
+      expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal(
+        { 'key1': 'otel1', 'key2': 'otel2' }
+      )
+      ddSpan.setBaggageItem('key2', 'dd2')
+      expect(propagation.getActiveBaggage().getAllEntries()).to.deep.equal(
+        [ [ 'key1', { value: 'otel1' } ], [ 'key2', { value: 'dd2' } ] ]
+      )
+    })
+  })
+
+  it('should handle dd-otel baggage removal', () => {
+    const ddSpan = tracer.startSpan('dd')
+    ddSpan.setBaggageItem('key1', 'dd1')
+    ddSpan.setBaggageItem('key2', 'dd2')
+    let contextWithUpdatedBaggages
+    tracer.scope().activate(ddSpan, () => {
+      let baggages = propagation.getBaggage(api.context.active())
+      baggages = baggages.removeEntry('key1')
+      contextWithUpdatedBaggages = propagation.setBaggage(api.context.active(), baggages)
+    })
+    expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal(
+      { 'key1': 'dd1', 'key2': 'dd2' }
+    )
+    api.context.with(contextWithUpdatedBaggages, () => {
+      expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal(
+        { 'key2': 'dd2' }
+      )
+      ddSpan.removeBaggageItem('key2')
+      expect(propagation.getActiveBaggage().getAllEntries()).to.deep.equal([])
+    })
+  })
 })
