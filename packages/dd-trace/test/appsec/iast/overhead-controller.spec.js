@@ -31,6 +31,7 @@ describe('Overhead controller', () => {
         it('should populate request context', () => {
           const iastContext = {}
           overheadController.initializeRequestContext(iastContext)
+
           expect(iastContext).to.have.nested.property(overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY)
         })
       })
@@ -62,7 +63,9 @@ describe('Overhead controller', () => {
       it('should not start refresher interval when already started', () => {
         overheadController.startGlobalContext()
         overheadController.startGlobalContext()
+
         expect(global.setInterval).to.have.been.calledOnce
+
         overheadController.finishGlobalContext()
       })
 
@@ -70,6 +73,7 @@ describe('Overhead controller', () => {
         overheadController.startGlobalContext()
         overheadController.finishGlobalContext()
         overheadController.finishGlobalContext()
+
         expect(global.clearInterval).to.have.been.calledOnce
       })
 
@@ -78,6 +82,7 @@ describe('Overhead controller', () => {
         overheadController.finishGlobalContext()
         overheadController.startGlobalContext()
         overheadController.finishGlobalContext()
+
         expect(global.setInterval).to.have.been.calledTwice
         expect(global.clearInterval).to.have.been.calledTwice
       })
@@ -137,6 +142,7 @@ describe('Overhead controller', () => {
         const reserved1 = overheadController.acquireRequest(rootSpan1)
         const reserved2 = overheadController.acquireRequest(rootSpan2)
         const reserved3 = overheadController.acquireRequest(rootSpan3)
+
         expect(reserved1).to.be.true
         expect(reserved2).to.be.true
         expect(reserved3).to.be.false
@@ -169,6 +175,7 @@ describe('Overhead controller', () => {
         const reserved3 = overheadController.acquireRequest(rootSpan3)
         overheadController.releaseRequest()
         const reserved4 = overheadController.acquireRequest(rootSpan4)
+
         expect(reserved1).to.be.true
         expect(reserved2).to.be.true
         expect(reserved3).to.be.false
@@ -200,12 +207,14 @@ describe('Overhead controller', () => {
 
           it('should allow when available tokens', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 2
+
             expect(overheadController.hasQuota(OPERATION, iastContext)).to.be.true
             expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 1)
           })
 
           it('should not allow when no available tokens', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 0
+
             expect(overheadController.hasQuota(OPERATION, iastContext)).to.be.false
             expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
           })
@@ -245,27 +254,22 @@ describe('Overhead controller', () => {
             const crypto = require('crypto')
             crypto.createHash('sha1')
           }
+
           requestResolvers[req.url] = () => {
             resolve()
             testRequestEventEmitter.emit(TEST_REQUEST_FINISHED, req.url)
           }
+
           testRequestEventEmitter.emit(TEST_REQUEST_STARTED, req.url)
         })
       }
 
       function tests (serverConfig) {
-        const handlers = []
-
         beforeEach(() => {
           testRequestEventEmitter
             .removeAllListeners(TEST_REQUEST_STARTED)
             .removeAllListeners(TEST_REQUEST_FINISHED)
           requestResolvers = {}
-        })
-
-        afterEach(() => {
-          handlers.forEach(agent.unsubscribe)
-          handlers.splice(0)
         })
 
         afterEach(() => {
@@ -284,45 +288,50 @@ describe('Overhead controller', () => {
             }
           })
           iast.enable(config)
+
           let urlCounter = 0
           const handler = function (traces) {
-            try {
-              for (let i = 0; i < traces.length; i++) {
-                for (let j = 0; j < traces[i].length; j++) {
-                  const trace = traces[i][j]
-                  if (trace.type === 'web') {
-                    const url = trace.meta['http.url']
-                    if (url.includes(FIRST_REQUEST)) {
-                      expect(trace.meta['_dd.iast.json']).not.to.be.undefined
-                      expect(trace.metrics['_dd.iast.enabled']).eq(1)
-                      urlCounter++
-                    } else if (url.includes(SECOND_REQUEST)) {
-                      expect(trace.meta['_dd.iast.json']).to.be.undefined
-                      expect(trace.metrics['_dd.iast.enabled']).eq(0)
-                      urlCounter++
-                    }
-                    if (urlCounter === 2) {
-                      done()
-                    }
+            for (let i = 0; i < traces.length; i++) {
+              for (let j = 0; j < traces[i].length; j++) {
+                const trace = traces[i][j]
+                if (trace.type === 'web') {
+                  const url = trace.meta['http.url']
+
+                  if (url.includes(FIRST_REQUEST)) {
+                    expect(trace.meta['_dd.iast.json']).not.to.be.undefined
+                    expect(trace.metrics['_dd.iast.enabled']).eq(1)
+
+                    urlCounter++
+                  } else if (url.includes(SECOND_REQUEST)) {
+                    expect(trace.meta['_dd.iast.json']).to.be.undefined
+                    expect(trace.metrics['_dd.iast.enabled']).eq(0)
+
+                    urlCounter++
+                  }
+
+                  if (urlCounter === 2) {
+                    done()
+                    return
                   }
                 }
               }
-            } catch (e) {
-              agent.unsubscribe(handler)
-              done(e)
             }
+
+            throw new Error('Trace not found')
           }
-          handlers.push(handler)
-          agent.subscribe(handler)
+
+          agent.use(handler)
+
           testRequestEventEmitter.on(TEST_REQUEST_STARTED, (url) => {
             if (url === FIRST_REQUEST) {
-              axios.get(`http://localhost:${serverConfig.port}${SECOND_REQUEST}`).then().catch(done)
+              axios.get(`http://localhost:${serverConfig.port}${SECOND_REQUEST}`).catch(done)
             } else if (url === SECOND_REQUEST) {
               requestResolvers[FIRST_REQUEST]()
               requestResolvers[SECOND_REQUEST]()
             }
           })
-          axios.get(`http://localhost:${serverConfig.port}${FIRST_REQUEST}`).then().catch(done)
+
+          axios.get(`http://localhost:${serverConfig.port}${FIRST_REQUEST}`).catch(done)
         })
 
         it('should detect vulnerabilities in both if max concurrent is 2', (done) => {
@@ -337,38 +346,38 @@ describe('Overhead controller', () => {
             }
           })
           iast.enable(config)
+
           let urlCounter = 0
           const handler = function (traces) {
-            try {
-              for (let i = 0; i < traces.length; i++) {
-                for (let j = 0; j < traces[i].length; j++) {
-                  const trace = traces[i][j]
-                  if (trace.type === 'web') {
-                    urlCounter++
-                    expect(trace.meta['_dd.iast.json']).not.to.be.undefined
-                    expect(trace.metrics['_dd.iast.enabled']).eq(1)
-                    if (urlCounter === 2) {
-                      done()
-                    }
+            for (let i = 0; i < traces.length; i++) {
+              for (let j = 0; j < traces[i].length; j++) {
+                const trace = traces[i][j]
+                if (trace.type === 'web') {
+                  expect(trace.meta['_dd.iast.json']).not.to.be.undefined
+                  expect(trace.metrics['_dd.iast.enabled']).eq(1)
+
+                  urlCounter++
+                  if (urlCounter === 2) {
+                    done()
                   }
                 }
               }
-            } catch (e) {
-              agent.unsubscribe(handler)
-              done(e)
             }
+
+            throw new Error('Trace not found')
           }
-          handlers.push(handler)
-          agent.subscribe(handler)
+          agent.use(handler)
+
           testRequestEventEmitter.on(TEST_REQUEST_STARTED, (url) => {
             if (url === FIRST_REQUEST) {
-              axios.get(`http://localhost:${serverConfig.port}${SECOND_REQUEST}`).then().catch(done)
+              axios.get(`http://localhost:${serverConfig.port}${SECOND_REQUEST}`).catch(done)
             } else if (url === SECOND_REQUEST) {
               setImmediate(() => {
                 requestResolvers[FIRST_REQUEST]()
               })
             }
           })
+
           testRequestEventEmitter.on(TEST_REQUEST_FINISHED, (url) => {
             if (url === FIRST_REQUEST) {
               setImmediate(() => {
@@ -376,7 +385,8 @@ describe('Overhead controller', () => {
               })
             }
           })
-          axios.get(`http://localhost:${serverConfig.port}${FIRST_REQUEST}`).then().catch(done)
+
+          axios.get(`http://localhost:${serverConfig.port}${FIRST_REQUEST}`).catch(done)
         })
 
         it('should recovery requests budget', function (done) {
@@ -396,51 +406,57 @@ describe('Overhead controller', () => {
 
           let counter = 0
           const handler = function (traces) {
-            try {
-              for (let i = 0; i < traces.length; i++) {
-                for (let j = 0; j < traces[i].length; j++) {
-                  const trace = traces[i][j]
-                  if (trace.type === 'web') {
+            for (let i = 0; i < traces.length; i++) {
+              for (let j = 0; j < traces[i].length; j++) {
+                const trace = traces[i][j]
+                if (trace.type === 'web') {
+                  const url = trace.meta['http.url']
+                  if (url.includes(FIRST_REQUEST)) {
+                    expect(trace.meta['_dd.iast.json']).not.to.be.undefined
                     counter++
-                    const url = trace.meta['http.url']
-                    if (url.includes(FIRST_REQUEST)) {
-                      expect(trace.meta['_dd.iast.json']).not.to.be.undefined
-                    } else if (url.includes(SECOND_REQUEST)) {
-                      expect(trace.meta['_dd.iast.json']).not.to.be.undefined
-                    } else if (url.includes(THIRD_REQUEST)) {
-                      expect(trace.meta['_dd.iast.json']).to.be.undefined
-                    } else if (url.includes(FOURTH_REQUEST)) {
-                      expect(trace.meta['_dd.iast.json']).not.to.be.undefined
-                    } else if (url.includes(FIFTH_REQUEST)) {
-                      expect(trace.meta['_dd.iast.json']).to.be.undefined
-                    }
-                    counter === 5 && done()
+                  } else if (url.includes(SECOND_REQUEST)) {
+                    expect(trace.meta['_dd.iast.json']).not.to.be.undefined
+                    counter++
+                  } else if (url.includes(THIRD_REQUEST)) {
+                    expect(trace.meta['_dd.iast.json']).to.be.undefined
+                    counter++
+                  } else if (url.includes(FOURTH_REQUEST)) {
+                    expect(trace.meta['_dd.iast.json']).not.to.be.undefined
+                    counter++
+                  } else if (url.includes(FIFTH_REQUEST)) {
+                    expect(trace.meta['_dd.iast.json']).to.be.undefined
+                    counter++
+                  }
+
+                  if (counter === 5) {
+                    done()
+                    return
                   }
                 }
               }
-            } catch (e) {
-              agent.unsubscribe(handler)
-              done(e)
             }
+
+            throw new Error('Trace not found')
           }
-          handlers.push(handler)
-          agent.subscribe(handler)
+          agent.use(handler).catch(done)
 
           testRequestEventEmitter.on(TEST_REQUEST_STARTED, (url) => {
             if (url === FIRST_REQUEST) {
-              axios.get(`http://localhost:${serverConfig.port}${SECOND_REQUEST}`).then().catch(done)
+              axios.get(`http://localhost:${serverConfig.port}${SECOND_REQUEST}`).catch(done)
             } else if (url === SECOND_REQUEST) {
-              axios.get(`http://localhost:${serverConfig.port}${THIRD_REQUEST}`).then().catch(done)
+              axios.get(`http://localhost:${serverConfig.port}${THIRD_REQUEST}`).catch(done)
             } else if (url === THIRD_REQUEST) {
               requestResolvers[FIRST_REQUEST]()
+            } else if (url === FOURTH_REQUEST) {
+              axios.get(`http://localhost:${serverConfig.port}${FIFTH_REQUEST}`).catch(done)
             } else if (url === FIFTH_REQUEST) {
               requestResolvers[SECOND_REQUEST]()
             }
           })
+
           testRequestEventEmitter.on(TEST_REQUEST_FINISHED, (url) => {
             if (url === FIRST_REQUEST) {
-              axios.get(`http://localhost:${serverConfig.port}${FOURTH_REQUEST}`).then().catch(done)
-              axios.get(`http://localhost:${serverConfig.port}${FIFTH_REQUEST}`).then().catch(done)
+              axios.get(`http://localhost:${serverConfig.port}${FOURTH_REQUEST}`).catch(done)
             } else if (url === SECOND_REQUEST) {
               setImmediate(() => {
                 requestResolvers[THIRD_REQUEST]()
@@ -450,7 +466,7 @@ describe('Overhead controller', () => {
             }
           })
 
-          axios.get(`http://localhost:${serverConfig.port}${FIRST_REQUEST}`).then().catch(done)
+          axios.get(`http://localhost:${serverConfig.port}${FIRST_REQUEST}`).catch(done)
         })
 
         it('should add _dd.iast.enabled tag even when no vulnerability is detected', (done) => {
@@ -466,27 +482,24 @@ describe('Overhead controller', () => {
           iast.enable(config)
 
           const handler = function (traces) {
-            try {
-              for (let i = 0; i < traces.length; i++) {
-                for (let j = 0; j < traces[i].length; j++) {
-                  const trace = traces[i][j]
-                  if (trace.type === 'web') {
-                    const url = trace.meta['http.url']
-                    if (url.includes(SECURE_REQUEST)) {
-                      expect(trace.meta['_dd.iast.json']).to.be.undefined
-                      expect(trace.metrics['_dd.iast.enabled']).eq(1)
-                      done()
-                    }
+            for (let i = 0; i < traces.length; i++) {
+              for (let j = 0; j < traces[i].length; j++) {
+                const trace = traces[i][j]
+                if (trace.type === 'web') {
+                  const url = trace.meta['http.url']
+                  if (url.includes(SECURE_REQUEST)) {
+                    expect(trace.meta['_dd.iast.json']).to.be.undefined
+                    expect(trace.metrics['_dd.iast.enabled']).eq(1)
+                    done()
+                    return
                   }
                 }
               }
-            } catch (e) {
-              agent.unsubscribe(handler)
-              done(e)
             }
+
+            throw new Error('Traces not found')
           }
-          handlers.push(handler)
-          agent.subscribe(handler)
+          agent.use(handler)
 
           testRequestEventEmitter.on(TEST_REQUEST_STARTED, (url) => {
             if (url === SECURE_REQUEST) {
@@ -495,7 +508,8 @@ describe('Overhead controller', () => {
               })
             }
           })
-          axios.get(`http://localhost:${serverConfig.port}${SECURE_REQUEST}`).then().catch(done)
+
+          axios.get(`http://localhost:${serverConfig.port}${SECURE_REQUEST}`).catch(done)
         })
       }
 
