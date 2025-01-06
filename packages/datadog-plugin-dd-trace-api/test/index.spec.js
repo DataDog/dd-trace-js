@@ -5,6 +5,8 @@ const dc = require('dc-polyfill')
 const agent = require('../../dd-trace/test/plugins/agent')
 const assert = require('assert')
 
+const SELF = Symbol('self')
+
 describe('Plugin', () => {
   describe('dd-trace-api', () => {
     let dummyTracer
@@ -12,24 +14,6 @@ describe('Plugin', () => {
 
     const allChannels = new Set()
     const testedChannels = new Set()
-
-    function testChannel ({ name, fn, self = dummyTracer, ret = undefined, args = [] }) {
-      testedChannels.add('datadog-api:v1:' + name)
-      const ch = dc.channel('datadog-api:v1:' + name)
-      const payload = {
-        self,
-        args,
-        ret: {},
-        proxy: ret && typeof ret === 'object' ? () => ret : undefined,
-        revProxy: []
-      }
-      ch.publish(payload)
-      if (payload.ret.error) {
-        throw payload.ret.error
-      }
-      expect(payload.ret.value).to.equal(ret)
-      expect(fn).to.have.been.calledOnceWithExactly(...args)
-    }
 
     before(async () => {
       sinon.spy(dc, 'channel')
@@ -100,48 +84,6 @@ describe('Plugin', () => {
       })
     })
 
-    describe('inject', () => {
-      it('should call underlying api', () => {
-        testChannel({ name: 'inject', fn: tracer.inject })
-      })
-    })
-
-    describe('extract', () => {
-      it('should call underlying api', () => {
-        testChannel({ name: 'extract', fn: tracer.extract, ret: null })
-      })
-    })
-
-    describe('getRumData', () => {
-      it('should call underlying api', () => {
-        testChannel({ name: 'getRumData', fn: tracer.getRumData, ret: '' })
-      })
-    })
-
-    describe('trace', () => {
-      it('should call underlying api', () => {
-        testChannel({ name: 'trace', fn: tracer.trace })
-      })
-    })
-
-    describe('wrap', () => {
-      it('should call underlying api', () => {
-        testChannel({ name: 'wrap', fn: tracer.wrap })
-      })
-    })
-
-    describe('use', () => {
-      it('should call underlying api', () => {
-        testChannel({ name: 'use', fn: tracer.use, ret: dummyTracer })
-      })
-    })
-
-    describe('profilerStarted', () => {
-      it('should call underlying api', () => {
-        testChannel({ name: 'profilerStarted', fn: tracer.profilerStarted, ret: Promise.resolve(false) })
-      })
-    })
-
     describe('startSpan', () => {
       let dummySpan
       let dummySpanContext
@@ -195,130 +137,74 @@ describe('Plugin', () => {
       })
     })
 
-    describe('appsec:blockRequest', () => {
-      it('should call underlying api', () => {
-        testChannel({
-          name: 'appsec:blockRequest',
-          fn: tracer.appsec.blockRequest,
-          self: tracer.appsec,
-          ret: false
-        })
-      })
-    })
+    describeMethod('inject')
+    describeMethod('extract', null)
+    describeMethod('getRumData', '')
+    describeMethod('trace')
+    describeMethod('wrap')
+    describeMethod('use', SELF)
+    describeMethod('profilerStarted', Promise.resolve(false))
 
-    describe('appsec:isUserBlocked', () => {
-      it('should call underlying api', () => {
-        testChannel({
-          name: 'appsec:isUserBlocked',
-          fn: tracer.appsec.isUserBlocked,
-          self: tracer.appsec,
-          ret: false
-        })
-      })
-    })
-
-    describe('appsec:setUser', () => {
-      it('should call underlying api', () => {
-        testChannel({
-          name: 'appsec:setUser',
-          fn: tracer.appsec.setUser,
-          self: tracer.appsec
-        })
-      })
-    })
-
-    describe('appsec:trackCustomEvent', () => {
-      it('should call underlying api', () => {
-        testChannel({
-          name: 'appsec:trackCustomEvent',
-          fn: tracer.appsec.trackCustomEvent,
-          self: tracer.appsec
-        })
-      })
-    })
-
-    describe('appsec:trackUserLoginFailureEvent', () => {
-      it('should call underlying api', () => {
-        testChannel({
-          name: 'appsec:trackUserLoginFailureEvent',
-          fn: tracer.appsec.trackUserLoginFailureEvent,
-          self: tracer.appsec
-        })
-      })
-    })
-
-    describe('appsec:trackUserLoginSuccessEvent', () => {
-      it('should call underlying api', () => {
-        testChannel({
-          name: 'appsec:trackUserLoginSuccessEvent',
-          fn: tracer.appsec.trackUserLoginSuccessEvent,
-          self: tracer.appsec
-        })
-      })
-    })
-
-    describe('dogstatsd:decrement', () => {
-      it('should call underlying api', () => {
-        testChannel({
-          name: 'dogstatsd:decrement',
-          fn: tracer.dogstatsd.decrement,
-          self: tracer.dogstatsd
-        })
-      })
-    })
-
-    describe('dogstatsd:distribution', () => {
-      it('should call underlying api', () => {
-        testChannel({
-          name: 'dogstatsd:distribution',
-          fn: tracer.dogstatsd.distribution,
-          self: tracer.dogstatsd
-        })
-      })
-    })
-
-    describe('dogstatsd:flush', () => {
-      it('should call underlying api', () => {
-        testChannel({
-          name: 'dogstatsd:flush',
-          fn: tracer.dogstatsd.flush,
-          self: tracer.dogstatsd
-        })
-      })
-    })
-
-    describe('dogstatsd:gauge', () => {
-      it('should call underlying api', () => {
-        testChannel({
-          name: 'dogstatsd:gauge',
-          fn: tracer.dogstatsd.gauge,
-          self: tracer.dogstatsd
-        })
-      })
-    })
-
-    describe('dogstatsd:histogram', () => {
-      it('should call underlying api', () => {
-        testChannel({
-          name: 'dogstatsd:histogram',
-          fn: tracer.dogstatsd.histogram,
-          self: tracer.dogstatsd
-        })
-      })
-    })
-
-    describe('dogstatsd:increment', () => {
-      it('should call underlying api', () => {
-        testChannel({
-          name: 'dogstatsd:increment',
-          fn: tracer.dogstatsd.increment,
-          self: tracer.dogstatsd
-        })
-      })
-    })
+    describeSubsystem('appsec', 'blockRequest', false)
+    describeSubsystem('appsec', 'isUserBlocked', false)
+    describeSubsystem('appsec', 'setUser')
+    describeSubsystem('appsec', 'trackCustomEvent')
+    describeSubsystem('appsec', 'trackUserLoginFailureEvent')
+    describeSubsystem('appsec', 'trackUserLoginSuccessEvent')
+    describeSubsystem('dogstatsd', 'decrement')
+    describeSubsystem('dogstatsd', 'distribution')
+    describeSubsystem('dogstatsd', 'flush')
+    describeSubsystem('dogstatsd', 'gauge')
+    describeSubsystem('dogstatsd', 'histogram')
+    describeSubsystem('dogstatsd', 'increment')
 
     after('dd-trace-api all events tested', () => {
       assert.deepStrictEqual([...allChannels].sort(), [...testedChannels].sort())
     })
+
+    function describeMethod(name, ret) {
+      describe(name, () => {
+        it('should call underlying api', () => {
+          if (ret === SELF) {
+            ret = dummyTracer
+          }
+          testChannel({ name, fn: tracer[name], ret })
+        })
+      })
+    }
+
+    function describeSubsystem(name, command, ret) {
+      describe(`${name}:${command}`, () => {
+        it('should call underlying api', () => {
+          const options = {
+            name: `${name}:${command}`,
+            fn: tracer[name][command],
+            self: tracer[name]
+          }
+          if (typeof ret !== 'undefined') {
+            options.ret = ret
+          }
+          testChannel(options)
+        })
+      })
+    }
+
+    function testChannel ({ name, fn, self = dummyTracer, ret = undefined, args = [] }) {
+      testedChannels.add('datadog-api:v1:' + name)
+      const ch = dc.channel('datadog-api:v1:' + name)
+      const payload = {
+        self,
+        args,
+        ret: {},
+        proxy: ret && typeof ret === 'object' ? () => ret : undefined,
+        revProxy: []
+      }
+      ch.publish(payload)
+      if (payload.ret.error) {
+        throw payload.ret.error
+      }
+      expect(payload.ret.value).to.equal(ret)
+      expect(fn).to.have.been.calledOnceWithExactly(...args)
+    }
   })
 })
