@@ -14,7 +14,23 @@ const pprofValueUnit = 'nanoseconds'
 const dateOffset = BigInt(Math.round(performance.timeOrigin * MS_TO_NS))
 
 function labelFromStr (stringTable, key, valStr) {
-  return new Label({ key, str: stringTable.dedup(String(valStr)) })
+  return new Label({ key, str: stringTable.dedup(safeToString(valStr)) })
+}
+
+// We don't want to invoke toString for objects and functions, rather we'll
+// provide dummy values. These values are not meant to emulate built-in toString
+// behavior.
+function safeToString (val) {
+  switch (typeof val) {
+    case 'string':
+      return val
+    case 'object':
+      return '[object]'
+    case 'function':
+      return '[function]'
+    default:
+      return String(val)
+  }
 }
 
 function labelFromStrStr (stringTable, keyStr, valStr) {
