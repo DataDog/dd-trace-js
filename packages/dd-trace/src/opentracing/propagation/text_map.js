@@ -29,6 +29,18 @@ const b3SampledKey = 'x-b3-sampled'
 const b3FlagsKey = 'x-b3-flags'
 const b3HeaderKey = 'b3'
 const sqsdHeaderHey = 'x-aws-sqsd-attr-_datadog'
+// AWS X-Ray specific constants
+const xrayHeaderKey = 'x-amzn-trace-id'
+const xrayRootKey = 'root'
+const xrayRootPrefix = '1-'
+const xrayParentKey = 'parent'
+const xraySampledKey = 'sampled'
+const xrayE2EStartTimeKey = 't0'
+const xraySelfKey = 'self'
+const xrayOriginKey = '_dd.origin'
+const xrayDefaultE2EStartTime = '00000000'
+const xrayMaxAdditionalBaggageBytes = 256
+//
 const b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}(-[01d](-[0-9a-f]{16})?)?|[01d])$/i
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 const tagKeyExpr = /^_dd\.p\.[\x21-\x2b\x2d-\x7e]+$/ // ASCII minus spaces and commas
@@ -46,17 +58,6 @@ const tracestateTagKeyFilter = /[^\x21-\x2b\x2d-\x3c\x3e-\x7e]/g
 const tracestateTagValueFilter = /[^\x20-\x2b\x2d-\x3a\x3c-\x7d]/g
 const invalidSegment = /^0+$/
 const zeroTraceId = '0000000000000000'
-// AWS X-Ray specific constants
-const xrayHeaderKey = 'x-amzn-trace-id'
-const xrayRootKey = 'root'
-const xrayRootPrefix = '1-'
-const xrayParentKey = 'parent'
-const xraySampledKey = 'sampled'
-const xrayE2EStartTimeKey = 't0'
-const xraySelfKey = 'self'
-const xrayOriginKey = '_dd.origin'
-const xrayDefaultE2EStartTime = '00000000'
-const xrayMaxAdditionalBaggageBytes = 256
 
 class TextMapPropagator {
   constructor (config) {
