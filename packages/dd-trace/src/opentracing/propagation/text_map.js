@@ -855,7 +855,9 @@ class TextMapPropagator {
     const keyValuePairs = header.split(';')
     keyValuePairs.forEach(pair => {
       const [key, value] = pair.split('=')
-      obj[key.toLowerCase()] = value.toLowerCase()
+      if (key && value) {
+        obj[key.toLowerCase()] = value.toLowerCase()
+      }
     })
     return obj
   }
