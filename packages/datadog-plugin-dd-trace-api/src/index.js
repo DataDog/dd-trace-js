@@ -72,7 +72,7 @@ module.exports = class DdTraceApiPlugin extends Plugin {
             objectMap.set(proxyVal, ret.value)
             ret.value = proxyVal
           } else if (ret.value && typeof ret.value === 'object') {
-            throw new TypeError('Objects need proxies when returned via API')
+            throw new TypeError(`Objects need proxies when returned via API (${name})`)
           }
         } catch (e) {
           ret.error = e
