@@ -20,12 +20,14 @@ module.exports = class DdTraceApiPlugin extends Plugin {
     this.addSub('datadog-api:v1:tracerinit', ({ proxy }) => {
       const proxyVal = proxy()
       objectMap.set(proxyVal, tracer)
+      objectMap.set(proxyVal.appsec, tracer.appsec)
+      objectMap.set(proxyVal.dogstatsd, tracer.dogstatsd)
     })
 
     const handleEvent = (name) => {
       const counter = apiMetrics.count('dd_trace_api.called', [
         `name:${name.replace(':', '.')}`,
-        `api_version:v1`,
+        'api_version:v1',
         `injection_enabled:${process.env.DD_INJECTION_ENABLED ? 'yes' : 'no'}`
       ])
 
@@ -69,6 +71,8 @@ module.exports = class DdTraceApiPlugin extends Plugin {
             const proxyVal = proxy()
             objectMap.set(proxyVal, ret.value)
             ret.value = proxyVal
+          } else if (ret.value && typeof ret.value === 'object') {
+            throw new TypeError('Objects need proxies when returned via API')
           }
         } catch (e) {
           ret.error = e
@@ -84,6 +88,7 @@ module.exports = class DdTraceApiPlugin extends Plugin {
     handleEvent('extract')
     handleEvent('getRumData')
     handleEvent('profilerStarted')
+    // TODO does context need to be wrapped/proxied?
     handleEvent('span:context')
     handleEvent('span:setTag')
     handleEvent('span:addTags')
@@ -96,7 +101,7 @@ module.exports = class DdTraceApiPlugin extends Plugin {
     handleEvent('appsec:blockRequest')
     handleEvent('appsec:isUserBlocked')
     handleEvent('appsec:setUser')
-    handleEvent('appsec:tracerCustomEvent')
+    handleEvent('appsec:trackCustomEvent')
     handleEvent('appsec:trackUserLoginFailureEvent')
     handleEvent('appsec:trackUserLoginSuccessEvent')
     handleEvent('dogstatsd:decrement')
