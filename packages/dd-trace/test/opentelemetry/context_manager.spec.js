@@ -133,7 +133,7 @@ describe('OTel Context Manager', () => {
     const span = makeSpan('otel-to-dd')
     const contextWithSpan = trace.setSpan(contextWithBaggage, span)
     api.context.with(contextWithSpan, () => {
-      expect(span._ddSpan.getBaggageItem('foo')).to.be.equal('bar')
+      expect(tracer.scope().active().getBaggageItem('foo')).to.be.equal('bar')
     })
   })
 
@@ -143,7 +143,7 @@ describe('OTel Context Manager', () => {
     const ddSpan = tracer.startSpan('dd-to-otel')
     ddSpan.setBaggageItem(baggageKey, baggageVal)
     tracer.scope().activate(ddSpan, () => {
-      const baggages = propagation.getBaggage(api.context.active()).getAllEntries()
+      const baggages = propagation.getActiveBaggage().getAllEntries()
       expect(baggages.length).to.equal(1)
       const baggage = baggages[0]
       expect(baggage[0]).to.equal(baggageKey)
