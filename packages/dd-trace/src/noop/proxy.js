@@ -10,7 +10,7 @@ const noopAppsec = new NoopAppsecSdk()
 const noopDogStatsDClient = new NoopDogStatsDClient()
 const noopLLMObs = new NoopLLMObsSDK(noop)
 
-class Tracer {
+class NoopProxy {
   constructor () {
     this._tracer = noop
     this.appsec = noopAppsec
@@ -91,4 +91,4 @@ class Tracer {
   }
 }
 
-module.exports = Tracer
+module.exports = NoopProxy
