@@ -63,15 +63,17 @@ const log = {
 
       Error.captureStackTrace(logRecord, this.trace)
 
-      const fn = logRecord.stack.split('\n')[1].replace(/^\s+at ([^\s]+) .+/, '$1')
+      const stack = logRecord.stack.split('\n')
+      const fn = stack[1].replace(/^\s+at ([^\s]+) .+/, '$1')
       const params = args.map(a => {
         return a && a.hasOwnProperty('toString') && typeof a.toString === 'function'
           ? a.toString()
           : inspect(a, { depth: 3, breakLength: Infinity, compact: true })
       }).join(', ')
-      const formatted = logRecord.stack.replace('Error: ', `Trace: ${fn}(${params})`)
 
-      traceChannel.publish(Log.parse(formatted))
+      stack[0] = `Trace: ${fn}(${params})`
+
+      traceChannel.publish(Log.parse(stack.join('\n')))
     }
     return this
   },
