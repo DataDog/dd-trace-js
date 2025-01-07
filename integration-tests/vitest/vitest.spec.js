@@ -906,10 +906,8 @@ versions.forEach((version) => {
       context('dynamic instrumentation', () => {
         it('does not activate it if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
           receiver.setSettings({
-            itr_enabled: false,
-            code_coverage: false,
-            tests_skipping: false,
-            flaky_test_retries_enabled: false
+            flaky_test_retries_enabled: true,
+            di_enabled: true
           })
 
           const eventsPromise = receiver
@@ -955,16 +953,60 @@ versions.forEach((version) => {
           })
         })
 
+        it('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            di_enabled: false
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+              assert.equal(retriedTests.length, 1)
+              const [retriedTest] = retriedTests
+
+              assert.notProperty(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
+              assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_FILE)
+              assert.notProperty(retriedTest.metrics, DI_DEBUG_ERROR_LINE)
+              assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_SNAPSHOT_ID)
+            })
+
+          const logsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+              if (payloads.length > 0) {
+                throw new Error('Unexpected logs')
+              }
+            }, 5000)
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --retry=1',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: '1'
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', () => {
+            Promise.all([eventsPromise, logsPromise]).then(() => {
+              done()
+            }).catch(done)
+          })
+        })
+
         it('runs retries with dynamic instrumentation', (done) => {
           receiver.setSettings({
-            itr_enabled: false,
-            code_coverage: false,
-            tests_skipping: false,
-            flaky_test_retries_enabled: false,
-            early_flake_detection: {
-              enabled: false
-            }
-            // di_enabled: true // TODO
+            flaky_test_retries_enabled: true,
+            di_enabled: true
           })
 
           let snapshotIdByTest, snapshotIdByLog
@@ -1050,6 +1092,11 @@ versions.forEach((version) => {
         })
 
         it('does not crash if the retry does not hit the breakpoint', (done) => {
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            di_enabled: true
+          })
+
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)

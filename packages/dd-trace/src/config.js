@@ -466,7 +466,7 @@ class Config {
     this._setValue(defaults, 'ciVisibilityTestSessionName', '')
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
-    this._setValue(defaults, 'crashtracking.enabled', false)
+    this._setValue(defaults, 'crashtracking.enabled', true)
     this._setValue(defaults, 'codeOriginForSpans.enabled', false)
     this._setValue(defaults, 'dbmPropagationMode', 'disabled')
     this._setValue(defaults, 'dogstatsd.hostname', '127.0.0.1')
@@ -485,6 +485,7 @@ class Config {
     this._setValue(defaults, 'headerTags', [])
     this._setValue(defaults, 'hostname', '127.0.0.1')
     this._setValue(defaults, 'iast.cookieFilterPattern', '.{32,}')
+    this._setValue(defaults, 'iast.dbRowsToTaint', 1)
     this._setValue(defaults, 'iast.deduplicationEnabled', true)
     this._setValue(defaults, 'iast.enabled', false)
     this._setValue(defaults, 'iast.maxConcurrentRequests', 2)
@@ -565,6 +566,7 @@ class Config {
     this._setValue(defaults, 'url', undefined)
     this._setValue(defaults, 'version', pkg.version)
     this._setValue(defaults, 'instrumentation_config_id', undefined)
+    this._setValue(defaults, 'aws.dynamoDb.tablePrimaryKeys', undefined)
   }
 
   _applyEnvironment () {
@@ -589,6 +591,7 @@ class Config {
       DD_APPSEC_RASP_ENABLED,
       DD_APPSEC_TRACE_RATE_LIMIT,
       DD_APPSEC_WAF_TIMEOUT,
+      DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS,
       DD_CRASHTRACKING_ENABLED,
       DD_CODE_ORIGIN_FOR_SPANS_ENABLED,
       DD_DATA_STREAMS_ENABLED,
@@ -605,6 +608,7 @@ class Config {
       DD_GRPC_SERVER_ERROR_STATUSES,
       JEST_WORKER_ID,
       DD_IAST_COOKIE_FILTER_PATTERN,
+      DD_IAST_DB_ROWS_TO_TAINT,
       DD_IAST_DEDUPLICATION_ENABLED,
       DD_IAST_ENABLED,
       DD_IAST_MAX_CONCURRENT_REQUESTS,
@@ -757,6 +761,7 @@ class Config {
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
     this._setString(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
     this._setString(env, 'iast.cookieFilterPattern', DD_IAST_COOKIE_FILTER_PATTERN)
+    this._setValue(env, 'iast.dbRowsToTaint', maybeInt(DD_IAST_DB_ROWS_TO_TAINT))
     this._setBoolean(env, 'iast.deduplicationEnabled', DD_IAST_DEDUPLICATION_ENABLED)
     this._setBoolean(env, 'iast.enabled', DD_IAST_ENABLED)
     this._setValue(env, 'iast.maxConcurrentRequests', maybeInt(DD_IAST_MAX_CONCURRENT_REQUESTS))
@@ -876,6 +881,7 @@ class Config {
     this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
     this._setString(env, 'version', DD_VERSION || tags.version)
     this._setBoolean(env, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
+    this._setString(env, 'aws.dynamoDb.tablePrimaryKeys', DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS)
   }
 
   _applyOptions (options) {
@@ -932,6 +938,7 @@ class Config {
     this._setArray(opts, 'headerTags', options.headerTags)
     this._setString(opts, 'hostname', options.hostname)
     this._setString(opts, 'iast.cookieFilterPattern', options.iast?.cookieFilterPattern)
+    this._setValue(opts, 'iast.dbRowsToTaint', maybeInt(options.iast?.dbRowsToTaint))
     this._setBoolean(opts, 'iast.deduplicationEnabled', options.iast && options.iast.deduplicationEnabled)
     this._setBoolean(opts, 'iast.enabled',
       options.iast && (options.iast === true || options.iast.enabled === true))
@@ -1135,10 +1142,6 @@ class Config {
     if (defaultPropagationStyle.length > 2) {
       calc['tracePropagationStyle.inject'] = calc['tracePropagationStyle.inject'] || defaultPropagationStyle
       calc['tracePropagationStyle.extract'] = calc['tracePropagationStyle.extract'] || defaultPropagationStyle
-    }
-
-    if (this._env.injectionEnabled?.length > 0) {
-      this._setBoolean(calc, 'crashtracking.enabled', true)
     }
   }
 

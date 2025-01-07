@@ -18,9 +18,9 @@ module.exports = {
   setup
 }
 
-function setup () {
+function setup ({ env, testApp } = {}) {
   let sandbox, cwd, appPort
-  const breakpoints = getBreakpointInfo(1) // `1` to disregard the `setup` function
+  const breakpoints = getBreakpointInfo({ file: testApp, stackIndex: 1 }) // `1` to disregard the `setup` function
   const t = {
     breakpoint: breakpoints[0],
     breakpoints,
@@ -50,9 +50,11 @@ function setup () {
   function triggerBreakpoint (url) {
     // Trigger the breakpoint once probe is successfully installed
     t.agent.on('debugger-diagnostics', ({ payload }) => {
-      if (payload.debugger.diagnostics.status === 'INSTALLED') {
-        t.axios.get(url)
-      }
+      payload.forEach((event) => {
+        if (event.debugger.diagnostics.status === 'INSTALLED') {
+          t.axios.get(url)
+        }
+      })
     })
   }
 
@@ -91,7 +93,8 @@ function setup () {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
         DD_TRACE_AGENT_PORT: t.agent.port,
         DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG, // inherit to make debugging the sandbox easier
-        DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: pollInterval
+        DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: pollInterval,
+        ...env
       }
     })
     t.axios = Axios.create({
@@ -107,16 +110,18 @@ function setup () {
   return t
 }
 
-function getBreakpointInfo (stackIndex = 0) {
-  // First, get the filename of file that called this function
-  const testFile = new Error().stack
-    .split('\n')[stackIndex + 2] // +2 to skip this function + the first line, which is the error message
-    .split(' (')[1]
-    .slice(0, -1)
-    .split(':')[0]
+function getBreakpointInfo ({ file, stackIndex = 0 }) {
+  if (!file) {
+    // First, get the filename of file that called this function
+    const testFile = new Error().stack
+      .split('\n')[stackIndex + 2] // +2 to skip this function + the first line, which is the error message
+      .split(' (')[1]
+      .slice(0, -1)
+      .split(':')[0]
 
-  // Then, find the corresponding file in which the breakpoint(s) exists
-  const file = join('target-app', basename(testFile).replace('.spec', ''))
+    // Then, find the corresponding file in which the breakpoint(s) exists
+    file = join('target-app', basename(testFile).replace('.spec', ''))
+  }
 
   // Finally, find the line number(s) of the breakpoint(s)
   const lines = readFileSync(join(__dirname, file), 'utf8').split('\n')
