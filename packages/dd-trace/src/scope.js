@@ -17,7 +17,7 @@ class Scope {
     if (typeof callback !== 'function') return callback
 
     const oldStore = storage.getStore()
-    const newStore = span ? span._store : oldStore
+    const newStore = span ? storage.getStore(span._store) : oldStore
 
     storage.enterWith({ ...newStore, span })
 

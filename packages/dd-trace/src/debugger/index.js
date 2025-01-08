@@ -48,7 +48,7 @@ function start (config, rc) {
       execArgv: [], // Avoid worker thread inheriting the `-r` command line argument
       env, // Avoid worker thread inheriting the `NODE_OPTIONS` environment variable (in case it contains `-r`)
       workerData: {
-        config: serializableConfig(config),
+        config: config.serialize(),
         parentThreadId,
         rcPort: rcChannel.port1,
         configPort: configChannel.port1
@@ -88,16 +88,5 @@ function start (config, rc) {
 
 function configure (config) {
   if (configChannel === null) return
-  configChannel.port2.postMessage(serializableConfig(config))
-}
-
-// TODO: Refactor the Config class so it never produces any config objects that are incompatible with MessageChannel
-function serializableConfig (config) {
-  // URL objects cannot be serialized over the MessageChannel, so we need to convert them to strings first
-  if (config.url instanceof URL) {
-    config = { ...config }
-    config.url = config.url.toString()
-  }
-
-  return config
+  configChannel.port2.postMessage(config.serialize())
 }

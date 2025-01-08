@@ -21,8 +21,16 @@ class DatadogStorage {
     this._storage.exit(callback, ...args)
   }
 
-  getStore () {
-    const handle = this._storage.getStore()
+  // TODO: Refactor the Scope class to use a span-only store and remove this.
+  getHandle () {
+    return this._storage.getStore()
+  }
+
+  getStore (handle) {
+    if (!handle) {
+      handle = this._storage.getStore()
+    }
+
     return stores.get(handle)
   }
 
@@ -50,6 +58,7 @@ const storage = function (namespace) {
 storage.disable = legacyStorage.disable.bind(legacyStorage)
 storage.enterWith = legacyStorage.enterWith.bind(legacyStorage)
 storage.exit = legacyStorage.exit.bind(legacyStorage)
+storage.getHandle = legacyStorage.getHandle.bind(legacyStorage)
 storage.getStore = legacyStorage.getStore.bind(legacyStorage)
 storage.run = legacyStorage.run.bind(legacyStorage)
 

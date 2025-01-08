@@ -3,11 +3,12 @@
 const path = require('path')
 const tvDynamicInstrumentation = require('../../../../src/ci-visibility/dynamic-instrumentation')
 const sum = require('./di-dependency')
+const Config = require('../../../../src/config')
 
 // keep process alive
 const intervalId = setInterval(() => {}, 5000)
 
-tvDynamicInstrumentation.start()
+tvDynamicInstrumentation.start(new Config())
 
 tvDynamicInstrumentation.isReady().then(() => {
   const [

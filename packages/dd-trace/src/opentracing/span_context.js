@@ -1,5 +1,6 @@
 'use strict'
 
+const util = require('util')
 const { AUTO_KEEP } = require('../../../../ext/priority')
 
 // the lowercase, hex encoded upper 64 bits of a 128-bit trace id, if present
@@ -29,6 +30,17 @@ class DatadogSpanContext {
       tags: {}
     }
     this._otelSpanContext = undefined
+  }
+
+  [util.inspect.custom] () {
+    return {
+      ...this,
+      _trace: {
+        ...this._trace,
+        started: '[Array]',
+        finished: '[Array]'
+      }
+    }
   }
 
   toTraceId (get128bitId = false) {
