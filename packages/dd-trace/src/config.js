@@ -473,6 +473,8 @@ class Config {
     this._setValue(defaults, 'dogstatsd.port', '8125')
     this._setValue(defaults, 'dsmEnabled', false)
     this._setValue(defaults, 'dynamicInstrumentationEnabled', false)
+    this._setValue(defaults, 'dynamicInstrumentationRedactedIdentifiers', [])
+    this._setValue(defaults, 'dynamicInstrumentationRedactionExcludedIdentifiers', [])
     this._setValue(defaults, 'env', undefined)
     this._setValue(defaults, 'experimental.enableGetRumData', false)
     this._setValue(defaults, 'experimental.exporter', undefined)
@@ -600,6 +602,8 @@ class Config {
       DD_DOGSTATSD_HOST,
       DD_DOGSTATSD_PORT,
       DD_DYNAMIC_INSTRUMENTATION_ENABLED,
+      DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS,
+      DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS,
       DD_ENV,
       DD_EXPERIMENTAL_API_SECURITY_ENABLED,
       DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,
@@ -747,6 +751,12 @@ class Config {
     this._setString(env, 'dogstatsd.port', DD_DOGSTATSD_PORT)
     this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
     this._setBoolean(env, 'dynamicInstrumentationEnabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
+    this._setArray(env, 'dynamicInstrumentationRedactedIdentifiers', DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS)
+    this._setArray(
+      env,
+      'dynamicInstrumentationRedactionExcludedIdentifiers',
+      DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS
+    )
     this._setString(env, 'env', DD_ENV || tags.env)
     this._setBoolean(env, 'traceEnabled', DD_TRACE_ENABLED)
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
@@ -927,6 +937,16 @@ class Config {
     }
     this._setBoolean(opts, 'dsmEnabled', options.dsmEnabled)
     this._setBoolean(opts, 'dynamicInstrumentationEnabled', options.experimental?.dynamicInstrumentationEnabled)
+    this._setArray(
+      opts,
+      'dynamicInstrumentationRedactedIdentifiers',
+      options.experimental?.dynamicInstrumentationRedactedIdentifiers
+    )
+    this._setArray(
+      opts,
+      'dynamicInstrumentationRedactionExcludedIdentifiers',
+      options.experimental?.dynamicInstrumentationRedactionExcludedIdentifiers
+    )
     this._setString(opts, 'env', options.env || tags.env)
     this._setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
     this._setString(opts, 'experimental.exporter', options.experimental?.exporter)
@@ -1311,6 +1331,22 @@ class Config {
 
     this.sampler.sampleRate = this.sampleRate
     updateConfig(changes, this)
+  }
+
+  // TODO: Refactor the Config class so it never produces any config objects that are incompatible with MessageChannel
+  /**
+   * Serializes the config object so it can be passed over a Worker Thread MessageChannel.
+   * @returns {Object} The serialized config object.
+   */
+  serialize () {
+    // URL objects cannot be serialized over the MessageChannel, so we need to convert them to strings first
+    if (this.url instanceof URL) {
+      const config = { ...this }
+      config.url = this.url.toString()
+      return config
+    }
+
+    return this
   }
 }
 
