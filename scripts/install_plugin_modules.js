@@ -6,7 +6,6 @@ const path = require('path')
 const crypto = require('crypto')
 const semver = require('semver')
 const exec = require('./helpers/exec')
-const childProcess = require('child_process')
 const externals = require('../packages/dd-trace/test/plugins/externals')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 
@@ -16,7 +15,6 @@ const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require
 // Can remove couchbase after removing support for couchbase <= 3.2.0
 const excludeList = os.arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
-const versionLists = {}
 const deps = {}
 const filter = process.env.hasOwnProperty('PLUGINS') && process.env.PLUGINS.split('|')
 
@@ -42,6 +40,8 @@ async function run () {
   assertWorkspace()
   // Some native addon packages rely on libraries that are not supported on ARM64
   excludeList.forEach(pkg => delete workspaces[pkg])
+  install()
+  assertPeerDependencies(path.join(__dirname, '..', 'versions'))
   install()
 }
 
@@ -107,9 +107,6 @@ function assertFolder (name, version) {
 
 async function assertPackage (name, version, dependencyVersionRange, external) {
   const dependencies = { [name]: dependencyVersionRange }
-  if (deps[name]) {
-    await addDependencies(dependencies, name, dependencyVersionRange)
-  }
   const pkg = {
     name: [name, sha1(name).substr(0, 8), sha1(version)].filter(val => val).join('-'),
     version: '1.0.0',
@@ -132,45 +129,47 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
   fs.writeFileSync(filename(name, version, 'package.json'), JSON.stringify(pkg, null, 2) + '\n')
 }
 
-async function addDependencies (dependencies, name, versionRange) {
-  const versionList = await getVersionList(name)
-  const version = semver.maxSatisfying(versionList, versionRange)
-  const pkgJson = await npmView(`${name}@${version}`)
-  for (const dep of deps[name]) {
-    for (const section of ['devDependencies', 'peerDependencies']) {
-      if (pkgJson[section] && dep in pkgJson[section]) {
-        if (pkgJson[section][dep].includes('||')) {
-          // Use the first version in the list (as npm does by default)
-          dependencies[dep] = pkgJson[section][dep].split('||')[0].trim()
-        } else {
-          // Only one version available so use that.
-          dependencies[dep] = pkgJson[section][dep]
+async function assertPeerDependencies (rootFolder, parent) {
+  const entries = fs.readdirSync(rootFolder)
+
+  for (const entry of entries) {
+    const folder = path.join(rootFolder, entry)
+
+    if (!fs.lstatSync(folder).isDirectory()) continue
+    if (entry === 'node_modules') continue
+    if (entry.startsWith('@')) {
+      assertPeerDependencies(folder, entry)
+      continue
+    }
+
+    const name = [parent, entry.split('@')[0]].filter(v => v).join('/')
+
+    if (!deps[name]) continue
+
+    const versionPkgJsonPath = path.join(folder, 'package.json')
+    const versionPkgJson = require(versionPkgJsonPath)
+
+    for (const dep of deps[name]) {
+      const pkgJsonPath = require(folder).pkgJsonPath()
+      const pkgJson = require(pkgJsonPath)
+
+      for (const section of ['devDependencies', 'peerDependencies']) {
+        if (pkgJson[section] && dep in pkgJson[section]) {
+          const peerVersion = pkgJson[section][dep].includes('||')
+            // Use the first version in the list (as npm does by default)
+            ? pkgJson[section][dep].split('||')[0].trim()
+            // Only one version available so use that.
+            : pkgJson[section][dep]
+
+          versionPkgJson.dependencies[dep] = peerVersion
+
+          fs.writeFileSync(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
+
+          break
         }
-        break
       }
     }
   }
-}
-
-async function getVersionList (name) {
-  if (versionLists[name]) {
-    return versionLists[name]
-  }
-  const list = await npmView(`${name} versions`)
-  versionLists[name] = list
-  return list
-}
-
-function npmView (input) {
-  return new Promise((resolve, reject) => {
-    childProcess.exec(`npm view ${input} --json`, (err, stdout) => {
-      if (err) {
-        reject(err)
-        return
-      }
-      resolve(JSON.parse(stdout.toString('utf8')))
-    })
-  })
 }
 
 function assertIndex (name, version) {
@@ -181,6 +180,7 @@ const requirePackageJson = require('${requirePackageJsonPath}')
 module.exports = {
   get (id) { return require(id || '${name}') },
   getPath (id) { return require.resolve(id || '${name}' ) },
+  pkgJsonPath (id) { return require.resolve((id || '${name}') + '/package.json') },
   version () { return requirePackageJson('${name}', module).version }
 }
 `
