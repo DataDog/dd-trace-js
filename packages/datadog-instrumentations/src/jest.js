@@ -35,7 +35,7 @@ const testSuiteCodeCoverageCh = channel('ci:jest:test-suite:code-coverage')
 
 const testStartCh = channel('ci:jest:test:start')
 const testSkippedCh = channel('ci:jest:test:skip')
-const testRunFinishCh = channel('ci:jest:test:finish')
+const testFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
@@ -74,6 +74,8 @@ const asyncResources = new WeakMap()
 const originalTestFns = new WeakMap()
 const retriedTestsToNumAttempts = new Map()
 const newTestsTestStatuses = new Map()
+
+const BREAKPOINT_HIT_GRACE_PERIOD_MS = 500
 
 // based on https://github.com/facebook/jest/blob/main/packages/jest-circus/src/formatNodeAssertErrors.ts#L41
 function formatJestError (errors) {
@@ -274,46 +276,71 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
       }
       if (event.name === 'test_done') {
-        const probe = {}
-        const asyncResource = asyncResources.get(event.test)
-        asyncResource.runInAsyncScope(() => {
-          let status = 'pass'
-          if (event.test.errors && event.test.errors.length) {
-            status = 'fail'
-            const numRetries = this.global[RETRY_TIMES]
-            const numTestExecutions = event.test?.invocations
-            const willBeRetried = numRetries > 0 && numTestExecutions - 1 < numRetries
+        let status = 'pass'
+        if (event.test.errors && event.test.errors.length) {
+          status = 'fail'
+        }
+        // restore in case it is retried
+        event.test.fn = originalTestFns.get(event.test)
 
-            const error = formatJestError(event.test.errors[0])
-            testErrCh.publish({
-              error,
-              willBeRetried,
-              probe,
-              isDiEnabled: this.isDiEnabled
-            })
-          }
-          testRunFinishCh.publish({
-            status,
-            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
-          })
-          // restore in case it is retried
-          event.test.fn = originalTestFns.get(event.test)
-          // We'll store the test statuses of the retries
-          if (this.isEarlyFlakeDetectionEnabled) {
-            const testName = getJestTestName(event.test)
-            const originalTestName = removeEfdStringFromTestName(testName)
-            const isNewTest = retriedTestsToNumAttempts.has(originalTestName)
-            if (isNewTest) {
-              if (newTestsTestStatuses.has(originalTestName)) {
-                newTestsTestStatuses.get(originalTestName).push(status)
-              } else {
-                newTestsTestStatuses.set(originalTestName, [status])
-              }
+        // We'll store the test statuses of the retries
+        if (this.isEarlyFlakeDetectionEnabled) {
+          const testName = getJestTestName(event.test)
+          const originalTestName = removeEfdStringFromTestName(testName)
+          const isNewTest = retriedTestsToNumAttempts.has(originalTestName)
+          if (isNewTest) {
+            if (newTestsTestStatuses.has(originalTestName)) {
+              newTestsTestStatuses.get(originalTestName).push(status)
+            } else {
+              newTestsTestStatuses.set(originalTestName, [status])
             }
           }
+        }
+
+        const promises = {}
+        const numRetries = this.global[RETRY_TIMES]
+        const numTestExecutions = event.test?.invocations
+        const willBeRetried = numRetries > 0 && numTestExecutions - 1 < numRetries
+        const mightHitBreakpoint = this.isDiEnabled && numTestExecutions >= 1
+
+        const asyncResource = asyncResources.get(event.test)
+
+        if (status === 'fail') {
+          asyncResource.runInAsyncScope(() => {
+            testErrCh.publish({
+              error: formatJestError(event.test.errors[0]),
+              shouldSetProbe: this.isDiEnabled && willBeRetried && numTestExecutions === 1,
+              promises
+            })
+          })
+        }
+
+        // After finishing it might take a bit for the snapshot to be handled.
+        // We'll give 500ms for the snapshot to be handled.
+        // This means that tests retried with DI are 500ms slower at least.
+        if (mightHitBreakpoint) {
+          await new Promise(resolve => {
+            setTimeout(() => {
+              resolve()
+            }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
+          })
+        }
+
+        asyncResource.runInAsyncScope(() => {
+          testFinishCh.publish({
+            status,
+            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite),
+            promises,
+            shouldRemoveProbe: this.isDiEnabled && !willBeRetried
+          })
         })
-        if (probe.setProbePromise) {
-          await probe.setProbePromise
+
+        if (promises.isProbeReady) {
+          await promises.isProbeReady
+        }
+
+        if (promises.isProbeRemoved) {
+          await promises.isProbeRemoved
         }
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {

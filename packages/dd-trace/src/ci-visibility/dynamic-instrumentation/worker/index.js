@@ -1,7 +1,14 @@
 'use strict'
-const sourceMap = require('source-map')
 const path = require('path')
-const { workerData: { breakpointSetChannel, breakpointHitChannel } } = require('worker_threads')
+const {
+  workerData: {
+    breakpointSetChannel,
+    breakpointHitChannel,
+    breakpointRemoveChannel
+  }
+} = require('worker_threads')
+const { randomUUID } = require('crypto')
+const sourceMap = require('source-map')
 
 // TODO: move debugger/devtools_client/session to common place
 const session = require('../../../debugger/devtools_client/session')
@@ -16,8 +23,8 @@ const log = require('../../../log')
 
 let sessionStarted = false
 
-const breakpointIdToSnapshotId = new Map()
 const breakpointIdToProbe = new Map()
+const probeIdToBreakpointId = new Map()
 
 session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint], callFrames } }) => {
   const probe = breakpointIdToProbe.get(hitBreakpoint)
@@ -32,13 +39,11 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
 
   await session.post('Debugger.resume')
 
-  const snapshotId = breakpointIdToSnapshotId.get(hitBreakpoint)
-
   const snapshot = {
-    id: snapshotId,
+    id: randomUUID(),
     timestamp: Date.now(),
     probe: {
-      id: probe.probeId,
+      id: probe.id,
       version: '0',
       location: probe.location
     },
@@ -56,13 +61,32 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
   breakpointHitChannel.postMessage({ snapshot })
 })
 
-// TODO: add option to remove breakpoint
-breakpointSetChannel.on('message', async ({ snapshotId, probe: { id: probeId, file, line } }) => {
-  await addBreakpoint(snapshotId, { probeId, file, line })
-  breakpointSetChannel.postMessage({ probeId })
+breakpointRemoveChannel.on('message', async (probeId) => {
+  await removeBreakpoint(probeId)
+  breakpointRemoveChannel.postMessage(probeId)
 })
 
-async function addBreakpoint (snapshotId, probe) {
+breakpointSetChannel.on('message', async (probe) => {
+  await addBreakpoint(probe)
+  breakpointSetChannel.postMessage(probe.id)
+})
+
+async function removeBreakpoint (probeId) {
+  if (!sessionStarted) {
+    // We should not get in this state, but abort if we do, so the code doesn't fail unexpected
+    throw Error(`Cannot remove probe ${probeId}: Debugger not started`)
+  }
+
+  const breakpointId = probeIdToBreakpointId.get(probeId)
+  if (!breakpointId) {
+    throw Error(`Unknown probe id: ${probeId}`)
+  }
+  await session.post('Debugger.removeBreakpoint', { breakpointId })
+  probeIdToBreakpointId.delete(probeId)
+  breakpointIdToProbe.delete(breakpointId)
+}
+
+async function addBreakpoint (probe) {
   if (!sessionStarted) await start()
   const { file, line } = probe
 
@@ -81,7 +105,7 @@ async function addBreakpoint (snapshotId, probe) {
     try {
       lineNumber = await processScriptWithInlineSourceMap({ file, line, sourceMapURL })
     } catch (err) {
-      log.error(err)
+      log.error('Error processing script with inline source map')
     }
   }
 
@@ -93,7 +117,7 @@ async function addBreakpoint (snapshotId, probe) {
   })
 
   breakpointIdToProbe.set(breakpointId, probe)
-  breakpointIdToSnapshotId.set(breakpointId, snapshotId)
+  probeIdToBreakpointId.set(probe.id, breakpointId)
 }
 
 function start () {
@@ -113,12 +137,22 @@ async function processScriptWithInlineSourceMap (params) {
   // Parse the source map
   const consumer = await new sourceMap.SourceMapConsumer(decodedSourceMap)
 
-  // Map to the generated position
-  const generatedPosition = consumer.generatedPositionFor({
-    source: path.basename(file), // this needs to be the file, not the filepath
-    line,
-    column: 0
-  })
+  let generatedPosition
+
+  // Map to the generated position. We'll attempt with the full file path first, then with the basename.
+  try {
+    generatedPosition = consumer.generatedPositionFor({
+      source: file,
+      line,
+      column: 0
+    })
+  } catch (e) {
+    generatedPosition = consumer.generatedPositionFor({
+      source: path.basename(file),
+      line,
+      column: 0
+    })
+  }
 
   consumer.destroy()
 

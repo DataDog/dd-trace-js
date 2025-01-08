@@ -193,7 +193,8 @@ module.exports = {
   DI_ERROR_DEBUG_INFO_CAPTURED,
   DI_DEBUG_ERROR_SNAPSHOT_ID,
   DI_DEBUG_ERROR_FILE,
-  DI_DEBUG_ERROR_LINE
+  DI_DEBUG_ERROR_LINE,
+  getFormattedError
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -650,13 +651,30 @@ function getNumFromKnownTests (knownTests) {
   return totalNumTests
 }
 
-function getFileAndLineNumberFromError (error) {
+const DEPENDENCY_FOLDERS = [
+  'node_modules',
+  'node:',
+  '.pnpm',
+  '.yarn',
+  '.pnp'
+]
+
+function getFileAndLineNumberFromError (error, repositoryRoot) {
   // Split the stack trace into individual lines
   const stackLines = error.stack.split('\n')
 
-  // The top frame is usually the second line
-  const topFrame = stackLines[1]
+  // Remove potential messages on top of the stack that are not frames
+  const frames = stackLines.filter(line => line.includes('at ') && line.includes(repositoryRoot))
 
+  const topRelevantFrameIndex = frames.findIndex(line =>
+    line.includes(repositoryRoot) && !DEPENDENCY_FOLDERS.some(pattern => line.includes(pattern))
+  )
+
+  if (topRelevantFrameIndex === -1) {
+    return []
+  }
+
+  const topFrame = frames[topRelevantFrameIndex]
   // Regular expression to match the file path, line number, and column number
   const regex = /\s*at\s+(?:.*\()?(.+):(\d+):(\d+)\)?/
   const match = topFrame.match(regex)
@@ -664,9 +682,20 @@ function getFileAndLineNumberFromError (error) {
   if (match) {
     const filePath = match[1]
     const lineNumber = Number(match[2])
-    const columnNumber = Number(match[3])
 
-    return [filePath, lineNumber, columnNumber]
+    return [filePath, lineNumber, topRelevantFrameIndex]
   }
   return []
+}
+
+// The error.stack property in TestingLibraryElementError includes the message, which results in redundant information
+function getFormattedError (error, repositoryRoot) {
+  if (error.name !== 'TestingLibraryElementError') {
+    return error
+  }
+  const { stack } = error
+  const newError = new Error(error.message)
+  newError.stack = stack.split('\n').filter(line => line.includes(repositoryRoot)).join('\n')
+
+  return newError
 }

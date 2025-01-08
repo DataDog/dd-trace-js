@@ -6,7 +6,7 @@ const { randomUUID } = require('crypto')
 const log = require('../../log')
 
 const probeIdToResolveBreakpointSet = new Map()
-const probeIdToResolveBreakpointHit = new Map()
+const probeIdToResolveBreakpointRemove = new Map()
 
 class TestVisDynamicInstrumentation {
   constructor () {
@@ -16,28 +16,36 @@ class TestVisDynamicInstrumentation {
     })
     this.breakpointSetChannel = new MessageChannel()
     this.breakpointHitChannel = new MessageChannel()
+    this.breakpointRemoveChannel = new MessageChannel()
+    this.onHitBreakpointByProbeId = new Map()
+  }
+
+  removeProbe (probeId) {
+    // breakpointRemoveChannel
+    return new Promise(resolve => {
+      this.breakpointRemoveChannel.port2.postMessage(probeId)
+
+      probeIdToResolveBreakpointRemove.set(probeId, resolve)
+    })
   }
 
   // Return 3 elements:
   // 1. Snapshot ID
   // 2. Promise that's resolved when the breakpoint is set
   // 3. Promise that's resolved when the breakpoint is hit
-  addLineProbe ({ file, line }) {
-    const snapshotId = randomUUID()
+  addLineProbe ({ file, line }, onHitBreakpoint) {
     const probeId = randomUUID()
 
-    this.breakpointSetChannel.port2.postMessage({
-      snapshotId,
-      probe: { id: probeId, file, line }
-    })
+    this.breakpointSetChannel.port2.postMessage(
+      { id: probeId, file, line }
+    )
+
+    this.onHitBreakpointByProbeId.set(probeId, onHitBreakpoint)
 
     return [
-      snapshotId,
+      probeId,
       new Promise(resolve => {
         probeIdToResolveBreakpointSet.set(probeId, resolve)
-      }),
-      new Promise(resolve => {
-        probeIdToResolveBreakpointHit.set(probeId, resolve)
       })
     ]
   }
@@ -67,13 +75,15 @@ class TestVisDynamicInstrumentation {
           rcPort: rcChannel.port1,
           configPort: configChannel.port1,
           breakpointSetChannel: this.breakpointSetChannel.port1,
-          breakpointHitChannel: this.breakpointHitChannel.port1
+          breakpointHitChannel: this.breakpointHitChannel.port1,
+          breakpointRemoveChannel: this.breakpointRemoveChannel.port1
         },
         transferList: [
           rcChannel.port1,
           configChannel.port1,
           this.breakpointSetChannel.port1,
-          this.breakpointHitChannel.port1
+          this.breakpointHitChannel.port1,
+          this.breakpointRemoveChannel.port1
         ]
       }
     )
@@ -91,7 +101,7 @@ class TestVisDynamicInstrumentation {
     // Allow the parent to exit even if the worker is still running
     this.worker.unref()
 
-    this.breakpointSetChannel.port2.on('message', ({ probeId }) => {
+    this.breakpointSetChannel.port2.on('message', (probeId) => {
       const resolve = probeIdToResolveBreakpointSet.get(probeId)
       if (resolve) {
         resolve()
@@ -101,15 +111,25 @@ class TestVisDynamicInstrumentation {
 
     this.breakpointHitChannel.port2.on('message', ({ snapshot }) => {
       const { probe: { id: probeId } } = snapshot
-      const resolve = probeIdToResolveBreakpointHit.get(probeId)
-      if (resolve) {
-        resolve({ snapshot })
-        probeIdToResolveBreakpointHit.delete(probeId)
+      const onHit = this.onHitBreakpointByProbeId.get(probeId)
+      if (onHit) {
+        onHit({ snapshot })
       }
     }).unref()
 
-    this.worker.on('error', (err) => log.error('ci-visibility DI worker error', err))
-    this.worker.on('messageerror', (err) => log.error('ci-visibility DI worker messageerror', err))
+    this.breakpointRemoveChannel.port2.on('message', (probeId) => {
+      const resolve = probeIdToResolveBreakpointRemove.get(probeId)
+      if (resolve) {
+        resolve()
+        probeIdToResolveBreakpointRemove.delete(probeId)
+      }
+    }).unref()
+
+    this.worker.on('error', (err) => log.error('Test Visibility - Dynamic Instrumentation worker error', err))
+    this.worker.on(
+      'messageerror',
+      (err) => log.error('Test Visibility - Dynamic Instrumentation worker messageerror', err)
+    )
   }
 }
 

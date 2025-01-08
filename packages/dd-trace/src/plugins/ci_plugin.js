@@ -22,8 +22,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_LEVEL_EVENT_TYPES,
   TEST_SUITE,
-  getFileAndLineNumberFromError,
-  getTestSuitePath
+  getFileAndLineNumberFromError
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -292,38 +291,19 @@ module.exports = class CiPlugin extends Plugin {
     return testSpan
   }
 
+  removeDiProbe (probeId) {
+    return this.di.removeProbe(probeId)
+  }
+
   // TODO: If the test finishes and the probe is not hit, we should remove the breakpoint
-  addDiProbe (err, probe) {
-    const [file, line] = getFileAndLineNumberFromError(err)
+  addDiProbe (err, onHitBreakpoint) {
+    const [file, line, stackIndex] = getFileAndLineNumberFromError(err, this.repositoryRoot)
 
-    const relativePath = getTestSuitePath(file, this.repositoryRoot)
-
-    const [
-      snapshotId,
-      setProbePromise,
-      hitProbePromise
-    ] = this.di.addLineProbe({ file: relativePath, line })
-
-    if (probe) { // not all frameworks may sync with the set probe promise
-      probe.setProbePromise = setProbePromise
+    if (!file || !line || !stackIndex) {
+      log.warn('Could not add breakpoint for dynamic instrumentation')
+      return
     }
 
-    hitProbePromise.then(({ snapshot }) => {
-      // TODO: handle race conditions for this.retriedTestIds
-      const { traceId, spanId } = this.retriedTestIds
-      this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
-        debugger: { snapshot },
-        dd: {
-          trace_id: traceId,
-          span_id: spanId
-        }
-      })
-    })
-
-    return {
-      snapshotId,
-      file: relativePath,
-      line
-    }
+    return this.di.addLineProbe({ file, line }, onHitBreakpoint)
   }
 }

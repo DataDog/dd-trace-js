@@ -27,7 +27,7 @@ const {
   DI_DEBUG_ERROR_SNAPSHOT_ID,
   DI_DEBUG_ERROR_FILE,
   DI_DEBUG_ERROR_LINE,
-  TEST_NAME
+  getFormattedError
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -44,10 +44,19 @@ const {
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
-const debuggerParameterPerTest = new Map()
 
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
+
+function withTimeout (promise, timeoutMs) {
+  return new Promise(resolve => {
+    // Set a timeout to resolve after 1s
+    setTimeout(resolve, timeoutMs)
+
+    // Also resolve if the original promise resolves
+    promise.then(resolve)
+  })
+}
 
 class JestPlugin extends CiPlugin {
   static get id () {
@@ -308,32 +317,10 @@ class JestPlugin extends CiPlugin {
       const span = this.startTestSpan(test)
 
       this.enter(span, store)
-
-      const { name: testName } = test
-
-      const debuggerParameters = debuggerParameterPerTest.get(testName)
-
-      // If we have a debugger probe, we need to add the snapshot id to the span
-      if (debuggerParameters) {
-        const spanContext = span.context()
-
-        // TODO: handle race conditions with this.retriedTestIds
-        this.retriedTestIds = {
-          spanId: spanContext.toSpanId(),
-          traceId: spanContext.toTraceId()
-        }
-        const { snapshotId, file, line } = debuggerParameters
-
-        // TODO: should these be added on test:end if and only if the probe is hit?
-        // Sync issues: `hitProbePromise` might be resolved after the test ends
-        span.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-        span.setTag(DI_DEBUG_ERROR_SNAPSHOT_ID, snapshotId)
-        span.setTag(DI_DEBUG_ERROR_FILE, file)
-        span.setTag(DI_DEBUG_ERROR_LINE, line)
-      }
+      this.activeTestSpan = span
     })
 
-    this.addSub('ci:jest:test:finish', ({ status, testStartLine }) => {
+    this.addSub('ci:jest:test:finish', ({ status, testStartLine, promises, shouldRemoveProbe }) => {
       const span = storage.getStore().span
       span.setTag(TEST_STATUS, status)
       if (testStartLine) {
@@ -354,20 +341,24 @@ class JestPlugin extends CiPlugin {
 
       span.finish()
       finishAllTraceSpans(span)
+      this.activeTestSpan = null
+      if (shouldRemoveProbe) {
+        promises.isProbeRemoved = withTimeout(this.removeDiProbe(this.runningTestProbeId), 2000)
+        this.runningTestProbeId = null
+      }
     })
 
-    this.addSub('ci:jest:test:err', ({ error, willBeRetried, probe, isDiEnabled }) => {
+    this.addSub('ci:jest:test:err', ({ error, shouldSetProbe, promises }) => {
       if (error) {
         const store = storage.getStore()
         if (store && store.span) {
           const span = store.span
           span.setTag(TEST_STATUS, 'fail')
-          span.setTag('error', error)
-          if (willBeRetried && this.di && isDiEnabled) {
-            // if we use numTestExecutions, we have to remove the breakpoint after each execution
-            const testName = span.context()._tags[TEST_NAME]
-            const debuggerParameters = this.addDiProbe(error, probe)
-            debuggerParameterPerTest.set(testName, debuggerParameters)
+          span.setTag('error', getFormattedError(error, this.repositoryRoot))
+          if (shouldSetProbe) {
+            const [probeId, setProbePromise] = this.addDiProbe(error, this.onDiBreakpointHit.bind(this))
+            this.runningTestProbeId = probeId
+            promises.isProbeReady = withTimeout(setProbePromise, 2000)
           }
         }
       }
@@ -377,6 +368,32 @@ class JestPlugin extends CiPlugin {
       const span = this.startTestSpan(test)
       span.setTag(TEST_STATUS, 'skip')
       span.finish()
+    })
+  }
+
+  onDiBreakpointHit ({ snapshot }) {
+    if (!this.activeTestSpan || this.activeTestSpan.context()._isFinished) {
+      console.log('active span is null or finished', this.activeTestSpan)
+      // this is unexpected
+      return
+    }
+
+    // TODO: WHERE TO GET THE STACK INDEX FROM????
+    const stackIndex = 3
+
+    this.activeTestSpan.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+    // TODO: replace DI_DEBUG_ERROR tags by just their prefix
+    this.activeTestSpan.setTag(DI_DEBUG_ERROR_SNAPSHOT_ID.replace('0', stackIndex), snapshot.id)
+    this.activeTestSpan.setTag(DI_DEBUG_ERROR_FILE.replace('0', stackIndex), snapshot.probe.location.file)
+    this.activeTestSpan.setTag(DI_DEBUG_ERROR_LINE.replace('0', stackIndex), snapshot.probe.location.lines[0])
+
+    const activeTestSpanContext = this.activeTestSpan.context()
+    this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
+      debugger: { snapshot },
+      dd: {
+        trace_id: activeTestSpanContext.toTraceId(),
+        span_id: activeTestSpanContext.toSpanId()
+      }
     })
   }
 
