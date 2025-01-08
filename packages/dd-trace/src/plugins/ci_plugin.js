@@ -295,7 +295,6 @@ module.exports = class CiPlugin extends Plugin {
     return this.di.removeProbe(probeId)
   }
 
-  // TODO: If the test finishes and the probe is not hit, we should remove the breakpoint
   addDiProbe (err, onHitBreakpoint) {
     const [file, line, stackIndex] = getFileAndLineNumberFromError(err, this.repositoryRoot)
 

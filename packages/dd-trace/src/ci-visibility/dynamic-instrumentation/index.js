@@ -21,7 +21,6 @@ class TestVisDynamicInstrumentation {
   }
 
   removeProbe (probeId) {
-    // breakpointRemoveChannel
     return new Promise(resolve => {
       this.breakpointRemoveChannel.port2.postMessage(probeId)
 
@@ -29,10 +28,9 @@ class TestVisDynamicInstrumentation {
     })
   }
 
-  // Return 3 elements:
-  // 1. Snapshot ID
+  // Return 2 elements:
+  // 1. Probe ID
   // 2. Promise that's resolved when the breakpoint is set
-  // 3. Promise that's resolved when the breakpoint is hit
   addLineProbe ({ file, line }, onHitBreakpoint) {
     const probeId = randomUUID()
 
