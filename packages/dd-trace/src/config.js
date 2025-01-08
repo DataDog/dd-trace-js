@@ -519,7 +519,8 @@ class Config {
     this._setValue(defaults, 'inferredProxyServicesEnabled', false)
     this._setValue(defaults, 'memcachedCommandEnabled', false)
     this._setValue(defaults, 'openAiLogsEnabled', false)
-    this._setValue(defaults, 'openaiSpanCharLimit', 128)
+    this._setValue(defaults, 'openai.spanCharLimit', 128)
+    this._setValue(defaults, 'openai.spanPromptCompletionSampleRate', 1.0)
     this._setValue(defaults, 'peerServiceMapping', {})
     this._setValue(defaults, 'plugins', true)
     this._setValue(defaults, 'port', '8126')
@@ -629,6 +630,7 @@ class Config {
       DD_LLMOBS_ML_APP,
       DD_OPENAI_LOGS_ENABLED,
       DD_OPENAI_SPAN_CHAR_LIMIT,
+      DD_OPENAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,
       DD_PROFILING_ENABLED,
       DD_PROFILING_EXPORTERS,
       DD_PROFILING_SOURCE_MAP,
@@ -792,8 +794,10 @@ class Config {
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this._setBoolean(env, 'memcachedCommandEnabled', DD_TRACE_MEMCACHED_COMMAND_ENABLED)
     this._setBoolean(env, 'openAiLogsEnabled', DD_OPENAI_LOGS_ENABLED)
-    this._setValue(env, 'openaiSpanCharLimit', maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT))
+    this._setValue(env, 'openai.spanCharLimit', maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT))
     this._envUnprocessed.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
+    this._setValue(env, 'openai.spanPromptCompletionSampleRate',
+      maybeFloat(DD_OPENAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE))
     if (DD_TRACE_PEER_SERVICE_MAPPING) {
       this._setValue(env, 'peerServiceMapping', fromEntries(
         DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))

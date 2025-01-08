@@ -9,12 +9,10 @@ const Sampler = require('../../dd-trace/src/sampler')
 const { MEASURED } = require('../../../ext/tags')
 const { estimateTokens } = require('./token-estimator')
 
-// String#replaceAll unavailable on Node.js@v14 (dd-trace@<=v3)
-const RE_NEWLINE = /\n/g
-const RE_TAB = /\t/g
+const makeUtilities = require('../../dd-trace/src/plugins/util/llm')
 
 // TODO: In the future we should refactor config.js to make it requirable
-let MAX_TEXT_LEN = 128
+let normalize, isPromptCompletionSampled
 
 function safeRequire (path) {
   try {
@@ -46,7 +44,10 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
     // hoist the max length env var to avoid making all of these functions a class method
     if (this._tracerConfig) {
-      MAX_TEXT_LEN = this._tracerConfig.openaiSpanCharLimit
+      const utilities = makeUtilities('openai', this._tracerConfig)
+
+      normalize = utilities.normalize
+      isPromptCompletionSampled = utilities.isPromptCompletionSampled
     }
   }
 
@@ -116,7 +117,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
     // createEdit, createEmbedding, createModeration
     if (payload.input) {
       const normalized = normalizeStringOrTokenArray(payload.input, false)
-      tags['openai.request.input'] = truncateText(normalized)
+      tags['openai.request.input'] = normalize(normalized)
       openaiStore.input = normalized
     }
 
@@ -594,7 +595,7 @@ function commonImageResponseExtraction (tags, body) {
   for (let i = 0; i < body.data.length; i++) {
     const image = body.data[i]
     // exactly one of these two options is provided
-    tags[`openai.response.images.${i}.url`] = truncateText(image.url)
+    tags[`openai.response.images.${i}.url`] = normalize(image.url)
     tags[`openai.response.images.${i}.b64_json`] = image.b64_json && 'returned'
   }
 }
@@ -731,14 +732,14 @@ function commonCreateResponseExtraction (tags, body, openaiStore, methodName) {
 
     tags[`openai.response.choices.${choiceIdx}.finish_reason`] = choice.finish_reason
     tags[`openai.response.choices.${choiceIdx}.logprobs`] = specifiesLogProb ? 'returned' : undefined
-    tags[`openai.response.choices.${choiceIdx}.text`] = truncateText(choice.text)
+    tags[`openai.response.choices.${choiceIdx}.text`] = normalize(choice.text)
 
     // createChatCompletion only
     const message = choice.message || choice.delta // delta for streamed responses
     if (message) {
       tags[`openai.response.choices.${choiceIdx}.message.role`] = message.role
-      tags[`openai.response.choices.${choiceIdx}.message.content`] = truncateText(message.content)
-      tags[`openai.response.choices.${choiceIdx}.message.name`] = truncateText(message.name)
+      tags[`openai.response.choices.${choiceIdx}.message.content`] = normalize(message.content)
+      tags[`openai.response.choices.${choiceIdx}.message.name`] = normalize(message.name)
       if (message.tool_calls) {
         const toolCalls = message.tool_calls
         for (let toolIdx = 0; toolIdx < toolCalls.length; toolIdx++) {
@@ -795,24 +796,6 @@ function truncateApiKey (apiKey) {
   return apiKey && `sk-...${apiKey.substr(apiKey.length - 4)}`
 }
 
-/**
- * for cleaning up prompt and response
- */
-function truncateText (text) {
-  if (!text) return
-  if (typeof text !== 'string' || !text || (typeof text === 'string' && text.length === 0)) return
-
-  text = text
-    .replace(RE_NEWLINE, '\\n')
-    .replace(RE_TAB, '\\t')
-
-  if (text.length > MAX_TEXT_LEN) {
-    return text.substring(0, MAX_TEXT_LEN) + '...'
-  }
-
-  return text
-}
-
 function tagChatCompletionRequestContent (contents, messageIdx, tags) {
   if (typeof contents === 'string') {
     tags[`openai.request.messages.${messageIdx}.content`] = contents
@@ -824,10 +807,10 @@ function tagChatCompletionRequestContent (contents, messageIdx, tags) {
       const type = content.type
       tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.type`] = content.type
       if (type === 'text') {
-        tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.text`] = truncateText(content.text)
+        tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.text`] = normalize(content.text)
       } else if (type === 'image_url') {
         tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.image_url.url`] =
-          truncateText(content.image_url.url)
+          normalize(content.image_url.url)
       }
       // unsupported type otherwise, won't be tagged
     }
@@ -1004,7 +987,7 @@ function normalizeStringOrTokenArray (input, truncate) {
   const normalized = Array.isArray(input)
     ? `[${input.join(', ')}]` // "[1, 2, 999]"
     : input // "foo"
-  return truncate ? truncateText(normalized) : normalized
+  return truncate ? normalize(normalized) : normalized
 }
 
 function defensiveArrayLength (maybeArray) {

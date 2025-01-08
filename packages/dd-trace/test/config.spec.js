@@ -353,7 +353,7 @@ describe('Config', () => {
       { name: 'logInjection', value: false, origin: 'default' },
       { name: 'lookup', value: undefined, origin: 'default' },
       { name: 'openAiLogsEnabled', value: false, origin: 'default' },
-      { name: 'openaiSpanCharLimit', value: 128, origin: 'default' },
+      { name: 'openai.spanCharLimit', value: 128, origin: 'default' },
       { name: 'peerServiceMapping', value: {}, origin: 'default' },
       { name: 'plugins', value: true, origin: 'default' },
       { name: 'port', value: '8126', origin: 'default' },

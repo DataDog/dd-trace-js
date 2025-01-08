@@ -26,13 +26,13 @@ class LangChainPlugin extends TracingPlugin {
   constructor () {
     super(...arguments)
 
-    const langchainConfig = this._tracerConfig.langchain || {}
+    const tracerConfig = this._tracerConfig
     this.handlers = {
-      chain: new LangChainChainHandler(langchainConfig),
-      chat_model: new LangChainChatModelHandler(langchainConfig),
-      llm: new LangChainLLMHandler(langchainConfig),
-      embedding: new LangChainEmbeddingHandler(langchainConfig),
-      default: new LangChainHandler(langchainConfig)
+      chain: new LangChainChainHandler(tracerConfig),
+      chat_model: new LangChainChatModelHandler(tracerConfig),
+      llm: new LangChainLLMHandler(tracerConfig),
+      embedding: new LangChainEmbeddingHandler(tracerConfig),
+      default: new LangChainHandler(tracerConfig)
     }
   }
 
