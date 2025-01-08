@@ -11,7 +11,7 @@ describe('Dynamic Instrumentation snapshot PII redaction', function () {
     it('should respect DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', function (done) {
       t.triggerBreakpoint()
 
-      t.agent.on('debugger-input', ({ payload: { 'debugger.snapshot': { captures } } }) => {
+      t.agent.on('debugger-input', ({ payload: [{ 'debugger.snapshot': { captures } }] }) => {
         const { locals } = captures.lines[t.breakpoint.line]
 
         assert.deepPropertyVal(locals, 'foo', { type: 'string', notCapturedReason: 'redactedIdent' })
@@ -34,7 +34,7 @@ describe('Dynamic Instrumentation snapshot PII redaction', function () {
     it('should respect DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', function (done) {
       t.triggerBreakpoint()
 
-      t.agent.on('debugger-input', ({ payload: { 'debugger.snapshot': { captures } } }) => {
+      t.agent.on('debugger-input', ({ payload: [{ 'debugger.snapshot': { captures } }] }) => {
         const { locals } = captures.lines[t.breakpoint.line]
 
         assert.deepPropertyVal(locals, 'secret', { type: 'string', value: 'shh!' })
