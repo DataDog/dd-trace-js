@@ -232,6 +232,8 @@ describe('Config', () => {
     expect(config).to.have.property('logLevel', 'debug')
     expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
     expect(config).to.have.property('dynamicInstrumentationEnabled', false)
+    expect(config).to.have.deep.property('dynamicInstrumentationRedactedIdentifiers', [])
+    expect(config).to.have.deep.property('dynamicInstrumentationRedactionExcludedIdentifiers', [])
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
@@ -314,6 +316,8 @@ describe('Config', () => {
       { name: 'dogstatsd.port', value: '8125', origin: 'default' },
       { name: 'dsmEnabled', value: false, origin: 'default' },
       { name: 'dynamicInstrumentationEnabled', value: false, origin: 'default' },
+      { name: 'dynamicInstrumentationRedactedIdentifiers', value: [], origin: 'default' },
+      { name: 'dynamicInstrumentationRedactionExcludedIdentifiers', value: [], origin: 'default' },
       { name: 'env', value: undefined, origin: 'default' },
       { name: 'experimental.enableGetRumData', value: false, origin: 'default' },
       { name: 'experimental.exporter', value: undefined, origin: 'default' },
@@ -457,6 +461,8 @@ describe('Config', () => {
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
     process.env.DD_ENV = 'test'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
     process.env.DD_TRACE_SAMPLE_RATE = '0.5'
     process.env.DD_TRACE_RATE_LIMIT = '-1'
@@ -552,6 +558,8 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.nested.property('codeOriginForSpans.enabled', true)
     expect(config).to.have.property('dynamicInstrumentationEnabled', true)
+    expect(config).to.have.deep.property('dynamicInstrumentationRedactedIdentifiers', ['foo', 'bar'])
+    expect(config).to.have.deep.property('dynamicInstrumentationRedactionExcludedIdentifiers', ['a', 'b', 'c'])
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.property('traceEnabled', true)
@@ -656,6 +664,8 @@ describe('Config', () => {
       { name: 'dogstatsd.hostname', value: 'dsd-agent', origin: 'env_var' },
       { name: 'dogstatsd.port', value: '5218', origin: 'env_var' },
       { name: 'dynamicInstrumentationEnabled', value: true, origin: 'env_var' },
+      { name: 'dynamicInstrumentationRedactedIdentifiers', value: ['foo', 'bar'], origin: 'env_var' },
+      { name: 'dynamicInstrumentationRedactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'env_var' },
       { name: 'env', value: 'test', origin: 'env_var' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'env_var' },
       { name: 'experimental.exporter', value: 'log', origin: 'env_var' },
@@ -851,6 +861,8 @@ describe('Config', () => {
       experimental: {
         b3: true,
         dynamicInstrumentationEnabled: true,
+        dynamicInstrumentationRedactedIdentifiers: ['foo', 'bar'],
+        dynamicInstrumentationRedactionExcludedIdentifiers: ['a', 'b', 'c'],
         traceparent: true,
         runtimeId: true,
         exporter: 'log',
@@ -896,6 +908,8 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('version', '0.1.0')
     expect(config).to.have.property('dynamicInstrumentationEnabled', true)
+    expect(config).to.have.deep.property('dynamicInstrumentationRedactedIdentifiers', ['foo', 'bar'])
+    expect(config).to.have.deep.property('dynamicInstrumentationRedactionExcludedIdentifiers', ['a', 'b', 'c'])
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.property('logger', logger)
@@ -974,6 +988,8 @@ describe('Config', () => {
       { name: 'dogstatsd.hostname', value: 'agent-dsd', origin: 'code' },
       { name: 'dogstatsd.port', value: '5218', origin: 'code' },
       { name: 'dynamicInstrumentationEnabled', value: true, origin: 'code' },
+      { name: 'dynamicInstrumentationRedactedIdentifiers', value: ['foo', 'bar'], origin: 'code' },
+      { name: 'dynamicInstrumentationRedactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'code' },
       { name: 'env', value: 'test', origin: 'code' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'code' },
       { name: 'experimental.exporter', value: 'log', origin: 'code' },
@@ -1175,6 +1191,8 @@ describe('Config', () => {
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
     process.env.DD_ENV = 'test'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
     process.env.DD_API_KEY = '123'
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v0'
     process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
@@ -1253,6 +1271,8 @@ describe('Config', () => {
       experimental: {
         b3: false,
         dynamicInstrumentationEnabled: false,
+        dynamicInstrumentationRedactedIdentifiers: ['foo2', 'bar2'],
+        dynamicInstrumentationRedactionExcludedIdentifiers: ['a2', 'b2'],
         traceparent: false,
         runtimeId: false,
         exporter: 'agent',
@@ -1318,6 +1338,8 @@ describe('Config', () => {
     expect(config).to.have.property('version', '1.0.0')
     expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
     expect(config).to.have.property('dynamicInstrumentationEnabled', false)
+    expect(config).to.have.deep.property('dynamicInstrumentationRedactedIdentifiers', ['foo2', 'bar2'])
+    expect(config).to.have.deep.property('dynamicInstrumentationRedactionExcludedIdentifiers', ['a2', 'b2'])
     expect(config).to.have.property('env', 'development')
     expect(config).to.have.property('clientIpEnabled', true)
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
