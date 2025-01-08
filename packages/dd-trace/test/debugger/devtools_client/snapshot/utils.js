@@ -12,8 +12,10 @@ proxyquire('../src/debugger/devtools_client/snapshot/collector', {
 })
 proxyquire('../src/debugger/devtools_client/snapshot/redaction', {
   '../config': {
-    dynamicInstrumentationRedactedIdentifiers: [],
-    dynamicInstrumentationRedactionExcludedIdentifiers: [],
+    dynamicInstrumentation: {
+      redactedIdentifiers: [],
+      redactionExcludedIdentifiers: []
+    },
     '@noCallThru': true
   }
 })
