@@ -124,12 +124,6 @@ class TestVisDynamicInstrumentation {
         probeIdToResolveBreakpointRemove.delete(probeId)
       }
     }).unref()
-
-    this.worker.on('error', (err) => log.error('Test Visibility - Dynamic Instrumentation worker error', err))
-    this.worker.on(
-      'messageerror',
-      (err) => log.error('Test Visibility - Dynamic Instrumentation worker messageerror', err)
-    )
   }
 }
 
