@@ -1,7 +1,7 @@
 'use strict'
 
 const { join } = require('path')
-const { Worker } = require('worker_threads')
+const { Worker, threadId: parentThreadId } = require('worker_threads')
 const { randomUUID } = require('crypto')
 const log = require('../../log')
 
@@ -46,12 +46,15 @@ class TestVisDynamicInstrumentation {
     return this._readyPromise
   }
 
-  start () {
+  start (config) {
     if (this.worker) return
 
     const { NODE_OPTIONS, ...envWithoutNodeOptions } = process.env
 
     log.debug('Starting Test Visibility - Dynamic Instrumentation client...')
+
+    const rcChannel = new MessageChannel() // mock channel
+    const configChannel = new MessageChannel() // mock channel
 
     this.worker = new Worker(
       join(__dirname, 'worker', 'index.js'),
@@ -59,15 +62,30 @@ class TestVisDynamicInstrumentation {
         execArgv: [],
         env: envWithoutNodeOptions,
         workerData: {
+          config: config.serialize(),
+          parentThreadId,
+          rcPort: rcChannel.port1,
+          configPort: configChannel.port1,
           breakpointSetChannel: this.breakpointSetChannel.port1,
           breakpointHitChannel: this.breakpointHitChannel.port1
         },
-        transferList: [this.breakpointSetChannel.port1, this.breakpointHitChannel.port1]
+        transferList: [
+          rcChannel.port1,
+          configChannel.port1,
+          this.breakpointSetChannel.port1,
+          this.breakpointHitChannel.port1
+        ]
       }
     )
     this.worker.on('online', () => {
       log.debug('Test Visibility - Dynamic Instrumentation client is ready')
       this._onReady()
+    })
+    this.worker.on('error', (err) => {
+      log.error('Test Visibility - Dynamic Instrumentation worker error', err)
+    })
+    this.worker.on('messageerror', (err) => {
+      log.error('Test Visibility - Dynamic Instrumentation worker messageerror', err)
     })
 
     // Allow the parent to exit even if the worker is still running
