@@ -98,7 +98,8 @@ describe('RemoteConfigManager', () => {
           service: config.service,
           env: config.env,
           app_version: config.version,
-          extra_services: []
+          extra_services: [],
+          tags: ['runtime-id:runtimeId']
         },
         capabilities: 'AA=='
       },
@@ -106,6 +107,20 @@ describe('RemoteConfigManager', () => {
     })
 
     expect(rc.appliedConfigs).to.be.an.instanceOf(Map)
+  })
+
+  it('should add git metadata to tags if present', () => {
+    const configWithGit = {
+      ...config,
+      repositoryUrl: 'https://github.com/DataDog/dd-trace-js',
+      commitSHA: '1234567890'
+    }
+    const rc = new RemoteConfigManager(configWithGit)
+    expect(rc.state.client.client_tracer.tags).to.deep.equal([
+      'runtime-id:runtimeId',
+      'git.repository_url:https://github.com/DataDog/dd-trace-js',
+      'git.commit.sha:1234567890'
+    ])
   })
 
   describe('updateCapabilities', () => {

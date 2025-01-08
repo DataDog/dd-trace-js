@@ -3,7 +3,21 @@
 const { randomUUID } = require('node:crypto')
 
 module.exports = {
-  generateProbeConfig
+  expectWithin,
+  generateProbeConfig,
+  getRequestOptions
+}
+
+function expectWithin (timeout, fn, start = Date.now(), backoff = 1) {
+  try {
+    fn()
+  } catch (e) {
+    if (Date.now() - start > timeout) {
+      throw e
+    } else {
+      setTimeout(expectWithin, backoff, timeout, fn, start, backoff < 128 ? backoff * 2 : backoff)
+    }
+  }
 }
 
 function generateProbeConfig (breakpoint, overrides = {}) {
@@ -22,4 +36,8 @@ function generateProbeConfig (breakpoint, overrides = {}) {
     evaluateAt: 'EXIT',
     ...overrides
   }
+}
+
+function getRequestOptions (request) {
+  return request.lastCall.args[1]
 }

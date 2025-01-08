@@ -219,7 +219,7 @@ describe('RASP - sql_injection', () => {
 
               await axios.get('/')
 
-              assert.equal(run.args.filter(arg => arg[1] === 'sql_injection').length, 1)
+              assert.equal(run.args.filter(arg => arg[1]?.type === 'sql_injection').length, 1)
             })
 
             it('should call to waf twice for sql injection with two different queries in pg Pool', async () => {
@@ -232,7 +232,7 @@ describe('RASP - sql_injection', () => {
 
               await axios.get('/')
 
-              assert.equal(run.args.filter(arg => arg[1] === 'sql_injection').length, 2)
+              assert.equal(run.args.filter(arg => arg[1]?.type === 'sql_injection').length, 2)
             })
 
             it('should call to waf twice for sql injection and same query when input address is updated', async () => {
@@ -254,7 +254,7 @@ describe('RASP - sql_injection', () => {
 
               await axios.get('/')
 
-              assert.equal(run.args.filter(arg => arg[1] === 'sql_injection').length, 2)
+              assert.equal(run.args.filter(arg => arg[1]?.type === 'sql_injection').length, 2)
             })
 
             it('should call to waf once for sql injection and same query when input address is updated', async () => {
@@ -276,7 +276,7 @@ describe('RASP - sql_injection', () => {
 
               await axios.get('/')
 
-              assert.equal(run.args.filter(arg => arg[1] === 'sql_injection').length, 1)
+              assert.equal(run.args.filter(arg => arg[1]?.type === 'sql_injection').length, 1)
             })
           })
         })

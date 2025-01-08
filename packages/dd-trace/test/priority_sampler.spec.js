@@ -490,6 +490,16 @@ describe('PrioritySampler', () => {
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_APPSEC)
       expect(context._trace.tags[DECISION_MAKER_KEY]).to.equal('-0')
     })
+
+    it('should ignore noop spans', () => {
+      context._trace.started[0] = undefined // noop
+
+      prioritySampler.setPriority(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+
+      expect(context._sampling.priority).to.undefined
+      expect(context._sampling.mechanism).to.undefined
+      expect(context._trace.tags[DECISION_MAKER_KEY]).to.undefined
+    })
   })
 
   describe('keepTrace', () => {

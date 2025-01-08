@@ -107,7 +107,7 @@ class DatadogSpan {
 
   toString () {
     const spanContext = this.context()
-    const resourceName = spanContext._tags['resource.name']
+    const resourceName = spanContext._tags['resource.name'] || ''
     const resource = resourceName.length > 100
       ? `${resourceName.substring(0, 97)}...`
       : resourceName

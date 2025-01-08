@@ -139,6 +139,27 @@ describe('log', () => {
       })
     })
 
+    describe('trace', () => {
+      it('should not log to console by default', () => {
+        log.trace('trace')
+
+        expect(console.debug).to.not.have.been.called
+      })
+
+      it('should log to console after setting log level to trace', function foo () {
+        log.toggle(true, 'trace')
+        log.trace('argument', { hello: 'world' }, {
+          toString: () => 'string'
+        }, { foo: 'bar' })
+
+        expect(console.debug).to.have.been.calledOnce
+        expect(console.debug.firstCall.args[0]).to.match(
+          /^Trace: Test.foo\('argument', { hello: 'world' }, string, { foo: 'bar' }\)/
+        )
+        expect(console.debug.firstCall.args[0].split('\n').length).to.be.gte(3)
+      })
+    })
+
     describe('error', () => {
       it('should log to console by default', () => {
         log.error(error)

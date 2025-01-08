@@ -23,7 +23,7 @@ function withNoop (fn) {
 }
 
 function unsubscribeAll () {
-  logChannel.unsubscribe({ debug: onDebug, info: onInfo, warn: onWarn, error: onError })
+  logChannel.unsubscribe({ trace: onTrace, debug: onDebug, info: onInfo, warn: onWarn, error: onError })
 }
 
 function toggleSubscription (enable, level) {
@@ -31,7 +31,7 @@ function toggleSubscription (enable, level) {
 
   if (enable) {
     logChannel = new LogChannel(level)
-    logChannel.subscribe({ debug: onDebug, info: onInfo, warn: onWarn, error: onError })
+    logChannel.subscribe({ trace: onTrace, debug: onDebug, info: onInfo, warn: onWarn, error: onError })
   }
 }
 
@@ -88,6 +88,14 @@ function onDebug (log) {
   if (cause) withNoop(() => logger.debug(cause))
 }
 
+function onTrace (log) {
+  const { formatted, cause } = getErrorLog(log)
+  // Using logger.debug() because not all loggers have trace level,
+  // and console.trace() has a completely different meaning.
+  if (formatted) withNoop(() => logger.debug(formatted))
+  if (cause) withNoop(() => logger.debug(cause))
+}
+
 function error (...args) {
   onError(Log.parse(...args))
 }
@@ -110,4 +118,8 @@ function debug (...args) {
   onDebug(Log.parse(...args))
 }
 
-module.exports = { use, toggle, reset, error, warn, info, debug }
+function trace (...args) {
+  onTrace(Log.parse(...args))
+}
+
+module.exports = { use, toggle, reset, error, warn, info, debug, trace }

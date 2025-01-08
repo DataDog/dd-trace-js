@@ -79,7 +79,7 @@ function getOrCreateMetricTags (store, versionsTags) {
   return metricTags
 }
 
-function updateRaspRequestsMetricTags (metrics, req, raspRuleType) {
+function updateRaspRequestsMetricTags (metrics, req, raspRule) {
   if (!req) return
 
   const store = getStore(req)
@@ -89,7 +89,12 @@ function updateRaspRequestsMetricTags (metrics, req, raspRuleType) {
 
   if (!enabled) return
 
-  const tags = { rule_type: raspRuleType, waf_version: metrics.wafVersion }
+  const tags = { rule_type: raspRule.type, waf_version: metrics.wafVersion }
+
+  if (raspRule.variant) {
+    tags.rule_variant = raspRule.variant
+  }
+
   appsecMetrics.count('rasp.rule.eval', tags).inc(1)
 
   if (metrics.wafTimeout) {

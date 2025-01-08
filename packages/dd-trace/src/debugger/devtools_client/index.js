@@ -129,9 +129,8 @@ session.on('Debugger.paused', async ({ params }) => {
     }
 
     // TODO: Process template (DEBUG-2628)
-    send(probe.template, logger, dd, snapshot, (err) => {
-      if (err) log.error('Debugger error', err)
-      else ackEmitting(probe)
+    send(probe.template, logger, dd, snapshot, () => {
+      ackEmitting(probe)
     })
   }
 })
@@ -141,6 +140,8 @@ function highestOrUndefined (num, max) {
 }
 
 async function getDD (callFrameId) {
+  // TODO: Consider if an `objectGroup` should be used, so it can be explicitly released using
+  // `Runtime.releaseObjectGroup`
   const { result } = await session.post('Debugger.evaluateOnCallFrame', {
     callFrameId,
     expression,
