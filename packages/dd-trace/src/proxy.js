@@ -9,7 +9,6 @@ const DynamicInstrumentation = require('./debugger')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
-const remoteConfig = require('./appsec/remote_config')
 const AppsecSdk = require('./appsec/sdk')
 const dogstatsd = require('./dogstatsd')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
@@ -89,7 +88,7 @@ class Tracer extends NoopProxy {
       }
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
-        const rc = remoteConfig.enable(config, this._modules.appsec)
+        const rc = require('./appsec/remote_config').enable(config, this._modules.appsec)
 
         rc.setProductHandler('APM_TRACING', (action, conf) => {
           if (action === 'unapply') {
