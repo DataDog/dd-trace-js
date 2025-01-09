@@ -27,7 +27,6 @@ const {
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
-// TODO: maybe move this to its own registry file?
 const registry = new WeakMap()
 
 class LLMObsTagger {

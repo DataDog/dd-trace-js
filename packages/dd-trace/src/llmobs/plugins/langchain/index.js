@@ -20,13 +20,6 @@ const ChatModelHandler = require('./handlers/chat_model')
 const LlmHandler = require('./handlers/llm')
 const EmbeddingHandler = require('./handlers/embedding')
 
-const SUPPORTED_HANLDERS = {
-  chain: ChainHandler,
-  chat_model: ChatModelHandler,
-  llm: LlmHandler,
-  embedding: EmbeddingHandler
-}
-
 class LangChainLLMObsPlugin extends LLMObsPlugin {
   static get prefix () {
     return 'tracing:apm:langchain:invoke'
@@ -35,12 +28,12 @@ class LangChainLLMObsPlugin extends LLMObsPlugin {
   constructor () {
     super(...arguments)
 
-    this._handlers =
-      Object.entries(SUPPORTED_HANLDERS)
-        .reduce((acc, [type, Handler]) => {
-          acc[type] = new Handler(this._tagger)
-          return acc
-        }, {})
+    this._handlers = {
+      chain: new ChainHandler(this._tagger),
+      chat_model: new ChatModelHandler(this._tagger),
+      llm: new LlmHandler(this._tagger),
+      embedding: new EmbeddingHandler(this._tagger)
+    }
   }
 
   getLLMObsSpanRegisterOptions (ctx) {
@@ -62,9 +55,9 @@ class LangChainLLMObsPlugin extends LLMObsPlugin {
 
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
-    const type = ctx.type // langchain operation type
+    const type = ctx.type // langchain operation type (oneof chain,chat_model,llm,embedding)
 
-    if (!Object.keys(SUPPORTED_HANLDERS).includes(type)) {
+    if (!Object.keys(this._handlers).includes(type)) {
       log.warn(`Unsupported LangChain operation type: ${type}`)
       return
     }
