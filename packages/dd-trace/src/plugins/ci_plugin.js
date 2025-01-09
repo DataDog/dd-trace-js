@@ -298,7 +298,7 @@ module.exports = class CiPlugin extends Plugin {
   addDiProbe (err, onHitBreakpoint) {
     const [file, line, stackIndex] = getFileAndLineNumberFromError(err, this.repositoryRoot)
 
-    if (!file || !line || !stackIndex) {
+    if (!file || !Number.isInteger(line)) {
       log.warn('Could not add breakpoint for dynamic instrumentation')
       return
     }

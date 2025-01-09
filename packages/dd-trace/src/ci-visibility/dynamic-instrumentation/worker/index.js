@@ -140,13 +140,13 @@ async function processScriptWithInlineSourceMap (params) {
   let generatedPosition
 
   // Map to the generated position. We'll attempt with the full file path first, then with the basename.
-  try {
-    generatedPosition = consumer.generatedPositionFor({
-      source: file,
-      line,
-      column: 0
-    })
-  } catch (e) {
+  // TODO: figure out why sometimes the full path doesn't work
+  generatedPosition = consumer.generatedPositionFor({
+    source: file,
+    line,
+    column: 0
+  })
+  if (generatedPosition.line === null) {
     generatedPosition = consumer.generatedPositionFor({
       source: path.basename(file),
       line,
@@ -155,6 +155,12 @@ async function processScriptWithInlineSourceMap (params) {
   }
 
   consumer.destroy()
+
+  // If we can't find the line, just return the original line
+  if (generatedPosition.line === null) {
+    log.error(`Could not find generated position for ${file}:${line}`)
+    return line
+  }
 
   return generatedPosition.line
 }

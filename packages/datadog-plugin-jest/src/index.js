@@ -397,7 +397,7 @@ class JestPlugin extends CiPlugin {
     )
     this.activeTestSpan.setTag(
       `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_LINE_SUFFIX}`,
-      snapshot.probe.location.lines[0]
+      Number(snapshot.probe.location.lines[0])
     )
 
     const activeTestSpanContext = this.activeTestSpan.context()
