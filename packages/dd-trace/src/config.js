@@ -472,9 +472,9 @@ class Config {
     this._setValue(defaults, 'dogstatsd.hostname', '127.0.0.1')
     this._setValue(defaults, 'dogstatsd.port', '8125')
     this._setValue(defaults, 'dsmEnabled', false)
-    this._setValue(defaults, 'dynamicInstrumentationEnabled', false)
-    this._setValue(defaults, 'dynamicInstrumentationRedactedIdentifiers', [])
-    this._setValue(defaults, 'dynamicInstrumentationRedactionExcludedIdentifiers', [])
+    this._setValue(defaults, 'dynamicInstrumentation.enabled', false)
+    this._setValue(defaults, 'dynamicInstrumentation.redactedIdentifiers', [])
+    this._setValue(defaults, 'dynamicInstrumentation.redactionExcludedIdentifiers', [])
     this._setValue(defaults, 'env', undefined)
     this._setValue(defaults, 'experimental.enableGetRumData', false)
     this._setValue(defaults, 'experimental.exporter', undefined)
@@ -750,11 +750,11 @@ class Config {
     this._setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOST || DD_DOGSTATSD_HOSTNAME)
     this._setString(env, 'dogstatsd.port', DD_DOGSTATSD_PORT)
     this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
-    this._setBoolean(env, 'dynamicInstrumentationEnabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
-    this._setArray(env, 'dynamicInstrumentationRedactedIdentifiers', DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS)
+    this._setBoolean(env, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
+    this._setArray(env, 'dynamicInstrumentation.redactedIdentifiers', DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS)
     this._setArray(
       env,
-      'dynamicInstrumentationRedactionExcludedIdentifiers',
+      'dynamicInstrumentation.redactionExcludedIdentifiers',
       DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS
     )
     this._setString(env, 'env', DD_ENV || tags.env)
@@ -936,16 +936,16 @@ class Config {
       this._setString(opts, 'dogstatsd.port', options.dogstatsd.port)
     }
     this._setBoolean(opts, 'dsmEnabled', options.dsmEnabled)
-    this._setBoolean(opts, 'dynamicInstrumentationEnabled', options.experimental?.dynamicInstrumentationEnabled)
+    this._setBoolean(opts, 'dynamicInstrumentation.enabled', options.dynamicInstrumentation?.enabled)
     this._setArray(
       opts,
-      'dynamicInstrumentationRedactedIdentifiers',
-      options.experimental?.dynamicInstrumentationRedactedIdentifiers
+      'dynamicInstrumentation.redactedIdentifiers',
+      options.dynamicInstrumentation?.redactedIdentifiers
     )
     this._setArray(
       opts,
-      'dynamicInstrumentationRedactionExcludedIdentifiers',
-      options.experimental?.dynamicInstrumentationRedactionExcludedIdentifiers
+      'dynamicInstrumentation.redactionExcludedIdentifiers',
+      options.dynamicInstrumentation?.redactionExcludedIdentifiers
     )
     this._setString(opts, 'env', options.env || tags.env)
     this._setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
