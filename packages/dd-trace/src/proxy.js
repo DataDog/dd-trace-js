@@ -119,7 +119,7 @@ class Tracer extends NoopProxy {
           this._flare.module.send(conf.args)
         })
 
-        if (config.dynamicInstrumentationEnabled) {
+        if (config.dynamicInstrumentation.enabled) {
           DynamicInstrumentation.start(config, rc)
         }
       }
