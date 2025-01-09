@@ -75,7 +75,7 @@ const originalTestFns = new WeakMap()
 const retriedTestsToNumAttempts = new Map()
 const newTestsTestStatuses = new Map()
 
-const BREAKPOINT_HIT_GRACE_PERIOD_MS = 500
+const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 
 // based on https://github.com/facebook/jest/blob/main/packages/jest-circus/src/formatNodeAssertErrors.ts#L41
 function formatJestError (errors) {
@@ -316,8 +316,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         // After finishing it might take a bit for the snapshot to be handled.
-        // We'll give 500ms for the snapshot to be handled.
-        // This means that tests retried with DI are 500ms slower at least.
+        // This means that tests retried with DI are BREAKPOINT_HIT_GRACE_PERIOD_MS slower at least.
         if (mightHitBreakpoint) {
           await new Promise(resolve => {
             setTimeout(() => {

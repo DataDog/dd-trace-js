@@ -303,6 +303,14 @@ module.exports = class CiPlugin extends Plugin {
       return
     }
 
-    return this.di.addLineProbe({ file, line }, onHitBreakpoint)
+    const [probeId, setProbePromise] = this.di.addLineProbe({ file, line }, onHitBreakpoint)
+
+    return {
+      probeId,
+      setProbePromise,
+      stackIndex,
+      file,
+      line
+    }
   }
 }

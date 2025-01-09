@@ -24,9 +24,10 @@ const {
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_DRIVER,
   DI_ERROR_DEBUG_INFO_CAPTURED,
-  DI_DEBUG_ERROR_SNAPSHOT_ID,
-  DI_DEBUG_ERROR_FILE,
-  DI_DEBUG_ERROR_LINE,
+  DI_DEBUG_ERROR_PREFIX,
+  DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
+  DI_DEBUG_ERROR_FILE_SUFFIX,
+  DI_DEBUG_ERROR_LINE_SUFFIX,
   getFormattedError
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -42,6 +43,7 @@ const {
   TELEMETRY_CODE_COVERAGE_NUM_FILES,
   TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
+const log = require('../../dd-trace/src/log')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
 
@@ -342,7 +344,7 @@ class JestPlugin extends CiPlugin {
       span.finish()
       finishAllTraceSpans(span)
       this.activeTestSpan = null
-      if (shouldRemoveProbe) {
+      if (shouldRemoveProbe && this.runningTestProbeId) {
         promises.isProbeRemoved = withTimeout(this.removeDiProbe(this.runningTestProbeId), 2000)
         this.runningTestProbeId = null
       }
@@ -356,9 +358,13 @@ class JestPlugin extends CiPlugin {
           span.setTag(TEST_STATUS, 'fail')
           span.setTag('error', getFormattedError(error, this.repositoryRoot))
           if (shouldSetProbe) {
-            const [probeId, setProbePromise] = this.addDiProbe(error, this.onDiBreakpointHit.bind(this))
-            this.runningTestProbeId = probeId
-            promises.isProbeReady = withTimeout(setProbePromise, 2000)
+            const probeInformation = this.addDiProbe(error, this.onDiBreakpointHit.bind(this))
+            if (probeInformation) {
+              const { probeId, setProbePromise, stackIndex } = probeInformation
+              this.runningTestProbeId = probeId
+              this.testErrorStackIndex = stackIndex
+              promises.isProbeReady = withTimeout(setProbePromise, 2000)
+            }
           }
         }
       }
@@ -373,19 +379,26 @@ class JestPlugin extends CiPlugin {
 
   onDiBreakpointHit ({ snapshot }) {
     if (!this.activeTestSpan || this.activeTestSpan.context()._isFinished) {
-      console.log('active span is null or finished', this.activeTestSpan)
-      // this is unexpected
+      // This is unexpected and is caused by a race condition.
+      log.warn('Breakpoint snapshot could not be attached to the active test span')
       return
     }
 
-    // TODO: WHERE TO GET THE STACK INDEX FROM????
-    const stackIndex = 3
+    const stackIndex = this.testErrorStackIndex
 
     this.activeTestSpan.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-    // TODO: replace DI_DEBUG_ERROR tags by just their prefix
-    this.activeTestSpan.setTag(DI_DEBUG_ERROR_SNAPSHOT_ID.replace('0', stackIndex), snapshot.id)
-    this.activeTestSpan.setTag(DI_DEBUG_ERROR_FILE.replace('0', stackIndex), snapshot.probe.location.file)
-    this.activeTestSpan.setTag(DI_DEBUG_ERROR_LINE.replace('0', stackIndex), snapshot.probe.location.lines[0])
+    this.activeTestSpan.setTag(
+      `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`,
+      snapshot.id
+    )
+    this.activeTestSpan.setTag(
+      `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_FILE_SUFFIX}`,
+      snapshot.probe.location.file
+    )
+    this.activeTestSpan.setTag(
+      `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_LINE_SUFFIX}`,
+      snapshot.probe.location.lines[0]
+    )
 
     const activeTestSpanContext = this.activeTestSpan.context()
     this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {

@@ -108,10 +108,10 @@ const TEST_LEVEL_EVENT_TYPES = [
 
 // Dynamic instrumentation - Test optimization integration tags
 const DI_ERROR_DEBUG_INFO_CAPTURED = 'error.debug_info_captured'
-// TODO: for the moment we'll only use a single snapshot id, so `0` is hardcoded
-const DI_DEBUG_ERROR_SNAPSHOT_ID = '_dd.debug.error.0.snapshot_id'
-const DI_DEBUG_ERROR_FILE = '_dd.debug.error.0.file'
-const DI_DEBUG_ERROR_LINE = '_dd.debug.error.0.line'
+const DI_DEBUG_ERROR_PREFIX = '_dd.debug.error'
+const DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX = 'snapshot_id'
+const DI_DEBUG_ERROR_FILE_SUFFIX = 'file'
+const DI_DEBUG_ERROR_LINE_SUFFIX = 'line'
 
 module.exports = {
   TEST_CODE_OWNERS,
@@ -191,9 +191,10 @@ module.exports = {
   getNumFromKnownTests,
   getFileAndLineNumberFromError,
   DI_ERROR_DEBUG_INFO_CAPTURED,
-  DI_DEBUG_ERROR_SNAPSHOT_ID,
-  DI_DEBUG_ERROR_FILE,
-  DI_DEBUG_ERROR_LINE,
+  DI_DEBUG_ERROR_PREFIX,
+  DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
+  DI_DEBUG_ERROR_FILE_SUFFIX,
+  DI_DEBUG_ERROR_LINE_SUFFIX,
   getFormattedError
 }
 
