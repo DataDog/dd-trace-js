@@ -129,6 +129,7 @@ describe('TracerProxy', () => {
       appsec: {},
       iast: {},
       crashtracking: {},
+      dynamicInstrumentation: {},
       remoteConfig: {
         enabled: true
       },
