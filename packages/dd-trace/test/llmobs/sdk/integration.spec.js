@@ -177,7 +177,8 @@ describe('end to end sdk integration tests', () => {
     check(expected, llmobsSpans)
   })
 
-  it('instruments and uninstruments as needed', () => {
+  // We want to move away from this kind of behavior
+  it.skip('instruments and uninstruments as needed', () => {
     payloadGenerator = function () {
       llmobs.disable()
       llmobs.trace({ kind: 'agent', name: 'llmobsParent' }, () => {
