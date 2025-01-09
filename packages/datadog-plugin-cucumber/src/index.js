@@ -244,6 +244,7 @@ class CucumberPlugin extends CiPlugin {
         span.setTag(TEST_IS_RETRY, 'true')
       }
       span.setTag('error', error)
+      // TODO: PROBE SHOULD ONLY BE ADDED IN THE FIRST TRY!
       if (this.di && error && this.libraryConfig?.isDiEnabled) {
         const probeInformation = this.addDiProbe(error)
         if (probeInformation) {

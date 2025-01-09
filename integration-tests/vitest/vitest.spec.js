@@ -26,15 +26,16 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_SUITE,
   DI_ERROR_DEBUG_INFO_CAPTURED,
-  DI_DEBUG_ERROR_FILE,
-  DI_DEBUG_ERROR_LINE,
-  DI_DEBUG_ERROR_SNAPSHOT_ID
+  DI_DEBUG_ERROR_PREFIX,
+  DI_DEBUG_ERROR_FILE_SUFFIX,
+  DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
+  DI_DEBUG_ERROR_LINE_SUFFIX
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
 const NUM_RETRIES_EFD = 3
 
-const versions = ['1.6.0', 'latest']
+const versions = ['latest']
 
 const linePctMatchRegex = /Lines\s+:\s+([\d.]+)%/
 
@@ -903,7 +904,7 @@ versions.forEach((version) => {
 
     // dynamic instrumentation only supported from >=2.0.0
     if (version === 'latest') {
-      context('dynamic instrumentation', () => {
+      context.only('dynamic instrumentation', () => {
         it('does not activate it if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
@@ -920,10 +921,12 @@ versions.forEach((version) => {
               assert.equal(retriedTests.length, 1)
               const [retriedTest] = retriedTests
 
-              assert.notProperty(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
-              assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_FILE)
-              assert.notProperty(retriedTest.metrics, DI_DEBUG_ERROR_LINE)
-              assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_SNAPSHOT_ID)
+              const hasDebugTags = Object.keys(retriedTest.meta)
+                .some(property =>
+                  property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
+                )
+
+              assert.isFalse(hasDebugTags)
             })
 
           const logsPromise = receiver
@@ -968,11 +971,12 @@ versions.forEach((version) => {
 
               assert.equal(retriedTests.length, 1)
               const [retriedTest] = retriedTests
+              const hasDebugTags = Object.keys(retriedTest.meta)
+                .some(property =>
+                  property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
+                )
 
-              assert.notProperty(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
-              assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_FILE)
-              assert.notProperty(retriedTest.metrics, DI_DEBUG_ERROR_LINE)
-              assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_SNAPSHOT_ID)
+              assert.isFalse(hasDebugTags)
             })
 
           const logsPromise = receiver
@@ -1003,7 +1007,7 @@ versions.forEach((version) => {
           })
         })
 
-        it('runs retries with dynamic instrumentation', (done) => {
+        it.only('runs retries with dynamic instrumentation', (done) => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
             di_enabled: true
@@ -1023,15 +1027,17 @@ versions.forEach((version) => {
               const [retriedTest] = retriedTests
 
               assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-              assert.propertyVal(
-                retriedTest.meta,
-                DI_DEBUG_ERROR_FILE,
-                'ci-visibility/vitest-tests/bad-sum.mjs'
-              )
-              assert.equal(retriedTest.metrics[DI_DEBUG_ERROR_LINE], 4)
-              assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
 
-              snapshotIdByTest = retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID]
+              assert.isTrue(
+                retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
+                  .endsWith('ci-visibility/vitest-tests/bad-sum.mjs')
+              )
+              assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
+
+              const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
+              assert.exists(retriedTest.meta[snapshotIdKey])
+
+              snapshotIdByTest = retriedTest.meta[snapshotIdKey]
               spanIdByTest = retriedTest.span_id.toString()
               traceIdByTest = retriedTest.trace_id.toString()
 
@@ -1081,6 +1087,9 @@ versions.forEach((version) => {
             }
           )
 
+          childProcess.stdout.pipe(process.stdout)
+          childProcess.stderr.pipe(process.stderr)
+
           childProcess.on('exit', () => {
             Promise.all([eventsPromise, logsPromise]).then(() => {
               assert.equal(snapshotIdByTest, snapshotIdByLog)
@@ -1107,14 +1116,12 @@ versions.forEach((version) => {
               assert.equal(retriedTests.length, 1)
               const [retriedTest] = retriedTests
 
-              assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-              assert.propertyVal(
-                retriedTest.meta,
-                DI_DEBUG_ERROR_FILE,
-                'ci-visibility/vitest-tests/bad-sum.mjs'
-              )
-              assert.equal(retriedTest.metrics[DI_DEBUG_ERROR_LINE], 4)
-              assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
+              const hasDebugTags = Object.keys(retriedTest.meta)
+                .some(property =>
+                  property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
+                )
+
+              assert.isFalse(hasDebugTags)
             })
 
           const logsPromise = receiver

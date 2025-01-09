@@ -36,8 +36,6 @@ const {
 // This is because there's some loss of resolution.
 const MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION = 5
 
-const debuggerParameterPerTest = new Map()
-
 class VitestPlugin extends CiPlugin {
   static get id () {
     return 'vitest'
@@ -68,6 +66,7 @@ class VitestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:vitest:test:start', ({ testName, testSuiteAbsolutePath, isRetry, isNew }) => {
+      console.log('test:start', { isRetry, testName })
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const store = storage.getStore()
 
@@ -88,27 +87,8 @@ class VitestPlugin extends CiPlugin {
         extraTags
       )
 
-      const debuggerParameters = debuggerParameterPerTest.get(testName)
-
-      if (debuggerParameters) {
-        const spanContext = span.context()
-
-        // TODO: handle race conditions with this.retriedTestIds
-        this.retriedTestIds = {
-          spanId: spanContext.toSpanId(),
-          traceId: spanContext.toTraceId()
-        }
-        const { snapshotId, file, line } = debuggerParameters
-
-        // TODO: should these be added on test:end if and only if the probe is hit?
-        // Sync issues: `hitProbePromise` might be resolved after the test ends
-        span.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-        span.setTag(DI_DEBUG_ERROR_SNAPSHOT_ID, snapshotId)
-        span.setTag(DI_DEBUG_ERROR_FILE, file)
-        span.setTag(DI_DEBUG_ERROR_LINE, line)
-      }
-
       this.enter(span, store)
+      this.activeTestSpan = span
     })
 
     this.addSub('ci:vitest:test:finish-time', ({ status, task }) => {
@@ -134,6 +114,7 @@ class VitestPlugin extends CiPlugin {
         span.setTag(TEST_STATUS, 'pass')
         span.finish(this.taskToFinishTime.get(task))
         finishAllTraceSpans(span)
+        this.activeTestSpan = null
       }
     })
 
@@ -142,10 +123,15 @@ class VitestPlugin extends CiPlugin {
       const span = store?.span
 
       if (span) {
+        // TODO: PROBE SHOULD ONLY BE ADDED IN THE FIRST TRY!
         if (willBeRetried && this.di && isDiEnabled) {
-          const testName = span.context()._tags[TEST_NAME]
-          const debuggerParameters = this.addDiProbe(error, probe)
-          debuggerParameterPerTest.set(testName, debuggerParameters)
+          const probeInformation = this.addDiProbe(error)
+          if (probeInformation) {
+            const { probeId, stackIndex, setProbePromise } = probeInformation
+            this.runningTestProbeId = probeId
+            this.testErrorStackIndex = stackIndex
+            probe.setProbePromise = setProbePromise
+          }
         }
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
           hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS]
@@ -161,6 +147,7 @@ class VitestPlugin extends CiPlugin {
           span.finish() // retries will not have a duration
         }
         finishAllTraceSpans(span)
+        this.activeTestSpan = null
       }
     })
 
