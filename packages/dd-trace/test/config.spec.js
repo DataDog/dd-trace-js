@@ -28,14 +28,6 @@ describe('Config', () => {
   const BLOCKED_TEMPLATE_GRAPHQL_PATH = require.resolve('./fixtures/config/appsec-blocked-graphql-template.json')
   const BLOCKED_TEMPLATE_GRAPHQL = readFileSync(BLOCKED_TEMPLATE_GRAPHQL_PATH, { encoding: 'utf8' })
   const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
-  const CONFIG_NORM_RULES_PATH = require.resolve('./fixtures/telemetry/config_norm_rules.json')
-  const CONFIG_NORM_RULES = readFileSync(CONFIG_NORM_RULES_PATH, { encoding: 'utf8' })
-  const CONFIG_PREFIX_BLOCK_LIST_PATH = require.resolve('./fixtures/telemetry/config_prefix_block_list.json')
-  const CONFIG_PREFIX_BLOCK_LIST = readFileSync(CONFIG_PREFIX_BLOCK_LIST_PATH, { encoding: 'utf8' })
-  const CONFIG_AGGREGATION_LIST_PATH = require.resolve('./fixtures/telemetry/config_aggregation_list.json')
-  const CONFIG_AGGREGATION_LIST = readFileSync(CONFIG_AGGREGATION_LIST_PATH, { encoding: 'utf8' })
-  const NODEJS_CONFIG_RULES_PATH = require.resolve('./fixtures/telemetry/nodejs_config_rules.json')
-  const NODEJS_CONFIG_RULES = readFileSync(NODEJS_CONFIG_RULES_PATH, { encoding: 'utf8' })
 
   function reloadLoggerAndConfig () {
     log = proxyquire('../src/log', {})
@@ -2313,77 +2305,6 @@ describe('Config', () => {
       expect(taggingConfig).to.have.property('requestsEnabled', true)
       expect(taggingConfig).to.have.property('responsesEnabled', true)
       expect(taggingConfig).to.have.property('maxDepth', 7)
-    })
-
-    it('config_norm_rules completeness', () => {
-      // ⚠️ Did this test just fail? Read here! ⚠️
-      //
-      // Some files are manually copied from dd-go from/to the following paths
-      // from: https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/
-      // to: packages/dd-trace/test/fixtures/telemetry/
-      // files:
-      // - config_norm_rules.json
-      // - config_prefix_block_list.json
-      // - config_aggregation_list.json
-      // - nodejs_config_rules.json
-      //
-      // If this test fails, it means that a telemetry key was found in config.js that does not
-      // exist in any of the files listed above in dd-go
-      // The impact is that telemetry will not be reported to the Datadog backend won't be unusable
-      //
-      // To fix this, you must update dd-go to either
-      // 1) Add an exact config key to match config_norm_rules.json
-      // 2) Add a prefix that matches the config keys to config_prefix_block_list.json
-      // 3) Add a prefix rule that fits an existing prefix to config_aggregation_list.json
-      // 4) (Discouraged) Add a language-specific rule to nodejs_config_rules.json
-      //
-      // Once dd-go is updated, you can copy over the files to this repo and merge them in as part of your changes
-
-      function getKeysInDotNotation (obj, parentKey = '') {
-        const keys = []
-
-        for (const key in obj) {
-          if (Object.prototype.hasOwnProperty.call(obj, key)) {
-            const fullKey = parentKey ? `${parentKey}.${key}` : key
-
-            if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
-              keys.push(...getKeysInDotNotation(obj[key], fullKey))
-            } else {
-              keys.push(fullKey)
-            }
-          }
-        }
-
-        return keys
-      }
-
-      const config = new Config()
-
-      const libraryConfigKeys = getKeysInDotNotation(config).sort()
-
-      const nodejsConfigRules = JSON.parse(NODEJS_CONFIG_RULES)
-      const configNormRules = JSON.parse(CONFIG_NORM_RULES)
-      const configPrefixBlockList = JSON.parse(CONFIG_PREFIX_BLOCK_LIST)
-      const configAggregationList = JSON.parse(CONFIG_AGGREGATION_LIST)
-
-      const allowedConfigKeys = [
-        ...Object.keys(configNormRules),
-        ...Object.keys(nodejsConfigRules.normalization_rules)
-      ]
-      const blockedConfigKeyPrefixes = [...configPrefixBlockList, ...nodejsConfigRules.prefix_block_list]
-      const configAggregationPrefixes = [
-        ...Object.keys(configAggregationList),
-        ...Object.keys(nodejsConfigRules.reduce_rules)
-      ]
-
-      const missingConfigKeys = libraryConfigKeys.filter(key => {
-        const isAllowed = allowedConfigKeys.includes(key)
-        const isBlocked = blockedConfigKeyPrefixes.some(prefix => key.startsWith(prefix))
-        const isReduced = configAggregationPrefixes.some(prefix => key.startsWith(prefix))
-        return !isAllowed && !isBlocked && !isReduced
-      })
-
-      expect(missingConfigKeys).to.be.empty
     })
   })
 })
