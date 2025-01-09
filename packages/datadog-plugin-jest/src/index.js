@@ -352,7 +352,7 @@ class JestPlugin extends CiPlugin {
           span.setTag(TEST_STATUS, 'fail')
           span.setTag('error', getFormattedError(error, this.repositoryRoot))
           if (shouldSetProbe) {
-            const probeInformation = this.addDiProbe(error, this.onDiBreakpointHit.bind(this))
+            const probeInformation = this.addDiProbe(error)
             if (probeInformation) {
               const { probeId, setProbePromise, stackIndex } = probeInformation
               this.runningTestProbeId = probeId

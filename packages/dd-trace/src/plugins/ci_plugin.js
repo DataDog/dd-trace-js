@@ -333,7 +333,7 @@ module.exports = class CiPlugin extends Plugin {
     return this.di.removeProbe(probeId)
   }
 
-  addDiProbe (err, onHitBreakpoint) {
+  addDiProbe (err) {
     const [file, line, stackIndex] = getFileAndLineNumberFromError(err, this.repositoryRoot)
 
     if (!file || !Number.isInteger(line)) {
@@ -341,7 +341,7 @@ module.exports = class CiPlugin extends Plugin {
       return
     }
 
-    const [probeId, setProbePromise] = this.di.addLineProbe({ file, line }, onHitBreakpoint)
+    const [probeId, setProbePromise] = this.di.addLineProbe({ file, line }, this.onDiBreakpointHit.bind(this))
 
     return {
       probeId,

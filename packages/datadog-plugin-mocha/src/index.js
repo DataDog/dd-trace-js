@@ -30,12 +30,7 @@ const {
   TEST_SUITE,
   MOCHA_IS_PARALLEL,
   TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_DRIVER,
-  TEST_NAME,
-  DI_ERROR_DEBUG_INFO_CAPTURED,
-  DI_DEBUG_ERROR_SNAPSHOT_ID,
-  DI_DEBUG_ERROR_FILE,
-  DI_DEBUG_ERROR_LINE
+  TEST_BROWSER_DRIVER
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -277,7 +272,7 @@ class MochaPlugin extends CiPlugin {
           }
         )
         if (willBeRetried && this.di && this.libraryConfig?.isDiEnabled) {
-          const probeInformation = this.addDiProbe(err, this.onDiBreakpointHit.bind(this))
+          const probeInformation = this.addDiProbe(err)
           if (probeInformation) {
             const { probeId, stackIndex } = probeInformation
             this.runningTestProbeId = probeId
