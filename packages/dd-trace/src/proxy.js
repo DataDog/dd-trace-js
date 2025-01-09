@@ -9,13 +9,11 @@ const DynamicInstrumentation = require('./debugger')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
-const AppsecSdk = require('./appsec/sdk')
 const dogstatsd = require('./dogstatsd')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const spanleak = require('./spanleak')
 const { SSIHeuristics } = require('./profiling/ssi-heuristics')
 const appsecStandalone = require('./appsec/standalone')
-const LLMObsSDK = require('./llmobs/sdk')
 
 class LazyModule {
   constructor (provider) {
@@ -213,8 +211,17 @@ class Tracer extends NoopProxy {
         const prioritySampler = appsecStandalone.configure(config)
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
-        this.appsec = new AppsecSdk(this._tracer, config)
-        this.llmobs = new LLMObsSDK(this._tracer, this._modules.llmobs, config)
+
+        if (config.appsec.enabled) {
+          const AppsecSdk = require('./appsec/sdk')
+          this.appsec = new AppsecSdk(this._tracer, config)
+        }
+
+        if (config.llmobs.enabled) {
+          const LLMObsSDK = require('./llmobs/sdk')
+          this.llmobs = new LLMObsSDK(this._tracer, this._modules.llmobs, config)
+        }
+
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {
