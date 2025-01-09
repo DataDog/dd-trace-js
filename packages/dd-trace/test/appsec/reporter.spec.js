@@ -192,13 +192,15 @@ describe('reporter', () => {
       expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
     })
 
-    it('should call updateRaspRequestsMetricTags when ruleType if provided', () => {
+    it('should call updateRaspRequestsMetricTags when raspRule is provided', () => {
       const metrics = { rulesVersion: '1.2.3' }
       const store = storage.getStore()
 
-      Reporter.reportMetrics(metrics, 'rule_type')
+      const raspRule = { type: 'rule_type', variant: 'rule_variant' }
 
-      expect(telemetry.updateRaspRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req, 'rule_type')
+      Reporter.reportMetrics(metrics, raspRule)
+
+      expect(telemetry.updateRaspRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req, raspRule)
       expect(telemetry.updateWafRequestsMetricTags).to.not.have.been.called
     })
   })

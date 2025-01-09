@@ -326,6 +326,7 @@ function buildExpressServer (agent) {
     res.status(200).send()
     agent.emit('debugger-input', {
       headers: req.headers,
+      query: req.query,
       payload: req.body
     })
   })

@@ -184,7 +184,7 @@ class Tracer extends NoopProxy {
 
       if (config.isTestDynamicInstrumentationEnabled) {
         const testVisibilityDynamicInstrumentation = require('./ci-visibility/dynamic-instrumentation')
-        testVisibilityDynamicInstrumentation.start()
+        testVisibilityDynamicInstrumentation.start(config)
       }
     } catch (e) {
       log.error('Error initialising tracer', e)
