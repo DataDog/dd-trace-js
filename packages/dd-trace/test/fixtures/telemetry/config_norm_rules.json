@@ -553,6 +553,7 @@
   "managed_tracer_framework": "managed_tracer_framework",
   "memcachedCommandEnabled": "memchached_command_enabled",
   "message.broker.split-by-destination": "message_broker_split_by_destination",
+  "middleware": "trace_middleware_enabled",
   "native_tracer_version": "native_tracer_version",
   "openAiLogsEnabled": "open_ai_logs_enabled",
   "openaiSpanCharLimit": "open_ai_span_char_limit",
