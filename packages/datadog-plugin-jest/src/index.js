@@ -23,11 +23,6 @@ const {
   JEST_DISPLAY_NAME,
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_DRIVER,
-  DI_ERROR_DEBUG_INFO_CAPTURED,
-  DI_DEBUG_ERROR_PREFIX,
-  DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
-  DI_DEBUG_ERROR_FILE_SUFFIX,
-  DI_DEBUG_ERROR_LINE_SUFFIX,
   getFormattedError
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -43,7 +38,6 @@ const {
   TELEMETRY_CODE_COVERAGE_NUM_FILES,
   TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
-const log = require('../../dd-trace/src/log')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
 
@@ -374,39 +368,6 @@ class JestPlugin extends CiPlugin {
       const span = this.startTestSpan(test)
       span.setTag(TEST_STATUS, 'skip')
       span.finish()
-    })
-  }
-
-  onDiBreakpointHit ({ snapshot }) {
-    if (!this.activeTestSpan || this.activeTestSpan.context()._isFinished) {
-      // This is unexpected and is caused by a race condition.
-      log.warn('Breakpoint snapshot could not be attached to the active test span')
-      return
-    }
-
-    const stackIndex = this.testErrorStackIndex
-
-    this.activeTestSpan.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-    this.activeTestSpan.setTag(
-      `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`,
-      snapshot.id
-    )
-    this.activeTestSpan.setTag(
-      `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_FILE_SUFFIX}`,
-      snapshot.probe.location.file
-    )
-    this.activeTestSpan.setTag(
-      `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_LINE_SUFFIX}`,
-      Number(snapshot.probe.location.lines[0])
-    )
-
-    const activeTestSpanContext = this.activeTestSpan.context()
-    this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
-      debugger: { snapshot },
-      dd: {
-        trace_id: activeTestSpanContext.toTraceId(),
-        span_id: activeTestSpanContext.toSpanId()
-      }
     })
   }
 

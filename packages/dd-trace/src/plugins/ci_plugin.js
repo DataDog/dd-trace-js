@@ -22,7 +22,12 @@ const {
   TEST_SOURCE_FILE,
   TEST_LEVEL_EVENT_TYPES,
   TEST_SUITE,
-  getFileAndLineNumberFromError
+  getFileAndLineNumberFromError,
+  DI_ERROR_DEBUG_INFO_CAPTURED,
+  DI_DEBUG_ERROR_PREFIX,
+  DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
+  DI_DEBUG_ERROR_FILE_SUFFIX,
+  DI_DEBUG_ERROR_LINE_SUFFIX
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -289,6 +294,39 @@ module.exports = class CiPlugin extends Plugin {
     testSpan.context()._trace.origin = CI_APP_ORIGIN
 
     return testSpan
+  }
+
+  onDiBreakpointHit ({ snapshot }) {
+    if (!this.activeTestSpan || this.activeTestSpan.context()._isFinished) {
+      // This is unexpected and is caused by a race condition.
+      log.warn('Breakpoint snapshot could not be attached to the active test span')
+      return
+    }
+
+    const stackIndex = this.testErrorStackIndex
+
+    this.activeTestSpan.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+    this.activeTestSpan.setTag(
+      `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`,
+      snapshot.id
+    )
+    this.activeTestSpan.setTag(
+      `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_FILE_SUFFIX}`,
+      snapshot.probe.location.file
+    )
+    this.activeTestSpan.setTag(
+      `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_LINE_SUFFIX}`,
+      Number(snapshot.probe.location.lines[0])
+    )
+
+    const activeTestSpanContext = this.activeTestSpan.context()
+    this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
+      debugger: { snapshot },
+      dd: {
+        trace_id: activeTestSpanContext.toTraceId(),
+        span_id: activeTestSpanContext.toSpanId()
+      }
+    })
   }
 
   removeDiProbe (probeId) {

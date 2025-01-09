@@ -2530,9 +2530,11 @@ describe('jest CommonJS', () => {
               .endsWith('ci-visibility/dynamic-instrumentation/dependency.js')
           )
           assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
-          assert.exists(retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`])
 
-          snapshotIdByTest = retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`]
+          const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
+          assert.exists(retriedTest.meta[snapshotIdKey])
+
+          snapshotIdByTest = retriedTest.meta[snapshotIdKey]
           spanIdByTest = retriedTest.span_id.toString()
           traceIdByTest = retriedTest.trace_id.toString()
 
