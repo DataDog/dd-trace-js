@@ -271,8 +271,7 @@ class MochaPlugin extends CiPlugin {
             browserDriver: spanTags[TEST_BROWSER_DRIVER]
           }
         )
-        // TODO: PROBE SHOULD ONLY BE ADDED IN THE FIRST TRY!
-        if (willBeRetried && this.di && this.libraryConfig?.isDiEnabled) {
+        if (isFirstAttempt && willBeRetried && this.di && this.libraryConfig?.isDiEnabled) {
           const probeInformation = this.addDiProbe(err)
           if (probeInformation) {
             const { probeId, stackIndex } = probeInformation

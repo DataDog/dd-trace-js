@@ -237,15 +237,14 @@ class CucumberPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:cucumber:test:retry', ({ isRetry, error }) => {
+    this.addSub('ci:cucumber:test:retry', ({ isFirstAttempt, error }) => {
       const store = storage.getStore()
       const span = store.span
-      if (isRetry) {
+      if (!isFirstAttempt) {
         span.setTag(TEST_IS_RETRY, 'true')
       }
       span.setTag('error', error)
-      // TODO: PROBE SHOULD ONLY BE ADDED IN THE FIRST TRY!
-      if (this.di && error && this.libraryConfig?.isDiEnabled) {
+      if (isFirstAttempt && this.di && error && this.libraryConfig?.isDiEnabled) {
         const probeInformation = this.addDiProbe(error)
         if (probeInformation) {
           const { probeId, stackIndex } = probeInformation
@@ -358,6 +357,10 @@ class CucumberPlugin extends CiPlugin {
           this.tracer._exporter.flush()
         }
         this.activeTestSpan = null
+        if (this.runningTestProbeId) {
+          this.removeDiProbe(this.runningTestProbeId)
+          this.runningTestProbeId = null
+        }
       }
     })
 

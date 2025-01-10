@@ -225,6 +225,9 @@ class VitestPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       // TODO: too frequent flush - find for method in worker to decrease frequency
       this.tracer._exporter.flush(onFinish)
+      if (this.runningTestProbeId) {
+        this.removeDiProbe(this.runningTestProbeId)
+      }
     })
 
     this.addSub('ci:vitest:test-suite:error', ({ error }) => {

@@ -253,8 +253,8 @@ function wrapRun (pl, isLatestVersion) {
               // ignore error
             }
 
+            const isFirstAttempt = numAttempt++ === 0
             const failedAttemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
-            const isRetry = numAttempt++ > 0
 
             if (promises.hitBreakpointPromise) {
               await promises.hitBreakpointPromise
@@ -262,7 +262,7 @@ function wrapRun (pl, isLatestVersion) {
 
             failedAttemptAsyncResource.runInAsyncScope(() => {
               // the current span will be finished and a new one will be created
-              testRetryCh.publish({ isRetry, error })
+              testRetryCh.publish({ isFirstAttempt, error })
             })
 
             const newAsyncResource = new AsyncResource('bound-anonymous-fn')
