@@ -39,9 +39,10 @@ const {
   TEST_SESSION_NAME,
   TEST_LEVEL_EVENT_TYPES,
   DI_ERROR_DEBUG_INFO_CAPTURED,
-  DI_DEBUG_ERROR_FILE,
-  DI_DEBUG_ERROR_SNAPSHOT_ID,
-  DI_DEBUG_ERROR_LINE
+  DI_DEBUG_ERROR_PREFIX,
+  DI_DEBUG_ERROR_FILE_SUFFIX,
+  DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
+  DI_DEBUG_ERROR_LINE_SUFFIX
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
@@ -1559,10 +1560,12 @@ versions.forEach(version => {
                   assert.equal(retriedTests.length, 1)
                   const [retriedTest] = retriedTests
 
-                  assert.notProperty(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
-                  assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_FILE)
-                  assert.notProperty(retriedTest.metrics, DI_DEBUG_ERROR_LINE)
-                  assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_SNAPSHOT_ID)
+                  const hasDebugTags = Object.keys(retriedTest.meta)
+                    .some(property =>
+                      property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
+                    )
+
+                  assert.isFalse(hasDebugTags)
                 })
               const logsPromise = receiver
                 .gatherPayloadsMaxTimeout(({ url }) => url === logsEndpoint, (payloads) => {
@@ -1602,11 +1605,12 @@ versions.forEach(version => {
 
                   assert.equal(retriedTests.length, 1)
                   const [retriedTest] = retriedTests
+                  const hasDebugTags = Object.keys(retriedTest.meta)
+                    .some(property =>
+                      property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
+                    )
 
-                  assert.notProperty(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
-                  assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_FILE)
-                  assert.notProperty(retriedTest.metrics, DI_DEBUG_ERROR_LINE)
-                  assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_SNAPSHOT_ID)
+                  assert.isFalse(hasDebugTags)
                 })
               const logsPromise = receiver
                 .gatherPayloadsMaxTimeout(({ url }) => url === logsEndpoint, (payloads) => {
@@ -1655,15 +1659,17 @@ versions.forEach(version => {
                   const [retriedTest] = retriedTests
 
                   assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-                  assert.propertyVal(
-                    retriedTest.meta,
-                    DI_DEBUG_ERROR_FILE,
-                    'ci-visibility/features-di/support/sum.js'
-                  )
-                  assert.equal(retriedTest.metrics[DI_DEBUG_ERROR_LINE], 4)
-                  assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
 
-                  snapshotIdByTest = retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID]
+                  assert.isTrue(
+                    retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
+                      .endsWith('ci-visibility/features-di/support/sum.js')
+                  )
+                  assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
+
+                  const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
+                  assert.exists(retriedTest.meta[snapshotIdKey])
+
+                  snapshotIdByTest = retriedTest.meta[snapshotIdKey]
                   spanIdByTest = retriedTest.span_id.toString()
                   traceIdByTest = retriedTest.trace_id.toString()
                 })
@@ -1733,14 +1739,12 @@ versions.forEach(version => {
                   assert.equal(retriedTests.length, 1)
                   const [retriedTest] = retriedTests
 
-                  assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-                  assert.propertyVal(
-                    retriedTest.meta,
-                    DI_DEBUG_ERROR_FILE,
-                    'ci-visibility/features-di/support/sum.js'
-                  )
-                  assert.equal(retriedTest.metrics[DI_DEBUG_ERROR_LINE], 4)
-                  assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
+                  const hasDebugTags = Object.keys(retriedTest.meta)
+                    .some(property =>
+                      property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
+                    )
+
+                  assert.isFalse(hasDebugTags)
                 })
               const logsPromise = receiver
                 .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {

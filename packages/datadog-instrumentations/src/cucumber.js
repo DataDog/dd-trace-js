@@ -238,8 +238,9 @@ function wrapRun (pl, isLatestVersion) {
     asyncResource.runInAsyncScope(() => {
       testStartCh.publish(testStartPayload)
     })
+    const promises = {}
     try {
-      this.eventBroadcaster.on('envelope', shimmer.wrapFunction(null, () => (testCase) => {
+      this.eventBroadcaster.on('envelope', shimmer.wrapFunction(null, () => async (testCase) => {
         // Only supported from >=8.0.0
         if (testCase?.testCaseFinished) {
           const { testCaseFinished: { willBeRetried } } = testCase
@@ -253,17 +254,22 @@ function wrapRun (pl, isLatestVersion) {
             }
 
             const failedAttemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
-            const isRetry = numAttempt++ > 0
+            const isFirstAttempt = numAttempt++ === 0
+
+            if (promises.hitBreakpointPromise) {
+              await promises.hitBreakpointPromise
+            }
+
             failedAttemptAsyncResource.runInAsyncScope(() => {
               // the current span will be finished and a new one will be created
-              testRetryCh.publish({ isRetry, error })
+              testRetryCh.publish({ isFirstAttempt, error })
             })
 
             const newAsyncResource = new AsyncResource('bound-anonymous-fn')
             numAttemptToAsyncResource.set(numAttempt, newAsyncResource)
 
             newAsyncResource.runInAsyncScope(() => {
-              testStartCh.publish(testStartPayload) // a new span will be created
+              testStartCh.publish({ ...testStartPayload, promises }) // a new span will be created
             })
           }
         }
@@ -273,7 +279,7 @@ function wrapRun (pl, isLatestVersion) {
       asyncResource.runInAsyncScope(() => {
         promise = run.apply(this, arguments)
       })
-      promise.finally(() => {
+      promise.finally(async () => {
         const result = this.getWorstStepResult()
         const { status, skipReason } = isLatestVersion
           ? getStatusFromResultLatest(result)
@@ -296,6 +302,9 @@ function wrapRun (pl, isLatestVersion) {
 
         const error = getErrorFromCucumberResult(result)
 
+        if (promises.hitBreakpointPromise) {
+          await promises.hitBreakpointPromise
+        }
         attemptAsyncResource.runInAsyncScope(() => {
           testFinishCh.publish({ status, skipReason, error, isNew, isEfdRetry, isFlakyRetry: numAttempt > 0 })
         })

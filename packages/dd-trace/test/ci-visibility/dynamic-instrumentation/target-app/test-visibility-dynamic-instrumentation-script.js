@@ -11,17 +11,15 @@ const intervalId = setInterval(() => {}, 5000)
 tvDynamicInstrumentation.start(new Config())
 
 tvDynamicInstrumentation.isReady().then(() => {
-  const [
-    snapshotId,
-    breakpointSetPromise,
-    breakpointHitPromise
-  ] = tvDynamicInstrumentation.addLineProbe({ file: path.join(__dirname, 'di-dependency.js'), line: 9 })
-
-  breakpointHitPromise.then(({ snapshot }) => {
-    // once the breakpoint is hit, we can grab the snapshot and send it to the parent process
-    process.send({ snapshot, snapshotId })
-    clearInterval(intervalId)
-  })
+  const file = path.join(__dirname, 'di-dependency.js')
+  const [probeId, breakpointSetPromise] = tvDynamicInstrumentation.addLineProbe(
+    { file, line: 9 },
+    ({ snapshot }) => {
+      // once the breakpoint is hit, we can grab the snapshot and send it to the parent process
+      process.send({ snapshot, probeId })
+      clearInterval(intervalId)
+    }
+  )
 
   // We run the code once the breakpoint is set
   breakpointSetPromise.then(() => {

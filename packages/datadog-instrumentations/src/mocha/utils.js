@@ -19,6 +19,7 @@ const skipCh = channel('ci:mocha:test:skip')
 // suite channels
 const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
 
+const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const testToAr = new WeakMap()
 const originalFns = new WeakMap()
 const testToStartLine = new WeakMap()
@@ -73,7 +74,7 @@ function isMochaRetry (test) {
   return test._currentRetry !== undefined && test._currentRetry !== 0
 }
 
-function isLastRetry (test) {
+function getIsLastRetry (test) {
   return test._currentRetry === test._retries
 }
 
@@ -203,14 +204,28 @@ function getOnTestHandler (isMain) {
 }
 
 function getOnTestEndHandler () {
-  return function (test) {
+  return async function (test) {
     const asyncResource = getTestAsyncResource(test)
     const status = getTestStatus(test)
+
+    // After finishing it might take a bit for the snapshot to be handled.
+    // This means that tests retried with DI are BREAKPOINT_HIT_GRACE_PERIOD_MS slower at least.
+    if (test._ddShouldWaitForHitProbe || test._retriedTest?._ddShouldWaitForHitProbe) {
+      await new Promise((resolve) => {
+        setTimeout(() => {
+          resolve()
+        }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
+      })
+    }
 
     // if there are afterEach to be run, we don't finish the test yet
     if (asyncResource && !test.parent._afterEach.length) {
       asyncResource.runInAsyncScope(() => {
-        testFinishCh.publish({ status, hasBeenRetried: isMochaRetry(test) })
+        testFinishCh.publish({
+          status,
+          hasBeenRetried: isMochaRetry(test),
+          isLastRetry: getIsLastRetry(test)
+        })
       })
     }
   }
@@ -220,16 +235,17 @@ function getOnHookEndHandler () {
   return function (hook) {
     const test = hook.ctx.currentTest
     if (test && hook.parent._afterEach.includes(hook)) { // only if it's an afterEach
-      const isLastAfterEach = hook.parent._afterEach.indexOf(hook) === hook.parent._afterEach.length - 1
-      if (test._retries > 0 && !isLastRetry(test)) {
+      const isLastRetry = getIsLastRetry(test)
+      if (test._retries > 0 && !isLastRetry) {
         return
       }
+      const isLastAfterEach = hook.parent._afterEach.indexOf(hook) === hook.parent._afterEach.length - 1
       if (isLastAfterEach) {
         const status = getTestStatus(test)
         const asyncResource = getTestAsyncResource(test)
         if (asyncResource) {
           asyncResource.runInAsyncScope(() => {
-            testFinishCh.publish({ status, hasBeenRetried: isMochaRetry(test) })
+            testFinishCh.publish({ status, hasBeenRetried: isMochaRetry(test), isLastRetry })
           })
         }
       }
@@ -286,7 +302,7 @@ function getOnTestRetryHandler () {
       const isFirstAttempt = test._currentRetry === 0
       const willBeRetried = test._currentRetry < test._retries
       asyncResource.runInAsyncScope(() => {
-        testRetryCh.publish({ isFirstAttempt, err, willBeRetried })
+        testRetryCh.publish({ isFirstAttempt, err, willBeRetried, test })
       })
     }
     const key = getTestToArKey(test)
