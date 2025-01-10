@@ -23,10 +23,10 @@ async function addBreakpoint (probe) {
   delete probe.where
 
   // Optimize for fast calculations when probe is hit
-  const snapshotsPerSecond = probe.sampling.snapshotsPerSecond ?? (probe.captureSnapshot
+  const snapshotsPerSecond = probe.sampling?.snapshotsPerSecond ?? (probe.captureSnapshot
     ? MAX_SNAPSHOTS_PER_SECOND_PER_PROBE
     : MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE)
-  probe.sampling.nsBetweenSampling = BigInt(1 / snapshotsPerSecond * 1e9)
+  probe.nsBetweenSampling = BigInt(1 / snapshotsPerSecond * 1e9)
   probe.lastCaptureNs = 0n
 
   // TODO: Inbetween `await session.post('Debugger.enable')` and here, the scripts are parsed and cached.
