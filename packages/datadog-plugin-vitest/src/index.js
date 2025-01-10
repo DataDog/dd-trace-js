@@ -17,12 +17,7 @@ const {
   TEST_SOURCE_START,
   TEST_IS_NEW,
   TEST_EARLY_FLAKE_ENABLED,
-  TEST_EARLY_FLAKE_ABORT_REASON,
-  TEST_NAME,
-  DI_ERROR_DEBUG_INFO_CAPTURED,
-  DI_DEBUG_ERROR_SNAPSHOT_ID,
-  DI_DEBUG_ERROR_FILE,
-  DI_DEBUG_ERROR_LINE
+  TEST_EARLY_FLAKE_ABORT_REASON
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -65,8 +60,7 @@ class VitestPlugin extends CiPlugin {
       onDone(isFaulty)
     })
 
-    this.addSub('ci:vitest:test:start', ({ testName, testSuiteAbsolutePath, isRetry, isNew }) => {
-      console.log('test:start', { isRetry, testName })
+    this.addSub('ci:vitest:test:start', ({ testName, testSuiteAbsolutePath, isRetry, isNew, mightHitProbe }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const store = storage.getStore()
 
@@ -88,7 +82,12 @@ class VitestPlugin extends CiPlugin {
       )
 
       this.enter(span, store)
-      this.activeTestSpan = span
+
+      // TODO: there might be multiple tests for which mightHitProbe is true, so activeTestSpan
+      // might be wrongly overwritten.
+      if (mightHitProbe) {
+        this.activeTestSpan = span
+      }
     })
 
     this.addSub('ci:vitest:test:finish-time', ({ status, task }) => {
@@ -114,23 +113,21 @@ class VitestPlugin extends CiPlugin {
         span.setTag(TEST_STATUS, 'pass')
         span.finish(this.taskToFinishTime.get(task))
         finishAllTraceSpans(span)
-        this.activeTestSpan = null
       }
     })
 
-    this.addSub('ci:vitest:test:error', ({ duration, error, willBeRetried, probe, isDiEnabled }) => {
+    this.addSub('ci:vitest:test:error', ({ duration, error, shouldSetProbe, promises }) => {
       const store = storage.getStore()
       const span = store?.span
 
       if (span) {
-        // TODO: PROBE SHOULD ONLY BE ADDED IN THE FIRST TRY!
-        if (willBeRetried && this.di && isDiEnabled) {
+        if (shouldSetProbe && this.di) {
           const probeInformation = this.addDiProbe(error)
           if (probeInformation) {
             const { probeId, stackIndex, setProbePromise } = probeInformation
             this.runningTestProbeId = probeId
             this.testErrorStackIndex = stackIndex
-            probe.setProbePromise = setProbePromise
+            promises.setProbePromise = setProbePromise
           }
         }
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
@@ -144,10 +141,9 @@ class VitestPlugin extends CiPlugin {
         if (duration) {
           span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
         } else {
-          span.finish() // retries will not have a duration
+          span.finish() // `duration` is empty for retries, so we'll use clock time
         }
         finishAllTraceSpans(span)
-        this.activeTestSpan = null
       }
     })
 

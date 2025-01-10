@@ -904,7 +904,7 @@ versions.forEach((version) => {
 
     // dynamic instrumentation only supported from >=2.0.0
     if (version === 'latest') {
-      context.only('dynamic instrumentation', () => {
+      context('dynamic instrumentation', () => {
         it('does not activate it if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
@@ -1007,7 +1007,7 @@ versions.forEach((version) => {
           })
         })
 
-        it.only('runs retries with dynamic instrumentation', (done) => {
+        it('runs retries with dynamic instrumentation', (done) => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
             di_enabled: true
@@ -1086,9 +1086,6 @@ versions.forEach((version) => {
               stdio: 'pipe'
             }
           )
-
-          childProcess.stdout.pipe(process.stdout)
-          childProcess.stderr.pipe(process.stderr)
 
           childProcess.on('exit', () => {
             Promise.all([eventsPromise, logsPromise]).then(() => {
