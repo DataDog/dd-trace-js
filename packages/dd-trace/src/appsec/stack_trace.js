@@ -39,7 +39,8 @@ function filterOutFramesFromLibrary (callSiteList) {
   return callSiteList.filter(callSite => !callSite.getFileName()?.startsWith(ddBasePath))
 }
 
-function getFramesForMetaStruct (callSiteList, maxDepth = 32) {
+function getCallSiteFrames (maxDepth = 32) {
+  const callSiteList = getCallSiteList(maxDepth)
   const filteredFrames = filterOutFramesFromLibrary(callSiteList)
 
   const half = filteredFrames.length > maxDepth ? Math.round(maxDepth / 2) : Infinity
@@ -54,7 +55,8 @@ function getFramesForMetaStruct (callSiteList, maxDepth = 32) {
       line: callSite.getLineNumber(),
       column: callSite.getColumnNumber(),
       function: callSite.getFunctionName(),
-      class_name: callSite.getTypeName()
+      class_name: callSite.getTypeName(),
+      isNative: callSite.isNative()
     })
   }
 
@@ -62,12 +64,12 @@ function getFramesForMetaStruct (callSiteList, maxDepth = 32) {
 }
 
 function reportStackTrace (
-  rootSpan, stackId, maxDepth, maxStackTraces, callSiteList, namespace = STACK_TRACE_NAMESPACES.RASP) {
+  rootSpan, stackId, maxStackTraces, frames, namespace = STACK_TRACE_NAMESPACES.RASP) {
   if (!rootSpan) return
 
   if (maxStackTraces < 1 || (rootSpan.meta_struct?.['_dd.stack']?.[namespace]?.length ?? 0) < maxStackTraces) {
-    if (maxDepth < 1) maxDepth = Infinity
-    if (!Array.isArray(callSiteList)) return
+    if (!Array.isArray(frames)) return
+    if (!frames.length) return
 
     if (!rootSpan.meta_struct) {
       rootSpan.meta_struct = {}
@@ -81,8 +83,6 @@ function reportStackTrace (
       rootSpan.meta_struct['_dd.stack'][namespace] = []
     }
 
-    const frames = getFramesForMetaStruct(callSiteList, maxDepth)
-
     rootSpan.meta_struct['_dd.stack'][namespace].push({
       id: stackId,
       language: 'nodejs',
@@ -92,7 +92,7 @@ function reportStackTrace (
 }
 
 module.exports = {
-  getCallSiteList,
+  getCallSiteFrames,
   reportStackTrace,
   STACK_TRACE_NAMESPACES
 }
