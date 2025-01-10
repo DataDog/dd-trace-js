@@ -8,6 +8,7 @@ const send = require('./send')
 const { getStackFromCallFrames } = require('./state')
 const { ackEmitting, ackError } = require('./status')
 const { parentThreadId } = require('./config')
+const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./defaults')
 const log = require('../../log')
 const { version } = require('../../../../../package.json')
 
@@ -24,11 +25,14 @@ const expression = `
 const threadId = parentThreadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${parentThreadId}`
 const threadName = parentThreadId === 0 ? 'MainThread' : `WorkerThread:${parentThreadId}`
 
+const oneSecondNs = BigInt(1_000_000_000)
+let globalSnapshotSamplingRateWindowStart = BigInt(0)
+let snapshotsSampledWithinTheLastSecond = 0
+
 // WARNING: The code above the line `await session.post('Debugger.resume')` is highly optimized. Please edit with care!
 session.on('Debugger.paused', async ({ params }) => {
   const start = process.hrtime.bigint()
 
-  let captureSnapshotForProbe = null
   let maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength
 
   // V8 doesn't allow seting more than one breakpoint at a specific location, however, it's possible to set two
@@ -38,6 +42,9 @@ session.on('Debugger.paused', async ({ params }) => {
   let sampled = false
   const length = params.hitBreakpoints.length
   let probes = new Array(length)
+  // TODO: Consider reusing this array between pauses and only recreating it if it needs to grow
+  const snapshotProbeIndex = new Uint8Array(length) // TODO: Is a limit of 256 probes ever going to be a problem?
+  let numberOfProbesWithSnapshots = 0
   for (let i = 0; i < length; i++) {
     const id = params.hitBreakpoints[i]
     const probe = breakpoints.get(id)
@@ -46,16 +53,27 @@ session.on('Debugger.paused', async ({ params }) => {
       continue
     }
 
-    sampled = true
-    probe.lastCaptureNs = start
-
     if (probe.captureSnapshot === true) {
-      captureSnapshotForProbe = probe
+      // This algorithm to calculate number of sampled snapshots within the last second is not perfect, as it's not a
+      // sliding window. But it's quick and easy :)
+      if (i === 0 && start - globalSnapshotSamplingRateWindowStart > oneSecondNs) {
+        snapshotsSampledWithinTheLastSecond = 1
+        globalSnapshotSamplingRateWindowStart = start
+      } else if (snapshotsSampledWithinTheLastSecond >= MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) {
+        continue
+      } else {
+        snapshotsSampledWithinTheLastSecond++
+      }
+
+      snapshotProbeIndex[numberOfProbesWithSnapshots++] = i
       maxReferenceDepth = highestOrUndefined(probe.capture.maxReferenceDepth, maxReferenceDepth)
       maxCollectionSize = highestOrUndefined(probe.capture.maxCollectionSize, maxCollectionSize)
       maxFieldCount = highestOrUndefined(probe.capture.maxFieldCount, maxFieldCount)
       maxLength = highestOrUndefined(probe.capture.maxLength, maxLength)
     }
+
+    sampled = true
+    probe.lastCaptureNs = start
 
     probes[i] = probe
   }
@@ -68,7 +86,7 @@ session.on('Debugger.paused', async ({ params }) => {
   const dd = await getDD(params.callFrames[0].callFrameId)
 
   let processLocalState
-  if (captureSnapshotForProbe !== null) {
+  if (numberOfProbesWithSnapshots !== 0) {
     try {
       // TODO: Create unique states for each affected probe based on that probes unique `capture` settings (DEBUG-2863)
       processLocalState = await getLocalStateForCallFrame(
@@ -76,9 +94,9 @@ session.on('Debugger.paused', async ({ params }) => {
         { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength }
       )
     } catch (err) {
-      // TODO: This error is not tied to a specific probe, but to all probes with `captureSnapshot: true`.
-      // However, in 99,99% of cases, there will be just a single probe, so I guess this simplification is ok?
-      ackError(err, captureSnapshotForProbe) // TODO: Ok to continue after sending ackError?
+      for (let i = 0; i < numberOfProbesWithSnapshots; i++) {
+        ackError(err, probes[snapshotProbeIndex[i]]) // TODO: Ok to continue after sending ackError?
+      }
     }
   }
 
