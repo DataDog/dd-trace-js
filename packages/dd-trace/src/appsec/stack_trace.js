@@ -50,11 +50,12 @@ function getFramesForMetaStruct (callSiteList, maxDepth = 32) {
     const callSite = filteredFrames[index]
     indexedFrames.push({
       id: index,
-      file: callSite.getFileName(),
-      line: callSite.getLineNumber(),
-      column: callSite.getColumnNumber(),
+      file: callSite.file || callSite.getFileName(),
+      line: callSite.line || callSite.getLineNumber(),
+      column: callSite.column || callSite.getColumnNumber(),
       function: callSite.getFunctionName(),
-      class_name: callSite.getTypeName()
+      class_name: callSite.getTypeName(),
+      isNative: callSite.isNative()
     })
   }
 

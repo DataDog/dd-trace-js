@@ -15,7 +15,8 @@ describe('Stack trace reporter', () => {
             getLineNumber: () => i,
             getColumnNumber: () => i,
             getFunctionName: () => `libraryFunction${i}`,
-            getTypeName: () => `LibraryClass${i}`
+            getTypeName: () => `LibraryClass${i}`,
+            isNative: () => false
           }
         )).concat(
           Array(10).fill().map((_, i) => (
@@ -24,7 +25,8 @@ describe('Stack trace reporter', () => {
               getLineNumber: () => i,
               getColumnNumber: () => i,
               getFunctionName: () => `function${i}`,
-              getTypeName: () => `Class${i}`
+              getTypeName: () => `Class${i}`,
+              isNative: () => false
             }
           ))
         ).concat([
@@ -33,7 +35,8 @@ describe('Stack trace reporter', () => {
             getLineNumber: () => null,
             getColumnNumber: () => null,
             getFunctionName: () => null,
-            getTypeName: () => null
+            getTypeName: () => null,
+            isNative: () => false
           }
         ])
 
@@ -44,7 +47,8 @@ describe('Stack trace reporter', () => {
           line: i,
           column: i,
           function: `function${i}`,
-          class_name: `Class${i}`
+          class_name: `Class${i}`,
+          isNative: false
         }
       ))
         .concat([
@@ -54,7 +58,8 @@ describe('Stack trace reporter', () => {
             line: null,
             column: null,
             function: null,
-            class_name: null
+            class_name: null,
+            isNative: false
           }
         ])
 
@@ -75,7 +80,8 @@ describe('Stack trace reporter', () => {
         getLineNumber: () => i,
         getColumnNumber: () => i,
         getFunctionName: () => `function${i}`,
-        getTypeName: () => `type${i}`
+        getTypeName: () => `type${i}`,
+        isNative: () => false
       }
     ))
 
@@ -101,7 +107,8 @@ describe('Stack trace reporter', () => {
           line: i,
           column: i,
           function: `function${i}`,
-          class_name: `type${i}`
+          class_name: `type${i}`,
+          isNative: false
         }
       ))
 
@@ -127,7 +134,8 @@ describe('Stack trace reporter', () => {
           line: i,
           column: i,
           function: `function${i}`,
-          class_name: `type${i}`
+          class_name: `type${i}`,
+          isNative: false
         }
       ))
 
@@ -157,7 +165,8 @@ describe('Stack trace reporter', () => {
           line: i,
           column: i,
           function: `function${i}`,
-          class_name: `type${i}`
+          class_name: `type${i}`,
+          isNative: false
         }
       ))
 
@@ -245,7 +254,8 @@ describe('Stack trace reporter', () => {
         getLineNumber: () => i,
         getColumnNumber: () => i,
         getFunctionName: () => `function${i}`,
-        getTypeName: () => `type${i}`
+        getTypeName: () => `type${i}`,
+        isNative: () => false
       }
     ))
 
@@ -260,7 +270,8 @@ describe('Stack trace reporter', () => {
           line: i,
           column: i,
           function: `function${i}`,
-          class_name: `type${i}`
+          class_name: `type${i}`,
+          isNative: false
         }
       ))
 
@@ -279,7 +290,8 @@ describe('Stack trace reporter', () => {
           getLineNumber: () => 314,
           getColumnNumber: () => 271,
           getFunctionName: () => 'libraryFunction',
-          getTypeName: () => 'libraryType'
+          getTypeName: () => 'libraryType',
+          isNative: () => false
         }
       ].concat(Array(120).fill().map((_, i) => (
         {
@@ -287,7 +299,8 @@ describe('Stack trace reporter', () => {
           getLineNumber: () => i,
           getColumnNumber: () => i,
           getFunctionName: () => `function${i}`,
-          getTypeName: () => `type${i}`
+          getTypeName: () => `type${i}`,
+          isNative: () => false
         }
       )).concat([
         {
@@ -295,7 +308,8 @@ describe('Stack trace reporter', () => {
           getLineNumber: () => 271,
           getColumnNumber: () => 314,
           getFunctionName: () => 'libraryFunction',
-          getTypeName: () => 'libraryType'
+          getTypeName: () => 'libraryType',
+          isNative: () => false
         }
       ]))
       const expectedFrames = [0, 1, 2, 118, 119].map(i => (
@@ -305,7 +319,8 @@ describe('Stack trace reporter', () => {
           line: i,
           column: i,
           function: `function${i}`,
-          class_name: `type${i}`
+          class_name: `type${i}`,
+          isNative: false
         }
       ))
 
@@ -325,7 +340,8 @@ describe('Stack trace reporter', () => {
           line: i,
           column: i,
           function: `function${i}`,
-          class_name: `type${i}`
+          class_name: `type${i}`,
+          isNative: false
         }
       ))
 
@@ -345,7 +361,8 @@ describe('Stack trace reporter', () => {
           line: i,
           column: i,
           function: `function${i}`,
-          class_name: `type${i}`
+          class_name: `type${i}`,
+          isNative: false
         }
       ))
 

@@ -4,10 +4,9 @@ const path = require('path')
 const process = require('process')
 const { calculateDDBasePath } = require('../../util')
 const pathLine = {
-  getFirstNonDDPathAndLine,
   getNodeModulesPaths,
   getRelativePath,
-  getFirstNonDDPathAndLineFromCallsites, // Exported only for test purposes
+  getNonDDPathAndLineFromCallsites,
   calculateDDBasePath, // Exported only for test purposes
   ddBasePath: calculateDDBasePath(__dirname) // Only for test purposes
 }
@@ -24,22 +23,26 @@ const EXCLUDED_PATH_PREFIXES = [
   'async_hooks'
 ]
 
-function getFirstNonDDPathAndLineFromCallsites (callsites, externallyExcludedPaths) {
-  if (callsites) {
-    for (let i = 0; i < callsites.length; i++) {
-      const callsite = callsites[i]
-      const filepath = callsite.getFileName()
-      if (!isExcluded(callsite, externallyExcludedPaths) && filepath.indexOf(pathLine.ddBasePath) === -1) {
-        return {
-          path: getRelativePath(filepath),
-          line: callsite.getLineNumber(),
-          column: callsite.getColumnNumber(),
-          isInternal: !path.isAbsolute(filepath)
-        }
-      }
+function getNonDDPathAndLineFromCallsites (callsites, externallyExcludedPaths) {
+  if (!callsites) {
+    return []
+  }
+
+  const result = []
+
+  for (const callsite of callsites) {
+    const filepath = callsite.getFileName()
+    if (!isExcluded(callsite, externallyExcludedPaths) && filepath.indexOf(pathLine.ddBasePath) === -1) {
+      callsite.column = callsite.getLineNumber()
+      callsite.line = callsite.getColumnNumber()
+      callsite.path = getRelativePath(filepath)
+      callsite.isInternal = !path.isAbsolute(filepath)
+
+      result.push(callsite)
     }
   }
-  return null
+
+  return result
 }
 
 function getRelativePath (filepath) {
@@ -70,10 +73,6 @@ function isExcluded (callsite, externallyExcludedPaths) {
   }
 
   return false
-}
-
-function getFirstNonDDPathAndLine (callSiteList, externallyExcludedPaths) {
-  return getFirstNonDDPathAndLineFromCallsites(callSiteList, externallyExcludedPaths)
 }
 
 function getNodeModulesPaths (...paths) {
