@@ -52,7 +52,11 @@ describe('path-line', function () {
 
   describe('getFirstNonDDPathAndLine', () => {
     it('call does not fail', () => {
-      const obj = pathLine.getFirstNonDDPathAndLine()
+      const PROJECT_PATH = path.join(rootPath, 'project-path')
+      const DD_BASE_PATH = path.join(PROJECT_PATH, 'node_modules', 'dd-trace')
+      const callSiteList = []
+      callSiteList.push(new CallSiteMock(path.join(DD_BASE_PATH, 'other', 'file', 'in', 'dd.js'), 89))
+      const obj = pathLine.getFirstNonDDPathAndLine(callSiteList, false)
       expect(obj).to.not.be.null
     })
   })
