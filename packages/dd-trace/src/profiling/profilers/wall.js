@@ -286,7 +286,7 @@ class NativeWallProfiler {
 
     const labels = { ...getThreadLabels() }
 
-    const { context: { ref }, timestamp } = context
+    const { context: { ref }, timestamp, asyncId } = context
     const { spanId, rootSpanId, webTags, endpoint } = ref ?? {}
 
     if (this._timelineEnabled) {
@@ -306,7 +306,9 @@ class NativeWallProfiler {
       // fallback to endpoint computed when sample was taken
       labels['trace endpoint'] = endpoint
     }
-
+    if (asyncId !== undefined) {
+      labels['async id'] = asyncId
+    }
     return labels
   }
 
