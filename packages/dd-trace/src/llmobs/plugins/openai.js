@@ -7,7 +7,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     return 'tracing:apm:openai:request'
   }
 
-  getLLMObsSPanRegisterOptions (ctx) {
+  getLLMObsSpanRegisterOptions (ctx) {
     const resource = ctx.methodName
     const methodName = gateResource(normalizeOpenAIResourceName(resource))
     if (!methodName) return // we will not trace all openai methods for llmobs

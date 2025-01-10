@@ -283,6 +283,10 @@
     {
       "name": "@langchain/anthropic",
       "versions": [">=0.1"]
+    },
+    {
+      "name": "@langchain/cohere",
+      "versions": [">=0.1"]
     }
   ],
   "ldapjs": [
