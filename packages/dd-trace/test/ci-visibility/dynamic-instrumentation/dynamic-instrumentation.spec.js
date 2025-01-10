@@ -23,8 +23,8 @@ describe('test visibility with dynamic instrumentation', () => {
   it('can grab local variables', (done) => {
     childProcess = fork(path.join(__dirname, 'target-app', 'test-visibility-dynamic-instrumentation-script.js'))
 
-    childProcess.on('message', ({ snapshot: { language, stack, probe, captures }, snapshotId }) => {
-      assert.exists(snapshotId)
+    childProcess.on('message', ({ snapshot: { language, stack, probe, captures }, probeId }) => {
+      assert.exists(probeId)
       assert.exists(probe)
       assert.exists(stack)
       assert.equal(language, 'javascript')
