@@ -253,8 +253,8 @@ function wrapRun (pl, isLatestVersion) {
               // ignore error
             }
 
-            const isFirstAttempt = numAttempt++ === 0
             const failedAttemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
+            const isFirstAttempt = numAttempt++ === 0
 
             if (promises.hitBreakpointPromise) {
               await promises.hitBreakpointPromise
