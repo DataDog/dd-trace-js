@@ -42,7 +42,7 @@ session.on('Debugger.paused', async ({ params }) => {
     const id = params.hitBreakpoints[i]
     const probe = breakpoints.get(id)
 
-    if (start - probe.lastCaptureNs < probe.sampling.nsBetweenSampling) {
+    if (start - probe.lastCaptureNs < probe.nsBetweenSampling) {
       continue
     }
 
