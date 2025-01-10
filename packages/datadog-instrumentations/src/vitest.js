@@ -291,9 +291,9 @@ addHook({
     const testName = getTestName(task)
 
     const {
-      _ddKnownTests: knownTests,
-      _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled,
-      _ddEarlyFlakeDetectionNumRetries: numRepeats
+      knownTests,
+      isEarlyFlakeDetectionEnabled,
+      numRepeats
     } = getProvidedContext()
 
     if (isEarlyFlakeDetectionEnabled) {
