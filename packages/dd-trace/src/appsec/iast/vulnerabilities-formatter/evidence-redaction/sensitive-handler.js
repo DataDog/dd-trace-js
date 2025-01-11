@@ -25,19 +25,20 @@ class SensitiveHandler {
 
     this._sensitiveAnalyzers = new Map()
     this._sensitiveAnalyzers.set(vulnerabilities.CODE_INJECTION, taintedRangeBasedSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.TEMPLATE_INJECTION, taintedRangeBasedSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.COMMAND_INJECTION, commandSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.NOSQL_MONGODB_INJECTION, jsonSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.LDAP_INJECTION, ldapSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.SQL_INJECTION, sqlSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.SSRF, urlSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.UNVALIDATED_REDIRECT, urlSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.HEADER_INJECTION, (evidence) => {
-      return headerSensitiveAnalyzer(evidence, this._namePattern, this._valuePattern)
-    })
     this._sensitiveAnalyzers.set(vulnerabilities.HARDCODED_PASSWORD, (evidence) => {
       return hardcodedPasswordAnalyzer(evidence, this._valuePattern)
     })
+    this._sensitiveAnalyzers.set(vulnerabilities.HEADER_INJECTION, (evidence) => {
+      return headerSensitiveAnalyzer(evidence, this._namePattern, this._valuePattern)
+    })
+    this._sensitiveAnalyzers.set(vulnerabilities.LDAP_INJECTION, ldapSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.NOSQL_MONGODB_INJECTION, jsonSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.SQL_INJECTION, sqlSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.SSRF, urlSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.TEMPLATE_INJECTION, taintedRangeBasedSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.UNTRUSTED_DESERIALIZATION, taintedRangeBasedSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.UNVALIDATED_REDIRECT, urlSensitiveAnalyzer)
   }
 
   isSensibleName (name) {
