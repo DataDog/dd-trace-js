@@ -3,10 +3,11 @@
 set -e
 
 DIRS=($(ls -d */ | sed 's:/$::')) # Array of subdirectories
+CWD=$(pwd)
 
 function cleanup {
   for D in "${DIRS[@]}"; do
-    rm -f "${D}/meta-temp.json"
+    rm -f "${CWD}/${D}/meta-temp.json"
   done
 }
 
