@@ -1,11 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
+const { assert } = require('chai')
 const { parse } = require('../../../../src/appsec/iast/security-controls/parser')
 
 const {
   COMMAND_INJECTION_MARK,
-  CODE_INJECTION_MARK
+  CODE_INJECTION_MARK,
+  CUSTOM_SECURE_MARK
 } = require('../../../../src/appsec/iast/taint-tracking/secure-marks')
 
 describe('IAST Security Controls parser', () => {
@@ -16,7 +17,7 @@ describe('IAST Security Controls parser', () => {
 
       const civ = securityControls.get('bar/foo/custom_input_validator.js')
 
-      expect(civ).to.undefined
+      assert.isUndefined(civ)
     })
 
     it('should not parse invalid security control definition with extra fields', () => {
@@ -25,7 +26,7 @@ describe('IAST Security Controls parser', () => {
 
       const civ = securityControls.get('bar/foo/custom_input_validator.js')
 
-      expect(civ).to.undefined
+      assert.isUndefined(civ)
     })
 
     it('should not parse invalid security mark security control definition', () => {
@@ -34,7 +35,7 @@ describe('IAST Security Controls parser', () => {
 
       const civ = securityControls.get('bar/foo/custom_input_validator.js')
 
-      expect(civ).to.undefined
+      assert.isUndefined(civ)
     })
 
     it('should parse valid simple security control definition without parameters', () => {
@@ -44,11 +45,12 @@ describe('IAST Security Controls parser', () => {
       const civ = securityControls.get('bar/foo/custom_input_validator.js')[0]
 
       expect(civ).not.undefined
-      expect(civ).to.deep.include({
+      assert.deepStrictEqual(civ, {
         type: 'INPUT_VALIDATOR',
         file: 'bar/foo/custom_input_validator.js',
-        secureMarks: [COMMAND_INJECTION_MARK],
-        method: 'validate'
+        secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
+        method: 'validate',
+        parameters: undefined
       })
     })
 
@@ -58,12 +60,12 @@ describe('IAST Security Controls parser', () => {
 
       const civ = securityControls.get('bar/foo/custom_input_validator.js')[0]
 
-      expect(civ).not.undefined
-      expect(civ).to.deep.include({
+      assert.deepStrictEqual(civ, {
         type: 'SANITIZER',
         file: 'bar/foo/custom_input_validator.js',
-        secureMarks: [COMMAND_INJECTION_MARK],
-        method: 'validate'
+        secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
+        method: 'validate',
+        parameters: undefined
       })
     })
 
@@ -74,12 +76,12 @@ describe('IAST Security Controls parser', () => {
 
       const civ = securityControls.get('bar/foo/custom_input_validator.js')[0]
 
-      expect(civ).not.undefined
-      expect(civ).to.deep.include({
+      assert.deepStrictEqual(civ, {
         type: 'INPUT_VALIDATOR',
         file: 'bar/foo/custom_input_validator.js',
-        secureMarks: [COMMAND_INJECTION_MARK],
-        method: 'validate'
+        secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
+        method: 'validate',
+        parameters: undefined
       })
     })
 
@@ -89,12 +91,12 @@ describe('IAST Security Controls parser', () => {
 
       const civ = securityControls.get('bar/foo/custom_input_validator.js')[0]
 
-      expect(civ).not.undefined
-      expect(civ).to.deep.include({
+      assert.deepStrictEqual(civ, {
         type: 'INPUT_VALIDATOR',
         file: 'bar/foo/custom_input_validator.js',
-        secureMarks: [COMMAND_INJECTION_MARK, CODE_INJECTION_MARK],
-        method: 'validate'
+        secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK | CODE_INJECTION_MARK,
+        method: 'validate',
+        parameters: undefined
       })
     })
 
@@ -104,12 +106,42 @@ describe('IAST Security Controls parser', () => {
 
       const civ = securityControls.get('bar/foo/custom_input_validator.js')[0]
 
-      expect(civ).not.undefined
-      expect(civ).to.deep.include({
+      assert.deepStrictEqual(civ, {
         type: 'INPUT_VALIDATOR',
         file: 'bar/foo/custom_input_validator.js',
-        secureMarks: [COMMAND_INJECTION_MARK, CODE_INJECTION_MARK],
-        method: 'validate'
+        secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK | CODE_INJECTION_MARK,
+        method: 'validate',
+        parameters: undefined
+      })
+    })
+
+    it('should parse valid simple security control definition within exported object', () => {
+      const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:bar/foo/custom_input_validator.js:validator.validate'
+      const securityControls = parse(conf)
+
+      const civ = securityControls.get('bar/foo/custom_input_validator.js')[0]
+
+      assert.deepStrictEqual(civ, {
+        type: 'INPUT_VALIDATOR',
+        file: 'bar/foo/custom_input_validator.js',
+        secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
+        method: 'validator.validate',
+        parameters: undefined
+      })
+    })
+
+    it('should parse valid simple security control definition within exported object and parameter', () => {
+      const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:bar/foo/custom_input_validator.js:validator.validate:1'
+      const securityControls = parse(conf)
+
+      const civ = securityControls.get('bar/foo/custom_input_validator.js')[0]
+
+      assert.deepStrictEqual(civ, {
+        type: 'INPUT_VALIDATOR',
+        file: 'bar/foo/custom_input_validator.js',
+        secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
+        method: 'validator.validate',
+        parameters: [1]
       })
     })
 
@@ -119,11 +151,10 @@ describe('IAST Security Controls parser', () => {
 
       const civ = securityControls.get('bar/foo/custom_input_validator.js')[0]
 
-      expect(civ).not.undefined
-      expect(civ).to.deep.include({
+      assert.deepStrictEqual(civ, {
         type: 'INPUT_VALIDATOR',
         file: 'bar/foo/custom_input_validator.js',
-        secureMarks: [COMMAND_INJECTION_MARK],
+        secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
         parameters: [1]
       })
@@ -135,11 +166,10 @@ describe('IAST Security Controls parser', () => {
 
       const civ = securityControls.get('bar/foo/custom_input_validator.js')[0]
 
-      expect(civ).not.undefined
-      expect(civ).to.deep.include({
+      assert.deepStrictEqual(civ, {
         type: 'INPUT_VALIDATOR',
         file: 'bar/foo/custom_input_validator.js',
-        secureMarks: [COMMAND_INJECTION_MARK],
+        secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
         parameters: [1, 2]
       })
@@ -153,25 +183,24 @@ SANITIZER:COMMAND_INJECTION:bar/foo/custom_input_validator.js:sanitize'
 
       const civ = securityControls.get('bar/foo/custom_input_validator.js')
 
-      expect(civ[0]).not.undefined
-      expect(civ[0]).to.deep.include({
+      assert.deepStrictEqual(civ[0], {
         type: 'INPUT_VALIDATOR',
         file: 'bar/foo/custom_input_validator.js',
-        secureMarks: [COMMAND_INJECTION_MARK],
+        secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
         parameters: [1, 2]
       })
 
-      expect(civ[1]).not.undefined
-      expect(civ[1]).to.deep.include({
+      assert.deepStrictEqual(civ[1], {
         type: 'SANITIZER',
         file: 'bar/foo/custom_input_validator.js',
-        secureMarks: [COMMAND_INJECTION_MARK],
-        method: 'sanitize'
+        secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
+        method: 'sanitize',
+        parameters: undefined
       })
     })
 
-    it('should parse valid multiple security control definitions for the different files', () => {
+    it('should parse valid multiple security control definitions for different files', () => {
       // eslint-disable-next-line no-multi-str
       const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:bar/foo/custom_input_validator.js:validate:1,2;\
 SANITIZER:COMMAND_INJECTION:bar/foo/sanitizer.js:sanitize'
@@ -179,37 +208,35 @@ SANITIZER:COMMAND_INJECTION:bar/foo/sanitizer.js:sanitize'
 
       const civ = securityControls.get('bar/foo/custom_input_validator.js')
 
-      expect(civ[0]).not.undefined
-      expect(civ[0]).to.deep.include({
+      assert.deepStrictEqual(civ[0], {
         type: 'INPUT_VALIDATOR',
         file: 'bar/foo/custom_input_validator.js',
-        secureMarks: [COMMAND_INJECTION_MARK],
+        secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
         parameters: [1, 2]
       })
 
       const sanitizerJs = securityControls.get('bar/foo/sanitizer.js')
-      expect(sanitizerJs[0]).not.undefined
-      expect(sanitizerJs[0]).to.deep.include({
+      assert.deepStrictEqual(sanitizerJs[0], {
         type: 'SANITIZER',
         file: 'bar/foo/sanitizer.js',
-        secureMarks: [COMMAND_INJECTION_MARK],
-        method: 'sanitize'
+        secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
+        method: 'sanitize',
+        parameters: undefined
       })
     })
 
-    it('should parse valid multiple security control definitions for the different files ignoring empty', () => {
+    it('should parse valid multiple security control definitions for different files ignoring empty', () => {
       // eslint-disable-next-line no-multi-str
       const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:bar/foo/custom_input_validator.js:validate:1,2;;'
       const securityControls = parse(conf)
 
       const civ = securityControls.get('bar/foo/custom_input_validator.js')
 
-      expect(civ[0]).not.undefined
-      expect(civ[0]).to.deep.include({
+      assert.deepStrictEqual(civ[0], {
         type: 'INPUT_VALIDATOR',
         file: 'bar/foo/custom_input_validator.js',
-        secureMarks: [COMMAND_INJECTION_MARK],
+        secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
         parameters: [1, 2]
       })

@@ -1,13 +1,16 @@
 'use strict'
 
 const log = require('../../../log')
-const { getMarkFromVulnerabilityType } = require('../taint-tracking/secure-marks')
+const { getMarkFromVulnerabilityType, CUSTOM_SECURE_MARK } = require('../taint-tracking/secure-marks')
 
 const SECURITY_CONTROL_DELIMITER = ';'
 const SECURITY_CONTROL_FIELD_DELIMITER = ':'
 const SECURITY_CONTROL_ELEMENT_DELIMITER = ','
 
-const validTypes = ['INPUT_VALIDATOR', 'SANITIZER']
+const INPUT_VALIDATOR_TYPE = 'INPUT_VALIDATOR'
+const SANITIZER_TYPE = 'SANITIZER'
+
+const validTypes = [INPUT_VALIDATOR_TYPE, SANITIZER_TYPE]
 
 // DD_IAST_SECURITY_CONTROLS_CONFIGURATION
 function parse (securityControlsConfiguration) {
@@ -48,14 +51,16 @@ function parseControl (control) {
     return
   }
 
-  const secureMarks = getSecureMarks(marks)
-  if (!secureMarks?.length) {
+  let secureMarks = CUSTOM_SECURE_MARK
+  getSecureMarks(marks).forEach(mark => { secureMarks |= mark })
+  if (secureMarks === CUSTOM_SECURE_MARK) {
     log.warn('Invalid security control mark: %s', marks)
     return
   }
 
   parameters = getParameters(parameters)
 
+  // TODO: check if file is a valid path?
   return { type, secureMarks, file, method, parameters }
 }
 
@@ -82,5 +87,8 @@ function getParameters (parameters) {
 }
 
 module.exports = {
-  parse
+  parse,
+
+  INPUT_VALIDATOR_TYPE,
+  SANITIZER_TYPE
 }
