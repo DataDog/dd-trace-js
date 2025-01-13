@@ -3,11 +3,11 @@
 set -e # Exit on error, so errors don't go unnoticed
 set -x # Print commands and their arguments as they are executed (easier debugging in case of error)
 
+DIRS=($(ls -d */ | sed 's:/$::')) # Array of subdirectories
+
 function cleanup {
-  for D in *; do
-    if [ -d "${D}" ]; then
-      rm -f "${D}/meta-temp.json"
-    fi
+  for D in "${DIRS[@]}"; do
+    rm -f "${D}/meta-temp.json"
   done
 }
 
@@ -49,13 +49,7 @@ echo "using Node.js ${VERSION}"
 CPU_AFFINITY="${CPU_START_ID:-24}" # reset for each node.js version
 SPLITS=${SPLITS:-1}
 GROUP=${GROUP:-1}
-BENCH_COUNT=0
-
-for D in *; do
-  if [ -d "${D}" ]; then
-    BENCH_COUNT=$(($BENCH_COUNT+1))
-  fi
-done
+BENCH_COUNT=${#DIRS[@]}
 
 # over count so that it can be divided by bash as an integer
 BENCH_COUNT=$(($BENCH_COUNT+$BENCH_COUNT%$SPLITS))
@@ -80,16 +74,14 @@ BENCH_INDEX=0
 BENCH_END=$(($GROUP_SIZE*$GROUP))
 BENCH_START=$(($BENCH_END-$GROUP_SIZE))
 
-for D in *; do
-  if [ -d "${D}" ]; then
-    if [[ ${BENCH_INDEX} -ge ${BENCH_START} && ${BENCH_INDEX} -lt ${BENCH_END} ]]; then
-      cd "${D}"
-      run_all_variants $D
-      cd ..
-    fi
-
-    BENCH_INDEX=$(($BENCH_INDEX+1))
+for D in "${DIRS[@]}"; do
+  if [[ ${BENCH_INDEX} -ge ${BENCH_START} && ${BENCH_INDEX} -lt ${BENCH_END} ]]; then
+    cd "${D}"
+    run_all_variants $D
+    cd ..
   fi
+
+  BENCH_INDEX=$(($BENCH_INDEX+1))
 done
 
 wait # waits until all tests are complete before continuing
