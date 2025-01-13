@@ -46,6 +46,12 @@ done
 BENCH_COUNT=$(($BENCH_COUNT+$BENCH_COUNT%$SPLITS))
 GROUP_SIZE=$(($BENCH_COUNT/$SPLITS))
 
+if [ ${GROUP_SIZE} -gt ${CPU_AFFINITY} ]; then
+  echo "Not enough CPU cores available to run benchmarks, aborting..."
+  echo "Consider increasing the number of groups/splits or decreasing the number of benchmarks."
+  exit 1
+fi
+
 run_all_variants () {
   local variants="$(node ../get-variants.js)"
 
