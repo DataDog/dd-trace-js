@@ -24,6 +24,7 @@ module.exports = {
   APM_TRACING_SAMPLE_RULES: 1n << 29n,
   ASM_AUTO_USER_INSTRUM_MODE: 1n << 31n,
   ASM_ENDPOINT_FINGERPRINT: 1n << 32n,
+  ASM_SESSION_FINGERPRINT: 1n << 33n, // should we only send this if app uses express-session ?
   ASM_NETWORK_FINGERPRINT: 1n << 34n,
   ASM_HEADER_FINGERPRINT: 1n << 35n,
   ASM_RASP_CMDI: 1n << 37n
