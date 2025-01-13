@@ -170,6 +170,7 @@ function trackUser (user, rootSpan) {
 
   if (!userId) {
     log.error('[ASM] Invalid login provided to AppSec trackLogin')
+    telemetry.incrementMissingUserIdMetric('passport', 'authenticated_request')
     return
   }
 
