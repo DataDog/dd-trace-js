@@ -55,6 +55,11 @@ BENCH_INDEX=0
 BENCH_END=$(($GROUP_SIZE*$GROUP))
 BENCH_START=$(($BENCH_END-$GROUP_SIZE))
 
+if [[ ${GROUP_SIZE} -gt 24 ]]; then
+  echo "Group size ${GROUP_SIZE} is larger than available number of CPU cores on Benchmarking Platform machines (24 cores)"
+  exit 1
+fi
+
 for D in *; do
   if [ -d "${D}" ]; then
     cd "${D}"
