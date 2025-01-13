@@ -4,10 +4,11 @@ set -e # Exit on error, so errors don't go unnoticed
 set -x # Print commands and their arguments as they are executed (easier debugging in case of error)
 
 DIRS=($(ls -d */ | sed 's:/$::')) # Array of subdirectories
+CWD=$(pwd)
 
 function cleanup {
   for D in "${DIRS[@]}"; do
-    rm -f "${D}/meta-temp.json"
+    rm -f "${CWD}/${D}/meta-temp.json"
   done
 }
 
