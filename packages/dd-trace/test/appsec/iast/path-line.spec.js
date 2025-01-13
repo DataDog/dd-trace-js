@@ -4,13 +4,25 @@ const os = require('os')
 const { expect } = require('chai')
 
 class CallSiteMock {
-  constructor (file, line, column = 0) {
-    this.file = file
-    this.line = line
-    this.column = column
+  constructor (fileName, lineNumber, columnNumber = 0) {
+    this.fileName = fileName
+    this.lineNumber = lineNumber
+    this.columnNumber = columnNumber
   }
 
-  get isNative () {
+  getLineNumber () {
+    return this.lineNumber
+  }
+
+  getColumnNumber () {
+    return this.columnNumber
+  }
+
+  getFileName () {
+    return this.fileName
+  }
+
+  isNative () {
     return false
   }
 }
@@ -59,20 +71,20 @@ describe('path-line', function () {
     })
   })
 
-  describe('getNonDDCallsitesFrames', () => {
+  describe('getNonDDPathAndLineFromCallsites', () => {
     describe('does not fail', () => {
       it('with null parameter', () => {
-        const result = pathLine.getNonDDCallsitesFrames(null)
+        const result = pathLine.getNonDDPathAndLineFromCallsites(null)
         expect(result).to.be.an('array').that.is.empty
       })
 
       it('with empty list parameter', () => {
-        const result = pathLine.getNonDDCallsitesFrames([])
+        const result = pathLine.getNonDDPathAndLineFromCallsites([])
         expect(result).to.be.an('array').that.is.empty
       })
 
       it('without parameter', () => {
-        const result = pathLine.getNonDDCallsitesFrames()
+        const result = pathLine.getNonDDPathAndLineFromCallsites()
         expect(result).to.be.an('array').that.is.empty
       })
     })
@@ -108,7 +120,7 @@ describe('path-line', function () {
         callsites.push(new CallSiteMock(firstFileOutOfDD, 13, 42))
         callsites.push(new CallSiteMock(secondFileOutOfDD, 20, 15))
 
-        const results = pathLine.getNonDDCallsitesFrames(callsites)
+        const results = pathLine.getNonDDPathAndLineFromCallsites(callsites)
 
         expect(results).to.have.lengthOf(2)
 
@@ -127,7 +139,7 @@ describe('path-line', function () {
         callsites.push(new CallSiteMock(path.join(DD_BASE_PATH, 'other', 'file', 'in', 'dd.js'), 89))
         callsites.push(new CallSiteMock(path.join(DD_BASE_PATH, 'another', 'file', 'in', 'dd.js'), 5))
 
-        const results = pathLine.getNonDDCallsitesFrames(callsites)
+        const results = pathLine.getNonDDPathAndLineFromCallsites(callsites)
         expect(results).to.be.an('array').that.is.empty
       })
 
@@ -142,7 +154,7 @@ describe('path-line', function () {
           callsites.push(new CallSiteMock(dcPath, 25))
           callsites.push(new CallSiteMock(firstFileOutOfDD, 13, 42))
 
-          const results = pathLine.getNonDDCallsitesFrames(callsites)
+          const results = pathLine.getNonDDPathAndLineFromCallsites(callsites)
           expect(results).to.have.lengthOf(1)
 
           expect(results[0].path).to.be.equals(expectedFilePath)
@@ -184,7 +196,7 @@ describe('path-line', function () {
         callsites.push(new CallSiteMock(firstFileOutOfDD, 13, 42))
         callsites.push(new CallSiteMock(secondFileOutOfDD, 20, 15))
 
-        const results = pathLine.getNonDDCallsitesFrames(callsites)
+        const results = pathLine.getNonDDPathAndLineFromCallsites(callsites)
         expect(results).to.have.lengthOf(2)
 
         expect(results[0].path).to.be.equals(expectedFilePaths[0])
@@ -211,13 +223,8 @@ describe('path-line', function () {
       e.stack
       Error.prepareStackTrace = previousPrepareStackTrace
       Error.stackTraceLimit = previousStackTraceLimit
-      return callsiteList.map(callsite => ({
-        ...callsite,
-        file: callsite.getFileName(),
-        ine: callsite.getLineNumber(),
-        column: callsite.getColumnNumber(),
-        isNative: callsite.isNative()
-      }))
+
+      return callsiteList
     }
 
     it('should handle windows paths correctly', () => {
@@ -225,7 +232,7 @@ describe('path-line', function () {
       pathLine.ddBasePath = path.join('test', 'base', 'path')
 
       const list = getCallSiteInfo()
-      const firstNonDDPath = pathLine.getNonDDCallsitesFrames(list)[0]
+      const firstNonDDPath = pathLine.getNonDDPathAndLineFromCallsites(list)[0]
 
       const nodeModulesPaths = pathLine.getNodeModulesPaths(__filename)
       expect(nodeModulesPaths[0]).to.eq(path.join('node_modules', process.cwd(), firstNonDDPath.path))

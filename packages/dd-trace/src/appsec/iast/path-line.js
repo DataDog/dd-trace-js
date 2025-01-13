@@ -33,8 +33,8 @@ function getNonDDPathAndLineFromCallsites (callsites, externallyExcludedPaths) {
   for (const callsite of callsites) {
     const filepath = callsite.getFileName()
     if (!isExcluded(callsite, externallyExcludedPaths) && filepath.indexOf(pathLine.ddBasePath) === -1) {
-      callsite.column = callsite.getLineNumber()
-      callsite.line = callsite.getColumnNumber()
+      callsite.column = callsite.getColumnNumber()
+      callsite.line = callsite.getLineNumber()
       callsite.path = getRelativePath(filepath)
       callsite.isInternal = !path.isAbsolute(filepath)
 
