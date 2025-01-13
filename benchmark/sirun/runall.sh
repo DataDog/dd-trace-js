@@ -2,6 +2,16 @@
 
 set -e
 
+function cleanup {
+  for D in *; do
+    if [ -d "${D}" ]; then
+      rm -f "${D}/meta-temp.json"
+    fi
+  done
+}
+
+trap cleanup EXIT
+
 # Temporary until merged to master
 wget -O sirun.tar.gz https://github.com/DataDog/sirun/releases/download/v0.1.10/sirun-v0.1.10-x86_64-unknown-linux-musl.tar.gz \
 	&& tar -xzf sirun.tar.gz \
@@ -84,13 +94,6 @@ for D in *; do
 done
 
 wait # waits until all tests are complete before continuing
-
-# TODO: cleanup even when something fails
-for D in *; do
-  if [ -d "${D}" ]; then
-    rm -f "${D}/meta-temp.json"
-  fi
-done
 
 node ./strip-unwanted-results.js
 
