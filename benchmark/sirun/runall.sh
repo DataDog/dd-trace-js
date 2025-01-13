@@ -47,9 +47,7 @@ for D in *; do
   fi
 done
 
-# over count so that it can be divided by bash as an integer
-BENCH_COUNT_CEILING=$(($BENCH_COUNT+$SPLITS-$BENCH_COUNT%$SPLITS))
-GROUP_SIZE=$((BENCH_COUNT_CEILING/$SPLITS))
+GROUP_SIZE=$(($(($BENCH_COUNT+$SPLITS-1))/$SPLITS)) # round up
 
 BENCH_INDEX=0
 BENCH_END=$(($GROUP_SIZE*$GROUP))
