@@ -167,37 +167,34 @@ function trackUser (user, rootSpan) {
   if (!collectionMode || collectionMode === 'disabled') return
 
   const userId = getUserId(user)
-
   if (!userId) {
-    log.error('[ASM] Invalid login provided to AppSec trackLogin')
+    log.error('[ASM] No valid user ID found in AppSec trackUser')
     telemetry.incrementMissingUserIdMetric('passport', 'authenticated_request')
     return
   }
 
-  const currentTags = rootSpan.context()._tags
-
-  // used to not overwrite tags set by SDK
-  function shouldSetTag (tag) {
-    return !(isSdkCalled && currentTags[tag])
-  }
+  const isSdkCalled = rootSpan.context()._tags.currentTags['_dd.appsec.user.collection_mode'] === 'sdk'
 
   const newTags = {
-    '_dd.appsec.usr.id': userId, // always AND only send when automated
-    '_dd.appsec.user.collection_mode': collectionMode
+    '_dd.appsec.usr.id': userId
   }
 
-  if (!currentTags['usr.id']) {
+  // do not override SDK
+  if (!isSdkCalled) {
     newTags['usr.id'] = userId
+    newTags['_dd.appsec.user.collection_mode'] = collectionMode
   }
 
   rootSpan.addTags(newTags)
 
-  // If the user monitoring SDK has already resulted in a call to libddwaf before any automated instrumentation or collection method has been executed, no extra call should be made.
-  return waf.run({
-    persistent: {
-      [addresses.USER_ID]: userId
-    }
-  })
+  // do not override SDK
+  if (!isSdkCalled) {
+    return waf.run({
+      persistent: {
+        [addresses.USER_ID]: userId
+      }
+    })
+  }
 }
 
 module.exports = {
@@ -205,3 +202,19 @@ module.exports = {
   trackLogin,
   trackUser
 }
+
+
+
+/*
+check conflict when trackUser and trackLogin is called
+
+
+test with:
+- express-session with passport
+- passport-jwt (or general jwt tokens)
+- data stored in cookies
+- opaque tokens that calls to third party service to get the users in each request (auth0, hydra...)
+- passport-saml (Onelogin, Okta, Shibboleth, LDAP)
+- passport-oauth2
+
+*/
