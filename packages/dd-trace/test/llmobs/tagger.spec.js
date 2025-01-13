@@ -111,14 +111,16 @@ describe('tagger', () => {
         const parentSpan = {
           context () {
             return {
-              _tags: {
-                '_ml_obs.meta.ml_app': 'my-ml-app',
-                '_ml_obs.session_id': 'my-session'
-              },
               toSpanId () { return '5678' }
             }
           }
         }
+
+        Tagger.tagMap.set(parentSpan, {
+          '_ml_obs.meta.ml_app': 'my-ml-app',
+          '_ml_obs.session_id': 'my-session'
+        })
+
         tagger.registerLLMObsSpan(span, { kind: 'llm', parent: parentSpan })
 
         expect(Tagger.tagMap.get(span)).to.deep.equal({
