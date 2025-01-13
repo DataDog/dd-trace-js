@@ -25,8 +25,8 @@ const expression = `
 const threadId = parentThreadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${parentThreadId}`
 const threadName = parentThreadId === 0 ? 'MainThread' : `WorkerThread:${parentThreadId}`
 
-const oneSecondNs = BigInt(1_000_000_000)
-let globalSnapshotSamplingRateWindowStart = BigInt(0)
+const oneSecondNs = 1_000_000_000n
+let globalSnapshotSamplingRateWindowStart = 0n
 let snapshotsSampledWithinTheLastSecond = 0
 
 // WARNING: The code above the line `await session.post('Debugger.resume')` is highly optimized. Please edit with care!
