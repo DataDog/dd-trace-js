@@ -1,16 +1,21 @@
 #!/bin/bash
 
+set -e # Exit on error, so errors don't go unnoticed
+set -x # Print commands and their arguments as they are executed (easier debugging in case of error)
+
 # Temporary until merged to master
 wget -O sirun.tar.gz https://github.com/DataDog/sirun/releases/download/v0.1.10/sirun-v0.1.10-x86_64-unknown-linux-musl.tar.gz \
 	&& tar -xzf sirun.tar.gz \
 	&& rm sirun.tar.gz \
 	&& mv sirun /usr/bin/sirun
 
+set +x
 if test -f ~/.nvm/nvm.sh; then
   source ~/.nvm/nvm.sh
 else
   source /usr/local/nvm/nvm.sh
 fi
+set -x
 
 nvm use 18
 
