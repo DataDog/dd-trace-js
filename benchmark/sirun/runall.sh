@@ -88,7 +88,7 @@ wait # waits until all tests are complete before continuing
 # TODO: cleanup even when something fails
 for D in *; do
   if [ -d "${D}" ]; then
-    unlink "${D}/meta-temp.json" 2>/dev/null
+    rm -f "${D}/meta-temp.json"
   fi
 done
 
