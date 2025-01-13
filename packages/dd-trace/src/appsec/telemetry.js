@@ -181,6 +181,15 @@ function incrementMissingUserLoginMetric (framework, eventType) {
   }).inc()
 }
 
+function incrementMissingUserIdMetric (framework, eventType) {
+  if (!enabled) return
+
+  appsecMetrics.count('instrum.user_auth.missing_user_id', {
+    framework,
+    event_type: eventType
+  }).inc()
+}
+
 function getRequestMetrics (req) {
   if (req) {
     const store = getStore(req)
@@ -198,6 +207,7 @@ module.exports = {
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,
   incrementMissingUserLoginMetric,
+  incrementMissingUserIdMetric,
 
   getRequestMetrics
 }
