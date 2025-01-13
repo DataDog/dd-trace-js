@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# DO NOT MERGE! Verify that script works correctly.
+
 set -e
 
 # Temporary until merged to master
