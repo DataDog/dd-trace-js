@@ -2,11 +2,11 @@
 
 set -e
 
+DIRS=($(ls -d */ | sed 's:/$::')) # Array of subdirectories
+
 function cleanup {
-  for D in *; do
-    if [ -d "${D}" ]; then
-      rm -f "${D}/meta-temp.json"
-    fi
+  for D in "${DIRS[@]}"; do
+    rm -f "${D}/meta-temp.json"
   done
 }
 
@@ -49,13 +49,11 @@ SPLITS=${SPLITS:-1}
 GROUP=${GROUP:-1}
 
 BENCH_COUNT=0
-for D in *; do
-  if [ -d "${D}" ]; then
-    cd "${D}"
-    variants="$(node ../get-variants.js)"
-    for V in $variants; do BENCH_COUNT=$(($BENCH_COUNT+1)); done
-    cd ..
-  fi
+for D in "${DIRS[@]}"; do
+  cd "${D}"
+  variants="$(node ../get-variants.js)"
+  for V in $variants; do BENCH_COUNT=$(($BENCH_COUNT+1)); done
+  cd ..
 done
 
 GROUP_SIZE=$(($(($BENCH_COUNT+$SPLITS-1))/$SPLITS)) # round up
@@ -69,28 +67,26 @@ if [[ ${GROUP_SIZE} -gt 24 ]]; then
   exit 1
 fi
 
-for D in *; do
-  if [ -d "${D}" ]; then
-    cd "${D}"
-    variants="$(node ../get-variants.js)"
+for D in "${DIRS[@]}"; do
+  cd "${D}"
+  variants="$(node ../get-variants.js)"
 
-    node ../squash-affinity.js
+  node ../squash-affinity.js
 
-    for V in $variants; do
-      if [[ ${BENCH_INDEX} -ge ${BENCH_START} && ${BENCH_INDEX} -lt ${BENCH_END} ]]; then
-        echo "running $((BENCH_INDEX+1)) out of ${BENCH_COUNT}, ${D}/${V} in background, pinned to core ${CPU_AFFINITY}..."
+  for V in $variants; do
+    if [[ ${BENCH_INDEX} -ge ${BENCH_START} && ${BENCH_INDEX} -lt ${BENCH_END} ]]; then
+      echo "running $((BENCH_INDEX+1)) out of ${BENCH_COUNT}, ${D}/${V} in background, pinned to core ${CPU_AFFINITY}..."
 
-        export SIRUN_VARIANT=$V
+      export SIRUN_VARIANT=$V
 
-        (time node ../run-one-variant.js >> ../results.ndjson && echo "${D}/${V} finished.") &
-        ((CPU_AFFINITY=CPU_AFFINITY+1))
-      fi
+      (time node ../run-one-variant.js >> ../results.ndjson && echo "${D}/${V} finished.") &
+      ((CPU_AFFINITY=CPU_AFFINITY+1))
+    fi
 
-      BENCH_INDEX=$(($BENCH_INDEX+1))
-    done
+    BENCH_INDEX=$(($BENCH_INDEX+1))
+  done
 
-    cd ..
-  fi
+  cd ..
 done
 
 wait # waits until all tests are complete before continuing
