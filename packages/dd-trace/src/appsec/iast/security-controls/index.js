@@ -1,9 +1,9 @@
 'use strict'
 
-function enable (iastConfig) {
+function configure (iastConfig) {
 
 }
 
 module.exports = {
-  enable
+  configure
 }
