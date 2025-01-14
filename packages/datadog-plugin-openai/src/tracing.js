@@ -41,7 +41,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
     this.sampler = new Sampler(0.1) // default 10% log sampling
 
-    // hoist the max length env var to avoid making all of these functions a class method
+    // hoist the normalize function to avoid making all of these functions a class method
     if (this._tracerConfig) {
       const utilities = makeUtilities('openai', this._tracerConfig)
 
