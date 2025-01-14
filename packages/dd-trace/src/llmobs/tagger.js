@@ -60,10 +60,10 @@ class LLMObsTagger {
     if (modelName) this._setTag(span, MODEL_NAME, modelName)
     if (modelProvider) this._setTag(span, MODEL_PROVIDER, modelProvider)
 
-    sessionId = sessionId || parent?.context()._tags[SESSION_ID]
+    sessionId = sessionId || registry.get(parent)?.[SESSION_ID]
     if (sessionId) this._setTag(span, SESSION_ID, sessionId)
 
-    if (!mlApp) mlApp = parent?.context()._tags[ML_APP] || this._config.llmobs.mlApp
+    if (!mlApp) mlApp = registry.get(parent)?.[ML_APP] || this._config.llmobs.mlApp
     this._setTag(span, ML_APP, mlApp)
 
     const parentId =
