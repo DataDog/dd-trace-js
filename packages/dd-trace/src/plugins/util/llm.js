@@ -22,11 +22,11 @@ function isPromptCompletionSampled (sampler) {
   return sampler.isSampled()
 }
 
-module.exports = function (integration, tracerConfig) {
-  const integrationConfig = tracerConfig[integration]
+module.exports = function (integrationName, tracerConfig) {
+  const integrationConfig = tracerConfig[integrationName]
   const { spanCharLimit, spanPromptCompletionSampleRate } = integrationConfig
 
-  const sampler = new Sampler(spanPromptCompletionSampleRate)
+  const sampler = new Sampler(spanPromptCompletionSampleRate ?? 1.0)
 
   return {
     normalize: str => normalize(str, spanCharLimit),

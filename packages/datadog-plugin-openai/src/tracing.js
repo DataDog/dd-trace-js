@@ -11,8 +11,7 @@ const { estimateTokens } = require('./token-estimator')
 
 const makeUtilities = require('../../dd-trace/src/plugins/util/llm')
 
-// TODO: In the future we should refactor config.js to make it requirable
-let normalize, isPromptCompletionSampled
+let normalize
 
 function safeRequire (path) {
   try {
@@ -47,7 +46,6 @@ class OpenAiTracingPlugin extends TracingPlugin {
       const utilities = makeUtilities('openai', this._tracerConfig)
 
       normalize = utilities.normalize
-      isPromptCompletionSampled = utilities.isPromptCompletionSampled
     }
   }
 
