@@ -10,6 +10,15 @@ session['@noCallThru'] = true
 proxyquire('../src/debugger/devtools_client/snapshot/collector', {
   '../session': session
 })
+proxyquire('../src/debugger/devtools_client/snapshot/redaction', {
+  '../config': {
+    dynamicInstrumentation: {
+      redactedIdentifiers: [],
+      redactionExcludedIdentifiers: []
+    },
+    '@noCallThru': true
+  }
+})
 
 const { getLocalStateForCallFrame } = require('../../../../src/debugger/devtools_client/snapshot')
 
@@ -75,16 +84,16 @@ async function setAndTriggerBreakpoint (path, line) {
   run()
 }
 
-function assertOnBreakpoint (done, config, callback) {
-  if (typeof config === 'function') {
-    callback = config
-    config = undefined
+function assertOnBreakpoint (done, snapshotConfig, callback) {
+  if (typeof snapshotConfig === 'function') {
+    callback = snapshotConfig
+    snapshotConfig = undefined
   }
 
   session.once('Debugger.paused', ({ params }) => {
     expect(params.hitBreakpoints.length).to.eq(1)
 
-    getLocalStateForCallFrame(params.callFrames[0], config).then((process) => {
+    getLocalStateForCallFrame(params.callFrames[0], snapshotConfig).then((process) => {
       callback(process())
       done()
     }).catch(done)

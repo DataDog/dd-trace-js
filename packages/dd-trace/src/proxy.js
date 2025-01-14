@@ -120,7 +120,7 @@ class Tracer extends NoopProxy {
           this._flare.module.send(conf.args)
         })
 
-        if (config.dynamicInstrumentationEnabled) {
+        if (config.dynamicInstrumentation.enabled) {
           DynamicInstrumentation.start(config, rc)
         }
       }
@@ -185,7 +185,7 @@ class Tracer extends NoopProxy {
 
       if (config.isTestDynamicInstrumentationEnabled) {
         const testVisibilityDynamicInstrumentation = require('./ci-visibility/dynamic-instrumentation')
-        testVisibilityDynamicInstrumentation.start()
+        testVisibilityDynamicInstrumentation.start(config)
       }
     } catch (e) {
       log.error('Error initialising tracer', e)
