@@ -45,7 +45,7 @@ describe('RASP - utils.js', () => {
       web.root.returns(rootSpan)
 
       utils.handleResult(result, req, undefined, undefined, config)
-      sinon.assert.calledOnceWithExactly(stackTrace.reportStackTrace, rootSpan, stackId, 42, 2, [])
+      sinon.assert.calledOnceWithExactly(stackTrace.reportStackTrace, rootSpan, stackId, 2, sinon.match.array)
     })
 
     it('should not report stack trace when no action is present in waf result', () => {

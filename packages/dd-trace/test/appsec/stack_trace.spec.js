@@ -3,11 +3,11 @@
 const { assert } = require('chai')
 const path = require('path')
 
-const { reportStackTrace } = require('../../src/appsec/stack_trace')
+const { reportStackTrace, getFramesForMetaStruct } = require('../../src/appsec/stack_trace')
 
 describe('Stack trace reporter', () => {
   describe('frame filtering', () => {
-    it('should filer out frames from library', () => {
+    it('should filter out frames from library', () => {
       const callSiteList =
         Array(10).fill().map((_, i) => (
           {
@@ -67,7 +67,9 @@ describe('Stack trace reporter', () => {
       const stackId = 'test_stack_id'
       const maxDepth = 32
       const maxStackTraces = 2
-      reportStackTrace(rootSpan, stackId, maxDepth, maxStackTraces, callSiteList)
+      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, maxStackTraces, frames)
 
       assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
     })
@@ -112,7 +114,9 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      reportStackTrace(rootSpan, stackId, maxDepth, 2, callSiteList)
+      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, 2, frames)
 
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].id, stackId)
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].language, 'nodejs')
@@ -139,7 +143,9 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      reportStackTrace(rootSpan, stackId, maxDepth, 2, callSiteList)
+      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, 2, frames)
 
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].id, stackId)
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].language, 'nodejs')
@@ -170,7 +176,9 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      reportStackTrace(rootSpan, stackId, maxDepth, 2, callSiteList)
+      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, 2, frames)
 
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[1].id, stackId)
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[1].language, 'nodejs')
@@ -190,7 +198,9 @@ describe('Stack trace reporter', () => {
       const stackId = 'test_stack_id'
       const maxDepth = 32
 
-      reportStackTrace(rootSpan, stackId, maxDepth, 2, callSiteList)
+      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, 2, frames)
 
       assert.equal(rootSpan.meta_struct['_dd.stack'].exploit.length, 2)
       assert.property(rootSpan.meta_struct, 'another_tag')
@@ -208,7 +218,9 @@ describe('Stack trace reporter', () => {
       const stackId = 'test_stack_id'
       const maxDepth = 32
 
-      reportStackTrace(rootSpan, stackId, maxDepth, 0, callSiteList)
+      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, 0, frames)
 
       assert.equal(rootSpan.meta_struct['_dd.stack'].exploit.length, 3)
       assert.property(rootSpan.meta_struct, 'another_tag')
@@ -226,7 +238,9 @@ describe('Stack trace reporter', () => {
       const stackId = 'test_stack_id'
       const maxDepth = 32
 
-      reportStackTrace(rootSpan, stackId, maxDepth, -1, callSiteList)
+      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, -1, frames)
 
       assert.equal(rootSpan.meta_struct['_dd.stack'].exploit.length, 3)
       assert.property(rootSpan.meta_struct, 'another_tag')
@@ -275,7 +289,9 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      reportStackTrace(rootSpan, stackId, maxDepth, 2, callSiteList)
+      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, 2, frames)
 
       assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
     })
@@ -324,7 +340,9 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      reportStackTrace(rootSpan, stackId, maxDepth, 2, callSiteListWithLibraryFrames)
+      const frames = getFramesForMetaStruct(maxDepth, () => callSiteListWithLibraryFrames)
+
+      reportStackTrace(rootSpan, stackId, 2, frames)
 
       assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
     })
@@ -345,7 +363,9 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      reportStackTrace(rootSpan, stackId, maxDepth, 2, callSiteList)
+      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, 2, frames)
 
       assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
     })
@@ -366,7 +386,9 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      reportStackTrace(rootSpan, stackId, maxDepth, 2, callSiteList)
+      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, 2, frames)
 
       assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
     })

@@ -1,7 +1,7 @@
 'use strict'
 
 const web = require('../../plugins/util/web')
-const { getCallSiteList, reportStackTrace } = require('../stack_trace')
+const { getFramesForMetaStruct, reportStackTrace } = require('../stack_trace')
 const { getBlockingAction } = require('../blocking')
 const log = require('../../log')
 
@@ -34,15 +34,14 @@ function handleResult (actions, req, res, abortController, config) {
   const { enabled, maxDepth, maxStackTraces } = config.appsec.stackTrace
 
   if (generateStackTraceAction && enabled) {
-    const callSiteList = getCallSiteList(maxDepth)
+    const frames = getFramesForMetaStruct(maxDepth)
 
     const rootSpan = web.root(req)
     reportStackTrace(
       rootSpan,
       generateStackTraceAction.stack_id,
-      maxDepth,
       maxStackTraces,
-      callSiteList
+      frames
     )
   }
 

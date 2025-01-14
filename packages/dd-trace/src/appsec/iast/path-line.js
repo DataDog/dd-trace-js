@@ -6,7 +6,7 @@ const { calculateDDBasePath } = require('../../util')
 const pathLine = {
   getNodeModulesPaths,
   getRelativePath,
-  getNonDDPathAndLineFromCallsites,
+  getNonDDFrames,
   calculateDDBasePath, // Exported only for test purposes
   ddBasePath: calculateDDBasePath(__dirname) // Only for test purposes
 }
@@ -23,18 +23,16 @@ const EXCLUDED_PATH_PREFIXES = [
   'async_hooks'
 ]
 
-function getNonDDPathAndLineFromCallsites (callsites, externallyExcludedPaths) {
-  if (!callsites) {
+function getNonDDFrames (callSiteFrames, externallyExcludedPaths) {
+  if (!callSiteFrames) {
     return []
   }
 
   const result = []
 
-  for (const callsite of callsites) {
-    const filepath = callsite.getFileName()
+  for (const callsite of callSiteFrames) {
+    const filepath = callsite.file
     if (!isExcluded(callsite, externallyExcludedPaths) && filepath.indexOf(pathLine.ddBasePath) === -1) {
-      callsite.column = callsite.getColumnNumber()
-      callsite.line = callsite.getLineNumber()
       callsite.path = getRelativePath(filepath)
       callsite.isInternal = !path.isAbsolute(filepath)
 
@@ -50,8 +48,8 @@ function getRelativePath (filepath) {
 }
 
 function isExcluded (callsite, externallyExcludedPaths) {
-  if (callsite.isNative()) return true
-  const filename = callsite.getFileName()
+  if (callsite.isNative) return true
+  const filename = callsite.file
   if (!filename) {
     return true
   }

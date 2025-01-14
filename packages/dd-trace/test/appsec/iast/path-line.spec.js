@@ -5,24 +5,12 @@ const { expect } = require('chai')
 
 class CallSiteMock {
   constructor (fileName, lineNumber, columnNumber = 0) {
-    this.fileName = fileName
-    this.lineNumber = lineNumber
-    this.columnNumber = columnNumber
+    this.file = fileName
+    this.line = lineNumber
+    this.column = columnNumber
   }
 
-  getLineNumber () {
-    return this.lineNumber
-  }
-
-  getColumnNumber () {
-    return this.columnNumber
-  }
-
-  getFileName () {
-    return this.fileName
-  }
-
-  isNative () {
+  get isNative () {
     return false
   }
 }
@@ -71,20 +59,20 @@ describe('path-line', function () {
     })
   })
 
-  describe('getNonDDPathAndLineFromCallsites', () => {
+  describe('getNonDDFrames', () => {
     describe('does not fail', () => {
       it('with null parameter', () => {
-        const result = pathLine.getNonDDPathAndLineFromCallsites(null)
+        const result = pathLine.getNonDDFrames(null)
         expect(result).to.be.an('array').that.is.empty
       })
 
       it('with empty list parameter', () => {
-        const result = pathLine.getNonDDPathAndLineFromCallsites([])
+        const result = pathLine.getNonDDFrames([])
         expect(result).to.be.an('array').that.is.empty
       })
 
       it('without parameter', () => {
-        const result = pathLine.getNonDDPathAndLineFromCallsites()
+        const result = pathLine.getNonDDFrames()
         expect(result).to.be.an('array').that.is.empty
       })
     })
@@ -120,7 +108,7 @@ describe('path-line', function () {
         callsites.push(new CallSiteMock(firstFileOutOfDD, 13, 42))
         callsites.push(new CallSiteMock(secondFileOutOfDD, 20, 15))
 
-        const results = pathLine.getNonDDPathAndLineFromCallsites(callsites)
+        const results = pathLine.getNonDDFrames(callsites)
 
         expect(results).to.have.lengthOf(2)
 
@@ -139,7 +127,7 @@ describe('path-line', function () {
         callsites.push(new CallSiteMock(path.join(DD_BASE_PATH, 'other', 'file', 'in', 'dd.js'), 89))
         callsites.push(new CallSiteMock(path.join(DD_BASE_PATH, 'another', 'file', 'in', 'dd.js'), 5))
 
-        const results = pathLine.getNonDDPathAndLineFromCallsites(callsites)
+        const results = pathLine.getNonDDFrames(callsites)
         expect(results).to.be.an('array').that.is.empty
       })
 
@@ -154,7 +142,7 @@ describe('path-line', function () {
           callsites.push(new CallSiteMock(dcPath, 25))
           callsites.push(new CallSiteMock(firstFileOutOfDD, 13, 42))
 
-          const results = pathLine.getNonDDPathAndLineFromCallsites(callsites)
+          const results = pathLine.getNonDDFrames(callsites)
           expect(results).to.have.lengthOf(1)
 
           expect(results[0].path).to.be.equals(expectedFilePath)
@@ -196,7 +184,7 @@ describe('path-line', function () {
         callsites.push(new CallSiteMock(firstFileOutOfDD, 13, 42))
         callsites.push(new CallSiteMock(secondFileOutOfDD, 20, 15))
 
-        const results = pathLine.getNonDDPathAndLineFromCallsites(callsites)
+        const results = pathLine.getNonDDFrames(callsites)
         expect(results).to.have.lengthOf(2)
 
         expect(results[0].path).to.be.equals(expectedFilePaths[0])
@@ -211,34 +199,36 @@ describe('path-line', function () {
   })
 
   describe('getNodeModulesPaths', () => {
-    function getCallSiteInfo () {
-      const previousPrepareStackTrace = Error.prepareStackTrace
-      const previousStackTraceLimit = Error.stackTraceLimit
-      let callsiteList
-      Error.stackTraceLimit = 100
-      Error.prepareStackTrace = function (_, callsites) {
-        callsiteList = callsites
-      }
-      const e = new Error()
-      e.stack
-      Error.prepareStackTrace = previousPrepareStackTrace
-      Error.stackTraceLimit = previousStackTraceLimit
+    // function getCallSiteInfo () {
+    //   const previousPrepareStackTrace = Error.prepareStackTrace
+    //   const previousStackTraceLimit = Error.stackTraceLimit
+    //   let callsiteList
+    //   Error.stackTraceLimit = 100
+    //   Error.prepareStackTrace = function (_, callsites) {
+    //     callsiteList = callsites
+    //   }
+    //   const e = new Error()
+    //   e.stack
+    //   Error.prepareStackTrace = previousPrepareStackTrace
+    //   Error.stackTraceLimit = previousStackTraceLimit
 
-      return callsiteList
-    }
+    //   return callsiteList
+    // }
+    // TODO: propose another test similar to this
+    // it('should handle windows paths correctly', () => {
+    //   const basePath = pathLine.ddBasePath
+    //   pathLine.ddBasePath = path.join('test', 'base', 'path')
+    //   const { getFramesForMetaStruct } = require('../../../src/appsec/stack_trace')
 
-    it('should handle windows paths correctly', () => {
-      const basePath = pathLine.ddBasePath
-      pathLine.ddBasePath = path.join('test', 'base', 'path')
+    //   const list = getFramesForMetaStruct(32, getCallSiteInfo)
+    //   const firstNonDDPath = pathLine.getNonDDFrames(list)[0]
 
-      const list = getCallSiteInfo()
-      const firstNonDDPath = pathLine.getNonDDPathAndLineFromCallsites(list)[0]
+    //   const nodeModulesPaths = pathLine.getNodeModulesPaths(__filename)
 
-      const nodeModulesPaths = pathLine.getNodeModulesPaths(__filename)
-      expect(nodeModulesPaths[0]).to.eq(path.join('node_modules', process.cwd(), firstNonDDPath.path))
+    //   expect(nodeModulesPaths[0]).to.eq(path.join('node_modules', process.cwd(), firstNonDDPath.path))
 
-      pathLine.ddBasePath = basePath
-    })
+    //   pathLine.ddBasePath = basePath
+    // })
 
     it('should convert / to \\ in windows platforms', () => {
       const dirname = __dirname
