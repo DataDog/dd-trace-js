@@ -4,7 +4,7 @@
 
 const fs = require('fs')
 const path = require('path')
-const { exec, getStdio } = require('./run-util')
+const { exec, stdio } = require('./run-util')
 
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
@@ -18,10 +18,10 @@ const env = Object.assign({}, process.env, { DD_TRACE_STARTUP_LOGS: 'false' })
     const variants = metaJson.variants
     for (const variant in variants) {
       const variantEnv = Object.assign({}, env, { SIRUN_VARIANT: variant })
-      await exec('sirun', ['meta-temp.json'], { env: variantEnv, stdio: getStdio() })
+      await exec('sirun', ['meta-temp.json'], { env: variantEnv, stdio })
     }
   } else {
-    await exec('sirun', ['meta-temp.json'], { env, stdio: getStdio() })
+    await exec('sirun', ['meta-temp.json'], { env, stdio })
   }
 
   try {
