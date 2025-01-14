@@ -3,7 +3,7 @@
 const { assert } = require('chai')
 const path = require('path')
 
-const { reportStackTrace, getFramesForMetaStruct } = require('../../src/appsec/stack_trace')
+const { reportStackTrace, getCallsiteFrames } = require('../../src/appsec/stack_trace')
 
 describe('Stack trace reporter', () => {
   describe('frame filtering', () => {
@@ -67,7 +67,7 @@ describe('Stack trace reporter', () => {
       const stackId = 'test_stack_id'
       const maxDepth = 32
       const maxStackTraces = 2
-      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
 
       reportStackTrace(rootSpan, stackId, maxStackTraces, frames)
 
@@ -114,7 +114,7 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
 
       reportStackTrace(rootSpan, stackId, 2, frames)
 
@@ -143,7 +143,7 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
 
       reportStackTrace(rootSpan, stackId, 2, frames)
 
@@ -176,7 +176,7 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
 
       reportStackTrace(rootSpan, stackId, 2, frames)
 
@@ -198,7 +198,7 @@ describe('Stack trace reporter', () => {
       const stackId = 'test_stack_id'
       const maxDepth = 32
 
-      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
 
       reportStackTrace(rootSpan, stackId, 2, frames)
 
@@ -218,7 +218,7 @@ describe('Stack trace reporter', () => {
       const stackId = 'test_stack_id'
       const maxDepth = 32
 
-      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
 
       reportStackTrace(rootSpan, stackId, 0, frames)
 
@@ -238,7 +238,7 @@ describe('Stack trace reporter', () => {
       const stackId = 'test_stack_id'
       const maxDepth = 32
 
-      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
 
       reportStackTrace(rootSpan, stackId, -1, frames)
 
@@ -289,7 +289,7 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
 
       reportStackTrace(rootSpan, stackId, 2, frames)
 
@@ -340,7 +340,7 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      const frames = getFramesForMetaStruct(maxDepth, () => callSiteListWithLibraryFrames)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteListWithLibraryFrames)
 
       reportStackTrace(rootSpan, stackId, 2, frames)
 
@@ -363,7 +363,7 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
 
       reportStackTrace(rootSpan, stackId, 2, frames)
 
@@ -386,7 +386,7 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      const frames = getFramesForMetaStruct(maxDepth, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
 
       reportStackTrace(rootSpan, stackId, 2, frames)
 

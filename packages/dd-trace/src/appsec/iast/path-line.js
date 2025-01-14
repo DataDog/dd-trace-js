@@ -6,7 +6,7 @@ const { calculateDDBasePath } = require('../../util')
 const pathLine = {
   getNodeModulesPaths,
   getRelativePath,
-  getNonDDFrames,
+  getNonDDCallSiteFrames,
   calculateDDBasePath, // Exported only for test purposes
   ddBasePath: calculateDDBasePath(__dirname) // Only for test purposes
 }
@@ -23,7 +23,7 @@ const EXCLUDED_PATH_PREFIXES = [
   'async_hooks'
 ]
 
-function getNonDDFrames (callSiteFrames, externallyExcludedPaths) {
+function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
   if (!callSiteFrames) {
     return []
   }

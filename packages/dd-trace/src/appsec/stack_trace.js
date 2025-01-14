@@ -37,7 +37,7 @@ function filterOutFramesFromLibrary (callSiteList) {
   return callSiteList.filter(callSite => !callSite.getFileName()?.startsWith(ddBasePath))
 }
 
-function getFramesForMetaStruct (maxDepth = 32, callSiteListGetter = getCallSiteList) {
+function getCallsiteFrames (maxDepth = 32, callSiteListGetter = getCallSiteList) {
   if (maxDepth < 1) maxDepth = Infinity
 
   const callSiteList = callSiteListGetter(maxDepth)
@@ -91,7 +91,7 @@ function reportStackTrace (
 }
 
 module.exports = {
-  getFramesForMetaStruct,
+  getCallsiteFrames,
   reportStackTrace,
   STACK_TRACE_NAMESPACES
 }
