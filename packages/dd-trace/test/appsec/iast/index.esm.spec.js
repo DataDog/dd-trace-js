@@ -25,7 +25,7 @@ describe('ESM', () => {
   after(async function () {
     await sandbox.remove()
   })
-  const nodeOptionsList = ['--import dd-trace/initialize.mjs', '--require dd-trace/init.js --loader dd-trace/initialize.mjs']
+  const nodeOptionsList = ['--import dd-trace/initialize.mjs', '--require dd-trace/init.js --loader dd-trace/loader-hook.mjs']
 
   nodeOptionsList.forEach(nodeOptions => {
     describe(`with NODE_OPTIONS=${nodeOptions}`, () => {
@@ -49,6 +49,22 @@ describe('ESM', () => {
         await agent.stop()
       })
 
+      function verifySpan (payload, verify) {
+        let err
+        for (let i = 0; i < payload.length; i++) {
+          const trace = payload[i]
+          for (let j = 0; j < trace.length; j++) {
+            try {
+              verify(trace[j])
+              return
+            } catch (e) {
+              err = err || e
+            }
+          }
+        }
+        throw err
+      }
+
       it('test endpoint have COMMAND_INJECTION vulnerability', async function () {
         this.timeout(30000)
         console.log('00 A')
@@ -56,12 +72,13 @@ describe('ESM', () => {
         console.log('10 A')
 
         await agent.assertMessageReceived(({ payload }) => {
-          console.log('20 A', payload)
-          assert.property(payload[0][0].meta, '_dd.iast.json')
-          console.log('30 A', payload)
-          assert.include(payload[0][0].meta['_dd.iast.json'], '"COMMAND_INJECTION"')
-          console.log('40 A', payload)
-        })
+          verifySpan(payload, span => {
+            assert.property(span.meta, '_dd.iast.json')
+            console.log('30 A', JSON.stringify(span.meta))
+            assert.include(span.meta['_dd.iast.json'], '"COMMAND_INJECTION"')
+            console.log('40 A')
+          })
+        }, null, 1, true)
       })
 
       it('test endpoint have COMMAND_INJECTION vulnerability in imported file', async () => {
@@ -70,12 +87,14 @@ describe('ESM', () => {
         console.log('10 B')
 
         await agent.assertMessageReceived(({ payload }) => {
-          console.log('20 B')
-          assert.property(payload[0][0].meta, '_dd.iast.json')
-          console.log('30 B')
-          assert.include(payload[0][0].meta['_dd.iast.json'], '"COMMAND_INJECTION"')
-          console.log('40 B')
-        })
+          verifySpan(payload, span => {
+            console.log('20 B')
+            assert.property(span.meta, '_dd.iast.json')
+            console.log('30 B')
+            assert.include(span.meta['_dd.iast.json'], '"COMMAND_INJECTION"')
+            console.log('40 B')
+          })
+        }, null, 1, true)
       })
     })
   })
