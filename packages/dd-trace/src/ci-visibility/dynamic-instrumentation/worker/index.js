@@ -105,7 +105,7 @@ async function addBreakpoint (probe) {
     try {
       lineNumber = await processScriptWithInlineSourceMap({ file, line, sourceMapURL })
     } catch (err) {
-      log.error('Error processing script with inline source map')
+      log.error('Error processing script with inline source map', err)
     }
   }
 
