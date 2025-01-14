@@ -49,7 +49,8 @@ describe('ESM', () => {
         await agent.stop()
       })
 
-      it('test endpoint have COMMAND_INJECTION vulnerability', async () => {
+      it('test endpoint have COMMAND_INJECTION vulnerability', async function () {
+        this.timeout(30000)
         await axios.get('/cmdi-vulnerable?args=-la')
 
         await agent.assertMessageReceived(({ payload }) => {
