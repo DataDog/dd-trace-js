@@ -51,20 +51,30 @@ describe('ESM', () => {
 
       it('test endpoint have COMMAND_INJECTION vulnerability', async function () {
         this.timeout(30000)
+        console.log('00 A')
         await axios.get('/cmdi-vulnerable?args=-la')
+        console.log('10 A')
 
         await agent.assertMessageReceived(({ payload }) => {
+          console.log('20 A', payload)
           assert.property(payload[0][0].meta, '_dd.iast.json')
+          console.log('30 A', payload)
           assert.include(payload[0][0].meta['_dd.iast.json'], '"COMMAND_INJECTION"')
+          console.log('40 A', payload)
         })
       })
 
       it('test endpoint have COMMAND_INJECTION vulnerability in imported file', async () => {
+        console.log('00 B')
         await axios.get('/more/cmdi-vulnerable?args=-la')
+        console.log('10 B')
 
         await agent.assertMessageReceived(({ payload }) => {
+          console.log('20 B')
           assert.property(payload[0][0].meta, '_dd.iast.json')
+          console.log('30 B')
           assert.include(payload[0][0].meta['_dd.iast.json'], '"COMMAND_INJECTION"')
+          console.log('40 B')
         })
       })
     })
