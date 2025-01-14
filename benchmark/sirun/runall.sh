@@ -27,13 +27,14 @@ nvm use 18
 # run each test in parallel for a given version of Node.js
 # once all of the tests have complete move on to the next version
 
-export CPU_AFFINITY="${CPU_START_ID:-24}" # Benchmarking Platform convention
+TOTAL_CPU_CORES=$(nproc 2>/dev/null || echo "24")
+export CPU_AFFINITY="${CPU_START_ID:-$TOTAL_CPU_CORES}" # Benchmarking Platform convention
 
 nvm use $MAJOR_VERSION # provided by each benchmark stage
 export VERSION=`nvm current`
 export ENABLE_AFFINITY=true
 echo "using Node.js ${VERSION}"
-CPU_AFFINITY="${CPU_START_ID:-24}" # reset for each node.js version
+CPU_AFFINITY="${CPU_START_ID:-$TOTAL_CPU_CORES}" # reset for each node.js version
 SPLITS=${SPLITS:-1}
 GROUP=${GROUP:-1}
 
@@ -54,7 +55,7 @@ BENCH_END=$(($GROUP_SIZE*$GROUP))
 BENCH_START=$(($BENCH_END-$GROUP_SIZE))
 
 if [[ ${GROUP_SIZE} -gt 24 ]]; then
-  echo "Group size ${GROUP_SIZE} is larger than available number of CPU cores on Benchmarking Platform machines (24 cores)"
+  echo "Group size ${GROUP_SIZE} is larger than available number of CPU cores on Benchmarking Platform machines (${TOTAL_CPU_CORES} cores)"
   exit 1
 fi
 
