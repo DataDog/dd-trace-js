@@ -27,7 +27,7 @@ nvm use 18
 # run each test in parallel for a given version of Node.js
 # once all of the tests have complete move on to the next version
 
-TOTAL_CPU_CORES=$(nproc:-24)
+TOTAL_CPU_CORES=$(nproc 2>/dev/null || echo "24")
 export CPU_AFFINITY="${CPU_START_ID:-$TOTAL_CPU_CORES}" # Benchmarking Platform convention
 
 nvm use $MAJOR_VERSION # provided by each benchmark stage
