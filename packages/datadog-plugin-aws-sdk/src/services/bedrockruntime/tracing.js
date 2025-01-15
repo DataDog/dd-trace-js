@@ -1,7 +1,7 @@
 'use strict'
 
-const BaseAwsSdkPlugin = require('../base')
-const log = require('../../../dd-trace/src/log')
+const BaseAwsSdkPlugin = require('../../base')
+const log = require('../../../../dd-trace/src/log')
 
 const PROVIDER = {
   AI21: 'AI21',
