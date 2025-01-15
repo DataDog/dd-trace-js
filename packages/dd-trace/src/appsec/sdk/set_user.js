@@ -3,11 +3,14 @@
 const { getRootSpan } = require('./utils')
 const log = require('../../log')
 const waf = require('../waf')
+const addresses = require('../addresses')
 
 function setUserTags (user, rootSpan) {
   for (const k of Object.keys(user)) {
     rootSpan.setTag(`usr.${k}`, '' + user[k])
   }
+
+  rootSpan.setTag('_dd.appsec.user.collection_mode', 'sdk')
 }
 
 function setUser (tracer, user) {
