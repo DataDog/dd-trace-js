@@ -169,8 +169,14 @@ function getFunctionArguments (fn, args = []) {
   }
 }
 
+function spanHasError (span) {
+  const tags = span.context()._tags
+  return !!(tags.error || tags['error.type'])
+}
+
 module.exports = {
   encodeUnicode,
   validateKind,
-  getFunctionArguments
+  getFunctionArguments,
+  spanHasError
 }
