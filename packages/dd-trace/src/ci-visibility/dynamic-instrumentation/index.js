@@ -56,6 +56,13 @@ class TestVisDynamicInstrumentation {
 
     const { NODE_OPTIONS, ...envWithoutNodeOptions } = process.env
 
+    // Remove initialization of dd-trace but keep other NODE_OPTIONS
+    const DD_TRACE_CI_INIT_REGEX = /-r [^\s]*?dd-trace\/ci\/init\b/
+    envWithoutNodeOptions.NODE_OPTIONS = NODE_OPTIONS.replace(DD_TRACE_CI_INIT_REGEX, '')
+
+    console.log('original node_options', NODE_OPTIONS)
+    console.log('changes node_options', envWithoutNodeOptions.NODE_OPTIONS)
+
     log.debug('Starting Test Visibility - Dynamic Instrumentation client...')
 
     const rcChannel = new MessageChannel() // mock channel
