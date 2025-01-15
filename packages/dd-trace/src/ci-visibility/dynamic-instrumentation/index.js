@@ -67,8 +67,8 @@ class TestVisDynamicInstrumentation {
         execArgv: [],
         env: {
           ...process.env,
-          DD_TRACE_ENABLED: 0,
-          DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 0
+          // DD_TRACE_ENABLED: 0,
+          // DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 0
         },
         workerData: {
           config: config.serialize(),
