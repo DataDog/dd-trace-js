@@ -6,6 +6,7 @@ const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./webspan-utils')
 const dc = require('dc-polyfill')
+const crashtracker = require('../crashtracking')
 
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
 const spanFinishedChannel = dc.channel('dd-trace:span:finish')
@@ -197,15 +198,17 @@ class Profiler extends EventEmitter {
         throw new Error('No profile types configured.')
       }
 
-      // collect profiles synchronously so that profilers can be safely stopped asynchronously
-      for (const profiler of this._config.profilers) {
-        const profile = profiler.profile(restart, startDate, endDate)
-        if (!restart) {
-          this._logger.debug(`Stopped ${profiler.type} profiler in ${threadNamePrefix} thread`)
+      crashtracker.withProfilerSerializing(() => {
+        // collect profiles synchronously so that profilers can be safely stopped asynchronously
+        for (const profiler of this._config.profilers) {
+          const profile = profiler.profile(restart, startDate, endDate)
+          if (!restart) {
+            this._logger.debug(`Stopped ${profiler.type} profiler in ${threadNamePrefix} thread`)
+          }
+          if (!profile) continue
+          profiles.push({ profiler, profile })
         }
-        if (!profile) continue
-        profiles.push({ profiler, profile })
-      }
+      })
 
       if (restart) {
         this._capture(this._timeoutInterval, endDate)
