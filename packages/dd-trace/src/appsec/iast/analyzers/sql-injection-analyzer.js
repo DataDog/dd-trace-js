@@ -83,8 +83,8 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
     }
   }
 
-  _areRangesVulnerable () {
-    return true
+  _areRangesVulnerable (ranges) {
+    return ranges?.some(range => !this._isRangeSecure(range))
   }
 }
 

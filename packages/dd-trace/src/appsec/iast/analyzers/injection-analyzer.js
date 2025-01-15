@@ -19,7 +19,8 @@ class InjectionAnalyzer extends Analyzer {
   }
 
   _areRangesVulnerable (ranges) {
-    return ranges?.some(range => range.iinfo.type !== SQL_ROW_VALUE)
+    return ranges?.filter(range => !this._isRangeSecure(range))
+      .some(range => range.iinfo.type !== SQL_ROW_VALUE)
   }
 }
 

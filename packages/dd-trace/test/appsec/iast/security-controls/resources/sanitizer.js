@@ -5,5 +5,9 @@ function sanitize (input) {
 }
 
 module.exports = {
-  sanitize
+  sanitize,
+
+  nested: {
+    sanitize
+  }
 }

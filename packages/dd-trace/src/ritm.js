@@ -111,12 +111,11 @@ function Hook (modules, options, onrequire) {
     } else {
       const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
       const hasLambdaHandler = process.env.DD_LAMBDA_HANDLER !== undefined
-      const iastSecurityControl = options?.iastSecurityControl
       const segments = filename.split(path.sep)
       const filenameFromNodeModule = segments.lastIndexOf('node_modules') !== -1
       // decide how to assign the stat
       // first case will only happen when patching an AWS Lambda Handler
-      const stat = ((inAWSLambda && hasLambdaHandler) || iastSecurityControl) &&
+      const stat = ((inAWSLambda && hasLambdaHandler) || moduleHooks[filename]) &&
         !filenameFromNodeModule
         ? { name: filename }
         : parse(filename)
