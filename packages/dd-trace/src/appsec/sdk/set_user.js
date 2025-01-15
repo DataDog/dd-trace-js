@@ -21,6 +21,10 @@ function setUser (tracer, user) {
     return
   }
 
+  if (user.session_id && typeof user.session_id === 'string') {
+    persistent['usr.session_id'] = user.session_id
+  }
+
   setUserTags(user, rootSpan)
 }
 
