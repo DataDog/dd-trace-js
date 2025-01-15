@@ -49,9 +49,15 @@ function obfuscateIfNeeded (str) {
   }
 }
 
+// what if we have a stack of auth strategies and only last one is sucessful ? we shouldn't send a million failures
+// what if sdk is called after automated user, will the waf detect it ? will the tags be overriden ?
+
 // TODO: should we find other ways to get the user ID ?
 function getUserId (user) {
   if (!user) return
+
+  // should we iterate on user keyss instead to be case independent
+  // but if we iterate over user then we're missing the inherited props ?
 
   for (const field of USER_ID_FIELDS) {
     let id = user[field]
@@ -72,11 +78,6 @@ function getUserId (user) {
 
 function trackLogin (framework, login, user, success, rootSpan) {
   if (!collectionMode || collectionMode === 'disabled') return
-
-  if (!rootSpan) {
-    log.error('[ASM] No rootSpan found in AppSec trackLogin')
-    return
-  }
 
   if (typeof login !== 'string') {
     log.error('[ASM] Invalid login provided to AppSec trackLogin')
@@ -162,7 +163,58 @@ function trackLogin (framework, login, user, success, rootSpan) {
   return waf.run({ persistent })
 }
 
+function trackUser (user, rootSpan) {
+  if (!collectionMode || collectionMode === 'disabled') return
+
+  const userId = getUserId(user)
+  if (!userId) {
+    log.error('[ASM] No valid user ID found in AppSec trackUser')
+    telemetry.incrementMissingUserIdMetric('passport', 'authenticated_request')
+    return
+  }
+
+  const isSdkCalled = rootSpan.context()._tags['_dd.appsec.user.collection_mode'] === 'sdk'
+
+  const newTags = {
+    '_dd.appsec.usr.id': userId
+  }
+
+  // do not override SDK
+  if (!isSdkCalled) {
+    newTags['usr.id'] = userId
+    newTags['_dd.appsec.user.collection_mode'] = collectionMode
+  }
+
+  rootSpan.addTags(newTags)
+
+  // do not override SDK
+  if (!isSdkCalled) {
+    return waf.run({
+      persistent: {
+        [addresses.USER_ID]: userId
+      }
+    })
+  }
+}
+
 module.exports = {
   setCollectionMode,
-  trackLogin
+  trackLogin,
+  trackUser
 }
+
+
+
+/*
+check conflict when trackUser and trackLogin is called
+
+
+test with:
+- express-session with passport
+- passport-jwt (or general jwt tokens)
+- data stored in cookies
+- opaque tokens that calls to third party service to get the users in each request (auth0, hydra...)
+- passport-saml (Onelogin, Okta, Shibboleth, LDAP)
+- passport-oauth2
+
+*/
