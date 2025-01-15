@@ -31,6 +31,7 @@ class BedrockRuntime extends BaseAwsSdkPlugin {
     let tags = {}
     let modelName = ''
     let modelProvider = ''
+    // TODO support aws arn model ids
     const modelMeta = params.modelId.split('.')
     if (modelMeta.length === 2) {
       [modelProvider, modelName] = modelMeta
@@ -65,6 +66,7 @@ class RequestParams {
     prompt = '',
     temperature = undefined,
     topP = undefined,
+    topK = undefined,
     maxTokens = undefined,
     stopSequences = [],
     inputType = '',
@@ -77,6 +79,7 @@ class RequestParams {
     this.prompt = typeof prompt === 'string' ? prompt : JSON.stringify(prompt) || ''
     this.temperature = temperature !== undefined ? temperature : undefined
     this.topP = topP !== undefined ? topP : undefined
+    this.topK = topK !== undefined ? topK : undefined
     this.maxTokens = maxTokens !== undefined ? maxTokens : undefined
     this.stopSequences = stopSequences || []
     this.inputType = inputType || ''
@@ -272,6 +275,7 @@ function buildTagsFromParams (requestParams, textAndResponseReason, modelProvide
   tags['aws.bedrock.request.prompt'] = requestParams.prompt
   tags['aws.bedrock.request.temperature'] = requestParams.temperature
   tags['aws.bedrock.request.top_p'] = requestParams.topP
+  tags['aws.bedrock.request.top_k'] = requestParams.topK
   tags['aws.bedrock.request.max_tokens'] = requestParams.maxTokens
   tags['aws.bedrock.request.stop_sequences'] = requestParams.stopSequences
   tags['aws.bedrock.request.input_type'] = requestParams.inputType
