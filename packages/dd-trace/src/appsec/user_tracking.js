@@ -173,7 +173,7 @@ function trackUser (user, rootSpan) {
     return
   }
 
-  const isSdkCalled = rootSpan.context()._tags.currentTags['_dd.appsec.user.collection_mode'] === 'sdk'
+  const isSdkCalled = rootSpan.context()._tags['_dd.appsec.user.collection_mode'] === 'sdk'
 
   const newTags = {
     '_dd.appsec.usr.id': userId
