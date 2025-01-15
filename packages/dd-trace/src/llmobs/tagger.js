@@ -40,6 +40,10 @@ class LLMObsTagger {
     return registry
   }
 
+  static getSpanKind (span) {
+    return registry.get(span)?.[SPAN_KIND]
+  }
+
   registerLLMObsSpan (span, {
     modelName,
     modelProvider,
@@ -134,6 +138,10 @@ class LLMObsTagger {
       Object.assign(tags, currentTags)
     }
     this._setTag(span, TAGS, tags)
+  }
+
+  changeKind (span, newKind) {
+    this._setTag(span, SPAN_KIND, newKind)
   }
 
   _tagText (span, data, key) {
@@ -310,7 +318,7 @@ class LLMObsTagger {
   _setTag (span, key, value) {
     if (!this._config.llmobs.enabled) return
     if (!registry.has(span)) {
-      this._handleFailure('Span must be an LLMObs generated span.')
+      this._handleFailure(`Span "${span._name}" must be an LLMObs generated span.`)
       return
     }
 

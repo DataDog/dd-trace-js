@@ -120,7 +120,7 @@ function expectedLLMObsBaseEvent ({
   const spanEvent = {
     trace_id: MOCK_STRING,
     span_id: spanId,
-    parent_id: parentId || 'undefined',
+    parent_id: parentId?.buffer ? fromBuffer(parentId) : (parentId || 'undefined'),
     name: spanName,
     tags: expectedLLMObsTags({ span, tags, error, errorType, sessionId }),
     start_ns: startNs,
