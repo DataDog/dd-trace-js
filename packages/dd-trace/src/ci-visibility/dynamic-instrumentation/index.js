@@ -1,5 +1,6 @@
 'use strict'
 
+const { join } = require('path')
 const { Worker, threadId: parentThreadId } = require('worker_threads')
 const { randomUUID } = require('crypto')
 const log = require('../../log')
@@ -54,25 +55,21 @@ class TestVisDynamicInstrumentation {
   start (config) {
     if (this.worker) return
 
-    const { NODE_OPTIONS, ...envWithoutNodeOptions } = process.env
-
-    // Remove initialization of dd-trace but keep other NODE_OPTIONS
-    const DD_TRACE_CI_INIT_REGEX = /-r [^\s]*?dd-trace\/ci\/init\b/
-    envWithoutNodeOptions.NODE_OPTIONS = NODE_OPTIONS.replace(DD_TRACE_CI_INIT_REGEX, '')
-
-    console.log('original node_options', NODE_OPTIONS)
-    console.log('changes node_options', envWithoutNodeOptions.NODE_OPTIONS)
-
+    console.log('TestVisDynamicInstrumentation#start')
     log.debug('Starting Test Visibility - Dynamic Instrumentation client...')
 
     const rcChannel = new MessageChannel() // mock channel
     const configChannel = new MessageChannel() // mock channel
 
     this.worker = new Worker(
-      require.resolve('./worker/index.js'),
+      join(__dirname, 'worker', 'index.js'),
       {
         execArgv: [],
-        env: envWithoutNodeOptions,
+        env: {
+          ...process.env,
+          DD_TRACE_ENABLED: 0,
+          DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 0
+        },
         workerData: {
           config: config.serialize(),
           parentThreadId,
@@ -100,10 +97,6 @@ class TestVisDynamicInstrumentation {
     })
     this.worker.on('messageerror', (err) => {
       log.error('Test Visibility - Dynamic Instrumentation worker messageerror', err)
-    })
-
-    this.worker.on('message', (message) => {
-      console.log('from worker:', message)
     })
 
     // Allow the parent to exit even if the worker is still running
