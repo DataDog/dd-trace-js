@@ -474,6 +474,29 @@ describe('tagger', () => {
         expect(() => tagger.tagTextIO(span, data, 'output')).to.throw()
       })
     })
+
+    describe('changeKind', () => {
+      it('changes the span kind', () => {
+        tagger._register(span)
+        tagger._setTag(span, '_ml_obs.meta.span.kind', 'old-kind')
+        expect(Tagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'old-kind'
+        })
+        tagger.changeKind(span, 'new-kind')
+        expect(Tagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'new-kind'
+        })
+      })
+
+      it('sets the kind if it is not already set', () => {
+        tagger._register(span)
+        expect(Tagger.tagMap.get(span)).to.deep.equal({})
+        tagger.changeKind(span, 'new-kind')
+        expect(Tagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'new-kind'
+        })
+      })
+    })
   })
 
   describe('with softFail', () => {
