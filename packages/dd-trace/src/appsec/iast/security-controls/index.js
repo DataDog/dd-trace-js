@@ -8,6 +8,7 @@ const log = require('../../../log')
 const { parse, SANITIZER_TYPE } = require('./parser')
 const TaintTrackingOperations = require('../taint-tracking/operations')
 const { getIastContext } = require('../iast-context')
+const { iterateObjectStrings } = require('../utils')
 
 // esm
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
@@ -33,23 +34,26 @@ function onModuleLoaded (payload) {
 
   const { filename, module } = payload
 
-  let controlsByFile
-  if (filename.includes('node_modules')) {
-    controlsByFile = controls.keys().find(file => filename.endsWith(file))
-  } else {
-    const relativeFilename = path.isAbsolute(filename) ? path.relative(process.cwd(), filename) : filename
-    controlsByFile = controls.get(relativeFilename)
-  }
-
+  const controlsByFile = getControls(filename)
   if (controlsByFile) {
     payload.module = hookModule(filename, module, controlsByFile)
   }
 }
 
+function getControls (filename) {
+  let key
+  if (filename.includes('node_modules')) {
+    key = [...controls.keys()].find(file => filename.endsWith(file))
+  } else {
+    key = path.isAbsolute(filename) ? path.relative(process.cwd(), filename) : filename
+  }
+  return controls.get(key)
+}
+
 function hookModule (filename, module, controlsByFile) {
   try {
     controlsByFile.forEach(({ type, method, parameters, secureMarks }) => {
-      const { target, parent, name } = resolve(method, module)
+      const { target, parent, methodName } = resolve(method, module)
       if (!target) {
         log.error('Unable to resolve IAST security control %s:%s', filename, method)
         return
@@ -62,8 +66,8 @@ function hookModule (filename, module, controlsByFile) {
         wrapper = wrapInputValidator(target, parameters, secureMarks)
       }
 
-      if (name) {
-        parent[name] = wrapper
+      if (methodName) {
+        parent[methodName] = wrapper
       } else {
         module = wrapper
       }
@@ -83,14 +87,14 @@ function resolve (path, obj, separator = '.') {
   const properties = path.split(separator)
 
   let parent
-  let name
+  let methodName
   const target = properties.reduce((prev, curr) => {
     parent = prev
-    name = curr
+    methodName = curr
     return prev?.[curr]
   }, obj)
 
-  return { target, parent, name }
+  return { target, parent, methodName }
 }
 
 function wrapSanitizer (target, secureMarks) {
@@ -115,8 +119,7 @@ function wrapInputValidator (target, parameters, secureMarks) {
       [...arguments].forEach((arg, index) => {
         if (allParameters || parameters.includes(index)) {
           // TODO: addSecureMark to a existing string
-          // TODO: check string properties in object arguments
-          addSecureMarks(arg, secureMarks)
+          addSecureMarks(arg, secureMarks, false)
         }
       })
     } catch (e) {
@@ -127,13 +130,27 @@ function wrapInputValidator (target, parameters, secureMarks) {
   })
 }
 
-function addSecureMarks (value, secureMarks) {
+function addSecureMarks (value, secureMarks, createNewTainted = true) {
   if (!value) return
 
   const store = storage.getStore()
   const iastContext = getIastContext(store)
 
-  return TaintTrackingOperations.addSecureMark(iastContext, value, secureMarks)
+  if (typeof value === 'string') {
+    return TaintTrackingOperations.addSecureMark(iastContext, value, secureMarks)
+  } else {
+    iterateObjectStrings(value, (value, levelKeys, parent, lastKey) => {
+      try {
+        const securedTainted = TaintTrackingOperations.addSecureMark(iastContext, value, secureMarks)
+        if (createNewTainted) {
+          parent[lastKey] = securedTainted
+        }
+      } catch (e) {
+        // if it is a readonly property, do nothing
+      }
+    })
+    return value
+  }
 }
 
 function disable () {

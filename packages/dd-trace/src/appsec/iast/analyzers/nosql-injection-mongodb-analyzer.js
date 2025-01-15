@@ -10,22 +10,7 @@ const { HTTP_REQUEST_PARAMETER, HTTP_REQUEST_BODY } = require('../taint-tracking
 
 const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb', 'mongoose', 'mquery')
 const { NOSQL_MONGODB_INJECTION_MARK } = require('../taint-tracking/secure-marks')
-
-function iterateObjectStrings (target, fn, levelKeys = [], depth = 20, visited = new Set()) {
-  if (target !== null && typeof target === 'object') {
-    Object.keys(target).forEach((key) => {
-      const nextLevelKeys = [...levelKeys, key]
-      const val = target[key]
-
-      if (typeof val === 'string') {
-        fn(val, nextLevelKeys, target, key)
-      } else if (depth > 0 && !visited.has(val)) {
-        iterateObjectStrings(val, fn, nextLevelKeys, depth - 1, visited)
-        visited.add(val)
-      }
-    })
-  }
-}
+const { iterateObjectStrings } = require('../utils')
 
 class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
   constructor () {

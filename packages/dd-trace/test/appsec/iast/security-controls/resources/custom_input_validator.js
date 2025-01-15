@@ -4,11 +4,11 @@ function validate (input) {
   return input
 }
 
-function validateSql (input) {
+function validateObject (input) {
   return input
 }
 
 module.exports = {
   validate,
-  validateSql
+  validateObject
 }
