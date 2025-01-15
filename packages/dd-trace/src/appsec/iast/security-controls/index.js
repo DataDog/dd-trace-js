@@ -1,58 +1,85 @@
 'use strict'
 
 const path = require('path')
+const dc = require('dc-polyfill')
 const { storage } = require('../../../../../datadog-core')
-const Hook = require('../../../../../datadog-instrumentations/src/helpers/hook')
 const shimmer = require('../../../../../datadog-shimmer')
 const log = require('../../../log')
 const { parse, SANITIZER_TYPE } = require('./parser')
 const TaintTrackingOperations = require('../taint-tracking/operations')
 const { getIastContext } = require('../iast-context')
 
+// esm
+const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
+
+// cjs
+const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
+
+let controls
 let hooks
 
 function configure (iastConfig) {
   if (!iastConfig?.securityControlsConfiguration) return
 
   hooks = []
+  controls = parse(iastConfig.securityControlsConfiguration)
 
-  parse(iastConfig.securityControlsConfiguration)
-    .forEach(hook)
+  moduleLoadStartChannel.subscribe(onModuleLoaded)
+  moduleLoadEndChannel.subscribe(onModuleLoaded)
 }
 
-function hook (controlsByFile, file) {
-  try {
-    // FIXME: ESM modules?
-    // TODO: node_modules
-    const fileName = require.resolve(path.join(process.cwd(), file))
+function onModuleLoaded (payload) {
+  if (!payload?.module) return
 
-    const hooked = Hook([fileName], undefined, (moduleExports) => {
-      controlsByFile.forEach(({ type, method, parameters, secureMarks }) => {
-        const { target, parent, name } = resolve(method, moduleExports)
-        if (!target) {
-          log.error('Unable to resolve IAST security control %s:%s', file, method)
-          return
-        }
+  const { filename, module } = payload
 
-        if (type === SANITIZER_TYPE) {
-          parent[name] = wrapSanitizer(target, secureMarks)
-        } else {
-          parent[name] = wrapInputValidator(target, parameters, secureMarks)
-        }
-      })
+  let controlsByFile
+  if (filename.includes('node_modules')) {
+    controlsByFile = controls.keys().find(file => filename.endsWith(file))
+  } else {
+    const relativeFilename = path.isAbsolute(filename) ? path.relative(process.cwd(), filename) : filename
+    controlsByFile = controls.get(relativeFilename)
+  }
 
-      return moduleExports
-    })
-
-    hooks.push(hooked)
-
-    // TODO: is this catch needed?
-  } catch (e) {
-    log.error('Error initializing IAST security control for %', file, e)
+  if (controlsByFile) {
+    payload.module = hookModule(filename, module, controlsByFile)
   }
 }
 
+function hookModule (filename, module, controlsByFile) {
+  try {
+    controlsByFile.forEach(({ type, method, parameters, secureMarks }) => {
+      const { target, parent, name } = resolve(method, module)
+      if (!target) {
+        log.error('Unable to resolve IAST security control %s:%s', filename, method)
+        return
+      }
+
+      let wrapper
+      if (type === SANITIZER_TYPE) {
+        wrapper = wrapSanitizer(target, secureMarks)
+      } else {
+        wrapper = wrapInputValidator(target, parameters, secureMarks)
+      }
+
+      if (name) {
+        parent[name] = wrapper
+      } else {
+        module = wrapper
+      }
+    })
+  } catch (e) {
+    log.error('Error initializing IAST security control for %', filename, e)
+  }
+
+  return module
+}
+
 function resolve (path, obj, separator = '.') {
+  if (!path) {
+    return { target: obj, parent: obj }
+  }
+
   const properties = path.split(separator)
 
   let parent
@@ -110,6 +137,10 @@ function addSecureMarks (value, secureMarks) {
 }
 
 function disable () {
+  if (moduleLoadStartChannel.hasSubscribers) moduleLoadStartChannel.unsubscribe(onModuleLoaded)
+  if (moduleLoadEndChannel.hasSubscribers) moduleLoadEndChannel.unsubscribe(onModuleLoaded)
+
+  controls = undefined
   hooks?.forEach(hook => hook?.unhook())
   hooks = undefined
 }

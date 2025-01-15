@@ -37,7 +37,7 @@ function parseControl (control) {
 
   const fields = control.split(SECURITY_CONTROL_FIELD_DELIMITER)
 
-  if (fields.length < 4 || fields.length > 5) {
+  if (fields.length < 3 || fields.length > 5) {
     // TODO: do we want telemetry log for these cases?
     log.warn('Security control configuration is invalid: %s', control)
     return
@@ -61,6 +61,7 @@ function parseControl (control) {
   parameters = getParameters(parameters)
 
   // TODO: check if file is a valid path?
+
   return { type, secureMarks, file, method, parameters }
 }
 

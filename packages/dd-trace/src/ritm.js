@@ -94,10 +94,11 @@ function Hook (modules, options, onrequire) {
     if (moduleLoadStartChannel.hasSubscribers) {
       moduleLoadStartChannel.publish(payload)
     }
-    const exports = origRequire.apply(this, arguments)
+    let exports = origRequire.apply(this, arguments)
     payload.module = exports
     if (moduleLoadEndChannel.hasSubscribers) {
       moduleLoadEndChannel.publish(payload)
+      exports = payload.module
     }
 
     // The module has already been loaded,
@@ -115,10 +116,7 @@ function Hook (modules, options, onrequire) {
       const filenameFromNodeModule = segments.lastIndexOf('node_modules') !== -1
       // decide how to assign the stat
       // first case will only happen when patching an AWS Lambda Handler
-      const stat = ((inAWSLambda && hasLambdaHandler) || moduleHooks[filename]) &&
-        !filenameFromNodeModule
-        ? { name: filename }
-        : parse(filename)
+      const stat = inAWSLambda && hasLambdaHandler && !filenameFromNodeModule ? { name: filename } : parse(filename)
       if (!stat) return exports // abort if filename could not be parsed
       name = stat.name
       basedir = stat.basedir

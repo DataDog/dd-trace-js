@@ -9,13 +9,16 @@ const {
   CUSTOM_SECURE_MARK
 } = require('../../../../src/appsec/iast/taint-tracking/secure-marks')
 
+const civFilename = 'bar/foo/custom_input_validator.js'
+const sanitizerFilename = 'bar/foo/sanitizer.js'
+
 describe('IAST Security Controls parser', () => {
   describe('parse', () => {
     it('should not parse invalid type', () => {
       const conf = 'INVALID_TYPE:COMMAND_INJECTION:bar/foo/custom_input_validator.js:validate'
       const securityControls = parse(conf)
 
-      const civ = securityControls.get('bar/foo/custom_input_validator.js')
+      const civ = securityControls.get(civFilename)
 
       assert.isUndefined(civ)
     })
@@ -24,7 +27,7 @@ describe('IAST Security Controls parser', () => {
       const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:bar/foo/custom_input_validator.js:validate:1:extra_invalid'
       const securityControls = parse(conf)
 
-      const civ = securityControls.get('bar/foo/custom_input_validator.js')
+      const civ = securityControls.get(civFilename)
 
       assert.isUndefined(civ)
     })
@@ -33,7 +36,7 @@ describe('IAST Security Controls parser', () => {
       const conf = 'INPUT_VALIDATOR:INVALID_MARK:bar/foo/custom_input_validator.js:validate:1'
       const securityControls = parse(conf)
 
-      const civ = securityControls.get('bar/foo/custom_input_validator.js')
+      const civ = securityControls.get(civFilename)
 
       assert.isUndefined(civ)
     })
@@ -42,12 +45,12 @@ describe('IAST Security Controls parser', () => {
       const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:bar/foo/custom_input_validator.js:validate'
       const securityControls = parse(conf)
 
-      const civ = securityControls.get('bar/foo/custom_input_validator.js')[0]
+      const civ = securityControls.get(civFilename)[0]
 
       expect(civ).not.undefined
       assert.deepStrictEqual(civ, {
         type: 'INPUT_VALIDATOR',
-        file: 'bar/foo/custom_input_validator.js',
+        file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
         parameters: undefined
@@ -58,13 +61,28 @@ describe('IAST Security Controls parser', () => {
       const conf = 'SANITIZER:COMMAND_INJECTION:bar/foo/custom_input_validator.js:validate'
       const securityControls = parse(conf)
 
-      const civ = securityControls.get('bar/foo/custom_input_validator.js')[0]
+      const civ = securityControls.get(civFilename)[0]
 
       assert.deepStrictEqual(civ, {
         type: 'SANITIZER',
-        file: 'bar/foo/custom_input_validator.js',
+        file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
+        parameters: undefined
+      })
+    })
+
+    it('should parse valid simple security control definition for a sanitizer without method', () => {
+      const conf = 'SANITIZER:COMMAND_INJECTION:bar/foo/custom_input_validator.js'
+      const securityControls = parse(conf)
+
+      const civ = securityControls.get(civFilename)[0]
+
+      assert.deepStrictEqual(civ, {
+        type: 'SANITIZER',
+        file: civFilename,
+        secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
+        method: undefined,
         parameters: undefined
       })
     })
@@ -74,11 +92,11 @@ describe('IAST Security Controls parser', () => {
         bar/foo/custom_input_validator.js:   validate`
       const securityControls = parse(conf)
 
-      const civ = securityControls.get('bar/foo/custom_input_validator.js')[0]
+      const civ = securityControls.get(civFilename)[0]
 
       assert.deepStrictEqual(civ, {
         type: 'INPUT_VALIDATOR',
-        file: 'bar/foo/custom_input_validator.js',
+        file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
         parameters: undefined
@@ -89,11 +107,11 @@ describe('IAST Security Controls parser', () => {
       const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION, CODE_INJECTION:bar/foo/custom_input_validator.js:validate'
       const securityControls = parse(conf)
 
-      const civ = securityControls.get('bar/foo/custom_input_validator.js')[0]
+      const civ = securityControls.get(civFilename)[0]
 
       assert.deepStrictEqual(civ, {
         type: 'INPUT_VALIDATOR',
-        file: 'bar/foo/custom_input_validator.js',
+        file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK | CODE_INJECTION_MARK,
         method: 'validate',
         parameters: undefined
@@ -104,11 +122,11 @@ describe('IAST Security Controls parser', () => {
       const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION, CODE_INJECTION, , :bar/foo/custom_input_validator.js:validate'
       const securityControls = parse(conf)
 
-      const civ = securityControls.get('bar/foo/custom_input_validator.js')[0]
+      const civ = securityControls.get(civFilename)[0]
 
       assert.deepStrictEqual(civ, {
         type: 'INPUT_VALIDATOR',
-        file: 'bar/foo/custom_input_validator.js',
+        file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK | CODE_INJECTION_MARK,
         method: 'validate',
         parameters: undefined
@@ -119,11 +137,11 @@ describe('IAST Security Controls parser', () => {
       const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:bar/foo/custom_input_validator.js:validator.validate'
       const securityControls = parse(conf)
 
-      const civ = securityControls.get('bar/foo/custom_input_validator.js')[0]
+      const civ = securityControls.get(civFilename)[0]
 
       assert.deepStrictEqual(civ, {
         type: 'INPUT_VALIDATOR',
-        file: 'bar/foo/custom_input_validator.js',
+        file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validator.validate',
         parameters: undefined
@@ -134,11 +152,11 @@ describe('IAST Security Controls parser', () => {
       const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:bar/foo/custom_input_validator.js:validator.validate:1'
       const securityControls = parse(conf)
 
-      const civ = securityControls.get('bar/foo/custom_input_validator.js')[0]
+      const civ = securityControls.get(civFilename)[0]
 
       assert.deepStrictEqual(civ, {
         type: 'INPUT_VALIDATOR',
-        file: 'bar/foo/custom_input_validator.js',
+        file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validator.validate',
         parameters: [1]
@@ -149,11 +167,11 @@ describe('IAST Security Controls parser', () => {
       const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:bar/foo/custom_input_validator.js:validate:1'
       const securityControls = parse(conf)
 
-      const civ = securityControls.get('bar/foo/custom_input_validator.js')[0]
+      const civ = securityControls.get(civFilename)[0]
 
       assert.deepStrictEqual(civ, {
         type: 'INPUT_VALIDATOR',
-        file: 'bar/foo/custom_input_validator.js',
+        file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
         parameters: [1]
@@ -164,11 +182,11 @@ describe('IAST Security Controls parser', () => {
       const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:bar/foo/custom_input_validator.js:validate:1,2'
       const securityControls = parse(conf)
 
-      const civ = securityControls.get('bar/foo/custom_input_validator.js')[0]
+      const civ = securityControls.get(civFilename)[0]
 
       assert.deepStrictEqual(civ, {
         type: 'INPUT_VALIDATOR',
-        file: 'bar/foo/custom_input_validator.js',
+        file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
         parameters: [1, 2]
@@ -181,11 +199,11 @@ describe('IAST Security Controls parser', () => {
 SANITIZER:COMMAND_INJECTION:bar/foo/custom_input_validator.js:sanitize'
       const securityControls = parse(conf)
 
-      const civ = securityControls.get('bar/foo/custom_input_validator.js')
+      const civ = securityControls.get(civFilename)
 
       assert.deepStrictEqual(civ[0], {
         type: 'INPUT_VALIDATOR',
-        file: 'bar/foo/custom_input_validator.js',
+        file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
         parameters: [1, 2]
@@ -193,7 +211,7 @@ SANITIZER:COMMAND_INJECTION:bar/foo/custom_input_validator.js:sanitize'
 
       assert.deepStrictEqual(civ[1], {
         type: 'SANITIZER',
-        file: 'bar/foo/custom_input_validator.js',
+        file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'sanitize',
         parameters: undefined
@@ -206,20 +224,20 @@ SANITIZER:COMMAND_INJECTION:bar/foo/custom_input_validator.js:sanitize'
 SANITIZER:COMMAND_INJECTION:bar/foo/sanitizer.js:sanitize'
       const securityControls = parse(conf)
 
-      const civ = securityControls.get('bar/foo/custom_input_validator.js')
+      const civ = securityControls.get(civFilename)
 
       assert.deepStrictEqual(civ[0], {
         type: 'INPUT_VALIDATOR',
-        file: 'bar/foo/custom_input_validator.js',
+        file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
         parameters: [1, 2]
       })
 
-      const sanitizerJs = securityControls.get('bar/foo/sanitizer.js')
+      const sanitizerJs = securityControls.get(sanitizerFilename)
       assert.deepStrictEqual(sanitizerJs[0], {
         type: 'SANITIZER',
-        file: 'bar/foo/sanitizer.js',
+        file: sanitizerFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'sanitize',
         parameters: undefined
@@ -231,11 +249,11 @@ SANITIZER:COMMAND_INJECTION:bar/foo/sanitizer.js:sanitize'
       const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:bar/foo/custom_input_validator.js:validate:1,2;;'
       const securityControls = parse(conf)
 
-      const civ = securityControls.get('bar/foo/custom_input_validator.js')
+      const civ = securityControls.get(civFilename)
 
       assert.deepStrictEqual(civ[0], {
         type: 'INPUT_VALIDATOR',
-        file: 'bar/foo/custom_input_validator.js',
+        file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
         parameters: [1, 2]

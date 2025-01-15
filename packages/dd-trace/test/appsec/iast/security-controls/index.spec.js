@@ -9,6 +9,11 @@ const { saveIastContext } = require('../../../../src/appsec/iast/iast-context')
 describe('IAST Security Controls', () => {
   let securityControls, addSecureMark, iastContext
 
+  before(() => {
+    // fire up ritm
+    require('../../../../src/plugin_manager')
+  })
+
   beforeEach(() => {
     addSecureMark = sinon.stub().callsFake((iastContext, input) => input)
 
@@ -44,6 +49,19 @@ describe('IAST Security Controls', () => {
     validate('input')
 
     sinon.assert.calledOnceWithExactly(addSecureMark, iastContext, 'input', CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK)
+  })
+
+  it('should hook configured control for default sanitizer', () => {
+    // eslint-disable-next-line no-multi-str
+    const conf = 'SANITIZER:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
+/security-controls/resources/sanitizer_default.js'
+    securityControls.configure({ securityControlsConfiguration: conf })
+
+    const sanitize = require('./resources/sanitizer_default')
+    const result = sanitize('input')
+
+    assert.equal(result, 'sanitized input')
+    sinon.assert.calledOnceWithExactly(addSecureMark, iastContext, result, CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK)
   })
 
   it('should hook configured control for input_validator with multiple inputs', () => {
