@@ -12,7 +12,6 @@ const { INSTRUMENTED_PROPAGATION } = require('../telemetry/iast-metric')
 const dc = require('dc-polyfill')
 const log = require('../../../log')
 const { isMainThread } = require('worker_threads')
-const fs = require('fs')
 
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')
 let rewriter

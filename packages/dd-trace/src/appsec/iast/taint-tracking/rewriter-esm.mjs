@@ -2,8 +2,6 @@
 
 import path from 'path'
 import { URL } from 'url'
-import fs from 'fs'
-import { csiMethods } from './csi-methods.js'
 import { getName } from '../telemetry/verbosity.js'
 import { isNotLibraryFile, isPrivateModule } from './filter.js'
 
@@ -11,17 +9,6 @@ const currentUrl = new URL(import.meta.url)
 const ddTraceDir = path.join(currentUrl.pathname, '..', '..', '..', '..', '..', '..')
 
 let port, rewriter
-
-function log (...msgs) {
-  fs.writeSync(1,  new Date().getTime() + ': ')
-  let first = true
-  msgs.forEach(msg => {
-    !first && fs.writeSync(1, ' - ')
-    fs.writeSync(1, typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2))
-    first = false
-  })
-  fs.writeSync(1, '\n')
-}
 
 export async function initialize (data) {
   if (rewriter) return Promise.reject(new Error('ALREADY INITIALIZED'))

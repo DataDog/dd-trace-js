@@ -1,5 +1,5 @@
 'use strict'
-console.log('custom-noop-hooks.mjs')
+
 function dummyOperation (a) {
   return a + 'should have ' + 'dummy operation to be rewritten' + ' without crashing'
 }

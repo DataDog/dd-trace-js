@@ -9,4 +9,3 @@ router.get('/cmdi-vulnerable', (req, res) => {
 })
 
 export default router
-
