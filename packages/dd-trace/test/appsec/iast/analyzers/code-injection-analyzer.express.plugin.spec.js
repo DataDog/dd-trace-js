@@ -12,7 +12,7 @@ const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 
 describe('Code injection vulnerability', () => {
-  withVersions('express', 'express', '>4.18.0', version => {
+  withVersions('express', 'express', version => {
     describe('Eval', () => {
       let i = 0
       let evalFunctionsPath
@@ -128,48 +128,6 @@ describe('Code injection vulnerability', () => {
           }, 'CODE_INJECTION')
         })
 
-      prepareTestServerForIastInExpress('Script runInContext in express', version,
-        (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
-          testThatRequestHasVulnerability({
-            fn: (req, res) => {
-              const script = new vm.Script(req.query.script)
-              const result = script.runInContext(context)
-
-              res.send(`${result}`)
-            },
-            vulnerability: 'CODE_INJECTION',
-            makeRequest: (done, config) => {
-              axios.get(`http://localhost:${config.port}/?script=1%2B2`)
-                .then(res => {
-                  expect(res.data).to.equal(3)
-                })
-                .catch(done)
-            }
-          })
-
-          testThatRequestHasVulnerability({
-            fn: (req, res) => {
-              const source = '1 + 2'
-              const store = storage.getStore()
-              const iastContext = iastContextFunctions.getIastContext(store)
-              const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
-
-              const script = new vm.Script(str)
-              const result = script.runInContext(context)
-              res.send(`${result}`)
-            },
-            vulnerability: 'CODE_INJECTION',
-            testDescription: 'Should detect CODE_INJECTION vulnerability with DB source'
-          })
-
-          testThatRequestHasNoVulnerability((req, res) => {
-            const script = new vm.Script('1 + 2')
-            const result = script.runInContext(context)
-
-            res.send(`${result}`)
-          }, 'CODE_INJECTION')
-        })
-
       prepareTestServerForIastInExpress('runInNewContext in express', version,
         (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
           testThatRequestHasVulnerability({
@@ -204,48 +162,6 @@ describe('Code injection vulnerability', () => {
 
           testThatRequestHasNoVulnerability((req, res) => {
             const result = vm.runInNewContext('1 + 2')
-
-            res.send(`${result}`)
-          }, 'CODE_INJECTION')
-        })
-
-      prepareTestServerForIastInExpress('Script runInNewContext in express', version,
-        (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
-          testThatRequestHasVulnerability({
-            fn: (req, res) => {
-              const script = new vm.Script(req.query.script)
-              const result = script.runInNewContext()
-
-              res.send(`${result}`)
-            },
-            vulnerability: 'CODE_INJECTION',
-            makeRequest: (done, config) => {
-              axios.get(`http://localhost:${config.port}/?script=1%2B2`)
-                .then(res => {
-                  expect(res.data).to.equal(3)
-                })
-                .catch(done)
-            }
-          })
-
-          testThatRequestHasVulnerability({
-            fn: (req, res) => {
-              const source = '1 + 2'
-              const store = storage.getStore()
-              const iastContext = iastContextFunctions.getIastContext(store)
-              const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
-
-              const script = new vm.Script(str)
-              const result = script.runInNewContext()
-              res.send(`${result}`)
-            },
-            vulnerability: 'CODE_INJECTION',
-            testDescription: 'Should detect CODE_INJECTION vulnerability with DB source'
-          })
-
-          testThatRequestHasNoVulnerability((req, res) => {
-            const script = new vm.Script('1 + 2')
-            const result = script.runInNewContext()
 
             res.send(`${result}`)
           }, 'CODE_INJECTION')
@@ -290,48 +206,6 @@ describe('Code injection vulnerability', () => {
           }, 'CODE_INJECTION')
         })
 
-      prepareTestServerForIastInExpress('Script runInThisContext in express', version,
-        (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
-          testThatRequestHasVulnerability({
-            fn: (req, res) => {
-              const script = new vm.Script(req.query.script)
-              const result = script.runInThisContext()
-
-              res.send(`${result}`)
-            },
-            vulnerability: 'CODE_INJECTION',
-            makeRequest: (done, config) => {
-              axios.get(`http://localhost:${config.port}/?script=1%2B2`)
-                .then(res => {
-                  expect(res.data).to.equal(3)
-                })
-                .catch(done)
-            }
-          })
-
-          testThatRequestHasVulnerability({
-            fn: (req, res) => {
-              const source = '1 + 2'
-              const store = storage.getStore()
-              const iastContext = iastContextFunctions.getIastContext(store)
-              const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
-
-              const script = new vm.Script(str)
-              const result = script.runInThisContext()
-              res.send(`${result}`)
-            },
-            vulnerability: 'CODE_INJECTION',
-            testDescription: 'Should detect CODE_INJECTION vulnerability with DB source'
-          })
-
-          testThatRequestHasNoVulnerability((req, res) => {
-            const script = new vm.Script('1 + 2')
-            const result = script.runInThisContext()
-
-            res.send(`${result}`)
-          }, 'CODE_INJECTION')
-        })
-
       prepareTestServerForIastInExpress('compileFunction in express', version,
         (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
           testThatRequestHasVulnerability({
@@ -371,6 +245,183 @@ describe('Code injection vulnerability', () => {
             res.send(`${result}`)
           }, 'CODE_INJECTION')
         })
+
+      describe('Script class', () => {
+        prepareTestServerForIastInExpress('runInContext in express', version,
+          (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
+            testThatRequestHasVulnerability({
+              fn: (req, res) => {
+                const script = new vm.Script(req.query.script)
+                const result = script.runInContext(context)
+
+                res.send(`${result}`)
+              },
+              vulnerability: 'CODE_INJECTION',
+              makeRequest: (done, config) => {
+                axios.get(`http://localhost:${config.port}/?script=1%2B2`)
+                  .then(res => {
+                    expect(res.data).to.equal(3)
+                  })
+                  .catch(done)
+              }
+            })
+
+            testThatRequestHasVulnerability({
+              fn: (req, res) => {
+                const source = '1 + 2'
+                const store = storage.getStore()
+                const iastContext = iastContextFunctions.getIastContext(store)
+                const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
+
+                const script = new vm.Script(str)
+                const result = script.runInContext(context)
+                res.send(`${result}`)
+              },
+              vulnerability: 'CODE_INJECTION',
+              testDescription: 'Should detect CODE_INJECTION vulnerability with DB source'
+            })
+
+            testThatRequestHasNoVulnerability((req, res) => {
+              const script = new vm.Script('1 + 2')
+              const result = script.runInContext(context)
+
+              res.send(`${result}`)
+            }, 'CODE_INJECTION')
+          })
+
+        prepareTestServerForIastInExpress('runInNewContext in express', version,
+          (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
+            testThatRequestHasVulnerability({
+              fn: (req, res) => {
+                const script = new vm.Script(req.query.script)
+                const result = script.runInNewContext()
+
+                res.send(`${result}`)
+              },
+              vulnerability: 'CODE_INJECTION',
+              makeRequest: (done, config) => {
+                axios.get(`http://localhost:${config.port}/?script=1%2B2`)
+                  .then(res => {
+                    expect(res.data).to.equal(3)
+                  })
+                  .catch(done)
+              }
+            })
+
+            testThatRequestHasVulnerability({
+              fn: (req, res) => {
+                const source = '1 + 2'
+                const store = storage.getStore()
+                const iastContext = iastContextFunctions.getIastContext(store)
+                const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
+
+                const script = new vm.Script(str)
+                const result = script.runInNewContext()
+                res.send(`${result}`)
+              },
+              vulnerability: 'CODE_INJECTION',
+              testDescription: 'Should detect CODE_INJECTION vulnerability with DB source'
+            })
+
+            testThatRequestHasNoVulnerability((req, res) => {
+              const script = new vm.Script('1 + 2')
+              const result = script.runInNewContext()
+
+              res.send(`${result}`)
+            }, 'CODE_INJECTION')
+          })
+
+        prepareTestServerForIastInExpress('runInThisContext in express', version,
+          (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
+            testThatRequestHasVulnerability({
+              fn: (req, res) => {
+                const script = new vm.Script(req.query.script)
+                const result = script.runInThisContext()
+
+                res.send(`${result}`)
+              },
+              vulnerability: 'CODE_INJECTION',
+              makeRequest: (done, config) => {
+                axios.get(`http://localhost:${config.port}/?script=1%2B2`)
+                  .then(res => {
+                    expect(res.data).to.equal(3)
+                  })
+                  .catch(done)
+              }
+            })
+
+            testThatRequestHasVulnerability({
+              fn: (req, res) => {
+                const source = '1 + 2'
+                const store = storage.getStore()
+                const iastContext = iastContextFunctions.getIastContext(store)
+                const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
+
+                const script = new vm.Script(str)
+                const result = script.runInThisContext()
+                res.send(`${result}`)
+              },
+              vulnerability: 'CODE_INJECTION',
+              testDescription: 'Should detect CODE_INJECTION vulnerability with DB source'
+            })
+
+            testThatRequestHasNoVulnerability((req, res) => {
+              const script = new vm.Script('1 + 2')
+              const result = script.runInThisContext()
+
+              res.send(`${result}`)
+            }, 'CODE_INJECTION')
+          })
+      })
+
+      describe('SourceTextModule class', () => {
+        prepareTestServerForIastInExpress('SourceTextModule in express', version,
+          (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
+            testThatRequestHasVulnerability({
+              fn: async (req, res) => {
+                const module = new vm.SourceTextModule(req.query.script)
+                await module.link(() => {})
+                await module.evaluate()
+
+                res.send(`${module.namespace.result}`)
+              },
+              vulnerability: 'CODE_INJECTION',
+              makeRequest: (done, config) => {
+                axios.get(`http://localhost:${config.port}/?script=export%20const%20result%20%3D%203%3B`)
+                  .then(res => {
+                    expect(res.data).to.equal(3)
+                  })
+                  .catch(done)
+              }
+            })
+
+            testThatRequestHasVulnerability({
+              fn: async (req, res) => {
+                const source = 'export const result = 1 + 2;'
+                const store = storage.getStore()
+                const iastContext = iastContextFunctions.getIastContext(store)
+                const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
+
+                const module = new vm.SourceTextModule(str)
+                await module.link(() => {})
+                await module.evaluate()
+
+                res.send(`${module.namespace.result}`)
+              },
+              vulnerability: 'CODE_INJECTION',
+              testDescription: 'Should detect CODE_INJECTION vulnerability with DB source'
+            })
+
+            testThatRequestHasNoVulnerability(async (req, res) => {
+              const source = 'export const result = 1 + 2;'
+              const module = new vm.SourceTextModule(source)
+              await module.link(() => {})
+              await module.evaluate()
+
+              res.send(`${module.namespace.result}`)
+            }, 'CODE_INJECTION')
+          })
+      })
     })
   })
 })
