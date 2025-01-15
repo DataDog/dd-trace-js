@@ -1,6 +1,6 @@
 'use strict'
 
-const { createSandbox, spawnProc, FakeAgent } = require('../../../../../integration-tests/helpers')
+const { createSandbox, spawnProc, FakeAgent } = require('../helpers')
 const path = require('path')
 const getPort = require('get-port')
 const Axios = require('axios')
@@ -11,11 +11,10 @@ describe('ESM', () => {
 
   before(async function () {
     this.timeout(process.platform === 'win32' ? 90000 : 30000)
-    sandbox = await createSandbox([`'express'`], false,
-      [path.join(__dirname, 'resources')])
+    sandbox = await createSandbox([`'express'`])
     appPort = await getPort()
     cwd = sandbox.folder
-    appFile = path.join(cwd,  'resources','esm-app', 'index.mjs')
+    appFile = path.join(cwd,  'appsec','esm-app', 'index.mjs')
 
     axios = Axios.create({
       baseURL: `http://localhost:${appPort}`
