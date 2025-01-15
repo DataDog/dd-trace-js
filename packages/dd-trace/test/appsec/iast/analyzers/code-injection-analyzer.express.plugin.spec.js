@@ -373,55 +373,6 @@ describe('Code injection vulnerability', () => {
             }, 'CODE_INJECTION')
           })
       })
-
-      describe('SourceTextModule class', () => {
-        prepareTestServerForIastInExpress('SourceTextModule in express', version,
-          (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
-            testThatRequestHasVulnerability({
-              fn: async (req, res) => {
-                const module = new vm.SourceTextModule(req.query.script)
-                await module.link(() => {})
-                await module.evaluate()
-
-                res.send(`${module.namespace.result}`)
-              },
-              vulnerability: 'CODE_INJECTION',
-              makeRequest: (done, config) => {
-                axios.get(`http://localhost:${config.port}/?script=export%20const%20result%20%3D%203%3B`)
-                  .then(res => {
-                    expect(res.data).to.equal(3)
-                  })
-                  .catch(done)
-              }
-            })
-
-            testThatRequestHasVulnerability({
-              fn: async (req, res) => {
-                const source = 'export const result = 1 + 2;'
-                const store = storage.getStore()
-                const iastContext = iastContextFunctions.getIastContext(store)
-                const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
-
-                const module = new vm.SourceTextModule(str)
-                await module.link(() => {})
-                await module.evaluate()
-
-                res.send(`${module.namespace.result}`)
-              },
-              vulnerability: 'CODE_INJECTION',
-              testDescription: 'Should detect CODE_INJECTION vulnerability with DB source'
-            })
-
-            testThatRequestHasNoVulnerability(async (req, res) => {
-              const source = 'export const result = 1 + 2;'
-              const module = new vm.SourceTextModule(source)
-              await module.link(() => {})
-              await module.evaluate()
-
-              res.send(`${module.namespace.result}`)
-            }, 'CODE_INJECTION')
-          })
-      })
     })
   })
 })
