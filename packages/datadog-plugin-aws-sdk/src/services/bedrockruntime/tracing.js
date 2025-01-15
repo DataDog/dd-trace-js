@@ -16,7 +16,7 @@ const PROVIDER = {
 const enabledOperations = ['invokeModel']
 
 class BedrockRuntime extends BaseAwsSdkPlugin {
-  static get id () { return 'bedrock runtime' }
+  static get id () { return 'bedrockruntime' }
 
   isEnabled (request) {
     const operation = request.operation
