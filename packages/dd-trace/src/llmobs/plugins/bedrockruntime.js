@@ -1,7 +1,7 @@
-'use strict'
-
-const BaseAwsSdkPlugin = require('../base')
-const log = require('../../../dd-trace/src/log')
+const BaseLLMObsPlugin = require('./base')
+const { storage } = require('../../../../datadog-core')
+const log = require('../../log')
+const llmobsStore = storage('llmobs')
 
 const PROVIDER = {
   AI21: 'AI21',
@@ -12,42 +12,55 @@ const PROVIDER = {
   STABILITY: 'STABILITY',
   MISTRAL: 'MISTRAL'
 }
-
 const enabledOperations = ['invokeModel']
 
-class BedrockRuntime extends BaseAwsSdkPlugin {
-  static get id () { return 'bedrock runtime' }
+class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
+  constructor () {
+    super(...arguments)
 
-  isEnabled (request) {
-    const operation = request.operation
-    if (!enabledOperations.includes(operation)) {
-      return false
-    }
-
-    return super.isEnabled(request)
+    this.addSub('apm:aws:request:complete:bedrockruntime', ({ response }) => {
+      const operation = response.request.operation
+      // avoids instrumenting other non supported runtime operations
+      if (!enabledOperations.includes(operation)) {
+        return
+      }
+      const request = response.request
+      // returns opentracing as integration name ??
+      const span = storage.getStore()?.span
+      this.setLLMObsTags({ request, span, response })
+    })
   }
 
-  generateTags (params, operation, response) {
-    let tags = {}
-    let modelName = ''
-    let modelProvider = ''
-    const modelMeta = params.modelId.split('.')
-    if (modelMeta.length === 2) {
-      [modelProvider, modelName] = modelMeta
-      modelProvider = modelProvider.toUpperCase()
-    } else {
-      [, modelProvider, modelName] = modelMeta
-      modelProvider = modelProvider.toUpperCase()
-    }
+  setLLMObsTags ({ request, span, response }) {
+    // TODO support aws arn model ids
+    const { modelName, modelProvider } = extractModelMeta(request.params.modelId)
+
+    const parent = llmobsStore.getStore()?.span
+    this._tagger.registerLLMObsSpan(span, {
+      parent,
+      modelName,
+      modelProvider,
+      kind: 'llm',
+      name: 'invokeModel'
+    })
 
     const shouldSetChoiceIds = modelProvider === PROVIDER.COHERE && !modelName.includes('embed')
 
-    const requestParams = extractRequestParams(params, modelProvider)
+    const requestParams = extractRequestParams(request.params, modelProvider)
     const textAndResponseReason = extractTextAndResponseReason(response, modelProvider, modelName, shouldSetChoiceIds)
 
-    tags = buildTagsFromParams(requestParams, textAndResponseReason, modelProvider, modelName, operation)
+    // add metadata tags
+    this._tagger.tagMetadata(span, {
+      temperature: parseFloat(requestParams.temperature) || 0.0,
+      max_tokens: parseInt(requestParams.maxTokens) || 0
+    })
 
-    return tags
+    // add I/O tags
+    if (modelName.includes('embed')) {
+      this._tagger.tagEmbeddingIO(span, requestParams.prompt, textAndResponseReason.message)
+    } else {
+      this._tagger.tagLLMIO(span, requestParams.prompt, textAndResponseReason.message)
+    }
   }
 }
 
@@ -65,6 +78,7 @@ class RequestParams {
     prompt = '',
     temperature = undefined,
     topP = undefined,
+    topK = undefined,
     maxTokens = undefined,
     stopSequences = [],
     inputType = '',
@@ -77,6 +91,7 @@ class RequestParams {
     this.prompt = typeof prompt === 'string' ? prompt : JSON.stringify(prompt) || ''
     this.temperature = temperature !== undefined ? temperature : undefined
     this.topP = topP !== undefined ? topP : undefined
+    this.topK = topK !== undefined ? topK : undefined
     this.maxTokens = maxTokens !== undefined ? maxTokens : undefined
     this.stopSequences = stopSequences || []
     this.inputType = inputType || ''
@@ -84,6 +99,20 @@ class RequestParams {
     this.stream = stream || ''
     this.n = n !== undefined ? n : undefined
   }
+}
+
+function extractModelMeta (modelId) {
+  let modelProvider = ''
+  let modelName = ''
+  const modelMeta = modelId.split('.')
+  if (modelMeta.length === 2) {
+    [modelProvider, modelName] = modelMeta
+    modelProvider = modelProvider.toUpperCase()
+  } else {
+    [, modelProvider, modelName] = modelMeta
+    modelProvider = modelProvider.toUpperCase()
+  }
+  return { modelProvider, modelName }
 }
 
 function extractRequestParams (params, provider) {
@@ -262,34 +291,4 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
   return new Generation()
 }
 
-function buildTagsFromParams (requestParams, textAndResponseReason, modelProvider, modelName, operation) {
-  const tags = {}
-
-  // add request tags
-  tags['resource.name'] = operation
-  tags['aws.bedrock.request.model'] = modelName
-  tags['aws.bedrock.request.model_provider'] = modelProvider
-  tags['aws.bedrock.request.prompt'] = requestParams.prompt
-  tags['aws.bedrock.request.temperature'] = requestParams.temperature
-  tags['aws.bedrock.request.top_p'] = requestParams.topP
-  tags['aws.bedrock.request.max_tokens'] = requestParams.maxTokens
-  tags['aws.bedrock.request.stop_sequences'] = requestParams.stopSequences
-  tags['aws.bedrock.request.input_type'] = requestParams.inputType
-  tags['aws.bedrock.request.truncate'] = requestParams.truncate
-  tags['aws.bedrock.request.stream'] = requestParams.stream
-  tags['aws.bedrock.request.n'] = requestParams.n
-
-  // add response tags
-  if (modelName.includes('embed')) {
-    tags['aws.bedrock.response.embedding_length'] = textAndResponseReason.message.length
-  }
-  if (textAndResponseReason.choiceId) {
-    tags['aws.bedrock.response.choices.id'] = textAndResponseReason.choiceId
-  }
-  tags['aws.bedrock.response.choices.text'] = textAndResponseReason.message
-  tags['aws.bedrock.response.choices.finish_reason'] = textAndResponseReason.finishReason
-
-  return tags
-}
-
-module.exports = BedrockRuntime
+module.exports = BedrockRuntimeLLMObsPlugin
