@@ -1,6 +1,5 @@
 'use strict'
 
-const { join } = require('path')
 const { Worker, threadId: parentThreadId } = require('worker_threads')
 const { randomUUID } = require('crypto')
 const log = require('../../log')
@@ -63,7 +62,7 @@ class TestVisDynamicInstrumentation {
     const configChannel = new MessageChannel() // mock channel
 
     this.worker = new Worker(
-      join(__dirname, 'worker', 'index.js'),
+      require.resolve('./worker/index.js'),
       {
         execArgv: [],
         env: envWithoutNodeOptions,
@@ -94,6 +93,10 @@ class TestVisDynamicInstrumentation {
     })
     this.worker.on('messageerror', (err) => {
       log.error('Test Visibility - Dynamic Instrumentation worker messageerror', err)
+    })
+
+    this.worker.on('message', (message) => {
+      console.log('from worker:', message)
     })
 
     // Allow the parent to exit even if the worker is still running
