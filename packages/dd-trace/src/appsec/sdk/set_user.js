@@ -21,6 +21,15 @@ function setUser (tracer, user) {
     return
   }
 
+  /*
+  When a user provides their own session ID through the use of the SDK using the session_id key:
+  If libddwaf hasn’t already been called with the usr.session_id address, it should be called with the provided session_id and further calls through the automated collection method should be inhibited.
+  If libddwaf has already been called with the usr.session_id address, it should be called again.
+  */
+  if (user.session_id && typeof user.session_id === 'string') {
+    persistent['usr.session_id'] = user.session_id
+  }
+
   setUserTags(user, rootSpan)
 }
 
