@@ -17,6 +17,16 @@ if (PROFILER === 'space' || PROFILER === 'all') {
   profilers.push(new SpaceProfiler())
 }
 
+if (profilers.length === 0) {
+  // Add a no-op "profiler"
+  profilers.push({
+    start: () => {},
+    stop: () => {},
+    profile: () => { return true },
+    encode: () => { Promise.resolve(true) }
+  })
+}
+
 const exporters = [{
   export () {
     profiler.stop()
