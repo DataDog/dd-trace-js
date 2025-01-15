@@ -6,9 +6,8 @@ const { channel, addHook } = require('./helpers/instrument')
 const onPassportDeserializeUserChannel = channel('datadog:passport:deserializeUser:finish')
 
 function wrapDone (done) {
-  // eslint-disable-next-line n/handle-callback-err
   return function wrappedDone (err, user) {
-    if (user) {
+    if (!err && user) {
       const abortController = new AbortController()
 
       onPassportDeserializeUserChannel.publish({ user, abortController })
