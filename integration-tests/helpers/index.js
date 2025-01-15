@@ -145,7 +145,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   // return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   const folder = path.join(os.tmpdir(), id().toString())
   const out = path.join(folder, 'dd-trace.tgz')
-  const allDependencies = [`file:${path.sep}${path.sep}${out}`].concat(dependencies)
+  const allDependencies = [`file:${out}`].concat(dependencies)
 
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
   const { NODE_OPTIONS, ...restOfEnv } = process.env
