@@ -55,8 +55,7 @@ class TestVisDynamicInstrumentation {
   start (config) {
     if (this.worker) return
 
-    const { NODE_OPTIONS, ...envWithoutNodeOptions } = process.env
-
+    console.log('TestVisDynamicInstrumentation#start2')
     log.debug('Starting Test Visibility - Dynamic Instrumentation client...')
 
     const rcChannel = new MessageChannel() // mock channel
@@ -66,7 +65,11 @@ class TestVisDynamicInstrumentation {
       join(__dirname, 'worker', 'index.js'),
       {
         execArgv: [],
-        env: envWithoutNodeOptions,
+        env: {
+          ...process.env
+          // DD_TRACE_ENABLED: 0,
+          // DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 0
+        },
         workerData: {
           config: config.serialize(),
           parentThreadId,
