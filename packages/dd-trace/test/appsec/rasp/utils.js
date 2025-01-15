@@ -1,17 +1,7 @@
 'use strict'
 
 const { assert } = require('chai')
-
-function getWebSpan (traces) {
-  for (const trace of traces) {
-    for (const span of trace) {
-      if (span.type === 'web') {
-        return span
-      }
-    }
-  }
-  throw new Error('web span not found')
-}
+const { getWebSpan } = require('../utils')
 
 function checkRaspExecutedAndNotThreat (agent, checkRuleEval = true) {
   return agent.use((traces) => {
@@ -39,7 +29,6 @@ function checkRaspExecutedAndHasThreat (agent, ruleId, ruleEvalCount = 1) {
 }
 
 module.exports = {
-  getWebSpan,
   checkRaspExecutedAndNotThreat,
   checkRaspExecutedAndHasThreat
 }
