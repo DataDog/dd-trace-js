@@ -2,6 +2,7 @@ const proxyquire = require('proxyquire')
 const path = require('path')
 const os = require('os')
 const { expect } = require('chai')
+const { getCallsiteFrames } = require('../../../src/appsec/stack_trace')
 
 class CallSiteMock {
   constructor (fileName, lineNumber, columnNumber = 0) {
@@ -97,8 +98,8 @@ describe('path-line', function () {
       it('should return all no DD entries when multiple stack frames are present', () => {
         const callsites = []
         const expectedFilePaths = [
-          path.join('first', 'file', 'out', 'of', 'dd1.js'),
-          path.join('second', 'file', 'out', 'of', 'dd2.js')
+          path.join('first', 'file', 'out', 'of', 'dd.js'),
+          path.join('second', 'file', 'out', 'of', 'dd.js')
         ]
         const firstFileOutOfDD = path.join(PROJECT_PATH, expectedFilePaths[0])
         const secondFileOutOfDD = path.join(PROJECT_PATH, expectedFilePaths[1])
@@ -218,7 +219,6 @@ describe('path-line', function () {
     it('should handle windows paths correctly', () => {
       const basePath = pathLine.ddBasePath
       pathLine.ddBasePath = path.join('test', 'base', 'path')
-      const { getCallsiteFrames } = require('../../../src/appsec/stack_trace')
 
       const list = getCallsiteFrames(32, getCallSiteInfo)
       const firstNonDDPath = pathLine.getNonDDCallSiteFrames(list)[0]

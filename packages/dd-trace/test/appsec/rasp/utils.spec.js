@@ -11,8 +11,7 @@ describe('RASP - utils.js', () => {
     }
 
     stackTrace = {
-      reportStackTrace: sinon.stub(),
-      getCallSiteList: sinon.stub().returns([])
+      reportStackTrace: sinon.stub()
     }
 
     utils = proxyquire('../../../src/appsec/rasp/utils', {

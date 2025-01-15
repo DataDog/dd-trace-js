@@ -10,17 +10,7 @@ const axios = require('axios')
 const iast = require('../../../src/appsec/iast')
 const Config = require('../../../src/config')
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
-
-function getWebSpan (traces) {
-  for (const trace of traces) {
-    for (const span of trace) {
-      if (span.type === 'web') {
-        return span
-      }
-    }
-  }
-  throw new Error('web span not found')
-}
+const { getWebSpan } = require('../utils')
 
 function testInRequest (app, tests) {
   let http

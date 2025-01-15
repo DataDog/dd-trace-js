@@ -90,9 +90,8 @@ describe('Stack trace reporter', () => {
     it('should not fail if no root span is passed', () => {
       const rootSpan = undefined
       const stackId = 'test_stack_id'
-      const maxDepth = 32
       try {
-        reportStackTrace(rootSpan, stackId, maxDepth, 2, callSiteList)
+        reportStackTrace(rootSpan, stackId, 2, callSiteList)
       } catch (e) {
         assert.fail()
       }
@@ -253,9 +252,8 @@ describe('Stack trace reporter', () => {
         }
       }
       const stackId = 'test_stack_id'
-      const maxDepth = 32
       const maxStackTraces = 2
-      reportStackTrace(rootSpan, stackId, maxDepth, maxStackTraces, undefined)
+      reportStackTrace(rootSpan, stackId, maxStackTraces, undefined)
       assert.property(rootSpan.meta_struct, 'another_tag')
       assert.notProperty(rootSpan.meta_struct, '_dd.stack')
     })
