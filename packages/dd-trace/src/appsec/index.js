@@ -210,8 +210,6 @@ function onPassportDeserializeUser ({ user, abortController }) {
 
   const results = UserTracking.trackUser(user, rootSpan)
 
-  console.log(results)
-
   handleResults(results, store.req, store.req.res, rootSpan, abortController)
 }
 
