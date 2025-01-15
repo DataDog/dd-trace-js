@@ -53,6 +53,7 @@ class Tracer extends NoopProxy {
   }
 
   init (options) {
+    throw new Error('Crash')
     if (this._initialized) return this
 
     this._initialized = true
