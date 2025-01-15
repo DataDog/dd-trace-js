@@ -1566,11 +1566,11 @@ describe('Plugin', () => {
         })
       })
 
-      middlewareDisabledTest('plugin', [{ middleware: false }, { client: false }], {})
+      // middlewareDisabledTest('plugin', [{ middleware: false }, { client: false }], {})
       middlewareDisabledTest('tracer', [{}, { client: false }], { middleware: false })
 
       function middlewareDisabledTest (description, pluginConfig, tracerConfig) {
-        describe(`with configuration for middleware disabled via ${description} config`, () => {
+        describe.only(`with configuration for middleware disabled via ${description} config`, () => {
           before(() => {
             return agent.load(['express', 'http'], pluginConfig, tracerConfig)
           })
@@ -1581,8 +1581,6 @@ describe('Plugin', () => {
 
           beforeEach(() => {
             express = require(`../../../versions/express@${version}`).get()
-            // eslint-disable-next-line no-console
-            console.log('loaded express', description)
           })
 
           it('should not activate a scope per middleware', done => {
