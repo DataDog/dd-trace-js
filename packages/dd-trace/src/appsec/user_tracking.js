@@ -49,16 +49,12 @@ function obfuscateIfNeeded (str) {
   }
 }
 
-// what if we have a stack of auth strategies and only last one is sucessful ? we shouldn't send a million failures
-// what if sdk is called after automated user, will the waf detect it ? will the tags be overriden ?
-
 // TODO: should we find other ways to get the user ID ?
 function getUserId (user) {
   if (!user) return
 
-  // should we iterate on user keyss instead to be case independent
+  // should we iterate on user keys instead to be case insensitive ?
   // but if we iterate over user then we're missing the inherited props ?
-
   for (const field of USER_ID_FIELDS) {
     let id = user[field]
 
@@ -202,19 +198,3 @@ module.exports = {
   trackLogin,
   trackUser
 }
-
-
-
-/*
-check conflict when trackUser and trackLogin is called
-
-
-test with:
-- express-session with passport
-- passport-jwt (or general jwt tokens)
-- data stored in cookies
-- opaque tokens that calls to third party service to get the users in each request (auth0, hydra...)
-- passport-saml (Onelogin, Okta, Shibboleth, LDAP)
-- passport-oauth2
-
-*/
