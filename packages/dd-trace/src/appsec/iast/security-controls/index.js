@@ -22,21 +22,25 @@ let hooks
 function configure (iastConfig) {
   if (!iastConfig?.securityControlsConfiguration) return
 
-  hooks = []
   controls = parse(iastConfig.securityControlsConfiguration)
+  if (controls?.size > 0) {
+    hooks = new Set()
 
-  moduleLoadStartChannel.subscribe(onModuleLoaded)
-  moduleLoadEndChannel.subscribe(onModuleLoaded)
+    moduleLoadStartChannel.subscribe(onModuleLoaded)
+    moduleLoadEndChannel.subscribe(onModuleLoaded)
+  }
 }
 
 function onModuleLoaded (payload) {
-  if (!payload?.module) return
+  if (!payload?.module || hooks?.has(payload.module)) return
 
   const { filename, module } = payload
 
   const controlsByFile = getControls(filename)
   if (controlsByFile) {
-    payload.module = hookModule(filename, module, controlsByFile)
+    const hook = hookModule(filename, module, controlsByFile)
+    payload.module = hook
+    hooks.add(hook)
   }
 }
 
@@ -157,7 +161,7 @@ function disable () {
   if (moduleLoadEndChannel.hasSubscribers) moduleLoadEndChannel.unsubscribe(onModuleLoaded)
 
   controls = undefined
-  hooks?.forEach(hook => hook?.unhook())
+  hooks?.clear()
   hooks = undefined
 }
 

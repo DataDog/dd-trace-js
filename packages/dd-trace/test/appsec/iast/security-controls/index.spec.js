@@ -15,10 +15,11 @@ describe('IAST Security Controls', () => {
   let securityControls, addSecureMark, iastContext
 
   describe('configure', () => {
-    let parse, startChSubscribe, endChSubscribe
+    let controls, parse, startChSubscribe, endChSubscribe
 
     beforeEach(() => {
-      parse = sinon.stub()
+      controls = new Map()
+      parse = sinon.stub().returns(controls)
       startChSubscribe = sinon.stub()
       endChSubscribe = sinon.stub()
 
@@ -46,12 +47,25 @@ describe('IAST Security Controls', () => {
     })
 
     it('should call parse and subscribe to moduleLoad channels', () => {
-      securityControls.configure({ securityControlsConfiguration: 'config' })
+      controls.set('sanitizer.js', {})
 
-      sinon.assert.calledWithExactly(parse, 'config')
+      const securityControlsConfiguration = 'SANITIZER:CODE_INJECTION:sanitizer.js:sanitize'
+      securityControls.configure({ securityControlsConfiguration })
+
+      sinon.assert.calledWithExactly(parse, securityControlsConfiguration)
 
       sinon.assert.calledOnce(startChSubscribe)
       sinon.assert.calledOnce(endChSubscribe)
+    })
+
+    it('should call parse and not subscribe to moduleLoad channels', () => {
+      const securityControlsConfiguration = 'invalid_config'
+      securityControls.configure({ securityControlsConfiguration })
+
+      sinon.assert.calledWithExactly(parse, securityControlsConfiguration)
+
+      sinon.assert.notCalled(startChSubscribe)
+      sinon.assert.notCalled(endChSubscribe)
     })
   })
 
@@ -90,6 +104,17 @@ describe('IAST Security Controls', () => {
       module = payload.module
       return module
     }
+
+    it('should hook a module only once', () => {
+      // eslint-disable-next-line no-multi-str
+      const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
+      /security-controls/resources/custom_input_validator.js:validate'
+      securityControls.configure({ securityControlsConfiguration: conf })
+
+      requireAndPublish('./resources/custom_input_validator')
+
+      requireAndPublish('./resources/custom_input_validator')
+    })
 
     describe('in custom libs', () => {
       it('should hook configured control for input_validator', () => {
