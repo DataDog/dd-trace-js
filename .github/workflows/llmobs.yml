@@ -28,7 +28,7 @@ jobs:
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
-          suffix: ${{ github.job }}
+          suffix: llmobs-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   openai:
@@ -50,7 +50,7 @@ jobs:
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
-          suffix: ${{ github.job }}
+          suffix: llmobs-${{ github.job }}
 
   langchain:
     runs-on: ubuntu-latest
@@ -71,4 +71,4 @@ jobs:
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
-          suffix: ${{ github.job }}
+          suffix: llmobs-${{ github.job }}

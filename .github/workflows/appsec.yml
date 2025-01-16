@@ -227,7 +227,7 @@ jobs:
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
-          suffix: ${{ github.job }}
+          suffix: appsec-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   lodash:

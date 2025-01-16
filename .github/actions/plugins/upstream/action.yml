@@ -15,4 +15,4 @@ runs:
     - if: always()
       uses: ./.github/actions/testagent/logs
       with:
-          suffix: upstream
+        suffix: upstream-${{ github.job }}
