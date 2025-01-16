@@ -154,7 +154,7 @@ describe('IAST Security Controls', () => {
       it('should hook configured control for input_validator with multiple inputs marking one parameter', () => {
         // eslint-disable-next-line no-multi-str
         const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
-    /security-controls/resources/custom_input_validator.js:validate:2'
+    /security-controls/resources/custom_input_validator.js:validate:1'
         securityControls.configure({ securityControlsConfiguration: conf })
 
         const { validate } = requireAndPublish('./resources/custom_input_validator')
@@ -166,7 +166,7 @@ describe('IAST Security Controls', () => {
       it('should hook configured control for input_validator with multiple inputs marking multiple parameter', () => {
         // eslint-disable-next-line no-multi-str
         const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
-    /security-controls/resources/custom_input_validator.js:validate:2,4'
+    /security-controls/resources/custom_input_validator.js:validate:1,3'
         securityControls.configure({ securityControlsConfiguration: conf })
 
         const { validate } = requireAndPublish('./resources/custom_input_validator')
@@ -175,6 +175,18 @@ describe('IAST Security Controls', () => {
         sinon.assert.calledTwice(addSecureMark)
         sinon.assert.calledWithExactly(addSecureMark, iastContext, 'input2', CUSTOM_COMMAND_INJECTION_MARK, false)
         sinon.assert.calledWithExactly(addSecureMark, iastContext, 'input4', CUSTOM_COMMAND_INJECTION_MARK, false)
+      })
+
+      it('should hook configured control for input_validator with invalid parameter', () => {
+        // eslint-disable-next-line no-multi-str
+        const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
+    /security-controls/resources/custom_input_validator.js:validate:42'
+        securityControls.configure({ securityControlsConfiguration: conf })
+
+        const { validate } = requireAndPublish('./resources/custom_input_validator')
+        validate('input1')
+
+        sinon.assert.notCalled(addSecureMark)
       })
 
       it('should hook configured control for sanitizer', () => {
