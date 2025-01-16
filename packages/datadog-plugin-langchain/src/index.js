@@ -1,88 +1,20 @@
 'use strict'
 
-const { MEASURED } = require('../../../ext/tags')
-const { storage } = require('../../datadog-core')
-const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const LangChainTracingPlugin = require('./tracing')
+const LangChainLLMObsPlugin = require('../../dd-trace/src/llmobs/plugins/langchain')
+const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 
-const API_KEY = 'langchain.request.api_key'
-const MODEL = 'langchain.request.model'
-const PROVIDER = 'langchain.request.provider'
-const TYPE = 'langchain.request.type'
-
-const LangChainHandler = require('./handlers/default')
-const LangChainChatModelHandler = require('./handlers/language_models/chat_model')
-const LangChainLLMHandler = require('./handlers/language_models/llm')
-const LangChainChainHandler = require('./handlers/chain')
-const LangChainEmbeddingHandler = require('./handlers/embedding')
-
-class LangChainPlugin extends TracingPlugin {
+class LangChainPlugin extends CompositePlugin {
   static get id () { return 'langchain' }
-  static get operation () { return 'invoke' }
-  static get system () { return 'langchain' }
-  static get prefix () {
-    return 'tracing:apm:langchain:invoke'
-  }
-
-  constructor () {
-    super(...arguments)
-
-    const tracerConfig = this._tracerConfig
-    this.handlers = {
-      chain: new LangChainChainHandler(tracerConfig),
-      chat_model: new LangChainChatModelHandler(tracerConfig),
-      llm: new LangChainLLMHandler(tracerConfig),
-      embedding: new LangChainEmbeddingHandler(tracerConfig),
-      default: new LangChainHandler(tracerConfig)
+  static get plugins () {
+    return {
+      // ordering here is important - the llm observability plugin must come first
+      // so that we can add annotations associated with the span before it finishes.
+      // however, because the tracing plugin uses `bindStart` vs the llmobs' `start`,
+      // the span is guaranteed to be created in the tracing plugin before the llmobs one is called
+      llmobs: LangChainLLMObsPlugin,
+      tracing: LangChainTracingPlugin
     }
-  }
-
-  bindStart (ctx) {
-    const { resource, type } = ctx
-    const handler = this.handlers[type]
-
-    const instance = ctx.instance
-    const apiKey = handler.extractApiKey(instance)
-    const provider = handler.extractProvider(instance)
-    const model = handler.extractModel(instance)
-
-    const tags = handler.getSpanStartTags(ctx, provider) || []
-
-    if (apiKey) tags[API_KEY] = apiKey
-    if (provider) tags[PROVIDER] = provider
-    if (model) tags[MODEL] = model
-    if (type) tags[TYPE] = type
-
-    const span = this.startSpan('langchain.request', {
-      service: this.config.service,
-      resource,
-      kind: 'client',
-      meta: {
-        [MEASURED]: 1,
-        ...tags
-      }
-    }, false)
-
-    const store = storage.getStore() || {}
-    ctx.currentStore = { ...store, span }
-
-    return ctx.currentStore
-  }
-
-  asyncEnd (ctx) {
-    const span = ctx.currentStore.span
-
-    const { type } = ctx
-
-    const handler = this.handlers[type]
-    const tags = handler.getSpanEndTags(ctx) || {}
-
-    span.addTags(tags)
-
-    span.finish()
-  }
-
-  getHandler (type) {
-    return this.handlers[type] || this.handlers.default
   }
 }
 
