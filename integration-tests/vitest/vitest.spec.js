@@ -35,7 +35,7 @@ const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/
 
 const NUM_RETRIES_EFD = 3
 
-const versions = ['latest']
+const versions = ['2.1.8'] // was previously 'latest', but v3 breaks this test
 
 const linePctMatchRegex = /Lines\s+:\s+([\d.]+)%/
 
