@@ -171,20 +171,16 @@ function trackUser (user, rootSpan) {
 
   const isSdkCalled = rootSpan.context()._tags['_dd.appsec.user.collection_mode'] === 'sdk'
 
-  const newTags = {
-    '_dd.appsec.usr.id': userId
-  }
-
   // do not override SDK
-  if (!isSdkCalled) {
-    newTags['usr.id'] = userId
-    newTags['_dd.appsec.user.collection_mode'] = collectionMode
-  }
+  if (isSdkCalled) {
+    rootSpan.setTag('_dd.appsec.usr.id', userId)
+  } else {
+    rootSpan.addTags({
+      '_dd.appsec.usr.id': userId,
+      'usr.id': userId,
+      '_dd.appsec.user.collection_mode': collectionMode
+    })
 
-  rootSpan.addTags(newTags)
-
-  // do not override SDK
-  if (!isSdkCalled) {
     return waf.run({
       persistent: {
         [addresses.USER_ID]: userId
