@@ -16,6 +16,7 @@ runs:
         fi
       shell: bash
     - name: Get Tested Integrations from Test Agent
+      id: get-integrations
       run: |
         # make temporary files to save response data to
         response=$(mktemp) && headers=$(mktemp)
@@ -32,9 +33,11 @@ runs:
         # copy data to final file and remove temp files
         mv "$response" "artifacts/${filename}_supported_versions.csv"
         rm "$headers"
+
+        echo "filename=$filename" >> $GITHUB_OUTPUT
       shell: bash
     - name: Archive Test Agent Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: supported-integrations
+        name: supported-integrations-${{ steps.get-integrations.outputs.filename }}
         path: ./artifacts
