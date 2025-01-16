@@ -63,6 +63,8 @@ jobs:
         run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: aerospike-${{ matrix.node-version }}
       - uses: codecov/codecov-action@v3
 
   amqp10:
@@ -164,6 +166,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: aws-sdk-${{ matrix.node-version }}
       - uses: codecov/codecov-action@v3
 
   axios:
@@ -741,6 +745,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: next-${{ matrix.range }}
       - uses: codecov/codecov-action@v3
 
   openai:
