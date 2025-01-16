@@ -64,7 +64,7 @@ jobs:
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
-          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.range }}
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ github.run_id }}
       - uses: codecov/codecov-action@v3
 
   amqp10:
@@ -762,7 +762,7 @@ jobs:
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
-          suffix: plugins-${{ github.job }}-${{ matrix.version }}-${{ matrix.range }}
+          suffix: plugins-${{ github.job }}-${{ matrix.version }}-${{ github.run_id }}
       - uses: codecov/codecov-action@v3
 
   openai:
