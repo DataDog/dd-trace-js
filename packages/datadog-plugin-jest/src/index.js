@@ -265,6 +265,12 @@ class JestPlugin extends CiPlugin {
       })
     })
 
+    this.addSub('ci:jest:worker-report:logs', (logsPayloads) => {
+      JSON.parse(logsPayloads).forEach(({ testConfiguration, logMessage }) => {
+        this.tracer._exporter.exportDiLogs(testConfiguration, logMessage)
+      })
+    })
+
     this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage, error }) => {
       this.testSuiteSpan.setTag(TEST_STATUS, status)
       if (error) {
