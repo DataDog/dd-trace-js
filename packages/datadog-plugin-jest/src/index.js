@@ -266,7 +266,6 @@ class JestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:jest:worker-report:logs', (logsPayloads) => {
-      console.log('ci:jest:worker-report:logs', logsPayloads)
       JSON.parse(logsPayloads).forEach(({ testConfiguration, logMessage }) => {
         this.tracer._exporter.exportDiLogs(testConfiguration, logMessage)
       })

@@ -55,7 +55,6 @@ class TestVisDynamicInstrumentation {
   start (config) {
     if (this.worker) return
 
-    console.log('TestVisDynamicInstrumentation#start4 - DD_TRACE_ENABLED')
     log.debug('Starting Test Visibility - Dynamic Instrumentation client...')
 
     const rcChannel = new MessageChannel() // mock channel
@@ -65,6 +64,9 @@ class TestVisDynamicInstrumentation {
       join(__dirname, 'worker', 'index.js'),
       {
         execArgv: [],
+        // Not passing `NODE_OPTIONS` results in issues with yarn, which relies on NODE_OPTIONS
+        // for PnP support, hence why we deviate from the DI pattern here.
+        // To avoid infinite initialization loops, we're disabling DI and tracing in the worker.
         env: {
           ...process.env,
           DD_TRACE_ENABLED: 0,
@@ -99,10 +101,6 @@ class TestVisDynamicInstrumentation {
       log.error('Test Visibility - Dynamic Instrumentation worker messageerror', err)
     })
 
-    this.worker.on('message', (message) => {
-      console.log('From worker:', message)
-    })
-
     // Allow the parent to exit even if the worker is still running
     this.worker.unref()
 
@@ -117,7 +115,6 @@ class TestVisDynamicInstrumentation {
     this.breakpointHitChannel.port2.on('message', ({ snapshot }) => {
       const { probe: { id: probeId } } = snapshot
       const onHit = this.onHitBreakpointByProbeId.get(probeId)
-      console.log('hit breakpoint!', { onHit })
       if (onHit) {
         onHit({ snapshot })
       }

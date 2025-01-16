@@ -5,8 +5,7 @@ const {
     breakpointSetChannel,
     breakpointHitChannel,
     breakpointRemoveChannel
-  },
-  parentPort
+  }
 } = require('worker_threads')
 const { randomUUID } = require('crypto')
 const sourceMap = require('source-map')
@@ -29,8 +28,6 @@ const probeIdToBreakpointId = new Map()
 
 session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint], callFrames } }) => {
   const probe = breakpointIdToProbe.get(hitBreakpoint)
-  parentPort.postMessage('Debugger.paused')
-  parentPort.postMessage(`probe id: ${probe?.id}`)
   if (!probe) {
     log.warn(`No probe found for breakpoint ${hitBreakpoint}`)
     return session.post('Debugger.resume')
@@ -53,7 +50,6 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
     stack,
     language: 'javascript'
   }
-  parentPort.postMessage({ snapshot })
 
   const state = getLocalState()
   if (state) {
@@ -61,7 +57,6 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
       lines: { [probe.location.lines[0]]: { locals: state } }
     }
   }
-  parentPort.postMessage({ state })
 
   breakpointHitChannel.postMessage({ snapshot })
 })
@@ -120,7 +115,6 @@ async function addBreakpoint (probe) {
       lineNumber: lineNumber - 1
     }
   })
-  parentPort.postMessage(`Breakpoint set at ${path}:${line} with id ${breakpointId}`)
 
   breakpointIdToProbe.set(breakpointId, probe)
   probeIdToBreakpointId.set(probe.id, breakpointId)
@@ -132,8 +126,6 @@ function start () {
 }
 
 async function processScriptWithInlineSourceMap (params) {
-  parentPort.postMessage('processScriptWithInlineSourceMap')
-  parentPort.postMessage({ params })
   const { file, line, sourceMapURL } = params
 
   // Extract the base64-encoded source map
@@ -161,7 +153,6 @@ async function processScriptWithInlineSourceMap (params) {
       column: 0
     })
   }
-  parentPort.postMessage({ generatedPosition })
 
   consumer.destroy()
 
