@@ -55,7 +55,7 @@ class TestVisDynamicInstrumentation {
   start (config) {
     if (this.worker) return
 
-    console.log('TestVisDynamicInstrumentation#start2')
+    console.log('TestVisDynamicInstrumentation#start3')
     log.debug('Starting Test Visibility - Dynamic Instrumentation client...')
 
     const rcChannel = new MessageChannel() // mock channel
@@ -66,9 +66,9 @@ class TestVisDynamicInstrumentation {
       {
         execArgv: [],
         env: {
-          ...process.env
+          ...process.env,
+          DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 0
           // DD_TRACE_ENABLED: 0,
-          // DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 0
         },
         workerData: {
           config: config.serialize(),
@@ -97,6 +97,10 @@ class TestVisDynamicInstrumentation {
     })
     this.worker.on('messageerror', (err) => {
       log.error('Test Visibility - Dynamic Instrumentation worker messageerror', err)
+    })
+
+    this.worker.on('message', (message) => {
+      console.log('From worker:', message)
     })
 
     // Allow the parent to exit even if the worker is still running
