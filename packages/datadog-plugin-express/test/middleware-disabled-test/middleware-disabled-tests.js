@@ -219,10 +219,10 @@ module.exports = function middlewareDisabledTest (description, pluginConfig, tra
                 validateStatus: status => status === 500
               })
               .catch(done)
-            })
           })
         })
-      }
+      })
+    }
     )
   })
 }
