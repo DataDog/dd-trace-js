@@ -321,7 +321,6 @@ module.exports = class CiPlugin extends Plugin {
 
     const activeTestSpanContext = this.activeTestSpan.context()
 
-    // This will not work for workers
     this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
       debugger: { snapshot },
       dd: {

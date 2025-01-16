@@ -94,9 +94,11 @@ class TestVisDynamicInstrumentation {
       log.debug('Test Visibility - Dynamic Instrumentation client is ready')
       this._onReady()
     })
+
     this.worker.on('error', (err) => {
       log.error('Test Visibility - Dynamic Instrumentation worker error', err)
     })
+
     this.worker.on('messageerror', (err) => {
       log.error('Test Visibility - Dynamic Instrumentation worker messageerror', err)
     })
