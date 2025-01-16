@@ -5,26 +5,45 @@ const proxyquire = require('proxyquire')
 const log = require('../../../../src/log')
 const dc = require('dc-polyfill')
 const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tracking/source-types')
+const { SQL_INJECTION_MARK, COMMAND_INJECTION_MARK } =
+ require('../../../../src/appsec/iast/taint-tracking/secure-marks')
 
 describe('sql-injection-analyzer', () => {
   const NOT_TAINTED_QUERY = 'no vulnerable query'
   const TAINTED_QUERY = 'vulnerable query'
+  const TAINTED_SQLI_SECURED = 'sqli secure marked vulnerable query'
+  const TAINTED_CMDI_SECURED = 'cmdi secure marked vulnerable query'
+
+  function getRanges (string, secureMarks) {
+    const range = {
+      start: 0,
+      end: string.length,
+      iinfo: {
+        parameterName: 'param',
+        parameterValue: string,
+        type: HTTP_REQUEST_PARAMETER
+      },
+      secureMarks
+    }
+
+    return [range]
+  }
 
   const TaintTrackingMock = {
     getRanges: (iastContext, string) => {
-      return string === TAINTED_QUERY
-        ? [
-            {
-              start: 0,
-              end: string.length,
-              iinfo: {
-                parameterName: 'param',
-                parameterValue: string,
-                type: HTTP_REQUEST_PARAMETER
-              }
-            }
-          ]
-        : []
+      switch (string) {
+        case TAINTED_QUERY:
+          return getRanges(string)
+
+        case TAINTED_SQLI_SECURED:
+          return getRanges(string, SQL_INJECTION_MARK)
+
+        case TAINTED_CMDI_SECURED:
+          return getRanges(COMMAND_INJECTION_MARK)
+
+        default:
+          return []
+      }
     }
   }
 
@@ -68,6 +87,16 @@ describe('sql-injection-analyzer', () => {
 
   it('should detect vulnerability when vulnerable query', () => {
     const isVulnerable = sqlInjectionAnalyzer._isVulnerable(TAINTED_QUERY)
+    expect(isVulnerable).to.be.true
+  })
+
+  it('should not detect vulnerability when vulnerable query with sqli secure mark', () => {
+    const isVulnerable = sqlInjectionAnalyzer._isVulnerable(TAINTED_SQLI_SECURED)
+    expect(isVulnerable).to.be.false
+  })
+
+  it('should detect vulnerability when vulnerable query with cmdi secure mark', () => {
+    const isVulnerable = sqlInjectionAnalyzer._isVulnerable(TAINTED_CMDI_SECURED)
     expect(isVulnerable).to.be.true
   })
 

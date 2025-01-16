@@ -12,7 +12,6 @@ const SANITIZER_TYPE = 'SANITIZER'
 
 const validTypes = [INPUT_VALIDATOR_TYPE, SANITIZER_TYPE]
 
-// DD_IAST_SECURITY_CONTROLS_CONFIGURATION
 function parse (securityControlsConfiguration) {
   const controls = new Map()
 
