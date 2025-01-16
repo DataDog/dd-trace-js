@@ -14,3 +14,5 @@ runs:
     - uses: codecov/codecov-action@v3
     - if: always()
       uses: ./.github/actions/testagent/logs
+      with:
+          suffix: upstream

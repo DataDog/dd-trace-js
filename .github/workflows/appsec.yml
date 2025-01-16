@@ -226,6 +226,8 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: ${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   lodash:
