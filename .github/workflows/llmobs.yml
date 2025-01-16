@@ -27,6 +27,8 @@ jobs:
       - run: yarn test:llmobs:sdk:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: llmobs-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   openai:
@@ -47,6 +49,8 @@ jobs:
       - uses: codecov/codecov-action@v3
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: llmobs-${{ github.job }}
 
   langchain:
     runs-on: ubuntu-latest
@@ -66,3 +70,5 @@ jobs:
       - uses: codecov/codecov-action@v3
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: llmobs-${{ github.job }}
