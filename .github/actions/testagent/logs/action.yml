@@ -34,7 +34,7 @@ runs:
         rm "$headers"
       shell: bash
     - name: Archive Test Agent Artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: supported-integrations
         path: ./artifacts
