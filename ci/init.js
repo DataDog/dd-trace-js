@@ -30,8 +30,6 @@ if (isPackageManager()) {
   shouldInit = false
 }
 
-console.log('branch!')
-
 const isAgentlessEnabled = isTrue(process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED)
 
 if (isAgentlessEnabled) {
