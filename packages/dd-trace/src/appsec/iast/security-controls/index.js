@@ -117,7 +117,7 @@ function wrapInputValidator (target, parameters, secureMarks) {
   return shimmer.wrapFunction(target, orig => function () {
     try {
       [...arguments].forEach((arg, index) => {
-        if (allParameters || parameters.includes(index)) {
+        if (allParameters || parameters.includes(index + 1)) {
           // TODO: addSecureMark to a existing string
           addSecureMarks(arg, secureMarks, false)
         }
@@ -137,11 +137,11 @@ function addSecureMarks (value, secureMarks, createNewTainted = true) {
   const iastContext = getIastContext(store)
 
   if (typeof value === 'string') {
-    return TaintTrackingOperations.addSecureMark(iastContext, value, secureMarks)
+    return TaintTrackingOperations.addSecureMark(iastContext, value, secureMarks, createNewTainted)
   } else {
     iterateObjectStrings(value, (value, levelKeys, parent, lastKey) => {
       try {
-        const securedTainted = TaintTrackingOperations.addSecureMark(iastContext, value, secureMarks)
+        const securedTainted = TaintTrackingOperations.addSecureMark(iastContext, value, secureMarks, createNewTainted)
         if (createNewTainted) {
           parent[lastKey] = securedTainted
         }
