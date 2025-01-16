@@ -22,6 +22,8 @@ function setUser (tracer, user) {
   }
 
   setUserTags(user, rootSpan)
+
+  // aie not handling results
 }
 
 module.exports = {

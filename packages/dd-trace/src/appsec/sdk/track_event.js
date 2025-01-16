@@ -96,6 +96,7 @@ function runWaf (eventName, user) {
     persistent[addresses.USER_LOGIN] = '' + user.login
   }
 
+  // aie it's not handling results
   waf.run({ persistent })
 }
 
