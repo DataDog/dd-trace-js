@@ -115,7 +115,10 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
     res.removeHeader(headerName)
   }
 
-  res.writeHead(statusCode, headers)._originalEnd(body)
+  res.writeHead(statusCode, headers)
+
+  // this is needed to call the original end method, since express-session replaces it
+  res.constructor.prototype.end.call(res, body)
 
   responseBlockedSet.add(res)
 
