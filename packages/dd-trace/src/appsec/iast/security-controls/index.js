@@ -45,11 +45,11 @@ function onModuleLoaded (payload) {
 }
 
 function getControls (filename) {
-  let key
-  if (filename.includes('node_modules')) {
-    key = [...controls.keys()].find(file => filename.endsWith(file))
-  } else {
-    key = path.isAbsolute(filename) ? path.relative(process.cwd(), filename) : filename
+  let key = path.isAbsolute(filename) ? path.relative(process.cwd(), filename) : filename
+  key = key.replaceAll(path.sep, path.posix.sep)
+
+  if (key.includes('node_modules')) {
+    key = [...controls.keys()].find(file => key.endsWith(file))
   }
   return controls.get(key)
 }
