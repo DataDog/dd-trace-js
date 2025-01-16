@@ -297,6 +297,7 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   onDiBreakpointHit ({ snapshot }) {
+    console.log('onDiBreakpointHit', { snapshot, isActiveSpan: !!this.activeTestSpan })
     if (!this.activeTestSpan || this.activeTestSpan.context()._isFinished) {
       // This is unexpected and is caused by a race condition.
       log.warn('Breakpoint snapshot could not be attached to the active test span')
@@ -320,6 +321,8 @@ module.exports = class CiPlugin extends Plugin {
     )
 
     const activeTestSpanContext = this.activeTestSpan.context()
+
+    // This will not work for workers
     this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
       debugger: { snapshot },
       dd: {
