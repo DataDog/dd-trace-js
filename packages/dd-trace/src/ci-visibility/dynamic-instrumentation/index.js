@@ -55,7 +55,7 @@ class TestVisDynamicInstrumentation {
   start (config) {
     if (this.worker) return
 
-    console.log('TestVisDynamicInstrumentation#start3')
+    console.log('TestVisDynamicInstrumentation#start4 - DD_TRACE_ENABLED')
     log.debug('Starting Test Visibility - Dynamic Instrumentation client...')
 
     const rcChannel = new MessageChannel() // mock channel
@@ -67,8 +67,8 @@ class TestVisDynamicInstrumentation {
         execArgv: [],
         env: {
           ...process.env,
+          DD_TRACE_ENABLED: 0,
           DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 0
-          // DD_TRACE_ENABLED: 0,
         },
         workerData: {
           config: config.serialize(),
