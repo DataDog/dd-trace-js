@@ -13,16 +13,19 @@ describe('Plugin', () => {
   let tracer
   let express
   let appListener
+  let oldLog = console.error
 
   describe('express', () => {
     withVersions('express', 'express', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
+        console.error = () => {}
       })
 
       afterEach(() => {
         appListener && appListener.close()
         appListener = null
+        console.error = oldLog
       })
 
       describe('without http', () => {
