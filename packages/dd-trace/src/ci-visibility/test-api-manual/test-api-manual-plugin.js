@@ -13,15 +13,16 @@ class TestApiManualPlugin extends CiPlugin {
 
   constructor (...args) {
     super(...args)
+    this._isConfigured = false
     this.sourceRoot = process.cwd()
 
-    this.addSub('dd-trace:ci:manual:test:start', ({ testName, testSuite }) => {
+    this.unconfiguredAddSub('dd-trace:ci:manual:test:start', ({ testName, testSuite }) => {
       const store = storage.getStore()
       const testSuiteRelative = getTestSuitePath(testSuite, this.sourceRoot)
       const testSpan = this.startTestSpan(testName, testSuiteRelative)
       this.enter(testSpan, store)
     })
-    this.addSub('dd-trace:ci:manual:test:finish', ({ status, error }) => {
+    this.unconfiguredAddSub('dd-trace:ci:manual:test:finish', ({ status, error }) => {
       const store = storage.getStore()
       const testSpan = store && store.span
       if (testSpan) {
@@ -33,13 +34,28 @@ class TestApiManualPlugin extends CiPlugin {
         finishAllTraceSpans(testSpan)
       }
     })
-    this.addSub('dd-trace:ci:manual:test:addTags', (tags) => {
+    this.unconfiguredAddSub('dd-trace:ci:manual:test:addTags', (tags) => {
       const store = storage.getStore()
       const testSpan = store && store.span
       if (testSpan) {
         testSpan.addTags(tags)
       }
     })
+  }
+
+  // To lazily configure to avoid unnecessary setup time.
+  unconfiguredAddSub (channelName, handler) {
+    this.addSub(channelName, (...args) => {
+      if (!this._isConfigured) {
+        this._isConfigured = true
+        this.configure(this._config)
+      }
+      return handler(...args)
+    })
+  }
+
+  setConfig (config) {
+    this._config = config
   }
 }
 
