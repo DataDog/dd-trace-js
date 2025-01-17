@@ -13,7 +13,7 @@ class TestApiManualPlugin extends CiPlugin {
 
   constructor (...args) {
     super(...args)
-    this._isConfigured = false
+    this._isEnvDataCalcualted = false
     this.sourceRoot = process.cwd()
 
     this.unconfiguredAddSub('dd-trace:ci:manual:test:start', ({ testName, testSuite }) => {
@@ -43,19 +43,20 @@ class TestApiManualPlugin extends CiPlugin {
     })
   }
 
-  // To lazily configure to avoid unnecessary setup time.
+  // To lazily calculate env data.
   unconfiguredAddSub (channelName, handler) {
     this.addSub(channelName, (...args) => {
-      if (!this._isConfigured) {
-        this._isConfigured = true
-        this.configure(this._config)
+      if (!this._isEnvDataCalcualted) {
+        this._isEnvDataCalcualted = true
+        this.configure(this._config, true)
       }
       return handler(...args)
     })
   }
 
-  setConfig (config) {
+  configure (config, shouldGetEnvironmentData) {
     this._config = config
+    super.configure(config, shouldGetEnvironmentData)
   }
 }
 
