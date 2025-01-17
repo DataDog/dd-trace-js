@@ -6,6 +6,7 @@ const { expect } = require('chai')
 const { readFileSync } = require('fs')
 const sinon = require('sinon')
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
+const path = require('path')
 
 describe('Config', () => {
   let Config
@@ -2340,6 +2341,86 @@ describe('Config', () => {
       expect(taggingConfig).to.have.property('requestsEnabled', true)
       expect(taggingConfig).to.have.property('responsesEnabled', true)
       expect(taggingConfig).to.have.property('maxDepth', 7)
+    })
+  })
+
+  context('library config', () => {
+    let env
+    let tempDir
+    beforeEach(() => {
+      env = process.env
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'config-test-'))
+      process.env.DD_TEST_LOCAL_CONFIG_PATH = path.join(tempDir, 'local.yaml')
+      process.env.DD_TEST_FLEET_CONFIG_PATH = path.join(tempDir, 'fleet.yaml')
+    })
+
+    afterEach(() => {
+      process.env = env
+      fs.rmdirSync(tempDir, { recursive: true })
+    })
+
+    it('should apply host wide config', () => {
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+apm_configuration_default:
+  DD_RUNTIME_METRICS_ENABLED: true
+`)
+      const config = new Config()
+      expect(config).to.have.property('runtimeMetrics', true)
+    })
+
+    it('should apply service specific config', () => {
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+rules:
+  - selectors:
+    - origin: language
+      matches:
+        - nodejs
+      operator: equals
+    configuration:
+      DD_SERVICE: my-service
+`)
+      const config = new Config()
+      expect(config).to.have.property('service', 'my-service')
+    })
+
+    it('should respect the priority orders', () => {
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+rules:
+  - selectors:
+    - origin: language
+      matches:
+        - nodejs
+      operator: equals
+    configuration:
+      DD_SERVICE: a
+`)
+      const configA = new Config()
+      expect(configA).to.have.property('service', 'a')
+
+      process.env.DD_SERVICE = 'b'
+      const configB = new Config()
+      expect(configB).to.have.property('service', 'b', 'local stable config < env var')
+
+      fs.writeFileSync(
+        process.env.DD_TEST_FLEET_CONFIG_PATH,
+        `
+rules:
+  - selectors:
+    - origin: language
+      matches:
+        - nodejs
+      operator: equals
+    configuration:
+      DD_SERVICE: c
+  `)
+      const configC = new Config()
+      expect(configC).to.have.property('service', 'c', 'local stable config < fleet config < env var')
     })
   })
 })

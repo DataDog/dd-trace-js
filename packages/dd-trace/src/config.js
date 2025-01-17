@@ -19,6 +19,7 @@ const telemetryMetrics = require('./telemetry/metrics')
 const { getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
+const libdatadog = require('@datadog/libdatadog')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -236,6 +237,8 @@ function reformatSpanSamplingRules (rules) {
 
 class Config {
   constructor (options = {}) {
+    const { localFileConfigEntries, fleetFileConfigEntries } = this.getStableConfig()
+
     options = {
       ...options,
       appsec: options.appsec != null ? options.appsec : options.experimental?.appsec,
@@ -244,9 +247,22 @@ class Config {
 
     // Configure the logger first so it can be used to warn about other configs
     const logConfig = log.getConfig()
-    this.debug = logConfig.enabled
+    this.debug = isTrue(coalesce(
+      fleetFileConfigEntries.DD_TRACE_DEBUG,
+      process.env.DD_TRACE_DEBUG,
+      process.env.OTEL_LOG_LEVEL === 'debug' || undefined,
+      localFileConfigEntries.DD_TRACE_DEBUG,
+      logConfig.enabled
+    ))
     this.logger = coalesce(options.logger, logConfig.logger)
-    this.logLevel = coalesce(options.logLevel, logConfig.logLevel)
+    this.logLevel = coalesce(
+      options.logLevel,
+      fleetFileConfigEntries.DD_TRACE_LOG_LEVEL,
+      process.env.DD_TRACE_LOG_LEVEL,
+      process.env.OTEL_LOG_LEVEL,
+      localFileConfigEntries.DD_TRACE_LOG_LEVEL,
+      logConfig.logLevel
+    )
 
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel)
@@ -337,7 +353,9 @@ class Config {
     }
 
     this._applyDefaults()
+    this._applyLocalStableConfig(localFileConfigEntries)
     this._applyEnvironment()
+    this._applyFleetStableConfig(fleetFileConfigEntries)
     this._applyOptions(options)
     this._applyCalculated()
     this._applyRemote({})
@@ -388,6 +406,44 @@ class Config {
         }
       }
     }
+  }
+
+  getStableConfig () {
+    // Note: we use maybeLoad because there may be cases where the library is not available and we
+    // want to avoid breaking the application. In those cases, we will not have the file-based configuration.
+    const libconfig = libdatadog.maybeLoad('library_config')
+    const localFileConfigEntries = {}
+    const fleetFileConfigEntries = {}
+    if (libconfig != null) {
+      const configurator = new libconfig.JsConfigurator()
+
+      const localConfigPath = process.env.DD_TEST_LOCAL_CONFIG_PATH ??
+        configurator.get_config_local_path(process.platform)
+      const fleetConfigPath = process.env.DD_TEST_FLEET_CONFIG_PATH ??
+        configurator.get_config_managed_path(process.platform)
+
+      let localConfig = ''
+      try {
+        localConfig = fs.readFileSync(localConfigPath, 'utf8')
+      } catch (err) {}
+      let fleetConfig = ''
+      try {
+        fleetConfig = fs.readFileSync(fleetConfigPath, 'utf8')
+      } catch (err) {}
+
+      if (localConfig || fleetConfig) {
+        configurator.set_envp(Object.entries(process.env).map(([key, value]) => `${key}=${value}`))
+        configurator.set_args(process.argv)
+        configurator.get_configuration(localConfig.toString(), fleetConfig.toString()).forEach((entry) => {
+          if (entry.source === 'local_stable_config') {
+            localFileConfigEntries[entry.name] = entry.value
+          } else if (entry.source === 'fleet_stable_config') {
+            fleetFileConfigEntries[entry.name] = entry.value
+          }
+        })
+      }
+    }
+    return { localFileConfigEntries, fleetFileConfigEntries }
   }
 
   // Supports only a subset of options for now.
@@ -573,6 +629,50 @@ class Config {
     this._setValue(defaults, 'version', pkg.version)
     this._setValue(defaults, 'instrumentation_config_id', undefined)
     this._setValue(defaults, 'aws.dynamoDb.tablePrimaryKeys', undefined)
+  }
+
+  _applyLocalStableConfig (localFileConfigEntries) {
+    const obj = setHiddenProperty(this, '_localStableConfig', {})
+    this._applyStableConfig(localFileConfigEntries, obj)
+  }
+
+  _applyFleetStableConfig (fleetFileConfigEntries) {
+    const obj = setHiddenProperty(this, '_fleetStableConfig', {})
+    this._applyStableConfig(fleetFileConfigEntries, obj)
+  }
+
+  _applyStableConfig (config, obj) {
+    const {
+      DD_APPSEC_ENABLED,
+      DD_APPSEC_SCA_ENABLED,
+      DD_DATA_STREAMS_ENABLED,
+      DD_DYNAMIC_INSTRUMENTATION_ENABLED,
+      DD_ENV,
+      DD_IAST_ENABLED,
+      DD_LOGS_INJECTION,
+      DD_PROFILING_ENABLED,
+      DD_RUNTIME_METRICS_ENABLED,
+      DD_SERVICE,
+      DD_VERSION
+    } = config
+
+    this._setBoolean(obj, 'appsec.enabled', DD_APPSEC_ENABLED)
+    this._setBoolean(obj, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
+    this._setBoolean(obj, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
+    this._setBoolean(obj, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
+    this._setString(obj, 'env', DD_ENV)
+    this._setBoolean(obj, 'iast.enabled', DD_IAST_ENABLED)
+    this._setBoolean(obj, 'logInjection', DD_LOGS_INJECTION)
+    const profilingEnabledEnv = DD_PROFILING_ENABLED
+    const profilingEnabled = isTrue(profilingEnabledEnv)
+      ? 'true'
+      : isFalse(profilingEnabledEnv)
+        ? 'false'
+        : profilingEnabledEnv === 'auto' ? 'auto' : undefined
+    this._setString(obj, 'profiling.enabled', profilingEnabled)
+    this._setBoolean(obj, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED)
+    this._setString(obj, 'service', DD_SERVICE)
+    this._setString(obj, 'version', DD_VERSION)
   }
 
   _applyEnvironment () {
@@ -1317,9 +1417,33 @@ class Config {
   // eslint-disable-next-line @stylistic/js/max-len
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
   _merge () {
-    const containers = [this._remote, this._options, this._env, this._calculated, this._defaults]
-    const origins = ['remote_config', 'code', 'env_var', 'calculated', 'default']
-    const unprocessedValues = [this._remoteUnprocessed, this._optsUnprocessed, this._envUnprocessed, {}, {}]
+    const containers = [
+      this._remote,
+      this._options,
+      this._fleetStableConfig,
+      this._env,
+      this._localStableConfig,
+      this._calculated,
+      this._defaults
+    ]
+    const origins = [
+      'remote_config',
+      'code',
+      'fleet_stable_config',
+      'env_var',
+      'local_stable_config',
+      'calculated',
+      'default'
+    ]
+    const unprocessedValues = [
+      this._remoteUnprocessed,
+      this._optsUnprocessed,
+      {},
+      this._envUnprocessed,
+      {},
+      {},
+      {}
+    ]
     const changes = []
 
     for (const name in this._defaults) {
