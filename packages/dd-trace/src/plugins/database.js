@@ -63,6 +63,12 @@ class DatabasePlugin extends StoragePlugin {
     return tracerService
   }
 
+  addComment (query, comment) {
+    return this.config.appendComment
+      ? `${query} /*${comment}*/`
+      : `/*${comment}*/ ${query}`
+  }
+
   injectDbmQuery (span, query, serviceName, isPreparedStatement = false) {
     const mode = this.config.dbmPropagationMode
     const dbmService = this.getDbmServiceName(span, serviceName)
@@ -74,11 +80,11 @@ class DatabasePlugin extends StoragePlugin {
     const servicePropagation = this.createDBMPropagationCommentService(dbmService, span)
 
     if (isPreparedStatement || mode === 'service') {
-      return `/*${servicePropagation}*/ ${query}`
+      return this.addComment(query, servicePropagation)
     } else if (mode === 'full') {
       span.setTag('_dd.dbm_trace_injected', 'true')
       const traceparent = span._spanContext.toTraceparent()
-      return `/*${servicePropagation},traceparent='${traceparent}'*/ ${query}`
+      return this.addComment(query, `${servicePropagation},traceparent='${traceparent}'`)
     }
   }
 
