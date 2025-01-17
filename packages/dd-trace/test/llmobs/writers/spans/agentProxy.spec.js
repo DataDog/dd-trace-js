@@ -25,4 +25,12 @@ describe('LLMObsAgentProxySpanWriter', () => {
 
     expect(writer._url.href).to.equal('http://localhost:8126/evp_proxy/v2/api/v2/llmobs')
   })
+
+  it('uses the url property if provided on the config', () => {
+    writer = new LLMObsAgentProxySpanWriter({
+      url: new URL('http://test-agent:12345')
+    })
+
+    expect(writer._url.href).to.equal('http://test-agent:12345/evp_proxy/v2/api/v2/llmobs')
+  })
 })
