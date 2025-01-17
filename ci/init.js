@@ -2,6 +2,7 @@
 const tracer = require('../packages/dd-trace')
 const { isTrue } = require('../packages/dd-trace/src/util')
 const log = require('../packages/dd-trace/src/log')
+const { isMainThread } = require('worker_threads')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
 const isCucumberWorker = !!process.env.CUCUMBER_WORKER_ID
@@ -65,6 +66,10 @@ if (isMochaWorker) {
   options.experimental = {
     exporter: 'mocha_worker'
   }
+}
+
+if (!isMainThread) {
+  shouldInit = false
 }
 
 if (shouldInit) {
