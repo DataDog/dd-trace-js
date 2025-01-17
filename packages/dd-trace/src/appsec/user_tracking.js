@@ -169,14 +169,12 @@ function trackUser (user, rootSpan) {
     return
   }
 
-  const isSdkCalled = rootSpan.context()._tags['_dd.appsec.user.collection_mode'] === 'sdk'
+  rootSpan.setTag('_dd.appsec.usr.id', userId)
 
+  const isSdkCalled = rootSpan.context()._tags['_dd.appsec.user.collection_mode'] === 'sdk'
   // do not override SDK
-  if (isSdkCalled) {
-    rootSpan.setTag('_dd.appsec.usr.id', userId)
-  } else {
+  if (!isSdkCalled) {
     rootSpan.addTags({
-      '_dd.appsec.usr.id': userId,
       'usr.id': userId,
       '_dd.appsec.user.collection_mode': collectionMode
     })
