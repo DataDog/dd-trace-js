@@ -1,8 +1,7 @@
 'use strict'
 
-const { addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const { channel } = require('./helpers/instrument')
+const { channel, addHook } = require('./helpers/instrument')
 
 const sessionMiddlewareFinishCh = channel('datadog:express-session:middleware:finish')
 
@@ -17,7 +16,7 @@ function wrapSessionMiddleware (sessionMiddleware) {
 
           if (abortController.signal.aborted) return
         }
-    
+
         return next.apply(this, arguments)
       }
     })
@@ -36,17 +35,7 @@ function wrapSession (session) {
 
 addHook({
   name: 'express-session',
-  versions: ['>=0.3.0'] // TODO
+  versions: ['>=1.0.1']
 }, session => {
   return shimmer.wrapFunction(session, wrapSession)
 })
-
-
-  return shimmer.wrapFunction(session, function wrapSession {
-      const queryMiddleware = query.apply(this, arguments)
-
-      return shimmer.wrapFunction(queryMiddleware, queryMiddleware => function (req, res, next) {
-      arguments[2] = publishQueryParsedAndNext(req, res, next)
-      return queryMiddleware.apply(this, arguments)
-    })
-  })
