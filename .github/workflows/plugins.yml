@@ -25,18 +25,22 @@ jobs:
         include:
           - node-version: 18
             range: '>=5.2.0'
+            range_clean: gte.5.2.0
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
           - node-version: 20
             range: '>=5.5.0'
+            range_clean: gte.5.5.0
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
           - node-version: 22
             range: '>=5.12.1'
+            range_clean: gte.5.12.1
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
           - node-version: 22
             range: '>=6.0.0'
+            range_clean: gte.6.0.0
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
     runs-on: ${{ matrix.test-image }}
@@ -64,7 +68,7 @@ jobs:
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
-          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ github.run_id }}
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.range_clean }}
       - uses: codecov/codecov-action@v3
 
   amqp10:
