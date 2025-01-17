@@ -119,7 +119,7 @@ describe('span processor', () => {
     it('removes problematic fields from the metadata', () => {
       // problematic fields are circular references or bigints
       const metadata = {
-        bigint: BigInt(1),
+        bigint: 1n,
         deep: {
           foo: 'bar'
         },

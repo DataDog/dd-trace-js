@@ -63,6 +63,8 @@ jobs:
         run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ github.run_id }}
       - uses: codecov/codecov-action@v3
 
   amqp10:
@@ -164,6 +166,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
       - uses: codecov/codecov-action@v3
 
   axios:
@@ -305,6 +309,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   dns:
@@ -324,6 +330,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   elasticsearch:
@@ -347,6 +355,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   express:
@@ -452,6 +462,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
       - uses: codecov/codecov-action@v3
 
   http2:
@@ -471,6 +483,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   # TODO: fix performance issues and test more Node versions
@@ -486,6 +500,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   kafkajs:
@@ -549,6 +565,8 @@ jobs:
       - uses: codecov/codecov-action@v3
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
 
   limitd-client:
     runs-on: ubuntu-latest
@@ -718,6 +736,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   # TODO: fix performance issues and test more Node versions
@@ -741,6 +761,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}-${{ matrix.version }}-${{ github.run_id }matrix.range}
       - uses: codecov/codecov-action@v3
 
   openai:
@@ -831,6 +853,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   # TODO: re-enable upstream tests if it ever stops being flaky
@@ -850,6 +874,8 @@ jobs:
       # - run: yarn test:plugins:upstream
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   postgres:
@@ -963,6 +989,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   tedious:
@@ -989,6 +1017,8 @@ jobs:
       - run: yarn test:plugins:upstream
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   undici:
