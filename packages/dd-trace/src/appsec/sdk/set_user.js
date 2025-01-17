@@ -9,8 +9,6 @@ function setUserTags (user, rootSpan) {
   for (const k of Object.keys(user)) {
     rootSpan.setTag(`usr.${k}`, '' + user[k])
   }
-
-  rootSpan.setTag('_dd.appsec.user.collection_mode', 'sdk')
 }
 
 function setUser (tracer, user) {
@@ -26,6 +24,7 @@ function setUser (tracer, user) {
   }
 
   setUserTags(user, rootSpan)
+  rootSpan.setTag('_dd.appsec.user.collection_mode', 'sdk')
 
   const persistent = {}
 
