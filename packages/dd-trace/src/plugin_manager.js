@@ -134,6 +134,7 @@ module.exports = class PluginManager {
       codeOriginForSpans,
       dbmPropagationMode,
       dsmEnabled,
+      dbmAppendComment,
       clientIpEnabled,
       clientIpHeader,
       memcachedCommandEnabled,
@@ -147,6 +148,7 @@ module.exports = class PluginManager {
     const sharedConfig = {
       codeOriginForSpans,
       dbmPropagationMode,
+      dbmAppendComment,
       dsmEnabled,
       memcachedCommandEnabled,
       site,

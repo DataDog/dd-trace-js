@@ -489,6 +489,7 @@ class Config {
     defaults['crashtracking.enabled'] = true
     defaults['codeOriginForSpans.enabled'] = true
     defaults['codeOriginForSpans.experimental.exit_spans.enabled'] = false
+    defaults.dbmAppendComment = false
     defaults.dbmPropagationMode = 'disabled'
     defaults['dogstatsd.hostname'] = '127.0.0.1'
     defaults['dogstatsd.port'] = '8125'
@@ -676,6 +677,7 @@ class Config {
       DD_CODE_ORIGIN_FOR_SPANS_ENABLED,
       DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED,
       DD_DATA_STREAMS_ENABLED,
+      DD_DBM_APPEND_COMMENT,
       DD_DBM_PROPAGATION_MODE,
       DD_DOGSTATSD_HOST,
       DD_DOGSTATSD_PORT,
@@ -846,6 +848,7 @@ class Config {
       'codeOriginForSpans.experimental.exit_spans.enabled',
       DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED
     )
+    this._setBoolean(env, 'dbmAppendComment', DD_DBM_APPEND_COMMENT)
     this._setString(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
     this._setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOST)
     this._setString(env, 'dogstatsd.port', DD_DOGSTATSD_PORT)
@@ -1064,6 +1067,7 @@ class Config {
       options.codeOriginForSpans?.experimental?.exit_spans?.enabled
     )
     this._setString(opts, 'dbmPropagationMode', options.dbmPropagationMode)
+    this._setBoolean(opts, 'dbmAppendComment', options.dbmAppendComment)
     if (options.dogstatsd) {
       this._setString(opts, 'dogstatsd.hostname', options.dogstatsd.hostname)
       this._setString(opts, 'dogstatsd.port', options.dogstatsd.port)

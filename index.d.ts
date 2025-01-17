@@ -623,6 +623,12 @@ declare namespace tracer {
     dbmPropagationMode?: 'disabled' | 'service' | 'full'
 
     /**
+     * Appends the SQL comment propagation to the query string. Prepends the comment if `false`. For long query strings, the appended propagation comment might be truncated, causing loss of correlation between the query and trace.
+     * @default false
+     */
+    dbmAppendComment?: boolean;
+
+    /**
      * Configuration of the AppSec protection. Can be a boolean as an alias to `appsec.enabled`.
      */
     appsec?: boolean | {
@@ -1935,6 +1941,10 @@ declare namespace tracer {
        * The database monitoring propagation mode to be used for this plugin.
        */
       dbmPropagationMode?: string;
+      /**
+       * Appends the SQL comment propagation to the query string. Prepends the comment if `false`. For long query strings, the appended propagation comment might be truncated, causing loss of correlation between the query and trace.
+       */
+      dbmAppendComment?: boolean;
     }
 
     /**
