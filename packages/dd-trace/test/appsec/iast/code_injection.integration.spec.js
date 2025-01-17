@@ -37,9 +37,7 @@ describe('IAST - code_injection - integration', () => {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_TRACE_DEBUG: 'true',
         APP_PORT: appPort,
-        DD_APPSEC_ENABLED: 'true',
         DD_IAST_ENABLED: 'true',
         DD_IAST_REQUEST_SAMPLING: '100'
       },

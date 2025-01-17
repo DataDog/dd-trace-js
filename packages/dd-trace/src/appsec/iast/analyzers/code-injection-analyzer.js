@@ -11,7 +11,7 @@ class CodeInjectionAnalyzer extends InjectionAnalyzer {
   onConfigure () {
     this.addSub('datadog:eval:call', ({ script }) => this.analyze(script))
     this.addSub('datadog:vm:run-script:start', ({ code }) => this.analyze(code))
-    this.addSub('datadog:vm:source-text-module:start', ({ sourceText }) => this.analyze(sourceText))
+    this.addSub('datadog:vm:source-text-module:start', ({ code }) => this.analyze(code))
   }
 
   _areRangesVulnerable () {

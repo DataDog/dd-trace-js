@@ -20,11 +20,11 @@ addHook({ name: names }, function (vm) {
 
   if (vm.SourceTextModule && typeof vm.SourceTextModule === 'function') {
     vm.SourceTextModule = class extends vm.SourceTextModule {
-      constructor (sourceText) {
+      constructor (code) {
         super(...arguments)
 
-        if (sourceTextModuleStartChannel.hasSubscribers && sourceText) {
-          sourceTextModuleStartChannel.publish({ sourceText })
+        if (sourceTextModuleStartChannel.hasSubscribers && code) {
+          sourceTextModuleStartChannel.publish({ code })
         }
       }
     }
