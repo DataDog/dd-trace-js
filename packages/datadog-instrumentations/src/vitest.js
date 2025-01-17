@@ -179,7 +179,9 @@ function getSortWrapper (sort) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
       if (!knownTestsResponse.err) {
         knownTests = knownTestsResponse.knownTests
-        const testFilepaths = await this.ctx.getTestFilepaths()
+        const getFilePaths = this.ctx.getTestFilepaths || this.ctx._globTestFilepaths
+
+        const testFilepaths = await getFilePaths.call(this.ctx)
 
         isEarlyFlakeDetectionFaultyCh.publish({
           knownTests: knownTests.vitest || {},
