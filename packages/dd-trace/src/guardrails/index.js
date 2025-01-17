@@ -53,6 +53,18 @@ function guard (fn) {
     }
   }
 
+  // If is a worker do not init
+  if (!clobberBailout) {
+    try {
+      var workerThreads = require('worker_threads')
+      if (!workerThreads.isMainThread) {
+        clobberBailout = true
+      }
+    } catch (e) {
+      // ignore, in theory it cannot happen
+    }
+  }
+
   if (!clobberBailout && (!initBailout || forced)) {
     var result = fn()
     telemetry('complete', ['injection_forced:' + (forced && initBailout ? 'true' : 'false')])
