@@ -401,10 +401,10 @@
   resolved "https://registry.npmjs.org/@colors/colors/-/colors-1.5.0.tgz"
   integrity "sha1-u1BFecHK6SPmV2pPXaQ9Jfl729k= sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ=="
 
-"@datadog/libdatadog@^0.3.0":
-  version "0.3.0"
-  resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.3.0.tgz#2fc1e2695872840bc8c356f66acf675da428d6f0"
-  integrity sha512-TbP8+WyXfh285T17FnLeLUOPl4SbkRYMqKgcmknID2mXHNrbt5XJgW9bnDgsrrtu31Q7FjWWw2WolgRLWyzLRA==
+"@datadog/libdatadog@^0.4.0":
+  version "0.4.0"
+  resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.4.0.tgz#aeeea02973f663b555ad9ac30c4015a31d561598"
+  integrity sha512-kGZfFVmQInzt6J4FFGrqMbrDvOxqwk3WqhAreS6n9b/De+iMVy/NMu3V7uKsY5zAvz+uQw0liDJm3ZDVH/MVVw==
 
 "@datadog/native-appsec@8.4.0":
   version "8.4.0"
@@ -421,10 +421,10 @@
     lru-cache "^7.14.0"
     node-gyp-build "^4.5.0"
 
-"@datadog/native-iast-taint-tracking@3.2.0":
-  version "3.2.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-3.2.0.tgz#9fb6823d82f934e12c06ea1baa7399ca80deb2ec"
-  integrity sha512-Mc6FzCoyvU5yXLMsMS9yKnEqJMWoImAukJXolNWCTm+JQYCMf2yMsJ8pBAm7KyZKliamM9rCn7h7Tr2H3lXwjA==
+"@datadog/native-iast-taint-tracking@3.3.0":
+  version "3.3.0"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-3.3.0.tgz#5a9c87e07376e7c5a4b4d4985f140a60388eee00"
+  integrity sha512-OzmjOncer199ATSYeCAwSACCRyQimo77LKadSHDUcxa/n9FYU+2U/bYQTYsK3vquSA2E47EbSVq9rytrlTdvnA==
   dependencies:
     node-gyp-build "^3.9.0"
 
