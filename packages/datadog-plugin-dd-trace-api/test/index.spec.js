@@ -98,11 +98,35 @@ describe('Plugin', () => {
       })
 
       describe('span:context', () => {
+        let traceId = '1234567890abcdef'
+        let spanId = 'abcdef1234567890'
+        let traceparent= `00-${traceId}-${spanId}-01`
+
         it('should call underlying api', () => {
           dummySpanContext = {}
           testChannel({ name: 'span:context', fn: span.context, self: dummySpan, ret: dummySpanContext })
           spanContext = span.context.getCall(0).returnValue
-          sinon.spy(spanContext)
+          sinon.stub(spanContext, 'toTraceId').callsFake(() => traceId)
+          sinon.stub(spanContext, 'toSpanId').callsFake(() => spanId)
+          sinon.stub(spanContext, 'toTraceparent').callsFake(() => traceparent)
+        })
+
+        describe('context:toTraceId', () => {
+          it('should call underlying api', () => {
+            testChannel({ name: 'context:toTraceId', fn: spanContext.toTraceId, self: dummySpanContext, ret: traceId })
+          })
+        })
+
+        describe('context:toSpanId', () => {
+          it('should call underlying api', () => {
+            testChannel({ name: 'context:toSpanId', fn: spanContext.toSpanId, self: dummySpanContext, ret: spanId })
+          })
+        })
+
+        describe('context:toTraceparent', () => {
+          it('should call underlying api', () => {
+            testChannel({ name: 'context:toTraceparent', fn: spanContext.toTraceparent, self: dummySpanContext, ret: traceparent })
+          })
         })
       })
 
