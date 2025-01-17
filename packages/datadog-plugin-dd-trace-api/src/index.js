@@ -88,7 +88,9 @@ module.exports = class DdTraceApiPlugin extends Plugin {
     handleEvent('extract')
     handleEvent('getRumData')
     handleEvent('profilerStarted')
-    // TODO does context need to be wrapped/proxied?
+    handleEvent('context:toTraceId')
+    handleEvent('context:toSpanId')
+    handleEvent('context:toTraceparent')
     handleEvent('span:context')
     handleEvent('span:setTag')
     handleEvent('span:addTags')
