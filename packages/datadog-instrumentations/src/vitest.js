@@ -28,6 +28,42 @@ const newTasks = new WeakSet()
 const switchedStatuses = new WeakSet()
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
+const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
+
+function waitForHitProbe () {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      resolve()
+    }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
+  })
+}
+
+function getProvidedContext () {
+  try {
+    const {
+      _ddIsEarlyFlakeDetectionEnabled,
+      _ddIsDiEnabled,
+      _ddKnownTests: knownTests,
+      _ddEarlyFlakeDetectionNumRetries: numRepeats
+    } = globalThis.__vitest_worker__.providedContext
+
+    return {
+      isDiEnabled: _ddIsDiEnabled,
+      isEarlyFlakeDetectionEnabled: _ddIsEarlyFlakeDetectionEnabled,
+      knownTests,
+      numRepeats
+    }
+  } catch (e) {
+    log.error('Vitest workers could not parse provided context, so some features will not work.')
+    return {
+      isDiEnabled: false,
+      isEarlyFlakeDetectionEnabled: false,
+      knownTests: {},
+      numRepeats: 0
+    }
+  }
+}
+
 function isReporterPackage (vitestPackage) {
   return vitestPackage.B?.name === 'BaseSequencer'
 }
@@ -117,6 +153,7 @@ function getSortWrapper (sort) {
     let isEarlyFlakeDetectionEnabled = false
     let earlyFlakeDetectionNumRetries = 0
     let isEarlyFlakeDetectionFaulty = false
+    let isDiEnabled = false
     let knownTests = {}
 
     try {
@@ -126,10 +163,12 @@ function getSortWrapper (sort) {
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+        isDiEnabled = libraryConfig.isDiEnabled
       }
     } catch (e) {
       isFlakyTestRetriesEnabled = false
       isEarlyFlakeDetectionEnabled = false
+      isDiEnabled = false
     }
 
     if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
@@ -166,6 +205,15 @@ function getSortWrapper (sort) {
         }
       } else {
         isEarlyFlakeDetectionEnabled = false
+      }
+    }
+
+    if (isDiEnabled) {
+      try {
+        const workspaceProject = this.ctx.getCoreWorkspaceProject()
+        workspaceProject._provided._ddIsDiEnabled = isDiEnabled
+      } catch (e) {
+        log.warn('Could not send Dynamic Instrumentation configuration to workers.')
       }
     }
 
@@ -241,29 +289,26 @@ addHook({
   // `onBeforeRunTask` is run before any repetition or attempt is run
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => async function (task) {
     const testName = getTestName(task)
-    try {
-      const {
-        _ddKnownTests: knownTests,
-        _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled,
-        _ddEarlyFlakeDetectionNumRetries: numRepeats
-      } = globalThis.__vitest_worker__.providedContext
 
-      if (isEarlyFlakeDetectionEnabled) {
-        isNewTestCh.publish({
-          knownTests,
-          testSuiteAbsolutePath: task.file.filepath,
-          testName,
-          onDone: (isNew) => {
-            if (isNew) {
-              task.repeats = numRepeats
-              newTasks.add(task)
-              taskToStatuses.set(task, [])
-            }
+    const {
+      knownTests,
+      isEarlyFlakeDetectionEnabled,
+      numRepeats
+    } = getProvidedContext()
+
+    if (isEarlyFlakeDetectionEnabled) {
+      isNewTestCh.publish({
+        knownTests,
+        testSuiteAbsolutePath: task.file.filepath,
+        testName,
+        onDone: (isNew) => {
+          if (isNew) {
+            task.repeats = numRepeats
+            newTasks.add(task)
+            taskToStatuses.set(task, [])
           }
-        })
-      }
-    } catch (e) {
-      log.error('Vitest workers could not parse known tests, so Early Flake Detection will not work.')
+        }
+      })
     }
 
     return onBeforeRunTask.apply(this, arguments)
@@ -271,9 +316,7 @@ addHook({
 
   // `onAfterRunTask` is run after all repetitions or attempts are run
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterRunTask', onAfterRunTask => async function (task) {
-    const {
-      _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled
-    } = globalThis.__vitest_worker__.providedContext
+    const { isEarlyFlakeDetectionEnabled } = getProvidedContext()
 
     if (isEarlyFlakeDetectionEnabled && taskToStatuses.has(task)) {
       const statuses = taskToStatuses.get(task)
@@ -297,35 +340,40 @@ addHook({
     }
     const testName = getTestName(task)
     let isNew = false
-    let isEarlyFlakeDetectionEnabled = false
 
-    try {
-      const {
-        _ddIsEarlyFlakeDetectionEnabled
-      } = globalThis.__vitest_worker__.providedContext
+    const {
+      isEarlyFlakeDetectionEnabled,
+      isDiEnabled
+    } = getProvidedContext()
 
-      isEarlyFlakeDetectionEnabled = _ddIsEarlyFlakeDetectionEnabled
-
-      if (isEarlyFlakeDetectionEnabled) {
-        isNew = newTasks.has(task)
-      }
-    } catch (e) {
-      log.error('Vitest workers could not parse known tests, so Early Flake Detection will not work.')
+    if (isEarlyFlakeDetectionEnabled) {
+      isNew = newTasks.has(task)
     }
+
     const { retry: numAttempt, repeats: numRepetition } = retryInfo
 
     // We finish the previous test here because we know it has failed already
     if (numAttempt > 0) {
-      const probe = {}
+      const shouldWaitForHitProbe = isDiEnabled && numAttempt > 1
+      if (shouldWaitForHitProbe) {
+        await waitForHitProbe()
+      }
+
+      const promises = {}
+      const shouldSetProbe = isDiEnabled && numAttempt === 1
       const asyncResource = taskToAsync.get(task)
       const testError = task.result?.errors?.[0]
       if (asyncResource) {
         asyncResource.runInAsyncScope(() => {
-          testErrorCh.publish({ error: testError, willBeRetried: true, probe })
+          testErrorCh.publish({
+            error: testError,
+            shouldSetProbe,
+            promises
+          })
         })
         // We wait for the probe to be set
-        if (probe.setProbePromise) {
-          await probe.setProbePromise
+        if (promises.setProbePromise) {
+          await promises.setProbePromise
         }
       }
     }
@@ -381,7 +429,8 @@ addHook({
         testName,
         testSuiteAbsolutePath: task.file.filepath,
         isRetry: numAttempt > 0 || numRepetition > 0,
-        isNew
+        isNew,
+        mightHitProbe: isDiEnabled && numAttempt > 0
       })
     })
     return onBeforeTryTask.apply(this, arguments)
@@ -397,6 +446,12 @@ addHook({
 
       const status = getVitestTestStatus(task, retryCount)
       const asyncResource = taskToAsync.get(task)
+
+      const { isDiEnabled } = getProvidedContext()
+
+      if (isDiEnabled && retryCount > 1) {
+        await waitForHitProbe()
+      }
 
       if (asyncResource) {
         // We don't finish here because the test might fail in a later hook (afterEach)

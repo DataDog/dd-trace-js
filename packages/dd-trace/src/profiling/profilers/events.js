@@ -14,7 +14,23 @@ const pprofValueUnit = 'nanoseconds'
 const dateOffset = BigInt(Math.round(performance.timeOrigin * MS_TO_NS))
 
 function labelFromStr (stringTable, key, valStr) {
-  return new Label({ key, str: stringTable.dedup(valStr) })
+  return new Label({ key, str: stringTable.dedup(safeToString(valStr)) })
+}
+
+// We don't want to invoke toString for objects and functions, rather we'll
+// provide dummy values. These values are not meant to emulate built-in toString
+// behavior.
+function safeToString (val) {
+  switch (typeof val) {
+    case 'string':
+      return val
+    case 'object':
+      return '[object]'
+    case 'function':
+      return '[function]'
+    default:
+      return String(val)
+  }
 }
 
 function labelFromStrStr (stringTable, keyStr, valStr) {
@@ -133,11 +149,32 @@ class NetDecorator {
   }
 }
 
+class FilesystemDecorator {
+  constructor (stringTable) {
+    this.stringTable = stringTable
+  }
+
+  decorateSample (sampleInput, item) {
+    const labels = sampleInput.label
+    const stringTable = this.stringTable
+    Object.entries(item.detail).forEach(([k, v]) => {
+      switch (typeof v) {
+        case 'string':
+          labels.push(labelFromStrStr(stringTable, k, v))
+          break
+        case 'number':
+          labels.push(new Label({ key: stringTable.dedup(k), num: v }))
+      }
+    })
+  }
+}
+
 // Keys correspond to PerformanceEntry.entryType, values are constructor
 // functions for type-specific decorators.
 const decoratorTypes = {
-  gc: GCDecorator,
+  fs: FilesystemDecorator,
   dns: DNSDecorator,
+  gc: GCDecorator,
   net: NetDecorator
 }
 
@@ -255,7 +292,7 @@ class NodeApiEventSource {
 
 class DatadogInstrumentationEventSource {
   constructor (eventHandler, eventFilter) {
-    this.plugins = ['dns_lookup', 'dns_lookupservice', 'dns_resolve', 'dns_reverse', 'net'].map(m => {
+    this.plugins = ['dns_lookup', 'dns_lookupservice', 'dns_resolve', 'dns_reverse', 'fs', 'net'].map(m => {
       const Plugin = require(`./event_plugins/${m}`)
       return new Plugin(eventHandler, eventFilter)
     })

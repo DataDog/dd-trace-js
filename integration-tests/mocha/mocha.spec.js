@@ -37,9 +37,10 @@ const {
   TEST_LEVEL_EVENT_TYPES,
   TEST_EARLY_FLAKE_ABORT_REASON,
   DI_ERROR_DEBUG_INFO_CAPTURED,
-  DI_DEBUG_ERROR_FILE,
-  DI_DEBUG_ERROR_SNAPSHOT_ID,
-  DI_DEBUG_ERROR_LINE
+  DI_DEBUG_ERROR_PREFIX,
+  DI_DEBUG_ERROR_FILE_SUFFIX,
+  DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
+  DI_DEBUG_ERROR_LINE_SUFFIX
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -2152,14 +2153,8 @@ describe('mocha CommonJS', function () {
   context('dynamic instrumentation', () => {
     it('does not activate dynamic instrumentation if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
-        flaky_test_retries_enabled: false,
-        early_flake_detection: {
-          enabled: false
-        }
-        // di_enabled: true // TODO
+        flaky_test_retries_enabled: true,
+        di_enabled: true
       })
 
       const eventsPromise = receiver
@@ -2172,10 +2167,10 @@ describe('mocha CommonJS', function () {
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
 
-          assert.notProperty(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
-          assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_FILE)
-          assert.notProperty(retriedTest.metrics, DI_DEBUG_ERROR_LINE)
-          assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_SNAPSHOT_ID)
+          const hasDebugTags = Object.keys(retriedTest.meta)
+            .some(property => property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED)
+
+          assert.isFalse(hasDebugTags)
         })
 
       const logsPromise = receiver
@@ -2207,16 +2202,62 @@ describe('mocha CommonJS', function () {
       })
     })
 
+    it('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: false
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+          assert.equal(retriedTests.length, 1)
+          const [retriedTest] = retriedTests
+
+          const hasDebugTags = Object.keys(retriedTest.meta)
+            .some(property => property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED)
+
+          assert.isFalse(hasDebugTags)
+        })
+
+      const logsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+          if (payloads.length > 0) {
+            throw new Error('Unexpected logs')
+          }
+        }, 5000)
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './dynamic-instrumentation/test-hit-breakpoint'
+            ]),
+            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', (code) => {
+        Promise.all([eventsPromise, logsPromise]).then(() => {
+          assert.equal(code, 0)
+          done()
+        }).catch(done)
+      })
+    })
+
     it('runs retries with dynamic instrumentation', (done) => {
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
-        flaky_test_retries_enabled: false,
-        early_flake_detection: {
-          enabled: false
-        }
-        // di_enabled: true // TODO
+        flaky_test_retries_enabled: true,
+        di_enabled: true
       })
 
       let snapshotIdByTest, snapshotIdByLog
@@ -2233,15 +2274,17 @@ describe('mocha CommonJS', function () {
           const [retriedTest] = retriedTests
 
           assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-          assert.propertyVal(
-            retriedTest.meta,
-            DI_DEBUG_ERROR_FILE,
-            'ci-visibility/dynamic-instrumentation/dependency.js'
+          assert.isTrue(
+            retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
+              .endsWith('ci-visibility/dynamic-instrumentation/dependency.js')
           )
-          assert.equal(retriedTest.metrics[DI_DEBUG_ERROR_LINE], 4)
-          assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
+          assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
 
-          snapshotIdByTest = retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID]
+          const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
+
+          assert.exists(retriedTest.meta[snapshotIdKey])
+
+          snapshotIdByTest = retriedTest.meta[snapshotIdKey]
           spanIdByTest = retriedTest.span_id.toString()
           traceIdByTest = retriedTest.trace_id.toString()
 
@@ -2304,14 +2347,8 @@ describe('mocha CommonJS', function () {
 
     it('does not crash if the retry does not hit the breakpoint', (done) => {
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
-        flaky_test_retries_enabled: false,
-        early_flake_detection: {
-          enabled: false
-        }
-        // di_enabled: true // TODO
+        flaky_test_retries_enabled: true,
+        di_enabled: true
       })
 
       const eventsPromise = receiver
@@ -2324,14 +2361,10 @@ describe('mocha CommonJS', function () {
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
 
-          assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-          assert.propertyVal(
-            retriedTest.meta,
-            DI_DEBUG_ERROR_FILE,
-            'ci-visibility/dynamic-instrumentation/dependency.js'
-          )
-          assert.equal(retriedTest.metrics[DI_DEBUG_ERROR_LINE], 4)
-          assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
+          const hasDebugTags = Object.keys(retriedTest.meta)
+            .some(property => property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED)
+
+          assert.isFalse(hasDebugTags)
         })
       const logsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {

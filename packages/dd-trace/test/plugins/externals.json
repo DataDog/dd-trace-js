@@ -31,6 +31,10 @@
       "versions": [">=3"]
     },
     {
+      "name": "@aws-sdk/client-dynamodb",
+      "versions": [">=3"]
+    },
+    {
       "name": "@aws-sdk/client-sfn",
       "versions": [">=3"]
     },
@@ -45,6 +49,10 @@
     {
       "name": "@aws-sdk/node-http-handler",
       "versions": [">=3"]
+    },
+    {
+      "name": "@aws-sdk/client-bedrock-runtime",
+      "versions": [">=3.422.0"]
     }
   ],
   "body-parser": [
@@ -275,6 +283,10 @@
     {
       "name": "@langchain/anthropic",
       "versions": [">=0.1"]
+    },
+    {
+      "name": "@langchain/cohere",
+      "versions": [">=0.1"]
     }
   ],
   "ldapjs": [
@@ -416,6 +428,10 @@
     {
       "name": "express",
       "versions": [">=4"]
+    },
+    {
+      "name": "sqlite3",
+      "versions": ["^5.0.8"]
     }
   ]
 }

@@ -32,11 +32,11 @@ class EventPlugin extends TracingPlugin {
     if (!store) return
 
     const { startEvent, startTime, error } = store
-    if (error) {
-      return // don't emit perf events for failed operations
+    if (error || this.ignoreEvent(startEvent)) {
+      return // don't emit perf events for failed operations or ignored events
     }
-    const duration = performance.now() - startTime
 
+    const duration = performance.now() - startTime
     const event = {
       entryType: this.entryType,
       startTime,
@@ -52,6 +52,10 @@ class EventPlugin extends TracingPlugin {
     event._ddRootSpanId = context?._trace.started[0]?.context().toSpanId() || event._ddSpanId
 
     this.eventHandler(this.extendEvent(event, startEvent))
+  }
+
+  ignoreEvent () {
+    return false
   }
 }
 

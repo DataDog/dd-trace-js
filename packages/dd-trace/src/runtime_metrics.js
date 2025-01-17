@@ -361,7 +361,7 @@ function startGCObserver () {
 
   gcObserver = new PerformanceObserver(list => {
     for (const entry of list.getEntries()) {
-      const type = gcType(entry.kind)
+      const type = gcType(entry.detail?.kind || entry.kind)
 
       runtimeMetrics.histogram('runtime.node.gc.pause.by.type', entry.duration, `gc_type:${type}`)
       runtimeMetrics.histogram('runtime.node.gc.pause', entry.duration)

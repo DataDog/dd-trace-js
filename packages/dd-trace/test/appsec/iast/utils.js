@@ -256,8 +256,8 @@ function prepareTestServerForIast (description, tests, iastConfig) {
       })
     }
 
-    function testThatRequestHasNoVulnerability (fn, vulnerability, makeRequest) {
-      it(`should not have ${vulnerability} vulnerability`, function (done) {
+    function testThatRequestHasNoVulnerability (fn, vulnerability, makeRequest, description) {
+      it(description || `should not have ${vulnerability} vulnerability`, function (done) {
         app = fn
         checkNoVulnerabilityInRequest(vulnerability, config, done, makeRequest)
       })
