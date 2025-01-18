@@ -62,6 +62,8 @@ function send (message, logger, dd, snapshot, cb) {
 }
 
 function onFlush (payload) {
+  log.debug('[debugger:devtools_client] Flushing probe payload buffer')
+
   const opts = {
     method: 'POST',
     url: config.url,
