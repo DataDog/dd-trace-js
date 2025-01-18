@@ -73,7 +73,7 @@ function onFlush (payload) {
   callbacks = []
 
   request(payload, opts, (err) => {
-    if (err) log.error('Could not send debugger payload', err)
+    if (err) log.error('[debugger:devtools_client] Error sending probe payload', err)
     else _callbacks.forEach(cb => cb())
   })
 }
