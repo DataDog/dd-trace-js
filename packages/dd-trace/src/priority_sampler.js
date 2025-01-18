@@ -120,13 +120,18 @@ class PrioritySampler {
     if (!span || !this.validate(samplingPriority)) return
 
     const context = this._getContext(span)
+    const root = context._trace.started[0]
+
+    if (!root) {
+      log.error('Skipping the setPriority on noop span')
+      return // noop span
+    }
 
     context._sampling.priority = samplingPriority
     context._sampling.mechanism = mechanism
 
-    const root = context._trace.started[0]
-
     log.trace(span, samplingPriority, mechanism)
+
     this._addDecisionMaker(root)
   }
 

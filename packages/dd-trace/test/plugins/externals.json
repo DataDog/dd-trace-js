@@ -49,6 +49,10 @@
     {
       "name": "@aws-sdk/node-http-handler",
       "versions": [">=3"]
+    },
+    {
+      "name": "@aws-sdk/client-bedrock-runtime",
+      "versions": [">=3.422.0"]
     }
   ],
   "body-parser": [
@@ -278,6 +282,10 @@
   "langchain": [
     {
       "name": "@langchain/anthropic",
+      "versions": [">=0.1"]
+    },
+    {
+      "name": "@langchain/cohere",
       "versions": [">=0.1"]
     }
   ],

@@ -2,6 +2,8 @@
 
 const { getRootSpan } = require('./utils')
 const log = require('../../log')
+const waf = require('../waf')
+const addresses = require('../addresses')
 
 function setUserTags (user, rootSpan) {
   for (const k of Object.keys(user)) {
@@ -26,6 +28,19 @@ function setUser (tracer, user) {
   }
 
   setUserTags(user, rootSpan)
+  rootSpan.setTag('_dd.appsec.user.collection_mode', 'sdk')
+
+  const persistent = {}
+
+  if (user.id) {
+    persistent[addresses.USER_ID] = '' + user.id
+  }
+
+  if (user.login) {
+    persistent[addresses.USER_LOGIN] = '' + user.login
+  }
+
+  waf.run({ persistent })
 }
 
 module.exports = {
