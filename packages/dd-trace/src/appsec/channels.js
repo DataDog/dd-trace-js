@@ -14,6 +14,7 @@ module.exports = {
   incomingHttpRequestStart: dc.channel('dd-trace:incomingHttpRequestStart'),
   incomingHttpRequestEnd: dc.channel('dd-trace:incomingHttpRequestEnd'),
   passportVerify: dc.channel('datadog:passport:verify:finish'),
+  expressSession: dc.channel('datadog:express-session:middleware:finish'),
   queryParser: dc.channel('datadog:query:read:finish'),
   setCookieChannel: dc.channel('datadog:iast:set-cookie'),
   nextBodyParsed: dc.channel('apm:next:body-parsed'),

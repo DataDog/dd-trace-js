@@ -10,6 +10,7 @@ const {
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   passportVerify,
+  expressSession,
   queryParser,
   nextBodyParsed,
   nextQueryParsed,
@@ -67,6 +68,7 @@ function enable (_config) {
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
     passportVerify.subscribe(onPassportVerify) // possible optimization: only subscribe if collection mode is enabled
+    expressSession.subscribe(onExpressSession)
     queryParser.subscribe(onRequestQueryParsed)
     nextBodyParsed.subscribe(onRequestBodyParsed)
     nextQueryParsed.subscribe(onRequestQueryParsed)
@@ -197,6 +199,22 @@ function onPassportVerify ({ framework, login, user, success, abortController })
   handleResults(results, store.req, store.req.res, rootSpan, abortController)
 }
 
+function onExpressSession ({ req, res, sessionId, abortController }) {
+  const rootSpan = web.root(req)
+  if (!rootSpan) {
+    log.warn('[ASM] No rootSpan found in onExpressSession')
+    return
+  }
+
+  const results = waf.run({
+    persistent: {
+      [addresses.USER_SESSION_ID]: sessionId
+    }
+  }, req)
+
+  handleResults(results, req, res, rootSpan, abortController)
+}
+
 function onRequestQueryParsed ({ req, res, query, abortController }) {
   if (!query || typeof query !== 'object') return
 
@@ -310,6 +328,7 @@ function disable () {
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
+  if (expressSession.hasSubscribers) expressSession.unsubscribe(onExpressSession)
   if (queryParser.hasSubscribers) queryParser.unsubscribe(onRequestQueryParsed)
   if (nextBodyParsed.hasSubscribers) nextBodyParsed.unsubscribe(onRequestBodyParsed)
   if (nextQueryParsed.hasSubscribers) nextQueryParsed.unsubscribe(onRequestQueryParsed)
