@@ -303,7 +303,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const numRetries = this.global[RETRY_TIMES]
         const numTestExecutions = event.test?.invocations
         const willBeRetried = numRetries > 0 && numTestExecutions - 1 < numRetries
-        const mightHitBreakpoint = this.isDiEnabled && numTestExecutions >= 1
+        const mightHitBreakpoint = this.isDiEnabled && numTestExecutions >= 2
 
         const asyncResource = asyncResources.get(event.test)
 
@@ -319,7 +319,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
         // After finishing it might take a bit for the snapshot to be handled.
         // This means that tests retried with DI are BREAKPOINT_HIT_GRACE_PERIOD_MS slower at least.
-        if (mightHitBreakpoint) {
+        if (status === 'fail' && mightHitBreakpoint) {
           await new Promise(resolve => {
             setTimeout(() => {
               resolve()

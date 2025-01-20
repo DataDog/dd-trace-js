@@ -691,14 +691,10 @@ function getFileAndLineNumberFromError (error, repositoryRoot) {
   return []
 }
 
-// The error.stack property in TestingLibraryElementError includes the message, which results in redundant information
 function getFormattedError (error, repositoryRoot) {
-  if (error.name !== 'TestingLibraryElementError') {
-    return error
-  }
-  const { stack } = error
   const newError = new Error(error.message)
-  newError.stack = stack.split('\n').filter(line => line.includes(repositoryRoot)).join('\n')
+  newError.stack = error.stack.split('\n').filter(line => line.includes(repositoryRoot)).join('\n')
+  newError.name = error.name
 
   return newError
 }
