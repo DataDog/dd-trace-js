@@ -179,7 +179,9 @@ function getSortWrapper (sort) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
       if (!knownTestsResponse.err) {
         knownTests = knownTestsResponse.knownTests
-        const testFilepaths = await this.ctx.getTestFilepaths()
+        const getFilePaths = this.ctx.getTestFilepaths || this.ctx._globTestFilepaths
+
+        const testFilepaths = await getFilePaths.call(this.ctx)
 
         isEarlyFlakeDetectionFaultyCh.publish({
           knownTests: knownTests.vitest || {},
@@ -494,15 +496,6 @@ addHook({
 
 addHook({
   name: 'vitest',
-  versions: ['>=2.1.0'],
-  filePattern: 'dist/chunks/RandomSequencer.*'
-}, (randomSequencerPackage) => {
-  shimmer.wrap(randomSequencerPackage.B.prototype, 'sort', getSortWrapper)
-  return randomSequencerPackage
-})
-
-addHook({
-  name: 'vitest',
   versions: ['>=2.0.5 <2.1.0'],
   filePattern: 'dist/chunks/index.*'
 }, (vitestPackage) => {
@@ -511,6 +504,24 @@ addHook({
   }
 
   return vitestPackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=2.1.0 <3.0.0'],
+  filePattern: 'dist/chunks/RandomSequencer.*'
+}, (randomSequencerPackage) => {
+  shimmer.wrap(randomSequencerPackage.B.prototype, 'sort', getSortWrapper)
+  return randomSequencerPackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=3.0.0'],
+  filePattern: 'dist/chunks/resolveConfig.*'
+}, (randomSequencerPackage) => {
+  shimmer.wrap(randomSequencerPackage.B.prototype, 'sort', getSortWrapper)
+  return randomSequencerPackage
 })
 
 // Can't specify file because compiled vitest includes hashes in their files
@@ -533,15 +544,17 @@ addHook({
   versions: ['>=1.6.0'],
   file: 'dist/index.js'
 }, (vitestPackage, frameworkVersion) => {
-  shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPath) {
+  shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPaths) {
     let testSuiteError = null
     if (!testSuiteStartCh.hasSubscribers) {
       return startTests.apply(this, arguments)
     }
+    // From >=3.0.1, the first arguments changes from a string to an object containing the filepath
+    const testSuiteAbsolutePath = testPaths[0]?.filepath || testPaths[0]
 
     const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
     testSuiteAsyncResource.runInAsyncScope(() => {
-      testSuiteStartCh.publish({ testSuiteAbsolutePath: testPath[0], frameworkVersion })
+      testSuiteStartCh.publish({ testSuiteAbsolutePath, frameworkVersion })
     })
     const startTestsResponse = await startTests.apply(this, arguments)
 
