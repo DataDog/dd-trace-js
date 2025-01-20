@@ -1,6 +1,5 @@
 'use strict'
 
-<<<<<<<< HEAD:packages/datadog-plugin-aws-sdk/src/services/bedrockruntime/utils.js
 const log = require('../../../../dd-trace/src/log')
 
 const MODEL_TYPE_IDENTIFIERS = [
@@ -13,10 +12,6 @@ const MODEL_TYPE_IDENTIFIERS = [
   'inference-profile/',
   'default-prompt-router/'
 ]
-========
-const BaseAwsSdkPlugin = require('../../base')
-const log = require('../../../../dd-trace/src/log')
->>>>>>>> 018a68375 (Update file structure):packages/datadog-plugin-aws-sdk/src/services/bedrockruntime/tracing.js
 
 const PROVIDER = {
   AI21: 'AI21',
