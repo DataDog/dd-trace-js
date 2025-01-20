@@ -6,7 +6,8 @@ const { parse } = require('../../../../src/appsec/iast/security-controls/parser'
 const {
   COMMAND_INJECTION_MARK,
   CODE_INJECTION_MARK,
-  CUSTOM_SECURE_MARK
+  CUSTOM_SECURE_MARK,
+  ASTERISK_MARK
 } = require('../../../../src/appsec/iast/taint-tracking/secure-marks')
 
 const civFilename = 'bar/foo/custom_input_validator.js'
@@ -255,6 +256,22 @@ SANITIZER:COMMAND_INJECTION:bar/foo/sanitizer.js:sanitize'
         type: 'INPUT_VALIDATOR',
         file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
+        method: 'validate',
+        parameters: [1, 2]
+      })
+    })
+
+    it('should parse * marks', () => {
+      const conf = 'INPUT_VALIDATOR:*:bar/foo/custom_input_validator.js:validate:1,2'
+
+      const securityControls = parse(conf)
+
+      const civ = securityControls.get(civFilename)
+
+      assert.deepStrictEqual(civ[0], {
+        type: 'INPUT_VALIDATOR',
+        file: civFilename,
+        secureMarks: CUSTOM_SECURE_MARK | ASTERISK_MARK,
         method: 'validate',
         parameters: [1, 2]
       })

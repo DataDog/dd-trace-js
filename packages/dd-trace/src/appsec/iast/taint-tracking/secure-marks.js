@@ -11,12 +11,12 @@ Object.keys(vulnerabilities).forEach(vulnerability => {
 let [asterisk, ...rest] = Object.values(marks)
 rest.forEach(mark => { asterisk |= mark })
 
-marks['*'] = asterisk
-
+marks.ASTERISK_MARK = asterisk
 marks.CUSTOM_SECURE_MARK = getNextSecureMark()
 
 function getMarkFromVulnerabilityType (vulnerabilityType) {
-  return marks[vulnerabilityType + '_MARK']
+  const mark = vulnerabilityType === '*' ? 'ASTERISK_MARK' : vulnerabilityType + '_MARK'
+  return marks[mark]
 }
 
 module.exports = {
