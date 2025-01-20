@@ -61,10 +61,11 @@ describe('set_user', () => {
 
         setUser(tracer, user)
         expect(log.warn).to.not.have.been.called
-        expect(rootSpan.setTag).to.have.been.calledThrice
-        expect(rootSpan.setTag.firstCall).to.have.been.calledWithExactly('usr.id', '123')
-        expect(rootSpan.setTag.secondCall).to.have.been.calledWithExactly('usr.email', 'a@b.c')
-        expect(rootSpan.setTag.thirdCall).to.have.been.calledWithExactly('usr.custom', 'hello')
+        expect(rootSpan.setTag.callCount).to.equal(4)
+        expect(rootSpan.setTag.getCall(0)).to.have.been.calledWithExactly('usr.id', '123')
+        expect(rootSpan.setTag.getCall(1)).to.have.been.calledWithExactly('usr.email', 'a@b.c')
+        expect(rootSpan.setTag.getCall(2)).to.have.been.calledWithExactly('usr.custom', 'hello')
+        expect(rootSpan.setTag.getCall(3)).to.have.been.calledWithExactly('_dd.appsec.user.collection_mode', 'sdk')
       })
     })
   })
