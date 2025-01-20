@@ -693,7 +693,9 @@ function getFileAndLineNumberFromError (error, repositoryRoot) {
 
 function getFormattedError (error, repositoryRoot) {
   const newError = new Error(error.message)
-  newError.stack = error.stack.split('\n').filter(line => line.includes(repositoryRoot)).join('\n')
+  if (error.stack) {
+    newError.stack = error.stack.split('\n').filter(line => line.includes(repositoryRoot)).join('\n')
+  }
   newError.name = error.name
 
   return newError

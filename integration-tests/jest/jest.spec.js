@@ -518,7 +518,7 @@ describe('jest CommonJS', () => {
           const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
 
           assert.equal(retriedTests.length, 2)
-          const [retriedTest] = retriedTests
+          const retriedTest = retriedTests.find(test => test.meta[TEST_SUITE].includes('test-hit-breakpoint.js'))
 
           assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
 
@@ -560,6 +560,7 @@ describe('jest CommonJS', () => {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'dynamic-instrumentation/test-',
             DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             RUN_IN_PARALLEL: true
           },
           stdio: 'inherit'
@@ -2518,7 +2519,8 @@ describe('jest CommonJS', () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint'
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
         }
@@ -2565,7 +2567,8 @@ describe('jest CommonJS', () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
         }
@@ -2649,7 +2652,8 @@ describe('jest CommonJS', () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
         }
@@ -2698,7 +2702,8 @@ describe('jest CommonJS', () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'dynamic-instrumentation/test-not-hit-breakpoint',
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
         }
