@@ -350,6 +350,17 @@ describe('Appsec Telemetry metrics', () => {
         })
       })
     })
+
+    describe('incrementMissingUserIdMetric', () => {
+      it('should increment instrum.user_auth.missing_user_id metric', () => {
+        appsecTelemetry.incrementMissingUserIdMetric('passport', 'authenticated_request')
+
+        expect(count).to.have.been.calledOnceWithExactly('instrum.user_auth.missing_user_id', {
+          framework: 'passport',
+          event_type: 'authenticated_request'
+        })
+      })
+    })
   })
 
   describe('if disabled', () => {
