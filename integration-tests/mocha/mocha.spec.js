@@ -37,9 +37,10 @@ const {
   TEST_LEVEL_EVENT_TYPES,
   TEST_EARLY_FLAKE_ABORT_REASON,
   DI_ERROR_DEBUG_INFO_CAPTURED,
-  DI_DEBUG_ERROR_FILE,
-  DI_DEBUG_ERROR_SNAPSHOT_ID,
-  DI_DEBUG_ERROR_LINE
+  DI_DEBUG_ERROR_PREFIX,
+  DI_DEBUG_ERROR_FILE_SUFFIX,
+  DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
+  DI_DEBUG_ERROR_LINE_SUFFIX
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -2166,10 +2167,10 @@ describe('mocha CommonJS', function () {
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
 
-          assert.notProperty(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
-          assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_FILE)
-          assert.notProperty(retriedTest.metrics, DI_DEBUG_ERROR_LINE)
-          assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_SNAPSHOT_ID)
+          const hasDebugTags = Object.keys(retriedTest.meta)
+            .some(property => property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED)
+
+          assert.isFalse(hasDebugTags)
         })
 
       const logsPromise = receiver
@@ -2187,7 +2188,8 @@ describe('mocha CommonJS', function () {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
               './dynamic-instrumentation/test-hit-breakpoint'
-            ])
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
         }
@@ -2217,10 +2219,10 @@ describe('mocha CommonJS', function () {
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
 
-          assert.notProperty(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
-          assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_FILE)
-          assert.notProperty(retriedTest.metrics, DI_DEBUG_ERROR_LINE)
-          assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_SNAPSHOT_ID)
+          const hasDebugTags = Object.keys(retriedTest.meta)
+            .some(property => property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED)
+
+          assert.isFalse(hasDebugTags)
         })
 
       const logsPromise = receiver
@@ -2239,7 +2241,8 @@ describe('mocha CommonJS', function () {
             TESTS_TO_RUN: JSON.stringify([
               './dynamic-instrumentation/test-hit-breakpoint'
             ]),
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
         }
@@ -2273,15 +2276,17 @@ describe('mocha CommonJS', function () {
           const [retriedTest] = retriedTests
 
           assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-          assert.propertyVal(
-            retriedTest.meta,
-            DI_DEBUG_ERROR_FILE,
-            'ci-visibility/dynamic-instrumentation/dependency.js'
+          assert.isTrue(
+            retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
+              .endsWith('ci-visibility/dynamic-instrumentation/dependency.js')
           )
-          assert.equal(retriedTest.metrics[DI_DEBUG_ERROR_LINE], 4)
-          assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
+          assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
 
-          snapshotIdByTest = retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID]
+          const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
+
+          assert.exists(retriedTest.meta[snapshotIdKey])
+
+          snapshotIdByTest = retriedTest.meta[snapshotIdKey]
           spanIdByTest = retriedTest.span_id.toString()
           traceIdByTest = retriedTest.trace_id.toString()
 
@@ -2326,7 +2331,8 @@ describe('mocha CommonJS', function () {
             TESTS_TO_RUN: JSON.stringify([
               './dynamic-instrumentation/test-hit-breakpoint'
             ]),
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
         }
@@ -2358,14 +2364,10 @@ describe('mocha CommonJS', function () {
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
 
-          assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-          assert.propertyVal(
-            retriedTest.meta,
-            DI_DEBUG_ERROR_FILE,
-            'ci-visibility/dynamic-instrumentation/dependency.js'
-          )
-          assert.equal(retriedTest.metrics[DI_DEBUG_ERROR_LINE], 4)
-          assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
+          const hasDebugTags = Object.keys(retriedTest.meta)
+            .some(property => property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED)
+
+          assert.isFalse(hasDebugTags)
         })
       const logsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
@@ -2383,7 +2385,8 @@ describe('mocha CommonJS', function () {
             TESTS_TO_RUN: JSON.stringify([
               './dynamic-instrumentation/test-not-hit-breakpoint'
             ]),
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
         }

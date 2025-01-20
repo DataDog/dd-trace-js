@@ -28,6 +28,42 @@ const newTasks = new WeakSet()
 const switchedStatuses = new WeakSet()
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
+const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
+
+function waitForHitProbe () {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      resolve()
+    }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
+  })
+}
+
+function getProvidedContext () {
+  try {
+    const {
+      _ddIsEarlyFlakeDetectionEnabled,
+      _ddIsDiEnabled,
+      _ddKnownTests: knownTests,
+      _ddEarlyFlakeDetectionNumRetries: numRepeats
+    } = globalThis.__vitest_worker__.providedContext
+
+    return {
+      isDiEnabled: _ddIsDiEnabled,
+      isEarlyFlakeDetectionEnabled: _ddIsEarlyFlakeDetectionEnabled,
+      knownTests,
+      numRepeats
+    }
+  } catch (e) {
+    log.error('Vitest workers could not parse provided context, so some features will not work.')
+    return {
+      isDiEnabled: false,
+      isEarlyFlakeDetectionEnabled: false,
+      knownTests: {},
+      numRepeats: 0
+    }
+  }
+}
+
 function isReporterPackage (vitestPackage) {
   return vitestPackage.B?.name === 'BaseSequencer'
 }
@@ -143,7 +179,9 @@ function getSortWrapper (sort) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
       if (!knownTestsResponse.err) {
         knownTests = knownTestsResponse.knownTests
-        const testFilepaths = await this.ctx.getTestFilepaths()
+        const getFilePaths = this.ctx.getTestFilepaths || this.ctx._globTestFilepaths
+
+        const testFilepaths = await getFilePaths.call(this.ctx)
 
         isEarlyFlakeDetectionFaultyCh.publish({
           knownTests: knownTests.vitest || {},
@@ -253,29 +291,26 @@ addHook({
   // `onBeforeRunTask` is run before any repetition or attempt is run
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => async function (task) {
     const testName = getTestName(task)
-    try {
-      const {
-        _ddKnownTests: knownTests,
-        _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled,
-        _ddEarlyFlakeDetectionNumRetries: numRepeats
-      } = globalThis.__vitest_worker__.providedContext
 
-      if (isEarlyFlakeDetectionEnabled) {
-        isNewTestCh.publish({
-          knownTests,
-          testSuiteAbsolutePath: task.file.filepath,
-          testName,
-          onDone: (isNew) => {
-            if (isNew) {
-              task.repeats = numRepeats
-              newTasks.add(task)
-              taskToStatuses.set(task, [])
-            }
+    const {
+      knownTests,
+      isEarlyFlakeDetectionEnabled,
+      numRepeats
+    } = getProvidedContext()
+
+    if (isEarlyFlakeDetectionEnabled) {
+      isNewTestCh.publish({
+        knownTests,
+        testSuiteAbsolutePath: task.file.filepath,
+        testName,
+        onDone: (isNew) => {
+          if (isNew) {
+            task.repeats = numRepeats
+            newTasks.add(task)
+            taskToStatuses.set(task, [])
           }
-        })
-      }
-    } catch (e) {
-      log.error('Vitest workers could not parse known tests, so Early Flake Detection will not work.')
+        }
+      })
     }
 
     return onBeforeRunTask.apply(this, arguments)
@@ -283,9 +318,7 @@ addHook({
 
   // `onAfterRunTask` is run after all repetitions or attempts are run
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterRunTask', onAfterRunTask => async function (task) {
-    const {
-      _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled
-    } = globalThis.__vitest_worker__.providedContext
+    const { isEarlyFlakeDetectionEnabled } = getProvidedContext()
 
     if (isEarlyFlakeDetectionEnabled && taskToStatuses.has(task)) {
       const statuses = taskToStatuses.get(task)
@@ -309,43 +342,40 @@ addHook({
     }
     const testName = getTestName(task)
     let isNew = false
-    let isEarlyFlakeDetectionEnabled = false
-    let isDiEnabled = false
 
-    try {
-      const {
-        _ddIsEarlyFlakeDetectionEnabled,
-        _ddIsDiEnabled
-      } = globalThis.__vitest_worker__.providedContext
+    const {
+      isEarlyFlakeDetectionEnabled,
+      isDiEnabled
+    } = getProvidedContext()
 
-      isEarlyFlakeDetectionEnabled = _ddIsEarlyFlakeDetectionEnabled
-      isDiEnabled = _ddIsDiEnabled
-
-      if (isEarlyFlakeDetectionEnabled) {
-        isNew = newTasks.has(task)
-      }
-    } catch (e) {
-      log.error('Vitest workers could not parse known tests, so Early Flake Detection will not work.')
+    if (isEarlyFlakeDetectionEnabled) {
+      isNew = newTasks.has(task)
     }
+
     const { retry: numAttempt, repeats: numRepetition } = retryInfo
 
     // We finish the previous test here because we know it has failed already
     if (numAttempt > 0) {
-      const probe = {}
+      const shouldWaitForHitProbe = isDiEnabled && numAttempt > 1
+      if (shouldWaitForHitProbe) {
+        await waitForHitProbe()
+      }
+
+      const promises = {}
+      const shouldSetProbe = isDiEnabled && numAttempt === 1
       const asyncResource = taskToAsync.get(task)
       const testError = task.result?.errors?.[0]
       if (asyncResource) {
         asyncResource.runInAsyncScope(() => {
           testErrorCh.publish({
             error: testError,
-            willBeRetried: true,
-            probe,
-            isDiEnabled
+            shouldSetProbe,
+            promises
           })
         })
         // We wait for the probe to be set
-        if (probe.setProbePromise) {
-          await probe.setProbePromise
+        if (promises.setProbePromise) {
+          await promises.setProbePromise
         }
       }
     }
@@ -401,7 +431,8 @@ addHook({
         testName,
         testSuiteAbsolutePath: task.file.filepath,
         isRetry: numAttempt > 0 || numRepetition > 0,
-        isNew
+        isNew,
+        mightHitProbe: isDiEnabled && numAttempt > 0
       })
     })
     return onBeforeTryTask.apply(this, arguments)
@@ -417,6 +448,12 @@ addHook({
 
       const status = getVitestTestStatus(task, retryCount)
       const asyncResource = taskToAsync.get(task)
+
+      const { isDiEnabled } = getProvidedContext()
+
+      if (isDiEnabled && retryCount > 1) {
+        await waitForHitProbe()
+      }
 
       if (asyncResource) {
         // We don't finish here because the test might fail in a later hook (afterEach)
@@ -459,15 +496,6 @@ addHook({
 
 addHook({
   name: 'vitest',
-  versions: ['>=2.1.0'],
-  filePattern: 'dist/chunks/RandomSequencer.*'
-}, (randomSequencerPackage) => {
-  shimmer.wrap(randomSequencerPackage.B.prototype, 'sort', getSortWrapper)
-  return randomSequencerPackage
-})
-
-addHook({
-  name: 'vitest',
   versions: ['>=2.0.5 <2.1.0'],
   filePattern: 'dist/chunks/index.*'
 }, (vitestPackage) => {
@@ -476,6 +504,24 @@ addHook({
   }
 
   return vitestPackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=2.1.0 <3.0.0'],
+  filePattern: 'dist/chunks/RandomSequencer.*'
+}, (randomSequencerPackage) => {
+  shimmer.wrap(randomSequencerPackage.B.prototype, 'sort', getSortWrapper)
+  return randomSequencerPackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=3.0.0'],
+  filePattern: 'dist/chunks/resolveConfig.*'
+}, (randomSequencerPackage) => {
+  shimmer.wrap(randomSequencerPackage.B.prototype, 'sort', getSortWrapper)
+  return randomSequencerPackage
 })
 
 // Can't specify file because compiled vitest includes hashes in their files
@@ -498,15 +544,17 @@ addHook({
   versions: ['>=1.6.0'],
   file: 'dist/index.js'
 }, (vitestPackage, frameworkVersion) => {
-  shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPath) {
+  shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPaths) {
     let testSuiteError = null
     if (!testSuiteStartCh.hasSubscribers) {
       return startTests.apply(this, arguments)
     }
+    // From >=3.0.1, the first arguments changes from a string to an object containing the filepath
+    const testSuiteAbsolutePath = testPaths[0]?.filepath || testPaths[0]
 
     const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
     testSuiteAsyncResource.runInAsyncScope(() => {
-      testSuiteStartCh.publish({ testSuiteAbsolutePath: testPath[0], frameworkVersion })
+      testSuiteStartCh.publish({ testSuiteAbsolutePath, frameworkVersion })
     })
     const startTestsResponse = await startTests.apply(this, arguments)
 
