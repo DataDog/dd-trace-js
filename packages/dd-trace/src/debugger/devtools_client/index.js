@@ -146,10 +146,9 @@ session.on('Debugger.paused', async ({ params }) => {
       }
     }
 
+    ackEmitting(probe)
     // TODO: Process template (DEBUG-2628)
-    send(probe.template, logger, dd, snapshot, () => {
-      ackEmitting(probe)
-    })
+    send(probe.template, logger, dd, snapshot)
   }
 })
 

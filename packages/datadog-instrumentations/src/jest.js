@@ -12,7 +12,8 @@ const {
   getTestParametersString,
   addEfdStringToTestName,
   removeEfdStringFromTestName,
-  getIsFaultyEarlyFlakeDetection
+  getIsFaultyEarlyFlakeDetection,
+  JEST_WORKER_LOGS_PAYLOAD_CODE
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   getFormattedJestTestParameters,
@@ -30,6 +31,7 @@ const testSuiteFinishCh = channel('ci:jest:test-suite:finish')
 
 const workerReportTraceCh = channel('ci:jest:worker-report:trace')
 const workerReportCoverageCh = channel('ci:jest:worker-report:coverage')
+const workerReportLogsCh = channel('ci:jest:worker-report:logs')
 
 const testSuiteCodeCoverageCh = channel('ci:jest:test-suite:code-coverage')
 
@@ -976,6 +978,12 @@ addHook({
     if (code === JEST_WORKER_COVERAGE_PAYLOAD_CODE) { // datadog coverage payload
       sessionAsyncResource.runInAsyncScope(() => {
         workerReportCoverageCh.publish(data)
+      })
+      return
+    }
+    if (code === JEST_WORKER_LOGS_PAYLOAD_CODE) { // datadog logs payload
+      sessionAsyncResource.runInAsyncScope(() => {
+        workerReportLogsCh.publish(data)
       })
       return
     }

@@ -55,8 +55,6 @@ class TestVisDynamicInstrumentation {
   start (config) {
     if (this.worker) return
 
-    const { NODE_OPTIONS, ...envWithoutNodeOptions } = process.env
-
     log.debug('Starting Test Visibility - Dynamic Instrumentation client...')
 
     const rcChannel = new MessageChannel() // mock channel
@@ -66,7 +64,14 @@ class TestVisDynamicInstrumentation {
       join(__dirname, 'worker', 'index.js'),
       {
         execArgv: [],
-        env: envWithoutNodeOptions,
+        // Not passing `NODE_OPTIONS` results in issues with yarn, which relies on NODE_OPTIONS
+        // for PnP support, hence why we deviate from the DI pattern here.
+        // To avoid infinite initialization loops, we're disabling DI and tracing in the worker.
+        env: {
+          ...process.env,
+          DD_TRACE_ENABLED: 0,
+          DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 0
+        },
         workerData: {
           config: config.serialize(),
           parentThreadId,
@@ -89,9 +94,11 @@ class TestVisDynamicInstrumentation {
       log.debug('Test Visibility - Dynamic Instrumentation client is ready')
       this._onReady()
     })
+
     this.worker.on('error', (err) => {
       log.error('Test Visibility - Dynamic Instrumentation worker error', err)
     })
+
     this.worker.on('messageerror', (err) => {
       log.error('Test Visibility - Dynamic Instrumentation worker messageerror', err)
     })

@@ -94,7 +94,7 @@ function onFlush (payload) {
   }
 
   request(form, options, (err) => {
-    if (err) log.error('[debugger:devtools_client] Error sending probe payload', err)
+    if (err) log.error('[debugger:devtools_client] Error sending diagnostics payload', err)
   })
 }
 

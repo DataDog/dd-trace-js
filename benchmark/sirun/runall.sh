@@ -14,9 +14,6 @@ else
   source /usr/local/nvm/nvm.sh
 fi
 
-nvm use 18
-
-# using Node.js v18 for the global yarn package
 (
   cd ../../ &&
   npm install --global yarn \
