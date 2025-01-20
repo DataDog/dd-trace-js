@@ -2188,7 +2188,8 @@ describe('mocha CommonJS', function () {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
               './dynamic-instrumentation/test-hit-breakpoint'
-            ])
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
         }
@@ -2240,7 +2241,8 @@ describe('mocha CommonJS', function () {
             TESTS_TO_RUN: JSON.stringify([
               './dynamic-instrumentation/test-hit-breakpoint'
             ]),
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
         }
@@ -2329,7 +2331,8 @@ describe('mocha CommonJS', function () {
             TESTS_TO_RUN: JSON.stringify([
               './dynamic-instrumentation/test-hit-breakpoint'
             ]),
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
         }
@@ -2382,7 +2385,8 @@ describe('mocha CommonJS', function () {
             TESTS_TO_RUN: JSON.stringify([
               './dynamic-instrumentation/test-not-hit-breakpoint'
             ]),
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
         }
