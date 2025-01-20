@@ -16,7 +16,7 @@ const PROVIDER = {
 }
 
 describe('Plugin', () => {
-  describe('aws-sdk (bedrock)', function () {
+  describe('aws-sdk (bedrockruntime)', function () {
     setup()
 
     withVersions('aws-sdk', ['@aws-sdk/smithy-client', 'aws-sdk'], '>=3', (version, moduleName) => {
@@ -217,7 +217,7 @@ describe('Plugin', () => {
               expect(span.meta).to.include({
                 'aws.operation': 'invokeModel',
                 'aws.bedrock.request.model': model.modelId.split('.')[1],
-                'aws.bedrock.request.model_provider': model.provider,
+                'aws.bedrock.request.model_provider': model.provider.toLowerCase(),
                 'aws.bedrock.request.prompt': model.userPrompt
               })
               expect(span.metrics).to.include({
