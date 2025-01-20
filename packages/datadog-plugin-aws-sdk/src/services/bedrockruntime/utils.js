@@ -1,7 +1,17 @@
-'use strict'
+// This file is used to extract the request and response data from the AWS SDK clients.
 
-const BaseAwsSdkPlugin = require('../base')
-const log = require('../../../dd-trace/src/log')
+const log = require('../../../../dd-trace/src/log')
+
+const MODEL_TYPE_IDENTIFIERS = [
+  'foundation-model/',
+  'custom-model/',
+  'provisioned-model/',
+  'imported-module/',
+  'prompt/',
+  'endpoint/',
+  'inference-profile/',
+  'default-prompt-router/'
+]
 
 const PROVIDER = {
   AI21: 'AI21',
@@ -11,44 +21,6 @@ const PROVIDER = {
   META: 'META',
   STABILITY: 'STABILITY',
   MISTRAL: 'MISTRAL'
-}
-
-const enabledOperations = ['invokeModel']
-
-class BedrockRuntime extends BaseAwsSdkPlugin {
-  static get id () { return 'bedrock runtime' }
-
-  isEnabled (request) {
-    const operation = request.operation
-    if (!enabledOperations.includes(operation)) {
-      return false
-    }
-
-    return super.isEnabled(request)
-  }
-
-  generateTags (params, operation, response) {
-    let tags = {}
-    let modelName = ''
-    let modelProvider = ''
-    const modelMeta = params.modelId.split('.')
-    if (modelMeta.length === 2) {
-      [modelProvider, modelName] = modelMeta
-      modelProvider = modelProvider.toUpperCase()
-    } else {
-      [, modelProvider, modelName] = modelMeta
-      modelProvider = modelProvider.toUpperCase()
-    }
-
-    const shouldSetChoiceIds = modelProvider === PROVIDER.COHERE && !modelName.includes('embed')
-
-    const requestParams = extractRequestParams(params, modelProvider)
-    const textAndResponseReason = extractTextAndResponseReason(response, modelProvider, modelName, shouldSetChoiceIds)
-
-    tags = buildTagsFromParams(requestParams, textAndResponseReason, modelProvider, modelName, operation)
-
-    return tags
-  }
 }
 
 class Generation {
@@ -65,6 +37,7 @@ class RequestParams {
     prompt = '',
     temperature = undefined,
     topP = undefined,
+    topK = undefined,
     maxTokens = undefined,
     stopSequences = [],
     inputType = '',
@@ -72,11 +45,11 @@ class RequestParams {
     stream = '',
     n = undefined
   } = {}) {
-    // TODO: set a truncation limit to prompt
     // stringify prompt as it could be a single prompt as well as a list of message objects
     this.prompt = typeof prompt === 'string' ? prompt : JSON.stringify(prompt) || ''
     this.temperature = temperature !== undefined ? temperature : undefined
     this.topP = topP !== undefined ? topP : undefined
+    this.topK = topK !== undefined ? topK : undefined
     this.maxTokens = maxTokens !== undefined ? maxTokens : undefined
     this.stopSequences = stopSequences || []
     this.inputType = inputType || ''
@@ -86,11 +59,53 @@ class RequestParams {
   }
 }
 
+function parseModelId (modelId) {
+  // Best effort to extract the model provider and model name from the bedrock model ID.
+  // modelId can be a 1/2 period-separated string or a full AWS ARN, based on the following formats:
+  // 1. Base model: "{model_provider}.{model_name}"
+  // 2. Cross-region model: "{region}.{model_provider}.{model_name}"
+  // 3. Other: Prefixed by AWS ARN "arn:aws{+region?}:bedrock:{region}:{account-id}:"
+  //     a. Foundation model: ARN prefix + "foundation-model/{region?}.{model_provider}.{model_name}"
+  //     b. Custom model: ARN prefix + "custom-model/{model_provider}.{model_name}"
+  //     c. Provisioned model: ARN prefix + "provisioned-model/{model-id}"
+  //     d. Imported model: ARN prefix + "imported-module/{model-id}"
+  //     e. Prompt management: ARN prefix + "prompt/{prompt-id}"
+  //     f. Sagemaker: ARN prefix + "endpoint/{model-id}"
+  //     g. Inference profile: ARN prefix + "{application-?}inference-profile/{model-id}"
+  //     h. Default prompt router: ARN prefix + "default-prompt-router/{prompt-id}"
+  // If model provider cannot be inferred from the modelId formatting, then default to "custom"
+  modelId = modelId.toLowerCase()
+  if (!modelId.startsWith('arn:aws')) {
+    const modelMeta = modelId.split('.')
+    if (modelMeta.length < 2) {
+      return { modelProvider: 'custom', modelName: modelMeta[0] }
+    }
+    return { modelProvider: modelMeta[modelMeta.length - 2], modelName: modelMeta[modelMeta.length - 1] }
+  }
+
+  for (const identifier of MODEL_TYPE_IDENTIFIERS) {
+    if (!modelId.includes(identifier)) {
+      continue
+    }
+    modelId = modelId.split(identifier).pop()
+    if (['foundation-model/', 'custom-model/'].includes(identifier)) {
+      const modelMeta = modelId.split('.')
+      if (modelMeta.length < 2) {
+        return { modelProvider: 'custom', modelName: modelId }
+      }
+      return { modelProvider: modelMeta[modelMeta.length - 2], modelName: modelMeta[modelMeta.length - 1] }
+    }
+    return { modelProvider: 'custom', modelName: modelId }
+  }
+
+  return { modelProvider: 'custom', modelName: 'custom' }
+}
+
 function extractRequestParams (params, provider) {
   const requestBody = JSON.parse(params.body)
   const modelId = params.modelId
 
-  switch (provider) {
+  switch (provider.toUpperCase()) {
     case PROVIDER.AI21: {
       let userPrompt = requestBody.prompt
       if (modelId.includes('jamba')) {
@@ -176,11 +191,13 @@ function extractRequestParams (params, provider) {
   }
 }
 
-function extractTextAndResponseReason (response, provider, modelName, shouldSetChoiceIds) {
+function extractTextAndResponseReason (response, provider, modelName, shouldSetChoiceIds = undefined) {
   const body = JSON.parse(Buffer.from(response.body).toString('utf8'))
-
+  if (shouldSetChoiceIds === undefined) {
+    shouldSetChoiceIds = provider.toUpperCase() === PROVIDER.COHERE && !modelName.includes
+  }
   try {
-    switch (provider) {
+    switch (provider.toUpperCase()) {
       case PROVIDER.AI21: {
         if (modelName.includes('jamba')) {
           const generations = body.choices || []
@@ -262,34 +279,11 @@ function extractTextAndResponseReason (response, provider, modelName, shouldSetC
   return new Generation()
 }
 
-function buildTagsFromParams (requestParams, textAndResponseReason, modelProvider, modelName, operation) {
-  const tags = {}
-
-  // add request tags
-  tags['resource.name'] = operation
-  tags['aws.bedrock.request.model'] = modelName
-  tags['aws.bedrock.request.model_provider'] = modelProvider
-  tags['aws.bedrock.request.prompt'] = requestParams.prompt
-  tags['aws.bedrock.request.temperature'] = requestParams.temperature
-  tags['aws.bedrock.request.top_p'] = requestParams.topP
-  tags['aws.bedrock.request.max_tokens'] = requestParams.maxTokens
-  tags['aws.bedrock.request.stop_sequences'] = requestParams.stopSequences
-  tags['aws.bedrock.request.input_type'] = requestParams.inputType
-  tags['aws.bedrock.request.truncate'] = requestParams.truncate
-  tags['aws.bedrock.request.stream'] = requestParams.stream
-  tags['aws.bedrock.request.n'] = requestParams.n
-
-  // add response tags
-  if (modelName.includes('embed')) {
-    tags['aws.bedrock.response.embedding_length'] = textAndResponseReason.message.length
-  }
-  if (textAndResponseReason.choiceId) {
-    tags['aws.bedrock.response.choices.id'] = textAndResponseReason.choiceId
-  }
-  tags['aws.bedrock.response.choices.text'] = textAndResponseReason.message
-  tags['aws.bedrock.response.choices.finish_reason'] = textAndResponseReason.finishReason
-
-  return tags
+module.exports = {
+  Generation,
+  RequestParams,
+  parseModelId,
+  extractRequestParams,
+  extractTextAndResponseReason,
+  PROVIDER
 }
-
-module.exports = BedrockRuntime
