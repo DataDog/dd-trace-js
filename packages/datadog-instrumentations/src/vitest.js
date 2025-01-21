@@ -44,14 +44,16 @@ function getProvidedContext () {
       _ddIsEarlyFlakeDetectionEnabled,
       _ddIsDiEnabled,
       _ddKnownTests: knownTests,
-      _ddEarlyFlakeDetectionNumRetries: numRepeats
+      _ddEarlyFlakeDetectionNumRetries: numRepeats,
+      _ddIsKnownTestsEnabled: isKnownTestsEnabled
     } = globalThis.__vitest_worker__.providedContext
 
     return {
       isDiEnabled: _ddIsDiEnabled,
       isEarlyFlakeDetectionEnabled: _ddIsEarlyFlakeDetectionEnabled,
       knownTests,
-      numRepeats
+      numRepeats,
+      isKnownTestsEnabled
     }
   } catch (e) {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -59,7 +61,8 @@ function getProvidedContext () {
       isDiEnabled: false,
       isEarlyFlakeDetectionEnabled: false,
       knownTests: {},
-      numRepeats: 0
+      numRepeats: 0,
+      isKnownTestsEnabled: false
     }
   }
 }
@@ -153,6 +156,7 @@ function getSortWrapper (sort) {
     let isEarlyFlakeDetectionEnabled = false
     let earlyFlakeDetectionNumRetries = 0
     let isEarlyFlakeDetectionFaulty = false
+    let isKnownTestsEnabled = false
     let isDiEnabled = false
     let knownTests = {}
 
@@ -164,18 +168,20 @@ function getSortWrapper (sort) {
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
         isDiEnabled = libraryConfig.isDiEnabled
+        isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
       }
     } catch (e) {
       isFlakyTestRetriesEnabled = false
       isEarlyFlakeDetectionEnabled = false
       isDiEnabled = false
+      isKnownTestsEnabled = false
     }
 
     if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
       this.ctx.config.retry = flakyTestRetriesCount
     }
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
       if (!knownTestsResponse.err) {
         knownTests = knownTestsResponse.knownTests
@@ -192,13 +198,15 @@ function getSortWrapper (sort) {
         })
         if (isEarlyFlakeDetectionFaulty) {
           isEarlyFlakeDetectionEnabled = false
-          log.warn('Early flake detection is disabled because the number of new tests is too high.')
+          isKnownTestsEnabled = false
+          log.warn('New test detection is disabled because the number of new tests is too high.')
         } else {
           // TODO: use this to pass session and module IDs to the worker, instead of polluting process.env
           // Note: setting this.ctx.config.provide directly does not work because it's cached
           try {
             const workspaceProject = this.ctx.getCoreWorkspaceProject()
-            workspaceProject._provided._ddKnownTests = knownTests.vitest
+            workspaceProject._provided._ddIsKnownTestsEnabled = isKnownTestsEnabled
+            workspaceProject._provided._ddKnownTests = knownTests.vitest || {}
             workspaceProject._provided._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
             workspaceProject._provided._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
           } catch (e) {
@@ -207,6 +215,7 @@ function getSortWrapper (sort) {
         }
       } else {
         isEarlyFlakeDetectionEnabled = false
+        isKnownTestsEnabled = false
       }
     }
 
@@ -295,17 +304,20 @@ addHook({
     const {
       knownTests,
       isEarlyFlakeDetectionEnabled,
+      isKnownTestsEnabled,
       numRepeats
     } = getProvidedContext()
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
       isNewTestCh.publish({
         knownTests,
         testSuiteAbsolutePath: task.file.filepath,
         testName,
         onDone: (isNew) => {
           if (isNew) {
-            task.repeats = numRepeats
+            if (isEarlyFlakeDetectionEnabled) {
+              task.repeats = numRepeats
+            }
             newTasks.add(task)
             taskToStatuses.set(task, [])
           }
@@ -344,11 +356,12 @@ addHook({
     let isNew = false
 
     const {
+      isKnownTestsEnabled,
       isEarlyFlakeDetectionEnabled,
       isDiEnabled
     } = getProvidedContext()
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
       isNew = newTasks.has(task)
     }
 
@@ -576,7 +589,11 @@ addHook({
       if (result) {
         const { state, duration, errors } = result
         if (state === 'skip') { // programmatic skip
-          testSkipCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.file.filepath })
+          testSkipCh.publish({
+            testName: getTestName(task),
+            testSuiteAbsolutePath: task.file.filepath,
+            isNew: newTasks.has(task)
+          })
         } else if (state === 'pass' && !isSwitchedStatus) {
           if (testAsyncResource) {
             testAsyncResource.runInAsyncScope(() => {
@@ -602,7 +619,11 @@ addHook({
           }
         }
       } else { // test.skip or test.todo
-        testSkipCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.file.filepath })
+        testSkipCh.publish({
+          testName: getTestName(task),
+          testSuiteAbsolutePath: task.file.filepath,
+          isNew: newTasks.has(task)
+        })
       }
     })
 

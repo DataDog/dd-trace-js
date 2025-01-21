@@ -147,7 +147,7 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:test:skip', ({ testName, testSuiteAbsolutePath }) => {
+    this.addSub('ci:vitest:test:skip', ({ testName, testSuiteAbsolutePath, isNew }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const testSpan = this.startTestSpan(
         testName,
@@ -156,7 +156,8 @@ class VitestPlugin extends CiPlugin {
         {
           [TEST_SOURCE_FILE]: testSuite,
           [TEST_SOURCE_START]: 1, // we can't get the proper start line in vitest
-          [TEST_STATUS]: 'skip'
+          [TEST_STATUS]: 'skip',
+          ...(isNew ? { [TEST_IS_NEW]: 'true' } : {})
         }
       )
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
