@@ -193,9 +193,7 @@ function extractRequestParams (params, provider) {
 
 function extractTextAndResponseReason (response, provider, modelName, shouldSetChoiceIds = undefined) {
   const body = JSON.parse(Buffer.from(response.body).toString('utf8'))
-  if (shouldSetChoiceIds === undefined) {
-    shouldSetChoiceIds = provider.toUpperCase() === PROVIDER.COHERE && !modelName.includes
-  }
+  shouldSetChoiceIds = provider.toUpperCase() === PROVIDER.COHERE && !modelName.includes('embed')
   try {
     switch (provider.toUpperCase()) {
       case PROVIDER.AI21: {
