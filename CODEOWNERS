@@ -60,6 +60,7 @@
 /packages/datadog-instrumentations/src/openai.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/langchain.js @DataDog/ml-observability
 /packages/datadog-plugin-aws-sdk/src/services/bedrockruntime @DataDog/ml-observability
+/packages/datadog-plugin-aws-sdk/test/bedrockruntime.spec.js @DataDog/ml-observability
 
 # CI
 /.github/workflows/appsec.yml @DataDog/asm-js
