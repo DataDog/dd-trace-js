@@ -11,6 +11,7 @@ const {
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   passportVerify,
+  passportUser,
   queryParser,
   nextBodyParsed,
   nextQueryParsed,
@@ -91,7 +92,8 @@ describe('AppSec Index', function () {
 
     UserTracking = {
       setCollectionMode: sinon.stub(),
-      trackLogin: sinon.stub()
+      trackLogin: sinon.stub(),
+      trackUser: sinon.stub()
     }
 
     log = {
@@ -176,6 +178,7 @@ describe('AppSec Index', function () {
       expect(bodyParser.hasSubscribers).to.be.false
       expect(cookieParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
+      expect(passportUser.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(nextBodyParsed.hasSubscribers).to.be.false
       expect(nextQueryParsed.hasSubscribers).to.be.false
@@ -189,6 +192,7 @@ describe('AppSec Index', function () {
       expect(bodyParser.hasSubscribers).to.be.true
       expect(cookieParser.hasSubscribers).to.be.true
       expect(passportVerify.hasSubscribers).to.be.true
+      expect(passportUser.hasSubscribers).to.be.true
       expect(queryParser.hasSubscribers).to.be.true
       expect(nextBodyParsed.hasSubscribers).to.be.true
       expect(nextQueryParsed.hasSubscribers).to.be.true
@@ -271,6 +275,7 @@ describe('AppSec Index', function () {
       expect(bodyParser.hasSubscribers).to.be.false
       expect(cookieParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
+      expect(passportUser.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(nextBodyParsed.hasSubscribers).to.be.false
       expect(nextQueryParsed.hasSubscribers).to.be.false
@@ -818,7 +823,7 @@ describe('AppSec Index', function () {
         sinon.stub(storage, 'getStore').returns({ req })
       })
 
-      it('should block when UserTracking.login() returns action', () => {
+      it('should block when UserTracking.trackLogin() returns action', () => {
         UserTracking.trackLogin.returns(resultActions)
 
         const abortController = new AbortController()
@@ -845,7 +850,7 @@ describe('AppSec Index', function () {
         expect(res.constructor.prototype.end).to.have.been.called
       })
 
-      it('should not block when UserTracking.login() returns nothing', () => {
+      it('should not block when UserTracking.trackLogin() returns nothing', () => {
         UserTracking.trackLogin.returns(undefined)
 
         const abortController = new AbortController()
@@ -889,6 +894,73 @@ describe('AppSec Index', function () {
         expect(storage.getStore).to.have.been.calledOnce
         expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] No rootSpan found in onPassportVerify')
         expect(UserTracking.trackLogin).to.not.have.been.called
+        expect(abortController.signal.aborted).to.be.false
+        expect(res.constructor.prototype.end).to.not.have.been.called
+      })
+    })
+
+    describe('onPassportDeserializeUser', () => {
+      beforeEach(() => {
+        web.root.resetHistory()
+        sinon.stub(storage, 'getStore').returns({ req })
+      })
+
+      it('should block when UserTracking.trackUser() returns action', () => {
+        UserTracking.trackUser.returns(resultActions)
+
+        const abortController = new AbortController()
+        const payload = {
+          user: { _id: 1, username: 'test', password: '1234' },
+          abortController
+        }
+
+        passportUser.publish(payload)
+
+        expect(storage.getStore).to.have.been.calledOnce
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(UserTracking.trackUser).to.have.been.calledOnceWithExactly(
+          payload.user,
+          rootSpan
+        )
+        expect(abortController.signal.aborted).to.be.true
+        expect(res.constructor.prototype.end).to.have.been.called
+      })
+
+      it('should not block when UserTracking.trackUser() returns nothing', () => {
+        UserTracking.trackUser.returns(undefined)
+
+        const abortController = new AbortController()
+        const payload = {
+          user: { _id: 1, username: 'test', password: '1234' },
+          abortController
+        }
+
+        passportUser.publish(payload)
+
+        expect(storage.getStore).to.have.been.calledOnce
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(UserTracking.trackUser).to.have.been.calledOnceWithExactly(
+          payload.user,
+          rootSpan
+        )
+        expect(abortController.signal.aborted).to.be.false
+        expect(res.constructor.prototype.end).to.not.have.been.called
+      })
+
+      it('should not block and call log if no rootSpan is found', () => {
+        storage.getStore.returns(undefined)
+
+        const abortController = new AbortController()
+        const payload = {
+          user: { _id: 1, username: 'test', password: '1234' },
+          abortController
+        }
+
+        passportUser.publish(payload)
+
+        expect(storage.getStore).to.have.been.calledOnce
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] No rootSpan found in onPassportDeserializeUser')
+        expect(UserTracking.trackUser).to.not.have.been.called
         expect(abortController.signal.aborted).to.be.false
         expect(res.constructor.prototype.end).to.not.have.been.called
       })
