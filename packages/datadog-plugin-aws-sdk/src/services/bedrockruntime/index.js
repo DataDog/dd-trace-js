@@ -2,7 +2,7 @@ const CompositePlugin = require('../../../../dd-trace/src/plugins/composite')
 const BedrockRuntimeTracing = require('./tracing')
 class BedrockRuntimePlugin extends CompositePlugin {
   static get id () {
-    return 'bedrock'
+    return 'bedrockruntime'
   }
 
   static get plugins () {
