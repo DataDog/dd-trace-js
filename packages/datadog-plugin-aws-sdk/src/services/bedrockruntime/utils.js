@@ -1,4 +1,4 @@
-// This file is used to extract the request and response data from the AWS SDK clients.
+'use strict'
 
 const log = require('../../../../dd-trace/src/log')
 
