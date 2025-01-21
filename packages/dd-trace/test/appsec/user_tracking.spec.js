@@ -770,7 +770,11 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserIdMetric)
 
-        sinon.assert.calledOnceWithExactly(rootSpan.setTag, '_dd.appsec.usr.id', 'anon_a665a45920422f9d417e4867efdc4fb8')
+        sinon.assert.calledOnceWithExactly(
+          rootSpan.setTag,
+          '_dd.appsec.usr.id',
+          'anon_a665a45920422f9d417e4867efdc4fb8'
+        )
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
           'usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8',
           '_dd.appsec.user.collection_mode': 'anonymization'
@@ -795,7 +799,11 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserIdMetric)
 
-        sinon.assert.calledOnceWithExactly(rootSpan.setTag, '_dd.appsec.usr.id', 'anon_a665a45920422f9d417e4867efdc4fb8')
+        sinon.assert.calledOnceWithExactly(
+          rootSpan.setTag,
+          '_dd.appsec.usr.id',
+          'anon_a665a45920422f9d417e4867efdc4fb8'
+        )
 
         sinon.assert.notCalled(rootSpan.addTags)
         sinon.assert.notCalled(waf.run)
