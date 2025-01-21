@@ -18,7 +18,6 @@ class BedrockRuntime extends BaseAwsSdkPlugin {
   }
 
   generateTags (params, operation, response) {
-    let tags = {}
 
     const { modelProvider, modelName } = parseModelId(params.modelId)
 
