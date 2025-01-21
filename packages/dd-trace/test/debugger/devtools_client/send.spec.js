@@ -54,13 +54,9 @@ describe('input message http requests', function () {
   })
 
   it('should call request with the expected payload once the buffer is flushed', function (done) {
-    const callback1 = sinon.spy()
-    const callback2 = sinon.spy()
-    const callback3 = sinon.spy()
-
-    send({ message: 1 }, logger, dd, snapshot, callback1)
-    send({ message: 2 }, logger, dd, snapshot, callback2)
-    send({ message: 3 }, logger, dd, snapshot, callback3)
+    send({ message: 1 }, logger, dd, snapshot)
+    send({ message: 2 }, logger, dd, snapshot)
+    send({ message: 3 }, logger, dd, snapshot)
     expect(request).to.not.have.been.called
 
     expectWithin(1200, () => {
@@ -82,16 +78,6 @@ describe('input message http requests', function () {
           `git.commit.sha%3A${commitSHA}%2C` +
           `git.repository_url%3A${repositoryUrl}`
       )
-
-      expect(callback1).to.not.have.been.calledOnce
-      expect(callback2).to.not.have.been.calledOnce
-      expect(callback3).to.not.have.been.calledOnce
-
-      request.firstCall.callback()
-
-      expect(callback1).to.have.been.calledOnce
-      expect(callback2).to.have.been.calledOnce
-      expect(callback3).to.have.been.calledOnce
 
       done()
     })

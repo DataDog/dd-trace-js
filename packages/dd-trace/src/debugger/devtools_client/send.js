@@ -29,10 +29,9 @@ const ddtags = [
 
 const path = `/debugger/v1/input?${stringify({ ddtags })}`
 
-let callbacks = []
 const jsonBuffer = new JSONBuffer({ size: config.maxTotalPayloadSize, timeout: 1000, onFlush })
 
-function send (message, logger, dd, snapshot, cb) {
+function send (message, logger, dd, snapshot) {
   const payload = {
     ddsource,
     hostname,
@@ -58,10 +57,11 @@ function send (message, logger, dd, snapshot, cb) {
   }
 
   jsonBuffer.write(json, size)
-  callbacks.push(cb)
 }
 
 function onFlush (payload) {
+  log.debug('[debugger:devtools_client] Flushing probe payload buffer')
+
   const opts = {
     method: 'POST',
     url: config.url,
@@ -69,11 +69,7 @@ function onFlush (payload) {
     headers: { 'Content-Type': 'application/json; charset=utf-8' }
   }
 
-  const _callbacks = callbacks
-  callbacks = []
-
   request(payload, opts, (err) => {
-    if (err) log.error('Could not send debugger payload', err)
-    else _callbacks.forEach(cb => cb())
+    if (err) log.error('[debugger:devtools_client] Error sending probe payload', err)
   })
 }
