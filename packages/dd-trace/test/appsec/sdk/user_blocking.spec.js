@@ -200,6 +200,7 @@ describe('user_blocking', () => {
         }
         agent.use(traces => {
           expect(traces[0][0].meta).to.have.property('usr.id', 'testUser3')
+          expect(traces[0][0].meta).to.have.property('_dd.appsec.user.collection_mode', 'sdk')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
@@ -214,6 +215,7 @@ describe('user_blocking', () => {
         }
         agent.use(traces => {
           expect(traces[0][0].meta).to.have.property('usr.id', 'testUser')
+          expect(traces[0][0].meta).to.have.property('_dd.appsec.user.collection_mode', 'sdk')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
@@ -226,6 +228,7 @@ describe('user_blocking', () => {
         }
         agent.use(traces => {
           expect(traces[0][0].meta).to.have.property('usr.id', 'blockedUser')
+          expect(traces[0][0].meta).to.have.property('_dd.appsec.user.collection_mode', 'sdk')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
