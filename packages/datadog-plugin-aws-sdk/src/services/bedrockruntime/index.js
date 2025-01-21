@@ -3,7 +3,7 @@ const BedrockRuntimeTracing = require('./tracing')
 const BedrockRuntimeLLMObsPlugin = require('../../../../dd-trace/src/llmobs/plugins/bedrockruntime')
 class BedrockRuntimePlugin extends CompositePlugin {
   static get id () {
-    return 'bedrock'
+    return 'bedrockruntime'
   }
 
   static get plugins () {
