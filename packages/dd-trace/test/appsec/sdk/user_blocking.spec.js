@@ -77,7 +77,8 @@ describe('user_blocking', () => {
         const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'user' })
         expect(ret).to.be.true
         expect(getRootSpan).to.have.been.calledOnceWithExactly(tracer)
-        expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('usr.id', 'user')
+        expect(rootSpan.setTag).to.have.been.calledWithExactly('usr.id', 'user')
+        expect(rootSpan.setTag).to.have.been.calledWithExactly('_dd.appsec.user.collection_mode', 'sdk')
       })
 
       it('should not override user when already set', () => {
@@ -104,7 +105,8 @@ describe('user_blocking', () => {
       it('should return false when received no results', () => {
         const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'gooduser' })
         expect(ret).to.be.false
-        expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('usr.id', 'gooduser')
+        expect(rootSpan.setTag).to.have.been.calledWithExactly('usr.id', 'gooduser')
+        expect(rootSpan.setTag).to.have.been.calledWithExactly('_dd.appsec.user.collection_mode', 'sdk')
       })
     })
 
