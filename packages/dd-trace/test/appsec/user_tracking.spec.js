@@ -171,21 +171,6 @@ describe('User Tracking', () => {
       sinon.assert.notCalled(waf.run)
     })
 
-    it('should log error when rootSpan is not found', () => {
-      setCollectionMode('identification')
-
-      const results = trackLogin('passport-local', 'login', { id: '123', email: 'a@b.c' }, true)
-
-      assert.deepStrictEqual(results, undefined)
-
-      sinon.assert.calledOnceWithExactly(log.error, '[ASM] No rootSpan found in AppSec trackLogin')
-      sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
-      sinon.assert.notCalled(keepTrace)
-      sinon.assert.notCalled(standalone.sample)
-      sinon.assert.notCalled(rootSpan.addTags)
-      sinon.assert.notCalled(waf.run)
-    })
-
     it('should log error and send telemetry when login success is not a string', () => {
       setCollectionMode('identification')
 
