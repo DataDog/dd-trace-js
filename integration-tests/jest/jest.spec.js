@@ -2289,6 +2289,16 @@ describe('jest CommonJS', () => {
     })
 
     it('disables early flake detection if known tests should not be requested', (done) => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 3
+          }
+        },
+        known_tests_enabled: false
+      })
+
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
@@ -2296,16 +2306,7 @@ describe('jest CommonJS', () => {
           'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
         }
       })
-      receiver.setSettings({
-        early_flake_detection: {
-          enabled: true,
-          slow_test_retries: {
-            '5s': 3
-          },
-          faulty_session_threshold: 100
-        },
-        known_tests_enabled: false
-      })
+
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -2886,10 +2887,6 @@ describe('jest CommonJS', () => {
           const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
           // no test has been retried
           assert.equal(retriedTests.length, 0)
-          // Test name does not change
-          newTests.forEach(test => {
-            assert.equal(test.meta[TEST_NAME], 'ci visibility 2 can report tests 2')
-          })
         })
 
       childProcess = exec(

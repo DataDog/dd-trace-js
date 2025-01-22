@@ -884,7 +884,7 @@ versions.forEach(version => {
                 )
                 assert.equal(retriedTests.length, NUM_RETRIES_EFD)
                 retriedTests.forEach(test => {
-                  test.meta[TEST_RETRY_REASON] = 'efd'
+                  assert.propertyVal(test.meta, TEST_RETRY_REASON, 'efd')
                 })
                 // Test name does not change
                 newTests.forEach(test => {
@@ -1187,12 +1187,9 @@ versions.forEach(version => {
                 // no new tests detected
                 const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
                 assert.equal(newTests.length, 0)
+                // no retries
                 const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
                 assert.equal(retriedTests.length, 0)
-                // Test name does not change
-                newTests.forEach(test => {
-                  assert.equal(test.meta[TEST_NAME], 'Say whatever')
-                })
               })
 
             childProcess = exec(

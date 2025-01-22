@@ -367,12 +367,12 @@ versions.forEach((version) => {
               const newTests = tests.filter(test =>
                 test.resource.endsWith('should work with passing tests')
               )
+              // new tests are detected but not retried
               newTests.forEach(test => {
                 assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
               })
 
               const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-
               assert.equal(retriedTests.length, 0)
             })
 
@@ -561,7 +561,6 @@ versions.forEach((version) => {
               })
 
               const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-
               assert.equal(retriedTests.length, 0)
             })
 
@@ -822,6 +821,7 @@ versions.forEach((version) => {
               const newTests = tests.filter(test =>
                 test.resource.endsWith('should work with passing tests')
               )
+              // new tests detected but no retries
               newTests.forEach(test => {
                 assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
               })

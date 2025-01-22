@@ -140,9 +140,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.flakyTestRetriesCount = this.testEnvironmentOptions._ddFlakyTestRetriesCount
       this.isDiEnabled = this.testEnvironmentOptions._ddIsDiEnabled
       this.isKnownTestsEnabled = this.testEnvironmentOptions._ddIsKnownTestsEnabled
-      this.shouldDetectNewTests = this.isEarlyFlakeDetectionEnabled || this.isKnownTestsEnabled
 
-      if (this.shouldDetectNewTests) {
+      if (this.isKnownTestsEnabled) {
         try {
           const hasKnownTests = !!knownTests.jest
           earlyFlakeDetectionNumRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionNumRetries
@@ -153,7 +152,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           // If there has been an error parsing the tests, we'll disable Early Flake Deteciton
           this.isEarlyFlakeDetectionEnabled = false
           this.isKnownTestsEnabled = false
-          this.shouldDetectNewTests = false
         }
       }
 
@@ -233,7 +231,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         asyncResources.set(event.test, asyncResource)
         const testName = getJestTestName(event.test)
 
-        if (this.shouldDetectNewTests) {
+        if (this.isKnownTestsEnabled) {
           const originalTestName = removeEfdStringFromTestName(testName)
           isNewTest = retriedTestsToNumAttempts.has(originalTestName)
           if (isNewTest) {
@@ -293,7 +291,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         event.test.fn = originalTestFns.get(event.test)
 
         // We'll store the test statuses of the retries
-        if (this.shouldDetectNewTests) {
+        if (this.isKnownTestsEnabled) {
           const testName = getJestTestName(event.test)
           const originalTestName = removeEfdStringFromTestName(testName)
           const isNewTest = retriedTestsToNumAttempts.has(originalTestName)

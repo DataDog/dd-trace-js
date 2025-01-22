@@ -30,7 +30,7 @@ const {
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
-  TEST_RETRY_REASON // TODO: missing this tag!
+  TEST_RETRY_REASON
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
@@ -944,7 +944,7 @@ versions.forEach((version) => {
               'early flake detection does not retry if the test is skipped'
             ])
 
-            // new tests are not detected
+            // new tests are not detected and not retried
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
             assert.equal(newTests.length, 0)
 
