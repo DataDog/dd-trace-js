@@ -25,6 +25,7 @@ const isEarlyFlakeDetectionFaultyCh = channel('ci:vitest:is-early-flake-detectio
 const taskToAsync = new WeakMap()
 const taskToStatuses = new WeakMap()
 const newTasks = new WeakSet()
+let isRetryReasonEfd = false
 const switchedStatuses = new WeakSet()
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -316,6 +317,7 @@ addHook({
         onDone: (isNew) => {
           if (isNew) {
             if (isEarlyFlakeDetectionEnabled) {
+              isRetryReasonEfd = task.repeats !== numRepeats
               task.repeats = numRepeats
             }
             newTasks.add(task)
@@ -444,6 +446,7 @@ addHook({
         testName,
         testSuiteAbsolutePath: task.file.filepath,
         isRetry: numAttempt > 0 || numRepetition > 0,
+        isRetryReasonEfd,
         isNew,
         mightHitProbe: isDiEnabled && numAttempt > 0
       })

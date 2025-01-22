@@ -17,7 +17,8 @@ const {
   TEST_SOURCE_START,
   TEST_IS_NEW,
   TEST_EARLY_FLAKE_ENABLED,
-  TEST_EARLY_FLAKE_ABORT_REASON
+  TEST_EARLY_FLAKE_ABORT_REASON,
+  TEST_RETRY_REASON
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -60,7 +61,14 @@ class VitestPlugin extends CiPlugin {
       onDone(isFaulty)
     })
 
-    this.addSub('ci:vitest:test:start', ({ testName, testSuiteAbsolutePath, isRetry, isNew, mightHitProbe }) => {
+    this.addSub('ci:vitest:test:start', ({
+      testName,
+      testSuiteAbsolutePath,
+      isRetry,
+      isNew,
+      mightHitProbe,
+      isRetryReasonEfd
+    }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const store = storage.getStore()
 
@@ -72,6 +80,9 @@ class VitestPlugin extends CiPlugin {
       }
       if (isNew) {
         extraTags[TEST_IS_NEW] = 'true'
+      }
+      if (isRetryReasonEfd) {
+        extraTags[TEST_RETRY_REASON] = 'efd'
       }
 
       const span = this.startTestSpan(

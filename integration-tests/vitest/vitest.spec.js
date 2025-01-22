@@ -474,6 +474,10 @@ versions.forEach((version) => {
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.equal(retriedTests.length, 9) // 3 retries of the 3 new tests
 
+            retriedTests.forEach(test => {
+              assert.equal(test.meta[TEST_RETRY_REASON], 'efd')
+            })
+
             // exit code should be 0 and test session should be reported as passed,
             // even though there are some failing executions
             const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
