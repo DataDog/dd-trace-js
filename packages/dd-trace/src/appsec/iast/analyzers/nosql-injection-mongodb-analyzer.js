@@ -105,8 +105,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
 
   _isVulnerableRange (range) {
     const rangeType = range?.iinfo?.type
-    const isVulnerableType = rangeType === HTTP_REQUEST_PARAMETER || rangeType === HTTP_REQUEST_BODY
-    return isVulnerableType && !this._isRangeSecure(range)
+    return rangeType === HTTP_REQUEST_PARAMETER || rangeType === HTTP_REQUEST_BODY
   }
 
   _isVulnerable (value, iastContext) {
@@ -121,9 +120,14 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       const allRanges = []
 
       iterateObjectStrings(value.filter, (val, nextLevelKeys) => {
-        const ranges = getRanges(iastContext, val)
+        let ranges = getRanges(iastContext, val)
         if (ranges?.length) {
           const filteredRanges = []
+
+          ranges = this._filterSecureRanges(ranges)
+          if (!ranges.length) {
+            this._incrementSupressedMetric(iastContext)
+          }
 
           for (const range of ranges) {
             if (this._isVulnerableRange(range)) {

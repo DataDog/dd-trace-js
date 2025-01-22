@@ -5,8 +5,12 @@ const { SQL_ROW_VALUE } = require('../taint-tracking/source-types')
 
 class InjectionAnalyzer extends Analyzer {
   _isVulnerable (value, iastContext) {
-    const ranges = value && getRanges(iastContext, value)
+    let ranges = value && getRanges(iastContext, value)
     if (ranges?.length > 0) {
+      ranges = this._filterSecureRanges(ranges)
+      if (!ranges.length) {
+        this._incrementSupressedMetric(iastContext)
+      }
       return this._areRangesVulnerable(ranges)
     }
 
@@ -19,8 +23,11 @@ class InjectionAnalyzer extends Analyzer {
   }
 
   _areRangesVulnerable (ranges) {
+    return ranges?.some(range => range.iinfo.type !== SQL_ROW_VALUE)
+  }
+
+  _filterSecureRanges (ranges) {
     return ranges?.filter(range => !this._isRangeSecure(range))
-      .some(range => range.iinfo.type !== SQL_ROW_VALUE)
   }
 }
 
