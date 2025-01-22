@@ -53,14 +53,23 @@ describe('Plugin', () => {
 
       it('should call underlying api', () => {
         dummyScope = {}
-        testChannel({ name: 'scope', fn: tracer.scope, ret: dummyScope })
+        testChannel({
+          name: 'scope',
+          fn: tracer.scope,
+          ret: dummyScope
+        })
       })
 
       describe('scope:active', () => {
         it('should call underlying api', () => {
           scope = tracer.scope()
           sinon.spy(scope, 'active')
-          testChannel({ name: 'scope:active', fn: scope.active, self: dummyScope, ret: null })
+          testChannel({
+            name: 'scope:active',
+            fn: scope.active,
+            self: dummyScope,
+            ret: null
+          })
           scope.active.restore()
         })
       })
@@ -69,7 +78,11 @@ describe('Plugin', () => {
         it('should call underlying api', () => {
           scope = tracer.scope()
           sinon.spy(scope, 'activate')
-          testChannel({ name: 'scope:activate', fn: scope.activate, self: dummyScope })
+          testChannel({
+            name: 'scope:activate',
+            fn: scope.activate,
+            self: dummyScope
+          })
           scope.activate.restore()
         })
       })
@@ -78,7 +91,11 @@ describe('Plugin', () => {
         it('should call underlying api', () => {
           scope = tracer.scope()
           sinon.spy(scope, 'bind')
-          testChannel({ name: 'scope:bind', fn: scope.bind, self: dummyScope })
+          testChannel({
+            name: 'scope:bind',
+            fn: scope.bind,
+            self: dummyScope
+          })
           scope.bind.restore()
         })
       })
@@ -92,19 +109,28 @@ describe('Plugin', () => {
 
       it('should call underlying api', () => {
         dummySpan = {}
-        testChannel({ name: 'startSpan', fn: tracer.startSpan, ret: dummySpan })
+        testChannel({
+          name: 'startSpan',
+          fn: tracer.startSpan,
+          ret: dummySpan
+        })
         span = tracer.startSpan.getCall(0).returnValue
         sinon.spy(span)
       })
 
       describe('span:context', () => {
-        let traceId = '1234567890abcdef'
-        let spanId = 'abcdef1234567890'
-        let traceparent= `00-${traceId}-${spanId}-01`
+        const traceId = '1234567890abcdef'
+        const spanId = 'abcdef1234567890'
+        const traceparent = `00-${traceId}-${spanId}-01`
 
         it('should call underlying api', () => {
           dummySpanContext = {}
-          testChannel({ name: 'span:context', fn: span.context, self: dummySpan, ret: dummySpanContext })
+          testChannel({
+            name: 'span:context',
+            fn: span.context,
+            self: dummySpan,
+            ret: dummySpanContext
+          })
           spanContext = span.context.getCall(0).returnValue
           sinon.stub(spanContext, 'toTraceId').callsFake(() => traceId)
           sinon.stub(spanContext, 'toSpanId').callsFake(() => spanId)
@@ -113,38 +139,67 @@ describe('Plugin', () => {
 
         describe('context:toTraceId', () => {
           it('should call underlying api', () => {
-            testChannel({ name: 'context:toTraceId', fn: spanContext.toTraceId, self: dummySpanContext, ret: traceId })
+            testChannel({
+              name: 'context:toTraceId',
+              fn: spanContext.toTraceId,
+              self: dummySpanContext,
+              ret: traceId
+            })
           })
         })
 
         describe('context:toSpanId', () => {
           it('should call underlying api', () => {
-            testChannel({ name: 'context:toSpanId', fn: spanContext.toSpanId, self: dummySpanContext, ret: spanId })
+            testChannel({
+              name: 'context:toSpanId',
+              fn: spanContext.toSpanId,
+              self: dummySpanContext,
+              ret: spanId
+            })
           })
         })
 
         describe('context:toTraceparent', () => {
           it('should call underlying api', () => {
-            testChannel({ name: 'context:toTraceparent', fn: spanContext.toTraceparent, self: dummySpanContext, ret: traceparent })
+            testChannel({
+              name: 'context:toTraceparent',
+              fn: spanContext.toTraceparent,
+              self: dummySpanContext,
+              ret: traceparent
+            })
           })
         })
       })
 
       describe('span:setTag', () => {
         it('should call underlying api', () => {
-          testChannel({ name: 'span:setTag', fn: span.setTag, self: dummySpan, ret: dummySpan })
+          testChannel({
+            name: 'span:setTag',
+            fn: span.setTag,
+            self: dummySpan,
+            ret: dummySpan
+          })
         })
       })
 
       describe('span:addTags', () => {
         it('should call underlying api', () => {
-          testChannel({ name: 'span:addTags', fn: span.addTags, self: dummySpan, ret: dummySpan })
+          testChannel({
+            name: 'span:addTags',
+            fn: span.addTags,
+            self: dummySpan,
+            ret: dummySpan
+          })
         })
       })
 
       describe('span:finish', () => {
         it('should call underlying api', () => {
-          testChannel({ name: 'span:finish', fn: span.finish, self: dummySpan })
+          testChannel({
+            name: 'span:finish',
+            fn: span.finish,
+            self: dummySpan
+          })
         })
       })
 
@@ -186,7 +241,7 @@ describe('Plugin', () => {
       assert.deepStrictEqual([...allChannels].sort(), [...testedChannels].sort())
     })
 
-    function describeMethod(name, ret) {
+    function describeMethod (name, ret) {
       describe(name, () => {
         it('should call underlying api', () => {
           if (ret === SELF) {
@@ -197,7 +252,7 @@ describe('Plugin', () => {
       })
     }
 
-    function describeSubsystem(name, command, ret) {
+    function describeSubsystem (name, command, ret) {
       describe(`${name}:${command}`, () => {
         it('should call underlying api', () => {
           const options = {
