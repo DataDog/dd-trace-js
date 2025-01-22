@@ -123,7 +123,7 @@ withVersions('passport-http', 'passport-http', version => {
         }
       })
 
-      expect(res.status).to.equal(200)
+      expect(res.status).to.equal(403) // try to break the test 
       expect(res.data).to.equal('Granted')
       expect(subscriberStub).to.be.calledOnceWithExactly({
         framework: 'passport-basic',
