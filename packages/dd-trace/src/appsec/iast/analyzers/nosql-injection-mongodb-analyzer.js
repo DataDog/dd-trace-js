@@ -106,7 +106,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
   _isVulnerableRange (range) {
     const rangeType = range?.iinfo?.type
     const isVulnerableType = rangeType === HTTP_REQUEST_PARAMETER || rangeType === HTTP_REQUEST_BODY
-    return isVulnerableType && (range.secureMarks & NOSQL_MONGODB_INJECTION_MARK) !== NOSQL_MONGODB_INJECTION_MARK
+    return isVulnerableType && !this._isRangeSecure(range)
   }
 
   _isVulnerable (value, iastContext) {
