@@ -24,12 +24,13 @@ Most of the documentation for `dd-trace` is available on these webpages:
 
 | Release Line                                             | Latest Version                                                                                         | Node.js  | [SSI](https://docs.datadoghq.com/tracing/trace_collection/automatic_instrumentation/single-step-apm/?tab=linuxhostorvm) | [K8s Injection](https://docs.datadoghq.com/tracing/trace_collection/library_injection_local/?tab=kubernetes) |Status          |Initial Release | End of Life |
 | :---:                                                    | :---:                                                                                                  | :---:    | :---:  | :---:  | :---:           | :---:          | :---:       |
-| [`v1`](https://github.com/DataDog/dd-trace-js/tree/v1.x) | ![npm v1](https://img.shields.io/npm/v/dd-trace/legacy-v1?color=white&label=%20&style=flat-square)     | `>= v12` | NO | NO | **End of Life** | 2021-07-13     | 2022-02-25  |
-| [`v2`](https://github.com/DataDog/dd-trace-js/tree/v2.x) | ![npm v2](https://img.shields.io/npm/v/dd-trace/latest-node12?color=white&label=%20&style=flat-square) | `>= v12` | NO | NO | **End of Life** | 2022-01-28     | 2023-08-15  |
-| [`v3`](https://github.com/DataDog/dd-trace-js/tree/v3.x) | ![npm v3](https://img.shields.io/npm/v/dd-trace/latest-node14?color=white&label=%20&style=flat-square) | `>= v14` | NO | YES | **End of Life** | 2022-08-15     | 2024-05-15  |
-| [`v4`](https://github.com/DataDog/dd-trace-js/tree/v4.x) | ![npm v4](https://img.shields.io/npm/v/dd-trace/latest-node16?color=white&label=%20&style=flat-square) | `>= v16` | YES | YES | **End of Life**     | 2023-05-12     | 2025-01-11     |
+| [`v1`](https://github.com/DataDog/dd-trace-js/tree/v1.x) | ![npm v1](https://img.shields.io/npm/v/dd-trace/legacy-v1?color=white&label=%20&style=flat-square)     | `>= v12` | NO | NO | **EOL** | 2021-07-13     | 2022-02-25  |
+| [`v2`](https://github.com/DataDog/dd-trace-js/tree/v2.x) | ![npm v2](https://img.shields.io/npm/v/dd-trace/latest-node12?color=white&label=%20&style=flat-square) | `>= v12` | NO | NO | **EOL** | 2022-01-28     | 2023-08-15  |
+| [`v3`](https://github.com/DataDog/dd-trace-js/tree/v3.x) | ![npm v3](https://img.shields.io/npm/v/dd-trace/latest-node14?color=white&label=%20&style=flat-square) | `>= v14` | NO | YES | **EOL** | 2022-08-15     | 2024-05-15  |
+| [`v4`](https://github.com/DataDog/dd-trace-js/tree/v4.x) | ![npm v4](https://img.shields.io/npm/v/dd-trace/latest-node16?color=white&label=%20&style=flat-square) | `>= v16` | YES | YES | **EOL**     | 2023-05-12     | 2025-01-11     |
 | [`v5`](https://github.com/DataDog/dd-trace-js/tree/v5.x) | ![npm v5](https://img.shields.io/npm/v/dd-trace/latest?color=white&label=%20&style=flat-square)        | `>= v18` | YES | YES | **Current**     | 2024-01-11     | Unknown     |
 
+* EOL = End-of-life
 * SSI = Single-Step Install
 
 We currently maintain one release line, namely `v5`.
@@ -56,7 +57,7 @@ Such releases are kept to a minimum to reduce the pain of upgrading the library.
 
 When a new release line is introduced the previous release line then enters maintenance mode where it will receive updates for the next year.
 Once that year is up the release line enters End of Life and will not receive new updates.
-The library also follows the Node.js LTS lifecycle wherein new release lines drop compatibility with Node.js versions that reach end of life (with the maintenance release line still receiving updates for a year).
+The library also follows the Node.js LTS lifecycle wherein new release lines drop compatibility with Node.js versions that reach end-of-life (with the maintenance release line still receiving updates for a year).
 
 For more information about library versioning and compatibility, see the [NodeJS Compatibility Requirements](https://docs.datadoghq.com/tracing/trace_collection/compatibility/nodejs/#releases) page.
 
