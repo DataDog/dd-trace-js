@@ -274,7 +274,7 @@ jobs:
   passport:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: passport-local|passport-http
+      PLUGINS: passport-local|passport-http|passport
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
