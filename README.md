@@ -23,13 +23,15 @@ Most of the documentation for `dd-trace` is available on these webpages:
 
 ## Version Release Lines and Maintenance
 
-| Release Line                                             | Latest Version                                                                                         | Node.js  | Status          |Initial Release | End of Life |
-| :---:                                                    | :---:                                                                                                  | :---:    | :---:           | :---:          | :---:       |
-| [`v1`](https://github.com/DataDog/dd-trace-js/tree/v1.x) | ![npm v1](https://img.shields.io/npm/v/dd-trace/legacy-v1?color=white&label=%20&style=flat-square)     | `>= v12` | **End of Life** | 2021-07-13     | 2022-02-25  |
-| [`v2`](https://github.com/DataDog/dd-trace-js/tree/v2.x) | ![npm v2](https://img.shields.io/npm/v/dd-trace/latest-node12?color=white&label=%20&style=flat-square) | `>= v12` | **End of Life** | 2022-01-28     | 2023-08-15  |
-| [`v3`](https://github.com/DataDog/dd-trace-js/tree/v3.x) | ![npm v3](https://img.shields.io/npm/v/dd-trace/latest-node14?color=white&label=%20&style=flat-square) | `>= v14` | **End of Life** | 2022-08-15     | 2024-05-15  |
-| [`v4`](https://github.com/DataDog/dd-trace-js/tree/v4.x) | ![npm v4](https://img.shields.io/npm/v/dd-trace/latest-node16?color=white&label=%20&style=flat-square)        | `>= v16` | **Maintenance**     | 2023-05-12     | 2025-01-11     |
-| [`v5`](https://github.com/DataDog/dd-trace-js/tree/v5.x) | ![npm v5](https://img.shields.io/npm/v/dd-trace/latest?color=white&label=%20&style=flat-square)        | `>= v18` | **Current**     | 2024-01-11     | Unknown     |
+| Release Line                                             | Latest Version                                                                                         | Node.js  | [SSI](https://docs.datadoghq.com/tracing/trace_collection/automatic_instrumentation/single-step-apm/?tab=linuxhostorvm) | [K8s Injection](https://docs.datadoghq.com/tracing/trace_collection/library_injection_local/?tab=kubernetes) |Status          |Initial Release | End of Life |
+| :---:                                                    | :---:                                                                                                  | :---:    | :---:  | :---:  | :---:           | :---:          | :---:       |
+| [`v1`](https://github.com/DataDog/dd-trace-js/tree/v1.x) | ![npm v1](https://img.shields.io/npm/v/dd-trace/legacy-v1?color=white&label=%20&style=flat-square)     | `>= v12` | NO | NO | **End of Life** | 2021-07-13     | 2022-02-25  |
+| [`v2`](https://github.com/DataDog/dd-trace-js/tree/v2.x) | ![npm v2](https://img.shields.io/npm/v/dd-trace/latest-node12?color=white&label=%20&style=flat-square) | `>= v12` | NO | NO | **End of Life** | 2022-01-28     | 2023-08-15  |
+| [`v3`](https://github.com/DataDog/dd-trace-js/tree/v3.x) | ![npm v3](https://img.shields.io/npm/v/dd-trace/latest-node14?color=white&label=%20&style=flat-square) | `>= v14` | NO | YES | **End of Life** | 2022-08-15     | 2024-05-15  |
+| [`v4`](https://github.com/DataDog/dd-trace-js/tree/v4.x) | ![npm v4](https://img.shields.io/npm/v/dd-trace/latest-node16?color=white&label=%20&style=flat-square) | `>= v16` | YES | YES | **Maintenance**     | 2023-05-12     | 2025-01-11     |
+| [`v5`](https://github.com/DataDog/dd-trace-js/tree/v5.x) | ![npm v5](https://img.shields.io/npm/v/dd-trace/latest?color=white&label=%20&style=flat-square)        | `>= v18` | YES | YES | **Current**     | 2024-01-11     | Unknown     |
+
+* SSI = Single-Step Install
 
 We currently maintain two release lines, namely `v5`, and `v4`.
 Features and bug fixes that are merged are released to the `v5` line and, if appropriate, also `v4`.
