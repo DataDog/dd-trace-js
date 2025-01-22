@@ -9,7 +9,7 @@ class InjectionAnalyzer extends Analyzer {
     if (ranges?.length > 0) {
       ranges = this._filterSecureRanges(ranges)
       if (!ranges.length) {
-        this._incrementSupressedMetric(iastContext)
+        this._incrementSuppressedMetric(iastContext)
       }
       return this._areRangesVulnerable(ranges)
     }

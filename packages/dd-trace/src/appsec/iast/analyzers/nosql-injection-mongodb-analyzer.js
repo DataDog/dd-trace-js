@@ -126,7 +126,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
 
           ranges = this._filterSecureRanges(ranges)
           if (!ranges.length) {
-            this._incrementSupressedMetric(iastContext)
+            this._incrementSuppressedMetric(iastContext)
           }
 
           for (const range of ranges) {

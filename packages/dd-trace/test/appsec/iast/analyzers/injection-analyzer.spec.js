@@ -63,25 +63,25 @@ describe('InjectionAnalyzer', () => {
       assert.isFalse(analyzer._isVulnerable('tained'))
     })
 
-    describe('supressed vulnerabilities metric', () => {
+    describe('suppressed vulnerabilities metric', () => {
       const iastContext = {}
 
       it('should not increase metric', () => {
-        const incrementSupressedMetric = sinon.stub(analyzer, '_incrementSupressedMetric')
+        const incrementSuppressedMetric = sinon.stub(analyzer, '_incrementSuppressedMetric')
 
         ranges = getRanges('tainted', COMMAND_INJECTION_MARK)
         analyzer._isVulnerable('tainted', iastContext)
 
-        sinon.assert.notCalled(incrementSupressedMetric)
+        sinon.assert.notCalled(incrementSuppressedMetric)
       })
 
       it('should increase metric', () => {
-        const incrementSupressedMetric = sinon.stub(analyzer, '_incrementSupressedMetric')
+        const incrementSuppressedMetric = sinon.stub(analyzer, '_incrementSuppressedMetric')
 
         ranges = getRanges('tainted', SQL_INJECTION_MARK)
         analyzer._isVulnerable('tainted', iastContext)
 
-        sinon.assert.calledOnceWithExactly(incrementSupressedMetric, iastContext)
+        sinon.assert.calledOnceWithExactly(incrementSuppressedMetric, iastContext)
       })
     })
 
