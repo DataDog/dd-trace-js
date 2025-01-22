@@ -45,12 +45,17 @@ function onModuleLoaded (payload) {
 }
 
 function getControls (filename) {
+  if (filename.startsWith('file://')) {
+    filename = filename.substring(7)
+  }
+
   let key = path.isAbsolute(filename) ? path.relative(process.cwd(), filename) : filename
   key = key.replaceAll(path.sep, path.posix.sep)
 
   if (key.includes('node_modules')) {
     key = [...controls.keys()].find(file => key.endsWith(file))
   }
+
   return controls.get(key)
 }
 
@@ -85,7 +90,12 @@ function hookModule (filename, module, controlsByFile) {
 
 function resolve (path, obj, separator = '.') {
   if (!path) {
-    return { target: obj, parent: obj }
+    // esm module with default export
+    if (obj?.default) {
+      return { target: obj.default, parent: obj, methodName: 'default' }
+    } else {
+      return { target: obj, parent: obj }
+    }
   }
 
   const properties = path.split(separator)
