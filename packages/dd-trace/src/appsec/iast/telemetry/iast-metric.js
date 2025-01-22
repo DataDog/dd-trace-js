@@ -83,6 +83,8 @@ const REQUEST_TAINTED = new NoTaggedIastMetric('request.tainted', Scope.REQUEST)
 const EXECUTED_PROPAGATION = new NoTaggedIastMetric('executed.propagation', Scope.REQUEST)
 const EXECUTED_TAINTED = new NoTaggedIastMetric('executed.tainted', Scope.REQUEST)
 
+const SUPRESSED_VULNERABILITIES = new IastMetric('suppressed.vulnerabilities', Scope.REQUEST, TagKey.VULNERABILITY_TYPE)
+
 module.exports = {
   INSTRUMENTED_PROPAGATION,
   INSTRUMENTED_SOURCE,
@@ -94,6 +96,8 @@ module.exports = {
   EXECUTED_TAINTED,
 
   REQUEST_TAINTED,
+
+  SUPRESSED_VULNERABILITIES,
 
   PropagationType,
   TagKey,
