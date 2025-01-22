@@ -155,7 +155,7 @@ describe('Flare', () => {
 
     debugChannel.publish('foo')
     debugChannel.publish('bar')
-    debugChannel.publish({foo: 'bar'})
+    debugChannel.publish({ foo: 'bar' })
 
     flare.send(task)
   })
