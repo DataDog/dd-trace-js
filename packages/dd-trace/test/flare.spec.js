@@ -142,7 +142,7 @@ describe('Flare', () => {
 
         const content = file.buffer.toString()
 
-        expect(content).to.equal('foo\nbar\n')
+        expect(content).to.equal('foo\nbar\n{"foo":"bar"}\n')
 
         done()
       } catch (e) {
@@ -155,6 +155,7 @@ describe('Flare', () => {
 
     debugChannel.publish('foo')
     debugChannel.publish('bar')
+    debugChannel.publish({foo: 'bar'})
 
     flare.send(task)
   })

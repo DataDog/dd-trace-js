@@ -92,6 +92,9 @@ const flare = {
 function recordLog (msg) {
   if (tracerLogs.length > MAX_LOG_SIZE) return
 
+  if (msg && typeof msg === 'object') {
+    msg = JSON.stringify(msg)
+  }
   tracerLogs.write(`${msg}\n`) // TODO: gzip
 }
 
