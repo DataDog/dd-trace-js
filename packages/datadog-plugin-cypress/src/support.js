@@ -1,5 +1,6 @@
 /* eslint-disable */
 let isEarlyFlakeDetectionEnabled = false
+let isKnownTestsEnabled = false
 let knownTestsForSuite = []
 let suiteTests = []
 let earlyFlakeDetectionNumRetries = 0
@@ -33,7 +34,7 @@ function retryTest (test, suiteTests) {
 
 const oldRunTests = Cypress.mocha.getRunner().runTests
 Cypress.mocha.getRunner().runTests = function (suite, fn) {
-  if (!isEarlyFlakeDetectionEnabled) {
+  if (!isKnownTestsEnabled) {
     return oldRunTests.apply(this, arguments)
   }
   // We copy the new tests at the beginning of the suite run (runTests), so that they're run
@@ -41,7 +42,9 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
   suite.tests.forEach(test => {
     if (!test._ddIsNew && !test.isPending() && isNewTest(test)) {
       test._ddIsNew = true
-      retryTest(test, suite.tests)
+      if (isEarlyFlakeDetectionEnabled) {
+        retryTest(test, suite.tests)
+      }
     }
   })
 
@@ -67,6 +70,7 @@ before(function () {
   }).then((suiteConfig) => {
     if (suiteConfig) {
       isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled
+      isKnownTestsEnabled = suiteConfig.isKnownTestsEnabled
       knownTestsForSuite = suiteConfig.knownTestsForSuite
       earlyFlakeDetectionNumRetries = suiteConfig.earlyFlakeDetectionNumRetries
     }
