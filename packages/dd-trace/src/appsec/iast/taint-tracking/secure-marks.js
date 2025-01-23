@@ -21,5 +21,7 @@ function getMarkFromVulnerabilityType (vulnerabilityType) {
 
 module.exports = {
   ...marks,
-  getMarkFromVulnerabilityType
+  getMarkFromVulnerabilityType,
+
+  ALL: marks
 }
