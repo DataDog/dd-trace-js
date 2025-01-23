@@ -59,6 +59,11 @@ class HttpClientPlugin extends ClientPlugin {
     }
 
     if (this.shouldInjectTraceHeaders(options, uri)) {
+      // Clone the headers object in case an upstream lib has a reference to the original headers
+      // Implemented due to aws-sdk issue where request signing is broken if we mutate the headers
+      // Explained further in:
+      // https://github.com/open-telemetry/opentelemetry-js-contrib/issues/1609#issuecomment-1826167348
+      options.headers = Object.assign({}, options.headers)
       this.tracer.inject(span, HTTP_HEADERS, options.headers)
     }
 
@@ -72,10 +77,6 @@ class HttpClientPlugin extends ClientPlugin {
   }
 
   shouldInjectTraceHeaders (options, uri) {
-    if (hasAmazonSignature(options) && !this.config.enablePropagationWithAmazonHeaders) {
-      return false
-    }
-
     if (!this.config.propagationFilter(uri)) {
       return false
     }
@@ -212,31 +213,6 @@ function getHooks (config) {
   return { request }
 }
 
-function hasAmazonSignature (options) {
-  if (!options) {
-    return false
-  }
-
-  if (options.headers) {
-    const headers = Object.keys(options.headers)
-      .reduce((prev, next) => Object.assign(prev, {
-        [next.toLowerCase()]: options.headers[next]
-      }), {})
-
-    if (headers['x-amz-signature']) {
-      return true
-    }
-
-    if ([].concat(headers.authorization).some(startsWith('AWS4-HMAC-SHA256'))) {
-      return true
-    }
-  }
-
-  const search = options.search || options.path
-
-  return search && search.toLowerCase().indexOf('x-amz-signature=') !== -1
-}
-
 function extractSessionDetails (options) {
   if (typeof options === 'string') {
     return new URL(options).host
@@ -246,10 +222,6 @@ function extractSessionDetails (options) {
   const port = options.port
 
   return { host, port }
-}
-
-function startsWith (searchString) {
-  return value => String(value).startsWith(searchString)
 }
 
 module.exports = HttpClientPlugin

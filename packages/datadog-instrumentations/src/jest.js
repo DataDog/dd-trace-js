@@ -69,6 +69,7 @@ let earlyFlakeDetectionNumRetries = 0
 let earlyFlakeDetectionFaultyThreshold = 30
 let isEarlyFlakeDetectionFaulty = false
 let hasFilteredSkippableSuites = false
+let isKnownTestsEnabled = false
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -138,17 +139,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.isFlakyTestRetriesEnabled = this.testEnvironmentOptions._ddIsFlakyTestRetriesEnabled
       this.flakyTestRetriesCount = this.testEnvironmentOptions._ddFlakyTestRetriesCount
       this.isDiEnabled = this.testEnvironmentOptions._ddIsDiEnabled
+      this.isKnownTestsEnabled = this.testEnvironmentOptions._ddIsKnownTestsEnabled
 
-      if (this.isEarlyFlakeDetectionEnabled) {
-        const hasKnownTests = !!knownTests.jest
-        earlyFlakeDetectionNumRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionNumRetries
+      if (this.isKnownTestsEnabled) {
         try {
+          const hasKnownTests = !!knownTests.jest
+          earlyFlakeDetectionNumRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionNumRetries
           this.knownTestsForThisSuite = hasKnownTests
             ? (knownTests.jest[this.testSuite] || [])
             : this.getKnownTestsForSuite(this.testEnvironmentOptions._ddKnownTests)
         } catch (e) {
           // If there has been an error parsing the tests, we'll disable Early Flake Deteciton
           this.isEarlyFlakeDetectionEnabled = false
+          this.isKnownTestsEnabled = false
         }
       }
 
@@ -228,7 +231,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         asyncResources.set(event.test, asyncResource)
         const testName = getJestTestName(event.test)
 
-        if (this.isEarlyFlakeDetectionEnabled) {
+        if (this.isKnownTestsEnabled) {
           const originalTestName = removeEfdStringFromTestName(testName)
           isNewTest = retriedTestsToNumAttempts.has(originalTestName)
           if (isNewTest) {
@@ -254,24 +257,26 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         })
       }
       if (event.name === 'add_test') {
-        if (this.isEarlyFlakeDetectionEnabled) {
+        if (this.isKnownTestsEnabled) {
           const testName = this.getTestNameFromAddTestEvent(event, state)
           const isNew = !this.knownTestsForThisSuite?.includes(testName)
           const isSkipped = event.mode === 'todo' || event.mode === 'skip'
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testName)) {
             retriedTestsToNumAttempts.set(testName, 0)
-            // Retrying snapshots has proven to be problematic, so we'll skip them for now
-            // We'll still detect new tests, but we won't retry them.
-            // TODO: do not bail out of EFD with the whole test suite
-            if (this.getHasSnapshotTests()) {
-              log.warn('Early flake detection is disabled for suites with snapshots')
-              return
-            }
-            for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
-              if (this.global.test) {
-                this.global.test(addEfdStringToTestName(event.testName, retryIndex), event.fn, event.timeout)
-              } else {
-                log.error('Early flake detection could not retry test because global.test is undefined')
+            if (this.isEarlyFlakeDetectionEnabled) {
+              // Retrying snapshots has proven to be problematic, so we'll skip them for now
+              // We'll still detect new tests, but we won't retry them.
+              // TODO: do not bail out of EFD with the whole test suite
+              if (this.getHasSnapshotTests()) {
+                log.warn('Early flake detection is disabled for suites with snapshots')
+                return
+              }
+              for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
+                if (this.global.test) {
+                  this.global.test(addEfdStringToTestName(event.testName, retryIndex), event.fn, event.timeout)
+                } else {
+                  log.error('Early flake detection could not retry test because global.test is undefined')
+                }
               }
             }
           }
@@ -286,7 +291,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         event.test.fn = originalTestFns.get(event.test)
 
         // We'll store the test statuses of the retries
-        if (this.isEarlyFlakeDetectionEnabled) {
+        if (this.isKnownTestsEnabled) {
           const testName = getJestTestName(event.test)
           const originalTestName = removeEfdStringFromTestName(testName)
           const isNewTest = retriedTestsToNumAttempts.has(originalTestName)
@@ -303,7 +308,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const numRetries = this.global[RETRY_TIMES]
         const numTestExecutions = event.test?.invocations
         const willBeRetried = numRetries > 0 && numTestExecutions - 1 < numRetries
-        const mightHitBreakpoint = this.isDiEnabled && numTestExecutions >= 1
+        const mightHitBreakpoint = this.isDiEnabled && numTestExecutions >= 2
 
         const asyncResource = asyncResources.get(event.test)
 
@@ -319,7 +324,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
         // After finishing it might take a bit for the snapshot to be handled.
         // This means that tests retried with DI are BREAKPOINT_HIT_GRACE_PERIOD_MS slower at least.
-        if (mightHitBreakpoint) {
+        if (status === 'fail' && mightHitBreakpoint) {
           await new Promise(resolve => {
             setTimeout(() => {
               resolve()
@@ -483,12 +488,13 @@ function cliWrapper (cli, jestVersion) {
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
         earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
+        isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
       }
     } catch (err) {
       log.error('Jest library configuration error', err)
     }
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
       const knownTestsPromise = new Promise((resolve) => {
         onDone = resolve
       })
@@ -504,6 +510,7 @@ function cliWrapper (cli, jestVersion) {
         } else {
           // We disable EFD if there has been an error in the known tests request
           isEarlyFlakeDetectionEnabled = false
+          isKnownTestsEnabled = false
         }
       } catch (err) {
         log.error('Jest known tests error', err)
@@ -821,6 +828,7 @@ addHook({
       _ddIsFlakyTestRetriesEnabled,
       _ddFlakyTestRetriesCount,
       _ddIsDiEnabled,
+      _ddIsKnownTestsEnabled,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 
@@ -848,17 +856,19 @@ addHook({
     const testPaths = await getTestPaths.apply(this, arguments)
     const [{ rootDir, shard }] = arguments
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
       const projectSuites = testPaths.tests.map(test => getTestSuitePath(test.path, test.context.config.rootDir))
       const isFaulty =
         getIsFaultyEarlyFlakeDetection(projectSuites, knownTests.jest || {}, earlyFlakeDetectionFaultyThreshold)
       if (isFaulty) {
         log.error('Early flake detection is disabled because the number of new suites is too high.')
         isEarlyFlakeDetectionEnabled = false
+        isKnownTestsEnabled = false
         const testEnvironmentOptions = testPaths.tests[0]?.context?.config?.testEnvironmentOptions
         // Project config is shared among all tests, so we can modify it here
         if (testEnvironmentOptions) {
           testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled = false
+          testEnvironmentOptions._ddIsKnownTestsEnabled = false
         }
         isEarlyFlakeDetectionFaulty = true
       }
@@ -929,6 +939,11 @@ addHook({
   return runtimePackage
 })
 
+/*
+* This hook does two things:
+* - Pass known tests to the workers.
+* - Receive trace, coverage and logs payloads from the workers.
+*/
 addHook({
   name: 'jest-worker',
   versions: ['>=24.9.0'],
@@ -936,7 +951,7 @@ addHook({
 }, (childProcessWorker) => {
   const ChildProcessWorker = childProcessWorker.default
   shimmer.wrap(ChildProcessWorker.prototype, 'send', send => function (request) {
-    if (!isEarlyFlakeDetectionEnabled) {
+    if (!isKnownTestsEnabled) {
       return send.apply(this, arguments)
     }
     const [type] = request

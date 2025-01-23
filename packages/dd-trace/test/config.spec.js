@@ -265,6 +265,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.redactionNamePattern', null)
     expect(config).to.have.nested.property('iast.redactionValuePattern', null)
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'INFORMATION')
+    expect(config).to.have.nested.property('iast.stackTrace.enabled', true)
     expect(config).to.have.nested.property('installSignature.id', null)
     expect(config).to.have.nested.property('installSignature.time', null)
     expect(config).to.have.nested.property('installSignature.type', null)
@@ -331,6 +332,7 @@ describe('Config', () => {
       { name: 'iast.requestSampling', value: 30, origin: 'default' },
       { name: 'iast.securityControlsConfiguration', value: null, origin: 'default' },
       { name: 'iast.telemetryVerbosity', value: 'INFORMATION', origin: 'default' },
+      { name: 'iast.stackTrace.enabled', value: true, origin: 'default' },
       { name: 'injectionEnabled', value: [], origin: 'default' },
       { name: 'isCiVisibility', value: false, origin: 'default' },
       { name: 'isEarlyFlakeDetectionEnabled', value: false, origin: 'default' },
@@ -511,6 +513,7 @@ describe('Config', () => {
     process.env.DD_IAST_REDACTION_NAME_PATTERN = 'REDACTION_NAME_PATTERN'
     process.env.DD_IAST_REDACTION_VALUE_PATTERN = 'REDACTION_VALUE_PATTERN'
     process.env.DD_IAST_TELEMETRY_VERBOSITY = 'DEBUG'
+    process.env.DD_IAST_STACK_TRACE_ENABLED = 'false'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
     process.env.DD_PROFILING_ENABLED = 'true'
@@ -627,6 +630,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.securityControlsConfiguration',
       'SANITIZER:CODE_INJECTION:sanitizer.js:method')
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
+    expect(config).to.have.nested.property('iast.stackTrace.enabled', false)
     expect(config).to.have.deep.property('installSignature', {
       id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
       type: 'k8s_single_step',
@@ -683,6 +687,7 @@ describe('Config', () => {
         origin: 'env_var'
       },
       { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'env_var' },
+      { name: 'iast.stackTrace.enabled', value: false, origin: 'env_var' },
       { name: 'instrumentation_config_id', value: 'abcdef123', origin: 'env_var' },
       { name: 'injectionEnabled', value: ['profiler'], origin: 'env_var' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
@@ -881,7 +886,10 @@ describe('Config', () => {
           redactionEnabled: false,
           redactionNamePattern: 'REDACTION_NAME_PATTERN',
           redactionValuePattern: 'REDACTION_VALUE_PATTERN',
-          telemetryVerbosity: 'DEBUG'
+          telemetryVerbosity: 'DEBUG',
+          stackTrace: {
+            enabled: false
+          }
         },
         appsec: {
           standalone: {
@@ -957,6 +965,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
     expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
+    expect(config).to.have.nested.property('iast.stackTrace.enabled', false)
     expect(config).to.have.deep.nested.property('sampler', {
       sampleRate: 0.5,
       rateLimit: 1000,
@@ -1011,6 +1020,7 @@ describe('Config', () => {
       { name: 'iast.redactionValuePattern', value: 'REDACTION_VALUE_PATTERN', origin: 'code' },
       { name: 'iast.requestSampling', value: 50, origin: 'code' },
       { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'code' },
+      { name: 'iast.stackTrace.enabled', value: false, origin: 'code' },
       { name: 'peerServiceMapping', value: { d: 'dd' }, origin: 'code' },
       { name: 'plugins', value: false, origin: 'code' },
       { name: 'port', value: '6218', origin: 'code' },
@@ -1233,6 +1243,7 @@ describe('Config', () => {
     process.env.DD_IAST_COOKIE_FILTER_PATTERN = '.*'
     process.env.DD_IAST_REDACTION_NAME_PATTERN = 'name_pattern_to_be_overriden_by_options'
     process.env.DD_IAST_REDACTION_VALUE_PATTERN = 'value_pattern_to_be_overriden_by_options'
+    process.env.DD_IAST_STACK_TRACE_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
     process.env.DD_LLMOBS_ML_APP = 'myMlApp'
@@ -1313,7 +1324,10 @@ describe('Config', () => {
         cookieFilterPattern: '.{10,}',
         dbRowsToTaint: 3,
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
-        redactionValuePattern: 'REDACTION_VALUE_PATTERN'
+        redactionValuePattern: 'REDACTION_VALUE_PATTERN',
+        stackTrace: {
+          enabled: false
+        }
       },
       remoteConfig: {
         pollInterval: 42
@@ -1388,6 +1402,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
     expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
+    expect(config).to.have.nested.property('iast.stackTrace.enabled', false)
     expect(config).to.have.nested.property('llmobs.mlApp', 'myOtherMlApp')
     expect(config).to.have.nested.property('llmobs.agentlessEnabled', false)
   })
@@ -1425,7 +1440,10 @@ describe('Config', () => {
         redactionEnabled: false,
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
         redactionValuePattern: 'REDACTION_VALUE_PATTERN',
-        telemetryVerbosity: 'DEBUG'
+        telemetryVerbosity: 'DEBUG',
+        stackTrace: {
+          enabled: false
+        }
       },
       experimental: {
         appsec: {
@@ -1459,7 +1477,10 @@ describe('Config', () => {
           redactionEnabled: true,
           redactionNamePattern: 'IGNORED_REDACTION_NAME_PATTERN',
           redactionValuePattern: 'IGNORED_REDACTION_VALUE_PATTERN',
-          telemetryVerbosity: 'OFF'
+          telemetryVerbosity: 'OFF',
+          stackTrace: {
+            enabled: true
+          }
         }
       }
     })
@@ -1510,6 +1531,9 @@ describe('Config', () => {
       redactionValuePattern: 'REDACTION_VALUE_PATTERN',
       securityControlsConfiguration: null,
       telemetryVerbosity: 'DEBUG'
+      stackTrace: {
+        enabled: false
+      }
     })
   })
 
