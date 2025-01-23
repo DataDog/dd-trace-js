@@ -2,8 +2,11 @@ const BaseLLMObsPlugin = require('./base')
 const { storage } = require('../../../../datadog-core')
 const llmobsStore = storage('llmobs')
 
-// eslint-disable-next-line @stylistic/js/max-len
-const { extractRequestParams, extractTextAndResponseReason, parseModelId } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
+const { 
+  extractRequestParams, 
+  extractTextAndResponseReason, 
+  parseModelId 
+} = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
 
 const enabledOperations = ['invokeModel']
 
