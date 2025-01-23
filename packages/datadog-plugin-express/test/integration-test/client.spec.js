@@ -47,6 +47,22 @@ describe('esm', () => {
         assert.strictEqual(payload[0].length, numberOfSpans)
         assert.propertyVal(payload[0][0], 'name', 'express.request')
         assert.propertyVal(payload[0][1], 'name', 'express.middleware')
+        console.log(1, payload)
+      })
+    }).timeout(50000)
+
+    it('disables middleware spans when config.middleware is set to false through environment variable', async () => {
+      process.env.DD_TRACE_MIDDLEWARE_ENABLED = false
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      const numberOfSpans = 1
+
+      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+        assert.isArray(payload)
+        assert.strictEqual(payload.length, 1)
+        assert.isArray(payload[0])
+        assert.strictEqual(payload[0].length, numberOfSpans)
+        assert.propertyVal(payload[0][0], 'name', 'express.request')
       })
     }).timeout(50000)
   })
