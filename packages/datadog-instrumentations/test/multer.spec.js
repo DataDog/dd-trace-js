@@ -15,7 +15,7 @@ withVersions('multer', 'multer', version => {
     })
 
     before((done) => {
-      const express = require('../../../versions/express').get()
+      const express = require('express')
       const multer = require(`../../../versions/multer@${version}`).get()
       const uploadToMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200000 } })
 
