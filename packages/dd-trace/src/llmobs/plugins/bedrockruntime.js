@@ -2,10 +2,10 @@ const BaseLLMObsPlugin = require('./base')
 const { storage } = require('../../../../datadog-core')
 const llmobsStore = storage('llmobs')
 
-const { 
-  extractRequestParams, 
-  extractTextAndResponseReason, 
-  parseModelId 
+const {
+  extractRequestParams,
+  extractTextAndResponseReason,
+  parseModelId
 } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
 
 const enabledOperations = ['invokeModel']
@@ -15,26 +15,24 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     super(...arguments)
 
     this.addSub('apm:aws:request:complete:bedrockruntime', ({ response }) => {
-      const operation = response.request.operation
+      const request = response.request
+      const operation = request.operation
       // avoids instrumenting other non supported runtime operations
       if (!enabledOperations.includes(operation)) {
         return
       }
-      const { modelName } = parseModelId(response.request.params.modelId)
+      const { modelProvider, modelName } = parseModelId(request.params.modelId)
 
       // avoids instrumenting non llm type
       if (modelName.includes('embed')) {
         return
       }
-      const request = response.request
       const span = storage.getStore()?.span
-      this.setLLMObsTags({ request, span, response })
+      this.setLLMObsTags({ request, span, response, modelProvider, modelName })
     })
   }
 
-  setLLMObsTags ({ request, span, response }) {
-    const { modelProvider, modelName } = parseModelId(request.params.modelId)
-
+  setLLMObsTags ({ request, span, response, modelProvider, modelName }) {
     const parent = llmobsStore.getStore()?.span
     this._tagger.registerLLMObsSpan(span, {
       parent,
@@ -54,11 +52,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     })
 
     // add I/O tags
-    if (modelName.includes('embed')) {
-      this._tagger.tagEmbeddingIO(span, requestParams.prompt, textAndResponseReason.message)
-    } else {
-      this._tagger.tagLLMIO(span, requestParams.prompt, textAndResponseReason.message)
-    }
+    this._tagger.tagLLMIO(span, requestParams.prompt, textAndResponseReason.message)
   }
 }
 
