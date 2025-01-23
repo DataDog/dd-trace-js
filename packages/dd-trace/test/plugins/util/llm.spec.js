@@ -39,7 +39,7 @@ describe('llm utils', () => {
       utils = makeUtilities('langchain', {
         langchain: {
           spanCharLimit: 100,
-          spanPromptCompletionSampleRate: 0.5
+          spanPromptCompletionSampleRate: 0.6
         }
       })
     })
@@ -49,23 +49,9 @@ describe('llm utils', () => {
       expect(utils.normalize(text)).to.equal('a'.repeat(100) + '...')
     })
 
-    describe('with a random value greater than 50%', () => {
+    describe('with a random value greater than 0.6', () => {
       beforeEach(() => {
-        sinon.stub(Math, 'random').returns(0.6)
-      })
-
-      afterEach(() => {
-        Math.random.restore()
-      })
-
-      it('should sample prompt completion at 50%', () => {
-        expect(utils.isPromptCompletionSampled()).to.be.true
-      })
-    })
-
-    describe('with a random value less than 50%', () => {
-      beforeEach(() => {
-        sinon.stub(Math, 'random').returns(0.4)
+        sinon.stub(Math, 'random').returns(0.7)
       })
 
       afterEach(() => {
@@ -74,6 +60,20 @@ describe('llm utils', () => {
 
       it('should not sample prompt completion', () => {
         expect(utils.isPromptCompletionSampled()).to.be.false
+      })
+    })
+
+    describe('with a random value less than 0.6', () => {
+      beforeEach(() => {
+        sinon.stub(Math, 'random').returns(0.5)
+      })
+
+      afterEach(() => {
+        Math.random.restore()
+      })
+
+      it('should sample prompt completion', () => {
+        expect(utils.isPromptCompletionSampled()).to.be.true
       })
     })
   })
