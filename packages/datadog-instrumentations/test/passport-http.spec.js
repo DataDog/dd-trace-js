@@ -78,6 +78,8 @@ withVersions('passport-http', 'passport-http', version => {
         })
       )
 
+      throw 'THIS SHOULD FAIL BUT NO'
+
       app.get('/grant', (req, res) => {
         res.send('Granted')
       })
