@@ -86,8 +86,15 @@ function reportStackTrace (rootSpan, stackId, frames, namespace = STACK_TRACE_NA
   })
 }
 
+function canReportStackTrace (rootSpan, maxStackTraces, namespace = STACK_TRACE_NAMESPACES.RASP) {
+  if (!rootSpan) return false
+
+  return maxStackTraces < 1 || (rootSpan.meta_struct?.['_dd.stack']?.[namespace]?.length ?? 0) < maxStackTraces
+}
+
 module.exports = {
   getCallsiteFrames,
   reportStackTrace,
+  canReportStackTrace,
   STACK_TRACE_NAMESPACES
 }

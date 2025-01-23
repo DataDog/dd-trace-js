@@ -1,7 +1,7 @@
 'use strict'
 
 const web = require('../../plugins/util/web')
-const { getCallsiteFrames, reportStackTrace, STACK_TRACE_NAMESPACES } = require('../stack_trace')
+const { getCallsiteFrames, reportStackTrace, canReportStackTrace } = require('../stack_trace')
 const { getBlockingAction } = require('../blocking')
 const log = require('../../log')
 
@@ -61,13 +61,6 @@ function handleResult (actions, req, res, abortController, config) {
       }
     }
   }
-}
-
-function canReportStackTrace (rootSpan, maxStackTraces) {
-  if (!rootSpan) return false
-
-  return maxStackTraces < 1 ||
-    (rootSpan.meta_struct?.['_dd.stack']?.[STACK_TRACE_NAMESPACES.RASP]?.length ?? 0) < maxStackTraces
 }
 
 module.exports = {
