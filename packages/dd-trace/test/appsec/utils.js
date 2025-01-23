@@ -1,3 +1,5 @@
+'use strict'
+
 function getWebSpan (traces) {
   for (const trace of traces) {
     for (const span of trace) {
