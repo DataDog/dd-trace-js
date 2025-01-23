@@ -24,6 +24,7 @@ describe('ESM', () => {
   after(async function () {
     await sandbox.remove()
   })
+
   const nodeOptionsList = [
     '--import dd-trace/initialize.mjs',
     '--require dd-trace/init.js --loader dd-trace/loader-hook.mjs'
@@ -67,7 +68,7 @@ describe('ESM', () => {
         throw err
       }
 
-      it('test endpoint have COMMAND_INJECTION vulnerability', async function () {
+      it('should detect COMMAND_INJECTION vulnerability', async function () {
         await axios.get('/cmdi-vulnerable?args=-la')
 
         await agent.assertMessageReceived(({ payload }) => {
@@ -78,7 +79,7 @@ describe('ESM', () => {
         }, null, 1, true)
       })
 
-      it('test endpoint have COMMAND_INJECTION vulnerability in imported file', async () => {
+      it('should detect COMMAND_INJECTION vulnerability in imported file', async () => {
         await axios.get('/more/cmdi-vulnerable?args=-la')
 
         await agent.assertMessageReceived(({ payload }) => {

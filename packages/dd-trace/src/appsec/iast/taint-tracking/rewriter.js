@@ -164,6 +164,9 @@ function enableEsmRewriter (telemetryVerbosity) {
   if (isMainThread && Module.register && !esmRewriterEnabled) {
     esmRewriterEnabled = true
     const { port1, port2 } = new MessageChannel()
+    port1.unref()
+    port2.unref()
+
     port1.on('message', (message) => {
       const { type, data } = message
       switch (type) {
@@ -176,8 +179,6 @@ function enableEsmRewriter (telemetryVerbosity) {
           break
       }
     })
-    port1.unref()
-    port2.unref()
 
     const chainSourceMap = isFlagPresent('--enable-source-maps')
     const data = {

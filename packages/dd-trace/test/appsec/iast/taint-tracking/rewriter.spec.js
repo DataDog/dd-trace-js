@@ -2,6 +2,8 @@
 
 const { expect } = require('chai')
 const proxyquire = require('proxyquire')
+const constants = require('../../../../src/appsec/iast/taint-tracking/constants')
+const dc = require('dc-polyfill')
 
 describe('IAST Rewriter', () => {
   it('Addon should return a rewritter instance', () => {
@@ -13,7 +15,7 @@ describe('IAST Rewriter', () => {
   })
 
   describe('Enabling rewriter', () => {
-    let rewriter, iastTelemetry, shimmer
+    let rewriter, iastTelemetry, shimmer, Module, cacheRewrittenSourceMap, log, rewriterTelemetry
 
     class Rewriter {
       rewrite (content, filename) {
@@ -36,7 +38,20 @@ describe('IAST Rewriter', () => {
         unwrap: sinon.spy()
       }
 
+      Module = {
+        register: sinon.stub()
+      }
+
+      cacheRewrittenSourceMap = sinon.stub()
+
+      log = {
+        error: sinon.stub()
+      }
+
       const kSymbolPrepareStackTrace = Symbol('kTestSymbolPrepareStackTrace')
+      rewriterTelemetry = {
+        incrementTelemetryIfNeeded: sinon.stub()
+      }
 
       rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {
         '@datadog/native-iast-rewriter': {
@@ -50,10 +65,14 @@ describe('IAST Rewriter', () => {
             })
             return testWrap
           },
-          kSymbolPrepareStackTrace
+          kSymbolPrepareStackTrace,
+          cacheRewrittenSourceMap
         },
         '../../../../../datadog-shimmer': shimmer,
-        '../../telemetry': iastTelemetry
+        '../../telemetry': iastTelemetry,
+        module: Module,
+        '../../../log': log,
+        './rewriter-telemetry': rewriterTelemetry
       })
     })
 
@@ -126,6 +145,155 @@ describe('IAST Rewriter', () => {
       expect(Error.prepareStackTrace).to.be.eq(testPrepareStackTrace)
 
       Error.prepareStackTrace = orig
+    })
+
+    describe('esm rewriter', () => {
+      let originalNodeOptions, originalExecArgv
+
+      beforeEach(() => {
+        originalNodeOptions = process.env.NODE_OPTIONS
+        originalExecArgv = process.execArgv
+        process.env.NODE_OPTIONS = ''
+        process.execArgv = []
+      })
+
+      afterEach(() => {
+        process.env.NODE_OPTIONS = originalNodeOptions
+        process.execArgv = originalExecArgv
+        rewriter.disableRewriter()
+      })
+
+      it('Should not enable esm rewriter when ESM is not instrumented', () => {
+        rewriter.enableRewriter()
+
+        expect(Module.register).not.to.be.called
+      })
+
+      it('Should enable esm rewriter when ESM is configured with --loader exec arg', () => {
+        process.execArgv = ['--loader', 'dd-trace/initialize.mjs']
+
+        rewriter.enableRewriter()
+
+        expect(Module.register).to.be.calledOnce
+      })
+
+      it('Should enable esm rewriter when ESM is configured with --experimental-loader exec arg', () => {
+        process.execArgv = ['--experimental-loader', 'dd-trace/initialize.mjs']
+
+        rewriter.enableRewriter()
+
+        expect(Module.register).to.be.calledOnce
+      })
+
+      it('Should enable esm rewriter when ESM is configured with --loader in NODE_OPTIONS', () => {
+        process.env.NODE_OPTIONS = '--loader dd-trace/initialize.mjs'
+
+        rewriter.enableRewriter()
+
+        expect(Module.register).to.be.calledOnce
+      })
+
+      it('Should enable esm rewriter when ESM is configured with --experimental-loader in NODE_OPTIONS', () => {
+        process.env.NODE_OPTIONS = '--experimental-loader dd-trace/initialize.mjs'
+
+        rewriter.enableRewriter()
+
+        expect(Module.register).to.be.calledOnce
+      })
+
+      describe('thread communication', () => {
+        let port
+
+        beforeEach(() => {
+          process.execArgv = ['--loader', 'dd-trace/initialize.mjs']
+          rewriter.enableRewriter()
+          port = Module.register.args[0][1].data.port
+        })
+
+        it('should cache sourceMaps when metrics status is modified', (done) => {
+          const content = 'file-content'
+          const data = {
+            rewritten: {
+              metrics: { status: 'modified' },
+              content
+            },
+            url: 'file://file.js'
+          }
+
+          port.postMessage({ type: constants.REWRITTEN, data })
+
+          setTimeout(() => {
+            expect(cacheRewrittenSourceMap).to.be.calledOnceWith('file.js', content)
+
+            done()
+          })
+        })
+
+        it('should call to increment telemetry', (done) => {
+          const content = 'file-content'
+          const metrics = { status: 'modified' }
+          const data = {
+            rewritten: {
+              metrics,
+              content
+            },
+            url: 'file://file.js'
+          }
+
+          port.postMessage({ type: constants.REWRITTEN, data })
+
+          setTimeout(() => {
+            expect(rewriterTelemetry.incrementTelemetryIfNeeded).to.be.calledOnceWith(metrics)
+
+            done()
+          })
+        })
+
+        it('should publish hardcoded secrets channel with literals', (done) => {
+          const content = 'file-content'
+          const metrics = { status: 'modified' }
+          const literalsResult = ['literal1', 'literal2']
+          const data = {
+            rewritten: {
+              metrics,
+              content,
+              literalsResult
+            },
+            url: 'file://file.js'
+          }
+          const hardcodedSecretCh = dc.channel('datadog:secrets:result')
+
+          function onHardcodedSecret (literals) {
+            expect(literals).to.deep.equal(literalsResult)
+
+            done()
+          }
+
+          hardcodedSecretCh.subscribe(onHardcodedSecret)
+
+          port.postMessage({ type: constants.REWRITTEN, data })
+
+          setTimeout(() => {
+            hardcodedSecretCh.unsubscribe(onHardcodedSecret)
+          })
+        })
+
+        it('should log the message', (done) => {
+          const messages = ['this is a %s', 'test']
+          const data = {
+            level: 'error',
+            messages
+          }
+
+          port.postMessage({ type: constants.LOG, data })
+
+          setTimeout(() => {
+            expect(log.error).to.be.calledOnceWith(...messages)
+
+            done()
+          })
+        })
+      })
     })
   })
 
