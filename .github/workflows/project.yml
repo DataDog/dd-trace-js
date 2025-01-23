@@ -170,13 +170,16 @@ jobs:
       - uses: ./.github/actions/install
       - run: node scripts/verify-ci-config.js
 
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: actionlint
-        id: actionlint  #optional, id required only when outputs are used in the workflow steps later
+        id: actionlint
         uses: raven-actions/actionlint@v2
         with:
           matcher: true
           fail-on-error: true
-
       - name: actionlint Summary
         if: ${{ steps.actionlint.outputs.exit-code != 0 }}
         run: |
