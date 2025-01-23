@@ -158,6 +158,7 @@ module.exports = class CiPlugin extends Plugin {
         if (err) {
           log.error('Known tests could not be fetched. %s', err.message)
           this.libraryConfig.isEarlyFlakeDetectionEnabled = false
+          this.libraryConfig.isKnownTestsEnabled = false
         }
         onDone({ err, knownTests })
       })
@@ -184,12 +185,16 @@ module.exports = class CiPlugin extends Plugin {
     }
   }
 
-  configure (config) {
+  configure (config, shouldGetEnvironmentData = true) {
     super.configure(config)
 
-    if (config.isTestDynamicInstrumentationEnabled) {
+    if (config.isTestDynamicInstrumentationEnabled && !this.di) {
       const testVisibilityDynamicInstrumentation = require('../ci-visibility/dynamic-instrumentation')
       this.di = testVisibilityDynamicInstrumentation
+    }
+
+    if (!shouldGetEnvironmentData) {
+      return
     }
 
     this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.id, this.config)
@@ -320,6 +325,7 @@ module.exports = class CiPlugin extends Plugin {
     )
 
     const activeTestSpanContext = this.activeTestSpan.context()
+
     this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
       debugger: { snapshot },
       dd: {
