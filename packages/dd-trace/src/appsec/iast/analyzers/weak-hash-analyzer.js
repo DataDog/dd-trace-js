@@ -22,7 +22,8 @@ const EXCLUDED_LOCATIONS = getNodeModulesPaths(
   'sqreen/lib/package-reader/index.js',
   'ws/lib/websocket-server.js',
   'google-gax/build/src/grpc.js',
-  'cookie-signature/index.js'
+  'cookie-signature/index.js',
+  'express-session/index.js'
 )
 
 const EXCLUDED_PATHS_FROM_STACK = [
