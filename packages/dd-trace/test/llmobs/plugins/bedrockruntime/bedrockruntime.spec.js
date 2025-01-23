@@ -252,7 +252,7 @@ describe('Plugin', () => {
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
                 spanKind: 'llm',
-                name: 'bedrock-runtime.invokeModel',
+                name: 'bedrock-runtime.command',
                 inputMessages: [
                   { content: model.userPrompt }
                 ],
