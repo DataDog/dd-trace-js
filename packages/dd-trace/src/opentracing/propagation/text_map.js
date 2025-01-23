@@ -325,6 +325,7 @@ class TextMapPropagator {
       if (context === null) {
         context = extractedContext
         if (this._config.tracePropagationExtractFirst) {
+          if (this._hasPropagationStyle('extract', 'baggage') && carrier.baggage) this._extractBaggageItems(carrier, context)
           return context
         }
       } else {
