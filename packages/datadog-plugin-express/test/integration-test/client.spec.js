@@ -36,6 +36,7 @@ describe('esm', () => {
     })
 
     it('is instrumented', async () => {
+      process.env.DD_TRACE_MIDDLEWARE_ENABLED = true
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
       const numberOfSpans = semver.intersects(version, '<5.0.0') ? 4 : 3
 
@@ -46,8 +47,9 @@ describe('esm', () => {
         assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, numberOfSpans)
         assert.propertyVal(payload[0][0], 'name', 'express.request')
-        assert.propertyVal(payload[0][1], 'name', 'express.middleware')
-        console.log(1, payload)
+        for (let i = 1; i < numberOfSpans + 1; i++) {
+          assert.propertyVal(payload[0][i], 'name', 'express.middleware')
+        }
       })
     }).timeout(50000)
 
