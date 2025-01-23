@@ -47,9 +47,7 @@ describe('esm', () => {
         assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, numberOfSpans)
         assert.propertyVal(payload[0][0], 'name', 'express.request')
-        for (let i = 1; i < numberOfSpans + 1; i++) {
-          assert.propertyVal(payload[0][i], 'name', 'express.middleware')
-        }
+        assert.propertyVal(payload[0][1], 'name', 'express.middleware')
       })
     }).timeout(50000)
 
