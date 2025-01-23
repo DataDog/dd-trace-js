@@ -1530,7 +1530,7 @@ describe('Config', () => {
       redactionNamePattern: 'REDACTION_NAME_PATTERN',
       redactionValuePattern: 'REDACTION_VALUE_PATTERN',
       securityControlsConfiguration: null,
-      telemetryVerbosity: 'DEBUG'
+      telemetryVerbosity: 'DEBUG',
       stackTrace: {
         enabled: false
       }
