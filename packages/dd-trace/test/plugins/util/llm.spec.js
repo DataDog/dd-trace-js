@@ -49,16 +49,32 @@ describe('llm utils', () => {
       expect(utils.normalize(text)).to.equal('a'.repeat(100) + '...')
     })
 
-    it('should sample prompt completion at 50%', () => {
-      sinon.stub(Math, 'random').returns(0.4)
-      expect(utils.isPromptCompletionSampled()).to.be.true
-      Math.random.restore()
+    describe('with a random value greater than 50%', () => {
+      beforeEach(() => {
+        sinon.stub(Math, 'random').returns(0.6)
+      })
+
+      afterEach(() => {
+        Math.random.restore()
+      })
+
+      it('should sample prompt completion at 50%', () => {
+        expect(utils.isPromptCompletionSampled()).to.be.true
+      })
     })
 
-    it('should not sample prompt completion at 50%', () => {
-      sinon.stub(Math, 'random').returns(0.6)
-      expect(utils.isPromptCompletionSampled()).to.be.false
-      Math.random.restore()
+    describe('with a random value less than 50%', () => {
+      beforeEach(() => {
+        sinon.stub(Math, 'random').returns(0.4)
+      })
+
+      afterEach(() => {
+        Math.random.restore()
+      })
+
+      it('should not sample prompt completion', () => {
+        expect(utils.isPromptCompletionSampled()).to.be.false
+      })
     })
   })
 })
