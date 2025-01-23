@@ -49,9 +49,6 @@ describe('Plugin', () => {
           // reduce errors related to too many listeners
           process.removeAllListeners('beforeExit')
 
-          sinon.stub(DogStatsDClient.prototype, '_add')
-          sinon.stub(NoopExternalLogger.prototype, 'log')
-          sinon.stub(Sampler.prototype, 'isSampled').returns(true)
 
           LLMObsAgentProxySpanWriter.prototype.append.reset()
 
