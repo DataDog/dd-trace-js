@@ -144,6 +144,15 @@ checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'appsec.yml'))
       pluginErrorMsg(instrumentation, 'ERROR', 'Instrumentation is tested but not in plugins.yml')
     }
   }
+  const allPlugins = fs.readdirSync(path.join(__dirname, '..', 'packages'))
+    .filter(file => file.startsWith('datadog-plugin-'))
+    .filter(file => fs.existsSync(path.join(__dirname, '..', 'packages', file, 'test')))
+    .map(file => file.replace('datadog-plugin-', ''))
+  for (const plugin of allPlugins) {
+    if (!allTestedPlugins.has(plugin)) {
+      pluginErrorMsg(plugin, 'ERROR', 'Plugin is tested but not in plugins.yml')
+    }
+  }
 }
 
 /// /
