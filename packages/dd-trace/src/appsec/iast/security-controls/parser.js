@@ -38,7 +38,7 @@ function parseControl (control) {
 
   if (fields.length < 3 || fields.length > 5) {
     // TODO: do we want telemetry log for these cases?
-    log.warn('Security control configuration is invalid: %s', control)
+    log.warn('[ASM] Security control configuration is invalid: %s', control)
     return
   }
 
@@ -46,14 +46,14 @@ function parseControl (control) {
 
   type = type.toUpperCase()
   if (!validTypes.includes(type)) {
-    log.warn('Invalid security control type: %s', type)
+    log.warn('[ASM] Invalid security control type: %s', type)
     return
   }
 
   let secureMarks = CUSTOM_SECURE_MARK
   getSecureMarks(marks).forEach(mark => { secureMarks |= mark })
   if (secureMarks === CUSTOM_SECURE_MARK) {
-    log.warn('Invalid security control mark: %s', marks)
+    log.warn('[ASM] Invalid security control mark: %s', marks)
     return
   }
 
@@ -77,7 +77,7 @@ function getParameters (parameters) {
 
       // TODO: should we discard the whole securityControl??
       if (isNaN(parsedParam)) {
-        log.warn('Invalid non-numeric security control parameter %s', param)
+        log.warn('[ASM] Invalid non-numeric security control parameter %s', param)
         parsedParam = undefined
       }
 

@@ -64,7 +64,7 @@ function hookModule (filename, module, controlsByFile) {
     controlsByFile.forEach(({ type, method, parameters, secureMarks }) => {
       const { target, parent, methodName } = resolve(method, module)
       if (!target) {
-        log.error('Unable to resolve IAST security control %s:%s', filename, method)
+        log.error('[ASM] Unable to resolve IAST security control %s:%s', filename, method)
         return
       }
 
@@ -82,7 +82,7 @@ function hookModule (filename, module, controlsByFile) {
       }
     })
   } catch (e) {
-    log.error('Error initializing IAST security control for %', filename, e)
+    log.error('[ASM] Error initializing IAST security control for %', filename, e)
   }
 
   return module
@@ -118,7 +118,7 @@ function wrapSanitizer (target, secureMarks) {
     try {
       return addSecureMarks(result, secureMarks)
     } catch (e) {
-      log.error('Error adding Secure mark for sanitizer', e)
+      log.error('[ASM] Error adding Secure mark for sanitizer', e)
     }
 
     return result
@@ -136,7 +136,7 @@ function wrapInputValidator (target, parameters, secureMarks) {
         }
       })
     } catch (e) {
-      log.error('Error adding Secure mark for input validator', e)
+      log.error('[ASM] Error adding Secure mark for input validator', e)
     }
 
     return orig.apply(this, arguments)

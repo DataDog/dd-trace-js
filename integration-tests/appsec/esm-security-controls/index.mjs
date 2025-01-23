@@ -9,7 +9,7 @@ import { validate, validateNotConfigured } from './validator.mjs'
 const app = express()
 const port = process.env.APP_PORT || 3000
 
-app.get('/cmdi-secure', (req, res) => {
+app.get('/cmdi-s-secure', (req, res) => {
   const command = sanitize(req.query.command)
   try {
     childProcess.execSync(command)
@@ -20,7 +20,7 @@ app.get('/cmdi-secure', (req, res) => {
   res.end()
 })
 
-app.get('/cmdi-secure-default', (req, res) => {
+app.get('/cmdi-s-secure-default', (req, res) => {
   const command = sanitizeDefault(req.query.command)
   try {
     childProcess.execSync(command)
