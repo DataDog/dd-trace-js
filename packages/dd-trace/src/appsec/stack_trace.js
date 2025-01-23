@@ -63,31 +63,27 @@ function getCallsiteFrames (maxDepth = 32, callSiteListGetter = getCallSiteList)
   return indexedFrames
 }
 
-function reportStackTrace (
-  rootSpan, stackId, maxStackTraces, frames, namespace = STACK_TRACE_NAMESPACES.RASP) {
+function reportStackTrace (rootSpan, stackId, frames, namespace = STACK_TRACE_NAMESPACES.RASP) {
   if (!rootSpan) return
+  if (!Array.isArray(frames)) return
 
-  if (maxStackTraces < 1 || (rootSpan.meta_struct?.['_dd.stack']?.[namespace]?.length ?? 0) < maxStackTraces) {
-    if (!Array.isArray(frames)) return
-
-    if (!rootSpan.meta_struct) {
-      rootSpan.meta_struct = {}
-    }
-
-    if (!rootSpan.meta_struct['_dd.stack']) {
-      rootSpan.meta_struct['_dd.stack'] = {}
-    }
-
-    if (!rootSpan.meta_struct['_dd.stack'][namespace]) {
-      rootSpan.meta_struct['_dd.stack'][namespace] = []
-    }
-
-    rootSpan.meta_struct['_dd.stack'][namespace].push({
-      id: stackId,
-      language: 'nodejs',
-      frames
-    })
+  if (!rootSpan.meta_struct) {
+    rootSpan.meta_struct = {}
   }
+
+  if (!rootSpan.meta_struct['_dd.stack']) {
+    rootSpan.meta_struct['_dd.stack'] = {}
+  }
+
+  if (!rootSpan.meta_struct['_dd.stack'][namespace]) {
+    rootSpan.meta_struct['_dd.stack'][namespace] = []
+  }
+
+  rootSpan.meta_struct['_dd.stack'][namespace].push({
+    id: stackId,
+    language: 'nodejs',
+    frames
+  })
 }
 
 module.exports = {
