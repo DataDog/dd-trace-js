@@ -78,8 +78,6 @@ withVersions('passport-http', 'passport-http', version => {
         })
       )
 
-      throw 'THIS SHOULD FAIL BUT NO'
-
       app.get('/grant', (req, res) => {
         res.send('Granted')
       })
@@ -125,7 +123,7 @@ withVersions('passport-http', 'passport-http', version => {
         }
       })
 
-      expect(res.status).to.equal(403) // try to break the test 
+      expect(res.status).to.equal(200)
       expect(res.data).to.equal('Granted')
       expect(subscriberStub).to.be.calledOnceWithExactly({
         framework: 'passport-basic',

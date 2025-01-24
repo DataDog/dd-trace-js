@@ -49,7 +49,7 @@ withVersions('express', 'express', version => {
       const res = await axios.get(`http://localhost:${port}/`)
 
       expect(requestBody).to.be.calledOnce
-      expect(res.data).to.be.equal('DO')
+      expect(res.data).to.be.equal('DONE')
 
       queryParserReadCh.unsubscribe(noop)
     })
