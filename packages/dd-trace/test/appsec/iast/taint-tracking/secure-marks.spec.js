@@ -20,6 +20,11 @@ describe('IAST secure marks', () => {
     assert.equal(mark, ASTERISK_MARK)
   })
 
+  it('should not be repeated marks (probably due to truncation)', () => {
+    const markValues = Object.values(ALL)
+    assert.equal(markValues.length, [...new Set(markValues)].length)
+  })
+
   it('should generate marks under 0x100000000 due taint-tracking secure mark length', () => {
     // in theory secure-marks generator can not reach this value with bitwise operations due to 32-bit integer linmits
     const limitMark = 0x100000000
