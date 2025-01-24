@@ -78,7 +78,11 @@ describe('Plugin', () => {
 
             nock('http://127.0.0.1:4566')
               .post(`/model/${model.modelId}/invoke`)
-              .reply(200, response)
+              .reply(200, response, {
+                'x-amzn-bedrock-input-token-count': 50,
+                'x-amzn-bedrock-output-token-count': 70,
+                'x-amzn-requestid': Date.now().toString()
+              })
 
             const command = new AWS.InvokeModelCommand(request)
 
@@ -93,7 +97,7 @@ describe('Plugin', () => {
                   { content: model.userPrompt }
                 ],
                 outputMessages: MOCK_ANY,
-                tokenMetrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+                tokenMetrics: { input_tokens: 50, output_tokens: 70, total_tokens: 120 },
                 modelName: model.modelId.split('.')[1].toLowerCase(),
                 modelProvider: model.provider.toLowerCase(),
                 metadata: {

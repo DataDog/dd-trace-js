@@ -208,3 +208,60 @@ addHook({ name: 'aws-sdk', file: 'lib/core.js', versions: ['>=2.1.35'] }, AWS =>
   shimmer.wrap(AWS.Request.prototype, 'send', wrapRequest)
   return AWS
 })
+// hooks for bedrock model token counts
+// later to add: converse, streamed
+const commands = new Set(['InvokeModelCommand'])
+
+function wrapBedrockCommandDeserialize (deserialize) {
+  return function (response) {
+    const tokenCh = channel('apm:aws:token:bedrockruntime')
+
+    const requestId = response.headers['x-amzn-requestid']
+    const inputTokenCount = response.headers['x-amzn-bedrock-input-token-count']
+    const outputTokenCount = response.headers['x-amzn-bedrock-output-token-count']
+
+    tokenCh.publish({ requestId, inputTokenCount, outputTokenCount })
+
+    return deserialize.apply(this, arguments)
+  }
+}
+
+/**
+ * TL;DR we want to access the deserialize middleware to intercept the headers before they are stripped from
+ * the response. This deserialize function is located in different place for different versions of bedrock
+ */
+addHook({
+  name: '@aws-sdk/client-bedrock-runtime',
+  versions: ['>=3.422.0']
+}, BedrockRuntime => {
+  for (const command of commands) {
+    const Command = BedrockRuntime[command]
+    shimmer.wrap(Command.prototype, 'deserialize', wrapBedrockCommandDeserialize)
+  }
+  return BedrockRuntime
+})
+
+// duplicate hook for now
+addHook({
+  name: '@smithy/smithy-client',
+  versions: ['>=1.0.3']
+}, client => {
+  shimmer.wrap(client.Command, 'classBuilder', classBuilder => {
+    return function () {
+      const builder = classBuilder.apply(this, arguments)
+      shimmer.wrap(builder, 'de', de => {
+        return function () {
+          const deserializerName = arguments[0]?.name?.split('de_')[1]
+          if (commands.has(deserializerName)) {
+            const originalDeserializer = arguments[0]
+            arguments[0] = shimmer.wrapFunction(originalDeserializer, wrapBedrockCommandDeserialize)
+          }
+
+          return de.apply(this, arguments)
+        }
+      })
+      return builder
+    }
+  })
+  return client
+})
