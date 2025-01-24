@@ -210,7 +210,17 @@ jobs:
         version:
           - 18
           - latest
-        range: ['>=10.2.0 <11', '>=11.0.0 <13', '11.1.4', '>=13.0.0 <14', '13.2.0', '>=14.0.0 <=14.2.6', '>=14.2.7 <15', '>=15.0.0']
+        range:
+          [
+            '>=10.2.0 <11',
+            '>=11.0.0 <13',
+            '11.1.4',
+            '>=13.0.0 <14',
+            '13.2.0',
+            '>=14.0.0 <=14.2.6',
+            '>=14.2.7 <15',
+            '>=15.0.0',
+          ]
         include:
           - range: '>=10.2.0 <11'
             range_clean: gte.10.2.0.and.lt.11
@@ -274,7 +284,7 @@ jobs:
   passport:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: passport-local|passport-http|passport
+      PLUGINS: passport-local|passport-http
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
