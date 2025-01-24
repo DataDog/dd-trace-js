@@ -13,7 +13,6 @@ concurrency:
 
 # TODO: upstream jobs
 
-
 jobs:
   aerospike:
     strategy:
@@ -48,7 +47,7 @@ jobs:
       aerospike:
         image: aerospike:${{ matrix.aerospike-image }}
         ports:
-          - "127.0.0.1:3000-3002:3000-3002"
+          - '127.0.0.1:3000-3002:3000-3002'
     env:
       PLUGINS: aerospike
       SERVICES: aerospike
@@ -143,7 +142,7 @@ jobs:
       localstack-legacy:
         image: localstack/localstack:1.1.0
         ports:
-          - "127.0.0.1:4567:4567" # Edge
+          - '127.0.0.1:4567:4567' # Edge
         env:
           LOCALSTACK_SERVICES: dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless
           EXTRA_CORS_ALLOWED_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
@@ -752,7 +751,17 @@ jobs:
         version:
           - 18
           - latest
-        range: ['>=10.2.0 <11', '>=11.0.0 <13', '11.1.4', '>=13.0.0 <14', '13.2.0', '>=14.0.0 <=14.2.6', '>=14.2.7 <15', '>=15.0.0']
+        range:
+          [
+            '>=10.2.0 <11',
+            '>=11.0.0 <13',
+            '11.1.4',
+            '>=13.0.0 <14',
+            '13.2.0',
+            '>=14.0.0 <=14.2.6',
+            '>=14.2.7 <15',
+            '>=15.0.0',
+          ]
         include:
           - range: '>=10.2.0 <11'
             range_clean: gte.10.2.0.and.lt.11
@@ -877,6 +886,30 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
+
+  passport:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: passport
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
+
+  passport-http:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: passport-http
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
+
+  passport-local:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: passport-local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
 
   # TODO: re-enable upstream tests if it ever stops being flaky
   pino:
