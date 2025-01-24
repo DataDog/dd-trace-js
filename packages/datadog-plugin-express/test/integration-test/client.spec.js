@@ -36,7 +36,7 @@ describe('esm', () => {
     })
 
     it('is instrumented', async () => {
-      process.env.DD_TRACE_MIDDLEWARE_ENABLED = true
+      delete process.env.DD_TRACE_MIDDLEWARE_ENABLED
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
       const numberOfSpans = semver.intersects(version, '<5.0.0') ? 4 : 3
 
