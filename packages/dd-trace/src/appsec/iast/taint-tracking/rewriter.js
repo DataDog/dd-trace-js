@@ -161,11 +161,10 @@ function isEsmConfigured () {
 }
 
 function enableEsmRewriter (telemetryVerbosity) {
-  if (isMainThread && Module.register && !esmRewriterEnabled) {
+  if (isMainThread && Module.register && !esmRewriterEnabled && isEsmConfigured()) {
     esmRewriterEnabled = true
+
     const { port1, port2 } = new MessageChannel()
-    port1.unref()
-    port2.unref()
 
     port1.on('message', (message) => {
       const { type, data } = message
@@ -180,6 +179,9 @@ function enableEsmRewriter (telemetryVerbosity) {
       }
     })
 
+    port1.unref()
+    port2.unref()
+
     const chainSourceMap = isFlagPresent('--enable-source-maps')
     const data = {
       port: port2,
@@ -189,13 +191,11 @@ function enableEsmRewriter (telemetryVerbosity) {
     }
 
     try {
-      if (isEsmConfigured()) {
-        Module.register('./rewriter-esm.mjs', {
-          parentURL: pathToFileURL(__filename),
-          transferList: [port2],
-          data
-        })
-      }
+      Module.register('./rewriter-esm.mjs', {
+        parentURL: pathToFileURL(__filename),
+        transferList: [port2],
+        data
+      })
     } catch (e) {
       log.error('[ASM] Error enabling ESM Rewriter', e)
     }

@@ -16,6 +16,7 @@ describe('IAST Rewriter', () => {
 
   describe('Enabling rewriter', () => {
     let rewriter, iastTelemetry, shimmer, Module, cacheRewrittenSourceMap, log, rewriterTelemetry
+    let workerThreads, MessageChannel, port1On, port1Unref
 
     class Rewriter {
       rewrite (content, filename) {
@@ -53,6 +54,17 @@ describe('IAST Rewriter', () => {
         incrementTelemetryIfNeeded: sinon.stub()
       }
 
+      workerThreads = require('worker_threads')
+
+      MessageChannel = workerThreads.MessageChannel
+      workerThreads.MessageChannel = function () {
+        const res = new MessageChannel(...arguments)
+        port1On = sinon.spy(res.port1, 'on')
+        port1Unref = sinon.spy(res.port1, 'unref')
+
+        return res
+      }
+
       rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {
         '@datadog/native-iast-rewriter': {
           Rewriter,
@@ -72,11 +84,13 @@ describe('IAST Rewriter', () => {
         '../../telemetry': iastTelemetry,
         module: Module,
         '../../../log': log,
-        './rewriter-telemetry': rewriterTelemetry
+        './rewriter-telemetry': rewriterTelemetry,
+        worker_threads: workerThreads
       })
     })
 
     afterEach(() => {
+      workerThreads.MessageChannel = MessageChannel
       sinon.reset()
     })
 
@@ -173,6 +187,7 @@ describe('IAST Rewriter', () => {
         process.execArgv = ['--loader', 'dd-trace/initialize.mjs']
 
         rewriter.enableRewriter()
+        delete Error.prepareStackTrace
 
         expect(Module.register).to.be.calledOnce
       })
@@ -292,6 +307,10 @@ describe('IAST Rewriter', () => {
 
             done()
           })
+        })
+
+        it('should call port1.on before port1.unref', () => {
+          expect(port1On).to.be.calledBefore(port1Unref)
         })
       })
     })
