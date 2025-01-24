@@ -73,10 +73,10 @@ jobs:
         with:
           suffix: llmobs-${{ github.job }}
 
-  bedrockruntime:
+  aws-sdk:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: bedrockruntime
+      PLUGINS: aws-sdk
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
