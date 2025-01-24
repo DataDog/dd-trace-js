@@ -7,7 +7,6 @@ const {
 } = require('./helpers')
 const path = require('path')
 const fs = require('fs')
-const { DD_MAJOR } = require('../version')
 
 const DD_INJECTION_ENABLED = 'tracing'
 const DD_INJECT_FORCE = 'true'
@@ -104,13 +103,13 @@ function testRuntimeVersionChecks (arg, filename) {
             it('should not initialize the tracer', () =>
               doTest(`Aborting application instrumentation due to incompatible_runtime.
 Found incompatible runtime nodejs ${process.versions.node}, Supported runtimes: nodejs \
->=${DD_MAJOR === 4 ? '16' : '18'}.
+>=18.
 false
 `, ...telemetryAbort))
             it('should initialize the tracer, if DD_INJECT_FORCE', () =>
               doTestForced(`Aborting application instrumentation due to incompatible_runtime.
 Found incompatible runtime nodejs ${process.versions.node}, Supported runtimes: nodejs \
->=${DD_MAJOR === 4 ? '16' : '18'}.
+>=18.
 DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
 Application instrumentation bootstrapping complete
 true
@@ -167,26 +166,19 @@ describe('init.js', () => {
   testRuntimeVersionChecks('require', 'init.js')
 })
 
-// ESM is not supportable prior to Node.js 12.17.0, 14.13.1 on the 14.x line,
-// or on 18.0.0 in particular.
-if (
-  semver.satisfies(process.versions.node, '>=12.17.0') &&
-  semver.satisfies(process.versions.node, '>=14.13.1')
-) {
-  describe('initialize.mjs', () => {
-    useSandbox()
-    stubTracerIfNeeded()
+describe('initialize.mjs', () => {
+  useSandbox()
+  stubTracerIfNeeded()
 
-    context('as --loader', () => {
-      testInjectionScenarios('loader', 'initialize.mjs',
-        process.versions.node !== '18.0.0')
+  context('as --loader', () => {
+    testInjectionScenarios('loader', 'initialize.mjs',
+      process.versions.node !== '18.0.0')
+    testRuntimeVersionChecks('loader', 'initialize.mjs')
+  })
+  if (semver.satisfies(process.versions.node, '>=20.6.0')) {
+    context('as --import', () => {
+      testInjectionScenarios('import', 'initialize.mjs', true)
       testRuntimeVersionChecks('loader', 'initialize.mjs')
     })
-    if (semver.satisfies(process.versions.node, '>=20.6.0')) {
-      context('as --import', () => {
-        testInjectionScenarios('import', 'initialize.mjs', true)
-        testRuntimeVersionChecks('loader', 'initialize.mjs')
-      })
-    }
-  })
-}
+  }
+})
