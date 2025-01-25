@@ -6,9 +6,13 @@ const path = require('path')
 const crypto = require('crypto')
 const semver = require('semver')
 const exec = require('./helpers/exec')
-const childProcess = require('child_process')
 const externals = require('../packages/dd-trace/test/plugins/externals')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
+const {
+  getVersionList,
+  npmView
+} = require('./helpers/versioning')
+const latests = require('../packages/datadog-instrumentations/src/helpers/latests.json')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
@@ -16,7 +20,6 @@ const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require
 // Can remove couchbase after removing support for couchbase <= 3.2.0
 const excludeList = os.arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
-const versionLists = {}
 const deps = {}
 const filter = process.env.hasOwnProperty('PLUGINS') && process.env.PLUGINS.split('|')
 
@@ -133,7 +136,17 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
 }
 
 async function addDependencies (dependencies, name, versionRange) {
-  const versionList = await getVersionList(name)
+  let versionList = await getVersionList(name)
+  if (!latests.pinned.includes(name)) {
+    const maxVersion = latests.latests[name]
+    versionList = versionList.map(version => {
+      if (version.startsWith('>=') && !version.includes('<')) {
+        return version + ' <=' + maxVersion
+      } else {
+        return version
+      }
+    })
+  }
   const version = semver.maxSatisfying(versionList, versionRange)
   const pkgJson = await npmView(`${name}@${version}`)
   for (const dep of deps[name]) {
@@ -150,27 +163,6 @@ async function addDependencies (dependencies, name, versionRange) {
       }
     }
   }
-}
-
-async function getVersionList (name) {
-  if (versionLists[name]) {
-    return versionLists[name]
-  }
-  const list = await npmView(`${name} versions`)
-  versionLists[name] = list
-  return list
-}
-
-function npmView (input) {
-  return new Promise((resolve, reject) => {
-    childProcess.exec(`npm view ${input} --json`, (err, stdout) => {
-      if (err) {
-        reject(err)
-        return
-      }
-      resolve(JSON.parse(stdout.toString('utf8')))
-    })
-  })
 }
 
 function assertIndex (name, version) {
