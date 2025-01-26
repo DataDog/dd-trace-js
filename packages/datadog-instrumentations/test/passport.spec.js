@@ -6,22 +6,29 @@ const axios = require('axios').create({ validateStatus: null })
 const dc = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
 
-const users = [{
-  id: 'uuid_42',
-  username: 'test',
-  password: '1234',
-  email: 'testuser@ddog.com'
-}, {
-  id: 'error_user',
-  username: 'error',
-  password: '1234',
-  email: 'a@b.c'
-}]
+const users = [
+  {
+    id: 'error_user',
+    username: 'error',
+    password: '1234',
+    email: 'a@b.c'
+  }, {
+    id: 'notfound_user',
+    username: 'notfound',
+    password: '1234',
+    email: 'a@b.c'
+  }, {
+    id: 'uuid_42',
+    username: 'test',
+    password: '1234',
+    email: 'testuser@ddog.com'
+  }
+]
 
 withVersions('passport', 'passport', version => {
   describe('passport instrumentation', () => {
     const passportDeserializeUserChannel = dc.channel('datadog:passport:deserializeUser:finish')
-    let port, server, subscriberStub, cookie
+    let port, server, subscriberStub
 
     before(() => {
       return agent.load(['http', 'express', 'express-session', 'passport', 'passport-local'], { client: false })
@@ -54,6 +61,10 @@ withVersions('passport', 'passport', version => {
           return done(new Error('*MOCK* Cannot deserialize user'))
         }
 
+        if (id === 'notfound_user') {
+          return done(null, false)
+        }
+
         const user = users.find((user) => user.id === id)
 
         done(null, user)
@@ -81,9 +92,6 @@ withVersions('passport', 'passport', version => {
 
     beforeEach(async () => {
       subscriberStub = sinon.stub()
-
-      const res = await axios.get(`http://localhost:${port}/login?username=test&password=1234`)
-      cookie = res.headers['set-cookie'][0]
     })
 
     after(() => {
@@ -92,22 +100,36 @@ withVersions('passport', 'passport', version => {
     })
 
     it('should not call subscriber when an error occurs', async () => {
-      const res = await axios.post(`http://localhost:${port}/`, { username: 'error', password: '1234' })
+      const login = await axios.get(`http://localhost:${port}/login?username=error&password=1234`)
+      const cookie = login.headers['set-cookie'][0]
 
-      expect(res.status).to.equal(500)
-      expect(subscriberStub).to.not.be.called
+      const res = await axios.get(`http://localhost:${port}/`, { headers: { cookie } })
+
+      assert.strictEqual(res.status, 500)
+      sinon.assert.notCalled(subscriberStub)
     })
 
-    it('should call subscriber with proper arguments on success', async () => {
-      const res = await axios.post(`http://localhost:${port}/`, { username: 'test', password: '1234' })
+    it('should not call subscriber when no user is found', async () => {
+      const login = await axios.get(`http://localhost:${port}/login?username=notfound&password=1234`)
+      const cookie = login.headers['set-cookie'][0]
 
-      expect(res.status).to.equal(200)
-      expect(res.data).to.equal('Granted')
-      expect(subscriberStub).to.be.calledOnceWithExactly({
-        framework: 'passport-local',
-        login: 'test',
-        user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
-        success: true,
+      const res = await axios.get(`http://localhost:${port}/`, { headers: { cookie } })
+
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, '')
+      sinon.assert.notCalled(subscriberStub)
+    })
+
+    it('should call subscriber with proper arguments on user deserialize', async () => {
+      const login = await axios.get(`http://localhost:${port}/login?username=test&password=1234`)
+      const cookie = login.headers['set-cookie'][0]
+
+      const res = await axios.get(`http://localhost:${port}/`, { headers: { cookie } })
+
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, 'uuid_42')
+      sinon.assert.calledOnceWithExactly(subscriberStub, {
+        user: { id: 'uuid_42', username: 'test', password: '1234', email: 'testuser@ddog.com' },
         abortController: new AbortController()
       })
     })
