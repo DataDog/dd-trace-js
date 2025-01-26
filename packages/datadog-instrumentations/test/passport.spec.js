@@ -1,21 +1,27 @@
 'use strict'
 
+const { assert } = require('chai')
 const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios').create({ validateStatus: null })
 const dc = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
 
 const users = [{
-  id: 1,
+  id: 'uuid_42',
   username: 'test',
   password: '1234',
   email: 'testuser@ddog.com'
+}, {
+  id: 'error_user',
+  username: 'error',
+  password: '1234',
+  email: 'a@b.c'
 }]
 
 withVersions('passport', 'passport', version => {
   describe('passport instrumentation', () => {
     const passportDeserializeUserChannel = dc.channel('datadog:passport:deserializeUser:finish')
-    let port, server, subscriberStub
+    let port, server, subscriberStub, cookie
 
     before(() => {
       return agent.load(['http', 'express', 'express-session', 'passport', 'passport-local'], { client: false })
@@ -25,9 +31,10 @@ withVersions('passport', 'passport', version => {
       const express = require('../../../versions/express').get()
       const expressSession = require('../../../versions/express-session').get()
       const passport = require(`../../../versions/passport@${version}`).get()
-      const LocalStrategy = require(`../../../versions/passport-local@${version}`).get().Strategy
+      const LocalStrategy = require('../../../versions/passport-local').get().Strategy
 
       const app = express()
+
       app.use(expressSession({
         secret: 'secret',
         resave: false,
@@ -43,18 +50,26 @@ withVersions('passport', 'passport', version => {
       })
 
       passport.deserializeUser((id, done) => {
+        if (id === 'error_user') {
+          return done(new Error('*MOCK* Cannot deserialize user'))
+        }
+
         const user = users.find((user) => user.id === id)
 
         done(null, user)
       })
 
-      passport.use('local', new LocalStrategy((username, password, done) => {
+      passport.use(new LocalStrategy((username, password, done) => {
         const user = users.find((user) => user.username === username && user.password === password)
 
         return done(null, user)
       }))
 
-      app.get('/', passport.authenticate('local'))
+      app.get('/login', passport.authenticate('local'))
+
+      app.get('/', (req, res) => {
+        res.send(req.user?.id)
+      })
 
       passportDeserializeUserChannel.subscribe((data) => subscriberStub(data))
 
@@ -67,9 +82,8 @@ withVersions('passport', 'passport', version => {
     beforeEach(async () => {
       subscriberStub = sinon.stub()
 
-      const res = await axios.post(`http://localhost:${port}/`, { username: 'test', password: '1234' })
-
-      console.log(res.headers['set-cookie'])
+      const res = await axios.get(`http://localhost:${port}/login?username=test&password=1234`)
+      cookie = res.headers['set-cookie'][0]
     })
 
     after(() => {
