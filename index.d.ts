@@ -2233,7 +2233,17 @@ declare namespace tracer {
     /**
      * Specifies the verbosity of the sent telemetry. Default 'INFORMATION'
      */
-    telemetryVerbosity?: string
+    telemetryVerbosity?: string,
+
+    /**
+     * Configuration for stack trace reporting
+     */
+    stackTrace?: {
+      /** Whether to enable stack trace reporting.
+       * @default true
+       */
+      enabled?: boolean,
+    }
   }
 
   export namespace llmobs {
