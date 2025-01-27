@@ -15,7 +15,7 @@ const validTypes = [INPUT_VALIDATOR_TYPE, SANITIZER_TYPE]
 function parse (securityControlsConfiguration) {
   const controls = new Map()
 
-  securityControlsConfiguration?.replace(/\s/g, '')
+  securityControlsConfiguration?.replace(/[\r\n\t\v\f]*/g, '')
     .split(SECURITY_CONTROL_DELIMITER)
     .map(parseControl)
     .filter(control => !!control)
@@ -37,14 +37,13 @@ function parseControl (control) {
   const fields = control.split(SECURITY_CONTROL_FIELD_DELIMITER)
 
   if (fields.length < 3 || fields.length > 5) {
-    // TODO: do we want telemetry log for these cases?
     log.warn('[ASM] Security control configuration is invalid: %s', control)
     return
   }
 
   let [type, marks, file, method, parameters] = fields
 
-  type = type.toUpperCase()
+  type = type.trim().toUpperCase()
   if (!validTypes.includes(type)) {
     log.warn('[ASM] Invalid security control type: %s', type)
     return
@@ -57,9 +56,11 @@ function parseControl (control) {
     return
   }
 
-  parameters = getParameters(parameters)
+  file = file?.trim()
 
-  // TODO: check if file is a valid path?
+  method = method?.trim()
+
+  parameters = getParameters(parameters)
 
   return { type, secureMarks, file, method, parameters }
 }

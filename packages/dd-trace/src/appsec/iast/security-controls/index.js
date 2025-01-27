@@ -22,12 +22,16 @@ let hooks
 function configure (iastConfig) {
   if (!iastConfig?.securityControlsConfiguration) return
 
-  controls = parse(iastConfig.securityControlsConfiguration)
-  if (controls?.size > 0) {
-    hooks = new WeakSet()
+  try {
+    controls = parse(iastConfig.securityControlsConfiguration)
+    if (controls?.size > 0) {
+      hooks = new WeakSet()
 
-    moduleLoadStartChannel.subscribe(onModuleLoaded)
-    moduleLoadEndChannel.subscribe(onModuleLoaded)
+      moduleLoadStartChannel.subscribe(onModuleLoaded)
+      moduleLoadEndChannel.subscribe(onModuleLoaded)
+    }
+  } catch (e) {
+    log.error('[ASM] Error configuring IAST Security Controls', e)
   }
 }
 
@@ -171,7 +175,6 @@ function disable () {
   if (moduleLoadEndChannel.hasSubscribers) moduleLoadEndChannel.unsubscribe(onModuleLoaded)
 
   controls = undefined
-  hooks?.clear()
   hooks = undefined
 }
 

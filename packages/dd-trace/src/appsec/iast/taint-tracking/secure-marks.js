@@ -15,6 +15,7 @@ marks.ASTERISK_MARK = asterisk
 marks.CUSTOM_SECURE_MARK = getNextSecureMark()
 
 function getMarkFromVulnerabilityType (vulnerabilityType) {
+  vulnerabilityType = vulnerabilityType?.trim()
   const mark = vulnerabilityType === '*' ? 'ASTERISK_MARK' : vulnerabilityType + '_MARK'
   return marks[mark]
 }
