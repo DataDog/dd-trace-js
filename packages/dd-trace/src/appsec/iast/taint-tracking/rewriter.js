@@ -146,15 +146,8 @@ function enableRewriter (telemetryVerbosity) {
 }
 
 function isEsmConfigured () {
-  const hasLoaderArg = !!process.execArgv?.find(
-    arg => arg.includes('--loader') || arg.includes('--experimental-loader')
-  )
+  const hasLoaderArg = isFlagPresent('--loader') || isFlagPresent('--experimental-loader')
   if (hasLoaderArg) return true
-
-  const nodeOptions = process.env.NODE_OPTIONS
-  const hasLoaderNodeOptions = nodeOptions &&
-    (nodeOptions.includes('--loader') || nodeOptions.includes('--experimental-loader'))
-  if (hasLoaderNodeOptions) return true
 
   const initializeLoaded = Object.keys(require.cache).find(file => file.includes('import-in-the-middle/hook.js'))
   return !!initializeLoaded
