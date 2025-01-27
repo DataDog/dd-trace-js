@@ -15,6 +15,16 @@ concurrency:
 
 
 jobs:
+  sandbox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm run sandbox
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sandbox
+          path: ${{ env.TMPDIR }}/dd-trace
+
   aerospike:
     strategy:
       matrix:
@@ -369,6 +379,10 @@ jobs:
       PLUGINS: express
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: sandbox
+          path: ${{ env.TMPDIR }}/dd-trace
       - uses: ./.github/actions/plugins/test
 
   express-mongo-sanitize:
