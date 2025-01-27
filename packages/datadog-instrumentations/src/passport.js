@@ -37,7 +37,7 @@ function wrapDeserializeUser (deserializeUser) {
 addHook({
   name: 'passport',
   file: 'lib/authenticator.js',
-  versions: ['>=0.2.0']
+  versions: ['>=0.3.0']
 }, Authenticator => {
   shimmer.wrap(Authenticator.prototype, 'deserializeUser', wrapDeserializeUser)
 
