@@ -31,7 +31,7 @@ withVersions('passport', 'passport', version => {
     let port, server, subscriberStub
 
     before(() => {
-      return agent.load([], { client: false })
+      return agent.load(['http'], { client: false })
     })
 
     before((done) => {
