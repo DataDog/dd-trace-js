@@ -382,6 +382,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
 
+  express-session:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: express-session
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
+
   fastify:
     runs-on: ubuntu-latest
     env:
