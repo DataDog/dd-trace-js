@@ -36,7 +36,11 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       this.setLLMObsTags({ request, span, response, modelProvider, modelName })
     })
 
-    this.addSub('apm:aws:token:bedrockruntime', ({ requestId, inputTokenCount, outputTokenCount }) => {
+    this.addSub('apm:aws:headers:bedrockruntime', ({ headers }) => {
+      const requestId = headers['x-amzn-requestid']
+      const inputTokenCount = headers['x-amzn-bedrock-input-token-count']
+      const outputTokenCount = headers['x-amzn-bedrock-output-token-count']
+
       requestIdsToTokens[requestId] = {
         inputTokenCount,
         outputTokenCount

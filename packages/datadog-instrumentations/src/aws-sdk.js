@@ -40,6 +40,17 @@ function wrapRequest (send) {
   }
 }
 
+function wrapDeserialize (deserialize, serviceIdentifier) {
+  return function (response) {
+    const channelSuffix = getChannelSuffix(serviceIdentifier)
+    const headersCh = channel(`apm:aws:headers:${channelSuffix}`)
+
+    headersCh.publish({ headers: response.headers })
+
+    return deserialize.apply(this, arguments)
+  }
+}
+
 function wrapSmithySend (send) {
   return function (command, ...args) {
     const cb = args[args.length - 1]
@@ -60,6 +71,16 @@ function wrapSmithySend (send) {
     const completeChannel = channel(`apm:aws:request:complete:${channelSuffix}`)
     const responseStartChannel = channel(`apm:aws:response:start:${channelSuffix}`)
     const responseFinishChannel = channel(`apm:aws:response:finish:${channelSuffix}`)
+
+    shimmer.wrap(command, 'resolveMiddleware', resolveMiddleware => {
+      return function () {
+        if (this.deserialize) {
+          // this.deserialize *should* be set by this point
+          shimmer.wrap(this, 'deserialize', deserialize => wrapDeserialize(deserialize, serviceIdentifier))
+        }
+        return resolveMiddleware.apply(this, arguments)
+      }
+    })
 
     return innerAr.runInAsyncScope(() => {
       startCh.publish({
@@ -178,9 +199,6 @@ function getChannelSuffix (name) {
 
 addHook({ name: '@smithy/smithy-client', versions: ['>=1.0.3'] }, smithy => {
   shimmer.wrap(smithy.Client.prototype, 'send', wrapSmithySend)
-
-  // wrapped for Bedrock model commands
-  shimmer.wrap(smithy.Command, 'classBuilder', wrapClassBuilder) // static function
   return smithy
 })
 
@@ -210,66 +228,4 @@ addHook({ name: 'aws-sdk', file: 'lib/core.js', versions: ['>=2.3.0'] }, AWS => 
 addHook({ name: 'aws-sdk', file: 'lib/core.js', versions: ['>=2.1.35'] }, AWS => {
   shimmer.wrap(AWS.Request.prototype, 'send', wrapRequest)
   return AWS
-})
-
-// Hooks into the deserialization of BedrockRuntime commands
-// This is so we can extract the token usages before they are dropped from the response metadata
-
-const commands = new Set(['InvokeModelCommand'])
-
-/**
- * Wraps the static classBuilder function of the Command class.
- * The Bedrock Runtime client uses this class builder to set its deserializers, which are
- * not available on the model command instances at the time of patching.
- *
- * We attempt to extract the deserializer here and wrap it to extract the necessary headers.
- */
-function wrapClassBuilder (classBuilder) {
-  return function () {
-    const builder = classBuilder.apply(this, arguments)
-    shimmer.wrap(builder, 'de', deserialize => {
-      return function () {
-        const deserializerName = arguments[0]?.name?.split('de_')[1]
-        if (commands.has(deserializerName)) {
-          const originalDeserializer = arguments[0]
-          arguments[0] = shimmer.wrapFunction(originalDeserializer, wrapBedrockCommandDeserialize)
-        }
-
-        return deserialize.apply(this, arguments)
-      }
-    })
-    return builder
-  }
-}
-
-/**
- * Wraps the deserializer function of BedrockRuntime commands.
- * This is to extract the token headers from the response metadata before they are dropped.
- *
- * Request ID is extracted and can be used by subscribers to match the request ID in the response
- * to the token counts.
- */
-function wrapBedrockCommandDeserialize (deserialize) {
-  return function (response) {
-    const tokenCh = channel('apm:aws:token:bedrockruntime')
-
-    const requestId = response.headers['x-amzn-requestid']
-    const inputTokenCount = response.headers['x-amzn-bedrock-input-token-count']
-    const outputTokenCount = response.headers['x-amzn-bedrock-output-token-count']
-
-    tokenCh.publish({ requestId, inputTokenCount, outputTokenCount })
-
-    return deserialize.apply(this, arguments)
-  }
-}
-
-addHook({
-  name: '@aws-sdk/client-bedrock-runtime',
-  versions: ['>=3.422.0 <3.451.0']
-}, BedrockRuntime => {
-  for (const command of commands) {
-    const Command = BedrockRuntime[command]
-    shimmer.wrap(Command.prototype, 'deserialize', wrapBedrockCommandDeserialize)
-  }
-  return BedrockRuntime
 })
