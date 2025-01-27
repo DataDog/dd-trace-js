@@ -208,9 +208,9 @@ addHook({ name: 'aws-sdk', file: 'lib/core.js', versions: ['>=2.1.35'] }, AWS =>
   shimmer.wrap(AWS.Request.prototype, 'send', wrapRequest)
   return AWS
 })
-// hooks for bedrock model token counts
-// later to add: converse, streamed
-const commands = new Set(['InvokeModelCommand'])
+
+// Hooks into the deserialization of BedrockRuntime commands
+// This is so we can extract the token usages before they are dropped from the response metadata
 
 function wrapBedrockCommandDeserialize (deserialize) {
   return function (response) {
@@ -226,10 +226,8 @@ function wrapBedrockCommandDeserialize (deserialize) {
   }
 }
 
-/**
- * TL;DR we want to access the deserialize middleware to intercept the headers before they are stripped from
- * the response. This deserialize function is located in different place for different versions of bedrock
- */
+const commands = new Set(['InvokeModelCommand'])
+
 addHook({
   name: '@aws-sdk/client-bedrock-runtime',
   versions: ['>=3.422.0']
@@ -241,7 +239,7 @@ addHook({
   return BedrockRuntime
 })
 
-// duplicate hook for now
+// separate hook from above to distinguish functionality
 addHook({
   name: '@smithy/smithy-client',
   versions: ['>=1.0.3']
