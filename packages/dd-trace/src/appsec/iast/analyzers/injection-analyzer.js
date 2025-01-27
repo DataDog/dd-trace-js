@@ -11,6 +11,7 @@ class InjectionAnalyzer extends Analyzer {
       if (!ranges?.length) {
         this._incrementSuppressedMetric(iastContext)
       }
+
       return this._areRangesVulnerable(ranges)
     }
 
