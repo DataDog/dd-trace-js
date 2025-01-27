@@ -39,8 +39,8 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       const outputTokenCount = headers['x-amzn-bedrock-output-token-count']
 
       requestIdsToTokens[requestId] = {
-        inputTokensFromHeaders: inputTokenCount,
-        outputTokensFromHeaders: outputTokenCount
+        inputTokensFromHeaders: inputTokenCount && parseInt(inputTokenCount),
+        outputTokensFromHeaders: outputTokenCount && parseInt(outputTokenCount)
       }
     })
   }
