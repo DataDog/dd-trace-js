@@ -2,10 +2,13 @@ const BaseLLMObsPlugin = require('./base')
 const { storage } = require('../../../../datadog-core')
 const llmobsStore = storage('llmobs')
 
+const get = require('../../../../datadog-core/src/utils/src/get')
+
 const {
   extractRequestParams,
   extractTextAndResponseReason,
-  parseModelId
+  parseModelId,
+  PROVIDER
 } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
 
 const enabledOperations = ['invokeModel']
@@ -61,30 +64,75 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     })
 
     // add I/O tags
-    this._tagger.tagLLMIO(span, requestParams.prompt, textAndResponseReason.message)
+    this._tagger.tagLLMIO(
+      span,
+      requestParams.prompt,
+      [{ content: textAndResponseReason.message, role: textAndResponseReason.role }]
+    )
 
     // add token metrics
-    const { inputTokens, outputTokens, totalTokens } = this.extractTokens({ response })
+    const { inputTokens, outputTokens, totalTokens } = extractTokens(response, modelProvider)
     this._tagger.tagMetrics(span, {
       inputTokens,
       outputTokens,
       totalTokens
     })
   }
+}
 
-  extractTokens ({ response }) {
-    const requestId = response.$metadata.requestId
-    const { inputTokenCount, outputTokenCount } = requestIdsToTokens[requestId] || {}
-    delete requestIdsToTokens[requestId]
+function extractTokens (response, provider) {
+  const requestId = response.$metadata.requestId
+  const { inputTokenCount, outputTokenCount } = requestIdsToTokens[requestId] || {}
+  delete requestIdsToTokens[requestId]
 
-    const inputTokens = parseInt(inputTokenCount) || 0
-    const outputTokens = parseInt(outputTokenCount) || 0
+  const tokensBasedOnProvider = findTokensByProvider(response, provider)
 
-    return {
-      inputTokens,
-      outputTokens,
-      totalTokens: inputTokens + outputTokens
-    }
+  const inputTokens = (
+    tokensBasedOnProvider != null ? tokensBasedOnProvider.inputTokens : parseInt(inputTokenCount)
+  ) || 0
+
+  const outputTokens = (
+    tokensBasedOnProvider != null ? tokensBasedOnProvider.outputTokens : parseInt(outputTokenCount)
+  ) || 0
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens
+  }
+}
+
+const TOKEN_PATHS = {
+  [PROVIDER.AMAZON]: {
+    inputTokens: 'inputTextTokenCount',
+    outputTokens: 'results.0.tokenCount'
+  },
+  [PROVIDER.AI21]: {
+    inputTokens: 'usage.prompt_tokens',
+    outputTokens: 'usage.completion_tokens'
+  },
+  [PROVIDER.META]: {
+    inputTokens: 'prompt_token_count',
+    outputTokens: 'generation_token_count'
+  }
+}
+
+// Try and use the provider token paths in the case that
+// we didn't extract them from the headers
+function findTokensByProvider (response, provider) {
+  const tokenPaths = TOKEN_PATHS[provider.toUpperCase()]
+  if (!tokenPaths) {
+    return null
+  }
+
+  const body = JSON.parse(Buffer.from(response.body).toString('utf8'))
+
+  const inputTokens = get(body, tokenPaths.inputTokens) ?? 0
+  const outputTokens = get(body, tokenPaths.outputTokens) ?? 0
+
+  return {
+    inputTokens,
+    outputTokens
   }
 }
 

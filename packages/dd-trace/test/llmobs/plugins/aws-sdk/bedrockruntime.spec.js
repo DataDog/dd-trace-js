@@ -97,7 +97,11 @@ describe('Plugin', () => {
                   { content: model.userPrompt }
                 ],
                 outputMessages: MOCK_ANY,
-                tokenMetrics: { input_tokens: 50, output_tokens: 70, total_tokens: 120 },
+                tokenMetrics: {
+                  input_tokens: model.usage?.inputTokens ?? 50,
+                  output_tokens: model.usage?.outputTokens ?? 70,
+                  total_tokens: model.usage?.totalTokens ?? 120
+                },
                 modelName: model.modelId.split('.')[1].toLowerCase(),
                 modelProvider: model.provider.toLowerCase(),
                 metadata: {

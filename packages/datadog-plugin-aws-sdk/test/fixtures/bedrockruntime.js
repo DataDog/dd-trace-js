@@ -32,18 +32,18 @@ bedrockruntime.models = [
     },
     response: {
       inputTextTokenCount: 7,
-      results: {
-        inputTextTokenCount: 7,
-        results: [
-          {
-            tokenCount: 35,
-            outputText: '\n' +
-                'Paris is the capital of France. France is a country that is located in Western Europe. ' +
-                'Paris is one of the most populous cities in the European Union. ',
-            completionReason: 'FINISH'
-          }
-        ]
-      }
+      results: [{
+        tokenCount: 35,
+        outputText: '\n' +
+            'Paris is the capital of France. France is a country that is located in Western Europe. ' +
+            'Paris is one of the most populous cities in the European Union. ',
+        completionReason: 'FINISH'
+      }]
+    },
+    usage: {
+      inputTokens: 7,
+      outputTokens: 35,
+      totalTokens: 42
     }
   },
   {
@@ -79,6 +79,11 @@ bedrockruntime.models = [
         completion_tokens: 7,
         total_tokens: 17
       }
+    },
+    usage: {
+      inputTokens: 10,
+      outputTokens: 7,
+      totalTokens: 17
     }
   },
   {
@@ -138,6 +143,11 @@ bedrockruntime.models = [
       prompt_token_count: 10,
       generation_token_count: 7,
       stop_reason: 'stop'
+    },
+    usage: {
+      inputTokens: 10,
+      outputTokens: 7,
+      totalTokens: 17
     }
   },
   {

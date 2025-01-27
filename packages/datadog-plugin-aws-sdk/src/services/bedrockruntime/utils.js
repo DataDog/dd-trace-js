@@ -24,11 +24,12 @@ const PROVIDER = {
 }
 
 class Generation {
-  constructor ({ message = '', finishReason = '', choiceId = '' } = {}) {
+  constructor ({ message = '', finishReason = '', choiceId = '', role } = {}) {
     // stringify message as it could be a single generated message as well as a list of embeddings
     this.message = typeof message === 'string' ? message : JSON.stringify(message) || ''
     this.finishReason = finishReason || ''
     this.choiceId = choiceId || undefined
+    this.role = role
   }
 }
 
@@ -202,9 +203,10 @@ function extractTextAndResponseReason (response, provider, modelName) {
           if (generations.length > 0) {
             const generation = generations[0]
             return new Generation({
-              message: generation.message,
+              message: generation.message.content,
               finishReason: generation.finish_reason,
-              choiceId: shouldSetChoiceIds ? generation.id : undefined
+              choiceId: shouldSetChoiceIds ? generation.id : undefined,
+              role: generation.message.role
             })
           }
         }
