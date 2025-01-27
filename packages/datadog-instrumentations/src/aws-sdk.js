@@ -178,6 +178,9 @@ function getChannelSuffix (name) {
 
 addHook({ name: '@smithy/smithy-client', versions: ['>=1.0.3'] }, smithy => {
   shimmer.wrap(smithy.Client.prototype, 'send', wrapSmithySend)
+
+  // wrapped for Bedrock model commands
+  shimmer.wrap(smithy.Command, 'classBuilder', wrapClassBuilder) // static function
   return smithy
 })
 
@@ -212,6 +215,40 @@ addHook({ name: 'aws-sdk', file: 'lib/core.js', versions: ['>=2.1.35'] }, AWS =>
 // Hooks into the deserialization of BedrockRuntime commands
 // This is so we can extract the token usages before they are dropped from the response metadata
 
+const commands = new Set(['InvokeModelCommand'])
+
+/**
+ * Wraps the static classBuilder function of the Command class.
+ * The Bedrock Runtime client uses this class builder to set its deserializers, which are
+ * not available on the model command instances at the time of patching.
+ *
+ * We attempt to extract the deserializer here and wrap it to extract the necessary headers.
+ */
+function wrapClassBuilder (classBuilder) {
+  return function () {
+    const builder = classBuilder.apply(this, arguments)
+    shimmer.wrap(builder, 'de', deserialize => {
+      return function () {
+        const deserializerName = arguments[0]?.name?.split('de_')[1]
+        if (commands.has(deserializerName)) {
+          const originalDeserializer = arguments[0]
+          arguments[0] = shimmer.wrapFunction(originalDeserializer, wrapBedrockCommandDeserialize)
+        }
+
+        return deserialize.apply(this, arguments)
+      }
+    })
+    return builder
+  }
+}
+
+/**
+ * Wraps the deserializer function of BedrockRuntime commands.
+ * This is to extract the token headers from the response metadata before they are dropped.
+ *
+ * Request ID is extracted and can be used by subscribers to match the request ID in the response
+ * to the token counts.
+ */
 function wrapBedrockCommandDeserialize (deserialize) {
   return function (response) {
     const tokenCh = channel('apm:aws:token:bedrockruntime')
@@ -226,40 +263,13 @@ function wrapBedrockCommandDeserialize (deserialize) {
   }
 }
 
-const commands = new Set(['InvokeModelCommand'])
-
 addHook({
   name: '@aws-sdk/client-bedrock-runtime',
-  versions: ['>=3.422.0']
+  versions: ['>=3.422.0 <3.451.0']
 }, BedrockRuntime => {
   for (const command of commands) {
     const Command = BedrockRuntime[command]
     shimmer.wrap(Command.prototype, 'deserialize', wrapBedrockCommandDeserialize)
   }
   return BedrockRuntime
-})
-
-// separate hook from above to distinguish functionality
-addHook({
-  name: '@smithy/smithy-client',
-  versions: ['>=1.0.3']
-}, client => {
-  shimmer.wrap(client.Command, 'classBuilder', classBuilder => {
-    return function () {
-      const builder = classBuilder.apply(this, arguments)
-      shimmer.wrap(builder, 'de', de => {
-        return function () {
-          const deserializerName = arguments[0]?.name?.split('de_')[1]
-          if (commands.has(deserializerName)) {
-            const originalDeserializer = arguments[0]
-            arguments[0] = shimmer.wrapFunction(originalDeserializer, wrapBedrockCommandDeserialize)
-          }
-
-          return de.apply(this, arguments)
-        }
-      })
-      return builder
-    }
-  })
-  return client
 })
