@@ -43,7 +43,7 @@ function wrapRequest (send) {
 function wrapDeserialize (deserialize, serviceIdentifier) {
   return function (response) {
     const channelSuffix = getChannelSuffix(serviceIdentifier)
-    const headersCh = channel(`apm:aws:headers:${channelSuffix}`)
+    const headersCh = channel(`apm:aws:headers:deserialize:${channelSuffix}`)
 
     headersCh.publish({ headers: response.headers })
 

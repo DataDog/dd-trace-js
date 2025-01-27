@@ -24,12 +24,23 @@ const PROVIDER = {
 }
 
 class Generation {
-  constructor ({ message = '', finishReason = '', choiceId = '', role } = {}) {
+  constructor ({
+    message = '',
+    finishReason = '',
+    choiceId = '',
+    role,
+    inputTokens,
+    outputTokens
+  } = {}) {
     // stringify message as it could be a single generated message as well as a list of embeddings
     this.message = typeof message === 'string' ? message : JSON.stringify(message) || ''
     this.finishReason = finishReason || ''
     this.choiceId = choiceId || undefined
     this.role = role
+    this.usage = {
+      inputTokens,
+      outputTokens
+    }
   }
 }
 
@@ -206,7 +217,9 @@ function extractTextAndResponseReason (response, provider, modelName) {
               message: generation.message.content,
               finishReason: generation.finish_reason,
               choiceId: shouldSetChoiceIds ? generation.id : undefined,
-              role: generation.message.role
+              role: generation.message.role,
+              inputTokens: body.usage?.prompt_tokens,
+              outputTokens: body.usage?.completion_tokens
             })
           }
         }
@@ -216,7 +229,9 @@ function extractTextAndResponseReason (response, provider, modelName) {
           return new Generation({
             message: completion.data?.text,
             finishReason: completion?.finishReason,
-            choiceId: shouldSetChoiceIds ? completion?.id : undefined
+            choiceId: shouldSetChoiceIds ? completion?.id : undefined,
+            inputTokens: body.usage?.prompt_tokens,
+            outputTokens: body.usage?.completion_tokens
           })
         }
         return new Generation()
@@ -228,7 +243,12 @@ function extractTextAndResponseReason (response, provider, modelName) {
         const results = body.results || []
         if (results.length > 0) {
           const result = results[0]
-          return new Generation({ message: result.outputText, finishReason: result.completionReason })
+          return new Generation({
+            message: result.outputText,
+            finishReason: result.completionReason,
+            inputTokens: body.inputTextTokenCount,
+            outputTokens: result.tokenCount
+          })
         }
         break
       }
@@ -254,7 +274,12 @@ function extractTextAndResponseReason (response, provider, modelName) {
         break
       }
       case PROVIDER.META: {
-        return new Generation({ message: body.generation, finishReason: body.stop_reason })
+        return new Generation({
+          message: body.generation,
+          finishReason: body.stop_reason,
+          inputTokens: body.prompt_token_count,
+          outputTokens: body.generation_token_count
+        })
       }
       case PROVIDER.MISTRAL: {
         const mistralGenerations = body.outputs || []
