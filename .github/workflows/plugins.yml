@@ -25,18 +25,22 @@ jobs:
         include:
           - node-version: 18
             range: '>=5.2.0'
+            range_clean: gte.5.2.0
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
           - node-version: 20
             range: '>=5.5.0'
+            range_clean: gte.5.5.0
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
           - node-version: 22
             range: '>=5.12.1'
+            range_clean: gte.5.12.1
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
           - node-version: 22
             range: '>=6.0.0'
+            range_clean: gte.6.0.0
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
     runs-on: ${{ matrix.test-image }}
@@ -63,6 +67,8 @@ jobs:
         run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.range_clean }}
       - uses: codecov/codecov-action@v3
 
   amqp10:
@@ -164,6 +170,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
       - uses: codecov/codecov-action@v3
 
   axios:
@@ -305,6 +313,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   dns:
@@ -324,6 +334,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   elasticsearch:
@@ -347,6 +359,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   express:
@@ -452,6 +466,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
       - uses: codecov/codecov-action@v3
 
   http2:
@@ -471,6 +487,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   # TODO: fix performance issues and test more Node versions
@@ -486,6 +504,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   kafkajs:
@@ -549,6 +569,8 @@ jobs:
       - uses: codecov/codecov-action@v3
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
 
   limitd-client:
     runs-on: ubuntu-latest
@@ -718,6 +740,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   # TODO: fix performance issues and test more Node versions
@@ -729,6 +753,23 @@ jobs:
           - 18
           - latest
         range: ['>=10.2.0 <11', '>=11.0.0 <13', '11.1.4', '>=13.0.0 <14', '13.2.0', '>=14.0.0 <=14.2.6', '>=14.2.7 <15', '>=15.0.0']
+        include:
+          - range: '>=10.2.0 <11'
+            range_clean: gte.10.2.0.and.lt.11
+          - range: '>=11.0.0 <13'
+            range_clean: gte.11.0.0.and.lt.13
+          - range: '11.1.4'
+            range_clean: 11.1.4
+          - range: '>=13.0.0 <14'
+            range_clean: gte.13.0.0.and.lt.14
+          - range: '13.2.0'
+            range_clean: 13.2.0
+          - range: '>=14.0.0 <=14.2.6'
+            range_clean: gte.14.0.0.and.lte.14.2.6
+          - range: '>=14.2.7 <15'
+            range_clean: gte.14.2.7.and.lt.15
+          - range: '>=15.0.0'
+            range_clean: gte.15.0.0
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
@@ -741,6 +782,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}-${{ matrix.version }}-${{ matrix.range_clean }}
       - uses: codecov/codecov-action@v3
 
   openai:
@@ -831,6 +874,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   # TODO: re-enable upstream tests if it ever stops being flaky
@@ -850,6 +895,8 @@ jobs:
       # - run: yarn test:plugins:upstream
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   postgres:
@@ -963,6 +1010,8 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   tedious:
@@ -989,6 +1038,8 @@ jobs:
       - run: yarn test:plugins:upstream
       - if: always()
         uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v3
 
   undici:

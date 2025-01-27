@@ -2,6 +2,17 @@
 
 set -e
 
+DIRS=($(ls -d */ | sed 's:/$::')) # Array of subdirectories
+CWD=$(pwd)
+
+function cleanup {
+  for D in "${DIRS[@]}"; do
+    rm -f "${CWD}/${D}/meta-temp.json"
+  done
+}
+
+trap cleanup EXIT
+
 # Temporary until merged to master
 wget -O sirun.tar.gz https://github.com/DataDog/sirun/releases/download/v0.1.10/sirun-v0.1.10-x86_64-unknown-linux-musl.tar.gz \
 	&& tar -xzf sirun.tar.gz \
@@ -14,9 +25,6 @@ else
   source /usr/local/nvm/nvm.sh
 fi
 
-nvm use 18
-
-# using Node.js v18 for the global yarn package
 (
   cd ../../ &&
   npm install --global yarn \
@@ -27,24 +35,23 @@ nvm use 18
 # run each test in parallel for a given version of Node.js
 # once all of the tests have complete move on to the next version
 
-export CPU_AFFINITY="${CPU_START_ID:-24}" # Benchmarking Platform convention
+TOTAL_CPU_CORES=$(nproc 2>/dev/null || echo "24")
+export CPU_AFFINITY="${CPU_START_ID:-$TOTAL_CPU_CORES}" # Benchmarking Platform convention
 
 nvm use $MAJOR_VERSION # provided by each benchmark stage
 export VERSION=`nvm current`
 export ENABLE_AFFINITY=true
 echo "using Node.js ${VERSION}"
-CPU_AFFINITY="${CPU_START_ID:-24}" # reset for each node.js version
+CPU_AFFINITY="${CPU_START_ID:-$TOTAL_CPU_CORES}" # reset for each node.js version
 SPLITS=${SPLITS:-1}
 GROUP=${GROUP:-1}
 
 BENCH_COUNT=0
-for D in *; do
-  if [ -d "${D}" ]; then
-    cd "${D}"
-    variants="$(node ../get-variants.js)"
-    for V in $variants; do BENCH_COUNT=$(($BENCH_COUNT+1)); done
-    cd ..
-  fi
+for D in "${DIRS[@]}"; do
+  cd "${D}"
+  variants="$(node ../get-variants.js)"
+  for V in $variants; do BENCH_COUNT=$(($BENCH_COUNT+1)); done
+  cd ..
 done
 
 GROUP_SIZE=$(($(($BENCH_COUNT+$SPLITS-1))/$SPLITS)) # round up
@@ -54,42 +61,33 @@ BENCH_END=$(($GROUP_SIZE*$GROUP))
 BENCH_START=$(($BENCH_END-$GROUP_SIZE))
 
 if [[ ${GROUP_SIZE} -gt 24 ]]; then
-  echo "Group size ${GROUP_SIZE} is larger than available number of CPU cores on Benchmarking Platform machines (24 cores)"
+  echo "Group size ${GROUP_SIZE} is larger than available number of CPU cores on Benchmarking Platform machines (${TOTAL_CPU_CORES} cores)"
   exit 1
 fi
 
-for D in *; do
-  if [ -d "${D}" ]; then
-    cd "${D}"
-    variants="$(node ../get-variants.js)"
+for D in "${DIRS[@]}"; do
+  cd "${D}"
+  variants="$(node ../get-variants.js)"
 
-    node ../squash-affinity.js
+  node ../squash-affinity.js
 
-    for V in $variants; do
-      if [[ ${BENCH_INDEX} -ge ${BENCH_START} && ${BENCH_INDEX} -lt ${BENCH_END} ]]; then
-        echo "running $((BENCH_INDEX+1)) out of ${BENCH_COUNT}, ${D}/${V} in background, pinned to core ${CPU_AFFINITY}..."
+  for V in $variants; do
+    if [[ ${BENCH_INDEX} -ge ${BENCH_START} && ${BENCH_INDEX} -lt ${BENCH_END} ]]; then
+      echo "running $((BENCH_INDEX+1)) out of ${BENCH_COUNT}, ${D}/${V} in background, pinned to core ${CPU_AFFINITY}..."
 
-        export SIRUN_VARIANT=$V
+      export SIRUN_VARIANT=$V
 
-        (time node ../run-one-variant.js >> ../results.ndjson && echo "${D}/${V} finished.") &
-        ((CPU_AFFINITY=CPU_AFFINITY+1))
-      fi
+      (time node ../run-one-variant.js >> ../results.ndjson && echo "${D}/${V} finished.") &
+      ((CPU_AFFINITY=CPU_AFFINITY+1))
+    fi
 
-      BENCH_INDEX=$(($BENCH_INDEX+1))
-    done
+    BENCH_INDEX=$(($BENCH_INDEX+1))
+  done
 
-    cd ..
-  fi
+  cd ..
 done
 
 wait # waits until all tests are complete before continuing
-
-# TODO: cleanup even when something fails
-for D in *; do
-  if [ -d "${D}" ]; then
-    unlink "${D}/meta-temp.json" 2>/dev/null
-  fi
-done
 
 node ./strip-unwanted-results.js
 

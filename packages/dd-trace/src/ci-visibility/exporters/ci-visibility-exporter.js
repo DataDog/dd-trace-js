@@ -87,9 +87,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
 
   shouldRequestKnownTests () {
     return !!(
-      this._config.isEarlyFlakeDetectionEnabled &&
       this._canUseCiVisProtocol &&
-      this._libraryConfig?.isEarlyFlakeDetectionEnabled
+      this._libraryConfig?.isKnownTestsEnabled
     )
   }
 
@@ -197,7 +196,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       earlyFlakeDetectionNumRetries,
       earlyFlakeDetectionFaultyThreshold,
       isFlakyTestRetriesEnabled,
-      isDiEnabled
+      isDiEnabled,
+      isKnownTestsEnabled
     } = remoteConfiguration
     return {
       isCodeCoverageEnabled,
@@ -209,7 +209,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       earlyFlakeDetectionFaultyThreshold,
       isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && this._config.isFlakyTestRetriesEnabled,
       flakyTestRetriesCount: this._config.flakyTestRetriesCount,
-      isDiEnabled: isDiEnabled && this._config.isTestDynamicInstrumentationEnabled
+      isDiEnabled: isDiEnabled && this._config.isTestDynamicInstrumentationEnabled,
+      isKnownTestsEnabled
     }
   }
 

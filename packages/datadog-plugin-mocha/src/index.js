@@ -31,11 +31,7 @@ const {
   MOCHA_IS_PARALLEL,
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_DRIVER,
-  TEST_NAME,
-  DI_ERROR_DEBUG_INFO_CAPTURED,
-  DI_DEBUG_ERROR_SNAPSHOT_ID,
-  DI_DEBUG_ERROR_FILE,
-  DI_DEBUG_ERROR_LINE
+  TEST_RETRY_REASON
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -51,8 +47,6 @@ const {
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const id = require('../../dd-trace/src/id')
 const log = require('../../dd-trace/src/log')
-
-const debuggerParameterPerTest = new Map()
 
 function getTestSuiteLevelVisibilityTags (testSuiteSpan) {
   const testSuiteSpanContext = testSuiteSpan.context()
@@ -192,36 +186,15 @@ class MochaPlugin extends CiPlugin {
       const store = storage.getStore()
       const span = this.startTestSpan(testInfo)
 
-      const { testName } = testInfo
-
-      const debuggerParameters = debuggerParameterPerTest.get(testName)
-
-      if (debuggerParameters) {
-        const spanContext = span.context()
-
-        // TODO: handle race conditions with this.retriedTestIds
-        this.retriedTestIds = {
-          spanId: spanContext.toSpanId(),
-          traceId: spanContext.toTraceId()
-        }
-        const { snapshotId, file, line } = debuggerParameters
-
-        // TODO: should these be added on test:end if and only if the probe is hit?
-        // Sync issues: `hitProbePromise` might be resolved after the test ends
-        span.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-        span.setTag(DI_DEBUG_ERROR_SNAPSHOT_ID, snapshotId)
-        span.setTag(DI_DEBUG_ERROR_FILE, file)
-        span.setTag(DI_DEBUG_ERROR_LINE, line)
-      }
-
       this.enter(span, store)
+      this.activeTestSpan = span
     })
 
     this.addSub('ci:mocha:worker:finish', () => {
       this.tracer._exporter.flush()
     })
 
-    this.addSub('ci:mocha:test:finish', ({ status, hasBeenRetried }) => {
+    this.addSub('ci:mocha:test:finish', ({ status, hasBeenRetried, isLastRetry }) => {
       const store = storage.getStore()
       const span = store?.span
 
@@ -245,6 +218,11 @@ class MochaPlugin extends CiPlugin {
 
         span.finish()
         finishAllTraceSpans(span)
+        this.activeTestSpan = null
+        if (this.di && this.libraryConfig?.isDiEnabled && this.runningTestProbeId && isLastRetry) {
+          this.removeDiProbe(this.runningTestProbeId)
+          this.runningTestProbeId = null
+        }
       }
     })
 
@@ -271,7 +249,7 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, willBeRetried, err }) => {
+    this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, willBeRetried, err, test }) => {
       const store = storage.getStore()
       const span = store?.span
       if (span) {
@@ -294,10 +272,15 @@ class MochaPlugin extends CiPlugin {
             browserDriver: spanTags[TEST_BROWSER_DRIVER]
           }
         )
-        if (willBeRetried && this.di && this.libraryConfig?.isDiEnabled) {
-          const testName = span.context()._tags[TEST_NAME]
-          const debuggerParameters = this.addDiProbe(err)
-          debuggerParameterPerTest.set(testName, debuggerParameters)
+        if (isFirstAttempt && willBeRetried && this.di && this.libraryConfig?.isDiEnabled) {
+          const probeInformation = this.addDiProbe(err)
+          if (probeInformation) {
+            const { probeId, stackIndex } = probeInformation
+            this.runningTestProbeId = probeId
+            this.testErrorStackIndex = stackIndex
+            test._ddShouldWaitForHitProbe = true
+            // TODO: we're not waiting for setProbePromise to be resolved, so there might be race conditions
+          }
         }
 
         span.finish()
@@ -439,6 +422,7 @@ class MochaPlugin extends CiPlugin {
       extraTags[TEST_IS_NEW] = 'true'
       if (isEfdRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
+        extraTags[TEST_RETRY_REASON] = 'efd'
       }
     }
 

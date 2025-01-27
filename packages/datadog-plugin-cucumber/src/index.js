@@ -27,11 +27,7 @@ const {
   TEST_MODULE_ID,
   TEST_SUITE,
   CUCUMBER_IS_PARALLEL,
-  TEST_NAME,
-  DI_ERROR_DEBUG_INFO_CAPTURED,
-  DI_DEBUG_ERROR_SNAPSHOT_ID,
-  DI_DEBUG_ERROR_FILE,
-  DI_DEBUG_ERROR_LINE
+  TEST_RETRY_REASON
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -50,8 +46,8 @@ const {
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const id = require('../../dd-trace/src/id')
 
+const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const isCucumberWorker = !!process.env.CUCUMBER_WORKER_ID
-const debuggerParameterPerTest = new Map()
 
 function getTestSuiteTags (testSuiteSpan) {
   const suiteTags = {
@@ -210,7 +206,13 @@ class CucumberPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: 'istanbul' })
     })
 
-    this.addSub('ci:cucumber:test:start', ({ testName, testFileAbsolutePath, testSourceLine, isParallel }) => {
+    this.addSub('ci:cucumber:test:start', ({
+      testName,
+      testFileAbsolutePath,
+      testSourceLine,
+      isParallel,
+      promises
+    }) => {
       const store = storage.getStore()
       const testSuite = getTestSuitePath(testFileAbsolutePath, this.sourceRoot)
       const testSourceFile = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)
@@ -227,38 +229,30 @@ class CucumberPlugin extends CiPlugin {
 
       this.enter(testSpan, store)
 
-      const debuggerParameters = debuggerParameterPerTest.get(testName)
-
-      if (debuggerParameters) {
-        const spanContext = testSpan.context()
-
-        // TODO: handle race conditions with this.retriedTestIds
-        this.retriedTestIds = {
-          spanId: spanContext.toSpanId(),
-          traceId: spanContext.toTraceId()
-        }
-        const { snapshotId, file, line } = debuggerParameters
-
-        // TODO: should these be added on test:end if and only if the probe is hit?
-        // Sync issues: `hitProbePromise` might be resolved after the test ends
-        testSpan.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-        testSpan.setTag(DI_DEBUG_ERROR_SNAPSHOT_ID, snapshotId)
-        testSpan.setTag(DI_DEBUG_ERROR_FILE, file)
-        testSpan.setTag(DI_DEBUG_ERROR_LINE, line)
+      this.activeTestSpan = testSpan
+      // Time we give the breakpoint to be hit
+      if (promises && this.runningTestProbeId) {
+        promises.hitBreakpointPromise = new Promise((resolve) => {
+          setTimeout(resolve, BREAKPOINT_HIT_GRACE_PERIOD_MS)
+        })
       }
     })
 
-    this.addSub('ci:cucumber:test:retry', ({ isRetry, error }) => {
+    this.addSub('ci:cucumber:test:retry', ({ isFirstAttempt, error }) => {
       const store = storage.getStore()
       const span = store.span
-      if (isRetry) {
+      if (!isFirstAttempt) {
         span.setTag(TEST_IS_RETRY, 'true')
       }
       span.setTag('error', error)
-      if (this.di && error && this.libraryConfig?.isDiEnabled) {
-        const testName = span.context()._tags[TEST_NAME]
-        const debuggerParameters = this.addDiProbe(error)
-        debuggerParameterPerTest.set(testName, debuggerParameters)
+      if (isFirstAttempt && this.di && error && this.libraryConfig?.isDiEnabled) {
+        const probeInformation = this.addDiProbe(error)
+        if (probeInformation) {
+          const { probeId, stackIndex } = probeInformation
+          this.runningTestProbeId = probeId
+          this.testErrorStackIndex = stackIndex
+          // TODO: we're not waiting for setProbePromise to be resolved, so there might be race conditions
+        }
       }
       span.setTag(TEST_STATUS, 'fail')
       span.finish()
@@ -328,6 +322,7 @@ class CucumberPlugin extends CiPlugin {
         span.setTag(TEST_IS_NEW, 'true')
         if (isEfdRetry) {
           span.setTag(TEST_IS_RETRY, 'true')
+          span.setTag(TEST_RETRY_REASON, 'efd')
         }
       }
 
@@ -362,6 +357,11 @@ class CucumberPlugin extends CiPlugin {
         // If it's a worker, flushing is cheap, as it's just sending data to the main process
         if (isCucumberWorker) {
           this.tracer._exporter.flush()
+        }
+        this.activeTestSpan = null
+        if (this.runningTestProbeId) {
+          this.removeDiProbe(this.runningTestProbeId)
+          this.runningTestProbeId = null
         }
       }
     })

@@ -17,6 +17,11 @@ const lines = fs
   .trim()
   .split('\n')
 
+if (lines.length === 1 && lines[0] === '') {
+  console.log('The file "results.ndjson" is empty! Aborting...') // eslint-disable-line no-console
+  process.exit(1)
+}
+
 const results = []
 
 for (const line of lines) {

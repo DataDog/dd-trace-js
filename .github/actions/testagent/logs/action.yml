@@ -4,6 +4,9 @@ inputs:
   container-id:
     description: "ID of the Docker Container to get logs from (optional)"
     required: false
+  suffix:
+    description: "suffix of the artifact file name"
+    required: false
 runs:
   using: composite
   steps:
@@ -34,7 +37,7 @@ runs:
         rm "$headers"
       shell: bash
     - name: Archive Test Agent Artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: supported-integrations
+        name: supported-integrations-${{inputs.suffix}}
         path: ./artifacts
