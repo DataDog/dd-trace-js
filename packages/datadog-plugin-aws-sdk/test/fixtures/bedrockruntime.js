@@ -44,7 +44,10 @@ bedrockruntime.models = [
       inputTokens: 7,
       outputTokens: 35,
       totalTokens: 42
-    }
+    },
+    output: '\n' +
+      'Paris is the capital of France. France is a country that is located in Western Europe. ' +
+      'Paris is one of the most populous cities in the European Union. '
   },
   {
     provider: PROVIDER.AI21,
@@ -84,7 +87,9 @@ bedrockruntime.models = [
       inputTokens: 10,
       outputTokens: 7,
       totalTokens: 17
-    }
+    },
+    output: 'The capital of France is Paris.',
+    outputRole: 'assistant'
   },
   {
     provider: PROVIDER.ANTHROPIC,
@@ -102,7 +107,8 @@ bedrockruntime.models = [
       completion: ' Paris is the capital of France.',
       stop_reason: 'stop_sequence',
       stop: '\n\nHuman:'
-    }
+    },
+    output: ' Paris is the capital of France.'
   },
   {
     provider: PROVIDER.COHERE,
@@ -125,8 +131,8 @@ bedrockruntime.models = [
         }
       ],
       prompt: 'What is the capital of France?'
-    }
-
+    },
+    output: ' The capital of France is Paris. \n'
   },
   {
     provider: PROVIDER.META,
@@ -148,7 +154,8 @@ bedrockruntime.models = [
       inputTokens: 10,
       outputTokens: 7,
       totalTokens: 17
-    }
+    },
+    output: '\n\nThe capital of France is Paris.'
   },
   {
     provider: PROVIDER.MISTRAL,
@@ -168,7 +175,8 @@ bedrockruntime.models = [
           stop_reason: 'stop'
         }
       ]
-    }
+    },
+    output: 'The capital of France is Paris.'
   }
 ]
 bedrockruntime.modelConfig = {

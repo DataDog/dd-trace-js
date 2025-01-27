@@ -3,7 +3,7 @@
 const agent = require('../../../plugins/agent')
 
 const nock = require('nock')
-const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues, MOCK_ANY } = require('../../util')
+const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues } = require('../../util')
 const { models, modelConfig } = require('../../../../../datadog-plugin-aws-sdk/test/fixtures/bedrockruntime')
 const chai = require('chai')
 const LLMObsAgentProxySpanWriter = require('../../../../src/llmobs/writers/spans/agentProxy')
@@ -86,6 +86,9 @@ describe('Plugin', () => {
 
             const command = new AWS.InvokeModelCommand(request)
 
+            const expectedOutput = { content: model.output }
+            if (model.outputRole) expectedOutput.role = model.outputRole
+
             agent.use(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
@@ -93,10 +96,8 @@ describe('Plugin', () => {
                 span,
                 spanKind: 'llm',
                 name: 'bedrock-runtime.command',
-                inputMessages: [
-                  { content: model.userPrompt }
-                ],
-                outputMessages: MOCK_ANY,
+                inputMessages: [{ content: model.userPrompt }],
+                outputMessages: [expectedOutput],
                 tokenMetrics: {
                   input_tokens: model.usage?.inputTokens ?? 50,
                   output_tokens: model.usage?.outputTokens ?? 70,
