@@ -75,7 +75,6 @@ function wrapSmithySend (send) {
     shimmer.wrap(command, 'resolveMiddleware', resolveMiddleware => {
       return function () {
         if (this.deserialize) {
-          // this.deserialize *should* be set by this point
           shimmer.wrap(this, 'deserialize', deserialize => wrapDeserialize(deserialize, serviceIdentifier))
         }
         return resolveMiddleware.apply(this, arguments)
