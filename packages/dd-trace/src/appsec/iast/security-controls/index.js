@@ -24,7 +24,7 @@ function configure (iastConfig) {
 
   controls = parse(iastConfig.securityControlsConfiguration)
   if (controls?.size > 0) {
-    hooks = new Set()
+    hooks = new WeakSet()
 
     moduleLoadStartChannel.subscribe(onModuleLoaded)
     moduleLoadEndChannel.subscribe(onModuleLoaded)
