@@ -82,16 +82,20 @@ withVersions('passport', 'passport', version => {
         res.send(req.user?.id)
       })
 
-      passportDeserializeUserChannel.subscribe((data) => subscriberStub(data))
-
       server = app.listen(0, () => {
         port = server.address().port
         done()
       })
     })
 
-    beforeEach(async () => {
+    beforeEach(() => {
       subscriberStub = sinon.stub()
+
+      passportDeserializeUserChannel.subscribe(subscriberStub)
+    })
+
+    afterEach(() => {
+      passportDeserializeUserChannel.unsubscribe(subscriberStub)
     })
 
     after(() => {
@@ -129,7 +133,8 @@ withVersions('passport', 'passport', version => {
 
       assert.strictEqual(res.status, 200)
       assert.strictEqual(res.data, 'uuid_42')
-      sinon.assert.calledOnceWithExactly(subscriberStub, {
+      sinon.assert.calledOnce(subscriberStub)
+      sinon.assert.calledWith(subscriberStub, {
         user: { id: 'uuid_42', username: 'test', password: '1234', email: 'testuser@ddog.com' },
         abortController: new AbortController()
       })
@@ -139,18 +144,22 @@ withVersions('passport', 'passport', version => {
       const login = await axios.get(`http://localhost:${port}/login?username=test&password=1234`)
       const cookie = login.headers['set-cookie'][0]
 
-      subscriberStub = sinon.spy(({ abortController }) => {
+      subscriberStub.callsFake(({ abortController }) => {
         storage.getStore().req.res.writeHead(403).end('Blocked')
         abortController.abort()
       })
 
       const res = await axios.get(`http://localhost:${port}/`, { headers: { cookie } })
 
+      const abortController = new AbortController()
+      abortController.abort()
+
       assert.strictEqual(res.status, 403)
       assert.strictEqual(res.data, 'Blocked')
-      sinon.assert.calledOnceWithExactly(subscriberStub, {
+      sinon.assert.calledOnce(subscriberStub)
+      sinon.assert.calledWith(subscriberStub, {
         user: { id: 'uuid_42', username: 'test', password: '1234', email: 'testuser@ddog.com' },
-        abortController: new AbortController()
+        abortController
       })
     })
   })
