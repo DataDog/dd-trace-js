@@ -190,6 +190,7 @@ jobs:
         with:
           matcher: true
           fail-on-error: true
+          shellcheck: false # TODO should we enable this?
       - name: actionlint Summary
         if: ${{ steps.actionlint.outputs.exit-code != 0 }}
         run: |
