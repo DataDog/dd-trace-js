@@ -17,11 +17,11 @@ concurrency:
 jobs:
   sandbox:
     runs-on: ubuntu-latest
-    env:
-      TMPDIR: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v4
       - run: npm run sandbox
+        env:
+          TMPDIR: ${{ runner.temp }}
       - uses: actions/upload-artifact@v4
         with:
           name: sandbox
@@ -379,7 +379,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGINS: express
-      TMPDIR: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -387,6 +386,8 @@ jobs:
           name: sandbox
           path: ${{ runner.temp }}/dd-trace
       - uses: ./.github/actions/plugins/test
+        env:
+          TMPDIR: ${{ runner.temp }}
 
   express-mongo-sanitize:
     runs-on: ubuntu-latest
