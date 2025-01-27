@@ -7,6 +7,7 @@ const { getLocalStateForCallFrame } = require('./snapshot')
 const send = require('./send')
 const { getStackFromCallFrames } = require('./state')
 const { ackEmitting } = require('./status')
+const { threadPausedMsMetric } = require('./telemetry')
 const { parentThreadId } = require('./config')
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./defaults')
 const log = require('../../log')
@@ -157,12 +158,10 @@ session.on('Debugger.paused', async ({ params }) => {
   )
 
   await session.post('Debugger.resume')
-  const diff = process.hrtime.bigint() - start // TODO: Recored as telemetry (DEBUG-2858)
 
-  log.debug(
-    '[debugger:devtools_client] Finished processing breakpoints - main thread paused for: %d ms',
-    Number(diff) / 1_000_000
-  )
+  const diff = Number(process.hrtime.bigint() - start) / 1_000_000
+  log.debug('[debugger:devtools_client] Finished processing breakpoints - instrumented thread paused for: %d ms', diff)
+  threadPausedMsMetric(diff)
 
   const logger = {
     // We can safely use `location.file` from the first probe in the array, since all probes hit by `hitBreakpoints`
