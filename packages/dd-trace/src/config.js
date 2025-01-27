@@ -981,8 +981,9 @@ class Config {
       this._setValue(opts, 'iast.requestSampling', iastRequestSampling)
       this._optsUnprocessed['iast.requestSampling'] = options.iast?.requestSampling
     }
-    this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
+    this._setValue(opts, 'iast.securityControlsConfiguration', options.iast?.securityControlsConfiguration)
     this._setBoolean(opts, 'iast.stackTrace.enabled', options.iast?.stackTrace?.enabled)
+    this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
     this._setBoolean(opts, 'legacyBaggageEnabled', options.legacyBaggageEnabled)
     this._setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)

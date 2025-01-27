@@ -886,6 +886,7 @@ describe('Config', () => {
           redactionEnabled: false,
           redactionNamePattern: 'REDACTION_NAME_PATTERN',
           redactionValuePattern: 'REDACTION_VALUE_PATTERN',
+          securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
           telemetryVerbosity: 'DEBUG',
           stackTrace: {
             enabled: false
@@ -964,8 +965,10 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
     expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
-    expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
+    expect(config).to.have.nested.property('iast.securityControlsConfiguration',
+      'SANITIZER:CODE_INJECTION:sanitizer.js:method')
     expect(config).to.have.nested.property('iast.stackTrace.enabled', false)
+    expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
     expect(config).to.have.deep.nested.property('sampler', {
       sampleRate: 0.5,
       rateLimit: 1000,
@@ -1019,6 +1022,11 @@ describe('Config', () => {
       { name: 'iast.redactionNamePattern', value: 'REDACTION_NAME_PATTERN', origin: 'code' },
       { name: 'iast.redactionValuePattern', value: 'REDACTION_VALUE_PATTERN', origin: 'code' },
       { name: 'iast.requestSampling', value: 50, origin: 'code' },
+      {
+        name: 'iast.securityControlsConfiguration',
+        value: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
+        origin: 'code'
+      },
       { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'code' },
       { name: 'iast.stackTrace.enabled', value: false, origin: 'code' },
       { name: 'peerServiceMapping', value: { d: 'dd' }, origin: 'code' },
@@ -1244,6 +1252,7 @@ describe('Config', () => {
     process.env.DD_IAST_REDACTION_NAME_PATTERN = 'name_pattern_to_be_overriden_by_options'
     process.env.DD_IAST_REDACTION_VALUE_PATTERN = 'value_pattern_to_be_overriden_by_options'
     process.env.DD_IAST_STACK_TRACE_ENABLED = 'true'
+    process.env.DD_IAST_SECURITY_CONTROLS_CONFIGURATION = 'SANITIZER:CODE_INJECTION:sanitizer.js:method1'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
     process.env.DD_LLMOBS_ML_APP = 'myMlApp'
@@ -1325,6 +1334,7 @@ describe('Config', () => {
         dbRowsToTaint: 3,
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
         redactionValuePattern: 'REDACTION_VALUE_PATTERN',
+        securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method2',
         stackTrace: {
           enabled: false
         }
@@ -1403,6 +1413,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
     expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
     expect(config).to.have.nested.property('iast.stackTrace.enabled', false)
+    expect(config).to.have.nested.property('iast.securityControlsConfiguration',
+      'SANITIZER:CODE_INJECTION:sanitizer.js:method2')
     expect(config).to.have.nested.property('llmobs.mlApp', 'myOtherMlApp')
     expect(config).to.have.nested.property('llmobs.agentlessEnabled', false)
   })
