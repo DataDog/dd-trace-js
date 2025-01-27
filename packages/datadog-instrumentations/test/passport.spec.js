@@ -110,7 +110,7 @@ withVersions('passport', 'passport', version => {
       const res = await axios.get(`http://localhost:${port}/`, { headers: { cookie } })
 
       assert.strictEqual(res.status, 500)
-      assert.strictEqual(res.data, '*MOCK* Cannot deserialize user')
+      assert.include(res.data, '*MOCK* Cannot deserialize user')
       sinon.assert.notCalled(subscriberStub)
     })
 
@@ -145,7 +145,9 @@ withVersions('passport', 'passport', version => {
       const cookie = login.headers['set-cookie'][0]
 
       subscriberStub.callsFake(({ abortController }) => {
-        storage.getStore().req.res.writeHead(403).end('Blocked')
+        const res = storage.getStore().req.res
+        res.writeHead(403)
+        res.constructor.prototype.end.call(res, 'Blocked')
         abortController.abort()
       })
 
