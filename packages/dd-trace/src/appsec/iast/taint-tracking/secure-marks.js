@@ -8,8 +8,8 @@ Object.keys(vulnerabilities).forEach(vulnerability => {
   marks[vulnerability + '_MARK'] = getNextSecureMark()
 })
 
-let [asterisk, ...rest] = Object.values(marks)
-rest.forEach(mark => { asterisk |= mark })
+let asterisk = 0x0
+Object.values(marks).forEach(mark => { asterisk |= mark })
 
 marks.ASTERISK_MARK = asterisk
 marks.CUSTOM_SECURE_MARK = getNextSecureMark()
