@@ -198,6 +198,8 @@ function enableEsmRewriter (telemetryVerbosity) {
       })
     } catch (e) {
       log.error('[ASM] Error enabling ESM Rewriter', e)
+      port1.close()
+      port2.close()
     }
   }
 }
