@@ -380,6 +380,7 @@ jobs:
     needs: sandbox
     env:
       PLUGINS: express
+      USE_SANDBOX: 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
