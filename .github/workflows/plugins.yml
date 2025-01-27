@@ -377,6 +377,7 @@ jobs:
 
   express:
     runs-on: ubuntu-latest
+    needs: sandbox
     env:
       PLUGINS: express
     steps:
