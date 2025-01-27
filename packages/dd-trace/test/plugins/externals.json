@@ -361,6 +361,20 @@
       "dep": true
     }
   ],
+  "passport": [
+    {
+      "name": "express",
+      "versions": [">=4.0.0"]
+    },
+    {
+      "name": "express-session",
+      "versions": [">=1.5.0"]
+    },
+    {
+      "name": "passport-local",
+      "versions": [">=1.0.0"]
+    }
+  ],
    "passport-http": [
      {
        "name": "passport",
