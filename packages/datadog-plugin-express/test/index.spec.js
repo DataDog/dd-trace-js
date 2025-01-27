@@ -17,7 +17,7 @@ describe('Plugin', () => {
   describe('express', () => {
     withVersions('express', 'express', version => {
       beforeEach(() => {
-        tracer = require('../../dd-trace')
+        tracer = require('../../dd-trace/test/tracer')
       })
 
       afterEach(() => {
