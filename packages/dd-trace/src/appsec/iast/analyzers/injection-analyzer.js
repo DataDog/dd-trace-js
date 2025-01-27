@@ -30,6 +30,11 @@ class InjectionAnalyzer extends Analyzer {
   _filterSecureRanges (ranges) {
     return ranges?.filter(range => !this._isRangeSecure(range))
   }
+
+  _isRangeSecure (range) {
+    const { secureMarks } = range
+    return (secureMarks & this._secureMark) === this._secureMark
+  }
 }
 
 module.exports = InjectionAnalyzer
