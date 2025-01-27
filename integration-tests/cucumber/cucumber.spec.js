@@ -3,7 +3,6 @@
 const { exec } = require('child_process')
 
 const getPort = require('get-port')
-const semver = require('semver')
 const { assert } = require('chai')
 
 const {
@@ -47,8 +46,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
-const isOldNode = semver.satisfies(process.version, '<=16')
-const versions = ['7.0.0', isOldNode ? '9' : 'latest']
+const versions = ['7.0.0', 'latest']
 
 const runTestsCommand = './node_modules/.bin/cucumber-js ci-visibility/features/*.feature'
 const runTestsWithCoverageCommand = './node_modules/nyc/bin/nyc.js -r=text-summary ' +
