@@ -58,7 +58,7 @@ withVersions('passport', 'passport', version => {
 
       passport.deserializeUser((id, done) => {
         if (id === 'error_user') {
-          return done(new Error('*MOCK* Cannot deserialize user'))
+          return done('*MOCK* Cannot deserialize user')
         }
 
         if (id === 'notfound_user') {
@@ -106,6 +106,7 @@ withVersions('passport', 'passport', version => {
       const res = await axios.get(`http://localhost:${port}/`, { headers: { cookie } })
 
       assert.strictEqual(res.status, 500)
+      assert.strictEqual(res.data, '*MOCK* Cannot deserialize user')
       sinon.assert.notCalled(subscriberStub)
     })
 
