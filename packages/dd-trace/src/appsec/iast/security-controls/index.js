@@ -17,6 +17,7 @@ const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
 
 let controls
+let controlsKeys
 let hooks
 
 function configure (iastConfig) {
@@ -26,6 +27,7 @@ function configure (iastConfig) {
     controls = parse(iastConfig.securityControlsConfiguration)
     if (controls?.size > 0) {
       hooks = new WeakSet()
+      controlsKeys = [...controls.keys()]
 
       moduleLoadStartChannel.subscribe(onModuleLoaded)
       moduleLoadEndChannel.subscribe(onModuleLoaded)
@@ -57,7 +59,7 @@ function getControls (filename) {
   key = key.replaceAll(path.sep, path.posix.sep)
 
   if (key.includes('node_modules')) {
-    key = [...controls.keys()].find(file => key.endsWith(file))
+    key = controlsKeys.find(file => key.endsWith(file))
   }
 
   return controls.get(key)
@@ -175,6 +177,7 @@ function disable () {
   if (moduleLoadEndChannel.hasSubscribers) moduleLoadEndChannel.unsubscribe(onModuleLoaded)
 
   controls = undefined
+  controlsKeys = undefined
   hooks = undefined
 }
 
