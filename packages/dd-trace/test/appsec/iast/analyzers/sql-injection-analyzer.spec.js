@@ -50,8 +50,11 @@ describe('sql-injection-analyzer', () => {
   const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
     '../taint-tracking/operations': TaintTrackingMock
   })
-  const sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
+  const StoredInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/stored-injection-analyzer', {
     './injection-analyzer': InjectionAnalyzer
+  })
+  const sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
+    './stored-injection-analyzer': StoredInjectionAnalyzer
   })
 
   afterEach(() => {
@@ -127,9 +130,14 @@ describe('sql-injection-analyzer', () => {
       '../taint-tracking/operations': TaintTrackingMock,
       './vulnerability-analyzer': ProxyAnalyzer
     })
+
+    const StoredInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/stored-injection-analyzer', {
+      './injection-analyzer': InjectionAnalyzer
+    })
+
     const proxiedSqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer',
       {
-        './injection-analyzer': InjectionAnalyzer,
+        './stored-injection-analyzer': StoredInjectionAnalyzer,
         '../taint-tracking/operations': TaintTrackingMock,
         '../iast-context': {
           getIastContext: () => iastContext

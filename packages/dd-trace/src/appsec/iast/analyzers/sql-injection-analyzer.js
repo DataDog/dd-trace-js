@@ -1,14 +1,14 @@
 'use strict'
 
-const InjectionAnalyzer = require('./injection-analyzer')
 const { SQL_INJECTION } = require('../vulnerabilities')
 const { getRanges } = require('../taint-tracking/operations')
 const { storage } = require('../../../../../datadog-core')
 const { getNodeModulesPaths } = require('../path-line')
+const StoredInjectionAnalyzer = require('./stored-injection-analyzer')
 
 const EXCLUDED_PATHS = getNodeModulesPaths('mysql', 'mysql2', 'sequelize', 'pg-pool', 'knex')
 
-class SqlInjectionAnalyzer extends InjectionAnalyzer {
+class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
   constructor () {
     super(SQL_INJECTION)
   }
@@ -81,10 +81,6 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
     if (typeof knexDialect === 'string') {
       return knexDialect.toUpperCase()
     }
-  }
-
-  _areRangesVulnerable (ranges) {
-    return ranges?.length > 0
   }
 }
 
