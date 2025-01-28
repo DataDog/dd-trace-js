@@ -35,7 +35,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
   finish ({ res, args }) {
     const span = this.activeSpan
     this.config.hooks.execute(span, args, res)
-    if (res.errors) {
+    if (res?.errors) {
       for (const err of res.errors) {
         extractErrorIntoSpanEvent(this._tracerConfig, span, err)
       }

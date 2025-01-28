@@ -920,6 +920,18 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property(ERROR_MESSAGE, errors[0].message)
               expect(spans[0].meta).to.have.property(ERROR_STACK, errors[0].stack)
               expect(spans[0].meta).to.have.property('component', 'graphql')
+
+              const spanEvents = agent.unformatSpanEvents(spans[0])
+
+              expect(spanEvents).to.have.length(1)
+              expect(spanEvents[0]).to.have.property('startTime')
+              expect(spanEvents[0]).to.have.property('name', 'dd.graphql.query.error')
+              expect(spanEvents[0].attributes).to.have.property('type', 'GraphQLError')
+              expect(spanEvents[0].attributes).to.have.property('stacktrace')
+              expect(spanEvents[0].attributes).to.have.property('message', 'Field "address" of ' +
+                'type "Address" must have a selection of subfields. Did you mean "address { ... }"?')
+              expect(spanEvents[0].attributes.locations).to.have.length(1)
+              expect(spanEvents[0].attributes.locations[0]).to.equal('1:11')
             })
             .then(done)
             .catch(done)
@@ -986,6 +998,19 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
               expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
               expect(spans[0].meta).to.have.property('component', 'graphql')
+
+              const spanEvents = agent.unformatSpanEvents(spans[0])
+
+              expect(spanEvents).to.have.length(1)
+              expect(spanEvents[0]).to.have.property('startTime')
+              expect(spanEvents[0]).to.have.property('name', 'dd.graphql.query.error')
+              expect(spanEvents[0].attributes).to.have.property('type', 'GraphQLError')
+              expect(spanEvents[0].attributes).to.have.property('stacktrace')
+              expect(spanEvents[0].attributes).to.have.property('message', 'test')
+              expect(spanEvents[0].attributes.locations).to.have.length(1)
+              expect(spanEvents[0].attributes.locations[0]).to.equal('1:3')
+              expect(spanEvents[0].attributes.path).to.have.length(1)
+              expect(spanEvents[0].attributes.path[0]).to.equal('hello')
             })
             .then(done)
             .catch(done)

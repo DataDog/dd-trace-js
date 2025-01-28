@@ -24,9 +24,8 @@ function extractErrorIntoSpanEvent (config, span, exc) {
     attributes.message = exc.message
   }
 
-  if (!config.traceGraphQlErrorExtensions) { // fix ! and config
-    config.traceGraphQlErrorExtensions = ['code']
-    for (const ext of config.traceGraphQlErrorExtensions) {
+  if (config.graphqlErrorExtensions) {
+    for (const ext of config.graphqlErrorExtensions) {
       if (exc.extensions?.[ext]) {
         attributes[`extensions.${ext}`] = exc.extensions[ext]
       }
