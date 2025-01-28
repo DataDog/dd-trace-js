@@ -70,6 +70,7 @@ function getUserId (user) {
   }
 }
 
+// TODO: what if we have a stack of auth strategies and only last one is sucessful ? we shouldn't send a million failures
 function trackLogin (framework, login, user, success, rootSpan) {
   if (!collectionMode || collectionMode === 'disabled') return
 
