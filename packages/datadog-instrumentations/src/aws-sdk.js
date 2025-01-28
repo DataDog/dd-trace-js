@@ -40,11 +40,10 @@ function wrapRequest (send) {
   }
 }
 
-function wrapDeserialize (deserialize, serviceIdentifier) {
-  return function (response) {
-    const channelSuffix = getChannelSuffix(serviceIdentifier)
-    const headersCh = channel(`apm:aws:response:deserialize:${channelSuffix}`)
+function wrapDeserialize (deserialize, channelSuffix) {
+  const headersCh = channel(`apm:aws:response:deserialize:${channelSuffix}`)
 
+  return function (response) {
     headersCh.publish({ headers: response.headers })
 
     return deserialize.apply(this, arguments)
@@ -75,7 +74,7 @@ function wrapSmithySend (send) {
     shimmer.wrap(command, 'resolveMiddleware', resolveMiddleware => {
       return function () {
         if (this.deserialize) {
-          shimmer.wrap(this, 'deserialize', deserialize => wrapDeserialize(deserialize, serviceIdentifier))
+          shimmer.wrap(this, 'deserialize', deserialize => wrapDeserialize(deserialize, channelSuffix))
         }
         return resolveMiddleware.apply(this, arguments)
       }
