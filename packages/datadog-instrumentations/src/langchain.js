@@ -62,12 +62,10 @@ for (const extension of extensions) {
   })
 
   addHook({ name: '@langchain/core', file: `dist/embeddings.${extension}`, versions: ['>=0.1'] }, exports => {
-    // we unfortunately cannot patch the prototype of the Embeddings class directly
+    // we cannot patch the prototype of the Embeddings class directly
     // this is because the "abstract class Embeddings" is transpiled from TypeScript to not include abstract functions
-    // thus, we patch the exports instead.
+    // thus, we patch the exported class directly instead instead.
 
-    // Embeddings is a simple class with no defined functions, just instantiating an async caller in its constructor,
-    // handled by the `super` call here
     shimmer.wrap(exports, 'Embeddings', Embeddings => {
       return class extends Embeddings {
         constructor (...args) {
