@@ -2,13 +2,11 @@ name: System Tests
 
 on:
   pull_request:
-    branches:
-      - "**"
   push:
     branches: [master]
   workflow_dispatch: {}
   schedule:
-    - cron:  '00 04 * * 2-6'
+    - cron: "0 4 * * *"
 
 jobs:
   build-artifacts:

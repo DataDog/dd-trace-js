@@ -19,7 +19,7 @@ jobs:
       - uses: ./.github/actions/node/setup
       - uses: ./.github/actions/install
       - run: yarn test:appsec:ci
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   ubuntu:
     runs-on: ubuntu-latest
@@ -33,18 +33,18 @@ jobs:
       - run: yarn test:appsec:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:ci
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: '18'
       - uses: ./.github/actions/install
       - run: yarn test:appsec:ci
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   ldapjs:
     runs-on: ubuntu-latest
@@ -69,7 +69,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   postgres:
     runs-on: ubuntu-latest
@@ -94,7 +94,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/20
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   mysql:
     runs-on: ubuntu-latest
@@ -117,7 +117,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/20
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   express:
     runs-on: ubuntu-latest
@@ -131,7 +131,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   graphql:
     runs-on: ubuntu-latest
@@ -145,7 +145,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   mongodb-core:
     runs-on: ubuntu-latest
@@ -165,7 +165,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   mongoose:
     runs-on: ubuntu-latest
@@ -185,7 +185,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   sourcing:
     runs-on: ubuntu-latest
@@ -201,7 +201,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   next:
     strategy:
@@ -235,7 +235,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           cache: yarn
           node-version: ${{ matrix.version }}
@@ -245,7 +245,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: appsec-${{ github.job }}-${{ matrix.version }}-${{ matrix.range_clean }}
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   lodash:
     runs-on: ubuntu-latest
@@ -259,7 +259,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   integration:
     runs-on: ubuntu-latest
@@ -283,7 +283,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   template:
     runs-on: ubuntu-latest
@@ -297,7 +297,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   node-serialize:
     runs-on: ubuntu-latest
@@ -311,4 +311,4 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
