@@ -77,7 +77,8 @@ describe('user_blocking', () => {
         const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'user' })
         expect(ret).to.be.true
         expect(getRootSpan).to.have.been.calledOnceWithExactly(tracer)
-        expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('usr.id', 'user')
+        expect(rootSpan.setTag).to.have.been.calledWithExactly('usr.id', 'user')
+        expect(rootSpan.setTag).to.have.been.calledWithExactly('_dd.appsec.user.collection_mode', 'sdk')
       })
 
       it('should not override user when already set', () => {
@@ -104,7 +105,8 @@ describe('user_blocking', () => {
       it('should return false when received no results', () => {
         const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'gooduser' })
         expect(ret).to.be.false
-        expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('usr.id', 'gooduser')
+        expect(rootSpan.setTag).to.have.been.calledWithExactly('usr.id', 'gooduser')
+        expect(rootSpan.setTag).to.have.been.calledWithExactly('_dd.appsec.user.collection_mode', 'sdk')
       })
     })
 
@@ -198,6 +200,7 @@ describe('user_blocking', () => {
         }
         agent.use(traces => {
           expect(traces[0][0].meta).to.have.property('usr.id', 'testUser3')
+          expect(traces[0][0].meta).to.have.property('_dd.appsec.user.collection_mode', 'sdk')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
@@ -212,6 +215,7 @@ describe('user_blocking', () => {
         }
         agent.use(traces => {
           expect(traces[0][0].meta).to.have.property('usr.id', 'testUser')
+          expect(traces[0][0].meta).to.have.property('_dd.appsec.user.collection_mode', 'sdk')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
@@ -224,6 +228,7 @@ describe('user_blocking', () => {
         }
         agent.use(traces => {
           expect(traces[0][0].meta).to.have.property('usr.id', 'blockedUser')
+          expect(traces[0][0].meta).to.have.property('_dd.appsec.user.collection_mode', 'sdk')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
