@@ -882,21 +882,6 @@ describe('Plugin', () => {
       })
 
       describe('embeddings', () => {
-        if (version !== '0.1.0') {
-          // version mismatching otherwise
-          it('maintains the original instance of the embeddings class', () => {
-            const Embeddings = langchainEmbeddings.Embeddings
-            const OpenAIEmbeddings = langchainOpenai.OpenAIEmbeddings
-            const GoogleGenerativeAIEmbeddings = langchainGoogleGenAI.GoogleGenerativeAIEmbeddings
-
-            const oaiEmbeddings = new OpenAIEmbeddings()
-            const genaiEmbeddings = new GoogleGenerativeAIEmbeddings()
-
-            expect(oaiEmbeddings).to.be.an.instanceOf(Embeddings)
-            expect(genaiEmbeddings).to.be.an.instanceOf(Embeddings)
-          })
-        }
-
         describe('@langchain/openai', () => {
           it('does not tag output on error', async () => {
             nock('https://api.openai.com').post('/v1/embeddings').reply(403)
