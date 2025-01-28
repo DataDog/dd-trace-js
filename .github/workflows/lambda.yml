@@ -29,4 +29,4 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: lambda
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
