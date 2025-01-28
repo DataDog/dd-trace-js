@@ -15,7 +15,8 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
-  TELEMETRY_TEST_SESSION
+  TELEMETRY_TEST_SESSION,
+  TEST_RETRY_REASON
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -144,6 +145,7 @@ class PlaywrightPlugin extends CiPlugin {
         span.setTag(TEST_IS_NEW, 'true')
         if (isEfdRetry) {
           span.setTag(TEST_IS_RETRY, 'true')
+          span.setTag(TEST_RETRY_REASON, 'efd')
         }
       }
       if (isRetry) {

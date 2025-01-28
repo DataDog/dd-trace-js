@@ -84,6 +84,7 @@ class VulnerabilityFormatter {
     const formattedVulnerability = {
       type: vulnerability.type,
       hash: vulnerability.hash,
+      stackId: vulnerability.stackId,
       evidence: this.formatEvidence(vulnerability.type, vulnerability.evidence, sourcesIndexes, sources),
       location: {
         spanId: vulnerability.location.spanId

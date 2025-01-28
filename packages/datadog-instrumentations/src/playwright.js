@@ -35,6 +35,7 @@ const STATUS_TO_TEST_STATUS = {
 }
 
 let remainingTestsByFile = {}
+let isKnownTestsEnabled = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
 let isFlakyTestRetriesEnabled = false
@@ -418,6 +419,7 @@ function runnerHook (runnerExport, playwrightVersion) {
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
       if (!err) {
+        isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
@@ -425,19 +427,22 @@ function runnerHook (runnerExport, playwrightVersion) {
       }
     } catch (e) {
       isEarlyFlakeDetectionEnabled = false
+      isKnownTestsEnabled = false
       log.error('Playwright session start error', e)
     }
 
-    if (isEarlyFlakeDetectionEnabled && semver.gte(playwrightVersion, MINIMUM_SUPPORTED_VERSION_EFD)) {
+    if (isKnownTestsEnabled && semver.gte(playwrightVersion, MINIMUM_SUPPORTED_VERSION_EFD)) {
       try {
         const { err, knownTests: receivedKnownTests } = await getChannelPromise(knownTestsCh)
         if (!err) {
           knownTests = receivedKnownTests
         } else {
           isEarlyFlakeDetectionEnabled = false
+          isKnownTestsEnabled = false
         }
       } catch (err) {
         isEarlyFlakeDetectionEnabled = false
+        isKnownTestsEnabled = false
         log.error('Playwright known tests error', err)
       }
     }
@@ -553,7 +558,7 @@ addHook({
 
   async function newCreateRootSuite () {
     const rootSuite = await oldCreateRootSuite.apply(this, arguments)
-    if (!isEarlyFlakeDetectionEnabled) {
+    if (!isKnownTestsEnabled) {
       return rootSuite
     }
     const newTests = rootSuite
@@ -562,7 +567,7 @@ addHook({
 
     newTests.forEach(newTest => {
       newTest._ddIsNew = true
-      if (newTest.expectedStatus !== 'skipped') {
+      if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped') {
         const fileSuite = getSuiteType(newTest, 'file')
         const projectSuite = getSuiteType(newTest, 'project')
         for (let repeatEachIndex = 0; repeatEachIndex < earlyFlakeDetectionNumRetries; repeatEachIndex++) {

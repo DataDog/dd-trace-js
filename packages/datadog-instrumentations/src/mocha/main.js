@@ -201,6 +201,7 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
     if (err) {
       config.knownTests = []
       config.isEarlyFlakeDetectionEnabled = false
+      config.isKnownTestsEnabled = false
     } else {
       config.knownTests = knownTests
     }
@@ -222,12 +223,13 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
     config.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
     config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
     config.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
+    config.isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
     // ITR and auto test retries are not supported in parallel mode yet
     config.isSuitesSkippingEnabled = !isParallel && libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = !isParallel && libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = !isParallel && libraryConfig.flakyTestRetriesCount
 
-    if (config.isEarlyFlakeDetectionEnabled) {
+    if (config.isKnownTestsEnabled) {
       knownTestsCh.publish({
         onDone: mochaRunAsyncResource.bind(onReceivedKnownTests)
       })
@@ -273,7 +275,7 @@ addHook({
     })
 
     getExecutionConfiguration(runner, false, () => {
-      if (config.isEarlyFlakeDetectionEnabled) {
+      if (config.isKnownTestsEnabled) {
         const testSuites = this.files.map(file => getTestSuitePath(file, process.cwd()))
         const isFaulty = getIsFaultyEarlyFlakeDetection(
           testSuites,
@@ -283,6 +285,7 @@ addHook({
         if (isFaulty) {
           config.isEarlyFlakeDetectionEnabled = false
           config.isEarlyFlakeDetectionFaulty = true
+          config.isKnownTestsEnabled = false
         }
       }
       if (getCodeCoverageCh.hasSubscribers) {
@@ -537,7 +540,7 @@ addHook({
     this.once('end', getOnEndHandler(true))
 
     getExecutionConfiguration(this, true, () => {
-      if (config.isEarlyFlakeDetectionEnabled) {
+      if (config.isKnownTestsEnabled) {
         const testSuites = files.map(file => getTestSuitePath(file, process.cwd()))
         const isFaulty = getIsFaultyEarlyFlakeDetection(
           testSuites,
@@ -545,6 +548,7 @@ addHook({
           config.earlyFlakeDetectionFaultyThreshold
         )
         if (isFaulty) {
+          config.isKnownTestsEnabled = false
           config.isEarlyFlakeDetectionEnabled = false
           config.isEarlyFlakeDetectionFaulty = true
         }
@@ -569,7 +573,7 @@ addHook({
   const { BufferedWorkerPool } = BufferedWorkerPoolPackage
 
   shimmer.wrap(BufferedWorkerPool.prototype, 'run', run => async function (testSuiteAbsolutePath, workerArgs) {
-    if (!testStartCh.hasSubscribers || !config.isEarlyFlakeDetectionEnabled) {
+    if (!testStartCh.hasSubscribers || !config.isKnownTestsEnabled) {
       return run.apply(this, arguments)
     }
 
@@ -584,6 +588,7 @@ addHook({
         {
           ...workerArgs,
           _ddEfdNumRetries: config.earlyFlakeDetectionNumRetries,
+          _ddIsEfdEnabled: config.isEarlyFlakeDetectionEnabled,
           _ddKnownTests: {
             mocha: {
               [testPath]: testSuiteKnownTests

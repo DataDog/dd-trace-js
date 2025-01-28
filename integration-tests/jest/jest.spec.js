@@ -30,6 +30,7 @@ const {
   TEST_NAME,
   JEST_DISPLAY_NAME,
   TEST_EARLY_FLAKE_ABORT_REASON,
+  TEST_RETRY_REASON,
   TEST_SOURCE_START,
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
@@ -1609,16 +1610,14 @@ describe('jest CommonJS', () => {
       })
       const NUM_RETRIES_EFD = 3
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': NUM_RETRIES_EFD
           },
           faulty_session_threshold: 100
-        }
+        },
+        known_tests_enabled: true
       })
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -1652,6 +1651,9 @@ describe('jest CommonJS', () => {
             retriedTests.length
           )
           assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+          retriedTests.forEach(test => {
+            assert.propertyVal(test.meta, TEST_RETRY_REASON, 'efd')
+          })
           // Test name does not change
           newTests.forEach(test => {
             assert.equal(test.meta[TEST_NAME], 'ci visibility 2 can report tests 2')
@@ -1682,16 +1684,14 @@ describe('jest CommonJS', () => {
         }
       })
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': 3
           },
           faulty_session_threshold: 100
-        }
+        },
+        known_tests_enabled: true
       })
 
       const parameterizedTestFile = 'test-parameterized.js'
@@ -1757,16 +1757,14 @@ describe('jest CommonJS', () => {
         }
       })
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': 3
           },
           faulty_session_threshold: 100
-        }
+        },
+        known_tests_enabled: true
       })
 
       const eventsPromise = receiver
@@ -1779,8 +1777,12 @@ describe('jest CommonJS', () => {
           const newTests = tests.filter(test =>
             test.meta[TEST_IS_NEW] === 'true'
           )
-          // new tests are not detected
-          assert.equal(newTests.length, 0)
+          // new tests are detected but not retried
+          assert.equal(newTests.length, 1)
+          const retriedTests = tests.filter(test =>
+            test.meta[TEST_IS_RETRY] === 'true'
+          )
+          assert.equal(retriedTests.length, 0)
         })
 
       childProcess = exec(
@@ -1809,16 +1811,14 @@ describe('jest CommonJS', () => {
 
       const NUM_RETRIES_EFD = 5
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': NUM_RETRIES_EFD
           },
           faulty_session_threshold: 100
-        }
+        },
+        known_tests_enabled: true
       })
 
       const eventsPromise = receiver
@@ -1875,16 +1875,14 @@ describe('jest CommonJS', () => {
 
       const NUM_RETRIES_EFD = 5
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': NUM_RETRIES_EFD
           },
           faulty_session_threshold: 100
-        }
+        },
+        known_tests_enabled: true
       })
 
       const eventsPromise = receiver
@@ -1931,16 +1929,14 @@ describe('jest CommonJS', () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
 
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': 3
           },
           faulty_session_threshold: 100
-        }
+        },
+        known_tests_enabled: true
       })
       // Tests from ci-visibility/test/skipped-and-todo-test will be considered new
       receiver.setKnownTests({
@@ -1999,16 +1995,14 @@ describe('jest CommonJS', () => {
 
       const NUM_RETRIES_EFD = 5
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': NUM_RETRIES_EFD
           },
           faulty_session_threshold: 100
-        }
+        },
+        known_tests_enabled: true
       })
 
       const eventsPromise = receiver
@@ -2051,16 +2045,14 @@ describe('jest CommonJS', () => {
 
       const NUM_RETRIES_EFD = 3
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': NUM_RETRIES_EFD
           },
           faulty_session_threshold: 100
-        }
+        },
+        known_tests_enabled: true
       })
 
       const eventsPromise = receiver
@@ -2127,16 +2119,14 @@ describe('jest CommonJS', () => {
 
       const NUM_RETRIES_EFD = 3
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': NUM_RETRIES_EFD
           },
           faulty_session_threshold: 100
-        }
+        },
+        known_tests_enabled: true
       })
 
       const eventsPromise = receiver
@@ -2183,16 +2173,14 @@ describe('jest CommonJS', () => {
 
       const NUM_RETRIES_EFD = 3
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': NUM_RETRIES_EFD
           },
           faulty_session_threshold: 1
-        }
+        },
+        known_tests_enabled: true
       })
 
       const eventsPromise = receiver
@@ -2235,16 +2223,14 @@ describe('jest CommonJS', () => {
       })
       const NUM_RETRIES_EFD = 3
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': NUM_RETRIES_EFD
           },
           faulty_session_threshold: 100
-        }
+        },
+        known_tests_enabled: true
       })
 
       const eventsPromise = receiver
@@ -2292,6 +2278,66 @@ describe('jest CommonJS', () => {
             DD_TRACE_DEBUG: 1,
             DD_TRACE_LOG_LEVEL: 'warn'
           },
+          stdio: 'inherit'
+        }
+      )
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('disables early flake detection if known tests should not be requested', (done) => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 3
+          }
+        },
+        known_tests_enabled: false
+      })
+
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
+      receiver.setKnownTests({
+        jest: {
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const oldTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
+          )
+          oldTests.forEach(test => {
+            assert.notProperty(test.meta, TEST_IS_NEW)
+          })
+          assert.equal(oldTests.length, 1)
+          const newTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test-2.js'
+          )
+          newTests.forEach(test => {
+            assert.notProperty(test.meta, TEST_IS_NEW)
+          })
+          const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.equal(retriedTests.length, 0)
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test/ci-visibility-test' },
           stdio: 'inherit'
         }
       )
@@ -2792,6 +2838,68 @@ describe('jest CommonJS', () => {
       childProcess.on('exit', (code) => {
         eventsPromise.then(() => {
           assert.equal(code, 0)
+          done()
+        }).catch(done)
+      })
+    })
+  })
+
+  context('known tests without early flake detection', () => {
+    it('detects new tests without retrying them', (done) => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
+      receiver.setKnownTests({
+        jest: {
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
+        }
+      })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: false
+        },
+        known_tests_enabled: true
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          // no other tests are considered new
+          const oldTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
+          )
+          oldTests.forEach(test => {
+            assert.notProperty(test.meta, TEST_IS_NEW)
+          })
+          assert.equal(oldTests.length, 1)
+
+          const newTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test-2.js'
+          )
+          newTests.forEach(test => {
+            assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+          })
+          const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          // no test has been retried
+          assert.equal(retriedTests.length, 0)
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test/ci-visibility-test' },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
           done()
         }).catch(done)
       })

@@ -17,7 +17,8 @@ const {
   TEST_SOURCE_START,
   TEST_IS_NEW,
   TEST_EARLY_FLAKE_ENABLED,
-  TEST_EARLY_FLAKE_ABORT_REASON
+  TEST_EARLY_FLAKE_ABORT_REASON,
+  TEST_RETRY_REASON
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -60,7 +61,14 @@ class VitestPlugin extends CiPlugin {
       onDone(isFaulty)
     })
 
-    this.addSub('ci:vitest:test:start', ({ testName, testSuiteAbsolutePath, isRetry, isNew, mightHitProbe }) => {
+    this.addSub('ci:vitest:test:start', ({
+      testName,
+      testSuiteAbsolutePath,
+      isRetry,
+      isNew,
+      mightHitProbe,
+      isRetryReasonEfd
+    }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const store = storage.getStore()
 
@@ -72,6 +80,9 @@ class VitestPlugin extends CiPlugin {
       }
       if (isNew) {
         extraTags[TEST_IS_NEW] = 'true'
+      }
+      if (isRetryReasonEfd) {
+        extraTags[TEST_RETRY_REASON] = 'efd'
       }
 
       const span = this.startTestSpan(
@@ -147,7 +158,7 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:test:skip', ({ testName, testSuiteAbsolutePath }) => {
+    this.addSub('ci:vitest:test:skip', ({ testName, testSuiteAbsolutePath, isNew }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const testSpan = this.startTestSpan(
         testName,
@@ -156,7 +167,8 @@ class VitestPlugin extends CiPlugin {
         {
           [TEST_SOURCE_FILE]: testSuite,
           [TEST_SOURCE_START]: 1, // we can't get the proper start line in vitest
-          [TEST_STATUS]: 'skip'
+          [TEST_STATUS]: 'skip',
+          ...(isNew ? { [TEST_IS_NEW]: 'true' } : {})
         }
       )
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {

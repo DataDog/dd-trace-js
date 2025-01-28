@@ -158,6 +158,7 @@ module.exports = class CiPlugin extends Plugin {
         if (err) {
           log.error('Known tests could not be fetched. %s', err.message)
           this.libraryConfig.isEarlyFlakeDetectionEnabled = false
+          this.libraryConfig.isKnownTestsEnabled = false
         }
         onDone({ err, knownTests })
       })

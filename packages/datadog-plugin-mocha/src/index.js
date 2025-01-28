@@ -30,7 +30,8 @@ const {
   TEST_SUITE,
   MOCHA_IS_PARALLEL,
   TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_DRIVER
+  TEST_BROWSER_DRIVER,
+  TEST_RETRY_REASON
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -421,6 +422,7 @@ class MochaPlugin extends CiPlugin {
       extraTags[TEST_IS_NEW] = 'true'
       if (isEfdRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
+        extraTags[TEST_RETRY_REASON] = 'efd'
       }
     }
 

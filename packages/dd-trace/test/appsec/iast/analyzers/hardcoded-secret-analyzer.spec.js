@@ -11,6 +11,7 @@ const { NameAndValue, ValueOnly } = require('../../../../src/appsec/iast/analyze
 const hardcodedSecretAnalyzer = require('../../../../src/appsec/iast/analyzers/hardcoded-secret-analyzer')
 const { suite } = require('./resources/hardcoded-secrets-suite.json')
 const iast = require('../../../../src/appsec/iast')
+const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
 
 describe('Hardcoded Secret Analyzer', () => {
   describe('unit test', () => {
@@ -101,6 +102,7 @@ describe('Hardcoded Secret Analyzer', () => {
 
       afterEach(() => {
         iast.disable()
+        vulnerabilityReporter.clearCache()
       })
 
       afterEach(() => {

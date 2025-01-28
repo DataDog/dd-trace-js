@@ -8,31 +8,21 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
-const { NODE_MAJOR } = require('../../../../version')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
-
-const BUILD_COMMAND = NODE_MAJOR < 18
-  ? 'yarn exec next build'
-  : 'NODE_OPTIONS=--openssl-legacy-provider yarn exec next build'
-const NODE_OPTIONS = NODE_MAJOR < 18
-  ? `--loader=${hookFile} --require dd-trace/init`
-  : `--loader=${hookFile} --require dd-trace/init --openssl-legacy-provider`
-
-const VERSIONS_TO_TEST = NODE_MAJOR < 18 ? '>=11.1 <13.2' : '>=11.1'
 
 describe('esm', () => {
   let agent
   let proc
   let sandbox
   // match versions tested with unit tests
-  withVersions('next', 'next', VERSIONS_TO_TEST, version => {
+  withVersions('next', 'next', '>=11.1', version => {
     before(async function () {
       // next builds slower in the CI, match timeout with unit tests
       this.timeout(120 * 1000)
       sandbox = await createSandbox([`'next@${version}'`, 'react@^18.2.0', 'react-dom@^18.2.0'],
         false, ['./packages/datadog-plugin-next/test/integration-test/*'],
-        BUILD_COMMAND)
+        'NODE_OPTIONS=--openssl-legacy-provider yarn exec next build')
     })
 
     after(async () => {
@@ -50,7 +40,7 @@ describe('esm', () => {
 
     it('is instrumented', async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined, {
-        NODE_OPTIONS
+        NODE_OPTIONS: `--loader=${hookFile} --require dd-trace/init --openssl-legacy-provider`
       })
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)

@@ -349,12 +349,14 @@ function getOnPendingHandler () {
 // Hook to add retries to tests if EFD is enabled
 function getRunTestsWrapper (runTests, config) {
   return function (suite, fn) {
-    if (config.isEarlyFlakeDetectionEnabled) {
+    if (config.isKnownTestsEnabled) {
       // by the time we reach `this.on('test')`, it is too late. We need to add retries here
       suite.tests.forEach(test => {
         if (!test.isPending() && isNewTest(test, config.knownTests)) {
           test._ddIsNew = true
-          retryTest(test, config.earlyFlakeDetectionNumRetries)
+          if (config.isEarlyFlakeDetectionEnabled) {
+            retryTest(test, config.earlyFlakeDetectionNumRetries)
+          }
         }
       })
     }

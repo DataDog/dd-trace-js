@@ -10,6 +10,7 @@ const Config = require('../../../../src/config')
 
 const hardcodedPasswordAnalyzer = require('../../../../src/appsec/iast/analyzers/hardcoded-password-analyzer')
 const iast = require('../../../../src/appsec/iast')
+const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
 
 const ruleId = 'hardcoded-password'
 const samples = [
@@ -131,6 +132,7 @@ describe('Hardcoded Password Analyzer', () => {
 
       afterEach(() => {
         iast.disable()
+        vulnerabilityReporter.clearCache()
       })
 
       afterEach(() => {

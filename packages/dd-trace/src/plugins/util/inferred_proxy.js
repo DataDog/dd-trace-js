@@ -2,7 +2,6 @@ const log = require('../../log')
 const tags = require('../../../../../ext/tags')
 
 const RESOURCE_NAME = tags.RESOURCE_NAME
-const HTTP_ROUTE = tags.HTTP_ROUTE
 const SPAN_KIND = tags.SPAN_KIND
 const SPAN_TYPE = tags.SPAN_TYPE
 const HTTP_URL = tags.HTTP_URL
@@ -54,7 +53,6 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
         [SPAN_TYPE]: 'web',
         [HTTP_METHOD]: proxyContext.method,
         [HTTP_URL]: proxyContext.domainName + proxyContext.path,
-        [HTTP_ROUTE]: proxyContext.path,
         stage: proxyContext.stage
       }
     }
