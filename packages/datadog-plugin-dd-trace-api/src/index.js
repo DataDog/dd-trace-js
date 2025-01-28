@@ -7,6 +7,9 @@ const apiMetrics = telemetryMetrics.manager.namespace('tracers')
 // api ==> here
 const objectMap = new WeakMap()
 
+const injectionEnabledTag =
+  `injection_enabled:${process.env.DD_INJECTION_ENABLED ? 'yes' : 'no'}`
+
 module.exports = class DdTraceApiPlugin extends Plugin {
   static get id () {
     return 'dd-trace-api'
@@ -28,7 +31,7 @@ module.exports = class DdTraceApiPlugin extends Plugin {
       const counter = apiMetrics.count('dd_trace_api.called', [
         `name:${name.replace(':', '.')}`,
         'api_version:v1',
-        `injection_enabled:${process.env.DD_INJECTION_ENABLED ? 'yes' : 'no'}`
+        injectionEnabledTag
       ])
 
       // For v1, APIs are 1:1 with their internal equivalents, so we can just
