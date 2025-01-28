@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
       - run: yarn config set ignore-engines true
@@ -69,7 +69,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.range_clean }}
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   amqp10:
     runs-on: ubuntu-latest
@@ -164,7 +164,7 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - uses: ./.github/actions/install
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
       - run: yarn test:plugins:ci
@@ -172,7 +172,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   axios:
     runs-on: ubuntu-latest
@@ -233,7 +233,7 @@ jobs:
     env:
       PLUGINS: child_process
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
       - uses: ./.github/actions/install
       - uses: ./.github/actions/node/oldest
@@ -242,7 +242,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - uses: codecov/codecov-action@v2
+      - uses: codecov/codecov-action@v5
 
   cookie-parser:
     runs-on: ubuntu-latest
@@ -282,7 +282,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
       - run: yarn config set ignore-engines true
       - run: yarn test:plugins:ci --ignore-engines
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   connect:
     runs-on: ubuntu-latest
@@ -315,7 +315,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   dns:
     runs-on: ubuntu-latest
@@ -336,7 +336,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   elasticsearch:
     runs-on: ubuntu-latest
@@ -361,7 +361,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   express:
     runs-on: ubuntu-latest
@@ -398,6 +398,14 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGINS: fetch
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
+
+  fs:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: fs
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
@@ -460,7 +468,7 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - uses: ./.github/actions/install
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
       - run: yarn test:plugins:ci
@@ -468,7 +476,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   http2:
     runs-on: ubuntu-latest
@@ -489,7 +497,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   # TODO: fix performance issues and test more Node versions
   jest:
@@ -506,7 +514,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   kafkajs:
     runs-on: ubuntu-latest
@@ -566,7 +574,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
         shell: bash
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -742,7 +750,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   # TODO: fix performance issues and test more Node versions
   next:
@@ -784,7 +792,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.version }}-${{ matrix.range_clean }}
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   openai:
     runs-on: ubuntu-latest
@@ -850,8 +858,8 @@ jobs:
         run: |
           curl -LO https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
           tar -xf node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           cache: yarn
           node-version: '16'
@@ -859,7 +867,7 @@ jobs:
       - run: yarn config set ignore-engines true
       - run: yarn services --ignore-engines
       - run: yarn test:plugins --ignore-engines
-      - uses: codecov/codecov-action@v2
+      - uses: codecov/codecov-action@v5
 
   paperplane:
     runs-on: ubuntu-latest
@@ -876,7 +884,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   # TODO: re-enable upstream tests if it ever stops being flaky
   pino:
@@ -897,7 +905,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   postgres:
     runs-on: ubuntu-latest
@@ -1012,7 +1020,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   tedious:
     runs-on: ubuntu-latest
@@ -1040,7 +1048,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   undici:
     runs-on: ubuntu-latest

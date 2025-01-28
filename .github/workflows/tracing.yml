@@ -19,7 +19,7 @@ jobs:
       - uses: ./.github/actions/node/setup
       - uses: ./.github/actions/install
       - run: yarn test:trace:core:ci
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   ubuntu:
     runs-on: ubuntu-latest
@@ -33,15 +33,15 @@ jobs:
       - run: yarn test:trace:core:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:trace:core:ci
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
 
   windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: '18'
       - uses: ./.github/actions/install
       - run: yarn test:trace:core:ci
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
