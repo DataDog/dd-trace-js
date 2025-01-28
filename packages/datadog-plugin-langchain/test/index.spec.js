@@ -25,7 +25,6 @@ describe('Plugin', () => {
   let langchainOutputParsers
   let langchainPrompts
   let langchainRunnables
-  let langchainEmbeddings
 
   // so we can verify it gets tagged properly
   useEnv({
@@ -60,7 +59,6 @@ describe('Plugin', () => {
           .get('@langchain/core/output_parsers')
         langchainPrompts = require(`../../../versions/@langchain/core@${version}`).get('@langchain/core/prompts')
         langchainRunnables = require(`../../../versions/@langchain/core@${version}`).get('@langchain/core/runnables')
-        langchainEmbeddings = require(`../../../versions/@langchain/core@${version}`).get('@langchain/core/embeddings')
       })
 
       afterEach(() => {
