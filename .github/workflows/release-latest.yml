@@ -24,7 +24,7 @@ jobs:
       pkgjson: ${{ steps.pkg.outputs.json }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           registry-url: 'https://registry.npmjs.org'
       - run: npm publish --provenance
@@ -45,7 +45,7 @@ jobs:
     needs: ['publish']
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`

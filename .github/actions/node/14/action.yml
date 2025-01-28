@@ -1,7 +1,8 @@
 name: Node 14
+description: Install Node 14
 runs:
   using: composite
   steps:
-    - uses: actions/setup-node@v3
+    - uses: actions/setup-node@v4
       with:
         node-version: '14'
