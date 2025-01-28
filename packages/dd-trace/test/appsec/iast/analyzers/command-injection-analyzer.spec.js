@@ -26,7 +26,7 @@ describe('command injection analyzer', () => {
         const childProcess = require('child_process')
         childProcess.execSync(command)
       }, 'COMMAND_INJECTION', undefined, undefined, undefined,
-      'should have COMMAND_INJECTION vuln due even with SQL_INJECTION_MARK')
+      'should have COMMAND_INJECTION vuln even with SQL_INJECTION_MARK')
 
       testThatRequestHasNoVulnerability(() => {
         const childProcess = require('child_process')
