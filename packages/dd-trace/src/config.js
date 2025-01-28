@@ -19,6 +19,7 @@ const telemetryMetrics = require('./telemetry/metrics')
 const { getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
+const libdatadog = require('@datadog/libdatadog')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -236,6 +237,25 @@ function reformatSpanSamplingRules (rules) {
 
 class Config {
   constructor (options = {}) {
+    // Read & apply the YAML configuration
+    const libconfig = libdatadog.maybeLoadWASM('library_config')
+    if (libconfig != null) {
+      const yamlConfigPath = '/etc/datadog-agent/managed/datadog-apm-libraries/stable/libraries_config.yaml'
+      if (fs.existsSync(yamlConfigPath)) {
+        const rawConfig = fs.readFileSync(yamlConfigPath, 'utf8')
+        const configurator = new libconfig.JsConfigurator()
+        configurator.set_envp(Object.entries(process.env).map(([key, value]) => `${key}=${value}`))
+        configurator.set_args(process.argv)
+        configurator.get_configuration(rawConfig.toString()).forEach((value, key, map) => {
+          // TODO: this is ugly and only for demo purposes, we should use
+          // the config object we get and override parameters that way
+          process.env[key] = value
+        })
+      }
+    } else {
+      log.info('libconfig not found, skipping file-based configuration')
+    }
+
     options = {
       ...options,
       appsec: options.appsec != null ? options.appsec : options.experimental?.appsec,
