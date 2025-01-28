@@ -1920,6 +1920,17 @@ declare namespace tracer {
        * Register this tracer provider with @opentelemetry/api
        */
       register(): void;
+
+      /**
+       * Add a new SpanProcessor to this TracerProvider
+       * @param processor OpenTelemetry SpanProcessor
+       */
+      addSpanProcessor(processor: otel.SpanProcessor): void;
+
+      /**
+       * Returns the active SpanProcessor
+       */
+      getActiveSpanProcessor(): otel.SpanProcessor | undefined;
     }
 
     /**
