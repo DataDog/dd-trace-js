@@ -12,50 +12,30 @@ jobs:
           - v5.x
     runs-on: ubuntu-latest
 
-    permissions: write-all
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ matrix.base-branch }}
           token: ${{ secrets.GH_ACCESS_TOKEN_RELEASE }}
 
-      - name: Set up Git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Update prerelease-branch
+        uses: ./.github/actions/prepare-prerelease
+        with:
+          base-branch: ${{ matrix.base-branch }}
+          github-token: ${{ secrets.GH_ACCESS_TOKEN_RELEASE }}
 
-      - name: Pull master branch
+      - name: Checkout prerelease branch
         run: |
-          git checkout master
-          git pull
-          cp -r scripts _scripts
           git checkout ${{ matrix.base-branch }}
+          git pull
+          git checkout ${{ matrix.base-branch }}-proposal
+          git pull
 
-
-      - name: Configure node
-        uses: actions/setup-node@v3
-
-      - name: Install dependencies
+      - name: Get branch diffs
+        id: get_branch_diffs
         run: |
-          yarn
-          git checkout yarn.lock
-
-      - name: Install branch-diff
-        run: |
-          npm i -g @bengl/branch-diff
-
-      - name: Configure branch-diff
-        run: |
-          mkdir -p ~/.config/changelog-maker
-          echo "{\"token\":\"${{secrets.GITHUB_TOKEN}}\",\"user\":\"${{github.actor}}\"}" > ~/.config/changelog-maker/config.json
-
-      - name: Commit branch diffs
-        id: commit_branch_diffs
-        run: |
-          node _scripts/prepare-release-proposal.js commit-branch-diffs ${{ matrix.base-branch }} > branch-diffs.txt
+          node _scripts/prepare-release-proposal.js print-branch-diffs ${{ matrix.base-branch }} ${{ matrix.base-branch }}-proposal > branch-diffs.txt
 
       - name: Calculate release type
         id: calc-release-type

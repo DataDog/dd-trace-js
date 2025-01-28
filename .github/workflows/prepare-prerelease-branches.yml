@@ -1,0 +1,47 @@
+name: Prepare prelease branches
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  check-no-pending-release:
+    strategy:
+      matrix:
+        release-line:
+          - v4
+          - v5
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check pending release
+        run: |
+          git fetch
+          git ls-remote --heads | grep -E '${{ matrix.release-line}}\.[1-9]+\.[1-9]+-proposal' && echo "Release already in progress, can not create proposal branch now" && exit 1 || exit 0
+
+  update-prelease-branches:
+    needs: check-no-pending-release
+
+    strategy:
+      matrix:
+        base-branch:
+          - v4.x
+          - v5.x
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_ACCESS_TOKEN_RELEASE }}
+
+      - uses: ./.github/actions/prepare-prerelease
+        with:
+          base-branch: ${{ matrix.base-branch }}
+          github-token: ${{ secrets.GH_ACCESS_TOKEN_RELEASE }}

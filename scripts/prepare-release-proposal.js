@@ -43,6 +43,15 @@ function createReleaseBranch (args) {
   }
 }
 
+function getBranchDiffCoreCommand (releaseBranch) {
+  const excludedLabels = [
+    'semver-major',
+    `dont-land-on-${releaseBranch.replace(/-proposal$/, '')}`
+  ]
+
+  return `branch-diff --user DataDog --repo dd-trace-js --exclude-label=${excludedLabels.join(',')}`
+}
+
 function commitBranchDiffs (args) {
   if (args.length !== 1) {
     console.log('usage: node prepare-release-proposal.js commit-branch-diffs <release-branch>')
@@ -53,17 +62,29 @@ function commitBranchDiffs (args) {
   }
   const releaseBranch = args[0]
 
-  const excludedLabels = [
-    'semver-major',
-    `dont-land-on-${releaseBranch}`
-  ]
+  const commandCore = getBranchDiffCoreCommand(releaseBranch)
 
-  const commandCore = `branch-diff --user DataDog --repo dd-trace-js --exclude-label=${excludedLabels.join(',')}`
+  if (execSync(`${commandCore} --format=sha --reverse ${releaseBranch} master`).toString().length > 0) {
+    execSync(`${commandCore} --format=sha --reverse ${releaseBranch} master | xargs git cherry-pick`)
+  }
+}
 
-  const releaseNotesDraft = execSync(`${commandCore} ${releaseBranch} master`).toString()
+function printBranchDiffs (args) {
+  if (args.length !== 2) {
+    console.log('usage: node prepare-release-proposal.js get-branch-diffs <release-branch> <proposal-branch>')
+    console.log('release-branches:')
+    console.log('  v4.x')
+    console.log('  v5.x')
+    console.log('proposal-branches:')
+    console.log('  v4.x-proposal')
+    console.log('  v5.x-proposal')
+    return
+  }
+  const releaseBranch = args[0]
+  const proposalBranch = args[1]
 
-  execSync(`${commandCore} --format=sha --reverse ${releaseBranch} master | xargs git cherry-pick`)
-
+  const commandCore = getBranchDiffCoreCommand(releaseBranch)
+  const releaseNotesDraft = execSync(`${commandCore} ${releaseBranch} ${proposalBranch}`).toString()
   console.log(releaseNotesDraft)
 }
 
@@ -93,6 +114,9 @@ switch (process.argv[2]) {
     break
   case 'commit-branch-diffs':
     commitBranchDiffs(methodArgs)
+    break
+  case 'print-branch-diffs':
+    printBranchDiffs(methodArgs)
     break
   case 'update-package-json':
     updatePackageJson(methodArgs)
