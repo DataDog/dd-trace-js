@@ -71,7 +71,7 @@ function wrapSmithySend (send) {
     const responseStartChannel = channel(`apm:aws:response:start:${channelSuffix}`)
     const responseFinishChannel = channel(`apm:aws:response:finish:${channelSuffix}`)
 
-    if (command.deserialize && typeof command.deserialize === 'function') {
+    if (typeof command.deserialize === 'function') {
       shimmer.wrap(command, 'deserialize', deserialize => wrapDeserialize(deserialize, channelSuffix))
     }
 
