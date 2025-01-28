@@ -71,14 +71,9 @@ function wrapSmithySend (send) {
     const responseStartChannel = channel(`apm:aws:response:start:${channelSuffix}`)
     const responseFinishChannel = channel(`apm:aws:response:finish:${channelSuffix}`)
 
-    shimmer.wrap(command, 'resolveMiddleware', resolveMiddleware => {
-      return function () {
-        if (this.deserialize) {
-          shimmer.wrap(this, 'deserialize', deserialize => wrapDeserialize(deserialize, channelSuffix))
-        }
-        return resolveMiddleware.apply(this, arguments)
-      }
-    })
+    if (command.deserialize && typeof command.deserialize === 'function') {
+      shimmer.wrap(command, 'deserialize', deserialize => wrapDeserialize(deserialize, channelSuffix))
+    }
 
     return innerAr.runInAsyncScope(() => {
       startCh.publish({
