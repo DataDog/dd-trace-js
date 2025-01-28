@@ -14,6 +14,7 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const spanleak = require('../spanleak')
+const util = require('util')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -64,7 +65,7 @@ class DatadogSpan {
     this._debug = debug
     this._processor = processor
     this._prioritySampler = prioritySampler
-    this._store = storage.getStore()
+    this._store = storage.getHandle()
     this._duration = undefined
 
     this._events = []
@@ -105,9 +106,18 @@ class DatadogSpan {
     }
   }
 
+  [util.inspect.custom] () {
+    return {
+      ...this,
+      _parentTracer: `[${this._parentTracer.constructor.name}]`,
+      _prioritySampler: `[${this._prioritySampler.constructor.name}]`,
+      _processor: `[${this._processor.constructor.name}]`
+    }
+  }
+
   toString () {
     const spanContext = this.context()
-    const resourceName = spanContext._tags['resource.name']
+    const resourceName = spanContext._tags['resource.name'] || ''
     const resource = resourceName.length > 100
       ? `${resourceName.substring(0, 97)}...`
       : resourceName
@@ -214,7 +224,7 @@ class DatadogSpan {
 
     if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true') {
       if (!this._spanContext._tags['service.name']) {
-        log.error(`Finishing invalid span: ${this}`)
+        log.error('Finishing invalid span: %s', this)
       }
     }
 

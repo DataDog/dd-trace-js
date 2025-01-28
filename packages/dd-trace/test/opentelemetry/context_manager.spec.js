@@ -4,8 +4,17 @@ require('../setup/tap')
 
 const { expect } = require('chai')
 const ContextManager = require('../../src/opentelemetry/context_manager')
-const { ROOT_CONTEXT } = require('@opentelemetry/api')
+const TracerProvider = require('../../src/opentelemetry/tracer_provider')
+const { context, propagation, trace, ROOT_CONTEXT } = require('@opentelemetry/api')
 const api = require('@opentelemetry/api')
+const tracer = require('../../').init()
+
+function makeSpan (...args) {
+  const tracerProvider = new TracerProvider()
+  tracerProvider.register()
+  const tracer = tracerProvider.getTracer()
+  return tracer.startSpan(...args)
+}
 
 describe('OTel Context Manager', () => {
   let contextManager
@@ -113,5 +122,76 @@ describe('OTel Context Manager', () => {
       return 'return value'
     })
     expect(ret).to.equal('return value')
+  })
+
+  it('should propagate baggage from an otel span to a datadog span', () => {
+    const entries = {
+      foo: { value: 'bar' }
+    }
+    const baggage = propagation.createBaggage(entries)
+    const contextWithBaggage = propagation.setBaggage(context.active(), baggage)
+    const span = makeSpan('otel-to-dd')
+    const contextWithSpan = trace.setSpan(contextWithBaggage, span)
+    api.context.with(contextWithSpan, () => {
+      expect(tracer.scope().active().getBaggageItem('foo')).to.be.equal('bar')
+    })
+  })
+
+  it('should propagate baggage from a datadog span to an otel span', () => {
+    const baggageKey = 'raccoon'
+    const baggageVal = 'chunky'
+    const ddSpan = tracer.startSpan('dd-to-otel')
+    ddSpan.setBaggageItem(baggageKey, baggageVal)
+    tracer.scope().activate(ddSpan, () => {
+      const baggages = propagation.getActiveBaggage().getAllEntries()
+      expect(baggages.length).to.equal(1)
+      const baggage = baggages[0]
+      expect(baggage[0]).to.equal(baggageKey)
+      expect(baggage[1].value).to.equal(baggageVal)
+    })
+  })
+
+  it('should handle dd-otel baggage conflict', () => {
+    const ddSpan = tracer.startSpan('dd')
+    ddSpan.setBaggageItem('key1', 'dd1')
+    let contextWithUpdatedBaggages
+    tracer.scope().activate(ddSpan, () => {
+      let baggages = propagation.getBaggage(api.context.active())
+      baggages = baggages.setEntry('key1', { value: 'otel1' })
+      baggages = baggages.setEntry('key2', { value: 'otel2' })
+      contextWithUpdatedBaggages = propagation.setBaggage(api.context.active(), baggages)
+    })
+    expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal({ key1: 'dd1' })
+    api.context.with(contextWithUpdatedBaggages, () => {
+      expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal(
+        { key1: 'otel1', key2: 'otel2' }
+      )
+      ddSpan.setBaggageItem('key2', 'dd2')
+      expect(propagation.getActiveBaggage().getAllEntries()).to.deep.equal(
+        [['key1', { value: 'otel1' }], ['key2', { value: 'dd2' }]]
+      )
+    })
+  })
+
+  it('should handle dd-otel baggage removal', () => {
+    const ddSpan = tracer.startSpan('dd')
+    ddSpan.setBaggageItem('key1', 'dd1')
+    ddSpan.setBaggageItem('key2', 'dd2')
+    let contextWithUpdatedBaggages
+    tracer.scope().activate(ddSpan, () => {
+      let baggages = propagation.getBaggage(api.context.active())
+      baggages = baggages.removeEntry('key1')
+      contextWithUpdatedBaggages = propagation.setBaggage(api.context.active(), baggages)
+    })
+    expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal(
+      { key1: 'dd1', key2: 'dd2' }
+    )
+    api.context.with(contextWithUpdatedBaggages, () => {
+      expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal(
+        { key2: 'dd2' }
+      )
+      ddSpan.removeBaggageItem('key2')
+      expect(propagation.getActiveBaggage().getAllEntries()).to.deep.equal([])
+    })
   })
 })

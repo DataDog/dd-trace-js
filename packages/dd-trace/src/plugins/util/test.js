@@ -59,6 +59,7 @@ const TEST_IS_NEW = 'test.is_new'
 const TEST_IS_RETRY = 'test.is_retry'
 const TEST_EARLY_FLAKE_ENABLED = 'test.early_flake.enabled'
 const TEST_EARLY_FLAKE_ABORT_REASON = 'test.early_flake.abort_reason'
+const TEST_RETRY_REASON = 'test.retry_reason'
 
 const CI_APP_ORIGIN = 'ciapp-test'
 
@@ -88,6 +89,7 @@ const TEST_BROWSER_VERSION = 'test.browser.version'
 // jest worker variables
 const JEST_WORKER_TRACE_PAYLOAD_CODE = 60
 const JEST_WORKER_COVERAGE_PAYLOAD_CODE = 61
+const JEST_WORKER_LOGS_PAYLOAD_CODE = 62
 
 // cucumber worker variables
 const CUCUMBER_WORKER_TRACE_PAYLOAD_CODE = 70
@@ -108,10 +110,10 @@ const TEST_LEVEL_EVENT_TYPES = [
 
 // Dynamic instrumentation - Test optimization integration tags
 const DI_ERROR_DEBUG_INFO_CAPTURED = 'error.debug_info_captured'
-// TODO: for the moment we'll only use a single snapshot id, so `0` is hardcoded
-const DI_DEBUG_ERROR_SNAPSHOT_ID = '_dd.debug.error.0.snapshot_id'
-const DI_DEBUG_ERROR_FILE = '_dd.debug.error.0.file'
-const DI_DEBUG_ERROR_LINE = '_dd.debug.error.0.line'
+const DI_DEBUG_ERROR_PREFIX = '_dd.debug.error'
+const DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX = 'snapshot_id'
+const DI_DEBUG_ERROR_FILE_SUFFIX = 'file'
+const DI_DEBUG_ERROR_LINE_SUFFIX = 'line'
 
 module.exports = {
   TEST_CODE_OWNERS,
@@ -134,6 +136,7 @@ module.exports = {
   LIBRARY_VERSION,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
+  JEST_WORKER_LOGS_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   TEST_SOURCE_START,
@@ -143,6 +146,7 @@ module.exports = {
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
+  TEST_RETRY_REASON,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -191,9 +195,11 @@ module.exports = {
   getNumFromKnownTests,
   getFileAndLineNumberFromError,
   DI_ERROR_DEBUG_INFO_CAPTURED,
-  DI_DEBUG_ERROR_SNAPSHOT_ID,
-  DI_DEBUG_ERROR_FILE,
-  DI_DEBUG_ERROR_LINE
+  DI_DEBUG_ERROR_PREFIX,
+  DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
+  DI_DEBUG_ERROR_FILE_SUFFIX,
+  DI_DEBUG_ERROR_LINE_SUFFIX,
+  getFormattedError
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -218,13 +224,13 @@ function removeInvalidMetadata (metadata) {
   return Object.keys(metadata).reduce((filteredTags, tag) => {
     if (tag === GIT_REPOSITORY_URL) {
       if (!validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
-        log.error(`Repository URL is not a valid repository URL: ${metadata[GIT_REPOSITORY_URL]}.`)
+        log.error('Repository URL is not a valid repository URL: %s.', metadata[GIT_REPOSITORY_URL])
         return filteredTags
       }
     }
     if (tag === GIT_COMMIT_SHA) {
       if (!validateGitCommitSha(metadata[GIT_COMMIT_SHA])) {
-        log.error(`Git commit SHA must be a full-length git SHA: ${metadata[GIT_COMMIT_SHA]}.`)
+        log.error('Git commit SHA must be a full-length git SHA: %s.', metadata[GIT_COMMIT_SHA])
         return filteredTags
       }
     }
@@ -650,13 +656,30 @@ function getNumFromKnownTests (knownTests) {
   return totalNumTests
 }
 
-function getFileAndLineNumberFromError (error) {
+const DEPENDENCY_FOLDERS = [
+  'node_modules',
+  'node:',
+  '.pnpm',
+  '.yarn',
+  '.pnp'
+]
+
+function getFileAndLineNumberFromError (error, repositoryRoot) {
   // Split the stack trace into individual lines
   const stackLines = error.stack.split('\n')
 
-  // The top frame is usually the second line
-  const topFrame = stackLines[1]
+  // Remove potential messages on top of the stack that are not frames
+  const frames = stackLines.filter(line => line.includes('at ') && line.includes(repositoryRoot))
 
+  const topRelevantFrameIndex = frames.findIndex(line =>
+    line.includes(repositoryRoot) && !DEPENDENCY_FOLDERS.some(pattern => line.includes(pattern))
+  )
+
+  if (topRelevantFrameIndex === -1) {
+    return []
+  }
+
+  const topFrame = frames[topRelevantFrameIndex]
   // Regular expression to match the file path, line number, and column number
   const regex = /\s*at\s+(?:.*\()?(.+):(\d+):(\d+)\)?/
   const match = topFrame.match(regex)
@@ -664,9 +687,18 @@ function getFileAndLineNumberFromError (error) {
   if (match) {
     const filePath = match[1]
     const lineNumber = Number(match[2])
-    const columnNumber = Number(match[3])
 
-    return [filePath, lineNumber, columnNumber]
+    return [filePath, lineNumber, topRelevantFrameIndex]
   }
   return []
+}
+
+function getFormattedError (error, repositoryRoot) {
+  const newError = new Error(error.message)
+  if (error.stack) {
+    newError.stack = error.stack.split('\n').filter(line => line.includes(repositoryRoot)).join('\n')
+  }
+  newError.name = error.name
+
+  return newError
 }

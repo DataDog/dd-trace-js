@@ -106,7 +106,7 @@ describe('span-stats writer', () => {
         encoder.count.returns(1)
 
         writer.flush(() => {
-          expect(log.error).to.have.been.calledWith(error)
+          expect(log.error).to.have.been.calledWith('Error sending span stats', error)
           done()
         })
       })

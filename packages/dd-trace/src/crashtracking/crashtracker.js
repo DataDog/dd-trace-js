@@ -20,7 +20,7 @@ class Crashtracker {
       binding.updateConfig(this._getConfig(config))
       binding.updateMetadata(this._getMetadata(config))
     } catch (e) {
-      log.error(e)
+      log.error('Error configuring crashtracker', e)
     }
   }
 
@@ -36,7 +36,16 @@ class Crashtracker {
         this._getMetadata(config)
       )
     } catch (e) {
-      log.error(e)
+      log.error('Error initialising crashtracker', e)
+    }
+  }
+
+  withProfilerSerializing (f) {
+    binding.beginProfilerSerializing()
+    try {
+      return f()
+    } finally {
+      binding.endProfilerSerializing()
     }
   }
 

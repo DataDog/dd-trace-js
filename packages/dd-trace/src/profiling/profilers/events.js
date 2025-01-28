@@ -14,7 +14,23 @@ const pprofValueUnit = 'nanoseconds'
 const dateOffset = BigInt(Math.round(performance.timeOrigin * MS_TO_NS))
 
 function labelFromStr (stringTable, key, valStr) {
-  return new Label({ key, str: stringTable.dedup(valStr) })
+  return new Label({ key, str: stringTable.dedup(safeToString(valStr)) })
+}
+
+// We don't want to invoke toString for objects and functions, rather we'll
+// provide dummy values. These values are not meant to emulate built-in toString
+// behavior.
+function safeToString (val) {
+  switch (typeof val) {
+    case 'string':
+      return val
+    case 'object':
+      return '[object]'
+    case 'function':
+      return '[function]'
+    default:
+      return String(val)
+  }
 }
 
 function labelFromStrStr (stringTable, keyStr, valStr) {
@@ -133,11 +149,32 @@ class NetDecorator {
   }
 }
 
+class FilesystemDecorator {
+  constructor (stringTable) {
+    this.stringTable = stringTable
+  }
+
+  decorateSample (sampleInput, item) {
+    const labels = sampleInput.label
+    const stringTable = this.stringTable
+    Object.entries(item.detail).forEach(([k, v]) => {
+      switch (typeof v) {
+        case 'string':
+          labels.push(labelFromStrStr(stringTable, k, v))
+          break
+        case 'number':
+          labels.push(new Label({ key: stringTable.dedup(k), num: v }))
+      }
+    })
+  }
+}
+
 // Keys correspond to PerformanceEntry.entryType, values are constructor
 // functions for type-specific decorators.
 const decoratorTypes = {
-  gc: GCDecorator,
+  fs: FilesystemDecorator,
   dns: DNSDecorator,
+  gc: GCDecorator,
   net: NetDecorator
 }
 
@@ -254,10 +291,10 @@ class NodeApiEventSource {
 }
 
 class DatadogInstrumentationEventSource {
-  constructor (eventHandler) {
-    this.plugins = ['dns_lookup', 'dns_lookupservice', 'dns_resolve', 'dns_reverse', 'net'].map(m => {
+  constructor (eventHandler, eventFilter) {
+    this.plugins = ['dns_lookup', 'dns_lookupservice', 'dns_resolve', 'dns_reverse', 'fs', 'net'].map(m => {
       const Plugin = require(`./event_plugins/${m}`)
-      return new Plugin(eventHandler)
+      return new Plugin(eventHandler, eventFilter)
     })
 
     this.started = false
@@ -292,29 +329,68 @@ class CompositeEventSource {
   }
 }
 
+function createPossionProcessSamplingFilter (samplingIntervalMillis) {
+  let nextSamplingInstant = performance.now()
+  let currentSamplingInstant = 0
+  setNextSamplingInstant()
+
+  return event => {
+    const endTime = event.startTime + event.duration
+    while (endTime >= nextSamplingInstant) {
+      setNextSamplingInstant()
+    }
+    // An event is sampled if it started before, and ended on or after a sampling instant. The above
+    // while loop will ensure that the ending invariant is always true for the current sampling
+    // instant so we don't have to test for it below. Across calls, the invariant also holds as long
+    // as the events arrive in endTime order. This is true for events coming from
+    // DatadogInstrumentationEventSource; they will be ordered by endTime by virtue of this method
+    // being invoked synchronously with the plugins' finish() handler which evaluates
+    // performance.now(). OTOH, events coming from NodeAPIEventSource (GC in typical setup) might be
+    // somewhat delayed as they are queued by Node, so they can arrive out of order with regard to
+    // events coming from the non-queued source. By omitting the endTime check, we will pass through
+    // some short events that started and ended before the current sampling instant. OTOH, if we
+    // were to check for this.currentSamplingInstant <= endTime, we would discard some long events
+    // that also ended before the current sampling instant. We'd rather err on the side of including
+    // some short events than excluding some long events.
+    return event.startTime < currentSamplingInstant
+  }
+
+  function setNextSamplingInstant () {
+    currentSamplingInstant = nextSamplingInstant
+    nextSamplingInstant -= Math.log(1 - Math.random()) * samplingIntervalMillis
+  }
+}
+
 /**
  * This class generates pprof files with timeline events. It combines an event
- * source with an event serializer.
+ * source with a sampling event filter and an event serializer.
  */
 class EventsProfiler {
   constructor (options = {}) {
     this.type = 'events'
     this.eventSerializer = new EventSerializer()
 
-    const eventHandler = event => {
-      this.eventSerializer.addEvent(event)
+    const eventHandler = event => this.eventSerializer.addEvent(event)
+    const eventFilter = options.timelineSamplingEnabled
+      // options.samplingInterval comes in microseconds, we need millis
+      ? createPossionProcessSamplingFilter((options.samplingInterval ?? 1e6 / 99) / 1000)
+      : _ => true
+    const filteringEventHandler = event => {
+      if (eventFilter(event)) {
+        eventHandler(event)
+      }
     }
 
     if (options.codeHotspotsEnabled) {
       // Use Datadog instrumentation to collect events with span IDs. Still use
       // Node API for GC events.
       this.eventSource = new CompositeEventSource([
-        new DatadogInstrumentationEventSource(eventHandler),
-        new NodeApiEventSource(eventHandler, ['gc'])
+        new DatadogInstrumentationEventSource(eventHandler, eventFilter),
+        new NodeApiEventSource(filteringEventHandler, ['gc'])
       ])
     } else {
       // Use Node API instrumentation to collect events without span IDs
-      this.eventSource = new NodeApiEventSource(eventHandler)
+      this.eventSource = new NodeApiEventSource(filteringEventHandler)
     }
   }
 

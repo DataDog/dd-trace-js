@@ -26,7 +26,8 @@ const {
   TEST_MODULE,
   TEST_MODULE_ID,
   TEST_SUITE,
-  CUCUMBER_IS_PARALLEL
+  CUCUMBER_IS_PARALLEL,
+  TEST_RETRY_REASON
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -45,6 +46,7 @@ const {
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const id = require('../../dd-trace/src/id')
 
+const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const isCucumberWorker = !!process.env.CUCUMBER_WORKER_ID
 
 function getTestSuiteTags (testSuiteSpan) {
@@ -204,7 +206,13 @@ class CucumberPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: 'istanbul' })
     })
 
-    this.addSub('ci:cucumber:test:start', ({ testName, testFileAbsolutePath, testSourceLine, isParallel }) => {
+    this.addSub('ci:cucumber:test:start', ({
+      testName,
+      testFileAbsolutePath,
+      testSourceLine,
+      isParallel,
+      promises
+    }) => {
       const store = storage.getStore()
       const testSuite = getTestSuitePath(testFileAbsolutePath, this.sourceRoot)
       const testSourceFile = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)
@@ -220,13 +228,31 @@ class CucumberPlugin extends CiPlugin {
       const testSpan = this.startTestSpan(testName, testSuite, extraTags)
 
       this.enter(testSpan, store)
+
+      this.activeTestSpan = testSpan
+      // Time we give the breakpoint to be hit
+      if (promises && this.runningTestProbeId) {
+        promises.hitBreakpointPromise = new Promise((resolve) => {
+          setTimeout(resolve, BREAKPOINT_HIT_GRACE_PERIOD_MS)
+        })
+      }
     })
 
-    this.addSub('ci:cucumber:test:retry', (isFlakyRetry) => {
+    this.addSub('ci:cucumber:test:retry', ({ isFirstAttempt, error }) => {
       const store = storage.getStore()
       const span = store.span
-      if (isFlakyRetry) {
+      if (!isFirstAttempt) {
         span.setTag(TEST_IS_RETRY, 'true')
+      }
+      span.setTag('error', error)
+      if (isFirstAttempt && this.di && error && this.libraryConfig?.isDiEnabled) {
+        const probeInformation = this.addDiProbe(error)
+        if (probeInformation) {
+          const { probeId, stackIndex } = probeInformation
+          this.runningTestProbeId = probeId
+          this.testErrorStackIndex = stackIndex
+          // TODO: we're not waiting for setProbePromise to be resolved, so there might be race conditions
+        }
       }
       span.setTag(TEST_STATUS, 'fail')
       span.finish()
@@ -281,6 +307,7 @@ class CucumberPlugin extends CiPlugin {
       isStep,
       status,
       skipReason,
+      error,
       errorMessage,
       isNew,
       isEfdRetry,
@@ -295,6 +322,7 @@ class CucumberPlugin extends CiPlugin {
         span.setTag(TEST_IS_NEW, 'true')
         if (isEfdRetry) {
           span.setTag(TEST_IS_RETRY, 'true')
+          span.setTag(TEST_RETRY_REASON, 'efd')
         }
       }
 
@@ -302,7 +330,9 @@ class CucumberPlugin extends CiPlugin {
         span.setTag(TEST_SKIP_REASON, skipReason)
       }
 
-      if (errorMessage) {
+      if (error) {
+        span.setTag('error', error)
+      } else if (errorMessage) { // we can't get a full error in cucumber steps
         span.setTag(ERROR_MESSAGE, errorMessage)
       }
 
@@ -327,6 +357,11 @@ class CucumberPlugin extends CiPlugin {
         // If it's a worker, flushing is cheap, as it's just sending data to the main process
         if (isCucumberWorker) {
           this.tracer._exporter.flush()
+        }
+        this.activeTestSpan = null
+        if (this.runningTestProbeId) {
+          this.removeDiProbe(this.runningTestProbeId)
+          this.runningTestProbeId = null
         }
       }
     })

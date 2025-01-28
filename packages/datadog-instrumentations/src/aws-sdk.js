@@ -155,6 +155,8 @@ function getMessage (request, error, result) {
 }
 
 function getChannelSuffix (name) {
+  // some resource identifiers have spaces between ex: bedrock runtime
+  name = name.replaceAll(' ', '')
   return [
     'cloudwatchlogs',
     'dynamodb',
@@ -167,7 +169,8 @@ function getChannelSuffix (name) {
     'sns',
     'sqs',
     'states',
-    'stepfunctions'
+    'stepfunctions',
+    'bedrockruntime'
   ].includes(name)
     ? name
     : 'default'

@@ -70,6 +70,7 @@ let earlyFlakeDetectionNumRetries = 0
 let earlyFlakeDetectionFaultyThreshold = 0
 let isEarlyFlakeDetectionFaulty = false
 let isFlakyTestRetriesEnabled = false
+let isKnownTestsEnabled = false
 let numTestRetries = 0
 let knownTests = []
 let skippedSuites = []
@@ -124,6 +125,20 @@ function getTestStatusFromRetries (testStatuses) {
     return 'pass'
   }
   return 'pass'
+}
+
+function getErrorFromCucumberResult (cucumberResult) {
+  if (!cucumberResult.message) {
+    return
+  }
+
+  const [message] = cucumberResult.message.split('\n')
+  const error = new Error(message)
+  if (cucumberResult.exception) {
+    error.type = cucumberResult.exception.type
+  }
+  error.stack = cucumberResult.message
+  return error
 }
 
 function getChannelPromise (channelToPublishTo) {
@@ -224,22 +239,38 @@ function wrapRun (pl, isLatestVersion) {
     asyncResource.runInAsyncScope(() => {
       testStartCh.publish(testStartPayload)
     })
+    const promises = {}
     try {
-      this.eventBroadcaster.on('envelope', shimmer.wrapFunction(null, () => (testCase) => {
+      this.eventBroadcaster.on('envelope', shimmer.wrapFunction(null, () => async (testCase) => {
         // Only supported from >=8.0.0
         if (testCase?.testCaseFinished) {
           const { testCaseFinished: { willBeRetried } } = testCase
           if (willBeRetried) { // test case failed and will be retried
+            let error
+            try {
+              const cucumberResult = this.getWorstStepResult()
+              error = getErrorFromCucumberResult(cucumberResult)
+            } catch (e) {
+              // ignore error
+            }
+
             const failedAttemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
+            const isFirstAttempt = numAttempt++ === 0
+
+            if (promises.hitBreakpointPromise) {
+              await promises.hitBreakpointPromise
+            }
+
             failedAttemptAsyncResource.runInAsyncScope(() => {
-              testRetryCh.publish(numAttempt++ > 0) // the current span will be finished and a new one will be created
+              // the current span will be finished and a new one will be created
+              testRetryCh.publish({ isFirstAttempt, error })
             })
 
             const newAsyncResource = new AsyncResource('bound-anonymous-fn')
             numAttemptToAsyncResource.set(numAttempt, newAsyncResource)
 
             newAsyncResource.runInAsyncScope(() => {
-              testStartCh.publish(testStartPayload) // a new span will be created
+              testStartCh.publish({ ...testStartPayload, promises }) // a new span will be created
             })
           }
         }
@@ -249,9 +280,9 @@ function wrapRun (pl, isLatestVersion) {
       asyncResource.runInAsyncScope(() => {
         promise = run.apply(this, arguments)
       })
-      promise.finally(() => {
+      promise.finally(async () => {
         const result = this.getWorstStepResult()
-        const { status, skipReason, errorMessage } = isLatestVersion
+        const { status, skipReason } = isLatestVersion
           ? getStatusFromResultLatest(result)
           : getStatusFromResult(result)
 
@@ -262,7 +293,7 @@ function wrapRun (pl, isLatestVersion) {
         }
         let isNew = false
         let isEfdRetry = false
-        if (isEarlyFlakeDetectionEnabled && status !== 'skip') {
+        if (isKnownTestsEnabled && status !== 'skip') {
           const numRetries = numRetriesByPickleId.get(this.pickle.id)
 
           isNew = numRetries !== undefined
@@ -270,8 +301,13 @@ function wrapRun (pl, isLatestVersion) {
         }
         const attemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
 
+        const error = getErrorFromCucumberResult(result)
+
+        if (promises.hitBreakpointPromise) {
+          await promises.hitBreakpointPromise
+        }
         attemptAsyncResource.runInAsyncScope(() => {
-          testFinishCh.publish({ status, skipReason, errorMessage, isNew, isEfdRetry, isFlakyRetry: numAttempt > 0 })
+          testFinishCh.publish({ status, skipReason, error, isNew, isEfdRetry, isFlakyRetry: numAttempt > 0 })
         })
       })
       return promise
@@ -359,13 +395,15 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     isSuitesSkippingEnabled = configurationResponse.libraryConfig?.isSuitesSkippingEnabled
     isFlakyTestRetriesEnabled = configurationResponse.libraryConfig?.isFlakyTestRetriesEnabled
     numTestRetries = configurationResponse.libraryConfig?.flakyTestRetriesCount
+    isKnownTestsEnabled = configurationResponse.libraryConfig?.isKnownTestsEnabled
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
       if (!knownTestsResponse.err) {
         knownTests = knownTestsResponse.knownTests
       } else {
         isEarlyFlakeDetectionEnabled = false
+        isKnownTestsEnabled = false
       }
     }
 
@@ -402,7 +440,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
     pickleByFile = isCoordinator ? getPickleByFileNew(this) : getPickleByFile(this)
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
       const isFaulty = getIsFaultyEarlyFlakeDetection(
         Object.keys(pickleByFile),
         knownTests.cucumber || {},
@@ -410,6 +448,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       )
       if (isFaulty) {
         isEarlyFlakeDetectionEnabled = false
+        isKnownTestsEnabled = false
         isEarlyFlakeDetectionFaulty = true
       }
     }
@@ -498,7 +537,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
 
     let isNew = false
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
       isNew = isNewTest(testSuitePath, pickle.name)
       if (isNew) {
         numRetriesByPickleId.set(pickle.id, 0)
@@ -643,14 +682,14 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
       const { status } = getStatusFromResultLatest(worstTestStepResult)
       let isNew = false
 
-      if (isEarlyFlakeDetectionEnabled) {
+      if (isKnownTestsEnabled) {
         isNew = isNewTest(pickle.uri, pickle.name)
       }
 
       const testFileAbsolutePath = pickle.uri
       const finished = pickleResultByFile[testFileAbsolutePath]
 
-      if (isNew) {
+      if (isEarlyFlakeDetectionEnabled && isNew) {
         const testFullname = `${pickle.uri}:${pickle.name}`
         let testStatuses = newTestsByTestFullname.get(testFullname)
         if (!testStatuses) {
@@ -804,7 +843,8 @@ addHook({
   )
   // EFD in parallel mode only supported in >=11.0.0
   shimmer.wrap(adapterPackage.ChildProcessAdapter.prototype, 'startWorker', startWorker => function () {
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
+      this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
       this.options.worldParameters._ddKnownTests = knownTests
       this.options.worldParameters._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
     }
@@ -827,9 +867,12 @@ addHook({
     'initialize',
     initialize => async function () {
       await initialize.apply(this, arguments)
-      isEarlyFlakeDetectionEnabled = !!this.options.worldParameters._ddKnownTests
-      if (isEarlyFlakeDetectionEnabled) {
+      isKnownTestsEnabled = !!this.options.worldParameters._ddKnownTests
+      if (isKnownTestsEnabled) {
         knownTests = this.options.worldParameters._ddKnownTests
+      }
+      isEarlyFlakeDetectionEnabled = !!this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled
+      if (isEarlyFlakeDetectionEnabled) {
         earlyFlakeDetectionNumRetries = this.options.worldParameters._ddEarlyFlakeDetectionNumRetries
       }
     }

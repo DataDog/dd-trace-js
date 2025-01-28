@@ -87,9 +87,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
 
   shouldRequestKnownTests () {
     return !!(
-      this._config.isEarlyFlakeDetectionEnabled &&
       this._canUseCiVisProtocol &&
-      this._libraryConfig?.isEarlyFlakeDetectionEnabled
+      this._libraryConfig?.isKnownTestsEnabled
     )
   }
 
@@ -196,7 +195,9 @@ class CiVisibilityExporter extends AgentInfoExporter {
       isEarlyFlakeDetectionEnabled,
       earlyFlakeDetectionNumRetries,
       earlyFlakeDetectionFaultyThreshold,
-      isFlakyTestRetriesEnabled
+      isFlakyTestRetriesEnabled,
+      isDiEnabled,
+      isKnownTestsEnabled
     } = remoteConfiguration
     return {
       isCodeCoverageEnabled,
@@ -207,7 +208,9 @@ class CiVisibilityExporter extends AgentInfoExporter {
       earlyFlakeDetectionNumRetries,
       earlyFlakeDetectionFaultyThreshold,
       isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && this._config.isFlakyTestRetriesEnabled,
-      flakyTestRetriesCount: this._config.flakyTestRetriesCount
+      flakyTestRetriesCount: this._config.flakyTestRetriesCount,
+      isDiEnabled: isDiEnabled && this._config.isTestDynamicInstrumentationEnabled,
+      isKnownTestsEnabled
     }
   }
 
@@ -225,7 +228,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
         repositoryUrl,
         (err) => {
           if (err) {
-            log.error(`Error uploading git metadata: ${err.message}`)
+            log.error('Error uploading git metadata: %s', err.message)
           } else {
             log.debug('Successfully uploaded git metadata')
           }
@@ -345,7 +348,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
       this._writer.setUrl(url)
       this._coverageWriter.setUrl(coverageUrl)
     } catch (e) {
-      log.error(e)
+      log.error('Error setting CI exporter url', e)
     }
   }
 

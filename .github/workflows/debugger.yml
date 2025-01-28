@@ -30,4 +30,6 @@ jobs:
       - run: yarn test:integration:debugger
       - if: always()
         uses: ./.github/actions/testagent/logs
-      - uses: codecov/codecov-action@v3
+        with:
+          suffix: debugger
+      - uses: codecov/codecov-action@v5

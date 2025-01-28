@@ -119,7 +119,7 @@ class Tracer extends NoopProxy {
           this._flare.module.send(conf.args)
         })
 
-        if (config.dynamicInstrumentationEnabled) {
+        if (config.dynamicInstrumentation.enabled) {
           DynamicInstrumentation.start(config, rc)
         }
       }
@@ -166,7 +166,10 @@ class Tracer extends NoopProxy {
         if (config.isManualApiEnabled) {
           const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
           this._testApiManualPlugin = new TestApiManualPlugin(this)
-          this._testApiManualPlugin.configure({ ...config, enabled: true })
+          // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
+          // This is the only place where we need to do this because the rest of the plugins
+          // are lazily configured when the library is imported.
+          this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
         }
       }
       if (config.ciVisAgentlessLogSubmissionEnabled) {
@@ -184,10 +187,10 @@ class Tracer extends NoopProxy {
 
       if (config.isTestDynamicInstrumentationEnabled) {
         const testVisibilityDynamicInstrumentation = require('./ci-visibility/dynamic-instrumentation')
-        testVisibilityDynamicInstrumentation.start()
+        testVisibilityDynamicInstrumentation.start(config)
       }
     } catch (e) {
-      log.error(e)
+      log.error('Error initialising tracer', e)
     }
 
     return this
@@ -198,7 +201,7 @@ class Tracer extends NoopProxy {
     try {
       return require('./profiler').start(config)
     } catch (e) {
-      log.error(e)
+      log.error('Error starting profiler', e)
     }
   }
 
