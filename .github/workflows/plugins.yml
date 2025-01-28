@@ -886,30 +886,6 @@ jobs:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v5
 
-  passport:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: passport
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/plugins/test
-
-  passport-http:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: passport-http
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/plugins/test
-
-  passport-local:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: passport-local
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/plugins/test
-
   # TODO: re-enable upstream tests if it ever stops being flaky
   pino:
     runs-on: ubuntu-latest
