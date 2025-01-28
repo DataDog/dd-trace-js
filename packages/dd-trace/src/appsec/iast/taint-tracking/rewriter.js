@@ -23,6 +23,16 @@ function isFlagPresent (flag) {
     process.execArgv?.some(arg => arg.includes(flag))
 }
 
+function getTypeScriptParsingOptions (sourceUrl) {
+  const mode = isFlagPresent('--experimental-transform-types') ? 'transform' : 'strip-only'
+
+  return {
+    mode,
+    sourceUrl,
+    sourceMap: isFlagPresent('--enable-source-maps')
+  }
+}
+
 function getGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, getOriginalPathAndLineFromSourceMap) {
   if (chainSourceMap) {
     return function (path, line, column) {
@@ -84,23 +94,42 @@ function getPrepareStackTraceAccessor () {
 
 function getCompileMethodFn (compileMethod) {
   const rewriteFn = getRewriteFunction(rewriter)
-  return function (content, filename) {
+  return function (content, filename, format) {
     try {
       if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
-        const rewritten = rewriteFn(content, filename)
+        if (format === 'commonjs-typescript' || format === 'module-typescript' || format === 'typescript') {
+          const options = getTypeScriptParsingOptions(filename)
+          content = Module.stripTypeScriptTypes(content, options)
+
+          switch (format) {
+            case 'commonjs-typescript': {
+              format = 'commonjs'
+              break
+            }
+            case 'module-typescript': {
+              format = 'module'
+              break
+            }
+            default:
+              format = undefined
+              break
+          }
+        }
+
+        const rewritten = rewriteFn(content, filename, format)
 
         if (rewritten?.literalsResult && hardcodedSecretCh.hasSubscribers) {
           hardcodedSecretCh.publish(rewritten.literalsResult)
         }
 
         if (rewritten?.content) {
-          return compileMethod.apply(this, [rewritten.content, filename])
+          return compileMethod.apply(this, [rewritten.content, filename, format])
         }
       }
     } catch (e) {
       log.error('[ASM] Error rewriting file %s', filename, e)
     }
-    return compileMethod.apply(this, [content, filename])
+    return compileMethod.apply(this, [content, filename, format])
   }
 }
 
