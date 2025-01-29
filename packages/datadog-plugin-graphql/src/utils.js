@@ -17,7 +17,7 @@ function extractErrorIntoSpanEvent (config, span, exc) {
   }
 
   if (exc.path) {
-    attributes.path = exc.path
+    attributes.path = exc.path.toString()
   }
 
   if (exc.message) {
@@ -27,7 +27,7 @@ function extractErrorIntoSpanEvent (config, span, exc) {
   if (config.graphqlErrorExtensions) {
     for (const ext of config.graphqlErrorExtensions) {
       if (exc.extensions?.[ext]) {
-        attributes[`extensions.${ext}`] = exc.extensions[ext]
+        attributes[`extensions.${ext}`] = exc.extensions[ext].toString()
       }
     }
   }
