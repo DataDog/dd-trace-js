@@ -62,7 +62,7 @@ class RouterPlugin extends WebPlugin {
     this.addSub(`apm:${this.constructor.id}:middleware:error`, ({ req, error }) => {
       web.addError(req, error)
 
-      if (!this.config.middlewareTracingEnabled) return
+      if (!this.config.middleware) return
 
       const span = this._getActive(req)
 
@@ -100,7 +100,7 @@ class RouterPlugin extends WebPlugin {
   }
 
   _getMiddlewareSpan (name, childOf) {
-    if (this.config.middlewareTracingEnabled === false) {
+    if (this.config.middleware === false) {
       return childOf
     }
 

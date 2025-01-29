@@ -45,7 +45,7 @@ const web = {
     const validateStatus = getStatusValidator(config)
     const hooks = getHooks(config)
     const filter = urlFilter.getFilter(config)
-    const middlewareTracingEnabled = getMiddlewareSetting(config, tracerConfig)
+    const middleware = getMiddlewareSetting(config, tracerConfig)
     const queryStringObfuscation = getQsObfuscator(config)
 
     return {
@@ -54,7 +54,7 @@ const web = {
       validateStatus,
       hooks,
       filter,
-      middlewareTracingEnabled,
+      middleware,
       queryStringObfuscation
     }
   },
@@ -160,7 +160,7 @@ const web = {
     const childOf = this.active(req)
     const config = context.config
 
-    if (config.middlewareTracingEnabled === false) {
+    if (config.middleware === false) {
       return this.bindAndWrapMiddlewareErrors(fn, req, tracer, childOf)
     }
 
@@ -574,8 +574,8 @@ function getHooks (config) {
 
 function getMiddlewareSetting (config, tracerConfig) {
   if (config) {
-    if (typeof config.middlewareTracingEnabled === 'boolean') {
-      return config.middlewareTracingEnabled
+    if (typeof config.middleware === 'boolean') {
+      return config.middleware
     } else if (config.hasOwnProperty('middlewareTracingEnabled')) {
       log.error('Expected `middlewareTracingEnabled` to be a boolean.')
     }
