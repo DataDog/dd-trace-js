@@ -351,6 +351,12 @@
       "versions": ["1.20.1"]
     }
   ],
+  "multer": [
+    {
+      "name": "express",
+      "versions": ["^4"]
+    }
+  ],
   "next": [
     {
       "name": "react",
