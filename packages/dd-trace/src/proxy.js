@@ -10,13 +10,34 @@ const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const remoteConfig = require('./appsec/remote_config')
-const AppsecSdk = require('./appsec/sdk')
 const dogstatsd = require('./dogstatsd')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const spanleak = require('./spanleak')
 const { SSIHeuristics } = require('./profiling/ssi-heuristics')
 const appsecStandalone = require('./appsec/standalone')
-const LLMObsSDK = require('./llmobs/sdk')
+
+const lazyClasses = {
+  _AppsecSdk: null,
+  get AppsecSdk () {
+    if (this._AppsecSdk) return this._AppsecSdk
+    return this._AppsecSdk = require('./appsec/sdk')
+  },
+  _NoopAppsecSdk: null,
+  get NoopAppsecSdk () {
+    if (this._NoopAppsecSdk) return this._NoopAppsecSdk
+    return this._NoopAppsecSdk = require('./appsec/noop')
+  },
+  _LLMObsSDK: null,
+  get LLMObsSDK () {
+    if (this._LLMObsSDK) return this._LLMObsSDK
+    return this._LLMObsSDK = require('./llmobs/sdk')
+  },
+  _NoopLLMObsSDK: null,
+  get NoopLLMObsSDK () {
+    if (this._NoopLLMObsSDK) return this._NoopLLMObsSDK
+    return this._NoopLLMObsSDK = require('./llmobs/noop')
+  }
+}
 
 class LazyModule {
   constructor (provider) {
@@ -217,8 +238,16 @@ class Tracer extends NoopProxy {
         const prioritySampler = appsecStandalone.configure(config)
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
-        this.appsec = new AppsecSdk(this._tracer, config)
-        this.llmobs = new LLMObsSDK(this._tracer, this._modules.llmobs, config)
+        if (config.appsec.enabled) {
+          this.appsec = new lazyClasses.AppsecSdk(this._tracer, config)
+        } else {
+          this.appsec = new lazyClasses.NoopAppsecSdk()
+        }
+        if (config.llmobs.enabled) {
+          this.llmobs = new lazyClasses.LLMObsSDK(this._tracer, this._modules.llmobs, config)
+        } else {
+          this.llmobs = new lazyClasses.NoopLLMObsSDK()
+        }
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {
