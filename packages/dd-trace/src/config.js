@@ -482,6 +482,7 @@ class Config {
     this._setValue(defaults, 'flushInterval', 2000)
     this._setValue(defaults, 'flushMinSpans', 1000)
     this._setValue(defaults, 'gitMetadataEnabled', true)
+    this._setValue(defaults, 'graphqlErrorExtensions', [])
     this._setValue(defaults, 'grpc.client.error.statuses', GRPC_CLIENT_ERROR_STATUSES)
     this._setValue(defaults, 'grpc.server.error.statuses', GRPC_SERVER_ERROR_STATUSES)
     this._setValue(defaults, 'headerTags', [])
@@ -669,6 +670,7 @@ class Config {
       DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
       DD_TRACE_GIT_METADATA_ENABLED,
       DD_TRACE_GLOBAL_TAGS,
+      DD_TRACE_GRAPHQL_ERROR_EXTENSIONS,
       DD_TRACE_HEADER_TAGS,
       DD_TRACE_LEGACY_BAGGAGE_ENABLED,
       DD_TRACE_MEMCACHED_COMMAND_ENABLED,
@@ -895,6 +897,7 @@ class Config {
     this._setString(env, 'version', DD_VERSION || tags.version)
     this._setBoolean(env, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
     this._setString(env, 'aws.dynamoDb.tablePrimaryKeys', DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS)
+    this._setArray(env, 'graphqlErrorExtensions', DD_TRACE_GRAPHQL_ERROR_EXTENSIONS)
   }
 
   _applyOptions (options) {
@@ -1020,6 +1023,7 @@ class Config {
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
     this._setString(opts, 'version', options.version || tags.version)
     this._setBoolean(opts, 'inferredProxyServicesEnabled', options.inferredProxyServicesEnabled)
+    this._setBoolean(opts, 'graphqlErrorExtensions', options.graphqlErrorExtensions)
 
     // For LLMObs, we want the environment variable to take precedence over the options.
     // This is reliant on environment config being set before options.
