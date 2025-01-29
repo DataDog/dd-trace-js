@@ -87,6 +87,27 @@ function dsmStatsExistWithParentHash (agent, expectedParentHash) {
   return hashFound
 }
 
+function unformatSpanEvents (span) {
+  if (span.meta && span.meta.events) {
+    // Parse the JSON string back into an object
+    const events = JSON.parse(span.meta.events)
+
+    // Create the _events array
+    const spanEvents = events.map(event => {
+      return {
+        name: event.name,
+        startTime: event.time_unix_nano / 1e6, // Convert from nanoseconds back to milliseconds
+        attributes: event.attributes ? event.attributes : undefined
+      }
+    })
+
+    // Return the unformatted _events
+    return spanEvents
+  }
+
+  return [] // Return an empty array if no events are found
+}
+
 function addEnvironmentVariablesToHeaders (headers) {
   // get all environment variables that start with "DD_"
   const ddEnvVars = new Map(
@@ -443,5 +464,6 @@ module.exports = {
   testedPlugins,
   getDsmStats,
   dsmStatsExist,
-  dsmStatsExistWithParentHash
+  dsmStatsExistWithParentHash,
+  unformatSpanEvents
 }
