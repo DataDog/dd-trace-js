@@ -160,7 +160,9 @@ const web = {
     const childOf = this.active(req)
     const config = context.config
 
-    if (config.middleware === false) return this.bindAndWrapMiddlewareErrors(fn, req, tracer, childOf)
+    if (config.middlewareTracingEnabled === false) {
+      return this.bindAndWrapMiddlewareErrors(fn, req, tracer, childOf)
+    }
 
     const span = tracer.startSpan(name, { childOf })
 
