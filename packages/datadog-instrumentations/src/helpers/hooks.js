@@ -5,7 +5,6 @@ module.exports = {
   '@apollo/gateway': () => require('../apollo'),
   'apollo-server-core': () => require('../apollo-server-core'),
   '@aws-sdk/smithy-client': () => require('../aws-sdk'),
-  '@aws-sdk/client-bedrock-runtime': () => require('../aws-sdk'),
   '@azure/functions': () => require('../azure-functions'),
   '@cucumber/cucumber': () => require('../cucumber'),
   '@playwright/test': () => require('../playwright'),
