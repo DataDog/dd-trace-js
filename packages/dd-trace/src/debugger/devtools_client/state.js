@@ -24,12 +24,23 @@ module.exports = {
    * To fix this, specify a more unique file path, e.g `demo-project1/index.js` instead of `index.js`
    *
    * @param {string} path
-   * @returns {[string, string] | undefined}
+   * @returns {[string, string, string | undefined] | undefined}
    */
   findScriptFromPartialPath (path) {
-    return scriptIds
-      .filter(([url]) => url.endsWith(path))
-      .sort(([a], [b]) => a.length - b.length)[0]
+    if (!path) return
+    do {
+      const result = scriptIds
+        .filter(([url]) => url.endsWith(path))
+        .sort(([a], [b]) => a.length - b.length)[0]
+
+      if (result === undefined) {
+        const index = path.indexOf('/')
+        if (index === -1) return
+        path = path.slice(index + 1)
+      } else {
+        return result
+      }
+    } while (true)
   },
 
   getStackFromCallFrames (callFrames) {
