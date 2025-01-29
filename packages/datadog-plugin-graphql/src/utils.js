@@ -17,7 +17,7 @@ function extractErrorIntoSpanEvent (config, span, exc) {
   }
 
   if (exc.path) {
-    attributes.path = exc.path.toString()
+    attributes.path = exc.path.map(String)
   }
 
   if (exc.message) {
