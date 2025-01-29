@@ -12,16 +12,30 @@ module.exports = {
   /**
    * Find the matching script that can be inspected based on a partial path.
    *
-   * Algorithm: Find the sortest url that ends in the requested path.
+   * Algorithm:
    *
-   * Will identify the correct script as long as Node.js doesn't load a module from a `node_modules` folder outside the
-   * project root. If so, there's a risk that this path is shorter than the expected path inside the project root.
-   * Example of mismatch where path = `index.js`:
+   * 1. Find the sortest url that ends in the requested path
+   * 2. If no match, remove the base directory from the requested path and go to step 1
    *
-   * Expected match:       /www/code/my-projects/demo-project1/index.js
-   * Actual shorter match: /www/node_modules/dd-trace/index.js
+   * Risks of false positives:
    *
-   * To fix this, specify a more unique file path, e.g `demo-project1/index.js` instead of `index.js`
+   * 1. If Node.js loads a module from a `node_modules` folder outside the project root. If so, there's a risk that
+   *    this path is shorter than the expected path inside the project root.
+   *
+   *    Example of mismatch where path = `index.js`:
+   *
+   *    Expected match:       /www/code/my-projects/demo-project1/index.js
+   *    Actual shorter match: /www/node_modules/dd-trace/index.js
+   *
+   *    To fix this, specify a more unique file path, e.g `demo-project1/index.js` instead of `index.js`
+   *
+   * 2. If the requested path is unknown (e.g. if a directory is spelled incorrectly), base directories will be
+   *    removed and a shorter, incorrect match might be returned.
+   *
+   *    Requested path: `servr/index.js` (should have been `server/index.js`)
+   *
+   *    Expected match: server/index.js
+   *    Actual match:   index.js
    *
    * @param {string} path
    * @returns {[string, string, string | undefined] | undefined}
