@@ -23,7 +23,8 @@ const {
   JEST_DISPLAY_NAME,
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_DRIVER,
-  getFormattedError
+  getFormattedError,
+  TEST_RETRY_REASON
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -167,6 +168,7 @@ class JestPlugin extends CiPlugin {
         config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
         config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
         config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
+        config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
       })
     })
 
@@ -262,6 +264,12 @@ class JestPlugin extends CiPlugin {
       }))
       formattedCoverages.forEach(formattedCoverage => {
         this.tracer._exporter.exportCoverage(formattedCoverage)
+      })
+    })
+
+    this.addSub('ci:jest:worker-report:logs', (logsPayloads) => {
+      JSON.parse(logsPayloads).forEach(({ testConfiguration, logMessage }) => {
+        this.tracer._exporter.exportDiLogs(testConfiguration, logMessage)
       })
     })
 
@@ -404,6 +412,7 @@ class JestPlugin extends CiPlugin {
       extraTags[TEST_IS_NEW] = 'true'
       if (isEfdRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
+        extraTags[TEST_RETRY_REASON] = 'efd'
       }
     }
 

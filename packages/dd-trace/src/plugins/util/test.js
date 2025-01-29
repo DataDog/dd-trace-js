@@ -59,6 +59,7 @@ const TEST_IS_NEW = 'test.is_new'
 const TEST_IS_RETRY = 'test.is_retry'
 const TEST_EARLY_FLAKE_ENABLED = 'test.early_flake.enabled'
 const TEST_EARLY_FLAKE_ABORT_REASON = 'test.early_flake.abort_reason'
+const TEST_RETRY_REASON = 'test.retry_reason'
 
 const CI_APP_ORIGIN = 'ciapp-test'
 
@@ -88,6 +89,7 @@ const TEST_BROWSER_VERSION = 'test.browser.version'
 // jest worker variables
 const JEST_WORKER_TRACE_PAYLOAD_CODE = 60
 const JEST_WORKER_COVERAGE_PAYLOAD_CODE = 61
+const JEST_WORKER_LOGS_PAYLOAD_CODE = 62
 
 // cucumber worker variables
 const CUCUMBER_WORKER_TRACE_PAYLOAD_CODE = 70
@@ -134,6 +136,7 @@ module.exports = {
   LIBRARY_VERSION,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
+  JEST_WORKER_LOGS_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   TEST_SOURCE_START,
@@ -143,6 +146,7 @@ module.exports = {
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
+  TEST_RETRY_REASON,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -689,14 +693,12 @@ function getFileAndLineNumberFromError (error, repositoryRoot) {
   return []
 }
 
-// The error.stack property in TestingLibraryElementError includes the message, which results in redundant information
 function getFormattedError (error, repositoryRoot) {
-  if (error.name !== 'TestingLibraryElementError') {
-    return error
-  }
-  const { stack } = error
   const newError = new Error(error.message)
-  newError.stack = stack.split('\n').filter(line => line.includes(repositoryRoot)).join('\n')
+  if (error.stack) {
+    newError.stack = error.stack.split('\n').filter(line => line.includes(repositoryRoot)).join('\n')
+  }
+  newError.name = error.name
 
   return newError
 }

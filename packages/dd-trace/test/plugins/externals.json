@@ -283,6 +283,10 @@
     {
       "name": "@langchain/anthropic",
       "versions": [">=0.1"]
+    },
+    {
+      "name": "@langchain/cohere",
+      "versions": [">=0.1"]
     }
   ],
   "ldapjs": [
@@ -345,6 +349,12 @@
     {
       "name": "body-parser",
       "versions": ["1.20.1"]
+    }
+  ],
+  "multer": [
+    {
+      "name": "express",
+      "versions": ["^4"]
     }
   ],
   "next": [

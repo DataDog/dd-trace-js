@@ -136,7 +136,10 @@ tracer.init({
     redactionEnabled: true,
     redactionNamePattern: 'password',
     redactionValuePattern: 'bearer',
-    telemetryVerbosity: 'OFF'
+    telemetryVerbosity: 'OFF',
+    stackTrace: {
+      enabled: true
+    }
   }
 });
 

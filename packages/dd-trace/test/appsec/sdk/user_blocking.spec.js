@@ -227,6 +227,19 @@ describe('user_blocking', () => {
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
+
+      it('should return true action if userID was matched before with trackUserLoginSuccessEvent()', (done) => {
+        controller = (req, res) => {
+          tracer.appsec.trackUserLoginSuccessEvent({ id: 'blockedUser' })
+          const ret = tracer.appsec.isUserBlocked({ id: 'blockedUser' })
+          expect(ret).to.be.true
+          res.end()
+        }
+        agent.use(traces => {
+          expect(traces[0][0].meta).to.have.property('usr.id', 'blockedUser')
+        }).then(done).catch(done)
+        axios.get(`http://localhost:${port}/`)
+      })
     })
 
     describe('blockRequest', () => {
