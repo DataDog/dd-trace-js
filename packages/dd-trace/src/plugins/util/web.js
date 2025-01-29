@@ -45,7 +45,7 @@ const web = {
     const validateStatus = getStatusValidator(config)
     const hooks = getHooks(config)
     const filter = urlFilter.getFilter(config)
-    const enableMiddlewareTracing = getMiddlewareSetting(config, tracerConfig)
+    const middlewareTracingEnabled = getMiddlewareSetting(config, tracerConfig)
     const queryStringObfuscation = getQsObfuscator(config)
 
     return {
@@ -54,7 +54,7 @@ const web = {
       validateStatus,
       hooks,
       filter,
-      enableMiddlewareTracing,
+      middlewareTracingEnabled,
       queryStringObfuscation
     }
   },
@@ -572,13 +572,13 @@ function getHooks (config) {
 
 function getMiddlewareSetting (config, tracerConfig) {
   if (config) {
-    if (typeof config.enableMiddlewareTracing === 'boolean') {
-      return config.enableMiddlewareTracing
-    } else if (config.hasOwnProperty('enableMiddlewareTracing')) {
-      log.error('Expected `enableMiddlewareTracing` to be a boolean.')
+    if (typeof config.middlewareTracingEnabled === 'boolean') {
+      return config.middlewareTracingEnabled
+    } else if (config.hasOwnProperty('middlewareTracingEnabled')) {
+      log.error('Expected `middlewareTracingEnabled` to be a boolean.')
     }
   }
-  if (tracerConfig && tracerConfig.enableMiddlewareTracing === false) {
+  if (tracerConfig && tracerConfig.middlewareTracingEnabled === false) {
     return false
   }
 

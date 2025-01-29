@@ -51,7 +51,7 @@ describe('esm', () => {
       })
     }).timeout(50000)
 
-    it('disables middleware spans when config.enableMiddlewareTracing is set to false through environment variable', async () => {
+    it('disables middleware spans when config.middlewareTracingEnabled is set to false through environment variable', async () => {
       process.env.DD_TRACE_MIDDLEWARE_ENABLED = false
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
       const numberOfSpans = 1
