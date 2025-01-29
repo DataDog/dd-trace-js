@@ -66,7 +66,7 @@ describe('set_user', () => {
       it('should call setTag with every attribute', () => {
         const user = {
           id: '123',
-          login: 'login',
+          email: 'a@b.c',
           custom: 'hello'
         }
 
@@ -74,13 +74,12 @@ describe('set_user', () => {
         expect(log.warn).to.not.have.been.called
         expect(rootSpan.setTag.callCount).to.equal(4)
         expect(rootSpan.setTag.getCall(0)).to.have.been.calledWithExactly('usr.id', '123')
-        expect(rootSpan.setTag.getCall(1)).to.have.been.calledWithExactly('usr.login', 'login')
+        expect(rootSpan.setTag.getCall(1)).to.have.been.calledWithExactly('usr.email', 'a@b.c')
         expect(rootSpan.setTag.getCall(2)).to.have.been.calledWithExactly('usr.custom', 'hello')
         expect(rootSpan.setTag.getCall(3)).to.have.been.calledWithExactly('_dd.appsec.user.collection_mode', 'sdk')
         expect(waf.run).to.have.been.calledOnceWithExactly({
           persistent: {
-            'usr.id': '123',
-            'usr.login': 'login'
+            'usr.id': '123'
           }
         })
       })
