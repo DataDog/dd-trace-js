@@ -10,7 +10,6 @@ const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const remoteConfig = require('./appsec/remote_config')
-const AppsecSdk = require('./appsec/sdk')
 const dogstatsd = require('./dogstatsd')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const spanleak = require('./spanleak')
@@ -217,7 +216,20 @@ class Tracer extends NoopProxy {
         const prioritySampler = appsecStandalone.configure(config)
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
-        this.appsec = new AppsecSdk(this._tracer, config)
+
+        if (config._isInServerlessEnvironment()) {
+          // lazy load if we're in serverless to save on startup time
+          this.appsec = new Proxy(this.appsec, {
+            get (target, key) {
+              const AppsecSdk = require('./appsec/sdk')
+              this.appsec = new AppsecSdk(this._tracer, config)
+              return this.appsec[key]
+            }
+          })
+        } else {
+          const AppsecSdk = require('./appsec/sdk')
+          this.appsec = new AppsecSdk(this._tracer, config)
+        }
         this.llmobs = new LLMObsSDK(this._tracer, this._modules.llmobs, config)
         this._tracingInitialized = true
       }
