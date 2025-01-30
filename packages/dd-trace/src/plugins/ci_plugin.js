@@ -337,10 +337,12 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   removeDiProbe ({ file, line }) {
-    const probeId = this.fileLineToProbeId.get(`${file}:${line}`)
-    log.warn(`Removing probe from ${file}:${line}, with probe id: ${probeId}`)
-    this.fileLineToProbeId.delete(probeId)
-    return this.di.removeProbe(probeId)
+    // TODO: we should probably only call this after the test suite has finished just to be sure
+    // return
+    // const probeId = this.fileLineToProbeId.get(`${file}:${line}`)
+    // log.warn(`Removing probe from ${file}:${line}, with probe id: ${probeId}`)
+    // this.fileLineToProbeId.delete(probeId)
+    // return this.di.removeProbe(probeId)
   }
 
   addDiProbe (err) {
