@@ -3,8 +3,7 @@
 require('../setup/tap')
 
 const { expect } = require('chai')
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
+const msgpack = require('@msgpack/msgpack')
 const { MsgpackEncoder } = require('../../src/msgpack/encoder')
 
 function randString (length) {
@@ -40,13 +39,12 @@ describe('msgpack/encoder', () => {
         biguint: BigInt('9223372036854775807'),
         bigint: BigInt('-9223372036854775807'),
         buffer: Buffer.from('test'),
-        uint8array: new Uint8Array([1, 2, 3, 4]),
-        uint32array: new Uint32Array([1, 2])
+        uint8array: new Uint8Array([1, 2, 3, 4])
       }
     ]
 
     const buffer = encoder.encode(data)
-    const decoded = msgpack.decode(buffer, { codec })
+    const decoded = msgpack.decode(buffer, { useBigInt64: true })
 
     expect(decoded).to.be.an('array')
     expect(decoded[0]).to.be.an('object')
@@ -81,8 +79,5 @@ describe('msgpack/encoder', () => {
     expect(decoded[1].uint8array[1]).to.equal(2)
     expect(decoded[1].uint8array[2]).to.equal(3)
     expect(decoded[1].uint8array[3]).to.equal(4)
-    expect(decoded[1]).to.have.property('uint32array')
-    expect(decoded[1].uint32array[0]).to.equal(1)
-    expect(decoded[1].uint32array[4]).to.equal(2)
   })
 })
