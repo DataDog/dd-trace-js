@@ -4,7 +4,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { assert } = require('chai')
-const msgpack = require('msgpack-lite')
+const msgpack = require('@msgpack/msgpack')
 
 const agent = require('../../plugins/agent')
 const axios = require('axios')
