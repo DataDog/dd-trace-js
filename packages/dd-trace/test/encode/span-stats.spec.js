@@ -3,8 +3,7 @@
 require('../setup/tap')
 
 const { expect } = require('chai')
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec()
+const msgpack = require('@msgpack/msgpack')
 
 const {
   MAX_NAME_LENGTH,
@@ -74,7 +73,7 @@ describe('span-stats-encode', () => {
     encoder.encode(stats)
 
     const buffer = encoder.makePayload()
-    const decoded = msgpack.decode(buffer, { codec })
+    const decoded = msgpack.decode(buffer)
 
     expect(decoded).to.deep.equal(stats)
   })
@@ -121,7 +120,7 @@ describe('span-stats-encode', () => {
     encoder.encode(statsToTruncate)
 
     const buffer = encoder.makePayload()
-    const decoded = msgpack.decode(buffer, { codec })
+    const decoded = msgpack.decode(buffer)
 
     expect(decoded)
     const decodedStat = decoded.Stats[0].Stats[0]
@@ -151,7 +150,7 @@ describe('span-stats-encode', () => {
     encoder.encode(statsToTruncate)
 
     const buffer = encoder.makePayload()
-    const decodedStats = msgpack.decode(buffer, { codec })
+    const decodedStats = msgpack.decode(buffer)
     expect(decodedStats)
 
     const decodedStat = decodedStats.Stats[0].Stats[0]

@@ -3,8 +3,7 @@
 require('../setup/tap')
 
 const { expect } = require('chai')
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
+const msgpack = require('@msgpack/msgpack')
 const id = require('../../src/id')
 const {
   MAX_META_KEY_LENGTH,
@@ -65,7 +64,7 @@ describe('agentless-ci-visibility-encode', () => {
     encoder.encode(trace)
 
     const buffer = encoder.makePayload()
-    const decodedTrace = msgpack.decode(buffer, { codec })
+    const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
 
     expect(decodedTrace.version).to.equal(1)
     expect(decodedTrace.metadata['*']).to.contain({
@@ -143,7 +142,7 @@ describe('agentless-ci-visibility-encode', () => {
     encoder.encode(traceToTruncate)
 
     const buffer = encoder.makePayload()
-    const decodedTrace = msgpack.decode(buffer, { codec })
+    const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
 
     expect(decodedTrace)
     const spanEvent = decodedTrace.events[0]
@@ -171,7 +170,7 @@ describe('agentless-ci-visibility-encode', () => {
     encoder.encode(traceToTruncate)
 
     const buffer = encoder.makePayload()
-    const decodedTrace = msgpack.decode(buffer, { codec })
+    const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
 
     expect(decodedTrace)
     const spanEvent = decodedTrace.events[0]
@@ -203,7 +202,7 @@ describe('agentless-ci-visibility-encode', () => {
     encoder.encode(traceToTruncate)
 
     const buffer = encoder.makePayload()
-    const decodedTrace = msgpack.decode(buffer, { codec })
+    const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
     const spanEvent = decodedTrace.events[0]
     expect(spanEvent.content.meta).to.eql({
       [`${tooLongKey.slice(0, MAX_META_KEY_LENGTH)}...`]: `${tooLongValue.slice(0, MAX_META_VALUE_LENGTH)}...`
@@ -248,7 +247,7 @@ describe('agentless-ci-visibility-encode', () => {
     encoder.encode(traceToFilter)
 
     const buffer = encoder.makePayload()
-    const decodedTrace = msgpack.decode(buffer, { codec })
+    const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
     expect(decodedTrace.events.length).to.equal(1)
     expect(decodedTrace.events[0].type).to.equal('test_session_end')
     expect(decodedTrace.events[0].content.type).to.eql('test_session_end')
@@ -273,7 +272,7 @@ describe('agentless-ci-visibility-encode', () => {
     }]
     encoder.encode(traceToTruncate)
     const buffer = encoder.makePayload()
-    const decodedTrace = msgpack.decode(buffer, { codec })
+    const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
     const spanEvent = decodedTrace.events[0]
     expect(spanEvent.type).to.equal('span')
     expect(spanEvent.version).to.equal(1)
