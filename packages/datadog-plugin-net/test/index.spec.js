@@ -3,7 +3,6 @@
 const dns = require('dns')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
-const { Int64BE } = require('int64-buffer') // TODO remove dependency
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
@@ -66,7 +65,7 @@ describe('Plugin', () => {
             'span.kind': 'client',
             'ipc.path': '/tmp/dd-trace.sock'
           },
-          parent_id: new Int64BE(parent.context()._spanId._buffer)
+          parent_id: BigInt(parent.context()._spanId.toString(10))
         }).then(done).catch(done)
 
         tracer.scope().activate(parent, () => {
@@ -121,7 +120,7 @@ describe('Plugin', () => {
                 'tcp.remote.port': port,
                 'tcp.local.port': socket.localPort
               },
-              parent_id: new Int64BE(parent.context()._spanId._buffer)
+              parent_id: BigInt(parent.context()._spanId.toString(10))
             }, 2000).then(done).catch(done)
           })
         })
@@ -152,7 +151,7 @@ describe('Plugin', () => {
                 'tcp.remote.port': port,
                 'tcp.local.port': socket.localPort
               },
-              parent_id: new Int64BE(parent.context()._spanId._buffer)
+              parent_id: BigInt(parent.context()._spanId.toString(10))
             }).then(done).catch(done)
           })
         })
@@ -168,7 +167,7 @@ describe('Plugin', () => {
             'span.kind': 'client',
             'ipc.path': '/tmp/dd-trace.sock'
           },
-          parent_id: new Int64BE(parent.context()._spanId._buffer)
+          parent_id: BigInt(parent.context()._spanId.toString(10))
         }).then(done).catch(done)
 
         tracer.scope().activate(parent, () => {
