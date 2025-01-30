@@ -368,6 +368,8 @@ module.exports = class CiPlugin extends Plugin {
 
     const [probeId, setProbePromise] = this.di.addLineProbe({ file, line }, this.onDiBreakpointHit.bind(this))
 
+    this.fileLineToProbeId.set(activeProbeKey, probeId)
+
     return {
       probeId,
       setProbePromise,
