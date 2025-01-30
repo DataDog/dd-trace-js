@@ -6,11 +6,18 @@ const { AgentEncoder: BaseEncoder } = require('./0.4')
 const ARRAY_OF_TWO = 0x92
 const ARRAY_OF_TWELVE = 0x9c
 
+const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
+
 function formatSpan (span) {
   return normalizeSpan(truncateSpan(span, false))
 }
 
 class AgentEncoder extends BaseEncoder {
+  constructor (writer, limit = SOFT_LIMIT) {
+    super(writer, limit)
+    this._format = 'v0.5'
+  }
+
   makePayload () {
     const prefixSize = 1
     const stringSize = this._stringBytes.length + 5

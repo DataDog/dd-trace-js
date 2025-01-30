@@ -24,6 +24,7 @@ class AgentEncoder {
       process.env.DD_TRACE_ENCODING_DEBUG,
       false
     ))
+    this._format = 'v0.4'
   }
 
   count () {
@@ -112,6 +113,10 @@ class AgentEncoder {
       this._encodeMap(bytes, span.meta)
       this._encodeString(bytes, 'metrics')
       this._encodeMap(bytes, span.metrics)
+      if (span.span_events) {
+        this._encodeString(bytes, 'span_events')
+        this._encodeObjectAsArray(bytes, span.span_events, new Set())
+      }
       if (span.meta_struct) {
         this._encodeString(bytes, 'meta_struct')
         this._encodeMetaStruct(bytes, span.meta_struct)
