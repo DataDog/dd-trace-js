@@ -40,12 +40,12 @@ const web = {
   TYPE: WEB,
 
   // Ensure the configuration has the correct structure and defaults.
-  normalizeConfig (config, tracerConfig) {
+  normalizeConfig (config) {
     const headers = getHeadersToRecord(config)
     const validateStatus = getStatusValidator(config)
     const hooks = getHooks(config)
     const filter = urlFilter.getFilter(config)
-    const middleware = getMiddlewareSetting(config, tracerConfig)
+    const middleware = getMiddlewareSetting(config)
     const queryStringObfuscation = getQsObfuscator(config)
 
     return {
@@ -160,9 +160,7 @@ const web = {
     const childOf = this.active(req)
     const config = context.config
 
-    if (config.middleware === false) {
-      return this.bindAndWrapMiddlewareErrors(fn, req, tracer, childOf)
-    }
+    if (config.middleware === false) return this.bindAndWrapMiddlewareErrors(fn, req, tracer, childOf)
 
     const span = tracer.startSpan(name, { childOf })
 
@@ -572,16 +570,11 @@ function getHooks (config) {
   return { request }
 }
 
-function getMiddlewareSetting (config, tracerConfig) {
-  if (config) {
-    if (typeof config.middleware === 'boolean') {
-      return config.middleware
-    } else if (config.hasOwnProperty('middlewareTracingEnabled')) {
-      log.error('Expected `middlewareTracingEnabled` to be a boolean.')
-    }
-  }
-  if (tracerConfig && tracerConfig.middlewareTracingEnabled === false) {
-    return false
+function getMiddlewareSetting (config) {
+  if (config && typeof config.middleware === 'boolean') {
+    return config.middleware
+  } else if (config && config.hasOwnProperty('middleware')) {
+    log.error('Expected `middleware` to be a boolean.')
   }
 
   return true

@@ -9,7 +9,7 @@ class WebPlugin extends Plugin {
   }
 
   configure (config) {
-    return super.configure(web.normalizeConfig(config, this._tracerConfig))
+    return super.configure(web.normalizeConfig(config))
   }
 
   setFramework (req, name, config) {
