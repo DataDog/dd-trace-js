@@ -13,7 +13,8 @@ runs:
     - run: yarn test:plugins:ci
       shell: bash
     - uses: codecov/codecov-action@v5
-    - if: always()
-      uses: ./.github/actions/testagent/logs
-      with:
-        suffix: test-${{ github.job }}
+    # uncomment to get test-agent logs within github actions output
+    # - if: always()
+    #   uses: ./.github/actions/testagent/logs
+    #   with:
+    #     suffix: test-${{ github.job }}
