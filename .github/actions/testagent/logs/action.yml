@@ -11,8 +11,10 @@ runs:
   using: composite
   steps:
     - uses: actions/checkout@v2
-    - name: Create Artifacts Directory
-      run: mkdir -p "./artifacts"
+    - name: Create Artifacts Directories
+      run: |
+        mkdir -p "./artifacts/logs"
+        mkdir -p "./artifacts/supported-integrations"
       shell: bash
     - name: Save Test Agent Logs
       run: |
@@ -21,11 +23,16 @@ runs:
         plugin="${plugin/test-and-upstream-/}"
 
         if [ -n "${{inputs.container-id}}" ]; then
-          docker logs "${{inputs.container-id}}" > "artifacts/test_agent_logs_${plugin}.txt"
+          docker logs "${{inputs.container-id}}" > "artifacts/logs/test_agent_logs_${plugin}.txt"
         else
-          docker compose logs testagent > "artifacts/test_agent_logs_${plugin}.txt"
+          docker compose logs testagent > "artifacts/logs/test_agent_logs_${plugin}.txt"
         fi
       shell: bash
+    - name: Archive Test Agent Logs
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-agent-logs-${{inputs.suffix}}
+        path: "./artifacts/logs"
     - name: Get Tested Integrations from Test Agent
       run: |
         # make temporary files to save response data to
@@ -38,11 +45,11 @@ runs:
         filename=$(awk -F': ' '/file-name/{print $2}' "$headers" | tr -d '\r\n')
 
         # copy data to final file and remove temp files
-        mv "$response" "artifacts/${filename}_supported_versions.csv"
+        mv "$response" "artifacts/supported-integrations/${filename}_supported_versions.csv"
         rm "$headers"
       shell: bash
-    - name: Archive Test Agent Artifacts
+    - name: Archive Test Agent Tested Versions Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: supported-integrations-${{inputs.suffix}}
-        path: ./artifacts
+        path: "./artifacts/supported-integrations"
