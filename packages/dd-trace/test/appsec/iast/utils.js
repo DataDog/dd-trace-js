@@ -13,8 +13,6 @@ const Config = require('../../../src/config')
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
 const { getWebSpan } = require('../utils')
 
-const VULNS_WITHOUT_LOCATION = new Set(['XCONTENTTYPE_HEADER_MISSING', 'HSTS_HEADER_MISSING'])
-
 function testInRequest (app, tests) {
   let http
   let listener
@@ -155,7 +153,15 @@ function checkNoVulnerabilityInRequest (vulnerability, config, done, makeRequest
   }
 }
 
-function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb, makeRequest, config, done) {
+function checkVulnerabilityInRequest (
+  vulnerability,
+  occurrencesAndLocation,
+  cb,
+  makeRequest,
+  config,
+  done,
+  matchLocation
+) {
   let location
   let occurrences = occurrencesAndLocation
   if (occurrencesAndLocation !== null && typeof occurrencesAndLocation === 'object') {
@@ -202,9 +208,11 @@ function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb,
         }
       }
 
-      const matchFound = locationHasMatchingFrame(span, vulnerability, vulnerabilitiesTrace.vulnerabilities)
+      if (matchLocation) {
+        const matchFound = locationHasMatchingFrame(span, vulnerability, vulnerabilitiesTrace.vulnerabilities)
 
-      assert.isTrue(matchFound)
+        assert.isTrue(matchFound)
+      }
 
       if (cb) {
         cb(vulnerabilitiesTrace.vulnerabilities.filter(v => v.type === vulnerability))
@@ -261,11 +269,19 @@ function prepareTestServerForIast (description, tests, iastConfig) {
       return agent.close({ ritmReset: false })
     })
 
-    function testThatRequestHasVulnerability (fn, vulnerability, occurrences, cb, makeRequest, description) {
+    function testThatRequestHasVulnerability (
+      fn,
+      vulnerability,
+      occurrences,
+      cb,
+      makeRequest,
+      description,
+      matchLocation = true
+    ) {
       it(description || `should have ${vulnerability} vulnerability`, function (done) {
         this.timeout(5000)
         app = fn
-        checkVulnerabilityInRequest(vulnerability, occurrences, cb, makeRequest, config, done)
+        checkVulnerabilityInRequest(vulnerability, occurrences, cb, makeRequest, config, done, matchLocation)
       })
     }
 
@@ -381,10 +397,6 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
 }
 
 function locationHasMatchingFrame (span, vulnerabilityType, vulnerabilities) {
-  if (VULNS_WITHOUT_LOCATION.has(vulnerabilityType)) {
-    return true
-  }
-
   const stack = msgpack.decode(span.meta_struct['_dd.stack'])
   const matchingVulns = vulnerabilities.filter(vulnerability => vulnerability.type === vulnerabilityType)
 
