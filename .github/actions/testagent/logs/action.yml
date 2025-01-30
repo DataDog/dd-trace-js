@@ -18,6 +18,7 @@ runs:
       shell: bash
     - name: Save Test Agent Logs
       id: save_logs
+      if:  runner.debug == '1' # only create test agent log artifacts if the github action has been re-run with debug mode
       env:
         SUFFIX: ${{ inputs.suffix }}
       run: |
@@ -37,6 +38,7 @@ runs:
         fi
       shell: bash
     - name: Archive Test Agent Logs
+      if:  runner.debug == '1' # only create test agent log artifacts if the github action has been re-run with debug mode
       uses: actions/upload-artifact@v4
       with:
         name: "test_agent_logs_${{ env.PLUGIN_NAME }}"
