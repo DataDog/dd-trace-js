@@ -482,6 +482,7 @@ class Config {
     this._setValue(defaults, 'flushInterval', 2000)
     this._setValue(defaults, 'flushMinSpans', 1000)
     this._setValue(defaults, 'gitMetadataEnabled', true)
+    this._setValue(defaults, 'graphqlErrorExtensions', [])
     this._setValue(defaults, 'grpc.client.error.statuses', GRPC_CLIENT_ERROR_STATUSES)
     this._setValue(defaults, 'grpc.server.error.statuses', GRPC_SERVER_ERROR_STATUSES)
     this._setValue(defaults, 'headerTags', [])
@@ -497,6 +498,7 @@ class Config {
     this._setValue(defaults, 'iast.redactionValuePattern', null)
     this._setValue(defaults, 'iast.requestSampling', 30)
     this._setValue(defaults, 'iast.telemetryVerbosity', 'INFORMATION')
+    this._setValue(defaults, 'iast.stackTrace.enabled', true)
     this._setValue(defaults, 'injectionEnabled', [])
     this._setValue(defaults, 'isAzureFunction', false)
     this._setValue(defaults, 'isCiVisibility', false)
@@ -521,7 +523,7 @@ class Config {
     this._setValue(defaults, 'inferredProxyServicesEnabled', false)
     this._setValue(defaults, 'memcachedCommandEnabled', false)
     this._setValue(defaults, 'openAiLogsEnabled', false)
-    this._setValue(defaults, 'openaiSpanCharLimit', 128)
+    this._setValue(defaults, 'openai.spanCharLimit', 128)
     this._setValue(defaults, 'peerServiceMapping', {})
     this._setValue(defaults, 'plugins', true)
     this._setValue(defaults, 'port', '8126')
@@ -622,6 +624,7 @@ class Config {
       DD_IAST_REDACTION_VALUE_PATTERN,
       DD_IAST_REQUEST_SAMPLING,
       DD_IAST_TELEMETRY_VERBOSITY,
+      DD_IAST_STACK_TRACE_ENABLED,
       DD_INJECTION_ENABLED,
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
@@ -667,6 +670,7 @@ class Config {
       DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
       DD_TRACE_GIT_METADATA_ENABLED,
       DD_TRACE_GLOBAL_TAGS,
+      DD_TRACE_GRAPHQL_ERROR_EXTENSIONS,
       DD_TRACE_HEADER_TAGS,
       DD_TRACE_LEGACY_BAGGAGE_ENABLED,
       DD_TRACE_MEMCACHED_COMMAND_ENABLED,
@@ -787,6 +791,7 @@ class Config {
     }
     this._envUnprocessed['iast.requestSampling'] = DD_IAST_REQUEST_SAMPLING
     this._setString(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
+    this._setBoolean(env, 'iast.stackTrace.enabled', DD_IAST_STACK_TRACE_ENABLED)
     this._setArray(env, 'injectionEnabled', DD_INJECTION_ENABLED)
     this._setBoolean(env, 'isAzureFunction', getIsAzureFunction())
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
@@ -802,7 +807,7 @@ class Config {
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this._setBoolean(env, 'memcachedCommandEnabled', DD_TRACE_MEMCACHED_COMMAND_ENABLED)
     this._setBoolean(env, 'openAiLogsEnabled', DD_OPENAI_LOGS_ENABLED)
-    this._setValue(env, 'openaiSpanCharLimit', maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT))
+    this._setValue(env, 'openai.spanCharLimit', maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT))
     this._envUnprocessed.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
     if (DD_TRACE_PEER_SERVICE_MAPPING) {
       this._setValue(env, 'peerServiceMapping', fromEntries(
@@ -892,6 +897,7 @@ class Config {
     this._setString(env, 'version', DD_VERSION || tags.version)
     this._setBoolean(env, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
     this._setString(env, 'aws.dynamoDb.tablePrimaryKeys', DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS)
+    this._setArray(env, 'graphqlErrorExtensions', DD_TRACE_GRAPHQL_ERROR_EXTENSIONS)
   }
 
   _applyOptions (options) {
@@ -976,6 +982,7 @@ class Config {
       this._optsUnprocessed['iast.requestSampling'] = options.iast?.requestSampling
     }
     this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
+    this._setBoolean(opts, 'iast.stackTrace.enabled', options.iast?.stackTrace?.enabled)
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
     this._setBoolean(opts, 'legacyBaggageEnabled', options.legacyBaggageEnabled)
     this._setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)
@@ -1016,6 +1023,7 @@ class Config {
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
     this._setString(opts, 'version', options.version || tags.version)
     this._setBoolean(opts, 'inferredProxyServicesEnabled', options.inferredProxyServicesEnabled)
+    this._setBoolean(opts, 'graphqlErrorExtensions', options.graphqlErrorExtensions)
 
     // For LLMObs, we want the environment variable to take precedence over the options.
     // This is reliant on environment config being set before options.

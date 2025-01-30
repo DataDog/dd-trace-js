@@ -1,4 +1,5 @@
 name: Install dependencies
+description: Install dependencies
 runs:
   using: composite
   steps: # retry in case of server error from registry

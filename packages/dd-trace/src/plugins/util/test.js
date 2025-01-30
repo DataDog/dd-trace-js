@@ -59,6 +59,7 @@ const TEST_IS_NEW = 'test.is_new'
 const TEST_IS_RETRY = 'test.is_retry'
 const TEST_EARLY_FLAKE_ENABLED = 'test.early_flake.enabled'
 const TEST_EARLY_FLAKE_ABORT_REASON = 'test.early_flake.abort_reason'
+const TEST_RETRY_REASON = 'test.retry_reason'
 
 const CI_APP_ORIGIN = 'ciapp-test'
 
@@ -145,6 +146,7 @@ module.exports = {
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
+  TEST_RETRY_REASON,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -691,14 +693,12 @@ function getFileAndLineNumberFromError (error, repositoryRoot) {
   return []
 }
 
-// The error.stack property in TestingLibraryElementError includes the message, which results in redundant information
 function getFormattedError (error, repositoryRoot) {
-  if (error.name !== 'TestingLibraryElementError') {
-    return error
-  }
-  const { stack } = error
   const newError = new Error(error.message)
-  newError.stack = stack.split('\n').filter(line => line.includes(repositoryRoot)).join('\n')
+  if (error.stack) {
+    newError.stack = error.stack.split('\n').filter(line => line.includes(repositoryRoot)).join('\n')
+  }
+  newError.name = error.name
 
   return newError
 }
