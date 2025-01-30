@@ -19,29 +19,18 @@ runs:
     - name: Save Test Agent Logs
       id: save_logs
       if:  runner.debug == '1' # only create test agent log artifacts if the github action has been re-run with debug mode
-      env:
-        SUFFIX: ${{ inputs.suffix }}
       run: |
-        # Clean the suffix to derive the plugin name
-        plugin="${SUFFIX}"
-        plugin="${plugin/test-and-upstream-/}"
-        plugin="${plugin/test-/}"
-        plugin="${plugin/plugins-/}"
-        plugin="${plugin/upstream-/}"
-
-        echo "PLUGIN_NAME=${plugin}" >> $GITHUB_ENV
-
         if [ -n "${{inputs.container-id}}" ]; then
-          docker logs "${{inputs.container-id}}" > "artifacts/logs/test_agent_logs_${plugin}.txt"
+          docker logs "${{inputs.container-id}}" > "artifacts/logs/test_agent_logs_${{ inputs.suffix }}.txt"
         else
-          docker compose logs testagent > "artifacts/logs/test_agent_logs_${plugin}.txt"
+          docker compose logs testagent > "artifacts/logs/test_agent_logs_${{ inputs.suffix }}.txt"
         fi
       shell: bash
     - name: Archive Test Agent Logs
       if:  runner.debug == '1' # only create test agent log artifacts if the github action has been re-run with debug mode
       uses: actions/upload-artifact@v4
       with:
-        name: "test_agent_logs_${{ env.PLUGIN_NAME }}"
+        name: "test_agent_logs_${{ inputs.suffix }}"
         path: "./artifacts/logs"
     - name: Get Tested Integrations from Test Agent
       run: |
@@ -61,5 +50,5 @@ runs:
     - name: Archive Test Agent Tested Versions Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: "supported-integrations-${{ env.PLUGIN_NAME }}"
-        path: "./artifacts/supported-integrations"
+        name: supported-integrations-${{ inputs.suffix }}
+        path: ./artifacts
