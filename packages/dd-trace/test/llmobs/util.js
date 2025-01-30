@@ -186,8 +186,7 @@ function expectedLLMObsTags ({
 }
 
 function fromBuffer (spanProperty, isNumber = false) {
-  const { buffer, offset } = spanProperty
-  const strVal = buffer.readBigInt64BE(offset).toString()
+  const strVal = spanProperty.toString(10)
   return isNumber ? Number(strVal) : strVal
 }
 
