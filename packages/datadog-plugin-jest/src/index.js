@@ -39,6 +39,7 @@ const {
   TELEMETRY_CODE_COVERAGE_NUM_FILES,
   TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
+const log = require('../../dd-trace/src/log')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
 
@@ -363,9 +364,12 @@ class JestPlugin extends CiPlugin {
             const probeInformation = this.addDiProbe(error)
             if (probeInformation) {
               const { probeId, setProbePromise, stackIndex } = probeInformation
+              log.warn(`Setting probe for test error stackIndex:${stackIndex}`)
               this.runningTestProbeId = probeId
               this.testErrorStackIndex = stackIndex
               promises.isProbeReady = withTimeout(setProbePromise, 2000)
+            } else {
+              log.warn('no probeInformation')
             }
           }
         }

@@ -313,6 +313,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const asyncResource = asyncResources.get(event.test)
 
         if (status === 'fail') {
+          log.warn('Setting probe because test failed')
           asyncResource.runInAsyncScope(() => {
             testErrCh.publish({
               error: formatJestError(event.test.errors[0]),

@@ -93,11 +93,14 @@ async function addBreakpoint (probe) {
   probe.location = { file, lines: [String(line)] }
 
   const script = findScriptFromPartialPath(file)
-  if (!script) throw new Error(`No loaded script found for ${file}`)
+  if (!script) {
+    log.error(`No loaded script found for ${file}`)
+    throw new Error(`No loaded script found for ${file}`)
+  }
 
   const [path, scriptId, sourceMapURL] = script
 
-  log.debug(`Adding breakpoint at ${path}:${line}`)
+  log.warn(`Adding breakpoint at ${path}:${line}`)
 
   let lineNumber = line
 
