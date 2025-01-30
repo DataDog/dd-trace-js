@@ -337,6 +337,7 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   removeDiProbe ({ file, line }) {
+    return Promise.resolve()
     // TODO: we should probably only call this after the test suite has finished just to be sure
     // return
     // const probeId = this.fileLineToProbeId.get(`${file}:${line}`)
