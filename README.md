@@ -9,7 +9,6 @@
 
 ![Tracer, Agent, Datadog relationship diagram](./docs/relationship.png)
 
-
 ## Documentation
 
 Most of the documentation for `dd-trace` is available on these webpages:
