@@ -11,21 +11,25 @@ runs:
   using: composite
   steps:
     - uses: actions/checkout@v2
+    - name: Create Artifacts Directory
+      run: mkdir -p "./artifacts"
+      shell: bash
     - name: Save Test Agent Logs
       run: |
+        # Remove "test-and-upstream-" from the suffix
+        plugin="${{ inputs.suffix }}"
+        plugin="${plugin/test-and-upstream-/}"
+
         if [ -n "${{inputs.container-id}}" ]; then
-          docker logs "${{inputs.container-id}}" > "artifacts/test_agent_logs_${{inputs.suffix}}.txt"
+          docker logs "${{inputs.container-id}}" > "artifacts/test_agent_logs_${plugin}.txt"
         else
-          docker compose logs testagent > "artifacts/test_agent_logs_${{inputs.suffix}}.txt"
+          docker compose logs testagent > "artifacts/test_agent_logs_${plugin}.txt"
         fi
       shell: bash
     - name: Get Tested Integrations from Test Agent
       run: |
         # make temporary files to save response data to
         response=$(mktemp) && headers=$(mktemp)
-
-        # create artifacts directory if it doesn't exist
-        mkdir -p "./artifacts"
 
         # get tested integrations
         curl -o "$response" -D "$headers" http://127.0.0.1:9126/test/integrations/tested_versions
