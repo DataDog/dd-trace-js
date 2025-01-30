@@ -1,4 +1,5 @@
 'use strict'
 
-require('tap').mochaGlobals()
+require('tap')
+require('@tapjs/mocha-globals').globalize()
 require('./core')

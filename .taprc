@@ -1,5 +1,7 @@
-check-coverage: false
+# vim: set filetype=yaml :
 color: true
-coverage: false
-node-arg: --expose-gc
+node-arg:
+  - --expose-gc
 reporter: spec
+plugin:
+  - "@tapjs/mocha-globals"
