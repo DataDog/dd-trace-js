@@ -343,7 +343,9 @@ should set probe: ${shouldSetProbe}
 
         const shouldRemoveProbe = this.isDiEnabled && !willBeRetried
         asyncResource.runInAsyncScope(() => {
-          log.warn(`shouldRemoveProbe: ${shouldRemoveProbe}`)
+          if (shouldRemoveProbe) {
+            log.warn(`shouldRemoveProbe for: ${getJestTestName(event.test)}`)
+          }
           testFinishCh.publish({
             status,
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite),

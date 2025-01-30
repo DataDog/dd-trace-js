@@ -348,10 +348,10 @@ class JestPlugin extends CiPlugin {
       span.finish()
       finishAllTraceSpans(span)
       this.activeTestSpan = null
-      if (shouldRemoveProbe && this.runningTestProbeId) {
+      if (shouldRemoveProbe && this.runningTestProbe) {
         log.warn(`ci:jest:test:finish removing probe ${spanTags[TEST_NAME]}`)
-        promises.isProbeRemoved = withTimeout(this.removeDiProbe(this.runningTestProbeId), 2000)
-        this.runningTestProbeId = null
+        promises.isProbeRemoved = withTimeout(this.removeDiProbe(this.runningTestProbe), 2000)
+        this.runningTestProbe = null
       }
     })
 
@@ -365,9 +365,9 @@ class JestPlugin extends CiPlugin {
           if (shouldSetProbe) {
             const probeInformation = this.addDiProbe(error)
             if (probeInformation) {
-              const { probeId, setProbePromise, stackIndex } = probeInformation
+              const { file, line, setProbePromise, stackIndex } = probeInformation
               log.warn(`Setting probe for test error stackIndex:${stackIndex}`)
-              this.runningTestProbeId = probeId
+              this.runningTestProbe = { file, line }
               this.testErrorStackIndex = stackIndex
               promises.isProbeReady = withTimeout(setProbePromise, 2000)
             } else {
