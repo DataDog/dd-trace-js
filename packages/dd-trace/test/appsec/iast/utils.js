@@ -395,7 +395,8 @@ function locationHasMatchingFrame (span, vulnerabilityType, vulnerabilities) {
           frame.line === location.line &&
           frame.class_name === location.class &&
           frame.function === location.method &&
-          frame.path === location.path
+          frame.path === location.path &&
+          !location.hasOwnProperty('column')
         ) {
           return true
         }
