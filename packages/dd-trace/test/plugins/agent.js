@@ -142,6 +142,7 @@ function handleTraceRequest (req, res, sendToTestAgent) {
   // handles the received trace request and sends trace to Test Agent if bool enabled.
   if (sendToTestAgent) {
     const testAgentUrl = process.env.DD_TEST_AGENT_URL || 'http://127.0.0.1:9126'
+    const replacer = (k, v) => typeof v === 'bigint' ? v.toString() : v
 
     // remove incorrect headers
     delete req.headers.host
@@ -173,7 +174,7 @@ function handleTraceRequest (req, res, sendToTestAgent) {
         })
       }
     })
-    testAgentReq.write(JSON.stringify(req.body))
+    testAgentReq.write(JSON.stringify(req.body, replacer))
     testAgentReq.end()
   }
 
