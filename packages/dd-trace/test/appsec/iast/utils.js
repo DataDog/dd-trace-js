@@ -4,6 +4,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { assert } = require('chai')
+const msgpack = require('msgpack-lite')
 
 const agent = require('../../plugins/agent')
 const axios = require('axios')
@@ -11,6 +12,8 @@ const iast = require('../../../src/appsec/iast')
 const Config = require('../../../src/config')
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
 const { getWebSpan } = require('../utils')
+
+const VULNS_WITHOUT_LOCATION = new Set(['XCONTENTTYPE_HEADER_MISSING', 'HSTS_HEADER_MISSING'])
 
 function testInRequest (app, tests) {
   let http
@@ -199,6 +202,10 @@ function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb,
         }
       }
 
+      const matchFound = locationHasMatchingFrame(span, vulnerability, vulnerabilitiesTrace.vulnerabilities)
+
+      assert.isTrue(matchFound)
+
       if (cb) {
         cb(vulnerabilitiesTrace.vulnerabilities.filter(v => v.type === vulnerability))
       }
@@ -371,6 +378,32 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
 
     tests(testThatRequestHasVulnerability, testThatRequestHasNoVulnerability, config)
   })
+}
+
+function locationHasMatchingFrame (span, vulnerabilityType, vulnerabilities) {
+  if (VULNS_WITHOUT_LOCATION.has(vulnerabilityType)) {
+    return true
+  }
+
+  const stack = msgpack.decode(span.meta_struct['_dd.stack'])
+  const matchingVulns = vulnerabilities.filter(vulnerability => vulnerability.type === vulnerabilityType)
+
+  for (const vulnerability of stack.vulnerability) {
+    for (const frame of vulnerability.frames) {
+      for (const { location } of matchingVulns) {
+        if (
+          frame.line === location.line &&
+          frame.class_name === location.class &&
+          frame.function === location.method &&
+          frame.path === location.path
+        ) {
+          return true
+        }
+      }
+    }
+  }
+
+  return false
 }
 
 module.exports = {

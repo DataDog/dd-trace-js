@@ -87,8 +87,8 @@ class VulnerabilityFormatter {
       type,
       hash,
       stackId,
-      location,
-      evidence: this.formatEvidence(type, evidence, sourcesIndexes, sources)
+      evidence: this.formatEvidence(type, evidence, sourcesIndexes, sources),
+      location
     }
 
     return formattedVulnerability
