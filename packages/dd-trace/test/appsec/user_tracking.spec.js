@@ -2,7 +2,6 @@
 
 const assert = require('assert')
 
-const log = require('../../src/log')
 const telemetry = require('../../src/appsec/telemetry')
 const { SAMPLING_MECHANISM_APPSEC } = require('../../src/constants')
 const standalone = require('../../src/appsec/standalone')
@@ -11,14 +10,13 @@ const waf = require('../../src/appsec/waf')
 describe('User Tracking', () => {
   let currentTags
   let rootSpan
+  let log
   let keepTrace
 
   let setCollectionMode
   let trackLogin
 
   beforeEach(() => {
-    sinon.stub(log, 'warn')
-    sinon.stub(log, 'error')
     sinon.stub(telemetry, 'incrementMissingUserLoginMetric')
     sinon.stub(standalone, 'sample')
     sinon.stub(waf, 'run').returns(['action1'])
@@ -30,9 +28,15 @@ describe('User Tracking', () => {
       addTags: sinon.stub()
     }
 
+    log = {
+      warn: sinon.stub(),
+      error: sinon.stub()
+    }
+
     keepTrace = sinon.stub()
 
     const UserTracking = proxyquire('../src/appsec/user_tracking', {
+      '../log': log,
       '../priority_sampler': { keepTrace }
     })
 
