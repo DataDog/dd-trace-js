@@ -11,11 +11,12 @@ runs:
   using: composite
   steps:
     - uses: actions/checkout@v2
-    - run: |
+    - name: Save Test Agent Logs
+      run: |
         if [ -n "${{inputs.container-id}}" ]; then
-          docker logs ${{inputs.container-id}}
+          docker logs "${{inputs.container-id}}" > "artifacts/test_agent_logs_${{inputs.suffix}}.txt"
         else
-          docker compose logs testagent
+          docker compose logs testagent > "artifacts/test_agent_logs_${{inputs.suffix}}.txt"
         fi
       shell: bash
     - name: Get Tested Integrations from Test Agent
