@@ -59,7 +59,6 @@ dev,get-port,MIT,Copyright Sindre Sorhus
 dev,glob,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,globals,MIT,Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
 dev,graphql,MIT,Copyright 2015 Facebook Inc.
-dev,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 dev,jszip,MIT,Copyright 2015-2016 Stuart Knightley and contributors
 dev,knex,MIT,Copyright (c) 2013-present Tim Griesser
 dev,mkdirp,MIT,Copyright 2010 James Halliday

@@ -2973,11 +2973,6 @@ ink@^3.2.0:
     ws "^7.5.5"
     yoga-layout-prebuilt "^1.9.6"
 
-int64-buffer@^0.1.9:
-  version "0.1.10"
-  resolved "https://registry.npmjs.org/int64-buffer/-/int64-buffer-0.1.10.tgz"
-  integrity sha512-v7cSY1J8ydZ0GyjUHqF+1bshJ6cnEVLo9EnjB8p+4HDRPZc9N5jjmvUV7NvEsqQOKyH0pmIBFWXVQbiS0+OBbA==
-
 internal-slot@^1.0.7:
   version "1.0.7"
   resolved "https://registry.yarnpkg.com/internal-slot/-/internal-slot-1.0.7.tgz#c06dcca3ed874249881007b0a5523b172a190802"
