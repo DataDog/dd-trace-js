@@ -24,7 +24,8 @@ const {
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_DRIVER,
   getFormattedError,
-  TEST_RETRY_REASON
+  TEST_RETRY_REASON,
+  TEST_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -348,6 +349,7 @@ class JestPlugin extends CiPlugin {
       finishAllTraceSpans(span)
       this.activeTestSpan = null
       if (shouldRemoveProbe && this.runningTestProbeId) {
+        log.warn(`ci:jest:test:finish removing probe ${spanTags[TEST_NAME]}`)
         promises.isProbeRemoved = withTimeout(this.removeDiProbe(this.runningTestProbeId), 2000)
         this.runningTestProbeId = null
       }
