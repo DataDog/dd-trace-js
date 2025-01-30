@@ -18,9 +18,12 @@ runs:
       shell: bash
     - name: Save Test Agent Logs
       run: |
-        # Remove "test-and-upstream-" from the suffix
+        # Clean the suffix to derive the plugin name
         plugin="${{ inputs.suffix }}"
         plugin="${plugin/test-and-upstream-/}"
+        plugin="${plugin/test-/}"
+        plugin="${plugin/plugins-/}"
+        plugin="${plugin/upstream-/}"
 
         if [ -n "${{inputs.container-id}}" ]; then
           docker logs "${{inputs.container-id}}" > "artifacts/logs/test_agent_logs_${plugin}.txt"
@@ -31,7 +34,7 @@ runs:
     - name: Archive Test Agent Logs
       uses: actions/upload-artifact@v4
       with:
-        name: test-agent-logs-${{inputs.suffix}}
+        name: "test_agent_logs_${plugin}"
         path: "./artifacts/logs"
     - name: Get Tested Integrations from Test Agent
       run: |
@@ -51,5 +54,5 @@ runs:
     - name: Archive Test Agent Tested Versions Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: supported-integrations-${{inputs.suffix}}
+        name: "supported-integrations-${{ inputs.suffix }}"
         path: "./artifacts/supported-integrations"
