@@ -2,8 +2,7 @@
 
 const http = require('http')
 const bodyParser = require('body-parser')
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
+const msgpack = require('@msgpack/msgpack')
 const express = require('express')
 const path = require('path')
 const ritm = require('../../src/ritm')
@@ -278,7 +277,7 @@ module.exports = {
     agent.use((req, res, next) => {
       if (req.is('application/msgpack')) {
         if (!req.body.length) return res.status(200).send()
-        req.body = msgpack.decode(req.body, { codec })
+        req.body = msgpack.decode(req.body, { useBigInt64: true })
       }
       next()
     })

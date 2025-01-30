@@ -35,6 +35,7 @@ dev,@apollo/server,MIT,Copyright (c) 2016-2020 Apollo Graph, Inc. (Formerly Mete
 dev,@types/node,MIT,Copyright Authors
 dev,@eslint/eslintrc,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,@eslint/js,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
+dev,@msgpack/msgpack,ISC,Copyright 2019 The MessagePack Community
 dev,@stylistic/eslint-plugin-js,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,autocannon,MIT,Copyright 2016 Matteo Collina
 dev,aws-sdk,Apache 2.0,Copyright 2012-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
@@ -63,7 +64,6 @@ dev,jszip,MIT,Copyright 2015-2016 Stuart Knightley and contributors
 dev,knex,MIT,Copyright (c) 2013-present Tim Griesser
 dev,mkdirp,MIT,Copyright 2010 James Halliday
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
-dev,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
 dev,multer,MIT,Copyright 2014 Hage Yaapa
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
 dev,nyc,ISC,Copyright 2015 Contributors
