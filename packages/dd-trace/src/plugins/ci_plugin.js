@@ -346,6 +346,7 @@ module.exports = class CiPlugin extends Plugin {
       log.warn('Could not add breakpoint for dynamic instrumentation')
       return
     }
+    log.debug('Adding breakpoint for Dynamic Instrumentation')
 
     const [probeId, setProbePromise] = this.di.addLineProbe({ file, line }, this.onDiBreakpointHit.bind(this))
 
