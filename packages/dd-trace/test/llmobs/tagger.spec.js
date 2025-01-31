@@ -168,6 +168,14 @@ describe('tagger', () => {
           '_ml_obs.meta.metadata': { a: 'foo', b: 'bar' }
         })
       })
+
+      it('updates instead of overriding', () => {
+        Tagger.tagMap.set(span, { '_ml_obs.meta.metadata': { a: 'foo' } })
+        tagger.tagMetadata(span, { b: 'bar' })
+        expect(Tagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.metadata': { a: 'foo', b: 'bar' }
+        })
+      })
     })
 
     describe('tagMetrics', () => {
@@ -201,6 +209,14 @@ describe('tagger', () => {
         }
         tagger._register(span)
         expect(() => tagger.tagMetrics(span, metrics)).to.throw()
+      })
+
+      it('updates instead of overriding', () => {
+        Tagger.tagMap.set(span, { '_ml_obs.metrics': { a: 1 } })
+        tagger.tagMetrics(span, { b: 2 })
+        expect(Tagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.metrics': { a: 1, b: 2 }
+        })
       })
     })
 
