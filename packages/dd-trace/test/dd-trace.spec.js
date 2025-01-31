@@ -2,7 +2,6 @@
 
 require('./setup/tap')
 
-const Uint64BE = require('int64-buffer').Uint64BE
 const agent = require('./plugins/agent')
 
 const { SAMPLING_PRIORITY_KEY, DECISION_MAKER_KEY } = require('../src/constants')
@@ -34,8 +33,8 @@ describe('dd-trace', () => {
       expect(payload[0][0].service).to.equal('test')
       expect(payload[0][0].name).to.equal('hello')
       expect(payload[0][0].resource).to.equal('/hello/:name')
-      expect(payload[0][0].start).to.be.instanceof(Uint64BE)
-      expect(payload[0][0].duration).to.be.instanceof(Uint64BE)
+      expect(typeof payload[0][0].start).to.equal('bigint')
+      expect(typeof payload[0][0].duration).to.equal('bigint')
       expect(payload[0][0].metrics).to.have.property(SAMPLING_PRIORITY_KEY)
       expect(payload[0][0].meta).to.have.property(DECISION_MAKER_KEY)
     })

@@ -139,7 +139,8 @@ module.exports = class PluginManager {
       memcachedCommandEnabled,
       ciVisibilityTestSessionName,
       ciVisAgentlessLogSubmissionEnabled,
-      isTestDynamicInstrumentationEnabled
+      isTestDynamicInstrumentationEnabled,
+      middlewareTracingEnabled
     } = this._tracerConfig
 
     const sharedConfig = {
@@ -168,6 +169,13 @@ module.exports = class PluginManager {
 
     if (clientIpEnabled !== undefined) {
       sharedConfig.clientIpEnabled = clientIpEnabled
+    }
+
+    // For the global setting, we use the name `middlewareTracingEnabled`, but
+    // for the plugin-specific setting, we use `middleware`. They mean the same
+    // to an individual plugin, so we normalize them here.
+    if (middlewareTracingEnabled !== undefined) {
+      sharedConfig.middleware = middlewareTracingEnabled
     }
 
     return sharedConfig
