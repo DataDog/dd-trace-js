@@ -21,6 +21,10 @@ describe('findScriptFromPartialPath', function () {
             cases.forEach(([url, scriptId]) => {
               listener({ params: { scriptId, url } })
             })
+
+            // Test case for when there's multiple partial matches
+            listener({ params: { scriptId: 'should-match', url: 'file:///server/index.js' } })
+            listener({ params: { scriptId: 'should-not-match', url: 'file:///index.js' } })
           }
         }
       }
@@ -107,6 +111,13 @@ describe('findScriptFromPartialPath', function () {
       }
     }
   }
+
+  describe('multiple partial matches', function () {
+    it('should match the longest partial match', function () {
+      const result = state.findScriptFromPartialPath('server/index.js')
+      expect(result).to.deep.equal(['file:///server/index.js', 'should-match', undefined])
+    })
+  })
 
   describe('circuit breakers', function () {
     it('should abort if the path is unknown', testPathNoMatch('this/path/does/not/exist.js'))
