@@ -1,5 +1,6 @@
 'use strict'
 
+const http = require('http')
 const { exec } = require('child_process')
 
 const getPort = require('get-port')
@@ -1635,6 +1636,54 @@ moduleTypes.forEach(({
           }).catch(done)
         })
       })
+    })
+
+    it('does not crash for multi origin tests', async () => {
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      const secondWebAppPort = await getPort()
+
+      const secondWebAppServer = http.createServer((req, res) => {
+        res.setHeader('Content-Type', 'text/html')
+        res.writeHead(200)
+        res.end(`
+          <!DOCTYPE html>
+          <html>
+            <div class="hella-world">Hella World</div>
+          </html>
+        `)
+      })
+
+      secondWebAppServer.listen(secondWebAppPort)
+
+      const specToRun = 'cypress/e2e/multi-origin.js'
+
+      childProcess = exec(
+        version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_BASE_URL_SECOND: `http://localhost:${secondWebAppPort}`,
+            SPEC_PATTERN: specToRun
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      await receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          assert.equal(events.length, 4)
+
+          const test = events.find(event => event.type === 'test').content
+          assert.equal(test.resource, 'cypress/e2e/multi-origin.js.tests multiple origins')
+          assert.equal(test.meta[TEST_STATUS], 'pass')
+        })
     })
   })
 })
