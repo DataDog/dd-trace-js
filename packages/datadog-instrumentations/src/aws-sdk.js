@@ -44,7 +44,9 @@ function wrapDeserialize (deserialize, channelSuffix) {
   const headersCh = channel(`apm:aws:response:deserialize:${channelSuffix}`)
 
   return function (response) {
-    headersCh.publish({ headers: response.headers })
+    if (headersCh.hasSubscribers) {
+      headersCh.publish({ headers: response.headers })
+    }
 
     return deserialize.apply(this, arguments)
   }
