@@ -92,6 +92,10 @@ const storage = {
       opName: () => 'pg.query',
       serviceName: withSuffixFunction('postgres')
     },
+    prisma: {
+      opName: ({ operation }) => `prisma.${operation}`,
+      serviceName: withSuffixFunction('prisma')
+    },
     redis: redisConfig,
     tedious: {
       opName: () => 'tedious.request',
