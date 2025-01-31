@@ -7,11 +7,11 @@ const { storage } = require('../../datadog-core')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { DataStreamsProcessor } = require('./datastreams/processor')
-const { DsmPathwayCodec } = require('./datastreams/pathway')
+// const { DataStreamsProcessor } = require('./datastreams/processor')
+// const { DsmPathwayCodec } = require('./datastreams/pathway')
 const { DD_MAJOR } = require('../../../version')
-const DataStreamsContext = require('./data_streams_context')
-const { DataStreamsCheckpointer } = require('./data_streams')
+// const DataStreamsContext = require('./data_streams_context')
+// const { DataStreamsCheckpointer } = require('./data_streams')
 const { flushStartupLogs } = require('../../datadog-instrumentations/src/check_require_cache')
 const log = require('./log/writer')
 
@@ -23,8 +23,8 @@ const MEASURED = tags.MEASURED
 class DatadogTracer extends Tracer {
   constructor (config, prioritySampler) {
     super(config, prioritySampler)
-    this._dataStreamsProcessor = new DataStreamsProcessor(config)
-    this.dataStreamsCheckpointer = new DataStreamsCheckpointer(this)
+    // this._dataStreamsProcessor = new DataStreamsProcessor(config)
+    // this.dataStreamsCheckpointer = new DataStreamsCheckpointer(this)
     this._scope = new Scope()
     setStartupLogConfig(config)
     flushStartupLogs(log)
@@ -36,24 +36,24 @@ class DatadogTracer extends Tracer {
 
   // todo[piochelepiotr] These two methods are not related to the tracer, but to data streams monitoring.
   // They should be moved outside of the tracer in the future.
-  setCheckpoint (edgeTags, span, payloadSize = 0) {
-    const ctx = this._dataStreamsProcessor.setCheckpoint(
-      edgeTags, span, DataStreamsContext.getDataStreamsContext(), payloadSize
-    )
-    DataStreamsContext.setDataStreamsContext(ctx)
-    return ctx
-  }
+  // setCheckpoint (edgeTags, span, payloadSize = 0) {
+  //   const ctx = this._dataStreamsProcessor.setCheckpoint(
+  //     edgeTags, span, DataStreamsContext.getDataStreamsContext(), payloadSize
+  //   )
+  //   DataStreamsContext.setDataStreamsContext(ctx)
+  //   return ctx
+  // }
 
-  decodeDataStreamsContext (carrier) {
-    const ctx = DsmPathwayCodec.decode(carrier)
-    // we erase the previous context everytime we decode a new one
-    DataStreamsContext.setDataStreamsContext(ctx)
-    return ctx
-  }
+  // decodeDataStreamsContext (carrier) {
+  //   const ctx = DsmPathwayCodec.decode(carrier)
+  //   // we erase the previous context everytime we decode a new one
+  //   DataStreamsContext.setDataStreamsContext(ctx)
+  //   return ctx
+  // }
 
-  setOffset (offsetData) {
-    return this._dataStreamsProcessor.setOffset(offsetData)
-  }
+  // setOffset (offsetData) {
+  //   return this._dataStreamsProcessor.setOffset(offsetData)
+  // }
 
   trace (name, options, fn) {
     options = Object.assign({

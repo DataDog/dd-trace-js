@@ -4,27 +4,27 @@
 const { performance } = require('perf_hooks')
 const now = performance.now.bind(performance)
 const dateNow = Date.now
-const semver = require('semver')
+// const semver = require('semver')
 const SpanContext = require('./span_context')
 const id = require('../id')
 const tagger = require('../tagger')
-const runtimeMetrics = require('../runtime_metrics')
+// const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
-const spanleak = require('../spanleak')
+// const spanleak = require('../spanleak')
 const util = require('util')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
 const {
-  DD_TRACE_EXPERIMENTAL_STATE_TRACKING,
-  DD_TRACE_EXPERIMENTAL_SPAN_COUNTS
+  DD_TRACE_EXPERIMENTAL_STATE_TRACKING
+  // DD_TRACE_EXPERIMENTAL_SPAN_COUNTS
 } = process.env
 
-const unfinishedRegistry = createRegistry('unfinished')
-const finishedRegistry = createRegistry('finished')
+// const unfinishedRegistry = createRegistry('unfinished')
+// const finishedRegistry = createRegistry('finished')
 
 const OTEL_ENABLED = !!process.env.DD_TRACE_OTEL_ENABLED
 const ALLOWED = ['string', 'number', 'boolean']
@@ -90,16 +90,16 @@ class DatadogSpan {
     this._links = []
     fields.links && fields.links.forEach(link => this.addLink(link.context, link.attributes))
 
-    if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
-      runtimeMetrics.increment('runtime.node.spans.unfinished')
-      runtimeMetrics.increment('runtime.node.spans.unfinished.by.name', `span_name:${operationName}`)
+    // if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
+    //   runtimeMetrics.increment('runtime.node.spans.unfinished')
+    //   runtimeMetrics.increment('runtime.node.spans.unfinished.by.name', `span_name:${operationName}`)
 
-      runtimeMetrics.increment('runtime.node.spans.open') // unfinished for real
-      runtimeMetrics.increment('runtime.node.spans.open.by.name', `span_name:${operationName}`)
+    //   runtimeMetrics.increment('runtime.node.spans.open') // unfinished for real
+    //   runtimeMetrics.increment('runtime.node.spans.open.by.name', `span_name:${operationName}`)
 
-      unfinishedRegistry.register(this, operationName, this)
-    }
-    spanleak.addSpan(this, operationName)
+    //   unfinishedRegistry.register(this, operationName, this)
+    // }
+    // spanleak.addSpan(this, operationName)
 
     if (startCh.hasSubscribers) {
       startCh.publish({ span: this, fields })
@@ -230,18 +230,18 @@ class DatadogSpan {
 
     getIntegrationCounter('spans_finished', this._integrationName).inc()
 
-    if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
-      runtimeMetrics.decrement('runtime.node.spans.unfinished')
-      runtimeMetrics.decrement('runtime.node.spans.unfinished.by.name', `span_name:${this._name}`)
-      runtimeMetrics.increment('runtime.node.spans.finished')
-      runtimeMetrics.increment('runtime.node.spans.finished.by.name', `span_name:${this._name}`)
+    // if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
+    //   runtimeMetrics.decrement('runtime.node.spans.unfinished')
+    //   runtimeMetrics.decrement('runtime.node.spans.unfinished.by.name', `span_name:${this._name}`)
+    //   runtimeMetrics.increment('runtime.node.spans.finished')
+    //   runtimeMetrics.increment('runtime.node.spans.finished.by.name', `span_name:${this._name}`)
 
-      runtimeMetrics.decrement('runtime.node.spans.open') // unfinished for real
-      runtimeMetrics.decrement('runtime.node.spans.open.by.name', `span_name:${this._name}`)
+    //   runtimeMetrics.decrement('runtime.node.spans.open') // unfinished for real
+    //   runtimeMetrics.decrement('runtime.node.spans.open.by.name', `span_name:${this._name}`)
 
-      unfinishedRegistry.unregister(this)
-      finishedRegistry.register(this, this._name)
-    }
+    //   unfinishedRegistry.unregister(this)
+    //   finishedRegistry.register(this, this._name)
+    // }
 
     finishTime = parseFloat(finishTime) || this._getTime()
 
@@ -364,13 +364,13 @@ class DatadogSpan {
   }
 }
 
-function createRegistry (type) {
-  if (!semver.satisfies(process.version, '>=14.6')) return
+// function createRegistry (type) {
+//   if (!semver.satisfies(process.version, '>=14.6')) return
 
-  return new global.FinalizationRegistry(name => {
-    runtimeMetrics.decrement(`runtime.node.spans.${type}`)
-    runtimeMetrics.decrement(`runtime.node.spans.${type}.by.name`, [`span_name:${name}`])
-  })
-}
+//   return new global.FinalizationRegistry(name => {
+//     runtimeMetrics.decrement(`runtime.node.spans.${type}`)
+//     runtimeMetrics.decrement(`runtime.node.spans.${type}.by.name`, [`span_name:${name}`])
+//   })
+// }
 
 module.exports = DatadogSpan

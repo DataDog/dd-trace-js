@@ -5,7 +5,7 @@ const format = require('./format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 
-const { SpanStatsProcessor } = require('./span_stats')
+// const { SpanStatsProcessor } = require('./span_stats')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -20,7 +20,7 @@ class SpanProcessor {
     this._config = config
     this._killAll = false
 
-    this._stats = new SpanStatsProcessor(config)
+    // this._stats = new SpanStatsProcessor(config)
     this._spanSampler = new SpanSampler(config.sampler)
     this._gitMetadataTagger = new GitMetadataTagger(config)
   }
