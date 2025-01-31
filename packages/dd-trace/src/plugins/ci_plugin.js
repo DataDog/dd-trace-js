@@ -337,7 +337,10 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   removeAllDiProbes () {
-    log.debug('Removing all DI probes')
+    if (this.fileLineToProbeId.size === 0) {
+      return Promise.resolve()
+    }
+    log.debug('Removing all Dynamic Instrumentation probes')
     return Promise.all(Array.from(this.fileLineToProbeId.keys())
       .map((fileLine) => {
         const [file, line] = fileLine.split(':')
@@ -347,7 +350,7 @@ module.exports = class CiPlugin extends Plugin {
 
   removeDiProbe ({ file, line }) {
     const probeId = this.fileLineToProbeId.get(`${file}:${line}`)
-    log.warn(`Removing probe from ${file}:${line}, with probe id: ${probeId}`)
+    log.warn(`Removing probe from ${file}:${line}, with id: ${probeId}`)
     this.fileLineToProbeId.delete(probeId)
     return this.di.removeProbe(probeId)
   }
