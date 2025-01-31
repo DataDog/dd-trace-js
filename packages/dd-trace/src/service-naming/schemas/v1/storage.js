@@ -64,6 +64,10 @@ const storage = {
       opName: () => 'postgresql.query',
       serviceName: withFunction
     },
+    prisma: {
+      opName: ({ operation }) => `prisma.${operation}`,
+      serviceName: configWithFallback
+    },
     redis: redisNaming,
     tedious: {
       opName: () => 'mssql.query',

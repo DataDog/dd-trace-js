@@ -440,6 +440,12 @@
       "versions": ["8.0.0"]
     }
   ],
+  "prisma": [  
+    {
+      "name": "prisma",
+      "versions": ["^6.1.0"]
+    }
+  ],
   "q": [
     {
       "name": "collections",
