@@ -314,14 +314,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
         if (status === 'fail') {
           const shouldSetProbe = this.isDiEnabled && willBeRetried && numTestExecutions === 1
-          log.warn(
-            `Setting probe because test failed: ${getJestTestName(event.test)},
-num test executions: ${numTestExecutions}
-will be retried: ${willBeRetried}
-is di enabled: ${this.isDiEnabled}
-should set probe: ${shouldSetProbe}
-`
-          )
           asyncResource.runInAsyncScope(() => {
             testErrCh.publish({
               error: formatJestError(event.test.errors[0]),
@@ -341,25 +333,16 @@ should set probe: ${shouldSetProbe}
           })
         }
 
-        const shouldRemoveProbe = this.isDiEnabled && !willBeRetried
         asyncResource.runInAsyncScope(() => {
-          if (shouldRemoveProbe) {
-            log.warn(`shouldRemoveProbe for: ${getJestTestName(event.test)}`)
-          }
           testFinishCh.publish({
             status,
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite),
-            promises,
-            shouldRemoveProbe: this.isDiEnabled && !willBeRetried
+            promises
           })
         })
 
         if (promises.isProbeReady) {
           await promises.isProbeReady
-        }
-
-        if (promises.isProbeRemoved) {
-          await promises.isProbeRemoved
         }
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {

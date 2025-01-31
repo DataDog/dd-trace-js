@@ -336,14 +336,20 @@ module.exports = class CiPlugin extends Plugin {
     })
   }
 
+  removeAllDiProbes () {
+    log.debug('Removing all DI probes')
+    return Promise.all(Array.from(this.fileLineToProbeId.keys())
+      .map((fileLine) => {
+        const [file, line] = fileLine.split(':')
+        return this.removeDiProbe({ file, line })
+      }))
+  }
+
   removeDiProbe ({ file, line }) {
-    return Promise.resolve()
-    // TODO: we should probably only call this after the test suite has finished just to be sure
-    // return
-    // const probeId = this.fileLineToProbeId.get(`${file}:${line}`)
-    // log.warn(`Removing probe from ${file}:${line}, with probe id: ${probeId}`)
-    // this.fileLineToProbeId.delete(probeId)
-    // return this.di.removeProbe(probeId)
+    const probeId = this.fileLineToProbeId.get(`${file}:${line}`)
+    log.warn(`Removing probe from ${file}:${line}, with probe id: ${probeId}`)
+    this.fileLineToProbeId.delete(probeId)
+    return this.di.removeProbe(probeId)
   }
 
   addDiProbe (err) {
@@ -355,6 +361,7 @@ module.exports = class CiPlugin extends Plugin {
     }
     log.debug('Adding breakpoint for Dynamic Instrumentation')
 
+    this.testErrorStackIndex = stackIndex
     const activeProbeKey = `${file}:${line}`
 
     if (this.fileLineToProbeId.has(activeProbeKey)) {

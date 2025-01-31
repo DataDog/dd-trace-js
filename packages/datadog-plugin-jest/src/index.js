@@ -24,8 +24,7 @@ const {
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_DRIVER,
   getFormattedError,
-  TEST_RETRY_REASON,
-  TEST_NAME
+  TEST_RETRY_REASON
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -40,7 +39,6 @@ const {
   TELEMETRY_CODE_COVERAGE_NUM_FILES,
   TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
-const log = require('../../dd-trace/src/log')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
 
@@ -293,6 +291,7 @@ class JestPlugin extends CiPlugin {
       if (isJestWorker) {
         this.tracer._exporter.flush()
       }
+      this.removeAllDiProbes()
     })
 
     /**
@@ -326,7 +325,7 @@ class JestPlugin extends CiPlugin {
       this.activeTestSpan = span
     })
 
-    this.addSub('ci:jest:test:finish', ({ status, testStartLine, promises, shouldRemoveProbe }) => {
+    this.addSub('ci:jest:test:finish', ({ status, testStartLine }) => {
       const span = storage.getStore().span
       span.setTag(TEST_STATUS, status)
       if (testStartLine) {
@@ -348,11 +347,6 @@ class JestPlugin extends CiPlugin {
       span.finish()
       finishAllTraceSpans(span)
       this.activeTestSpan = null
-      if (shouldRemoveProbe && this.runningTestProbe) {
-        log.warn(`ci:jest:test:finish removing probe ${spanTags[TEST_NAME]}`)
-        promises.isProbeRemoved = withTimeout(this.removeDiProbe(this.runningTestProbe), 2000)
-        this.runningTestProbe = null
-      }
     })
 
     this.addSub('ci:jest:test:err', ({ error, shouldSetProbe, promises }) => {
@@ -365,13 +359,8 @@ class JestPlugin extends CiPlugin {
           if (shouldSetProbe) {
             const probeInformation = this.addDiProbe(error)
             if (probeInformation) {
-              const { file, line, setProbePromise, stackIndex } = probeInformation
-              log.warn(`Setting probe for test error stackIndex:${stackIndex}`)
-              this.runningTestProbe = { file, line }
-              this.testErrorStackIndex = stackIndex
+              const { setProbePromise } = probeInformation
               promises.isProbeReady = withTimeout(setProbePromise, 2000)
-            } else {
-              log.warn('no probeInformation')
             }
           }
         }
