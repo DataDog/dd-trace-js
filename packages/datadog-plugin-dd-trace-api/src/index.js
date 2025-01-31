@@ -29,7 +29,7 @@ module.exports = class DdTraceApiPlugin extends Plugin {
 
     const handleEvent = (name) => {
       const counter = apiMetrics.count('dd_trace_api.called', [
-        `name:${name.replace(':', '.')}`,
+        `name:${name.replaceAll(':', '.')}`,
         'api_version:v1',
         injectionEnabledTag
       ])
