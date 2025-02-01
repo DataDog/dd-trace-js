@@ -220,7 +220,7 @@ class Tracer extends NoopProxy {
         if (config._isInServerlessEnvironment()) {
           // lazy load if we're in serverless to save on startup time
           this.appsec = new Proxy(this.appsec, {
-            get (target, key) {
+            get: (target, key) => {
               const AppsecSdk = require('./appsec/sdk')
               this.appsec = new AppsecSdk(this._tracer, config)
               return this.appsec[key]
