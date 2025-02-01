@@ -230,6 +230,7 @@ class Tracer extends NoopProxy {
           const AppsecSdk = require('./appsec/sdk')
           this.appsec = new AppsecSdk(this._tracer, config)
         }
+
         this.llmobs = new LLMObsSDK(this._tracer, this._modules.llmobs, config)
         this._tracingInitialized = true
       }
