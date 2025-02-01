@@ -43,8 +43,8 @@ module.exports = {
         // If both are boundaries, or if characters match exactly
         if (isBoundary || urlChar === pathChar) {
           if (isBoundary) {
-            lastBoundaryPos = matchLength
             atBoundary = true
+            lastBoundaryPos = matchLength
           } else {
             atBoundary = false
           }
@@ -71,7 +71,10 @@ module.exports = {
       }
 
       // If we found a valid match and it's better than our previous best
-      if (atBoundary && lastBoundaryPos !== -1 && lastBoundaryPos > maxMatchLength) {
+      if (atBoundary && (
+        lastBoundaryPos > maxMatchLength ||
+        (lastBoundaryPos === maxMatchLength && url.length < bestMatch[0].length) // Prefer shorter paths
+      )) {
         maxMatchLength = lastBoundaryPos
         bestMatch[0] = url
         bestMatch[1] = scriptId
