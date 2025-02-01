@@ -2,7 +2,6 @@
 
 const log = require('../log')
 const RuleManager = require('./rule_manager')
-const remoteConfig = require('./remote_config')
 const {
   bodyParser,
   cookieParser,
@@ -53,7 +52,7 @@ function enable (_config) {
 
     RuleManager.loadRules(_config.appsec)
 
-    remoteConfig.enableWafUpdate(_config.appsec)
+    global._ddtrace?._modules?.rc?.module?.enableWafUpdate(_config.appsec)
 
     Reporter.setRateLimit(_config.appsec.rateLimit)
 
@@ -299,7 +298,7 @@ function disable () {
   graphql.disable()
   rasp.disable()
 
-  remoteConfig.disableWafUpdate()
+  global._ddtrace?._modules?.rc?.module?.disableWafUpdate()
 
   apiSecuritySampler.disable()
 

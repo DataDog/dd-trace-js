@@ -24,7 +24,7 @@ class LazyModule {
 
   enable (...args) {
     this.module = this.provider()
-    this.module.enable(...args)
+    return this.module.enable(...args)
   }
 
   disable () {
@@ -89,7 +89,7 @@ class Tracer extends NoopProxy {
       }
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
-        this._modules.rc.enable(config, this._modules.appsec)
+        const rc = this._modules.rc.enable(config, this._modules.appsec)
 
         rc.setProductHandler('APM_TRACING', (action, conf) => {
           if (action === 'unapply') {
