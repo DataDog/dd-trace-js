@@ -25,6 +25,13 @@ describe('findScriptFromPartialPath', function () {
             // Test case for when there's multiple partial matches
             listener({ params: { scriptId: 'should-match', url: 'file:///server/index.js' } })
             listener({ params: { scriptId: 'should-not-match', url: 'file:///index.js' } })
+
+            // Test case for when there's two equal length partial matches
+            listener({ params: { scriptId: 'should-not-match-longest-a', url: 'file:///node_modules/foo/index.js' } })
+            listener({ params: { scriptId: 'should-match-shortest-a', url: 'file:///foo/index.js' } })
+            // The same, but in reverse order to ensure this doesn't influence the result
+            listener({ params: { scriptId: 'should-match-shortest-b', url: 'file:///bar/index.js' } })
+            listener({ params: { scriptId: 'should-not-match-longest-b', url: 'file:///node_modules/bar/index.js' } })
           }
         }
       }
@@ -117,14 +124,30 @@ describe('findScriptFromPartialPath', function () {
       const result = state.findScriptFromPartialPath('server/index.js')
       expect(result).to.deep.equal(['file:///server/index.js', 'should-match', undefined])
     })
+
+    it('should match the shorter of two equal length partial matches', function () {
+      const result1 = state.findScriptFromPartialPath('foo/index.js')
+      expect(result1).to.deep.equal(['file:///foo/index.js', 'should-match-shortest-a', undefined])
+
+      const result2 = state.findScriptFromPartialPath('bar/index.js')
+      expect(result2).to.deep.equal(['file:///bar/index.js', 'should-match-shortest-b', undefined])
+    })
   })
 
-  describe('circuit breakers', function () {
-    it('should abort if the path is unknown', testPathNoMatch('this/path/does/not/exist.js'))
+  describe('should abort if the path is', function () {
+    it('unknown', testPathNoMatch('this/path/does/not/exist.js'))
 
-    it('should abort if the path is undefined', testPathNoMatch(undefined))
+    it('undefined', testPathNoMatch(undefined))
 
-    it('should abort if the path is an empty string', testPathNoMatch(''))
+    it('an empty string', testPathNoMatch(''))
+
+    it('a slash', testPathNoMatch('/'))
+
+    it('a backslash', testPathNoMatch('\\'))
+
+    it('a Windows drive letter', testPathNoMatch('c:'))
+
+    it('a Windows drive letter with a backslash', testPathNoMatch('c:\\'))
   })
 
   function testPathNoMatch (path) {
