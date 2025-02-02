@@ -41,6 +41,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
       })
 
       afterEach((done) => {
+        // testing
         client.unbind(done)
       })
 
