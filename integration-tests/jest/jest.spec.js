@@ -39,7 +39,8 @@ const {
   DI_DEBUG_ERROR_PREFIX,
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
-  DI_DEBUG_ERROR_LINE_SUFFIX
+  DI_DEBUG_ERROR_LINE_SUFFIX,
+  DD_TEST_IS_USER_PROVIDED_SERVICE
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -179,6 +180,7 @@ describe('jest CommonJS', () => {
         tests.forEach(testEvent => {
           assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
           assert.exists(testEvent.metrics[TEST_SOURCE_START])
+          assert.equal(testEvent.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
           // Can read DD_TAGS
           assert.propertyVal(testEvent.meta, 'test.customtag', 'customvalue')
           assert.propertyVal(testEvent.meta, 'test.customtag2', 'customvalue2')
@@ -2903,6 +2905,36 @@ describe('jest CommonJS', () => {
           done()
         }).catch(done)
       })
+    })
+  })
+
+  it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', (done) => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        tests.forEach(test => {
+          assert.equal(test.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'true')
+        })
+      })
+
+    childProcess = exec(
+      runTestsWithCoverageCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          TESTS_TO_RUN: 'test/ci-visibility-test',
+          DD_SERVICE: 'my-service'
+        },
+        stdio: 'inherit'
+      }
+    )
+
+    childProcess.on('exit', () => {
+      eventsPromise.then(() => {
+        done()
+      }).catch(done)
     })
   })
 })
