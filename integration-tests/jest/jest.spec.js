@@ -201,7 +201,8 @@ describe('jest CommonJS', () => {
         env: {
           ...envVars,
           DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-          DD_TEST_SESSION_NAME: 'my-test-session'
+          DD_TEST_SESSION_NAME: 'my-test-session',
+          DD_SERVICE: undefined
         },
         stdio: 'pipe'
       })

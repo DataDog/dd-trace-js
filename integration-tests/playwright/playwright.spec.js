@@ -178,7 +178,8 @@ versions.forEach((version) => {
                 ...envVars,
                 PW_BASE_URL: `http://localhost:${webAppPort}`,
                 DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-                DD_TEST_SESSION_NAME: 'my-test-session'
+                DD_TEST_SESSION_NAME: 'my-test-session',
+                DD_SERVICE: undefined
               },
               stdio: 'pipe'
             }

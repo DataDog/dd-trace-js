@@ -182,7 +182,8 @@ versions.forEach((version) => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
-            DD_TEST_SESSION_NAME: 'my-test-session'
+            DD_TEST_SESSION_NAME: 'my-test-session',
+            DD_SERVICE: undefined
           },
           stdio: 'pipe'
         }
