@@ -21,6 +21,8 @@ module.exports = {
   findScriptFromPartialPath (path) {
     if (!path) return null // This shouldn't happen, but better safe than sorry
 
+    path = path.toLowerCase()
+
     const bestMatch = new Array(3)
     let maxMatchLength = -1
 
@@ -33,7 +35,7 @@ module.exports = {
 
       // Compare characters from the end
       while (i >= 0 && j >= 0) {
-        const urlChar = url[i]
+        const urlChar = url[i].toLowerCase()
         const pathChar = path[j]
 
         // Check if both characters is a path boundary
