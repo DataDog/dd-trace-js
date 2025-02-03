@@ -63,6 +63,12 @@ describe('findScriptFromPartialPath', function () {
           it('prefixed with two unknown directories', testPath(`prefix1/prefix2/to/${filename}`))
         })
 
+        describe('case insensitive', function () {
+          it('should match if the path is in lowercase', testPath(filename.toLowerCase()))
+
+          it('should match if the path is in uppercase', testPath(filename.toUpperCase()))
+        })
+
         describe('non-matching paths', function () {
           it('should not match if only part of a directory matches (at boundary)',
             testPathNoMatch(`path/o/${filename}`))
@@ -73,8 +79,6 @@ describe('findScriptFromPartialPath', function () {
           it('should not match if only part of a directory matches (root)', testPathNoMatch(`o/${filename}`))
 
           it('should not match if only part of a file matches', testPathNoMatch(filename.slice(1)))
-
-          it('should not match if only difference is the letter casing', testPathNoMatch(filename.toUpperCase()))
         })
       })
 
