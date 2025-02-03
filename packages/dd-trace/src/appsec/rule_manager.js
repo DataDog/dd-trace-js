@@ -9,6 +9,7 @@ const blocking = require('./blocking')
 let defaultRules
 
 let appliedRulesData = new Map()
+let appliedExclusionData = new Map()
 let appliedRulesetId
 let appliedRulesOverride = new Map()
 let appliedExclusions = new Map()
@@ -29,6 +30,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
   const batch = new Set()
 
   const newRulesData = new SpyMap(appliedRulesData)
+  const newExclusionData = new SpyMap(appliedExclusionData)
   let newRuleset
   let newRulesetId
   const newRulesOverride = new SpyMap(appliedRulesOverride)
@@ -41,6 +43,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
 
     if (product === 'ASM_DATA') {
       newRulesData.delete(id)
+      newExclusionData.delete(id)
     } else if (product === 'ASM_DD') {
       if (appliedRulesetId === id) {
         newRuleset = defaultRules
@@ -57,8 +60,12 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
     const { product, id, file } = item
 
     if (product === 'ASM_DATA') {
-      if (file && file.rules_data && file.rules_data.length) {
+      if (file?.rules_data?.length) {
         newRulesData.set(id, file.rules_data)
+      }
+
+      if (file?.exclusion_data?.length) {
+        newExclusionData.set(id, file.exclusion_data)
       }
 
       batch.add(item)
@@ -101,6 +108,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
   let newApplyError
 
   if (newRulesData.modified ||
+    newExclusionData.modified ||
     newRuleset ||
     newRulesOverride.modified ||
     newExclusions.modified ||
@@ -111,6 +119,9 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
 
     if (newRulesData.modified) {
       payload.rules_data = mergeRulesData(newRulesData)
+    }
+    if (newExclusionData.modified) {
+      payload.exclusion_data = mergeRulesData(newExclusionData)
     }
     if (newRulesOverride.modified) {
       payload.rules_override = concatArrays(newRulesOverride)
@@ -130,6 +141,9 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
 
       if (newRulesData.modified) {
         appliedRulesData = newRulesData
+      }
+      if (newExclusionData.modified) {
+        appliedExclusionData = newExclusionData
       }
       if (newRuleset) {
         appliedRulesetId = newRulesetId
@@ -243,6 +257,7 @@ function clearAllRules () {
   defaultRules = undefined
 
   appliedRulesData.clear()
+  appliedExclusionData.clear()
   appliedRulesetId = undefined
   appliedRulesOverride.clear()
   appliedExclusions.clear()
