@@ -317,6 +317,14 @@ jobs:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@v5
 
+  dd-trace-api:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: dd-trace-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
+
   dns:
     runs-on: ubuntu-latest
     env:

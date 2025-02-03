@@ -36,6 +36,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/plugins/test
 
+  passport:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: passport
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/plugins/test
+
   passport-http:
     runs-on: ubuntu-latest
     env:

@@ -231,7 +231,7 @@ class CucumberPlugin extends CiPlugin {
 
       this.activeTestSpan = testSpan
       // Time we give the breakpoint to be hit
-      if (promises && this.runningTestProbeId) {
+      if (promises && this.runningTestProbe) {
         promises.hitBreakpointPromise = new Promise((resolve) => {
           setTimeout(resolve, BREAKPOINT_HIT_GRACE_PERIOD_MS)
         })
@@ -248,8 +248,8 @@ class CucumberPlugin extends CiPlugin {
       if (isFirstAttempt && this.di && error && this.libraryConfig?.isDiEnabled) {
         const probeInformation = this.addDiProbe(error)
         if (probeInformation) {
-          const { probeId, stackIndex } = probeInformation
-          this.runningTestProbeId = probeId
+          const { file, line, stackIndex } = probeInformation
+          this.runningTestProbe = { file, line }
           this.testErrorStackIndex = stackIndex
           // TODO: we're not waiting for setProbePromise to be resolved, so there might be race conditions
         }
@@ -359,9 +359,9 @@ class CucumberPlugin extends CiPlugin {
           this.tracer._exporter.flush()
         }
         this.activeTestSpan = null
-        if (this.runningTestProbeId) {
-          this.removeDiProbe(this.runningTestProbeId)
-          this.runningTestProbeId = null
+        if (this.runningTestProbe) {
+          this.removeDiProbe(this.runningTestProbe)
+          this.runningTestProbe = null
         }
       }
     })

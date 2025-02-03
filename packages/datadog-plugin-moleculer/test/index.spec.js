@@ -6,7 +6,7 @@ const os = require('os')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
-const sort = trace => trace.sort((a, b) => a.start.toNumber() - b.start.toNumber())
+const sort = trace => trace.sort((a, b) => Number(a.start - b.start))
 
 describe('Plugin', () => {
   let broker
