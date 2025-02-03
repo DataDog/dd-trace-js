@@ -21,7 +21,7 @@ function parse (securityControlsConfiguration) {
     .filter(control => !!control)
     .forEach(control => {
       if (!controls.has(control.file)) {
-         controls.set(control.file, [])
+        controls.set(control.file, [])
       }
       controls.get(control.file).push(control)
     })
