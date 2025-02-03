@@ -20,12 +20,10 @@ function parse (securityControlsConfiguration) {
     .map(parseControl)
     .filter(control => !!control)
     .forEach(control => {
-      let controlsByFile = controls.get(control.file)
-      if (!controlsByFile) {
-        controlsByFile = []
-        controls.set(control.file, controlsByFile)
+      if (!controls.has(control.file)) {
+         controls.set(control.file, [])
       }
-      controlsByFile.push(control)
+      controls.get(control.file).push(control)
     })
 
   return controls
