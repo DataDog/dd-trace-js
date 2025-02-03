@@ -219,9 +219,9 @@ class MochaPlugin extends CiPlugin {
         span.finish()
         finishAllTraceSpans(span)
         this.activeTestSpan = null
-        if (this.di && this.libraryConfig?.isDiEnabled && this.runningTestProbeId && isLastRetry) {
-          this.removeDiProbe(this.runningTestProbeId)
-          this.runningTestProbeId = null
+        if (this.di && this.libraryConfig?.isDiEnabled && this.runningTestProbe && isLastRetry) {
+          this.removeDiProbe(this.runningTestProbe)
+          this.runningTestProbe = null
         }
       }
     })
@@ -275,8 +275,8 @@ class MochaPlugin extends CiPlugin {
         if (isFirstAttempt && willBeRetried && this.di && this.libraryConfig?.isDiEnabled) {
           const probeInformation = this.addDiProbe(err)
           if (probeInformation) {
-            const { probeId, stackIndex } = probeInformation
-            this.runningTestProbeId = probeId
+            const { file, line, stackIndex } = probeInformation
+            this.runningTestProbe = { file, line }
             this.testErrorStackIndex = stackIndex
             test._ddShouldWaitForHitProbe = true
             // TODO: we're not waiting for setProbePromise to be resolved, so there might be race conditions
