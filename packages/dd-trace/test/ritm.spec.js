@@ -9,7 +9,7 @@ const Hook = require('../src/ritm')
 
 describe('Ritm', () => {
   let moduleLoadStartChannel, moduleLoadEndChannel, startListener, endListener
-  let utilHook, aHook, bHook, httpHook
+  let utilHook, aHook, bHook, defaultHook, httpHook
 
   before(() => {
     moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
@@ -63,6 +63,24 @@ describe('Ritm', () => {
     assert.equal(startListener.callCount, 2)
     assert.equal(endListener.callCount, 2)
     assert.equal(a(), 'Called by AJ')
+  })
+
+  it('should allow override original module', () => {
+    const onModuleLoadEnd = (payload) => {
+      if (payload.request === './ritm-tests/module-default') {
+        payload.module = function () {
+          return 'ho'
+        }
+      }
+    }
+
+    moduleLoadEndChannel.subscribe(onModuleLoadEnd)
+    try {
+      const hi = require('./ritm-tests/module-default')
+      assert.equal(hi(), 'ho')
+    } finally {
+      moduleLoadEndChannel.unsubscribe(onModuleLoadEnd)
+    }
   })
 
   it('should fall back to monkey patched module', () => {
