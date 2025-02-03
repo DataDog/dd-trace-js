@@ -26,78 +26,100 @@ describe('ESM Security controls', () => {
   })
   const nodeOptions = '--import dd-trace/initialize.mjs'
 
-  describe('with --import', () => {
-    beforeEach(async () => {
-      agent = await new FakeAgent().start()
+  beforeEach(async () => {
+    agent = await new FakeAgent().start()
 
-      proc = await spawnProc(appFile, {
-        cwd,
-        env: {
-          DD_TRACE_AGENT_PORT: agent.port,
-          APP_PORT: appPort,
-          DD_IAST_ENABLED: 'true',
-          DD_IAST_REQUEST_SAMPLING: '100',
-          // eslint-disable-next-line no-multi-str
-          DD_IAST_SECURITY_CONTROLS_CONFIGURATION: '\
+    proc = await spawnProc(appFile, {
+      cwd,
+      env: {
+        DD_TRACE_AGENT_PORT: agent.port,
+        APP_PORT: appPort,
+        DD_IAST_ENABLED: 'true',
+        DD_IAST_REQUEST_SAMPLING: '100',
+        // eslint-disable-next-line no-multi-str
+        DD_IAST_SECURITY_CONTROLS_CONFIGURATION: '\
             SANITIZER:COMMAND_INJECTION:appsec/esm-security-controls/sanitizer.mjs:sanitize;\
             SANITIZER:COMMAND_INJECTION:appsec/esm-security-controls/sanitizer-default.mjs;\
             INPUT_VALIDATOR:*:appsec/esm-security-controls/validator.mjs:validate',
-          NODE_OPTIONS: nodeOptions
-        }
+        NODE_OPTIONS: nodeOptions
+      }
+    })
+  })
+
+  afterEach(async () => {
+    proc.kill()
+    await agent.stop()
+  })
+
+  it('test endpoint with iv not configured does have COMMAND_INJECTION vulnerability', async function () {
+    await axios.get('/cmdi-iv-insecure?command=ls -la')
+
+    await agent.assertMessageReceived(({ payload }) => {
+      const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
+      spans.forEach(span => {
+        assert.property(span.meta, '_dd.iast.json')
+        assert.include(span.meta['_dd.iast.json'], '"COMMAND_INJECTION"')
       })
-    })
+    }, null, 1, true)
+  })
 
-    afterEach(async () => {
-      proc.kill()
-      await agent.stop()
-    })
+  it('test endpoint sanitizer does not have COMMAND_INJECTION vulnerability', async () => {
+    await axios.get('/cmdi-s-secure?command=ls -la')
 
-    it('test endpoint with iv not configured have COMMAND_INJECTION vulnerability', async function () {
-      await axios.get('/cmdi-iv-insecure?command=ls -la')
+    await agent.assertMessageReceived(({ payload }) => {
+      const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
+      spans.forEach(span => {
+        assert.notProperty(span.meta, '_dd.iast.json')
+        assert.property(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection')
+      })
+    }, null, 1, true)
+  })
 
-      await agent.assertMessageReceived(({ payload }) => {
-        const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
-        spans.forEach(span => {
-          assert.property(span.meta, '_dd.iast.json')
-          assert.include(span.meta['_dd.iast.json'], '"COMMAND_INJECTION"')
-        })
-      }, null, 1, true)
-    })
+  it('test endpoint with default sanitizer does not have COMMAND_INJECTION vulnerability', async () => {
+    await axios.get('/cmdi-s-secure-default?command=ls -la')
 
-    it('test endpoint sanitizer do not have COMMAND_INJECTION vulnerability', async () => {
-      await axios.get('/cmdi-s-secure?command=ls -la')
+    await agent.assertMessageReceived(({ payload }) => {
+      const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
+      spans.forEach(span => {
+        assert.notProperty(span.meta, '_dd.iast.json')
+        assert.property(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection')
+      })
+    }, null, 1, true)
+  })
 
-      await agent.assertMessageReceived(({ payload }) => {
-        const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
-        spans.forEach(span => {
-          assert.notProperty(span.meta, '_dd.iast.json')
-          assert.property(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection')
-        })
-      }, null, 1, true)
-    })
+  it('test endpoint with default sanitizer does have COMMAND_INJECTION with original tainted', async () => {
+    await axios.get('/cmdi-s-secure-comparison?command=ls -la')
 
-    it('test endpoint with default sanitizer do not have COMMAND_INJECTION vulnerability', async () => {
-      await axios.get('/cmdi-s-secure-default?command=ls -la')
+    await agent.assertMessageReceived(({ payload }) => {
+      const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
+      spans.forEach(span => {
+        assert.property(span.meta, '_dd.iast.json')
+        assert.include(span.meta['_dd.iast.json'], '"COMMAND_INJECTION"')
+      })
+    }, null, 1, true)
+  })
 
-      await agent.assertMessageReceived(({ payload }) => {
-        const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
-        spans.forEach(span => {
-          assert.notProperty(span.meta, '_dd.iast.json')
-          assert.property(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection')
-        })
-      }, null, 1, true)
-    })
+  it('test endpoint with default sanitizer does have COMMAND_INJECTION vulnerability', async () => {
+    await axios.get('/cmdi-s-secure-default?command=ls -la')
 
-    it('test endpoint with iv do not have COMMAND_INJECTION vulnerability', async () => {
-      await axios.get('/cmdi-iv-secure?command=ls -la')
+    await agent.assertMessageReceived(({ payload }) => {
+      const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
+      spans.forEach(span => {
+        assert.notProperty(span.meta, '_dd.iast.json')
+        assert.property(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection')
+      })
+    }, null, 1, true)
+  })
 
-      await agent.assertMessageReceived(({ payload }) => {
-        const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
-        spans.forEach(span => {
-          assert.notProperty(span.meta, '_dd.iast.json')
-          assert.property(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection')
-        })
-      }, null, 1, true)
-    })
+  it('test endpoint with iv does not have COMMAND_INJECTION vulnerability', async () => {
+    await axios.get('/cmdi-iv-secure?command=ls -la')
+
+    await agent.assertMessageReceived(({ payload }) => {
+      const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
+      spans.forEach(span => {
+        assert.notProperty(span.meta, '_dd.iast.json')
+        assert.property(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection')
+      })
+    }, null, 1, true)
   })
 })
