@@ -9,7 +9,7 @@ const Hook = require('../src/ritm')
 
 describe('Ritm', () => {
   let moduleLoadStartChannel, moduleLoadEndChannel, startListener, endListener
-  let utilHook, aHook, bHook, defaultHook, httpHook
+  let utilHook, aHook, bHook, httpHook
 
   before(() => {
     moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
