@@ -5,9 +5,8 @@ const log = require('../log')
 const telemetry = require('./telemetry')
 const addresses = require('./addresses')
 const { keepTrace } = require('../priority_sampler')
-const { SAMPLING_MECHANISM_APPSEC } = require('../constants')
-const standalone = require('./standalone')
 const waf = require('./waf')
+const { ASM } = require('../standalone/product')
 
 // the RFC doesn't include '_id', but it's common in MongoDB
 const USER_ID_FIELDS = ['id', '_id', 'email', 'username', 'login', 'user']
@@ -154,8 +153,7 @@ function trackLogin (framework, login, user, success, rootSpan) {
     persistent[addresses.LOGIN_FAILURE] = null
   }
 
-  keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
-  standalone.sample(rootSpan)
+  keepTrace(rootSpan, ASM)
 
   rootSpan.addTags(newTags)
 
