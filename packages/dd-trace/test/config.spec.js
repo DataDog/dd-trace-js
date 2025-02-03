@@ -212,6 +212,7 @@ describe('Config', () => {
     expect(config).to.have.property('queryStringObfuscation').with.length(626)
     expect(config).to.have.property('clientIpEnabled', false)
     expect(config).to.have.property('clientIpHeader', null)
+    expect(config).to.have.property('middlewareTracingEnabled', true)
     expect(config).to.have.nested.property('crashtracking.enabled', true)
     expect(config).to.have.property('sampleRate', undefined)
     expect(config).to.have.property('runtimeMetrics', false)
@@ -351,6 +352,7 @@ describe('Config', () => {
       { name: 'isTestDynamicInstrumentationEnabled', value: false, origin: 'default' },
       { name: 'logInjection', value: false, origin: 'default' },
       { name: 'lookup', value: undefined, origin: 'default' },
+      { name: 'middlewareTracingEnabled', value: true, origin: 'default' },
       { name: 'openAiLogsEnabled', value: false, origin: 'default' },
       { name: 'openai.spanCharLimit', value: 128, origin: 'default' },
       { name: 'peerServiceMapping', value: {}, origin: 'default' },
@@ -479,6 +481,7 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
+    process.env.DD_TRACE_MIDDLEWARE_TRACING_ENABLED = 'false'
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
     process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
     process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = 'true'
@@ -551,6 +554,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('crashtracking.enabled', false)
     expect(config.grpc.client.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
     expect(config.grpc.server.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
+    expect(config).to.have.property('middlewareTracingEnabled', false)
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.nested.property('codeOriginForSpans.enabled', true)
@@ -691,6 +695,7 @@ describe('Config', () => {
       { name: 'instrumentation_config_id', value: 'abcdef123', origin: 'env_var' },
       { name: 'injectionEnabled', value: ['profiler'], origin: 'env_var' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
+      { name: 'middlewareTracingEnabled', value: false, origin: 'env_var' },
       { name: 'peerServiceMapping', value: process.env.DD_TRACE_PEER_SERVICE_MAPPING, origin: 'env_var' },
       { name: 'port', value: '6218', origin: 'env_var' },
       { name: 'profiling.enabled', value: 'true', origin: 'env_var' },
@@ -856,6 +861,7 @@ describe('Config', () => {
       tags,
       flushInterval: 5000,
       flushMinSpans: 500,
+      middlewareTracingEnabled: false,
       runtimeMetrics: true,
       reportHostname: true,
       plugins: false,
@@ -933,6 +939,7 @@ describe('Config', () => {
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
     expect(config).to.have.property('flushInterval', 5000)
     expect(config).to.have.property('flushMinSpans', 500)
+    expect(config).to.have.property('middlewareTracingEnabled', false)
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('plugins', false)
@@ -1029,6 +1036,7 @@ describe('Config', () => {
       },
       { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'code' },
       { name: 'iast.stackTrace.enabled', value: false, origin: 'code' },
+      { name: 'middlewareTracingEnabled', value: false, origin: 'code' },
       { name: 'peerServiceMapping', value: { d: 'dd' }, origin: 'code' },
       { name: 'plugins', value: false, origin: 'code' },
       { name: 'port', value: '6218', origin: 'code' },
@@ -1229,6 +1237,7 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
+    process.env.DD_TRACE_MIDDLEWARE_TRACING_ENABLED = 'false'
     process.env.DD_APPSEC_ENABLED = 'false'
     process.env.DD_APPSEC_MAX_STACK_TRACES = '11'
     process.env.DD_APPSEC_MAX_STACK_TRACE_DEPTH = '11'
@@ -1278,6 +1287,7 @@ describe('Config', () => {
       tags: {
         foo: 'foo'
       },
+      middlewareTracingEnabled: true,
       serviceMapping: {
         b: 'bb'
       },
@@ -1360,6 +1370,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.hostname', 'server')
     expect(config).to.have.nested.property('dogstatsd.port', '8888')
     expect(config).to.have.property('site', 'datadoghq.com')
+    expect(config).to.have.property('middlewareTracingEnabled', true)
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('flushMinSpans', 500)

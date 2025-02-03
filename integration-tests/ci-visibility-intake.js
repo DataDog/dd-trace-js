@@ -1,7 +1,6 @@
 const express = require('express')
 const bodyParser = require('body-parser')
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
+const msgpack = require('@msgpack/msgpack')
 const http = require('http')
 const multer = require('multer')
 const upload = multer()
@@ -81,7 +80,7 @@ class FakeCiVisIntake extends FakeAgent {
       res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
       this.emit('message', {
         headers: req.headers,
-        payload: msgpack.decode(req.body, { codec }),
+        payload: msgpack.decode(req.body, { useBigInt64: true }),
         url: req.url
       })
     })
@@ -100,7 +99,7 @@ class FakeCiVisIntake extends FakeAgent {
         res.status(200).send('OK')
         this.emit('message', {
           headers: req.headers,
-          payload: msgpack.decode(req.body, { codec }),
+          payload: msgpack.decode(req.body, { useBigInt64: true }),
           url: req.url
         })
       }, waitingTime || 0)

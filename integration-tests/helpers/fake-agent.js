@@ -5,8 +5,7 @@ const EventEmitter = require('events')
 const http = require('http')
 const express = require('express')
 const bodyParser = require('body-parser')
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
+const msgpack = require('@msgpack/msgpack')
 const upload = require('multer')()
 
 module.exports = class FakeAgent extends EventEmitter {
@@ -241,7 +240,7 @@ function buildExpressServer (agent) {
     res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
     agent.emit('message', {
       headers: req.headers,
-      payload: msgpack.decode(req.body, { codec })
+      payload: msgpack.decode(req.body, { useBigInt64: true })
     })
   })
 
