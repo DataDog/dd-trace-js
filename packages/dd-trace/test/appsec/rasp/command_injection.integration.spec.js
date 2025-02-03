@@ -65,12 +65,12 @@ describe('RASP - command_injection - integration', () => {
 
       let appsecTelemetryReceived = false
 
-      const checkMessages = await agent.assertMessageReceived(({ headers, payload }) => {
+      const checkMessages = agent.assertMessageReceived(({ headers, payload }) => {
         assert.property(payload[0][0].meta, '_dd.appsec.json')
         assert.include(payload[0][0].meta['_dd.appsec.json'], `"rasp-command_injection-rule-id-${ruleId}"`)
       })
 
-      const checkTelemetry = await agent.assertTelemetryReceived(({ headers, payload }) => {
+      const checkTelemetry = agent.assertTelemetryReceived(({ headers, payload }) => {
         const namespace = payload.payload.namespace
 
         // Only check telemetry received in appsec namespace and ignore others
@@ -92,10 +92,11 @@ describe('RASP - command_injection - integration', () => {
         }
       }, 30_000, 'generate-metrics', 2)
 
-      const checks = await Promise.all([checkMessages, checkTelemetry])
-      assert.equal(appsecTelemetryReceived, true)
+      return Promise.all([checkMessages, checkTelemetry]).then(() => {
+        assert.equal(appsecTelemetryReceived, true)
 
-      return checks
+        return true
+      })
     }
 
     throw new Error('Request should be blocked')

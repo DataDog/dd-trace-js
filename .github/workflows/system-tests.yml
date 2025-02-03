@@ -13,20 +13,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout dd-trace-js
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           path: dd-trace-js
       - name: Pack dd-trace-js
         run: mkdir -p ./binaries && echo /binaries/$(npm pack --pack-destination ./binaries ./dd-trace-js) > ./binaries/nodejs-load-from-npm
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: system_tests_binaries
           path: ./binaries/**/*
 
   get-scenarios:
     name: Get parameters
-    uses: DataDog/system-tests/.github/workflows/compute-workflow-parameters.yml@main
+    uses: DataDog/system-tests/.github/workflows/compute-workflow-parameters.yml@994e6f9976f16c13c1cb15c02714d786e0eb8eb1 # main
     with:
       library: nodejs
       scenarios_groups: essentials,appsec_rasp
@@ -49,11 +49,11 @@ jobs:
 
     steps:
       - name: Checkout system tests
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           repository: 'DataDog/system-tests'
       - name: Checkout dd-trace-js
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           path: 'binaries/dd-trace-js'
       - name: Build runner
@@ -76,7 +76,7 @@ jobs:
         if: ${{ always() }}
         run: tar -czvf artifact.tar.gz $(ls | grep logs)
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         if: ${{ always() }}
         with:
           name: logs_${{ matrix.weblog-variant }}-${{ matrix.scenario }}
@@ -85,10 +85,10 @@ jobs:
   parametric:
     needs:
       - build-artifacts
-    uses: DataDog/system-tests/.github/workflows/run-parametric.yml@main
+    uses: DataDog/system-tests/.github/workflows/run-parametric.yml@994e6f9976f16c13c1cb15c02714d786e0eb8eb1 # main
     secrets: inherit
     with:
       library: nodejs
       binaries_artifact: system_tests_binaries
-      _experimental_job_count: 8
-      _experimental_job_matrix: '[1,2,3,4,5,6,7,8]'
+      job_count: 8
+      job_matrix: '[1,2,3,4,5,6,7,8]'
