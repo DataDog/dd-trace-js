@@ -32,5 +32,5 @@ module.exports = {
   fsOperationStart: dc.channel('apm:fs:operation:start'),
   expressMiddlewareError: dc.channel('apm:express:middleware:error'),
   childProcessExecutionTracingChannel: dc.tracingChannel('datadog:child_process:execution'),
-  prioritySamplerConfigure: dc.channel('datadog:priority-sampler:configure')
+  tracerConfigure: dc.channel('datadog:tracer:configure')
 }

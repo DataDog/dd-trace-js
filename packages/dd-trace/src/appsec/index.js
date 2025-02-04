@@ -18,7 +18,7 @@ const {
   responseWriteHead,
   responseSetHeader,
   routerParam,
-  prioritySamplerConfigure
+  tracerConfigure
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -80,7 +80,7 @@ function enable (_config) {
 
     const apmTracingEnabled = _config.apmTracing?.enabled ?? true
     if (!apmTracingEnabled) {
-      prioritySamplerConfigure.subscribe(onPrioritySamplerConfigure)
+      tracerConfigure.subscribe(onTracerConfigure)
     }
 
     isEnabled = true
@@ -296,8 +296,10 @@ function handleResults (actions, req, res, rootSpan, abortController) {
   }
 }
 
-function onPrioritySamplerConfigure ({ prioritySampler }) {
-  prioritySampler._limiter = new RateLimiter(1, 'minute')
+function onTracerConfigure ({ tracer }) {
+  if (tracer?._prioritySampler) {
+    tracer._prioritySampler._limiter = new RateLimiter(1, 'minute')
+  }
 }
 
 function disable () {
@@ -329,7 +331,7 @@ function disable () {
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
   if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
   if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseSetHeader)
-  if (prioritySamplerConfigure.hasSubscribers) prioritySamplerConfigure.unsubscribe(onPrioritySamplerConfigure)
+  if (tracerConfigure.hasSubscribers) tracerConfigure.unsubscribe(onTracerConfigure)
 }
 
 module.exports = {

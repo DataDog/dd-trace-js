@@ -1,6 +1,5 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
 const { hasOwn } = require('../util')
 const PrioritySampler = require('../priority_sampler')
 const { MANUAL_KEEP } = require('../../../../ext/tags')
@@ -9,19 +8,15 @@ const { SAMPLING_MECHANISM_DEFAULT } = require('../constants')
 const { addTraceSourceTag, hasTraceSourcePropagationTag } = require('./tracesource')
 const RateLimiter = require('../rate_limiter')
 
-const configureCh = channel('datadog:priority-sampler:configure')
-
 class TraceSourcePrioritySampler extends PrioritySampler {
   constructor (env, opts) {
     super(env, { sampleRate: 0, rateLimit: 0, rules: [] })
+    this._limiter = new RateLimiter(0)
   }
 
   configure (env, config) {
     // rules not supported
     this._env = env
-    this._limiter = new RateLimiter(0)
-
-    configureCh.publish({ prioritySampler: this })
   }
 
   _getPriorityFromTags (tags, context) {

@@ -22,7 +22,7 @@ const RateLimiter = require('../../rate_limiter')
 const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
 const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
 const iastResponseEnd = dc.channel('datadog:iast:response-end')
-const prioritySamplerConfigure = dc.channel('datadog:priority-sampler:configure')
+const tracerConfigure = dc.channel('datadog:tracer:configure')
 let isEnabled = false
 
 function enable (config, _tracer) {
@@ -34,8 +34,9 @@ function enable (config, _tracer) {
   enableTaintTracking(config.iast, iastTelemetry.verbosity)
   requestStart.subscribe(onIncomingHttpRequestStart)
   requestClose.subscribe(onIncomingHttpRequestEnd)
-  if (!config.apmTracing.enabled) {
-    prioritySamplerConfigure.subscribe(onPrioritySamplerConfigure)
+  const apmTracingEnabled = config.apmTracing?.enabled ?? true
+  if (!apmTracingEnabled) {
+    tracerConfigure.subscribe(onTracerConfigure)
   }
   overheadController.configure(config.iast)
   overheadController.startGlobalContext()
@@ -56,7 +57,7 @@ function disable () {
   overheadController.finishGlobalContext()
   if (requestStart.hasSubscribers) requestStart.unsubscribe(onIncomingHttpRequestStart)
   if (requestClose.hasSubscribers) requestClose.unsubscribe(onIncomingHttpRequestEnd)
-  if (prioritySamplerConfigure.hasSubscribers) prioritySamplerConfigure.unsubscribe(onPrioritySamplerConfigure)
+  if (tracerConfigure.hasSubscribers) tracerConfigure.unsubscribe(onTracerConfigure)
   vulnerabilityReporter.stop()
 }
 
@@ -106,8 +107,10 @@ function onIncomingHttpRequestEnd (data) {
   }
 }
 
-function onPrioritySamplerConfigure ({ prioritySampler }) {
-  prioritySampler._limiter = new RateLimiter(1, 'minute')
+function onTracerConfigure ({ tracer }) {
+  if (tracer?._prioritySampler) {
+    tracer._prioritySampler._limiter = new RateLimiter(1, 'minute')
+  }
 }
 
 module.exports = { enable, disable, onIncomingHttpRequestEnd, onIncomingHttpRequestStart }
