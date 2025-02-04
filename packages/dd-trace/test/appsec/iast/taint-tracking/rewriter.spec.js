@@ -235,7 +235,7 @@ describe('IAST Rewriter', () => {
             url: 'file://file.js'
           }
 
-          port.postMessage({ type: constants.REWRITTEN, data })
+          port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
 
           setTimeout(() => {
             expect(cacheRewrittenSourceMap).to.be.calledOnceWith('file.js', content)
@@ -255,7 +255,7 @@ describe('IAST Rewriter', () => {
             url: 'file://file.js'
           }
 
-          port.postMessage({ type: constants.REWRITTEN, data })
+          port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
 
           setTimeout(() => {
             expect(rewriterTelemetry.incrementTelemetryIfNeeded).to.be.calledOnceWith(metrics)
@@ -286,7 +286,7 @@ describe('IAST Rewriter', () => {
 
           hardcodedSecretCh.subscribe(onHardcodedSecret)
 
-          port.postMessage({ type: constants.REWRITTEN, data })
+          port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
 
           setTimeout(() => {
             hardcodedSecretCh.unsubscribe(onHardcodedSecret)
@@ -300,7 +300,7 @@ describe('IAST Rewriter', () => {
             messages
           }
 
-          port.postMessage({ type: constants.LOG, data })
+          port.postMessage({ type: constants.LOG_MESSAGE, data })
 
           setTimeout(() => {
             expect(log.error).to.be.calledOnceWith(...messages)

@@ -4,7 +4,7 @@ import path from 'path'
 import { URL } from 'url'
 import { getName } from '../telemetry/verbosity.js'
 import { isNotLibraryFile, isPrivateModule } from './filter.js'
-import constants, { LOG_MESSAGE, REWRITTEN_MESSAGE } from './constants.js'
+import constants from './constants.js'
 
 const currentUrl = new URL(import.meta.url)
 const ddTraceDir = path.join(currentUrl.pathname, '..', '..', '..', '..', '..', '..')
