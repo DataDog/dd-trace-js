@@ -15,7 +15,6 @@ let batch = 0
 // Internal representation of a trace or span ID.
 class Identifier {
   constructor (value, radix = 16) {
-    this._isUint64BE = true // msgpack-lite compatibility
     this._buffer = radix === 16
       ? createBuffer(value)
       : fromString(value, radix)
@@ -31,7 +30,6 @@ class Identifier {
     return this._buffer
   }
 
-  // msgpack-lite compatibility
   toArray () {
     if (this._buffer.length === 8) {
       return this._buffer
