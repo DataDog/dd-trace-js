@@ -2,66 +2,81 @@
 
 const { AsyncLocalStorage } = require('async_hooks')
 
-class DatadogStorage {
-  constructor () {
-    this._storage = new AsyncLocalStorage()
-  }
-
-  disable () {
-    this._storage.disable()
-  }
-
+/// This is exactly the same as AsyncLocalStorage, with the exception that it
+/// uses a WeakMap to store the store object. This is because ALS stores the
+/// store object as a property of the resource object, which causes all sorts
+/// of problems with logging and memory. We substitute the `store` object with
+/// a "handle" object, which is used as a key in a WeakMap, where the values
+/// are the real store objects.
+class DatadogStorage extends AsyncLocalStorage {
   enterWith (store) {
     const handle = {}
     stores.set(handle, store)
-    this._storage.enterWith(handle)
+    super.enterWith(handle)
   }
 
-  exit (callback, ...args) {
-    this._storage.exit(callback, ...args)
-  }
-
+  // This is method is a passthrough to the real `getStore()`, so that, when we
+  // need it, we can use the handle rather than our mapped store.
   // TODO: Refactor the Scope class to use a span-only store and remove this.
+  // It's only here because stores are currently used for a bunch of things,
+  // and we don't want to hold on to all of them in spans
+  // (see opentracing/span.js). Using a namespaced storage for spans would
+  // solve this.
   getHandle () {
-    return this._storage.getStore()
+    return super.getStore()
   }
 
+  // Here, we replicate the behavior of the original `getStore()` method by
+  // passing in the handle, which we retrieve by calling it on super. Handles
+  // retrieved through `getHandle()` can also be passed in to be used as the
+  // key. This is useful if you've stashed a handle somewhere and want to
+  // retrieve the store with it.
   getStore (handle) {
     if (!handle) {
-      handle = this._storage.getStore()
+      handle = super.getStore()
     }
 
     return stores.get(handle)
   }
 
+  // Here, we replicate the behavior of the original `run()` method. We ensure
+  // that our `enterWith()` is called internally, so that the handle to the
+  // store is set. As an optimization, we use super for getStore and enterWith
+  // when dealing with the parent store, so that we don't have to access the
+  // WeakMap.
   run (store, fn, ...args) {
-    const prior = this._storage.getStore()
+    const prior = super.getStore()
     this.enterWith(store)
     try {
       return Reflect.apply(fn, null, args)
     } finally {
-      this._storage.enterWith(prior)
+      super.enterWith(prior)
     }
   }
 }
 
-const storages = Object.create(null)
-const legacyStorage = new DatadogStorage()
+// This is the map from handles to real stores, used in the class above.
+const stores = new WeakMap()
 
-const storage = function (namespace) {
+// For convenience, we use the `storage` function as a registry of namespaces
+// corresponding to DatadogStorage instances. This lets us have separate
+// storages for separate purposes.
+const storages = Object.create(null)
+function storage (namespace) {
   if (!storages[namespace]) {
     storages[namespace] = new DatadogStorage()
   }
   return storages[namespace]
 }
 
+// Namespaces are a new concept, so for existing internal code that does not
+// use namespaces, we have a "legacy" storage object.
+const legacyStorage = new DatadogStorage()
 storage.disable = legacyStorage.disable.bind(legacyStorage)
 storage.enterWith = legacyStorage.enterWith.bind(legacyStorage)
 storage.exit = legacyStorage.exit.bind(legacyStorage)
 storage.getHandle = legacyStorage.getHandle.bind(legacyStorage)
 storage.getStore = legacyStorage.getStore.bind(legacyStorage)
 storage.run = legacyStorage.run.bind(legacyStorage)
-
-const stores = new WeakMap()
 
 module.exports = storage
