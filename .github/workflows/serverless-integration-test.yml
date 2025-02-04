@@ -11,8 +11,8 @@ jobs:
   integration:
     # Google Auth permissions
     permissions:
-      contents: "read"
-      id-token: "write"
+      contents: 'read'
+      id-token: 'write'
     strategy:
       matrix:
         version: [18, latest]
