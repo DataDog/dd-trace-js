@@ -1,4 +1,5 @@
 *
+!dist/**/*
 !ext/**/*
 !packages/*/lib/**/*
 !packages/*/src/**/*

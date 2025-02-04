@@ -2,7 +2,7 @@
   "name": "dd-trace",
   "version": "6.0.0-pre",
   "description": "Datadog APM tracing client for JavaScript",
-  "main": "index.js",
+  "main": "dist/dd-trace.bundle.js",
   "typings": "index.d.ts",
   "scripts": {
     "env": "bash ./plugin-env",
@@ -156,6 +156,7 @@
     "sinon-chai": "^3.7.0",
     "tap": "^16.3.7",
     "tiktoken": "^1.0.15",
+    "webpack": "^5.97.1",
     "yaml": "^2.5.0"
   }
 }
