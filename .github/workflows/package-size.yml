@@ -3,7 +3,9 @@ name: Package Size
 on:
   pull_request:
   schedule:
-    - cron: '0 4 * * *'
+    - cron: 0 4 * * *
+    - cron: 20 4 * * *
+    - cron: 40 4 * * *
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
