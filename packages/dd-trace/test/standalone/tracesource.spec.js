@@ -1,11 +1,13 @@
 'use strict'
 
+require('../setup/tap')
+
 const { assert } = require('chai')
 const { ASM } = require('../../src/standalone/product')
 const { TRACE_SOURCE_PROPAGATION_KEY } = require('../../src/constants')
 const { addTraceSourceTag } = require('../../src/standalone/tracesource')
 
-describe('Tracesource tag', () => {
+describe('Tracesource propagation tag', () => {
   let tags
 
   beforeEach(() => {

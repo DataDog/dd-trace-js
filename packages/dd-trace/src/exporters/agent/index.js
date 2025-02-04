@@ -15,7 +15,8 @@ class AgentExporter {
     }))
 
     const headers = {}
-    if (stats.enabled || !config.apmTracing.enabled) {
+    const apmTracingEnabled = config.apmTracing?.enabled ?? true
+    if (stats.enabled || !apmTracingEnabled) {
       headers['Datadog-Client-Computed-Stats'] = 'yes'
     }
 

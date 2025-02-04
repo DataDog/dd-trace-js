@@ -7,6 +7,7 @@ const { MANUAL_KEEP } = require('../../../../ext/tags')
 const { USER_KEEP, AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
 const { SAMPLING_MECHANISM_DEFAULT } = require('../constants')
 const { addTraceSourceTag, hasTraceSourcePropagationTag } = require('./tracesource')
+const RateLimiter = require('../rate_limiter')
 
 const configureCh = channel('datadog:priority-sampler:configure')
 
@@ -18,6 +19,7 @@ class TraceSourcePrioritySampler extends PrioritySampler {
   configure (env, config) {
     // rules not supported
     this._env = env
+    this._limiter = new RateLimiter(0)
 
     configureCh.publish({ prioritySampler: this })
   }

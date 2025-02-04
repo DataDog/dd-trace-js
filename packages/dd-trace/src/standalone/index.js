@@ -1,7 +1,6 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
-const PrioritySampler = require('../priority_sampler')
 const TraceSourcePrioritySampler = require('./tracesource_priority_sampler')
 const { USER_KEEP } = require('../../../../ext/priority')
 const TraceState = require('../opentracing/propagation/tracestate')
@@ -12,30 +11,19 @@ const startCh = channel('dd-trace:span:start')
 const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
 
-let enabled
-
 function configure (config) {
-  const configChanged = enabled !== config.apmTracing.enabled
-  if (!configChanged) return
+  if (startCh.hasSubscribers) startCh.unsubscribe(onSpanStart)
+  if (injectCh.hasSubscribers) injectCh.unsubscribe(onSpanInject)
+  if (extractCh.hasSubscribers) extractCh.unsubscribe(onSpanExtract)
 
-  enabled = config.apmTracing.enabled
+  const apmTracingEnabled = config.apmTracing?.enabled ?? true
+  if (apmTracingEnabled) return
 
-  let prioritySampler
-  if (enabled) {
-    prioritySampler = new PrioritySampler(config.env, config.sampler)
+  startCh.subscribe(onSpanStart)
+  injectCh.subscribe(onSpanInject)
+  extractCh.subscribe(onSpanExtract)
 
-    if (startCh.hasSubscribers) startCh.unsubscribe(onSpanStart)
-    if (injectCh.hasSubscribers) injectCh.unsubscribe(onSpanInject)
-    if (extractCh.hasSubscribers) extractCh.unsubscribe(onSpanExtract)
-  } else {
-    prioritySampler = new TraceSourcePrioritySampler(config.env)
-
-    startCh.subscribe(onSpanStart)
-    injectCh.subscribe(onSpanInject)
-    extractCh.subscribe(onSpanExtract)
-  }
-
-  return prioritySampler
+  return new TraceSourcePrioritySampler(config.env)
 }
 
 function onSpanStart ({ span, fields }) {

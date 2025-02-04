@@ -15,7 +15,7 @@ const dogstatsd = require('./dogstatsd')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const spanleak = require('./spanleak')
 const { SSIHeuristics } = require('./profiling/ssi-heuristics')
-const apmTracing = require('./standalone')
+const standalone = require('./standalone')
 const LLMObsSDK = require('./llmobs/sdk')
 
 class LazyModule {
@@ -214,7 +214,7 @@ class Tracer extends NoopProxy {
         this._modules.llmobs.enable(config)
       }
       if (!this._tracingInitialized) {
-        const prioritySampler = apmTracing.configure(config)
+        const prioritySampler = standalone.configure(config)
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         this.appsec = new AppsecSdk(this._tracer, config)

@@ -78,7 +78,8 @@ function enable (_config) {
     responseWriteHead.subscribe(onResponseWriteHead)
     responseSetHeader.subscribe(onResponseSetHeader)
 
-    if (!_config.apmTracing.enabled) {
+    const apmTracingEnabled = _config.apmTracing?.enabled ?? true
+    if (!apmTracingEnabled) {
       prioritySamplerConfigure.subscribe(onPrioritySamplerConfigure)
     }
 
