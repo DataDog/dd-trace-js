@@ -4,7 +4,7 @@ import path from 'path'
 import { URL } from 'url'
 import { getName } from '../telemetry/verbosity.js'
 import { isNotLibraryFile, isPrivateModule } from './filter.js'
-import constants from './constants.js'
+import constants, { LOG_MESSAGE, REWRITTEN_MESSAGE } from './constants.js'
 
 const currentUrl = new URL(import.meta.url)
 const ddTraceDir = path.join(currentUrl.pathname, '..', '..', '..', '..', '..', '..')
@@ -42,7 +42,7 @@ export async function load (url, context, nextLoad) {
       if (rewritten?.content) {
         result.source = rewritten.content || result.source
         const data = { url, rewritten }
-        port.postMessage({ type: constants.REWRITTEN, data })
+        port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
       }
     }
   } catch (e) {
@@ -56,7 +56,7 @@ export async function load (url, context, nextLoad) {
       messages: ['[ASM] Error rewriting file %s', url, newErrObject]
     }
     port.postMessage({
-      type: constants.LOG,
+      type: constants.LOG_MESSAGE,
       data
     })
   }

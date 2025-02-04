@@ -1,6 +1,6 @@
 'use strict'
 
 module.exports = {
-  LOG: 'LOG',
-  REWRITTEN: 'REWRITTEN'
+  LOG_MESSAGE: 'LOG',
+  REWRITTEN_MESSAGE: 'REWRITTEN'
 }

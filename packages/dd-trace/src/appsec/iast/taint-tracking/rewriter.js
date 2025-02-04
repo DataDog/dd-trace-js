@@ -11,7 +11,7 @@ const { getRewriteFunction, incrementTelemetryIfNeeded } = require('./rewriter-t
 const dc = require('dc-polyfill')
 const log = require('../../../log')
 const { isMainThread } = require('worker_threads')
-const { LOG, REWRITTEN } = require('./constants')
+const { LOG_MESSAGE, REWRITTEN_MESSAGE } = require('./constants')
 
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')
 let rewriter
@@ -162,11 +162,11 @@ function enableEsmRewriter (telemetryVerbosity) {
     port1.on('message', (message) => {
       const { type, data } = message
       switch (type) {
-        case LOG:
+        case LOG_MESSAGE:
           log[data.level]?.(...data.messages)
           break
 
-        case REWRITTEN:
+        case REWRITTEN_MESSAGE:
           esmRewritePostProcess(data.rewritten, data.url)
           break
       }
