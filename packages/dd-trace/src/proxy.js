@@ -18,20 +18,20 @@ const NoopDogStatsDClient = require('./noop/dogstatsd')
 // const appsecStandalone = require('./appsec/standalone')
 // const LLMObsSDK = require('./llmobs/sdk')
 
-class LazyModule {
-  constructor (provider) {
-    this.provider = provider
-  }
+// class LazyModule {
+//   constructor (provider) {
+//     this.provider = provider
+//   }
 
-  enable (...args) {
-    this.module = this.provider()
-    this.module.enable(...args)
-  }
+//   enable (...args) {
+//     this.module = this.provider()
+//     this.module.enable(...args)
+//   }
 
-  disable () {
-    this.module?.disable()
-  }
-}
+//   disable () {
+//     this.module?.disable()
+//   }
+// }
 
 class Tracer extends NoopProxy {
   constructor () {
@@ -42,13 +42,13 @@ class Tracer extends NoopProxy {
     // this._pluginManager = new PluginManager(this)
     this.dogstatsd = new NoopDogStatsDClient()
     this._tracingInitialized = false
-    this._flare = new LazyModule(() => require('./flare'))
+    // this._flare = new LazyModule(() => require('./flare'))
 
     // these requires must work with esm bundler
     this._modules = {
-      appsec: new LazyModule(() => require('./appsec')),
-      iast: new LazyModule(() => require('./appsec/iast')),
-      llmobs: new LazyModule(() => require('./llmobs'))
+      // appsec: new LazyModule(() => require('./appsec')),
+      // iast: new LazyModule(() => require('./appsec/iast')),
+      // llmobs: new LazyModule(() => require('./llmobs'))
     }
   }
 
@@ -251,9 +251,9 @@ class Tracer extends NoopProxy {
     return this
   }
 
-  get TracerProvider () {
-    return require('./opentelemetry/tracer_provider')
-  }
+  // get TracerProvider () {
+  //   // return require('./opentelemetry/tracer_provider')
+  // }
 }
 
 module.exports = Tracer

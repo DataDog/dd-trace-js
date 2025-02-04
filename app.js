@@ -1,4 +1,4 @@
-const tracer = require('./init')
+const tracer = require('./dist/dd-trace.bundle').init()
 
 const span = tracer.startSpan('test')
 

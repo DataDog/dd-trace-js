@@ -12,8 +12,8 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const { DD_MAJOR } = require('../../../version')
 // const DataStreamsContext = require('./data_streams_context')
 // const { DataStreamsCheckpointer } = require('./data_streams')
-const { flushStartupLogs } = require('../../datadog-instrumentations/src/check_require_cache')
-const log = require('./log/writer')
+// const { flushStartupLogs } = require('../../datadog-instrumentations/src/check_require_cache')
+// const log = require('./log/writer')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -27,7 +27,7 @@ class DatadogTracer extends Tracer {
     // this.dataStreamsCheckpointer = new DataStreamsCheckpointer(this)
     this._scope = new Scope()
     setStartupLogConfig(config)
-    flushStartupLogs(log)
+    // flushStartupLogs(log)
   }
 
   configure ({ env, sampler }) {

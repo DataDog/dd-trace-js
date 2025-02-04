@@ -114,7 +114,7 @@ build
 prebuilds
 prebuilds.*
 docs/test.js
-dist
+# dist
 acmeair-nodejs
 !packages/*/test/**/dist
 !packages/*/test/**/node_modules
