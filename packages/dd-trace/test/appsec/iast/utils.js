@@ -3,12 +3,14 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const { assert } = require('chai')
 
 const agent = require('../../plugins/agent')
 const axios = require('axios')
 const iast = require('../../../src/appsec/iast')
 const Config = require('../../../src/config')
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
+const { getWebSpan } = require('../utils')
 
 function testInRequest (app, tests) {
   let http
@@ -161,6 +163,10 @@ function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb,
     .use(traces => {
       expect(traces[0][0].metrics['_dd.iast.enabled']).to.be.equal(1)
       expect(traces[0][0].meta).to.have.property('_dd.iast.json')
+
+      const span = getWebSpan(traces)
+      assert.property(span.meta_struct, '_dd.stack')
+
       const vulnerabilitiesTrace = JSON.parse(traces[0][0].meta['_dd.iast.json'])
       expect(vulnerabilitiesTrace).to.not.be.null
       const vulnerabilitiesCount = new Map()

@@ -1,7 +1,5 @@
 'use strict'
 
-const { Int64BE } = require('int64-buffer') // TODO remove dependency
-
 const { AssertionError } = require('assert')
 const { AsyncResource } = require('../../../datadog-instrumentations/src/helpers/instrument')
 
@@ -47,7 +45,7 @@ function deepInclude (expected, actual, path = []) {
   for (const propName in expected) {
     path.push(propName.includes('.') ? `['${propName}']` : propName)
     if (isObject(expected[propName]) && isObject(actual[propName])) {
-      if (expected[propName] instanceof Int64BE) {
+      if (typeof expected[propName] === 'bigint') {
         deepInclude(expected[propName].toString(), actual[propName].toString(), path)
       } else {
         deepInclude(expected[propName], actual[propName], path)

@@ -119,6 +119,8 @@ class TestVisDynamicInstrumentation {
       const onHit = this.onHitBreakpointByProbeId.get(probeId)
       if (onHit) {
         onHit({ snapshot })
+      } else {
+        log.warn('Received a breakpoint hit for an unknown probe')
       }
     }).unref()
 

@@ -132,7 +132,13 @@ async function setup (modName, repoName, commitish) {
   const repoUrl = `https://github.com/${repoName}.git`
   const cwd = await getTmpDir()
   await execOrError(`git clone ${repoUrl} --branch ${commitish} --single-branch ${cwd}`)
-  await execOrError('npm install --legacy-peer-deps', { cwd })
+
+  try {
+    await execOrError('npm install --legacy-peer-deps', { cwd })
+  } catch (e) {
+    console.error(e)
+    await execOrError('npm install --legacy-peer-deps', { cwd })
+  }
 }
 
 async function cleanup () {

@@ -23,7 +23,8 @@ const {
   JEST_DISPLAY_NAME,
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_DRIVER,
-  getFormattedError
+  getFormattedError,
+  TEST_RETRY_REASON
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -167,6 +168,7 @@ class JestPlugin extends CiPlugin {
         config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
         config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
         config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
+        config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
       })
     })
 
@@ -289,6 +291,7 @@ class JestPlugin extends CiPlugin {
       if (isJestWorker) {
         this.tracer._exporter.flush()
       }
+      this.removeAllDiProbes()
     })
 
     /**
@@ -322,7 +325,7 @@ class JestPlugin extends CiPlugin {
       this.activeTestSpan = span
     })
 
-    this.addSub('ci:jest:test:finish', ({ status, testStartLine, promises, shouldRemoveProbe }) => {
+    this.addSub('ci:jest:test:finish', ({ status, testStartLine }) => {
       const span = storage.getStore().span
       span.setTag(TEST_STATUS, status)
       if (testStartLine) {
@@ -344,10 +347,6 @@ class JestPlugin extends CiPlugin {
       span.finish()
       finishAllTraceSpans(span)
       this.activeTestSpan = null
-      if (shouldRemoveProbe && this.runningTestProbeId) {
-        promises.isProbeRemoved = withTimeout(this.removeDiProbe(this.runningTestProbeId), 2000)
-        this.runningTestProbeId = null
-      }
     })
 
     this.addSub('ci:jest:test:err', ({ error, shouldSetProbe, promises }) => {
@@ -360,9 +359,7 @@ class JestPlugin extends CiPlugin {
           if (shouldSetProbe) {
             const probeInformation = this.addDiProbe(error)
             if (probeInformation) {
-              const { probeId, setProbePromise, stackIndex } = probeInformation
-              this.runningTestProbeId = probeId
-              this.testErrorStackIndex = stackIndex
+              const { setProbePromise } = probeInformation
               promises.isProbeReady = withTimeout(setProbePromise, 2000)
             }
           }
@@ -410,6 +407,7 @@ class JestPlugin extends CiPlugin {
       extraTags[TEST_IS_NEW] = 'true'
       if (isEfdRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
+        extraTags[TEST_RETRY_REASON] = 'efd'
       }
     }
 
