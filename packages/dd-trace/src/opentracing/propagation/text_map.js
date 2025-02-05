@@ -326,7 +326,7 @@ class TextMapPropagator {
         context = extractedContext
         if (this._config.tracePropagationExtractFirst) {
           if (this._hasPropagationStyle('extract', 'baggage') && carrier.baggage) {
-            if (context) this._extractBaggageItems(carrier, context)
+            this._extractBaggageItems(carrier, context)
           }
           return context
         }
@@ -348,7 +348,7 @@ class TextMapPropagator {
     }
 
     if (this._hasPropagationStyle('extract', 'baggage') && carrier.baggage) {
-      if (context) this._extractBaggageItems(carrier, context)
+      this._extractBaggageItems(carrier, context)
     }
 
     return context || this._extractSqsdContext(carrier)
@@ -598,6 +598,7 @@ class TextMapPropagator {
   }
 
   _extractBaggageItems (carrier, spanContext) {
+    if (!carrier) return
     const baggages = carrier.baggage.split(',')
     for (const keyValue of baggages) {
       if (!keyValue.includes('=')) {
