@@ -94,10 +94,11 @@ function Hook (modules, options, onrequire) {
     if (moduleLoadStartChannel.hasSubscribers) {
       moduleLoadStartChannel.publish(payload)
     }
-    const exports = origRequire.apply(this, arguments)
+    let exports = origRequire.apply(this, arguments)
     payload.module = exports
     if (moduleLoadEndChannel.hasSubscribers) {
       moduleLoadEndChannel.publish(payload)
+      exports = payload.module
     }
 
     // The module has already been loaded,
