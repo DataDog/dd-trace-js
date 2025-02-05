@@ -18,7 +18,7 @@ describe('xcontenttype header missing analyzer', () => {
       }, XCONTENTTYPE_HEADER_MISSING, 1, function (vulnerabilities) {
         expect(vulnerabilities[0].evidence).to.be.undefined
         expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('XCONTENTTYPE_HEADER_MISSING:mocha'))
-      })
+      }, undefined, undefined, false)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('content-type', 'text/html;charset=utf-8')
@@ -26,7 +26,7 @@ describe('xcontenttype header missing analyzer', () => {
       }, XCONTENTTYPE_HEADER_MISSING, 1, function (vulnerabilities) {
         expect(vulnerabilities[0].evidence).to.be.undefined
         expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('XCONTENTTYPE_HEADER_MISSING:mocha'))
-      })
+      }, undefined, undefined, false)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('content-type', 'application/xhtml+xml')
@@ -34,7 +34,7 @@ describe('xcontenttype header missing analyzer', () => {
       }, XCONTENTTYPE_HEADER_MISSING, 1, function (vulnerabilities) {
         expect(vulnerabilities[0].evidence).to.be.undefined
         expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('XCONTENTTYPE_HEADER_MISSING:mocha'))
-      })
+      }, undefined, undefined, false)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('content-type', 'text/html')
@@ -43,7 +43,7 @@ describe('xcontenttype header missing analyzer', () => {
       }, XCONTENTTYPE_HEADER_MISSING, 1, function (vulnerabilities) {
         expect(vulnerabilities[0].evidence.value).to.be.equal('whatever')
         expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('XCONTENTTYPE_HEADER_MISSING:mocha'))
-      })
+      }, undefined, undefined, false)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('content-type', ['text/html'])
@@ -52,7 +52,7 @@ describe('xcontenttype header missing analyzer', () => {
       }, XCONTENTTYPE_HEADER_MISSING, 1, function (vulnerabilities) {
         expect(vulnerabilities[0].evidence.value).to.be.equal('whatever')
         expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('XCONTENTTYPE_HEADER_MISSING:mocha'))
-      })
+      }, undefined, undefined, false)
 
       testThatRequestHasNoVulnerability((req, res) => {
         res.setHeader('content-type', 'application/json')

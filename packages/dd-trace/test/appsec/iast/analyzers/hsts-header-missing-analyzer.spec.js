@@ -27,7 +27,7 @@ describe('hsts header missing analyzer', () => {
       }, HSTS_HEADER_MISSING, 1, function (vulnerabilities) {
         expect(vulnerabilities[0].evidence).to.be.undefined
         expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('HSTS_HEADER_MISSING:mocha'))
-      }, makeRequestWithXFordwardedProtoHeader)
+      }, makeRequestWithXFordwardedProtoHeader, undefined, false)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('content-type', 'text/html;charset=utf-8')
@@ -35,7 +35,7 @@ describe('hsts header missing analyzer', () => {
       }, HSTS_HEADER_MISSING, 1, function (vulnerabilities) {
         expect(vulnerabilities[0].evidence).to.be.undefined
         expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('HSTS_HEADER_MISSING:mocha'))
-      }, makeRequestWithXFordwardedProtoHeader)
+      }, makeRequestWithXFordwardedProtoHeader, undefined, false)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('content-type', 'application/xhtml+xml')
@@ -43,7 +43,7 @@ describe('hsts header missing analyzer', () => {
       }, HSTS_HEADER_MISSING, 1, function (vulnerabilities) {
         expect(vulnerabilities[0].evidence).to.be.undefined
         expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('HSTS_HEADER_MISSING:mocha'))
-      }, makeRequestWithXFordwardedProtoHeader)
+      }, makeRequestWithXFordwardedProtoHeader, undefined, false)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('content-type', 'text/html')
@@ -52,7 +52,7 @@ describe('hsts header missing analyzer', () => {
       }, HSTS_HEADER_MISSING, 1, function (vulnerabilities) {
         expect(vulnerabilities[0].evidence.value).to.be.equal('max-age=-100')
         expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('HSTS_HEADER_MISSING:mocha'))
-      }, makeRequestWithXFordwardedProtoHeader)
+      }, makeRequestWithXFordwardedProtoHeader, undefined, false)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('content-type', 'text/html')
@@ -61,7 +61,7 @@ describe('hsts header missing analyzer', () => {
       }, HSTS_HEADER_MISSING, 1, function (vulnerabilities) {
         expect(vulnerabilities[0].evidence.value).to.be.equal('max-age=-100; includeSubDomains')
         expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('HSTS_HEADER_MISSING:mocha'))
-      }, makeRequestWithXFordwardedProtoHeader)
+      }, makeRequestWithXFordwardedProtoHeader, undefined, false)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('content-type', 'text/html')
@@ -70,7 +70,7 @@ describe('hsts header missing analyzer', () => {
       }, HSTS_HEADER_MISSING, 1, function (vulnerabilities) {
         expect(vulnerabilities[0].evidence.value).to.be.equal('invalid')
         expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('HSTS_HEADER_MISSING:mocha'))
-      }, makeRequestWithXFordwardedProtoHeader)
+      }, makeRequestWithXFordwardedProtoHeader, undefined, false)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('content-type', ['text/html'])
@@ -79,7 +79,7 @@ describe('hsts header missing analyzer', () => {
       }, HSTS_HEADER_MISSING, 1, function (vulnerabilities) {
         expect(vulnerabilities[0].evidence.value).to.be.equal('invalid')
         expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('HSTS_HEADER_MISSING:mocha'))
-      }, makeRequestWithXFordwardedProtoHeader)
+      }, makeRequestWithXFordwardedProtoHeader, undefined, false)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('content-type', ['text/html'])
@@ -88,7 +88,7 @@ describe('hsts header missing analyzer', () => {
       }, HSTS_HEADER_MISSING, 1, function (vulnerabilities) {
         expect(vulnerabilities[0].evidence).to.be.undefined
         expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('HSTS_HEADER_MISSING:mocha'))
-      }, makeRequestWithXFordwardedProtoHeader)
+      }, makeRequestWithXFordwardedProtoHeader, undefined, false)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('content-type', ['text/html'])
@@ -97,7 +97,7 @@ describe('hsts header missing analyzer', () => {
       }, HSTS_HEADER_MISSING, 1, function (vulnerabilities) {
         expect(vulnerabilities[0].evidence.value).to.be.equal(JSON.stringify(['invalid1', 'invalid2']))
         expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('HSTS_HEADER_MISSING:mocha'))
-      }, makeRequestWithXFordwardedProtoHeader)
+      }, makeRequestWithXFordwardedProtoHeader, undefined, false)
 
       testThatRequestHasNoVulnerability((req, res) => {
         res.setHeader('content-type', 'application/json')
