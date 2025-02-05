@@ -30,7 +30,7 @@ class DatadogSpanContext {
       tags: {}
     }
     this._otelSpanContext = undefined
-    this._traceId128BitGenerationEnabled = this._trace.tags['_dd.p.tid'] ? true : false || props.traceId128BitGenerationEnabled
+    this._traceId128BitGenerationEnabled = this._trace.tags['_dd.p.tid'] ? true : (props.traceId128BitGenerationEnabled || false)
   }
 
   [util.inspect.custom] () {
