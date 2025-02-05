@@ -1,7 +1,7 @@
 'use strict'
 
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
-const { storage } = require('../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const web = require('../../dd-trace/src/plugins/util/web')
@@ -20,7 +20,7 @@ class NextPlugin extends ServerPlugin {
   }
 
   bindStart ({ req, res }) {
-    const store = storage.getStore()
+    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
     const childOf = store ? store.span : store
     const span = this.tracer.startSpan(this.operationName(), {
       childOf,
@@ -43,7 +43,7 @@ class NextPlugin extends ServerPlugin {
 
   error ({ span, error }) {
     if (!span) {
-      const store = storage.getStore()
+      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
       if (!store) return
 
       span = store.span
@@ -53,7 +53,7 @@ class NextPlugin extends ServerPlugin {
   }
 
   finish ({ req, res, nextRequest = {} }) {
-    const store = storage.getStore()
+    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
 
     if (!store) return
 
@@ -85,7 +85,7 @@ class NextPlugin extends ServerPlugin {
   }
 
   pageLoad ({ page, isAppPath = false, isStatic = false }) {
-    const store = storage.getStore()
+    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
 
     if (!store) return
 

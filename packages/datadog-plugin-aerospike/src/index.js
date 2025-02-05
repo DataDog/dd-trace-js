@@ -1,6 +1,6 @@
 'use strict'
 
-const { storage } = require('../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../datadog-core')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 const AEROSPIKE_PEER_SERVICE = 'aerospike.namespace'
@@ -20,7 +20,7 @@ class AerospikePlugin extends DatabasePlugin {
   bindStart (ctx) {
     const { commandName, commandArgs } = ctx
     const resourceName = commandName.slice(0, commandName.indexOf('Command'))
-    const store = storage.getStore()
+    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
     const childOf = store ? store.span : null
     const meta = getMeta(resourceName, commandArgs)
 

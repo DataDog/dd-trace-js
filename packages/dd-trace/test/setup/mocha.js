@@ -9,7 +9,7 @@ const externals = require('../plugins/externals.json')
 const runtimeMetrics = require('../../src/runtime_metrics')
 const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
-const { storage } = require('../../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../datadog-core')
 const { schemaDefinitions } = require('../../src/service-naming/schemas')
 const { getInstrumentation } = require('./helpers/load-inst')
 
@@ -252,6 +252,6 @@ exports.mochaHooks = {
   afterEach () {
     agent.reset()
     runtimeMetrics.stop()
-    storage.enterWith(undefined)
+    storage(LEGACY_STORAGE_NAMESPACE).enterWith(undefined)
   }
 }

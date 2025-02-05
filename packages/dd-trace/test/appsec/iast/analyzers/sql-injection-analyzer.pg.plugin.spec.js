@@ -5,7 +5,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { prepareTestServerForIast } = require('../utils')
-const { storage } = require('../../../../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
@@ -60,7 +60,7 @@ describe('sql-injection-analyzer with pg', () => {
             })
 
             testThatRequestHasVulnerability(() => {
-              const store = storage.getStore()
+              const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
               const iastCtx = iastContextFunctions.getIastContext(store)
               let sql = 'SELECT 1'
               sql = newTaintedString(iastCtx, sql, 'param', 'Request')
@@ -95,7 +95,7 @@ describe('sql-injection-analyzer with pg', () => {
             })
 
             testThatRequestHasVulnerability(() => {
-              const store = storage.getStore()
+              const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
               const iastCtx = iastContextFunctions.getIastContext(store)
               let sql = 'SELECT 1'
               sql = newTaintedString(iastCtx, sql, 'param', 'Request')
@@ -107,7 +107,7 @@ describe('sql-injection-analyzer with pg', () => {
             })
 
             testThatRequestHasVulnerability(() => {
-              const store = storage.getStore()
+              const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
               const iastCtx = iastContextFunctions.getIastContext(store)
               let sql = 'SELECT 1'
               sql = newTaintedString(iastCtx, sql, 'param', 'Request')

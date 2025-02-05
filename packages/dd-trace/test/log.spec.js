@@ -3,7 +3,7 @@
 require('./setup/tap')
 
 const { expect } = require('chai')
-const { storage } = require('../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../datadog-core')
 
 /* eslint-disable no-console */
 
@@ -119,7 +119,7 @@ describe('log', () => {
 
     it('should call the logger in a noop context', () => {
       logger.debug = () => {
-        expect(storage.getStore()).to.have.property('noop', true)
+        expect(storage(LEGACY_STORAGE_NAMESPACE).getStore()).to.have.property('noop', true)
       }
 
       log.use(logger).debug('debug')

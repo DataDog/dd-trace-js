@@ -106,7 +106,7 @@ describe('RASP - lfi.js', () => {
 
     it('should analyze lfi for root fs operations', () => {
       const fs = { root: true }
-      datadogCore.storage.getStore.returns({ req, fs })
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({ req, fs })
 
       fsOperationStart.publish(ctx)
 
@@ -116,7 +116,7 @@ describe('RASP - lfi.js', () => {
 
     it('should NOT analyze lfi for child fs operations', () => {
       const fs = {}
-      datadogCore.storage.getStore.returns({ req, fs })
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({ req, fs })
 
       fsOperationStart.publish(ctx)
 
@@ -125,7 +125,7 @@ describe('RASP - lfi.js', () => {
 
     it('should NOT analyze lfi for undefined fs (AppsecFsPlugin disabled)', () => {
       const fs = undefined
-      datadogCore.storage.getStore.returns({ req, fs })
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({ req, fs })
 
       fsOperationStart.publish(ctx)
 
@@ -134,7 +134,7 @@ describe('RASP - lfi.js', () => {
 
     it('should NOT analyze lfi for excluded operations', () => {
       const fs = { opExcluded: true, root: true }
-      datadogCore.storage.getStore.returns({ req, fs })
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({ req, fs })
 
       fsOperationStart.publish(ctx)
 

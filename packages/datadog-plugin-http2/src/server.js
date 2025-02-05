@@ -3,7 +3,7 @@
 // Plugin temporarily disabled. See https://github.com/DataDog/dd-trace-js/issues/312
 
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
-const { storage } = require('../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../datadog-core')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
@@ -17,7 +17,7 @@ class Http2ServerPlugin extends ServerPlugin {
   }
 
   start ({ req, res }) {
-    const store = storage.getStore()
+    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
     const span = web.startSpan(
       this.tracer,
       {

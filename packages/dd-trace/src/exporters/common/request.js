@@ -11,7 +11,7 @@ const zlib = require('zlib')
 const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
-const { storage } = require('../../../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../datadog-core')
 const log = require('../../log')
 
 const maxActiveRequests = 8
@@ -126,9 +126,9 @@ function request (data, options, callback) {
 
     activeRequests++
 
-    const store = storage.getStore()
+    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
 
-    storage.enterWith({ noop: true })
+    storage(LEGACY_STORAGE_NAMESPACE).enterWith({ noop: true })
 
     const req = client.request(options, onResponse)
 
@@ -146,7 +146,7 @@ function request (data, options, callback) {
       req.end()
     }
 
-    storage.enterWith(store)
+    storage(LEGACY_STORAGE_NAMESPACE).enterWith(store)
   }
 
   // TODO: Figure out why setTimeout is needed to avoid losing the async context

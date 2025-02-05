@@ -6,7 +6,7 @@ const Plugin = require('../../plugins/plugin')
 const iastTelemetry = require('./telemetry')
 const { getInstrumentedMetric, getExecutedMetric, TagKey, EXECUTED_SOURCE, formatTags } =
   require('./telemetry/iast-metric')
-const { storage } = require('../../../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../datadog-core')
 const { getIastContext } = require('./iast-context')
 const instrumentations = require('../../../../datadog-instrumentations/src/helpers/instrumentations')
 const log = require('../../log')
@@ -62,12 +62,12 @@ class IastPlugin extends Plugin {
 
   _getTelemetryHandler (iastSub) {
     return () => {
-      const iastContext = getIastContext(storage.getStore())
+      const iastContext = getIastContext(storage(LEGACY_STORAGE_NAMESPACE).getStore())
       iastSub.increaseExecuted(iastContext)
     }
   }
 
-  _execHandlerAndIncMetric ({ handler, metric, tags, iastContext = getIastContext(storage.getStore()) }) {
+  _execHandlerAndIncMetric ({ handler, metric, tags, iastContext = getIastContext(storage(LEGACY_STORAGE_NAMESPACE).getStore()) }) {
     try {
       const result = handler()
       if (iastTelemetry.isEnabled()) {

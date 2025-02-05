@@ -1,6 +1,6 @@
 'use strict'
 
-const { storage } = require('../../../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../datadog-core')
 
 const dc = require('dc-polyfill')
 const runtimeMetrics = require('../../runtime_metrics')
@@ -25,7 +25,7 @@ const ProfilingContext = Symbol('NativeWallProfiler.ProfilingContext')
 let kSampleCount
 
 function getActiveSpan () {
-  const store = storage.getStore()
+  const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
   return store && store.span
 }
 

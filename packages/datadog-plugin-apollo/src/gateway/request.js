@@ -1,6 +1,6 @@
 'use strict'
 
-const { storage } = require('../../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../datadog-core')
 const ApolloBasePlugin = require('../../../dd-trace/src/plugins/apollo')
 
 let tools
@@ -15,7 +15,7 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
   }
 
   bindStart (ctx) {
-    const store = storage.getStore()
+    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
     const childOf = store ? store.span : null
     const spanData = {
       childOf,

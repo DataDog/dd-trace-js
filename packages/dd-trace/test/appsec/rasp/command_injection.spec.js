@@ -55,7 +55,7 @@ describe('RASP - command_injection.js', () => {
         file: 'cmd'
       }
       const req = {}
-      datadogCore.storage.getStore.returns({ req })
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({ req })
 
       start.publish(ctx)
 
@@ -66,7 +66,7 @@ describe('RASP - command_injection.js', () => {
       const ctx = {
         file: 'cmd'
       }
-      datadogCore.storage.getStore.returns(undefined)
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns(undefined)
 
       start.publish(ctx)
 
@@ -77,7 +77,7 @@ describe('RASP - command_injection.js', () => {
       const ctx = {
         file: 'cmd'
       }
-      datadogCore.storage.getStore.returns({})
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({})
 
       start.publish(ctx)
 
@@ -89,7 +89,7 @@ describe('RASP - command_injection.js', () => {
         fileArgs: ['arg0']
       }
       const req = {}
-      datadogCore.storage.getStore.returns({ req })
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({ req })
 
       start.publish(ctx)
 
@@ -103,7 +103,7 @@ describe('RASP - command_injection.js', () => {
           shell: true
         }
         const req = {}
-        datadogCore.storage.getStore.returns({ req })
+        datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({ req })
 
         start.publish(ctx)
 
@@ -120,7 +120,7 @@ describe('RASP - command_injection.js', () => {
           shell: true
         }
         const req = {}
-        datadogCore.storage.getStore.returns({ req })
+        datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({ req })
 
         start.publish(ctx)
 
@@ -137,7 +137,7 @@ describe('RASP - command_injection.js', () => {
         const req = { req: 'req' }
         const res = { res: 'res' }
         waf.run.returns(wafResult)
-        datadogCore.storage.getStore.returns({ req, res })
+        datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({ req, res })
 
         start.publish(ctx)
 
@@ -152,7 +152,7 @@ describe('RASP - command_injection.js', () => {
           shell: false
         }
         const req = {}
-        datadogCore.storage.getStore.returns({ req })
+        datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({ req })
 
         start.publish(ctx)
 
@@ -169,7 +169,7 @@ describe('RASP - command_injection.js', () => {
           shell: false
         }
         const req = {}
-        datadogCore.storage.getStore.returns({ req })
+        datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({ req })
 
         start.publish(ctx)
 
@@ -186,7 +186,7 @@ describe('RASP - command_injection.js', () => {
         const req = { req: 'req' }
         const res = { res: 'res' }
         waf.run.returns(wafResult)
-        datadogCore.storage.getStore.returns({ req, res })
+        datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({ req, res })
 
         start.publish(ctx)
 

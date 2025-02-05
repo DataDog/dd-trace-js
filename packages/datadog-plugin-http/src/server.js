@@ -1,7 +1,7 @@
 'use strict'
 
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
-const { storage } = require('../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../datadog-core')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../dd-trace/src/appsec/channels')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -22,7 +22,7 @@ class HttpServerPlugin extends ServerPlugin {
   }
 
   start ({ req, res, abortController }) {
-    const store = storage.getStore()
+    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
     const span = web.startSpan(
       this.tracer,
       {

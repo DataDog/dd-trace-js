@@ -49,7 +49,7 @@ describe('RASP - sql_injection', () => {
         }
       }
       const req = {}
-      datadogCore.storage.getStore.returns({ req })
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({ req })
 
       pgQueryStart.publish(ctx)
 
@@ -69,7 +69,7 @@ describe('RASP - sql_injection', () => {
         }
       }
       const req = {}
-      datadogCore.storage.getStore.returns({ req })
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({ req })
 
       pgQueryStart.publish(ctx)
 
@@ -82,7 +82,7 @@ describe('RASP - sql_injection', () => {
           text: 'SELECT 1'
         }
       }
-      datadogCore.storage.getStore.returns(undefined)
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns(undefined)
 
       pgQueryStart.publish(ctx)
 
@@ -95,7 +95,7 @@ describe('RASP - sql_injection', () => {
           text: 'SELECT 1'
         }
       }
-      datadogCore.storage.getStore.returns({})
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({})
 
       pgQueryStart.publish(ctx)
 
@@ -106,7 +106,7 @@ describe('RASP - sql_injection', () => {
       const ctx = {
         query: {}
       }
-      datadogCore.storage.getStore.returns({})
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({})
 
       pgQueryStart.publish(ctx)
 
@@ -120,7 +120,7 @@ describe('RASP - sql_injection', () => {
         sql: 'SELECT 1'
       }
       const req = {}
-      datadogCore.storage.getStore.returns({ req })
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({ req })
 
       mysql2OuterQueryStart.publish(ctx)
 
@@ -138,7 +138,7 @@ describe('RASP - sql_injection', () => {
         sql: 'SELECT 1'
       }
       const req = {}
-      datadogCore.storage.getStore.returns({ req })
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({ req })
 
       mysql2OuterQueryStart.publish(ctx)
 
@@ -149,7 +149,7 @@ describe('RASP - sql_injection', () => {
       const ctx = {
         sql: 'SELECT 1'
       }
-      datadogCore.storage.getStore.returns(undefined)
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns(undefined)
 
       mysql2OuterQueryStart.publish(ctx)
 
@@ -160,7 +160,7 @@ describe('RASP - sql_injection', () => {
       const ctx = {
         sql: 'SELECT 1'
       }
-      datadogCore.storage.getStore.returns({})
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({})
 
       mysql2OuterQueryStart.publish(ctx)
 
@@ -171,7 +171,7 @@ describe('RASP - sql_injection', () => {
       const ctx = {
         sql: 'SELECT 1'
       }
-      datadogCore.storage.getStore.returns({})
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({})
 
       mysql2OuterQueryStart.publish(ctx)
 

@@ -1,7 +1,7 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
-const { storage } = require('../../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../datadog-core')
 const zlib = require('zlib')
 const { SAMPLING_MECHANISM_APPSEC } = require('../../src/constants')
 const { USER_KEEP } = require('../../../../ext/priority')
@@ -141,11 +141,11 @@ describe('reporter', () => {
 
     beforeEach(() => {
       req = {}
-      storage.enterWith({ req })
+      storage(LEGACY_STORAGE_NAMESPACE).enterWith({ req })
     })
 
     afterEach(() => {
-      storage.disable()
+      storage(LEGACY_STORAGE_NAMESPACE).disable()
     })
 
     it('should do nothing when passed incomplete objects', () => {
@@ -184,7 +184,7 @@ describe('reporter', () => {
 
     it('should call updateWafRequestsMetricTags', () => {
       const metrics = { rulesVersion: '1.2.3' }
-      const store = storage.getStore()
+      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
 
       Reporter.reportMetrics(metrics)
 
@@ -194,7 +194,7 @@ describe('reporter', () => {
 
     it('should call updateRaspRequestsMetricTags when raspRule is provided', () => {
       const metrics = { rulesVersion: '1.2.3' }
-      const store = storage.getStore()
+      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
 
       const raspRule = { type: 'rule_type', variant: 'rule_variant' }
 
@@ -218,11 +218,11 @@ describe('reporter', () => {
           'user-agent': 'arachni'
         }
       }
-      storage.enterWith({ req })
+      storage(LEGACY_STORAGE_NAMESPACE).enterWith({ req })
     })
 
     afterEach(() => {
-      storage.disable()
+      storage(LEGACY_STORAGE_NAMESPACE).disable()
     })
 
     it('should add tags to request span when socket is not there', () => {

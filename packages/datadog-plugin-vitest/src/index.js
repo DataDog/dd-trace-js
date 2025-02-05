@@ -1,5 +1,5 @@
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
-const { storage } = require('../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../datadog-core')
 
 const {
   TEST_STATUS,
@@ -70,7 +70,7 @@ class VitestPlugin extends CiPlugin {
       isRetryReasonEfd
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const store = storage.getStore()
+      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
 
       const extraTags = {
         [TEST_SOURCE_FILE]: testSuite
@@ -102,7 +102,7 @@ class VitestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:vitest:test:finish-time', ({ status, task }) => {
-      const store = storage.getStore()
+      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
       const span = store?.span
 
       // we store the finish time to finish at a later hook
@@ -114,7 +114,7 @@ class VitestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:vitest:test:pass', ({ task }) => {
-      const store = storage.getStore()
+      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
       const span = store?.span
 
       if (span) {
@@ -128,7 +128,7 @@ class VitestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:vitest:test:error', ({ duration, error, shouldSetProbe, promises }) => {
-      const store = storage.getStore()
+      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
       const span = store?.span
 
       if (span) {
@@ -221,13 +221,13 @@ class VitestPlugin extends CiPlugin {
         }
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
-      const store = storage.getStore()
+      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
       this.enter(testSuiteSpan, store)
       this.testSuiteSpan = testSuiteSpan
     })
 
     this.addSub('ci:vitest:test-suite:finish', ({ status, onFinish }) => {
-      const store = storage.getStore()
+      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
       const span = store?.span
       if (span) {
         span.setTag(TEST_STATUS, status)
@@ -243,7 +243,7 @@ class VitestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:vitest:test-suite:error', ({ error }) => {
-      const store = storage.getStore()
+      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
       const span = store?.span
       if (span && error) {
         span.setTag('error', error)

@@ -16,17 +16,17 @@ describe('storage', () => {
   })
 
   afterEach(() => {
-    testStorage.enterWith(undefined)
+    testStorage(LEGACY_STORAGE_NAMESPACE).enterWith(undefined)
     testStorage2.enterWith(undefined)
   })
 
   it('should enter a store', done => {
     const store = 'foo'
 
-    testStorage.enterWith(store)
+    testStorage(LEGACY_STORAGE_NAMESPACE).enterWith(store)
 
     setImmediate(() => {
-      expect(testStorage.getStore()).to.equal(store)
+      expect(testStorage(LEGACY_STORAGE_NAMESPACE).getStore()).to.equal(store)
       done()
     })
   })
@@ -35,11 +35,11 @@ describe('storage', () => {
     const store = 'foo'
     const store2 = 'bar'
 
-    testStorage.enterWith(store)
+    testStorage(LEGACY_STORAGE_NAMESPACE).enterWith(store)
     testStorage2.enterWith(store2)
 
     setImmediate(() => {
-      expect(testStorage.getStore()).to.equal(store)
+      expect(testStorage(LEGACY_STORAGE_NAMESPACE).getStore()).to.equal(store)
       expect(testStorage2.getStore()).to.equal(store2)
       done()
     })
@@ -52,7 +52,7 @@ describe('storage', () => {
   it('should not have its store referenced by the underlying async resource', () => {
     const resource = executionAsyncResource()
 
-    testStorage.enterWith({ internal: 'internal' })
+    testStorage(LEGACY_STORAGE_NAMESPACE).enterWith({ internal: 'internal' })
 
     for (const sym of Object.getOwnPropertySymbols(resource)) {
       if (sym.toString() === 'Symbol(kResourceStore)' && resource[sym]) {

@@ -1,6 +1,6 @@
 'use strict'
 
-const { storage } = require('../../../../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../iast-context')
 const overheadController = require('../overhead-controller')
 const { IastPlugin } = require('../iast-plugin')
@@ -48,7 +48,7 @@ class IastContextPlugin extends IastPlugin {
     let isRequestAcquired = false
     let iastContext
 
-    const store = storage.getStore()
+    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
     if (store) {
       const topContext = this.getTopContext()
       const rootSpan = this.getRootSpan(store)
@@ -70,7 +70,7 @@ class IastContextPlugin extends IastPlugin {
   }
 
   finishContext () {
-    const store = storage.getStore()
+    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
     if (store) {
       const topContext = this.getTopContext()
       const iastContext = iastContextFunctions.getIastContext(store, topContext)

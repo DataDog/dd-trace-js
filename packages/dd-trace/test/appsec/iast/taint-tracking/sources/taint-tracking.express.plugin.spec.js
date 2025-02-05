@@ -4,7 +4,7 @@ const axios = require('axios')
 const semver = require('semver')
 const agent = require('../../../../plugins/agent')
 const Config = require('../../../../../src/config')
-const { storage } = require('../../../../../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../../../datadog-core')
 const iast = require('../../../../../src/appsec/iast')
 const iastContextFunctions = require('../../../../../src/appsec/iast/iast-context')
 const { isTainted, getRanges } = require('../../../../../src/appsec/iast/taint-tracking/operations')
@@ -50,7 +50,7 @@ describe('URI sourcing with express', () => {
       const app = express()
       const pathPattern = semver.intersects(version, '>=5.0.0') ? '/path/*splat' : '/path/*'
       app.get(pathPattern, (req, res) => {
-        const store = storage.getStore()
+        const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
         const iastContext = iastContextFunctions.getIastContext(store)
         const isPathTainted = isTainted(iastContext, req.url)
         expect(isPathTainted).to.be.true
@@ -78,7 +78,7 @@ describe('Path params sourcing with express', () => {
 
   withVersions('express', 'express', version => {
     const checkParamIsTaintedAndNext = (req, res, next, param, name) => {
-      const store = storage.getStore()
+      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
       const iastContext = iastContextFunctions.getIastContext(store)
 
       const pathParamValue = name ? req.params[name] : req.params
@@ -123,7 +123,7 @@ describe('Path params sourcing with express', () => {
     it('should taint path params', function (done) {
       const app = express()
       app.get('/:parameter1/:parameter2', (req, res) => {
-        const store = storage.getStore()
+        const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
         const iastContext = iastContextFunctions.getIastContext(store)
 
         for (const pathParamName of ['parameter1', 'parameter2']) {
@@ -156,7 +156,7 @@ describe('Path params sourcing with express', () => {
       const nestedRouter = express.Router({ mergeParams: true })
 
       nestedRouter.get('/:parameterChild', (req, res) => {
-        const store = storage.getStore()
+        const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
         const iastContext = iastContextFunctions.getIastContext(store)
 
         for (const pathParamName of ['parameterParent', 'parameterChild']) {

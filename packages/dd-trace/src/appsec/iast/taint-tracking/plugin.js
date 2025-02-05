@@ -2,7 +2,7 @@
 
 const { SourceIastPlugin } = require('../iast-plugin')
 const { getIastContext } = require('../iast-context')
-const { storage } = require('../../../../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../../datadog-core')
 const { taintObject, newTaintedString, getRanges } = require('./operations')
 const {
   HTTP_REQUEST_BODY,
@@ -39,7 +39,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
 
   onConfigure () {
     const onRequestBody = ({ req }) => {
-      const iastContext = getIastContext(storage.getStore())
+      const iastContext = getIastContext(storage(LEGACY_STORAGE_NAMESPACE).getStore())
       if (iastContext && iastContext.body !== req.body) {
         this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
         iastContext.body = req.body
@@ -70,7 +70,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       { channelName: 'apm:express:middleware:next', tag: HTTP_REQUEST_BODY },
       ({ req }) => {
         if (req && req.body !== null && typeof req.body === 'object') {
-          const iastContext = getIastContext(storage.getStore())
+          const iastContext = getIastContext(storage(LEGACY_STORAGE_NAMESPACE).getStore())
           if (iastContext && iastContext.body !== req.body) {
             this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
             iastContext.body = req.body
@@ -115,7 +115,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.addSub(
       { channelName: 'apm:graphql:resolve:start', tag: HTTP_REQUEST_BODY },
       (data) => {
-        const iastContext = getIastContext(storage.getStore())
+        const iastContext = getIastContext(storage(LEGACY_STORAGE_NAMESPACE).getStore())
         const source = data.context?.source
         const ranges = source && getRanges(iastContext, source)
         if (ranges?.length) {
@@ -128,7 +128,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.addSub(
       { channelName: 'datadog:url:parse:finish' },
       ({ input, base, parsed, isURL }) => {
-        const iastContext = getIastContext(storage.getStore())
+        const iastContext = getIastContext(storage(LEGACY_STORAGE_NAMESPACE).getStore())
         let ranges
 
         if (base) {
@@ -157,7 +157,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
         const origRange = this._taintedURLs.get(context.urlObject)
         if (!origRange) return
 
-        const iastContext = getIastContext(storage.getStore())
+        const iastContext = getIastContext(storage(LEGACY_STORAGE_NAMESPACE).getStore())
         if (!iastContext) return
 
         context.result =
@@ -168,7 +168,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.addInstrumentedSource('http', [HTTP_REQUEST_HEADER_VALUE, HTTP_REQUEST_HEADER_NAME])
   }
 
-  _taintTrackingHandler (type, target, property, iastContext = getIastContext(storage.getStore())) {
+  _taintTrackingHandler (type, target, property, iastContext = getIastContext(storage(LEGACY_STORAGE_NAMESPACE).getStore())) {
     if (!property) {
       taintObject(iastContext, target, type)
     } else if (target[property]) {
@@ -177,7 +177,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   }
 
   _cookiesTaintTrackingHandler (target) {
-    const iastContext = getIastContext(storage.getStore())
+    const iastContext = getIastContext(storage(LEGACY_STORAGE_NAMESPACE).getStore())
     // Prevent tainting cookie names since it leads to taint literal string with same value.
     taintObject(iastContext, target, HTTP_REQUEST_COOKIE_VALUE)
   }
@@ -206,7 +206,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.taintUrl(req, iastContext)
   }
 
-  _taintDatabaseResult (result, dbOrigin, iastContext = getIastContext(storage.getStore()), name) {
+  _taintDatabaseResult (result, dbOrigin, iastContext = getIastContext(storage(LEGACY_STORAGE_NAMESPACE).getStore()), name) {
     if (!iastContext) return result
 
     if (this._rowsToTaint === 0) return result

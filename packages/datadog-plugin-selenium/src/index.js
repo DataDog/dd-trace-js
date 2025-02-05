@@ -1,5 +1,5 @@
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
-const { storage } = require('../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../datadog-core')
 
 const {
   TEST_IS_RUM_ACTIVE,
@@ -39,7 +39,7 @@ class SeleniumPlugin extends CiPlugin {
       browserVersion,
       isRumActive
     }) => {
-      const store = storage.getStore()
+      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
       const span = store?.span
       if (!span) {
         return

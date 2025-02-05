@@ -1,5 +1,5 @@
 const BaseLLMObsPlugin = require('./base')
-const { storage } = require('../../../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../datadog-core')
 const llmobsStore = storage('llmobs')
 
 const {
@@ -29,7 +29,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       if (modelName.includes('embed')) {
         return
       }
-      const span = storage.getStore()?.span
+      const span = storage(LEGACY_STORAGE_NAMESPACE).getStore()?.span
       this.setLLMObsTags({ request, span, response, modelProvider, modelName })
     })
 

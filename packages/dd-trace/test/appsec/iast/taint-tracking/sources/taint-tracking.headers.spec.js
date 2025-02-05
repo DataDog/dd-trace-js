@@ -2,7 +2,7 @@
 
 const axios = require('axios')
 const Config = require('../../../../../src/config')
-const { storage } = require('../../../../../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../../../datadog-core')
 const iast = require('../../../../../src/appsec/iast')
 const iastContextFunctions = require('../../../../../src/appsec/iast/iast-context')
 const { isTainted, getRanges } = require('../../../../../src/appsec/iast/taint-tracking/operations')
@@ -11,7 +11,7 @@ const { testInRequest } = require('../../utils')
 
 describe('Headers sourcing', () => {
   function app (req) {
-    const store = storage.getStore()
+    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
     const iastContext = iastContextFunctions.getIastContext(store)
 
     Object.keys(req.headers).forEach(headerName => {

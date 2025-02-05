@@ -1,7 +1,7 @@
 'use strict'
 
 const { prepareTestServerForIast } = require('../utils')
-const { storage } = require('../../../../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
@@ -29,7 +29,7 @@ describe('sql-injection-analyzer with mysql2', () => {
       describe('has vulnerability', () => {
         testThatRequestHasVulnerability(() => {
           return new Promise((resolve, reject) => {
-            const store = storage.getStore()
+            const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
             const iastCtx = iastContextFunctions.getIastContext(store)
             let sql = 'SELECT 1'
             sql = newTaintedString(iastCtx, sql, 'param', 'Request')

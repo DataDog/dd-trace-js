@@ -10,7 +10,7 @@ const id = require('../id')
 const tagger = require('../tagger')
 const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
-const { storage } = require('../../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const spanleak = require('../spanleak')
@@ -65,7 +65,7 @@ class DatadogSpan {
     this._debug = debug
     this._processor = processor
     this._prioritySampler = prioritySampler
-    this._store = storage.getHandle()
+    this._store = storage(LEGACY_STORAGE_NAMESPACE).getHandle()
     this._duration = undefined
 
     this._events = []

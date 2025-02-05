@@ -788,14 +788,14 @@ describe('Plugin', () => {
             const store = {}
 
             app.use((ctx, next) => {
-              return storage.run(store, () => next())
+              return storage(LEGACY_STORAGE_NAMESPACE).run(store, () => next())
             })
 
             app.use(ctx => {
               ctx.body = ''
 
               try {
-                expect(storage.getStore()).to.equal(store)
+                expect(storage(LEGACY_STORAGE_NAMESPACE).getStore()).to.equal(store)
                 done()
               } catch (e) {
                 done(e)

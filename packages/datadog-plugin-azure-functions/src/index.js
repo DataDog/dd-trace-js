@@ -1,7 +1,7 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { storage } = require('../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../datadog-core')
 const serverless = require('../../dd-trace/src/plugins/util/serverless')
 const web = require('../../dd-trace/src/plugins/util/web')
 
@@ -24,7 +24,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const { functionName, methodName } = ctx
-    const store = storage.getStore()
+    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
 
     const span = this.startSpan(this.operationName(), {
       service: this.serviceName(),

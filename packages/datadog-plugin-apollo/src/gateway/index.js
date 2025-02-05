@@ -1,6 +1,6 @@
 'use strict'
 
-const { storage } = require('../../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../datadog-core')
 const CompositePlugin = require('../../../dd-trace/src/plugins/composite')
 const ApolloGatewayExecutePlugin = require('./execute')
 const ApolloGatewayPostProcessingPlugin = require('./postprocessing')
@@ -25,7 +25,7 @@ class ApolloGatewayPlugin extends CompositePlugin {
   constructor (...args) {
     super(...args)
     this.addSub('apm:apollo:gateway:general:error', (ctx) => {
-      const store = storage.getStore()
+      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
       const span = store?.span
       if (!span) return
       span.setTag('error', ctx.error)

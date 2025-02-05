@@ -1,7 +1,7 @@
 'use strict'
 
 require('..')
-const { storage } = require('../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../datadog-core')
 
 describe('Instrumentation', () => {
   let genericPool
@@ -27,11 +27,11 @@ describe('Instrumentation', () => {
       it('should run the acquire() callback in context where acquire() was called', done => {
         const store = 'store'
 
-        storage.run(store, () => {
+        storage(LEGACY_STORAGE_NAMESPACE).run(store, () => {
           // eslint-disable-next-line n/handle-callback-err
           pool.acquire((err, resource) => {
             pool.release(resource)
-            expect(storage.getStore()).to.equal(store)
+            expect(storage(LEGACY_STORAGE_NAMESPACE).getStore()).to.equal(store)
             done()
           })
         })
@@ -56,20 +56,20 @@ describe('Instrumentation', () => {
         const store = 'store'
         const store2 = 'store2'
 
-        storage.run(store, () => {
+        storage(LEGACY_STORAGE_NAMESPACE).run(store, () => {
           pool.acquire()
             .then(resource => {
               pool.release(resource)
-              expect(storage.getStore()).to.equal(store)
+              expect(storage(LEGACY_STORAGE_NAMESPACE).getStore()).to.equal(store)
             })
             .catch(done)
         })
 
-        storage.run(store2, () => {
+        storage(LEGACY_STORAGE_NAMESPACE).run(store2, () => {
           pool.acquire()
             .then(resource => {
               pool.release(resource)
-              expect(storage.getStore()).to.equal(store2)
+              expect(storage(LEGACY_STORAGE_NAMESPACE).getStore()).to.equal(store2)
               done()
             })
             .catch(done)

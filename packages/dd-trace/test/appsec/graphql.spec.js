@@ -1,7 +1,7 @@
 const proxyquire = require('proxyquire')
 const waf = require('../../src/appsec/waf')
 const web = require('../../src/plugins/util/web')
-const { storage } = require('../../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../datadog-core')
 const addresses = require('../../src/appsec/addresses')
 
 const {
@@ -131,7 +131,7 @@ describe('GraphQL', () => {
         user: [{ id: '1234' }]
       }
 
-      storage.getStore().req = undefined
+      storage(LEGACY_STORAGE_NAMESPACE).getStore().req = undefined
 
       startGraphqlResolve.publish({ context, resolverInfo })
 

@@ -1,7 +1,7 @@
 'use strict'
 
 const { MEASURED } = require('../../../ext/tags')
-const { storage } = require('../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 const API_KEY = 'langchain.request.api_key'
@@ -61,7 +61,7 @@ class LangChainTracingPlugin extends TracingPlugin {
       }
     }, false)
 
-    const store = storage.getStore() || {}
+    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore() || {}
     ctx.currentStore = { ...store, span }
 
     return ctx.currentStore

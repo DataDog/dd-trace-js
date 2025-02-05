@@ -114,16 +114,16 @@ describe('user_blocking', () => {
       it('should get req and res from local storage when they are not passed', () => {
         const ret = userBlocking.blockRequest(tracer)
         expect(ret).to.be.true
-        expect(storage.getStore).to.have.been.calledOnce
+        expect(storage(LEGACY_STORAGE_NAMESPACE).getStore).to.have.been.calledOnce
         expect(block).to.be.calledOnceWithExactly(req, res, rootSpan)
       })
 
       it('should log warning when req or res is not available', () => {
-        storage.getStore.returns(undefined)
+        storage(LEGACY_STORAGE_NAMESPACE).getStore.returns(undefined)
 
         const ret = userBlocking.blockRequest(tracer)
         expect(ret).to.be.false
-        expect(storage.getStore).to.have.been.calledOnce
+        expect(storage(LEGACY_STORAGE_NAMESPACE).getStore).to.have.been.calledOnce
         expect(log.warn)
           .to.have.been.calledOnceWithExactly('[ASM] Requests or response object not available in blockRequest')
         expect(block).to.not.have.been.called

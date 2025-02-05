@@ -49,7 +49,7 @@ describe('RASP - ssrf.js', () => {
         }
       }
       const req = {}
-      datadogCore.storage.getStore.returns({ req })
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({ req })
 
       httpClientRequestStart.publish(ctx)
 
@@ -65,7 +65,7 @@ describe('RASP - ssrf.js', () => {
         }
       }
       const req = {}
-      datadogCore.storage.getStore.returns({ req })
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({ req })
 
       httpClientRequestStart.publish(ctx)
 
@@ -78,7 +78,7 @@ describe('RASP - ssrf.js', () => {
           uri: 'http://example.com'
         }
       }
-      datadogCore.storage.getStore.returns(undefined)
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns(undefined)
 
       httpClientRequestStart.publish(ctx)
 
@@ -91,7 +91,7 @@ describe('RASP - ssrf.js', () => {
           uri: 'http://example.com'
         }
       }
-      datadogCore.storage.getStore.returns({})
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({})
 
       httpClientRequestStart.publish(ctx)
 
@@ -102,7 +102,7 @@ describe('RASP - ssrf.js', () => {
       const ctx = {
         args: {}
       }
-      datadogCore.storage.getStore.returns({})
+      datadogCore.storage(LEGACY_STORAGE_NAMESPACE).getStore.returns({})
 
       httpClientRequestStart.publish(ctx)
 

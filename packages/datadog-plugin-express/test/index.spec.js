@@ -1309,12 +1309,12 @@ describe('Plugin', () => {
           const store = {}
 
           app.use((req, res, next) => {
-            storage.run(store, () => next())
+            storage(LEGACY_STORAGE_NAMESPACE).run(store, () => next())
           })
 
           app.get('/user', (req, res) => {
             try {
-              expect(storage.getStore()).to.equal(store)
+              expect(storage(LEGACY_STORAGE_NAMESPACE).getStore()).to.equal(store)
               done()
             } catch (e) {
               done(e)

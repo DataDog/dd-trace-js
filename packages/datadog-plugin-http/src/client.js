@@ -1,7 +1,7 @@
 'use strict'
 
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
-const { storage } = require('../../datadog-core')
+const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../datadog-core')
 const tags = require('../../../ext/tags')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const formats = require('../../../ext/formats')
@@ -21,7 +21,7 @@ class HttpClientPlugin extends ClientPlugin {
 
   bindStart (message) {
     const { args, http = {} } = message
-    const store = storage.getStore()
+    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
     const options = args.options
     const agent = options.agent || options._defaultAgent || http.globalAgent || {}
     const protocol = options.protocol || agent.protocol || 'http:'
