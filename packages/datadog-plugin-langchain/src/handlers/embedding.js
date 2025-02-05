@@ -43,7 +43,10 @@ class LangChainEmbeddingHandler extends LangChainHandler {
   }
 
   extractApiKey (instance) {
-    const apiKey = instance.clientConfig?.apiKey
+    const apiKey =
+      instance.clientConfig?.apiKey ||
+      instance.apiKey ||
+      instance.client?.apiKey
     if (!apiKey || apiKey.length < 4) return ''
     return `...${apiKey.slice(-4)}`
   }
