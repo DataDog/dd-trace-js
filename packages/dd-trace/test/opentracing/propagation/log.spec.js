@@ -38,7 +38,7 @@ describe('LogPropagator', () => {
       propagator.inject(spanContext, carrier)
 
       expect(carrier).to.have.property('dd')
-      expect(carrier.dd).to.have.property('trace_id', '0000000000000000000000000000007b')
+      expect(carrier.dd).to.have.property('trace_id', '123')
       expect(carrier.dd).to.have.property('span_id', '456')
     })
 
@@ -109,7 +109,7 @@ describe('LogPropagator', () => {
       propagator.inject(spanContext, carrier)
 
       expect(carrier).to.have.property('dd')
-      expect(carrier.dd).to.have.property('trace_id', '8765432187654321000000000000007b')
+      expect(carrier.dd).to.have.property('trace_id', '123')
       expect(carrier.dd).to.have.property('span_id', '456')
     })
   })

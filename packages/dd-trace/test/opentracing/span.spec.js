@@ -4,7 +4,6 @@ require('../setup/tap')
 
 const Config = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
-const idClass = require('../../src/id')
 
 const { channel } = require('dc-polyfill')
 const startCh = channel('dd-trace:span:start')
@@ -304,13 +303,13 @@ describe('Span', () => {
   describe('span pointers', () => {
     it('should add a span pointer with a zero context', () => {
       // Override id stub for this test to return '0' when called with '0'
-      id.withArgs('0').returns(idClass('0', 10))
+      id.withArgs('0').returns('0')
 
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 
       span.addSpanPointer('pointer_kind', 'd', 'abc123')
       expect(span._links).to.have.lengthOf(1)
-      expect(span._links[0].context.toTraceId()).to.equal('00000000000000000000000000000000')
+      expect(span._links[0].context.toTraceId()).to.equal('0')
       expect(span._links[0].context.toSpanId()).to.equal('0')
       expect(span._links[0].attributes).to.deep.equal({
         'ptr.kind': 'pointer_kind',
@@ -328,7 +327,7 @@ describe('Span', () => {
       'ptr.hash': '1234567',
       'link.kind': 'span-pointer'
     })
-    expect(span._links[1].context.toTraceId()).to.equal('00000000000000000000000000000000')
+    expect(span._links[1].context.toTraceId()).to.equal('0')
     expect(span._links[1].context.toSpanId()).to.equal('0')
   })
 

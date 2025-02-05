@@ -21,7 +21,6 @@ describe('TextMapPropagator', () => {
   let textMap
   let baggageItems
   let config
-  let traceId128Bit
 
   const createContext = (params = {}) => {
     const trace = { started: [], finished: [], tags: {} }
@@ -44,7 +43,6 @@ describe('TextMapPropagator', () => {
     TextMapPropagator = require('../../../src/opentracing/propagation/text_map')
     config = new Config({ tagsHeaderMaxLength: 512 })
     propagator = new TextMapPropagator(config)
-    traceId128Bit = '0000000000000000000000000000007b'
     textMap = {
       'x-datadog-trace-id': '123',
       'x-datadog-parent-id': '456',
@@ -77,7 +75,7 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      expect(carrier).to.have.property('x-datadog-trace-id', traceId128Bit)
+      expect(carrier).to.have.property('x-datadog-trace-id', '123')
       expect(carrier).to.have.property('x-datadog-parent-id', '456')
       expect(carrier).to.have.property('ot-baggage-foo', 'bar')
       expect(carrier).to.have.property('baggage', 'foo=bar')
@@ -400,7 +398,7 @@ describe('TextMapPropagator', () => {
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
 
-      expect(spanContext.toTraceId()).to.equal(traceId128Bit)
+      expect(spanContext.toTraceId()).to.equal(carrier['x-datadog-trace-id'])
       expect(spanContext.toSpanId()).to.equal(carrier['x-datadog-parent-id'])
       expect(spanContext._baggageItems.foo).to.equal(carrier['ot-baggage-foo'])
       expect(spanContext._baggageItems).to.deep.equal({ foo: 'bar' })
@@ -470,12 +468,11 @@ describe('TextMapPropagator', () => {
     it('should convert signed IDs to unsigned', () => {
       textMap['x-datadog-trace-id'] = '-123'
       textMap['x-datadog-parent-id'] = '-456'
-      const unsigned128BitTraceId = '0000000000000000ffffffffffffff85'
 
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
 
-      expect(spanContext.toTraceId()).to.equal(unsigned128BitTraceId) // -123 casted to 128 bit
+      expect(spanContext.toTraceId()).to.equal('18446744073709551493') // -123 casted to uint64
       expect(spanContext.toSpanId()).to.equal('18446744073709551160') // -456 casted to uint64
     })
 
@@ -589,7 +586,7 @@ describe('TextMapPropagator', () => {
       // No traceparent yet, will skip ahead to datadog
       const second = propagator.extract(textMap)
 
-      expect(second.toTraceId()).to.equal(traceId128Bit)
+      expect(second.toTraceId()).to.equal(textMap['x-datadog-trace-id'])
       expect(second.toSpanId()).to.equal(textMap['x-datadog-parent-id'])
 
       // Add a traceparent header and it will prioritize it
@@ -719,7 +716,7 @@ describe('TextMapPropagator', () => {
       const first = propagator.extract(textMap)
 
       expect(first._links.length).to.equal(1)
-      expect(first._links[0].context.toTraceId()).to.equal(traceId128Bit)
+      expect(first._links[0].context.toTraceId()).to.equal(textMap['x-datadog-trace-id'])
       expect(first._links[0].context.toSpanId()).to.equal(textMap['x-datadog-parent-id'])
       expect(first._links[0].attributes.reason).to.equal('terminated_context')
       expect(first._links[0].attributes.context_headers).to.equal('datadog')
