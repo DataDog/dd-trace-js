@@ -451,6 +451,7 @@ describe('TextMapPropagator', () => {
       expect(spanContextD._baggageItems).to.deep.equal({})
     })
 
+    // temporary test. On the contrary, it SHOULD extract baggage
     it('should not extract baggage when it is the only propagation style', () => {
       config = new Config({
         tracePropagationStyle: {
