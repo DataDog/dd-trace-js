@@ -1,8 +1,6 @@
 'use strict'
 
-const { dirname } = require('path')
-const { SourceMapConsumer } = require('source-map')
-const { loadSourceMap } = require('./source-maps')
+const { getSourceMappedLine } = require('./source-maps')
 const session = require('./session')
 const { MAX_SNAPSHOTS_PER_SECOND_PER_PROBE, MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE } = require('./defaults')
 const { findScriptFromPartialPath, probes, breakpoints } = require('./state')
@@ -40,11 +38,7 @@ async function addBreakpoint (probe) {
   const { url, scriptId, sourceMapURL, source } = script
 
   if (sourceMapURL) {
-    const dir = dirname(new URL(url).pathname)
-    const sourceMap = await loadSourceMap(dir, sourceMapURL)
-    const consumer = await new SourceMapConsumer(sourceMap)
-    line = consumer.generatedPositionFor({ source, line, column: 0 }).line
-    consumer.destroy()
+    line = await getSourceMappedLine(url, source, line, sourceMapURL)
   }
 
   log.debug(

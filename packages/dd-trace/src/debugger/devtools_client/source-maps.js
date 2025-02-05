@@ -1,13 +1,14 @@
 'use strict'
 
-const { join } = require('path')
+const { join, dirname } = require('path')
 const { readFileSync } = require('fs')
 const { readFile } = require('fs/promises')
+const { SourceMapConsumer } = require('source-map')
 
 const cache = new Map()
 let cacheTimer = null
 
-module.exports = {
+const self = module.exports = {
   async loadSourceMap (dir, url) {
     if (url.startsWith('data:')) return loadInlineSourceMap(url)
     const path = join(dir, url)
@@ -20,6 +21,15 @@ module.exports = {
     const path = join(dir, url)
     if (cache.has(path)) return cache.get(path)
     return cacheIt(path, JSON.parse(readFileSync(path, 'utf8')))
+  },
+
+  async getSourceMappedLine (url, source, line, sourceMapURL) {
+    const dir = dirname(new URL(url).pathname)
+    return await SourceMapConsumer.with(
+      await self.loadSourceMap(dir, sourceMapURL),
+      null,
+      (consumer) => consumer.generatedPositionFor({ source, line, column: 0 }).line
+    )
   }
 }
 
