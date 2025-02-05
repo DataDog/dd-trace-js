@@ -5,7 +5,7 @@ const os = require('os')
 const path = require('path')
 const semver = require('semver')
 const { prepareTestServerForIast } = require('../utils')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
@@ -48,7 +48,7 @@ describe('sql-injection-analyzer with knex', () => {
 
           describe('simple raw query', () => {
             testThatRequestHasVulnerability(() => {
-              const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+              const store = storage(SPAN_NAMESPACE).getStore()
               const iastCtx = iastContextFunctions.getIastContext(store)
 
               let sql = 'SELECT 1'
@@ -70,7 +70,7 @@ describe('sql-injection-analyzer with knex', () => {
 
           describe('nested raw query', () => {
             testThatRequestHasVulnerability(() => {
-              const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+              const store = storage(SPAN_NAMESPACE).getStore()
               const iastCtx = iastContextFunctions.getIastContext(store)
 
               let taintedSql = 'SELECT 1'
@@ -90,7 +90,7 @@ describe('sql-injection-analyzer with knex', () => {
 
           describe('nested raw query - onRejected as then argument', () => {
             testThatRequestHasVulnerability(() => {
-              const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+              const store = storage(SPAN_NAMESPACE).getStore()
               const iastCtx = iastContextFunctions.getIastContext(store)
 
               let taintedSql = 'SELECT 1'
@@ -110,7 +110,7 @@ describe('sql-injection-analyzer with knex', () => {
 
           describe('nested raw query - with catch', () => {
             testThatRequestHasVulnerability(() => {
-              const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+              const store = storage(SPAN_NAMESPACE).getStore()
               const iastCtx = iastContextFunctions.getIastContext(store)
 
               let taintedSql = 'SELECT 1'
@@ -131,7 +131,7 @@ describe('sql-injection-analyzer with knex', () => {
           describe('nested raw query - asCallback', () => {
             testThatRequestHasVulnerability(() => {
               return new Promise((resolve, reject) => {
-                const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+                const store = storage(SPAN_NAMESPACE).getStore()
                 const iastCtx = iastContextFunctions.getIastContext(store)
 
                 let taintedSql = 'SELECT 1'

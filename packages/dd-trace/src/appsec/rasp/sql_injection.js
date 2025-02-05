@@ -6,7 +6,7 @@ const {
   wafRunFinished,
   mysql2OuterQueryStart
 } = require('../channels')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../../../datadog-core')
 const addresses = require('../addresses')
 const waf = require('../waf')
 const { RULE_TYPES, handleResult } = require('./utils')
@@ -49,7 +49,7 @@ function analyzePgSqlInjection (ctx) {
 }
 
 function analyzeSqlInjection (query, dbSystem, abortController) {
-  const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+  const store = storage(SPAN_NAMESPACE).getStore()
   if (!store) return
 
   const { req, res } = store
@@ -91,7 +91,7 @@ function hasAddressesObjectInputAddress (addressesObject) {
 function clearQuerySet ({ payload }) {
   if (!payload) return
 
-  const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+  const store = storage(SPAN_NAMESPACE).getStore()
   if (!store) return
 
   const { req } = store

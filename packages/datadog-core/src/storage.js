@@ -2,7 +2,15 @@
 
 const { AsyncLocalStorage } = require('async_hooks')
 
-const LEGACY_STORAGE_NAMESPACE = 'legacy'
+/**
+ * ⚠️THIS MAY NOT BE THE NAMESPACE YOU WANT!
+ *
+ * This mostly exists as a "default" namespace for storage and was added
+ * retroactively throughout our codebase. There may be a better option for
+ * different use cases
+ * @type {string}
+ */
+const SPAN_NAMESPACE = 'span'
 
 /**
  * This is exactly the same as AsyncLocalStorage, with the exception that it
@@ -36,7 +44,7 @@ class DatadogStorage extends AsyncLocalStorage {
    *
    * TODO: Refactor the Scope class to use a span-only store and remove this.
    *
-   * @returns {T}
+   * @returns {{}}
    */
   getHandle () {
     return super.getStore()
@@ -49,7 +57,7 @@ class DatadogStorage extends AsyncLocalStorage {
    * key. This is useful if you've stashed a handle somewhere and want to
    * retrieve the store with it.
    *
-   * @param handle {T | undefined}
+   * @param handle {{}}
    * @returns {T | undefined}
    */
   getStore (handle) {
@@ -111,4 +119,4 @@ function storage (namespace) {
   return storages[namespace]
 }
 
-module.exports = { storage, LEGACY_STORAGE_NAMESPACE }
+module.exports = { storage, SPAN_NAMESPACE }

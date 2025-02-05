@@ -1,7 +1,7 @@
 'use strict'
 
 const { fsOperationStart, incomingHttpRequestStart } = require('../channels')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../../../datadog-core')
 const { enable: enableFsPlugin, disable: disableFsPlugin, RASP_MODULE } = require('./fs-plugin')
 const { FS_OPERATION_PATH } = require('../addresses')
 const waf = require('../waf')
@@ -47,7 +47,7 @@ function onFirstReceivedRequest () {
 }
 
 function analyzeLfi (ctx) {
-  const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+  const store = storage(SPAN_NAMESPACE).getStore()
   if (!store) return
 
   const { req, fs, res } = store

@@ -1,5 +1,5 @@
 'use strict'
 
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('./src/storage')
+const { storage, SPAN_NAMESPACE } = require('./src/storage')
 
-module.exports = { storage, LEGACY_STORAGE_NAMESPACE }
+module.exports = { storage, SPAN_NAMESPACE }

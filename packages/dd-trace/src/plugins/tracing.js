@@ -1,7 +1,7 @@
 'use strict'
 
 const Plugin = require('./plugin')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
 const { COMPONENT } = require('../constants')
 
@@ -16,7 +16,7 @@ class TracingPlugin extends Plugin {
   }
 
   get activeSpan () {
-    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+    const store = storage(SPAN_NAMESPACE).getStore()
 
     return store && store.span
   }
@@ -102,7 +102,7 @@ class TracingPlugin extends Plugin {
   }
 
   startSpan (name, { childOf, kind, meta, metrics, service, resource, type } = {}, enter = true) {
-    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+    const store = storage(SPAN_NAMESPACE).getStore()
     if (store && childOf === undefined) {
       childOf = store.span
     }
@@ -126,7 +126,7 @@ class TracingPlugin extends Plugin {
 
     // TODO: Remove this after migration to TracingChannel is done.
     if (enter) {
-      storage(LEGACY_STORAGE_NAMESPACE).enterWith({ ...store, span })
+      storage(SPAN_NAMESPACE).enterWith({ ...store, span })
     }
 
     return span

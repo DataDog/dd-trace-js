@@ -4,7 +4,7 @@ const { USER_ID } = require('../addresses')
 const waf = require('../waf')
 const { getRootSpan } = require('./utils')
 const { block, getBlockingAction } = require('../blocking')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../../../datadog-core')
 const { setUserTags } = require('./set_user')
 const log = require('../../log')
 
@@ -34,7 +34,7 @@ function checkUserAndSetUser (tracer, user) {
 
 function blockRequest (tracer, req, res) {
   if (!req || !res) {
-    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+    const store = storage(SPAN_NAMESPACE).getStore()
     if (store) {
       req = req || store.req
       res = res || store.res

@@ -225,12 +225,12 @@ describe('Plugin', () => {
           const store = {}
 
           server.use((req, res, next) => {
-            storage(LEGACY_STORAGE_NAMESPACE).run(store, () => next())
+            storage(SPAN_NAMESPACE).run(store, () => next())
           })
 
           server.get('/user', (req, res, next) => {
             try {
-              expect(storage(LEGACY_STORAGE_NAMESPACE).getStore()).to.equal(store)
+              expect(storage(SPAN_NAMESPACE).getStore()).to.equal(store)
               done()
             } catch (e) {
               done(e)

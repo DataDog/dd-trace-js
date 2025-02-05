@@ -5,7 +5,7 @@ const {
 const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../../datadog-core')
 
 class Kinesis extends BaseAwsSdkPlugin {
   static get id () { return 'kinesis' }
@@ -21,7 +21,7 @@ class Kinesis extends BaseAwsSdkPlugin {
 
     this.addSub('apm:aws:response:start:kinesis', obj => {
       const { request, response } = obj
-      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+      const store = storage(SPAN_NAMESPACE).getStore()
       const plugin = this
 
       // if we have either of these operations, we want to store the streamName param
@@ -49,7 +49,7 @@ class Kinesis extends BaseAwsSdkPlugin {
         }
 
         // get the stream name that should have been stored previously
-        const { streamName } = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+        const { streamName } = storage(SPAN_NAMESPACE).getStore()
 
         // extract DSM context after as we might not have a parent-child but may have a DSM context
         this.responseExtractDSMContext(
@@ -59,7 +59,7 @@ class Kinesis extends BaseAwsSdkPlugin {
     })
 
     this.addSub('apm:aws:response:finish:kinesis', err => {
-      const { span } = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+      const { span } = storage(SPAN_NAMESPACE).getStore()
       this.finish(span, null, err)
     })
   }
@@ -79,7 +79,7 @@ class Kinesis extends BaseAwsSdkPlugin {
     if (!params || !params.StreamName) return
 
     const streamName = params.StreamName
-    storage(LEGACY_STORAGE_NAMESPACE).enterWith({ ...store, streamName })
+    storage(SPAN_NAMESPACE).enterWith({ ...store, streamName })
   }
 
   responseExtract (params, operation, response) {

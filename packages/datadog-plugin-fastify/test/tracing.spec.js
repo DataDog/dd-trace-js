@@ -309,15 +309,15 @@ describe('Plugin', () => {
             const storage = new AsyncLocalStorage()
             const store = {}
 
-            global.getStore = () => storage(LEGACY_STORAGE_NAMESPACE).getStore()
+            global.getStore = () => storage(SPAN_NAMESPACE).getStore()
 
             app.addHook('onRequest', (request, reply, next) => {
-              storage(LEGACY_STORAGE_NAMESPACE).run(store, () => next())
+              storage(SPAN_NAMESPACE).run(store, () => next())
             })
 
             app.get('/user', (request, reply) => {
               try {
-                expect(storage(LEGACY_STORAGE_NAMESPACE).getStore()).to.equal(store)
+                expect(storage(SPAN_NAMESPACE).getStore()).to.equal(store)
                 done()
               } catch (e) {
                 done(e)

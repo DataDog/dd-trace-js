@@ -4,18 +4,18 @@ require('../../../dd-trace/test/setup/tap')
 
 const { executionAsyncId } = require('async_hooks')
 const { expect } = require('chai')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../../datadog-core')
 const { AsyncResource } = require('../../src/helpers/instrument')
 
 describe('helpers/instrument', () => {
   describe('AsyncResource', () => {
     it('should bind statically', () => {
-      storage(LEGACY_STORAGE_NAMESPACE).run('test1', () => {
+      storage(SPAN_NAMESPACE).run('test1', () => {
         const tested = AsyncResource.bind(() => {
-          expect(storage(LEGACY_STORAGE_NAMESPACE).getStore()).to.equal('test1')
+          expect(storage(SPAN_NAMESPACE).getStore()).to.equal('test1')
         })
 
-        storage(LEGACY_STORAGE_NAMESPACE).run('test2', () => {
+        storage(SPAN_NAMESPACE).run('test2', () => {
           tested()
         })
       })
@@ -34,12 +34,12 @@ describe('helpers/instrument', () => {
     })
 
     it('should bind a specific instance', () => {
-      storage(LEGACY_STORAGE_NAMESPACE).run('test1', () => {
+      storage(SPAN_NAMESPACE).run('test1', () => {
         const asyncResource = new AsyncResource('test')
 
-        storage(LEGACY_STORAGE_NAMESPACE).run('test2', () => {
+        storage(SPAN_NAMESPACE).run('test2', () => {
           const tested = asyncResource.bind((a, b, c) => {
-            expect(storage(LEGACY_STORAGE_NAMESPACE).getStore()).to.equal('test1')
+            expect(storage(SPAN_NAMESPACE).getStore()).to.equal('test1')
             expect(test.asyncResource).to.equal(asyncResource)
             expect(test).to.have.length(3)
           })

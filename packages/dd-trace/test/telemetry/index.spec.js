@@ -6,7 +6,7 @@ const tracerVersion = require('../../../../package.json').version
 const proxyquire = require('proxyquire').noPreserveCache()
 const http = require('http')
 const { once } = require('events')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../../datadog-core')
 const os = require('os')
 const sinon = require('sinon')
 
@@ -24,7 +24,7 @@ describe('telemetry', () => {
     // If we don't no-op the server inside it, it will trace it, which will
     // screw up this test file entirely. -- bengl
 
-    storage(LEGACY_STORAGE_NAMESPACE).run({ noop: true }, () => {
+    storage(SPAN_NAMESPACE).run({ noop: true }, () => {
       traceAgent = http.createServer(async (req, res) => {
         const chunks = []
         for await (const chunk of req) {
@@ -832,7 +832,7 @@ describe('AVM OSS', () => {
         before((done) => {
           clock = sinon.useFakeTimers()
 
-          storage(LEGACY_STORAGE_NAMESPACE).run({ noop: true }, () => {
+          storage(SPAN_NAMESPACE).run({ noop: true }, () => {
             traceAgent = http.createServer(async (req, res) => {
               const chunks = []
               for await (const chunk of req) {

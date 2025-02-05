@@ -1,6 +1,6 @@
 'use strict'
 
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../../datadog-core')
 const { trace, ROOT_CONTEXT, propagation } = require('@opentelemetry/api')
 const DataDogSpanContext = require('../opentracing/span_context')
 

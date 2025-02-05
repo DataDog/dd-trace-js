@@ -3,7 +3,7 @@
 const dc = require('dc-polyfill')
 const axios = require('axios')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
 
 withVersions('body-parser', 'body-parser', version => {
   describe('body parser instrumentation', () => {
@@ -77,7 +77,7 @@ withVersions('body-parser', 'body-parser', version => {
       let payload
 
       function handler (data) {
-        store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+        store = storage(SPAN_NAMESPACE).getStore()
         payload = data
       }
       bodyParserReadCh.subscribe(handler)

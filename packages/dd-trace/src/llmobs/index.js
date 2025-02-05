@@ -63,7 +63,7 @@ function disable () {
 // since LLMObs traces can extend between services and be the same trace,
 // we need to propogate the parent id.
 function handleLLMObsParentIdInjection ({ carrier }) {
-  const parent = storage(LEGACY_STORAGE_NAMESPACE).getStore()?.span
+  const parent = storage(SPAN_NAMESPACE).getStore()?.span
   if (!parent) return
 
   const parentId = parent?.context().toSpanId()

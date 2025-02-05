@@ -1,7 +1,7 @@
 'use strict'
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
 
 const {
   TEST_STATUS,
@@ -155,13 +155,13 @@ class MochaPlugin extends CiPlugin {
       if (itrCorrelationId) {
         testSuiteSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
       }
-      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+      const store = storage(SPAN_NAMESPACE).getStore()
       this.enter(testSuiteSpan, store)
       this._testSuites.set(testSuite, testSuiteSpan)
     })
 
     this.addSub('ci:mocha:test-suite:finish', (status) => {
-      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+      const store = storage(SPAN_NAMESPACE).getStore()
       if (store && store.span) {
         const span = store.span
         // the test status of the suite may have been set in ci:mocha:test-suite:error already
@@ -174,7 +174,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test-suite:error', (err) => {
-      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+      const store = storage(SPAN_NAMESPACE).getStore()
       if (store && store.span) {
         const span = store.span
         span.setTag('error', err)
@@ -183,7 +183,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:start', (testInfo) => {
-      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+      const store = storage(SPAN_NAMESPACE).getStore()
       const span = this.startTestSpan(testInfo)
 
       this.enter(span, store)
@@ -195,7 +195,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:finish', ({ status, hasBeenRetried, isLastRetry }) => {
-      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+      const store = storage(SPAN_NAMESPACE).getStore()
       const span = store?.span
 
       if (span) {
@@ -227,7 +227,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:skip', (testInfo) => {
-      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+      const store = storage(SPAN_NAMESPACE).getStore()
       // skipped through it.skip, so the span is not created yet
       // for this test
       if (!store) {
@@ -237,7 +237,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:error', (err) => {
-      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+      const store = storage(SPAN_NAMESPACE).getStore()
       const span = store?.span
       if (err && span) {
         if (err.constructor.name === 'Pending' && !this.forbidPending) {
@@ -250,7 +250,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, willBeRetried, err, test }) => {
-      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+      const store = storage(SPAN_NAMESPACE).getStore()
       const span = store?.span
       if (span) {
         span.setTag(TEST_STATUS, 'fail')

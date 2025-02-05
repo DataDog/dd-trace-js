@@ -37,7 +37,7 @@ class LLMObsPlugin extends TracingPlugin {
     // ie OpenAI fine tuning jobs, file jobs, etc.
     if (registerOptions) {
       ctx.llmobs = {} // initialize context-based namespace
-      llmobsStorage(LEGACY_STORAGE_NAMESPACE).enterWith({ span })
+      llmobsStorage(SPAN_NAMESPACE).enterWith({ span })
       ctx.llmobs.parent = parent
 
       this._tagger.registerLLMObsSpan(span, { parent, ...registerOptions })
@@ -54,7 +54,7 @@ class LLMObsPlugin extends TracingPlugin {
     if (!LLMObsTagger.tagMap.has(span)) return
 
     const parent = ctx.llmobs.parent
-    llmobsStorage(LEGACY_STORAGE_NAMESPACE).enterWith({ span: parent })
+    llmobsStorage(SPAN_NAMESPACE).enterWith({ span: parent })
   }
 
   asyncEnd (ctx) {
@@ -86,7 +86,7 @@ class LLMObsPlugin extends TracingPlugin {
   }
 
   getLLMObsParent () {
-    const store = llmobsStorage(LEGACY_STORAGE_NAMESPACE).getStore()
+    const store = llmobsStorage(SPAN_NAMESPACE).getStore()
     return store?.span
   }
 }

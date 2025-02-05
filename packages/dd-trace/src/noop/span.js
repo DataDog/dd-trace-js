@@ -2,11 +2,11 @@
 
 const NoopSpanContext = require('./span_context')
 const id = require('../id')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../datadog-core') // TODO: noop storage?
+const { storage, SPAN_NAMESPACE } = require('../../../datadog-core') // TODO: noop storage?
 
 class NoopSpan {
   constructor (tracer, parent) {
-    this._store = storage(LEGACY_STORAGE_NAMESPACE).getHandle()
+    this._store = storage(SPAN_NAMESPACE).getHandle()
     this._noopTracer = tracer
     this._noopContext = this._createContext(parent)
   }

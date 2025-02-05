@@ -3,7 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios').create({ validateStatus: null })
 const dc = require('dc-polyfill')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
 
 withVersions('passport-local', 'passport-local', version => {
   describe('passport-local instrumentation', () => {
@@ -154,7 +154,7 @@ withVersions('passport-local', 'passport-local', version => {
 
     it('should block when subscriber aborts', async () => {
       subscriberStub = sinon.spy(({ abortController }) => {
-        storage(LEGACY_STORAGE_NAMESPACE).getStore().req.res.writeHead(403).end('Blocked')
+        storage(SPAN_NAMESPACE).getStore().req.res.writeHead(403).end('Blocked')
         abortController.abort()
       })
 

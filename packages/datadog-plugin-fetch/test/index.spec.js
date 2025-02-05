@@ -3,7 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const tags = require('../../../ext/tags')
 const { expect } = require('chai')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { DD_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
@@ -338,13 +338,13 @@ describe('Plugin', function () {
               clearTimeout(timer)
             })
 
-          const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+          const store = storage(SPAN_NAMESPACE).getStore()
 
-          storage(LEGACY_STORAGE_NAMESPACE).enterWith({ noop: true })
+          storage(SPAN_NAMESPACE).enterWith({ noop: true })
 
           fetch(`http://localhost:${port}/user`).catch(() => {})
 
-          storage(LEGACY_STORAGE_NAMESPACE).enterWith(store)
+          storage(SPAN_NAMESPACE).enterWith(store)
         })
       })
     })

@@ -381,13 +381,13 @@ class LLMObs extends NoopLLMObs {
   }
 
   _active () {
-    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+    const store = storage(SPAN_NAMESPACE).getStore()
     return store?.span
   }
 
   _activate (span, options, fn) {
     const parent = this._active()
-    if (this.enabled) storage(LEGACY_STORAGE_NAMESPACE).enterWith({ span })
+    if (this.enabled) storage(SPAN_NAMESPACE).enterWith({ span })
 
     if (options) {
       this._tagger.registerLLMObsSpan(span, {
@@ -399,7 +399,7 @@ class LLMObs extends NoopLLMObs {
     try {
       return fn()
     } finally {
-      if (this.enabled) storage(LEGACY_STORAGE_NAMESPACE).enterWith({ span: parent })
+      if (this.enabled) storage(SPAN_NAMESPACE).enterWith({ span: parent })
     }
   }
 

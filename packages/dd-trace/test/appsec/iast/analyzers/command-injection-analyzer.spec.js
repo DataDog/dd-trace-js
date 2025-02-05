@@ -1,7 +1,7 @@
 'use strict'
 
 const { prepareTestServerForIast } = require('../utils')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 
@@ -9,7 +9,7 @@ describe('command injection analyzer', () => {
   prepareTestServerForIast('command injection analyzer',
     (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
       testThatRequestHasVulnerability(() => {
-        const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+        const store = storage(SPAN_NAMESPACE).getStore()
         const iastContext = iastContextFunctions.getIastContext(store)
         const command = newTaintedString(iastContext, 'ls -la', 'param', 'Request')
         const childProcess = require('child_process')

@@ -30,7 +30,7 @@ const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { isBlocked, block, setTemplates, getBlockingAction } = require('./blocking')
 const UserTracking = require('./user_tracking')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../../datadog-core')
 const graphql = require('./graphql')
 const rasp = require('./rasp')
 
@@ -91,7 +91,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
   if (body === undefined || body === null) return
 
   if (!req) {
-    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+    const store = storage(SPAN_NAMESPACE).getStore()
     req = store?.req
   }
 
@@ -186,7 +186,7 @@ function incomingHttpEndTranslator ({ req, res }) {
 }
 
 function onPassportVerify ({ framework, login, user, success, abortController }) {
-  const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+  const store = storage(SPAN_NAMESPACE).getStore()
   const rootSpan = store?.req && web.root(store.req)
 
   if (!rootSpan) {
@@ -200,7 +200,7 @@ function onPassportVerify ({ framework, login, user, success, abortController })
 }
 
 function onPassportDeserializeUser ({ user, abortController }) {
-  const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+  const store = storage(SPAN_NAMESPACE).getStore()
   const rootSpan = store?.req && web.root(store.req)
 
   if (!rootSpan) {
@@ -217,7 +217,7 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
   if (!query || typeof query !== 'object') return
 
   if (!req) {
-    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+    const store = storage(SPAN_NAMESPACE).getStore()
     req = store?.req
   }
 

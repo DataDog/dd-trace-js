@@ -1,6 +1,6 @@
 'use strict'
 
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../../../datadog-core')
 const log = require('../../log')
 
 const waf = {
@@ -48,7 +48,7 @@ function update (newRules) {
 
 function run (data, req, raspRule) {
   if (!req) {
-    const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+    const store = storage(SPAN_NAMESPACE).getStore()
     if (!store || !store.req) {
       log.warn('[ASM] Request object not available in waf.run')
       return

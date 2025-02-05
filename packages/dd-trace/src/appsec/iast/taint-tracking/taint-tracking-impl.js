@@ -2,7 +2,7 @@
 
 const dc = require('dc-polyfill')
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../iast-context')
 const { EXECUTED_PROPAGATION } = require('../telemetry/iast-metric')
 const { isDebugAllowed } = require('../telemetry/verbosity')
@@ -39,7 +39,7 @@ function getTransactionId (iastContext) {
 }
 
 function getContextDefault () {
-  const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+  const store = storage(SPAN_NAMESPACE).getStore()
   return iastContextFunctions.getIastContext(store)
 }
 

@@ -5,7 +5,7 @@ const { NOSQL_MONGODB_INJECTION } = require('../vulnerabilities')
 const { getRanges, addSecureMark } = require('../taint-tracking/operations')
 const { getNodeModulesPaths } = require('../path-line')
 const { getNextSecureMark } = require('../taint-tracking/secure-marks-generator')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../../../../datadog-core')
 const { getIastContext } = require('../iast-context')
 const { HTTP_REQUEST_PARAMETER, HTTP_REQUEST_BODY } = require('../taint-tracking/source-types')
 
@@ -38,7 +38,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     this.configureSanitizers()
 
     const onStart = ({ filters }) => {
-      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+      const store = storage(SPAN_NAMESPACE).getStore()
       if (store && !store.nosqlAnalyzed && filters?.length) {
         filters.forEach(filter => {
           this.analyze({ filter }, store)
@@ -51,14 +51,14 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     const onStartAndEnterWithStore = (message) => {
       const store = onStart(message || {})
       if (store) {
-        storage(LEGACY_STORAGE_NAMESPACE).enterWith({ ...store, nosqlAnalyzed: true, nosqlParentStore: store })
+        storage(SPAN_NAMESPACE).enterWith({ ...store, nosqlAnalyzed: true, nosqlParentStore: store })
       }
     }
 
     const onFinish = () => {
-      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+      const store = storage(SPAN_NAMESPACE).getStore()
       if (store?.nosqlParentStore) {
-        storage(LEGACY_STORAGE_NAMESPACE).enterWith(store.nosqlParentStore)
+        storage(SPAN_NAMESPACE).enterWith(store.nosqlParentStore)
       }
     }
 
@@ -74,7 +74,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
 
   configureSanitizers () {
     this.addNotSinkSub('datadog:express-mongo-sanitize:filter:finish', ({ sanitizedProperties, req }) => {
-      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+      const store = storage(SPAN_NAMESPACE).getStore()
       const iastContext = getIastContext(store)
 
       if (iastContext) { // do nothing if we are not in an iast request
@@ -100,7 +100,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     })
 
     this.addNotSinkSub('datadog:express-mongo-sanitize:sanitize:finish', ({ sanitizedObject }) => {
-      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+      const store = storage(SPAN_NAMESPACE).getStore()
       const iastContext = getIastContext(store)
 
       if (iastContext) { // do nothing if we are not in an iast request

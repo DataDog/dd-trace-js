@@ -1,7 +1,7 @@
 'use strict'
 
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
 const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams/processor')
 
 class RheaConsumerPlugin extends ConsumerPlugin {
@@ -11,7 +11,7 @@ class RheaConsumerPlugin extends ConsumerPlugin {
     super(...args)
 
     this.addTraceSub('dispatch', ({ state }) => {
-      const span = storage(LEGACY_STORAGE_NAMESPACE).getStore().span
+      const span = storage(SPAN_NAMESPACE).getStore().span
       span.setTag('amqp.delivery.state', state)
     })
   }

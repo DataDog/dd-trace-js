@@ -2,7 +2,7 @@
 
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../../datadog-core')
 const { getHeadersSize } = require('../../../dd-trace/src/datastreams/processor')
 const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
 
@@ -20,7 +20,7 @@ class Sqs extends BaseAwsSdkPlugin {
 
     this.addSub('apm:aws:response:start:sqs', obj => {
       const { request, response } = obj
-      const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+      const store = storage(SPAN_NAMESPACE).getStore()
       const plugin = this
       const contextExtraction = this.responseExtract(request.params, request.operation, response)
       let span
@@ -47,7 +47,7 @@ class Sqs extends BaseAwsSdkPlugin {
     })
 
     this.addSub('apm:aws:response:finish:sqs', err => {
-      const { span } = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+      const { span } = storage(SPAN_NAMESPACE).getStore()
       this.finish(span, null, err)
     })
   }

@@ -2,7 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { promisify } = require('util')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
 const { ERROR_TYPE, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 
 const PLUGINS = ['dns', 'node:dns']
@@ -232,7 +232,7 @@ describe('Plugin', () => {
             clearTimeout(timer)
           })
 
-        storage(LEGACY_STORAGE_NAMESPACE).run({ noop: true }, () => {
+        storage(SPAN_NAMESPACE).run({ noop: true }, () => {
           resolver.resolve('lvh.me', () => {})
         })
       })

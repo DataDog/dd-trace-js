@@ -1,7 +1,7 @@
 'use strict'
 
 const { prepareTestServerForIast } = require('../utils')
-const { storage, LEGACY_STORAGE_NAMESPACE } = require('../../../../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const { SQL_ROW_VALUE } = require('../../../../src/appsec/iast/taint-tracking/source-types')
@@ -22,14 +22,14 @@ describe('template-injection-analyzer with pug', () => {
           })
 
           testThatRequestHasVulnerability(() => {
-            const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+            const store = storage(SPAN_NAMESPACE).getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const template = newTaintedString(iastContext, source, 'param', 'Request')
             lib.compile(template)
           }, 'TEMPLATE_INJECTION')
 
           testThatRequestHasVulnerability(() => {
-            const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+            const store = storage(SPAN_NAMESPACE).getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const template = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
             lib.compile(template)
@@ -52,14 +52,14 @@ describe('template-injection-analyzer with pug', () => {
           })
 
           testThatRequestHasVulnerability(() => {
-            const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+            const store = storage(SPAN_NAMESPACE).getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const template = newTaintedString(iastContext, source, 'param', 'Request')
             lib.compileClient(template)
           }, 'TEMPLATE_INJECTION')
 
           testThatRequestHasVulnerability(() => {
-            const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+            const store = storage(SPAN_NAMESPACE).getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const template = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
             lib.compileClient(template)
@@ -81,14 +81,14 @@ describe('template-injection-analyzer with pug', () => {
           })
 
           testThatRequestHasVulnerability(() => {
-            const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+            const store = storage(SPAN_NAMESPACE).getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const template = newTaintedString(iastContext, source, 'param', 'Request')
             lib.compileClientWithDependenciesTracked(template, {})
           }, 'TEMPLATE_INJECTION')
 
           testThatRequestHasVulnerability(() => {
-            const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+            const store = storage(SPAN_NAMESPACE).getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const template = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
             lib.compileClientWithDependenciesTracked(template, {})
@@ -110,14 +110,14 @@ describe('template-injection-analyzer with pug', () => {
           })
 
           testThatRequestHasVulnerability(() => {
-            const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+            const store = storage(SPAN_NAMESPACE).getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const str = newTaintedString(iastContext, source, 'param', 'Request')
             lib.render(str)
           }, 'TEMPLATE_INJECTION')
 
           testThatRequestHasVulnerability(() => {
-            const store = storage(LEGACY_STORAGE_NAMESPACE).getStore()
+            const store = storage(SPAN_NAMESPACE).getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
             lib.render(str)
