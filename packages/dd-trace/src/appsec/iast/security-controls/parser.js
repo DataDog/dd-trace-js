@@ -58,7 +58,12 @@ function parseControl (control) {
 
   method = method?.trim()
 
-  parameters = getParameters(parameters)
+  try {
+    parameters = getParameters(parameters)
+  } catch (e) {
+    log.warn('[ASM] Invalid non-numeric security control parameter %s', parameters)
+    return
+  }
 
   return { type, secureMarks, file, method, parameters }
 }
@@ -72,12 +77,11 @@ function getSecureMarks (marks) {
 function getParameters (parameters) {
   return parameters?.split(SECURITY_CONTROL_ELEMENT_DELIMITER)
     .map(param => {
-      let parsedParam = parseInt(param, 10)
+      const parsedParam = parseInt(param, 10)
 
-      // TODO: should we discard the whole securityControl??
+      // discard the securityControl if there is an incorrect parameter
       if (isNaN(parsedParam)) {
-        log.warn('[ASM] Invalid non-numeric security control parameter %s', param)
-        parsedParam = undefined
+        throw new Error('Invalid non-numeric security control parameter')
       }
 
       return parsedParam

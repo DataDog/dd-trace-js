@@ -42,6 +42,15 @@ describe('IAST Security Controls parser', () => {
       assert.isUndefined(civ)
     })
 
+    it('should not parse invalid parameter in security control definition', () => {
+      const conf = 'INPUT_VALIDATOR:INVALID_MARK:bar/foo/custom_input_validator.js:validate:not_numeric_parameter'
+      const securityControls = parse(conf)
+
+      const civ = securityControls.get(civFilename)
+
+      assert.isUndefined(civ)
+    })
+
     it('should parse valid simple security control definition without parameters', () => {
       const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:bar/foo/custom_input_validator.js:validate'
       const securityControls = parse(conf)
