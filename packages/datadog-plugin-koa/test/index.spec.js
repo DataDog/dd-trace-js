@@ -5,6 +5,7 @@ const axios = require('axios')
 const semver = require('semver')
 const { ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
+const {SPAN_NAMESPACE} = require("../../datadog-core");
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 

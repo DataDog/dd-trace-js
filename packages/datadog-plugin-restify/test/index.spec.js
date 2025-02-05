@@ -5,6 +5,7 @@ const axios = require('axios')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE } = require('../../dd-trace/src/constants')
+const {SPAN_NAMESPACE} = require("../../datadog-core");
 
 describe('Plugin', () => {
   let tracer
