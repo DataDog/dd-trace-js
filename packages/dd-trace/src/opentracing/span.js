@@ -330,7 +330,8 @@ class DatadogSpan {
       startTime = dateNow()
       spanContext = new SpanContext({
         traceId: spanId,
-        spanId
+        spanId,
+        traceId128BitGenerationEnabled: fields.traceId128BitGenerationEnabled
       })
       spanContext._trace.startTime = startTime
 
