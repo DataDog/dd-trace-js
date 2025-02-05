@@ -111,7 +111,7 @@ describe('SpanContext', () => {
         spanId: id('456', 10)
       })
 
-      expect(spanContext.toTraceId()).to.equal('123')
+      expect(spanContext.toTraceId()).to.equal('0000000000000000000000000000007b')
     })
   })
 
