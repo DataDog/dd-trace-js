@@ -348,7 +348,7 @@ describe('OTel Span', () => {
       'ptr.hash': '1234567',
       'link.kind': 'span-pointer'
     })
-    expect(_links[0].context.toTraceId()).to.equal('0')
+    expect(_links[1].context.toTraceId()).to.equal('0')
     expect(_links[1].context.toSpanId()).to.equal('0')
   })
 
