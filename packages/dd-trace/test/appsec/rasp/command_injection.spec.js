@@ -3,6 +3,7 @@
 const proxyquire = require('proxyquire')
 const addresses = require('../../../src/appsec/addresses')
 const { childProcessExecutionTracingChannel } = require('../../../src/appsec/channels')
+const { SPAN_NAMESPACE } = require("../../../../datadog-core");
 
 const { start } = childProcessExecutionTracingChannel
 
@@ -11,8 +12,10 @@ describe('RASP - command_injection.js', () => {
 
   beforeEach(() => {
     datadogCore = {
-      storage: {
-        getStore: sinon.stub()
+      storage: () => {
+        return {
+          getStore: sinon.stub()
+        }
       }
     }
 

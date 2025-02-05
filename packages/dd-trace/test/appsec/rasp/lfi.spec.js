@@ -5,14 +5,17 @@ const { assert } = require('chai')
 const { fsOperationStart, incomingHttpRequestStart } = require('../../../src/appsec/channels')
 const { FS_OPERATION_PATH } = require('../../../src/appsec/addresses')
 const { RASP_MODULE } = require('../../../src/appsec/rasp/fs-plugin')
+const {SPAN_NAMESPACE} = require("../../../../datadog-core");
 
 describe('RASP - lfi.js', () => {
   let waf, datadogCore, lfi, web, blocking, appsecFsPlugin, config
 
   beforeEach(() => {
     datadogCore = {
-      storage: {
-        getStore: sinon.stub()
+      storage: () => {
+        return {
+          getStore: sinon.stub()
+        }
       }
     }
 

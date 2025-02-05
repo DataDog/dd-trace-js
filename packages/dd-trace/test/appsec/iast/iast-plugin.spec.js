@@ -45,8 +45,10 @@ describe('IAST Plugin', () => {
       }
 
       datadogCore = {
-        storage: {
-          getStore: sinon.stub()
+        storage: () => {
+          return {
+            getStore: () => sinon.stub()
+          }
         }
       }
 

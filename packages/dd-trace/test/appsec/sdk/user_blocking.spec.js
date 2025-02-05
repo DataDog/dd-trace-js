@@ -10,6 +10,7 @@ const path = require('path')
 const waf = require('../../../src/appsec/waf')
 const { USER_ID } = require('../../../src/appsec/addresses')
 const blocking = require('../../../src/appsec/blocking')
+const {SPAN_NAMESPACE} = require("../../../../datadog-core");
 
 const resultActions = {
   block_request: {
@@ -44,8 +45,10 @@ describe('user_blocking', () => {
 
       block = sinon.stub()
 
-      storage = {
-        getStore: sinon.stub().returns({ req, res })
+      storage = () => {
+        return {
+          getStore: sinon.stub().returns({ req, res })
+        }
       }
 
       log = {

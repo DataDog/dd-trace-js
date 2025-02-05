@@ -45,8 +45,10 @@ describe('IAST TaintTracking Operations', () => {
   const store = {}
 
   const datadogCore = {
-    storage: {
-      getStore: () => store
+    storage: () => {
+      return {
+        getStore: () => store
+      }
     }
   }
 
@@ -531,8 +533,10 @@ describe('IAST TaintTracking Operations', () => {
 
     it('Should not call taintedUtils.trim method if an Error happens', () => {
       const datadogCoreErr = {
-        storage: {
-          getStore: () => { throw new Error() }
+        storage: () => {
+          return {
+            getStore: () => { throw new Error() }
+          }
         }
       }
       const taintTrackingImpl = proxyquire('../../../../src/appsec/iast/taint-tracking/taint-tracking-impl', {

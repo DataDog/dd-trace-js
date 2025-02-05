@@ -3,14 +3,17 @@
 const { pgQueryStart, mysql2OuterQueryStart } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
 const proxyquire = require('proxyquire')
+const {SPAN_NAMESPACE} = require("../../../../datadog-core");
 
 describe('RASP - sql_injection', () => {
   let waf, datadogCore, sqli
 
   beforeEach(() => {
     datadogCore = {
-      storage: {
-        getStore: sinon.stub()
+      storage: () => {
+        return {
+          getStore: sinon.stub()
+        }
       }
     }
 

@@ -3,14 +3,17 @@
 const proxyquire = require('proxyquire')
 const { httpClientRequestStart } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
+const {SPAN_NAMESPACE} = require("../../../../datadog-core");
 
 describe('RASP - ssrf.js', () => {
   let waf, datadogCore, ssrf
 
   beforeEach(() => {
     datadogCore = {
-      storage: {
-        getStore: sinon.stub()
+      storage: () => {
+        return {
+          getStore: sinon.stub()
+        }
       }
     }
 
