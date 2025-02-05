@@ -108,6 +108,8 @@ const TEST_LEVEL_EVENT_TYPES = [
   'test_session_end'
 ]
 
+const DD_TEST_IS_USER_PROVIDED_SERVICE = '_dd.test.is_user_provided_service'
+
 // Dynamic instrumentation - Test optimization integration tags
 const DI_ERROR_DEBUG_INFO_CAPTURED = 'error.debug_info_captured'
 const DI_DEBUG_ERROR_PREFIX = '_dd.debug.error'
@@ -199,7 +201,8 @@ module.exports = {
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
-  getFormattedError
+  getFormattedError,
+  DD_TEST_IS_USER_PROVIDED_SERVICE
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -275,6 +278,7 @@ function getTestEnvironmentMetadata (testFramework, config) {
 
   const metadata = {
     [TEST_FRAMEWORK]: testFramework,
+    [DD_TEST_IS_USER_PROVIDED_SERVICE]: (config && config.isServiceUserProvided) ? 'true' : 'false',
     ...gitMetadata,
     ...ciMetadata,
     ...userProvidedGitMetadata,
