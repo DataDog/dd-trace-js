@@ -42,7 +42,8 @@ const {
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
-  TEST_RETRY_REASON
+  TEST_RETRY_REASON,
+  DD_TEST_IS_USER_PROVIDED_SERVICE
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
@@ -206,6 +207,7 @@ versions.forEach(version => {
                   assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
                   assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
                   assert.equal(meta[TEST_SOURCE_FILE].startsWith('ci-visibility/features'), true)
+                  assert.equal(meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
                   // Can read DD_TAGS
                   assert.propertyVal(meta, 'test.customtag', 'customvalue')
                   assert.propertyVal(meta, 'test.customtag2', 'customvalue2')
@@ -228,7 +230,8 @@ versions.forEach(version => {
                 env: {
                   ...envVars,
                   DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-                  DD_TEST_SESSION_NAME: 'my-test-session'
+                  DD_TEST_SESSION_NAME: 'my-test-session',
+                  DD_SERVICE: undefined
                 },
                 stdio: 'pipe'
               }
@@ -1994,6 +1997,36 @@ versions.forEach(version => {
             done()
           }).catch(done)
         })
+      })
+    })
+
+    it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', (done) => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          tests.forEach(test => {
+            assert.equal(test.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'true')
+          })
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_SERVICE: 'my-service'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
       })
     })
   })
