@@ -28,7 +28,7 @@ jobs:
 
   get-scenarios:
     name: Get parameters
-    uses: DataDog/system-tests/.github/workflows/compute-workflow-parameters.yml@994e6f9976f16c13c1cb15c02714d786e0eb8eb1 # main
+    uses: DataDog/system-tests/.github/workflows/compute-workflow-parameters.yml@main
     with:
       library: nodejs
       scenarios_groups: essentials,appsec_rasp
@@ -87,7 +87,7 @@ jobs:
   parametric:
     needs:
       - build-artifacts
-    uses: DataDog/system-tests/.github/workflows/run-parametric.yml@994e6f9976f16c13c1cb15c02714d786e0eb8eb1 # main
+    uses: DataDog/system-tests/.github/workflows/run-parametric.yml@main
     secrets: inherit
     with:
       library: nodejs
