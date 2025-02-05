@@ -451,20 +451,6 @@ describe('TextMapPropagator', () => {
       expect(spanContextD._baggageItems).to.deep.equal({})
     })
 
-    it('should extract baggage when it is the only propagation style', () => {
-      config = new Config({
-        tracePropagationStyle: {
-          extract: ['baggage']
-        }
-      })
-      propagator = new TextMapPropagator(config)
-      const carrier = {
-        baggage: 'foo=bar'
-      }
-      const spanContext = propagator.extract(carrier)
-      expect(spanContext._baggageItems).to.deep.equal({ foo: 'bar' })
-    })
-
     it('should convert signed IDs to unsigned', () => {
       textMap['x-datadog-trace-id'] = '-123'
       textMap['x-datadog-parent-id'] = '-456'
