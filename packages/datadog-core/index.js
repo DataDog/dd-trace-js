@@ -1,5 +1,5 @@
 'use strict'
 
-const storage = require('./src/storage')
+const { storage, SPAN_NAMESPACE } = require('./src/storage')
 
-module.exports = { storage }
+module.exports = { storage, SPAN_NAMESPACE }

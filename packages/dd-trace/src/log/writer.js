@@ -1,6 +1,6 @@
 'use strict'
 
-const { storage } = require('../../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../../datadog-core')
 const { LogChannel } = require('./channels')
 const { Log } = require('./log')
 const defaultLogger = {
@@ -15,11 +15,11 @@ let logger = defaultLogger
 let logChannel = new LogChannel()
 
 function withNoop (fn) {
-  const store = storage.getStore()
+  const store = storage(SPAN_NAMESPACE).getStore()
 
-  storage.enterWith({ noop: true })
+  storage(SPAN_NAMESPACE).enterWith({ noop: true })
   fn()
-  storage.enterWith(store)
+  storage(SPAN_NAMESPACE).enterWith(store)
 }
 
 function unsubscribeAll () {

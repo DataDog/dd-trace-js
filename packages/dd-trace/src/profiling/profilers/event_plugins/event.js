@@ -1,4 +1,4 @@
-const { storage } = require('../../../../../datadog-core')
+const { storage, SPAN_NAMESPACE } = require('../../../../../datadog-core')
 const TracingPlugin = require('../../../plugins/tracing')
 const { performance } = require('perf_hooks')
 
