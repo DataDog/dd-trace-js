@@ -15,13 +15,14 @@ const {
 const { IAST_ENABLED_TAG_KEY } = require('./tags')
 const iastTelemetry = require('./telemetry')
 const { enable: enableFsPlugin, disable: disableFsPlugin, IAST_MODULE } = require('../rasp/fs-plugin')
+const RateLimiter = require('../../rate_limiter')
 
 // TODO Change to `apm:http:server:request:[start|close]` when the subscription
 //  order of the callbacks can be enforce
 const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
 const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
 const iastResponseEnd = dc.channel('datadog:iast:response-end')
-
+const tracerConfigure = dc.channel('datadog:tracer:configure')
 let isEnabled = false
 
 function enable (config, _tracer) {
@@ -33,6 +34,9 @@ function enable (config, _tracer) {
   enableTaintTracking(config.iast, iastTelemetry.verbosity)
   requestStart.subscribe(onIncomingHttpRequestStart)
   requestClose.subscribe(onIncomingHttpRequestEnd)
+  if (config.apmTracingEnabled === false) {
+    tracerConfigure.subscribe(onTracerConfigure)
+  }
   overheadController.configure(config.iast)
   overheadController.startGlobalContext()
   vulnerabilityReporter.start(config, _tracer)
@@ -52,6 +56,7 @@ function disable () {
   overheadController.finishGlobalContext()
   if (requestStart.hasSubscribers) requestStart.unsubscribe(onIncomingHttpRequestStart)
   if (requestClose.hasSubscribers) requestClose.unsubscribe(onIncomingHttpRequestEnd)
+  if (tracerConfigure.hasSubscribers) tracerConfigure.unsubscribe(onTracerConfigure)
   vulnerabilityReporter.stop()
 }
 
@@ -98,6 +103,12 @@ function onIncomingHttpRequestEnd (data) {
     if (iastContextFunctions.cleanIastContext(store, topContext, iastContext)) {
       overheadController.releaseRequest()
     }
+  }
+}
+
+function onTracerConfigure ({ tracer }) {
+  if (tracer?._prioritySampler) {
+    tracer._prioritySampler._limiter = new RateLimiter(1, 'minute')
   }
 }
 

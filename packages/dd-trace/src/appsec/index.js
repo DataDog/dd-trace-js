@@ -18,7 +18,8 @@ const {
   responseBody,
   responseWriteHead,
   responseSetHeader,
-  routerParam
+  routerParam,
+  tracerConfigure
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -33,6 +34,7 @@ const UserTracking = require('./user_tracking')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
 const rasp = require('./rasp')
+const RateLimiter = require('../rate_limiter')
 
 const responseAnalyzedSet = new WeakSet()
 
@@ -77,6 +79,10 @@ function enable (_config) {
     responseBody.subscribe(onResponseBody)
     responseWriteHead.subscribe(onResponseWriteHead)
     responseSetHeader.subscribe(onResponseSetHeader)
+
+    if (_config.apmTracingEnabled === false) {
+      tracerConfigure.subscribe(onTracerConfigure)
+    }
 
     isEnabled = true
     config = _config
@@ -305,6 +311,12 @@ function handleResults (actions, req, res, rootSpan, abortController) {
   }
 }
 
+function onTracerConfigure ({ tracer }) {
+  if (tracer?._prioritySampler) {
+    tracer._prioritySampler._limiter = new RateLimiter(1, 'minute')
+  }
+}
+
 function disable () {
   isEnabled = false
   config = null
@@ -335,6 +347,7 @@ function disable () {
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
   if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
   if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseSetHeader)
+  if (tracerConfigure.hasSubscribers) tracerConfigure.unsubscribe(onTracerConfigure)
 }
 
 module.exports = {

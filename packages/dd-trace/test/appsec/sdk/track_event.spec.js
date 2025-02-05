@@ -5,8 +5,8 @@ const agent = require('../../plugins/agent')
 const axios = require('axios')
 const tracer = require('../../../../../index')
 const { LOGIN_SUCCESS, LOGIN_FAILURE, USER_ID, USER_LOGIN } = require('../../../src/appsec/addresses')
-const { SAMPLING_MECHANISM_APPSEC } = require('../../../src/constants')
 const { USER_KEEP } = require('../../../../../ext/priority')
+const { ASM } = require('../../../src/standalone/product')
 
 describe('track_event', () => {
   describe('Internal API', () => {
@@ -16,7 +16,6 @@ describe('track_event', () => {
     let rootSpan
     let getRootSpan
     let setUserTags
-    let sample
     let waf
     let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent
 
@@ -39,8 +38,6 @@ describe('track_event', () => {
 
       setUserTags = sinon.stub()
 
-      sample = sinon.stub()
-
       waf = {
         run: sinon.spy()
       }
@@ -52,9 +49,6 @@ describe('track_event', () => {
         },
         './set_user': {
           setUserTags
-        },
-        '../standalone': {
-          sample
         },
         '../waf': waf
       })
@@ -109,8 +103,7 @@ describe('track_event', () => {
             'appsec.events.users.login.success.metakey3': 'metaValue3'
           })
         expect(prioritySampler.setPriority)
-          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
-        expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
         expect(waf.run).to.have.been.calledOnceWithExactly({
           persistent: {
             [LOGIN_SUCCESS]: null,
@@ -133,8 +126,7 @@ describe('track_event', () => {
           'appsec.events.users.login.success.usr.login': 'user_id'
         })
         expect(prioritySampler.setPriority)
-          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
-        expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
         expect(waf.run).to.have.been.calledOnceWithExactly({
           persistent: {
             [LOGIN_SUCCESS]: null,
@@ -157,8 +149,7 @@ describe('track_event', () => {
           'appsec.events.users.login.success.usr.login': 'user_login'
         })
         expect(prioritySampler.setPriority)
-          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
-        expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
         expect(waf.run).to.have.been.calledOnceWithExactly({
           persistent: {
             [LOGIN_SUCCESS]: null,
@@ -213,8 +204,7 @@ describe('track_event', () => {
           'appsec.events.users.login.failure.metakey3': 'metaValue3'
         })
         expect(prioritySampler.setPriority)
-          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
-        expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
         expect(waf.run).to.have.been.calledOnceWithExactly({
           persistent: {
             [LOGIN_FAILURE]: null,
@@ -243,8 +233,7 @@ describe('track_event', () => {
           'appsec.events.users.login.failure.metakey3': 'metaValue3'
         })
         expect(prioritySampler.setPriority)
-          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
-        expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
         expect(waf.run).to.have.been.calledOnceWithExactly({
           persistent: {
             [LOGIN_FAILURE]: null,
@@ -266,8 +255,7 @@ describe('track_event', () => {
           'appsec.events.users.login.failure.usr.exists': 'true'
         })
         expect(prioritySampler.setPriority)
-          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
-        expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
         expect(waf.run).to.have.been.calledOnceWithExactly({
           persistent: {
             [LOGIN_FAILURE]: null,
@@ -316,8 +304,7 @@ describe('track_event', () => {
           'appsec.events.custom_event.metakey2': 'metaValue2'
         })
         expect(prioritySampler.setPriority)
-          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
-        expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
       })
 
       it('should call addTags without metadata', () => {
@@ -330,8 +317,7 @@ describe('track_event', () => {
           '_dd.appsec.events.custom_event.sdk': 'true'
         })
         expect(prioritySampler.setPriority)
-          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
-        expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
+          .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
       })
     })
   })
