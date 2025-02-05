@@ -80,8 +80,7 @@ function enable (_config) {
     responseWriteHead.subscribe(onResponseWriteHead)
     responseSetHeader.subscribe(onResponseSetHeader)
 
-    const apmTracingEnabled = _config.apmTracing?.enabled ?? true
-    if (!apmTracingEnabled) {
+    if (_config.apmTracingEnabled === false) {
       tracerConfigure.subscribe(onTracerConfigure)
     }
 

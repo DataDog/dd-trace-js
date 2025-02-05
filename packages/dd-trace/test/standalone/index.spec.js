@@ -28,7 +28,7 @@ describe('Disabled APM Tracing or Standalone', () => {
 
   beforeEach(() => {
     config = {
-      apmTracing: { enabled: false },
+      apmTracingEnabled: false,
 
       tracePropagationStyle: {
         inject: ['datadog', 'tracecontext'],
@@ -69,7 +69,7 @@ describe('Disabled APM Tracing or Standalone', () => {
     })
 
     it('should not subscribe to start span if apmTracing enabled', () => {
-      delete config.apmTracing
+      config.apmTracingEnabled = true
 
       standalone.configure(config)
 
@@ -109,7 +109,7 @@ describe('Disabled APM Tracing or Standalone', () => {
     })
 
     it('should not return a prioritySampler when standalone ASM is disabled', () => {
-      const prioritySampler = standalone.configure({ apmTracing: { enabled: true } })
+      const prioritySampler = standalone.configure({ apmTracingEnabled: true })
 
       assert.isUndefined(prioritySampler)
     })
@@ -123,7 +123,7 @@ describe('Disabled APM Tracing or Standalone', () => {
 
   describe('onStartSpan', () => {
     it('should not add _dd.apm.enabled tag when standalone is disabled', () => {
-      delete config.apmTracing
+      config.apmTracingEnabled = true
       standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
@@ -244,7 +244,7 @@ describe('Disabled APM Tracing or Standalone', () => {
     })
 
     it('should keep priority if apm tracing is enabled', () => {
-      delete config.apmTracing
+      config.apmTracingEnabled = true
       standalone.configure(config)
 
       const carrier = {
@@ -307,7 +307,7 @@ describe('Disabled APM Tracing or Standalone', () => {
     })
 
     it('should not reset priority if standalone disabled', () => {
-      delete config.apmTracing
+      config.apmTracingEnabled = true
       standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {

@@ -16,8 +16,7 @@ function configure (config) {
   if (injectCh.hasSubscribers) injectCh.unsubscribe(onSpanInject)
   if (extractCh.hasSubscribers) extractCh.unsubscribe(onSpanExtract)
 
-  const apmTracingEnabled = config.apmTracing?.enabled ?? true
-  if (apmTracingEnabled) return
+  if (config.apmTracingEnabled !== false) return
 
   startCh.subscribe(onSpanStart)
   injectCh.subscribe(onSpanInject)

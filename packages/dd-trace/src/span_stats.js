@@ -127,7 +127,7 @@ class SpanStatsProcessor {
     url,
     env,
     tags,
-    apmTracing,
+    apmTracingEnabled,
     version
   } = {}) {
     this.exporter = new SpanStatsExporter({
@@ -140,7 +140,6 @@ class SpanStatsProcessor {
     this.bucketSizeNs = interval * 1e9
     this.buckets = new TimeBuckets()
     this.hostname = os.hostname()
-    const apmTracingEnabled = apmTracing?.enabled ?? true
     this.enabled = enabled && apmTracingEnabled
     this.env = env
     this.tags = tags || {}

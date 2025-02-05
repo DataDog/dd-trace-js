@@ -443,7 +443,7 @@ class Config {
 
     const defaults = setHiddenProperty(this, '_defaults', {})
 
-    this._setBoolean(defaults, 'apmTracing.enabled', true)
+    this._setBoolean(defaults, 'apmTracingEnabled', true)
     this._setValue(defaults, 'appsec.apiSecurity.enabled', true)
     this._setValue(defaults, 'appsec.apiSecurity.sampleDelay', 30)
     this._setValue(defaults, 'appsec.blockedTemplateGraphql', undefined)
@@ -716,7 +716,7 @@ class Config {
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
-    this._setBoolean(env, 'apmTracing.enabled', coalesce(
+    this._setBoolean(env, 'apmTracingEnabled', coalesce(
       DD_APM_TRACING_ENABLED && isTrue(DD_APM_TRACING_ENABLED),
       DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED && isFalse(DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED)
     ))
@@ -916,8 +916,8 @@ class Config {
 
     tagger.add(tags, options.tags)
 
-    this._setBoolean(opts, 'apmTracing.enabled', coalesce(
-      options.apmTracing?.enabled,
+    this._setBoolean(opts, 'apmTracingEnabled', coalesce(
+      options.apmTracingEnabled,
       options.experimental?.appsec?.standalone && !options.experimental.appsec.standalone.enabled
     ))
     this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec.apiSecurity?.enabled)

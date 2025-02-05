@@ -241,7 +241,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
-    expect(config).to.have.nested.property('apmTracing.enabled', true)
+    expect(config).to.have.nested.property('apmTracingEnabled', true)
     expect(config).to.have.nested.property('appsec.enabled', undefined)
     expect(config).to.have.nested.property('appsec.rules', undefined)
     expect(config).to.have.nested.property('appsec.rasp.enabled', true)
@@ -277,7 +277,7 @@ describe('Config', () => {
     expect(updateConfig).to.be.calledOnce
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
-      { name: 'apmTracing.enabled', value: true, origin: 'default' },
+      { name: 'apmTracingEnabled', value: true, origin: 'default' },
       { name: 'appsec.blockedTemplateHtml', value: undefined, origin: 'default' },
       { name: 'appsec.blockedTemplateJson', value: undefined, origin: 'default' },
       { name: 'appsec.enabled', value: undefined, origin: 'default' },
@@ -599,7 +599,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
-    expect(config).to.have.nested.property('apmTracing.enabled', false)
+    expect(config).to.have.nested.property('apmTracingEnabled', false)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rasp.enabled', false)
     expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
@@ -642,7 +642,7 @@ describe('Config', () => {
     expect(updateConfig).to.be.calledOnce
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
-      { name: 'apmTracing.enabled', value: false, origin: 'env_var' },
+      { name: 'apmTracingEnabled', value: false, origin: 'env_var' },
       { name: 'appsec.blockedTemplateHtml', value: BLOCKED_TEMPLATE_HTML_PATH, origin: 'env_var' },
       { name: 'appsec.blockedTemplateJson', value: BLOCKED_TEMPLATE_JSON_PATH, origin: 'env_var' },
       { name: 'appsec.enabled', value: true, origin: 'env_var' },
@@ -1289,9 +1289,7 @@ describe('Config', () => {
         exporter: 'agent',
         enableGetRumData: false
       },
-      apmTracing: {
-        enabled: true
-      },
+      apmTracingEnabled: true,
       appsec: {
         enabled: true,
         rules: RULES_JSON_PATH,
@@ -1375,7 +1373,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
-    expect(config).to.have.nested.property('apmTracing.enabled', true)
+    expect(config).to.have.nested.property('apmTracingEnabled', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rasp.enabled', false)
     expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
@@ -2342,33 +2340,33 @@ describe('Config', () => {
     it('should disable apm tracing with legacy DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED', () => {
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '1'
 
-      const apmTracing = new Config().apmTracing
-      expect(apmTracing).to.have.property('enabled', false)
+      const config = new Config()
+      expect(config).to.have.property('apmTracingEnabled', false)
     })
 
     it('should win DD_APM_TRACING_ENABLED', () => {
       process.env.DD_APM_TRACING_ENABLED = '0'
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'false'
 
-      const apmTracing = new Config().apmTracing
-      expect(apmTracing).to.have.property('enabled', false)
+      const config = new Config()
+      expect(config).to.have.property('apmTracingEnabled', false)
     })
 
     it('should disable apm tracing with legacy experimental.appsec.standalone.enabled option', () => {
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '1'
 
-      const apmTracing = new Config({ experimental: { appsec: { standalone: { enabled: true } } } }).apmTracing
-      expect(apmTracing).to.have.property('enabled', false)
+      const config = new Config({ experimental: { appsec: { standalone: { enabled: true } } } })
+      expect(config).to.have.property('apmTracingEnabled', false)
     })
 
-    it('should win apmTracing.enabled option', () => {
+    it('should win apmTracingEnabled option', () => {
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '1'
 
-      const apmTracing = new Config({
-        apmTracing: { enabled: false },
+      const config = new Config({
+        apmTracingEnabled: false,
         experimental: { appsec: { standalone: { enabled: false } } }
-      }).apmTracing
-      expect(apmTracing).to.have.property('enabled', false)
+      })
+      expect(config).to.have.property('apmTracingEnabled', false)
     })
   })
 })

@@ -34,8 +34,7 @@ function enable (config, _tracer) {
   enableTaintTracking(config.iast, iastTelemetry.verbosity)
   requestStart.subscribe(onIncomingHttpRequestStart)
   requestClose.subscribe(onIncomingHttpRequestEnd)
-  const apmTracingEnabled = config.apmTracing?.enabled ?? true
-  if (!apmTracingEnabled) {
+  if (config.apmTracingEnabled === false) {
     tracerConfigure.subscribe(onTracerConfigure)
   }
   overheadController.configure(config.iast)
