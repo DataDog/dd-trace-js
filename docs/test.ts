@@ -373,6 +373,7 @@ tracer.use('paperplane', httpServerOptions);
 tracer.use('playwright');
 tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });
+tracer.use('pg', { appendComment: true });
 tracer.use('pino');
 tracer.use('protobufjs');
 tracer.use('redis');
