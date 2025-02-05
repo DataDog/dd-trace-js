@@ -174,7 +174,7 @@ describe('IAST Security Controls parser', () => {
     })
 
     it('should parse valid simple security control definition with one parameter', () => {
-      const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:bar/foo/custom_input_validator.js:validate:1'
+      const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:bar/foo/custom_input_validator.js:validate:0'
       const securityControls = parse(conf)
 
       const civ = securityControls.get(civFilename)[0]
@@ -184,7 +184,7 @@ describe('IAST Security Controls parser', () => {
         file: civFilename,
         secureMarks: CUSTOM_SECURE_MARK | COMMAND_INJECTION_MARK,
         method: 'validate',
-        parameters: [1]
+        parameters: [0]
       })
     })
 

@@ -86,7 +86,6 @@ function getParameters (parameters) {
 
       return parsedParam
     })
-    .filter(param => !!param)
 }
 
 module.exports = {
