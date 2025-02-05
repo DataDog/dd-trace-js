@@ -44,7 +44,7 @@ class DatadogSpanContext {
   }
 
   toTraceId (get128bitId = true) {
-    if (get128bitId && this._trace.tags[TRACE_ID_128]) {
+    if (get128bitId) {
       return this._traceId.toBuffer().length <= 8 && this._trace.tags[TRACE_ID_128]
         ? this._trace.tags[TRACE_ID_128] + this._traceId.toString(16).padStart(16, '0')
         : this._traceId.toString(16).padStart(32, '0')
