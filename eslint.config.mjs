@@ -26,6 +26,7 @@ export default [
       '**/versions', // This is effectively a node_modules tree.
       '**/acmeair-nodejs', // We don't own this.
       '**/vendor', // Generally, we didn't author this code.
+      'integration-tests/debugger/target-app/source-map-support/index.js', // Generated
       'integration-tests/esbuild/out.js', // Generated
       'integration-tests/esbuild/aws-sdk-out.js', // Generated
       'packages/dd-trace/src/appsec/blocked_templates.js', // TODO Why is this ignored?
