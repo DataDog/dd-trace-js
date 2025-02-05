@@ -39,11 +39,11 @@ class StoreBinding {
   }
 
   enable () {
-    this._channel.bindStore(storage, this._transform)
+    this._channel.bindStore(storage(SPAN_NAMESPACE), this._transform)
   }
 
   disable () {
-    this._channel.unbindStore(storage, this._transform)
+    this._channel.unbindStore(storage(SPAN_NAMESPACE))
   }
 }
 
