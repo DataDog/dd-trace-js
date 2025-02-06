@@ -362,6 +362,7 @@ class TextMapPropagator {
 
     if (this._config.tracePropagationExtractFirst) return spanContext
 
+
     const tc = this._extractTraceparentContext(carrier)
 
     if (tc && spanContext._traceId.equals(tc._traceId)) {
@@ -482,10 +483,29 @@ class TextMapPropagator {
               }
               break
             }
+            case 't.tid': {
+              // we only accept 16 hex digits as a valid tid
+
+              const isHex16 = /^[0-9A-Fa-f]{16}$/.test(value)
+              console.log('bluhh', spanContext._trace.tags['_dd.p.tid'], value, traceparent, isHex16)
+              if (isHex16 ) {
+                const transformedValue = value.replace(/[\x7e]/gm, '=');
+
+                // Only overwrite if it matches the originally stored _dd.p.tid
+                if (spanContext._trace.tags['_dd.p.tid'] === transformedValue) {
+                  spanContext._trace.tags['_dd.p.tid'] = transformedValue;
+                }
+              }
+              console.log('yupppp', spanContext._trace.tags['_dd.p.tid'])
+              // If not valid, do nothing — so we preserve the TID from `traceparent`.
+              break
+            }
             default:
+              console.log(123123123, spanContext._trace.tags['_dd.p.tid'])
               if (!key.startsWith('t.')) continue
               spanContext._trace.tags[`_dd.p.${key.slice(2)}`] = value
                 .replace(/[\x7e]/gm, '=')
+              console.log(123123123, spanContext._trace.tags['_dd.p.tid'])
           }
         }
       })
@@ -645,7 +665,10 @@ class TextMapPropagator {
           log.error('Trace tags from carrier are invalid, skipping extraction.')
           return
         }
-
+        // Check if value is a valid 16 character lower-case hexadecimal encoded number as per spec
+        if (key === '_dd.p.tid' && !(/^[a-f0-9]{16}$/.test(value))) {
+          continue
+        }
         tags[key] = value
       }
 
@@ -663,8 +686,8 @@ class TextMapPropagator {
     const tid = traceId.substring(0, 16)
 
     // don't set upper 64 bits if they are all zeros or 128 bit trace id generation is disabled
-    console.log(123123123, this._config.traceId128BitGenerationEnabled)
-    if (tid === zeroTraceId || this._config.traceId128BitGenerationEnabled === false) return
+
+    if (tid === zeroTraceId) return
 
     spanContext._trace.tags['_dd.p.tid'] = tid
   }
