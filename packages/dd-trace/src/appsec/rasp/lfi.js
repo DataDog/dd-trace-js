@@ -47,7 +47,7 @@ function onFirstReceivedRequest () {
 }
 
 function analyzeLfi (ctx) {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   if (!store) return
 
   const { req, fs, res } = store

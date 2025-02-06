@@ -60,7 +60,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
   bindStart (ctx) {
     const { methodName, args, basePath, apiKey } = ctx
     const payload = normalizeRequestPayload(methodName, args)
-    const store = storage.getStore() || {}
+    const store = storage('legacy').getStore() || {}
 
     const span = this.startSpan('openai.request', {
       service: this.config.service,

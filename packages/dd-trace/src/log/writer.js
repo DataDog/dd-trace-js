@@ -15,11 +15,11 @@ let logger = defaultLogger
 let logChannel = new LogChannel()
 
 function withNoop (fn) {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
 
-  storage.enterWith({ noop: true })
+  storage('legacy').enterWith({ noop: true })
   fn()
-  storage.enterWith(store)
+  storage('legacy').enterWith(store)
 }
 
 function unsubscribeAll () {

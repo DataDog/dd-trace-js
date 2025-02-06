@@ -29,7 +29,7 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
 
   onConfigure () {
     this.addSub('apm:fs:operation:start', (obj) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const outOfReqOrChild = !store?.fs?.root
 
       // we could filter out all the nested fs.operations based on store.fs.root
@@ -84,7 +84,7 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
   }
 
   analyze (value) {
-    const iastContext = getIastContext(storage.getStore())
+    const iastContext = getIastContext(storage('legacy').getStore())
     if (!iastContext) {
       return
     }
