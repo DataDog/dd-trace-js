@@ -99,9 +99,9 @@ async function addBreakpoint (probe) {
     throw new Error(`No loaded script found for ${file}`)
   }
 
-  const { url, scriptId, sourceMapURL } = script
+  const [path, scriptId, sourceMapURL] = script
 
-  log.warn(`Adding breakpoint at ${url}:${line}`)
+  log.warn(`Adding breakpoint at ${path}:${line}`)
   log.warn(`scriptId: ${scriptId}`)
 
   let lineNumber = line
@@ -133,7 +133,7 @@ async function addBreakpoint (probe) {
     breakpointIdToProbe.set(breakpointId, probe)
     probeIdToBreakpointId.set(probe.id, breakpointId)
   } catch (e) {
-    log.error('Error setting breakpoint at %s:%s', url, line, e)
+    log.error('Error setting breakpoint at %s:%s', path, line, e)
   }
 }
 
