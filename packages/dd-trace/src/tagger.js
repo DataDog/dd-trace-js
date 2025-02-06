@@ -20,7 +20,8 @@ function add (carrier, keyValuePairs, parseOtelTags = false) {
   }
   try {
     if (typeof keyValuePairs === 'string') {
-      const segments = keyValuePairs.split(',')
+      // split on comma or whitespace
+      const segments = keyValuePairs.split(/[ ,]+/)
       for (const segment of segments) {
         const separatorIndex = parseOtelTags ? segment.indexOf('=') : segment.indexOf(':')
         if (separatorIndex === -1) continue
