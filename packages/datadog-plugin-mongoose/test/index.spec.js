@@ -22,7 +22,7 @@ describe('Plugin', () => {
       function connect () {
         // mongoose.connect('mongodb://username:password@host:port/database?options...');
         // actually the first part of the path is the dbName and not the collection
-        mongoose.connect(`mongodb://localhost:27017/${dbName}`, {
+        return mongoose.connect(`mongodb://localhost:27017/${dbName}`, {
           useNewUrlParser: true,
           useUnifiedTopology: true
         })
@@ -32,14 +32,14 @@ describe('Plugin', () => {
         return agent.load(['mongodb-core'])
       })
 
-      before(() => {
+      before(async () => {
         tracer = require('../../dd-trace')
 
         mongoose = require(`../../../versions/mongoose@${version}`).get()
 
         dbName = id().toString()
 
-        connect()
+        await connect()
       })
 
       after(() => {
