@@ -28,9 +28,9 @@ const breakpointIdToProbe = new Map()
 const probeIdToBreakpointId = new Map()
 
 session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint], callFrames } }) => {
-  log.warn(`Debugger.paused: ${JSON.stringify(hitBreakpoint)}`)
+  log.warn(`Debugger.paused: ${JSON.stringify(hitBreakpoint, null, 2)}`)
   const probe = breakpointIdToProbe.get(hitBreakpoint)
-  log.warn(`probe: ${JSON.stringify(probe)}`)
+  log.warn(`probe: ${JSON.stringify(probe, null, 2)}`)
   if (!probe) {
     log.warn(`No probe found for breakpoint ${hitBreakpoint}`)
     return session.post('Debugger.resume')
@@ -54,7 +54,7 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
     language: 'javascript'
   }
 
-  log.warn(`snapshot: ${JSON.stringify(snapshot)}`)
+  log.warn(`snapshot: ${JSON.stringify(snapshot, null, 2)}`)
 
   const state = getLocalState()
   if (state) {

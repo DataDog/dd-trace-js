@@ -117,7 +117,7 @@ class TestVisDynamicInstrumentation {
     this.breakpointHitChannel.port2.on('message', ({ snapshot }) => {
       const { probe: { id: probeId } } = snapshot
       const onHit = this.onHitBreakpointByProbeId.get(probeId)
-      log.warn(`received snapshot ${snapshot}`)
+      log.warn(`received snapshot ${JSON.stringify(snapshot, null, 2)}`)
       if (onHit) {
         onHit({ snapshot })
       } else {
