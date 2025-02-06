@@ -1,3 +1,5 @@
+'use strict'
+
 module.exports = {
   projects: process.env.PROJECTS ? JSON.parse(process.env.PROJECTS) : [__dirname],
   testPathIgnorePatterns: ['/node_modules/'],

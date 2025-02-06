@@ -1,3 +1,5 @@
+'use strict'
+
 // File to spin an HTTP server that returns an HTML for cypress to visit
 const http = require('http')
 

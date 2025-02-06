@@ -1,3 +1,5 @@
+'use strict'
+
 describe('jest-hook-failure', () => {
   beforeEach(() => {
     throw new Error('hey, hook error before')

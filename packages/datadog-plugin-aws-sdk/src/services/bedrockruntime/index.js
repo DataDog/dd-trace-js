@@ -1,3 +1,5 @@
+'use strict'
+
 const CompositePlugin = require('../../../../dd-trace/src/plugins/composite')
 const BedrockRuntimeTracing = require('./tracing')
 const BedrockRuntimeLLMObsPlugin = require('../../../../dd-trace/src/llmobs/plugins/bedrockruntime')

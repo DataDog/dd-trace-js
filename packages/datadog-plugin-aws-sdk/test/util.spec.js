@@ -1,3 +1,5 @@
+'use strict'
+
 const { generatePointerHash, encodeValue, extractPrimaryKeys } = require('../src/util')
 
 describe('generatePointerHash', () => {

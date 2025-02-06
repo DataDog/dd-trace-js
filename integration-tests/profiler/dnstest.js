@@ -1,3 +1,5 @@
+'use strict'
+
 const dns = require('node:dns')
 
 require('dd-trace').init().profilerStarted().then(() => {

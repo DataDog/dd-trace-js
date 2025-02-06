@@ -1,3 +1,5 @@
+'use strict'
+
 const { describe, it, expect } = require('../../../versions/@jest/globals').get()
 
 describe('jest-inject-globals', () => {

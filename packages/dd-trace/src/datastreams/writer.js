@@ -1,3 +1,5 @@
+'use strict'
+
 const pkg = require('../../../../package.json')
 const log = require('../log')
 const request = require('../exporters/common/request')

@@ -1,5 +1,3 @@
-'use strict'
-
 function dummyOperation (a) {
   return a + 'should have ' + 'dummy operation to be rewritten' + ' without crashing'
 }

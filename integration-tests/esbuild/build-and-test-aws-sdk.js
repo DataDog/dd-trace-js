@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+'use strict'
+
 /* eslint-disable no-console */
 const { spawnSync } = require('child_process')
 

@@ -1,3 +1,5 @@
+'use strict'
+
 const CiPlugin = require('../../plugins/ci_plugin')
 const {
   TEST_STATUS,

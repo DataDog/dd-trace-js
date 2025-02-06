@@ -1,3 +1,5 @@
+'use strict'
+
 // encodes positive and negative numbers, using zig zag encoding to reduce the size of the variable length encoding.
 // uses high and low part to ensure those parts are under the limit for byte operations in javascript (32 bits)
 // maximum number possible to encode is MAX_SAFE_INTEGER/2 (using zig zag shifts the bits by 1 to the left)

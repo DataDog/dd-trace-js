@@ -1,3 +1,5 @@
+'use strict'
+
 require('./setup/tap')
 
 const { getGitMetadataFromGitProperties } = require('../src/git_properties')

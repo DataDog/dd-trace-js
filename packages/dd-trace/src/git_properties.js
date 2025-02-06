@@ -1,3 +1,5 @@
+'use strict'
+
 const commitSHARegex = /git\.commit\.sha=([a-f\d]{40})/
 const repositoryUrlRegex = /git\.repository_url=([\w\d:@/.-]+)/
 

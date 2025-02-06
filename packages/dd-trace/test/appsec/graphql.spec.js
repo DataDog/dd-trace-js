@@ -1,3 +1,5 @@
+'use strict'
+
 const proxyquire = require('proxyquire')
 const waf = require('../../src/appsec/waf')
 const web = require('../../src/plugins/util/web')

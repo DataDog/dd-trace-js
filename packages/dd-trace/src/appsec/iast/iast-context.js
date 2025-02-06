@@ -1,3 +1,5 @@
+'use strict'
+
 const IAST_CONTEXT_KEY = Symbol('_dd.iast.context')
 const IAST_TRANSACTION_ID = Symbol('_dd.iast.transactionId')
 

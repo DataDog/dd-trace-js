@@ -1,3 +1,5 @@
+'use strict'
+
 const tracer = require('../../..').init()
 
 tracer._tracer._processor.process = function process (span) {

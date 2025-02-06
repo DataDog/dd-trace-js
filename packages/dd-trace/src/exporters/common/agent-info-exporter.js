@@ -1,3 +1,5 @@
+'use strict'
+
 const { URL, format } = require('url')
 
 const request = require('./request')

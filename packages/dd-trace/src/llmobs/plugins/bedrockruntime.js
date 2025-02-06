@@ -1,3 +1,5 @@
+'use strict'
+
 const BaseLLMObsPlugin = require('./base')
 const { storage } = require('../../../../datadog-core')
 const llmobsStore = storage('llmobs')

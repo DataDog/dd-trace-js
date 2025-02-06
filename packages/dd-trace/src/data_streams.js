@@ -1,3 +1,5 @@
+'use strict'
+
 const DataStreamsContext = require('./data_streams_context')
 
 class DataStreamsCheckpointer {

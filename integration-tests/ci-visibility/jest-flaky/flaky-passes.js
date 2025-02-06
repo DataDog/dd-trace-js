@@ -1,3 +1,5 @@
+'use strict'
+
 let counter = 0
 
 describe('test-flaky-test-retries', () => {

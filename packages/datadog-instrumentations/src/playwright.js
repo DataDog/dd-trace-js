@@ -1,3 +1,5 @@
+'use strict'
+
 const satisfies = require('semifies')
 
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')

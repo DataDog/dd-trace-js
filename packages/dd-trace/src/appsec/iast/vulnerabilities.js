@@ -1,3 +1,5 @@
+'use strict'
+
 module.exports = {
   COMMAND_INJECTION: 'COMMAND_INJECTION',
   CODE_INJECTION: 'CODE_INJECTION',

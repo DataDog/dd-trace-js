@@ -1,3 +1,5 @@
+'use strict'
+
 const {
   PAYLOAD_TAG_REQUEST_PREFIX,
   PAYLOAD_TAG_RESPONSE_PREFIX

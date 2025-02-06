@@ -1,3 +1,5 @@
+'use strict'
+
 /* eslint-disable no-console */
 const tracer = require('../packages/dd-trace')
 const { isTrue } = require('../packages/dd-trace/src/util')

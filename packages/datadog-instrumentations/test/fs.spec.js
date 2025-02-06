@@ -1,3 +1,5 @@
+'use strict'
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const semver = require('semver')
 describe('fs instrumentation', () => {

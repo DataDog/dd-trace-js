@@ -1,3 +1,5 @@
+'use strict'
+
 const aws = require('./aws.json')
 const sdks = { aws }
 

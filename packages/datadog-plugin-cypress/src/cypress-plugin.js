@@ -1,3 +1,5 @@
+'use strict'
+
 const {
   TEST_STATUS,
   TEST_IS_RUM_ACTIVE,

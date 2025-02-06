@@ -1,3 +1,5 @@
+'use strict'
+
 const { createHistogram, PerformanceObserver } = require('perf_hooks')
 if (createHistogram) {
   const StatsD = require('./statsd')
