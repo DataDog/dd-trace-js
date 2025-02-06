@@ -1,3 +1,5 @@
+'use strict'
+
 function extractErrorIntoSpanEvent (config, span, exc) {
   const attributes = {}
 

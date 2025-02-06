@@ -1,3 +1,5 @@
+'use strict'
+
 const workerpool = require('workerpool') // eslint-disable-line n/no-extraneous-require
 const pool = workerpool.pool({ workerType: 'process' })
 

@@ -1,3 +1,5 @@
+'use strict'
+
 const typeDefs = `
   type Query {
     hello(name: String, title: String): String

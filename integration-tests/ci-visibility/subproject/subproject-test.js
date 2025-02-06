@@ -1,3 +1,5 @@
+'use strict'
+
 const dependency = require('./dependency')
 
 describe('subproject-test', () => {

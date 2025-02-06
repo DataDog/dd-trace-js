@@ -1,3 +1,5 @@
+'use strict'
+
 const Sequencer = require('@jest/test-sequencer').default
 
 // From example in https://jestjs.io/docs/configuration#testsequencer-string

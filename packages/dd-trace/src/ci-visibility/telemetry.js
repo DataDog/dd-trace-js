@@ -1,3 +1,5 @@
+'use strict'
+
 const telemetryMetrics = require('../telemetry/metrics')
 
 const ciVisibilityMetrics = telemetryMetrics.manager.namespace('civisibility')

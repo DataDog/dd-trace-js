@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+'use strict'
 
 require('../../').init() // dd-trace
 const assert = require('assert')

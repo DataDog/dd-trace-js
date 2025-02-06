@@ -1,3 +1,5 @@
+'use strict'
+
 const { By, Builder } = require('selenium-webdriver')
 const chrome = require('selenium-webdriver/chrome')
 const { expect } = require('chai')
