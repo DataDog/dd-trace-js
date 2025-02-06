@@ -1,7 +1,6 @@
 'use strict'
 
 /* eslint-disable no-console */
-/* eslint-disable import/no-extraneous-dependencies */
 
 try {
   const P = require('bluebird')

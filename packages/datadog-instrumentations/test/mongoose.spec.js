@@ -178,7 +178,6 @@ describe('mongoose instrumentations', () => {
                   Test.deleteOne({ type: 'test' }, (err) => {
                     expect(err).to.be.null
 
-                    // eslint-disable-next-line n/handle-callback-err
                     Test.count({ type: 'test' }, (err, res) => {
                       expect(res).to.be.equal(2) // 3 -> delete 1 -> 2
 
@@ -259,7 +258,6 @@ describe('mongoose instrumentations', () => {
                     expect(item).not.to.be.null
                     expect(item.name).to.be.equal('test1')
 
-                    // eslint-disable-next-line n/handle-callback-err
                     Test.count({ type: 'test' }, (err, res) => {
                       expect(res).to.be.equal(2) // 3 -> delete 1 -> 2
 
@@ -425,7 +423,6 @@ describe('mongoose instrumentations', () => {
                   $set: {
                     other: 'modified-other'
                   }
-                // eslint-disable-next-line n/handle-callback-err
                 }).then((err) => {
                   Test.find({ type: 'test' }).then((items) => {
                     expect(items.length).to.be.equal(3)

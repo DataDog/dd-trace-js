@@ -145,7 +145,6 @@ describe('Plugin', () => {
             }
           }, { rejectFirst: true })
 
-          // eslint-disable-next-line n/handle-callback-err
           const httpd = server(router, (req, res) => err => res.end()).listen(0, 'localhost')
           await once(httpd, 'listening')
           const port = httpd.address().port

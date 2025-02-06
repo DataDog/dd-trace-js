@@ -163,7 +163,6 @@ describe('request', function () {
       hostname: 'test',
       port: 123,
       path: '/'
-    // eslint-disable-next-line n/handle-callback-err
     }, (err, res) => {
       expect(res).to.equal('OK')
     })
@@ -179,7 +178,6 @@ describe('request', function () {
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT'
-    // eslint-disable-next-line n/handle-callback-err
     }, (err, res) => {
       expect(res).to.equal('OK')
       done()
@@ -216,7 +214,6 @@ describe('request', function () {
     request(form, {
       path: '/path',
       method: 'PUT'
-    // eslint-disable-next-line n/handle-callback-err
     }, (err, res) => {
       expect(res).to.equal('OK')
       done()
@@ -246,7 +243,6 @@ describe('request', function () {
             hostname: 'localhost',
             protocol: 'http:',
             port: port2
-          // eslint-disable-next-line n/handle-callback-err
           }, (err, res) => {
             expect(res).to.equal('OK')
             shutdownFirst()

@@ -83,7 +83,6 @@ module.exports.addSpan = function (span) {
 
   const now = Date.now()
   const expiration = now + LIFETIME
-  // eslint-disable-next-line no-undef
   const wrapped = new WeakRef(span)
   spans.add(wrapped, expiration)
   // registry.register(span, span._name)

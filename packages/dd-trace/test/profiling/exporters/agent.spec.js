@@ -40,7 +40,6 @@ async function createProfile (periodType) {
       error (err) {
         throw err
       },
-      // eslint-disable-next-line n/handle-callback-err
       warn (err) {
       }
     }
