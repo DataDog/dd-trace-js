@@ -1,4 +1,3 @@
-// eslint-disable-next-line import/no-extraneous-dependencies
 import cypress from 'cypress'
 
 async function runCypress () {

@@ -34,7 +34,6 @@ names.forEach(name => {
 
     describe('url.parse', () => {
       it('should publish', () => {
-        // eslint-disable-next-line n/no-deprecated-api
         const result = url.parse('https://www.datadoghq.com')
 
         sinon.assert.calledOnceWithExactly(parseFinishedChannelCb, {
