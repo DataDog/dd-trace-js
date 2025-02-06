@@ -102,6 +102,7 @@ async function addBreakpoint (probe) {
   const { url, scriptId, sourceMapURL, source } = script
 
   log.warn(`Adding breakpoint at ${url}:${line}`)
+  log.warn(`scriptId: ${scriptId}`)
 
   let lineNumber = line
 
