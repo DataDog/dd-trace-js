@@ -17,13 +17,13 @@ class TestApiManualPlugin extends CiPlugin {
     this.sourceRoot = process.cwd()
 
     this.unconfiguredAddSub('dd-trace:ci:manual:test:start', ({ testName, testSuite }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const testSuiteRelative = getTestSuitePath(testSuite, this.sourceRoot)
       const testSpan = this.startTestSpan(testName, testSuiteRelative)
       this.enter(testSpan, store)
     })
     this.unconfiguredAddSub('dd-trace:ci:manual:test:finish', ({ status, error }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const testSpan = store && store.span
       if (testSpan) {
         testSpan.setTag(TEST_STATUS, status)
@@ -35,7 +35,7 @@ class TestApiManualPlugin extends CiPlugin {
       }
     })
     this.unconfiguredAddSub('dd-trace:ci:manual:test:addTags', (tags) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const testSpan = store && store.span
       if (testSpan) {
         testSpan.addTags(tags)
