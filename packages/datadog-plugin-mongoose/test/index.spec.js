@@ -57,7 +57,6 @@ describe('Plugin', () => {
         (done) => {
           const PeerCat = mongoose.model('PeerCat', { name: String })
           new PeerCat({ name: 'PeerCat' }).save().catch(done)
-          done()
         },
         'db', 'peer.service')
 
