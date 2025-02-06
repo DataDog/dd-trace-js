@@ -7,7 +7,7 @@ const id = require('../../dd-trace/src/id')
 
 describe('Plugin', () => {
   let tracer
-  const dbName = id().toString()
+  let dbName
 
   describe('mongoose', () => {
     withVersions('mongoose', ['mongoose'], (version) => {
@@ -37,6 +37,8 @@ describe('Plugin', () => {
 
         mongoose = require(`../../../versions/mongoose@${version}`).get()
 
+        dbName = id().toString()
+
         connect()
       })
 
@@ -55,7 +57,7 @@ describe('Plugin', () => {
           const PeerCat = mongoose.model('PeerCat', { name: String })
           new PeerCat({ name: 'PeerCat' }).save().catch(done)
         },
-        dbName, 'peer.service')
+        () => dbName, 'peer.service')
 
       it('should propagate context with write operations', () => {
         const Cat = mongoose.model('Cat1', { name: String })
