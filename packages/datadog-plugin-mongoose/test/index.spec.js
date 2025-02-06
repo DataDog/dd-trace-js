@@ -3,11 +3,11 @@
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { NODE_MAJOR } = require('../../../version')
+const id = require('../../dd-trace/src/id')
 
 describe('Plugin', () => {
-  let id
   let tracer
-  let dbName
+  const dbName = id().toString()
 
   describe('mongoose', () => {
     withVersions('mongoose', ['mongoose'], (version) => {
@@ -19,10 +19,10 @@ describe('Plugin', () => {
       // This needs to be called synchronously right before each test to make
       // sure a connection is not already established and the request is added
       // to the queue.
-      async function connect () {
+      function connect () {
         // mongoose.connect('mongodb://username:password@host:port/database?options...');
         // actually the first part of the path is the dbName and not the collection
-        await mongoose.connect(`mongodb://localhost:27017/${dbName}`, {
+        mongoose.connect(`mongodb://localhost:27017/${dbName}`, {
           useNewUrlParser: true,
           useUnifiedTopology: true
         })
@@ -33,10 +33,7 @@ describe('Plugin', () => {
       })
 
       before(() => {
-        id = require('../../dd-trace/src/id')
         tracer = require('../../dd-trace')
-
-        dbName = id().toString()
 
         mongoose = require(`../../../versions/mongoose@${version}`).get()
 
@@ -58,7 +55,7 @@ describe('Plugin', () => {
           const PeerCat = mongoose.model('PeerCat', { name: String })
           new PeerCat({ name: 'PeerCat' }).save().catch(done)
         },
-        'db', 'peer.service')
+        dbName, 'peer.service')
 
       it('should propagate context with write operations', () => {
         const Cat = mongoose.model('Cat1', { name: String })
