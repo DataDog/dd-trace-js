@@ -1,5 +1,6 @@
 'use strict'
 /* eslint-disable no-console */
+/* eslint n/no-unsupported-features/node-builtins: ['error', { version: '>=22.0.0', allowExperimental: true }] */
 
 const fs = require('fs')
 const path = require('path')
