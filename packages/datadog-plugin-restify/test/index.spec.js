@@ -5,7 +5,6 @@ const axios = require('axios')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE } = require('../../dd-trace/src/constants')
-const {SPAN_NAMESPACE} = require("../../datadog-core");
 
 describe('Plugin', () => {
   let tracer
@@ -226,12 +225,12 @@ describe('Plugin', () => {
           const store = {}
 
           server.use((req, res, next) => {
-            storage(SPAN_NAMESPACE).run(store, () => next())
+            storage.run(store, () => next())
           })
 
           server.get('/user', (req, res, next) => {
             try {
-              expect(storage(SPAN_NAMESPACE).getStore()).to.equal(store)
+              expect(storage.getStore()).to.equal(store)
               done()
             } catch (e) {
               done(e)

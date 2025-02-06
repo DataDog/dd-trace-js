@@ -1,6 +1,6 @@
 'use strict'
 
-const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
+const { storage } = require('../../datadog-core')
 const MySQLPlugin = require('../../datadog-plugin-mysql/src')
 
 let skippedStore
@@ -13,12 +13,12 @@ class MariadbPlugin extends MySQLPlugin {
     super(...args)
 
     this.addSub(`apm:${this.component}:pool:skip`, () => {
-      skippedStore = storage(SPAN_NAMESPACE).getStore()
-      storage(SPAN_NAMESPACE).enterWith({ noop: true })
+      skippedStore = storage('legacy').getStore()
+      storage('legacy').enterWith({ noop: true })
     })
 
     this.addSub(`apm:${this.component}:pool:unskip`, () => {
-      storage(SPAN_NAMESPACE).enterWith(skippedStore)
+      storage('legacy').enterWith(skippedStore)
       skippedStore = undefined
     })
   }

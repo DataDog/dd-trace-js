@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 
 const { prepareTestServerForIast, copyFileToTmp } = require('../utils')
-const { storage, SPAN_NAMESPACE } = require('../../../../../datadog-core')
+const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString, isTainted } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
@@ -53,7 +53,7 @@ describe('TaintTracking lodash', () => {
           describe(`with command: '${command}'`, () => {
             testThatRequestHasVulnerability(function () {
               const _ = require('../../../../../../versions/lodash').get()
-              const store = storage(SPAN_NAMESPACE).getStore()
+              const store = storage('legacy').getStore()
               const iastContext = iastContextFunctions.getIastContext(store)
               const commandTainted = newTaintedString(iastContext, command, 'param', 'Request')
 
@@ -82,7 +82,7 @@ describe('TaintTracking lodash', () => {
   describe('lodash method with no taint tracking', () => {
     it('should return the original result', () => {
       const _ = require('../../../../../../versions/lodash').get()
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
       const iastContext = iastContextFunctions.getIastContext(store)
       const taintedValue = newTaintedString(iastContext, 'tainted', 'param', 'Request')
 

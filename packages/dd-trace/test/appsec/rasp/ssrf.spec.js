@@ -3,7 +3,6 @@
 const proxyquire = require('proxyquire')
 const { httpClientRequestStart } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
-const {SPAN_NAMESPACE} = require("../../../../datadog-core");
 
 describe('RASP - ssrf.js', () => {
   let waf, datadogCore, ssrf
@@ -52,7 +51,7 @@ describe('RASP - ssrf.js', () => {
         }
       }
       const req = {}
-      datadogCore.storage(SPAN_NAMESPACE).getStore.returns({ req })
+      datadogCore.storage('legacy').getStore.returns({ req })
 
       httpClientRequestStart.publish(ctx)
 
@@ -68,7 +67,7 @@ describe('RASP - ssrf.js', () => {
         }
       }
       const req = {}
-      datadogCore.storage(SPAN_NAMESPACE).getStore.returns({ req })
+      datadogCore.storage('legacy').getStore.returns({ req })
 
       httpClientRequestStart.publish(ctx)
 
@@ -81,7 +80,7 @@ describe('RASP - ssrf.js', () => {
           uri: 'http://example.com'
         }
       }
-      datadogCore.storage(SPAN_NAMESPACE).getStore.returns(undefined)
+      datadogCore.storage('legacy').getStore.returns(undefined)
 
       httpClientRequestStart.publish(ctx)
 
@@ -94,7 +93,7 @@ describe('RASP - ssrf.js', () => {
           uri: 'http://example.com'
         }
       }
-      datadogCore.storage(SPAN_NAMESPACE).getStore.returns({})
+      datadogCore.storage('legacy').getStore.returns({})
 
       httpClientRequestStart.publish(ctx)
 
@@ -105,7 +104,7 @@ describe('RASP - ssrf.js', () => {
       const ctx = {
         args: {}
       }
-      datadogCore.storage(SPAN_NAMESPACE).getStore.returns({})
+      datadogCore.storage('legacy').getStore.returns({})
 
       httpClientRequestStart.publish(ctx)
 

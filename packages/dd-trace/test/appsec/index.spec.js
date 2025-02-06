@@ -26,7 +26,7 @@ const agent = require('../plugins/agent')
 const Config = require('../../src/config')
 const axios = require('axios')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
-const { storage, SPAN_NAMESPACE } = require('../../../datadog-core')
+const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
 
@@ -837,7 +837,7 @@ describe('AppSec Index', function () {
 
         passportVerify.publish(payload)
 
-        expect(storage(SPAN_NAMESPACE).getStore).to.have.been.calledOnce
+        expect(storage('legacy').getStore).to.have.been.calledOnce
         expect(web.root).to.have.been.calledOnceWithExactly(req)
         expect(UserTracking.trackLogin).to.have.been.calledOnceWithExactly(
           payload.framework,
@@ -864,7 +864,7 @@ describe('AppSec Index', function () {
 
         passportVerify.publish(payload)
 
-        expect(storage(SPAN_NAMESPACE).getStore).to.have.been.calledOnce
+        expect(storage('legacy').getStore).to.have.been.calledOnce
         expect(web.root).to.have.been.calledOnceWithExactly(req)
         expect(UserTracking.trackLogin).to.have.been.calledOnceWithExactly(
           payload.framework,
@@ -878,7 +878,7 @@ describe('AppSec Index', function () {
       })
 
       it('should not block and call log if no rootSpan is found', () => {
-        storage(SPAN_NAMESPACE).getStore.returns(undefined)
+        storage('legacy').getStore.returns(undefined)
 
         const abortController = new AbortController()
         const payload = {
@@ -891,7 +891,7 @@ describe('AppSec Index', function () {
 
         passportVerify.publish(payload)
 
-        expect(storage(SPAN_NAMESPACE).getStore).to.have.been.calledOnce
+        expect(storage('legacy').getStore).to.have.been.calledOnce
         expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] No rootSpan found in onPassportVerify')
         expect(UserTracking.trackLogin).to.not.have.been.called
         expect(abortController.signal.aborted).to.be.false
@@ -916,7 +916,7 @@ describe('AppSec Index', function () {
 
         passportUser.publish(payload)
 
-        expect(storage(SPAN_NAMESPACE).getStore).to.have.been.calledOnce
+        expect(storage('legacy').getStore).to.have.been.calledOnce
         expect(web.root).to.have.been.calledOnceWithExactly(req)
         expect(UserTracking.trackUser).to.have.been.calledOnceWithExactly(
           payload.user,
@@ -937,7 +937,7 @@ describe('AppSec Index', function () {
 
         passportUser.publish(payload)
 
-        expect(storage(SPAN_NAMESPACE).getStore).to.have.been.calledOnce
+        expect(storage('legacy').getStore).to.have.been.calledOnce
         expect(web.root).to.have.been.calledOnceWithExactly(req)
         expect(UserTracking.trackUser).to.have.been.calledOnceWithExactly(
           payload.user,
@@ -948,7 +948,7 @@ describe('AppSec Index', function () {
       })
 
       it('should not block and call log if no rootSpan is found', () => {
-        storage(SPAN_NAMESPACE).getStore.returns(undefined)
+        storage('legacy').getStore.returns(undefined)
 
         const abortController = new AbortController()
         const payload = {
@@ -958,7 +958,7 @@ describe('AppSec Index', function () {
 
         passportUser.publish(payload)
 
-        expect(storage(SPAN_NAMESPACE).getStore).to.have.been.calledOnce
+        expect(storage('legacy').getStore).to.have.been.calledOnce
         expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] No rootSpan found in onPassportDeserializeUser')
         expect(UserTracking.trackUser).to.not.have.been.called
         expect(abortController.signal.aborted).to.be.false

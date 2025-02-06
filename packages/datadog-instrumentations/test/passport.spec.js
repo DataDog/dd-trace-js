@@ -4,7 +4,7 @@ const { assert } = require('chai')
 const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios').create({ validateStatus: null })
 const dc = require('dc-polyfill')
-const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
+const { storage } = require('../../datadog-core')
 
 const users = [
   {
@@ -145,7 +145,7 @@ withVersions('passport', 'passport', version => {
       const cookie = login.headers['set-cookie'][0]
 
       subscriberStub.callsFake(({ abortController }) => {
-        const res = storage(SPAN_NAMESPACE).getStore().req.res
+        const res = storage('legacy').getStore().req.res
         res.writeHead(403)
         res.constructor.prototype.end.call(res, 'Blocked')
         abortController.abort()

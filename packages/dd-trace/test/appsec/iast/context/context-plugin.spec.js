@@ -3,7 +3,7 @@
 const proxyquire = require('proxyquire')
 const { IastPlugin } = require('../../../../src/appsec/iast/iast-plugin')
 const { TagKey } = require('../../../../src/appsec/iast/telemetry/iast-metric')
-const { storage, SPAN_NAMESPACE } = require('../../../../../datadog-core')
+const { storage } = require('../../../../../datadog-core')
 const { IAST_ENABLED_TAG_KEY } = require('../../../../src/appsec/iast/tags')
 
 describe('IastContextPlugin', () => {

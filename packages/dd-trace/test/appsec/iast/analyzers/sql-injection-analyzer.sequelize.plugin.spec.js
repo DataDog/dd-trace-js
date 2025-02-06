@@ -5,7 +5,7 @@ const os = require('os')
 const path = require('path')
 const semver = require('semver')
 const { prepareTestServerForIast } = require('../utils')
-const { storage, SPAN_NAMESPACE } = require('../../../../../datadog-core')
+const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
@@ -34,7 +34,7 @@ describe('sql-injection-analyzer with sequelize', () => {
           })
 
           testThatRequestHasVulnerability(() => {
-            const store = storage(SPAN_NAMESPACE).getStore()
+            const store = storage('legacy').getStore()
             const iastCtx = iastContextFunctions.getIastContext(store)
 
             let sql = 'SELECT 1'
@@ -53,7 +53,7 @@ module.exports = function (sequelize, sql) {
             const filepath = path.join(os.tmpdir(), 'test-sequelize-sqli.js')
             fs.writeFileSync(filepath, externalFileContent)
 
-            const store = storage(SPAN_NAMESPACE).getStore()
+            const store = storage('legacy').getStore()
             const iastCtx = iastContextFunctions.getIastContext(store)
 
             let sql = 'SELECT 1'

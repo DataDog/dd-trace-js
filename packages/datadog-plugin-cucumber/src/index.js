@@ -1,7 +1,7 @@
 'use strict'
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
-const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
+const { storage } = require('../../datadog-core')
 
 const {
   TEST_SKIP_REASON,
@@ -213,7 +213,7 @@ class CucumberPlugin extends CiPlugin {
       isParallel,
       promises
     }) => {
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testFileAbsolutePath, this.sourceRoot)
       const testSourceFile = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)
 
@@ -239,7 +239,7 @@ class CucumberPlugin extends CiPlugin {
     })
 
     this.addSub('ci:cucumber:test:retry', ({ isFirstAttempt, error }) => {
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
       const span = store.span
       if (!isFirstAttempt) {
         span.setTag(TEST_IS_RETRY, 'true')
@@ -260,7 +260,7 @@ class CucumberPlugin extends CiPlugin {
     })
 
     this.addSub('ci:cucumber:test-step:start', ({ resource }) => {
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
       const childOf = store ? store.span : store
       const span = this.tracer.startSpan('cucumber.step', {
         childOf,
@@ -313,7 +313,7 @@ class CucumberPlugin extends CiPlugin {
       isEfdRetry,
       isFlakyRetry
     }) => {
-      const span = storage(SPAN_NAMESPACE).getStore().span
+      const span = storage('legacy').getStore().span
       const statusTag = isStep ? 'step.status' : TEST_STATUS
 
       span.setTag(statusTag, status)
@@ -368,7 +368,7 @@ class CucumberPlugin extends CiPlugin {
 
     this.addSub('ci:cucumber:error', (err) => {
       if (err) {
-        const span = storage(SPAN_NAMESPACE).getStore().span
+        const span = storage('legacy').getStore().span
         span.setTag('error', err)
       }
     })

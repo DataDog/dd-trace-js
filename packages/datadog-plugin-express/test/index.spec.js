@@ -6,7 +6,6 @@ const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
-const {SPAN_NAMESPACE} = require("../../datadog-core");
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
@@ -1310,12 +1309,12 @@ describe('Plugin', () => {
           const store = {}
 
           app.use((req, res, next) => {
-            storage(SPAN_NAMESPACE).run(store, () => next())
+            storage.run(store, () => next())
           })
 
           app.get('/user', (req, res) => {
             try {
-              expect(storage(SPAN_NAMESPACE).getStore()).to.equal(store)
+              expect(storage.getStore()).to.equal(store)
               done()
             } catch (e) {
               done(e)

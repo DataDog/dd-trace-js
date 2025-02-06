@@ -1,7 +1,7 @@
 'use strict'
 
 const shimmer = require('../../../../../../datadog-shimmer')
-const { storage, SPAN_NAMESPACE } = require('../../../../../../datadog-core')
+const { storage } = require('../../../../../../datadog-core')
 const { getIastContext } = require('../../iast-context')
 const { KAFKA_MESSAGE_KEY, KAFKA_MESSAGE_VALUE } = require('../source-types')
 const { newTaintedObject, newTaintedString } = require('../operations')
@@ -22,7 +22,7 @@ class KafkaConsumerIastPlugin extends SourceIastPlugin {
   }
 
   taintKafkaMessage (message) {
-    const iastContext = getIastContext(storage(SPAN_NAMESPACE).getStore())
+    const iastContext = getIastContext(storage('legacy').getStore())
 
     if (iastContext && message) {
       const { key, value } = message

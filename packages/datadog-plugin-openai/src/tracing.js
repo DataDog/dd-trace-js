@@ -3,7 +3,7 @@
 const path = require('path')
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
+const { storage } = require('../../datadog-core')
 const services = require('./services')
 const Sampler = require('../../dd-trace/src/sampler')
 const { MEASURED } = require('../../../ext/tags')
@@ -60,7 +60,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
   bindStart (ctx) {
     const { methodName, args, basePath, apiKey } = ctx
     const payload = normalizeRequestPayload(methodName, args)
-    const store = storage(SPAN_NAMESPACE).getStore() || {}
+    const store = storage('legacy').getStore() || {}
 
     const span = this.startSpan('openai.request', {
       service: this.config.service,

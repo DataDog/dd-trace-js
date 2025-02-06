@@ -10,7 +10,6 @@ const path = require('path')
 const waf = require('../../../src/appsec/waf')
 const { USER_ID } = require('../../../src/appsec/addresses')
 const blocking = require('../../../src/appsec/blocking')
-const {SPAN_NAMESPACE} = require("../../../../datadog-core");
 
 const resultActions = {
   block_request: {
@@ -117,16 +116,16 @@ describe('user_blocking', () => {
       it('should get req and res from local storage when they are not passed', () => {
         const ret = userBlocking.blockRequest(tracer)
         expect(ret).to.be.true
-        expect(storage(SPAN_NAMESPACE).getStore).to.have.been.calledOnce
+        expect(storage('legacy').getStore).to.have.been.calledOnce
         expect(block).to.be.calledOnceWithExactly(req, res, rootSpan)
       })
 
       it('should log warning when req or res is not available', () => {
-        storage(SPAN_NAMESPACE).getStore.returns(undefined)
+        storage('legacy').getStore.returns(undefined)
 
         const ret = userBlocking.blockRequest(tracer)
         expect(ret).to.be.false
-        expect(storage(SPAN_NAMESPACE).getStore).to.have.been.calledOnce
+        expect(storage('legacy').getStore).to.have.been.calledOnce
         expect(log.warn)
           .to.have.been.calledOnceWithExactly('[ASM] Requests or response object not available in blockRequest')
         expect(block).to.not.have.been.called

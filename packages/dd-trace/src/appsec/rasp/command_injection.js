@@ -2,7 +2,7 @@
 
 const { childProcessExecutionTracingChannel } = require('../channels')
 const { RULE_TYPES, handleResult } = require('./utils')
-const { storage, SPAN_NAMESPACE } = require('../../../../datadog-core')
+const { storage } = require('../../../../datadog-core')
 const addresses = require('../addresses')
 const waf = require('../waf')
 
@@ -27,7 +27,7 @@ function disable () {
 function analyzeCommandInjection ({ file, fileArgs, shell, abortController }) {
   if (!file) return
 
-  const store = storage(SPAN_NAMESPACE).getStore()
+  const store = storage('legacy').getStore()
   const req = store?.req
   if (!req) return
 

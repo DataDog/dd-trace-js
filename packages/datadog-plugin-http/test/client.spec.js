@@ -5,7 +5,7 @@ const fs = require('fs')
 const path = require('path')
 const tags = require('../../../ext/tags')
 const { expect } = require('chai')
-const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
+const { storage } = require('../../datadog-core')
 const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -922,15 +922,15 @@ describe('Plugin', () => {
               })
 
             appListener = server(app, port => {
-              const store = storage(SPAN_NAMESPACE).getStore()
+              const store = storage('legacy').getStore()
 
-              storage(SPAN_NAMESPACE).enterWith({ noop: true })
+              storage('legacy').enterWith({ noop: true })
               const req = http.request(tracer._tracer._url.href)
 
               req.on('error', () => {})
               req.end()
 
-              storage(SPAN_NAMESPACE).enterWith(store)
+              storage('legacy').enterWith(store)
             })
           })
         }

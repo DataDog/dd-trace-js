@@ -2,7 +2,7 @@
 
 const os = require('os')
 const path = require('path')
-const { storage, SPAN_NAMESPACE } = require('../../../../../datadog-core')
+const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const expect = require('chai').expect
 const sinon = require('sinon')
@@ -186,7 +186,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     describe(description, () => {
       describe('vulnerable', () => {
         testThatRequestHasVulnerability(function () {
-          const store = storage(SPAN_NAMESPACE).getStore()
+          const store = storage('legacy').getStore()
           const iastCtx = iastContextFunctions.getIastContext(store)
           const callArgs = [...args]
           if (vulnerableIndex > -1) {

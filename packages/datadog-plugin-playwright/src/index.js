@@ -1,6 +1,6 @@
 'use strict'
 
-const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
+const { storage } = require('../../datadog-core')
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 
 const {
@@ -68,7 +68,7 @@ class PlaywrightPlugin extends CiPlugin {
     })
 
     this.addSub('ci:playwright:test-suite:start', (testSuiteAbsolutePath) => {
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
       const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
 
@@ -102,7 +102,7 @@ class PlaywrightPlugin extends CiPlugin {
     })
 
     this.addSub('ci:playwright:test-suite:finish', ({ status, error }) => {
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
       const span = store && store.span
       if (!span) return
       if (error) {
@@ -121,7 +121,7 @@ class PlaywrightPlugin extends CiPlugin {
     })
 
     this.addSub('ci:playwright:test:start', ({ testName, testSuiteAbsolutePath, testSourceLine, browserName }) => {
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
       const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const span = this.startTestSpan(testName, testSuite, testSourceFile, testSourceLine, browserName)
@@ -129,7 +129,7 @@ class PlaywrightPlugin extends CiPlugin {
       this.enter(span, store)
     })
     this.addSub('ci:playwright:test:finish', ({ testStatus, steps, error, extraTags, isNew, isEfdRetry, isRetry }) => {
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
       const span = store && store.span
       if (!span) return
 

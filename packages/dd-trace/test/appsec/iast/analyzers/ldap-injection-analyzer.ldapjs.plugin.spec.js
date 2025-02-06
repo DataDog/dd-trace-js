@@ -5,7 +5,7 @@ const os = require('os')
 const path = require('path')
 
 const { prepareTestServerForIast } = require('../utils')
-const { storage, SPAN_NAMESPACE } = require('../../../../../datadog-core')
+const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
@@ -47,7 +47,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
       describe('has vulnerability', () => {
         testThatRequestHasVulnerability(() => {
           return new Promise((resolve, reject) => {
-            const store = storage(SPAN_NAMESPACE).getStore()
+            const store = storage('legacy').getStore()
             const iastCtx = iastContextFunctions.getIastContext(store)
 
             let filter = '(objectClass=*)'
@@ -84,7 +84,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
       describe('context is not null after search end event', () => {
         testThatRequestHasVulnerability(() => {
           return new Promise((resolve, reject) => {
-            const store = storage(SPAN_NAMESPACE).getStore()
+            const store = storage('legacy').getStore()
             const iastCtx = iastContextFunctions.getIastContext(store)
 
             let filter = '(objectClass=*)'
@@ -95,7 +95,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
                 return reject(err)
               }
               searchRes.on('end', () => {
-                const storeEnd = storage(SPAN_NAMESPACE).getStore()
+                const storeEnd = storage('legacy').getStore()
                 const iastCtxEnd = iastContextFunctions.getIastContext(storeEnd)
                 expect(iastCtxEnd).to.not.be.undefined
 
@@ -109,7 +109,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
       describe('remove listener should work as expected', () => {
         testThatRequestHasVulnerability(() => {
           return new Promise((resolve, reject) => {
-            const store = storage(SPAN_NAMESPACE).getStore()
+            const store = storage('legacy').getStore()
             const iastCtx = iastContextFunctions.getIastContext(store)
 
             let filter = '(objectClass=*)'
@@ -144,7 +144,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
               if (err) {
                 reject(err)
               } else {
-                const store = storage(SPAN_NAMESPACE).getStore()
+                const store = storage('legacy').getStore()
                 const iastCtx = iastContextFunctions.getIastContext(store)
 
                 let filter = '(objectClass=*)'
@@ -155,7 +155,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
                     return reject(err)
                   }
                   searchRes.on('end', () => {
-                    const storeEnd = storage(SPAN_NAMESPACE).getStore()
+                    const storeEnd = storage('legacy').getStore()
                     const iastCtxEnd = iastContextFunctions.getIastContext(storeEnd)
                     expect(iastCtxEnd).to.not.be.undefined
 
@@ -199,7 +199,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
 
       describe('has vulnerability', () => {
         testThatRequestHasVulnerability(() => {
-          const store = storage(SPAN_NAMESPACE).getStore()
+          const store = storage('legacy').getStore()
           const iastCtx = iastContextFunctions.getIastContext(store)
 
           let filter = '(objectClass=*)'

@@ -3,7 +3,7 @@
 const web = require('../../dd-trace/src/plugins/util/web')
 const WebPlugin = require('../../datadog-plugin-web/src')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
-const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
+const { storage } = require('../../datadog-core')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class RouterPlugin extends WebPlugin {
@@ -29,7 +29,7 @@ class RouterPlugin extends WebPlugin {
         context.middleware.push(span)
       }
 
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
       this._storeStack.push(store)
       this.enter(span, store)
 
@@ -94,7 +94,7 @@ class RouterPlugin extends WebPlugin {
   }
 
   _getStoreSpan () {
-    const store = storage(SPAN_NAMESPACE).getStore()
+    const store = storage('legacy').getStore()
 
     return store && store.span
   }

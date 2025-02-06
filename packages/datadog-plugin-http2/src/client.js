@@ -1,6 +1,6 @@
 'use strict'
 
-const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
+const { storage } = require('../../datadog-core')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 
 const URL = require('url').URL
@@ -36,7 +36,7 @@ class Http2ClientPlugin extends ClientPlugin {
     const uri = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}${pathname}`
     const allowed = this.config.filter(uri)
 
-    const store = storage(SPAN_NAMESPACE).getStore()
+    const store = storage('legacy').getStore()
     const childOf = store && allowed ? store.span : null
     const span = this.startSpan(this.operationName(), {
       childOf,
@@ -85,7 +85,7 @@ class Http2ClientPlugin extends ClientPlugin {
         return parentStore
     }
 
-    return storage(SPAN_NAMESPACE).getStore()
+    return storage('legacy').getStore()
   }
 
   configure (config) {
@@ -98,7 +98,7 @@ class Http2ClientPlugin extends ClientPlugin {
     store.span.setTag(HTTP_STATUS_CODE, status)
 
     if (!this.config.validateStatus(status)) {
-      storage(SPAN_NAMESPACE).run(store, () => this.addError())
+      storage('legacy').run(store, () => this.addError())
     }
 
     addHeaderTags(store.span, headers, HTTP_RESPONSE_HEADERS, this.config)

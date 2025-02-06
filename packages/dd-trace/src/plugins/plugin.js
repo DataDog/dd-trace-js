@@ -4,13 +4,13 @@
 
 const dc = require('dc-polyfill')
 const logger = require('../log')
-const { storage, SPAN_NAMESPACE } = require('../../../datadog-core')
+const { storage } = require('../../../datadog-core')
 
 class Subscription {
   constructor (event, handler) {
     this._channel = dc.channel(event)
     this._handler = (message, name) => {
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
       if (!store || !store.noop) {
         handler(message, name)
       }
@@ -30,7 +30,7 @@ class StoreBinding {
   constructor (event, transform) {
     this._channel = dc.channel(event)
     this._transform = data => {
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
 
       return !store || !store.noop
         ? transform(data)
@@ -39,11 +39,11 @@ class StoreBinding {
   }
 
   enable () {
-    this._channel.bindStore(storage(SPAN_NAMESPACE), this._transform)
+    this._channel.bindStore(storage('legacy'), this._transform)
   }
 
   disable () {
-    this._channel.unbindStore(storage(SPAN_NAMESPACE))
+    this._channel.unbindStore(storage('legacy'))
   }
 }
 
@@ -62,14 +62,14 @@ module.exports = class Plugin {
   }
 
   enter (span, store) {
-    store = store || storage(SPAN_NAMESPACE).getStore()
-    storage(SPAN_NAMESPACE).enterWith({ ...store, span })
+    store = store || storage('legacy').getStore()
+    storage('legacy').enterWith({ ...store, span })
   }
 
   // TODO: Implement filters on resource name for all plugins.
   /** Prevents creation of spans here and for all async descendants. */
   skip () {
-    storage(SPAN_NAMESPACE).enterWith({ noop: true })
+    storage('legacy').enterWith({ noop: true })
   }
 
   addSub (channelName, handler) {
@@ -91,7 +91,7 @@ module.exports = class Plugin {
   }
 
   addError (error) {
-    const store = storage(SPAN_NAMESPACE).getStore()
+    const store = storage('legacy').getStore()
 
     if (!store || !store.span) return
 

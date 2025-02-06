@@ -1,6 +1,6 @@
 'use strict'
 
-const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
+const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
 
 describe('Plugin', () => {
@@ -29,12 +29,12 @@ describe('Plugin', () => {
       it('should propagate context', done => {
         const span = {}
 
-        storage(SPAN_NAMESPACE).run(span, () => {
+        storage('legacy').run(span, () => {
           limitd.take('user', 'test', function (err, resp) {
             if (err) return done(err)
 
             try {
-              expect(storage(SPAN_NAMESPACE).getStore()).to.equal(span)
+              expect(storage('legacy').getStore()).to.equal(span)
               done()
             } catch (e) {
               done(e)

@@ -1,7 +1,7 @@
 const vulnerabilityReporter = require('./vulnerability-reporter')
 const { enableAllAnalyzers, disableAllAnalyzers } = require('./analyzers')
 const web = require('../../plugins/util/web')
-const { storage, SPAN_NAMESPACE } = require('../../../../datadog-core')
+const { storage } = require('../../../../datadog-core')
 const overheadController = require('./overhead-controller')
 const dc = require('dc-polyfill')
 const iastContextFunctions = require('./iast-context')
@@ -57,7 +57,7 @@ function disable () {
 
 function onIncomingHttpRequestStart (data) {
   if (data?.req) {
-    const store = storage(SPAN_NAMESPACE).getStore()
+    const store = storage('legacy').getStore()
     if (store) {
       const topContext = web.getContext(data.req)
       if (topContext) {
@@ -82,7 +82,7 @@ function onIncomingHttpRequestStart (data) {
 
 function onIncomingHttpRequestEnd (data) {
   if (data?.req) {
-    const store = storage(SPAN_NAMESPACE).getStore()
+    const store = storage('legacy').getStore()
     const topContext = web.getContext(data.req)
     const iastContext = iastContextFunctions.getIastContext(store, topContext)
     if (iastContext?.rootSpan) {

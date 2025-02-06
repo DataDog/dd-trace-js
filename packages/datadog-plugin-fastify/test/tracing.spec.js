@@ -6,7 +6,6 @@ const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { NODE_MAJOR } = require('../../../version')
-const {SPAN_NAMESPACE} = require("../../datadog-core");
 
 const host = 'localhost'
 
@@ -310,15 +309,15 @@ describe('Plugin', () => {
             const storage = new AsyncLocalStorage()
             const store = {}
 
-            global.getStore = () => storage(SPAN_NAMESPACE).getStore()
+            global.getStore = () => storage('legacy').getStore()
 
             app.addHook('onRequest', (request, reply, next) => {
-              storage(SPAN_NAMESPACE).run(store, () => next())
+              storage.run(store, () => next())
             })
 
             app.get('/user', (request, reply) => {
               try {
-                expect(storage(SPAN_NAMESPACE).getStore()).to.equal(store)
+                expect(storage.getStore()).to.equal(store)
                 done()
               } catch (e) {
                 done(e)

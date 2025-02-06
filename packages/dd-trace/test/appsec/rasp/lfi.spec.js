@@ -5,7 +5,6 @@ const { assert } = require('chai')
 const { fsOperationStart, incomingHttpRequestStart } = require('../../../src/appsec/channels')
 const { FS_OPERATION_PATH } = require('../../../src/appsec/addresses')
 const { RASP_MODULE } = require('../../../src/appsec/rasp/fs-plugin')
-const {SPAN_NAMESPACE} = require("../../../../datadog-core");
 
 describe('RASP - lfi.js', () => {
   let waf, datadogCore, lfi, web, blocking, appsecFsPlugin, config
@@ -109,7 +108,7 @@ describe('RASP - lfi.js', () => {
 
     it('should analyze lfi for root fs operations', () => {
       const fs = { root: true }
-      datadogCore.storage(SPAN_NAMESPACE).getStore.returns({ req, fs })
+      datadogCore.storage('legacy').getStore.returns({ req, fs })
 
       fsOperationStart.publish(ctx)
 
@@ -119,7 +118,7 @@ describe('RASP - lfi.js', () => {
 
     it('should NOT analyze lfi for child fs operations', () => {
       const fs = {}
-      datadogCore.storage(SPAN_NAMESPACE).getStore.returns({ req, fs })
+      datadogCore.storage('legacy').getStore.returns({ req, fs })
 
       fsOperationStart.publish(ctx)
 
@@ -128,7 +127,7 @@ describe('RASP - lfi.js', () => {
 
     it('should NOT analyze lfi for undefined fs (AppsecFsPlugin disabled)', () => {
       const fs = undefined
-      datadogCore.storage(SPAN_NAMESPACE).getStore.returns({ req, fs })
+      datadogCore.storage('legacy').getStore.returns({ req, fs })
 
       fsOperationStart.publish(ctx)
 
@@ -137,7 +136,7 @@ describe('RASP - lfi.js', () => {
 
     it('should NOT analyze lfi for excluded operations', () => {
       const fs = { opExcluded: true, root: true }
-      datadogCore.storage(SPAN_NAMESPACE).getStore.returns({ req, fs })
+      datadogCore.storage('legacy').getStore.returns({ req, fs })
 
       fsOperationStart.publish(ctx)
 

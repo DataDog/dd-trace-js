@@ -3,7 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios').create({ validateStatus: null })
 const dc = require('dc-polyfill')
-const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
+const { storage } = require('../../datadog-core')
 
 withVersions('passport-http', 'passport-http', version => {
   describe('passport-http instrumentation', () => {
@@ -174,7 +174,7 @@ withVersions('passport-http', 'passport-http', version => {
 
     it('should block when subscriber aborts', async () => {
       subscriberStub = sinon.spy(({ abortController }) => {
-        storage(SPAN_NAMESPACE).getStore().req.res.writeHead(403).end('Blocked')
+        storage('legacy').getStore().req.res.writeHead(403).end('Blocked')
         abortController.abort()
       })
 

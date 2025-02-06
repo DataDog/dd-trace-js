@@ -2,7 +2,7 @@
 
 const { format } = require('url')
 const { httpClientRequestStart } = require('../channels')
-const { storage, SPAN_NAMESPACE } = require('../../../../datadog-core')
+const { storage } = require('../../../../datadog-core')
 const addresses = require('../addresses')
 const waf = require('../waf')
 const { RULE_TYPES, handleResult } = require('./utils')
@@ -19,7 +19,7 @@ function disable () {
 }
 
 function analyzeSsrf (ctx) {
-  const store = storage(SPAN_NAMESPACE).getStore()
+  const store = storage('legacy').getStore()
   const req = store?.req
   const outgoingUrl = (ctx.args.options?.uri && format(ctx.args.options.uri)) ?? ctx.args.uri
 

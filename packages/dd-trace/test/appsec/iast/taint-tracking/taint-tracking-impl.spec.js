@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 
 const { prepareTestServerForIast, copyFileToTmp } = require('../utils')
-const { storage, SPAN_NAMESPACE } = require('../../../../../datadog-core')
+const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString, isTainted, getRanges } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
@@ -66,7 +66,7 @@ describe('TaintTracking', () => {
         commands.forEach((command) => {
           describe(`with command: '${command}'`, () => {
             testThatRequestHasVulnerability(function () {
-              const store = storage(SPAN_NAMESPACE).getStore()
+              const store = storage('legacy').getStore()
               const iastContext = iastContextFunctions.getIastContext(store)
               const commandTainted = newTaintedString(iastContext, command, 'param', 'Request')
 
@@ -93,7 +93,7 @@ describe('TaintTracking', () => {
 
     describe('using JSON.parse', () => {
       testThatRequestHasVulnerability(function () {
-        const store = storage(SPAN_NAMESPACE).getStore()
+        const store = storage('legacy').getStore()
         const iastContext = iastContextFunctions.getIastContext(store)
 
         const json = '{"command":"ls -la"}'

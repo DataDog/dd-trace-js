@@ -2,7 +2,7 @@
 
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
-const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
+const { storage } = require('../../datadog-core')
 const { isTrue } = require('../../dd-trace/src/util')
 const coalesce = require('koalas')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
@@ -67,13 +67,13 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         span.addTags(requestTags)
       }
 
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
 
       this.enter(span, store)
     })
 
     this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, region => {
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
       if (!store) return
       const { span } = store
       if (!span) return
@@ -82,7 +82,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     })
 
     this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ({ response, cbExists = false }) => {
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
       if (!store) return
       const { span } = store
       if (!span) return

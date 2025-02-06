@@ -1,7 +1,7 @@
 'use strict'
 
 const Plugin = require('../../plugins/plugin')
-const { storage, SPAN_NAMESPACE } = require('../../../../datadog-core')
+const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 
 const RASP_MODULE = 'rasp'
@@ -14,9 +14,9 @@ const enabledFor = {
 
 let fsPlugin
 
-function enterWith (fsProps, store = storage(SPAN_NAMESPACE).getStore()) {
+function enterWith (fsProps, store = storage('legacy').getStore()) {
   if (store && !store.fs?.opExcluded) {
-    storage(SPAN_NAMESPACE).enterWith({
+    storage('legacy').enterWith({
       ...store,
       fs: {
         ...store.fs,
@@ -42,7 +42,7 @@ class AppsecFsPlugin extends Plugin {
   }
 
   _onFsOperationStart () {
-    const store = storage(SPAN_NAMESPACE).getStore()
+    const store = storage('legacy').getStore()
     if (store) {
       enterWith({ root: store.fs?.root === undefined }, store)
     }
@@ -53,9 +53,9 @@ class AppsecFsPlugin extends Plugin {
   }
 
   _onFsOperationFinishOrRenderEnd () {
-    const store = storage(SPAN_NAMESPACE).getStore()
+    const store = storage('legacy').getStore()
     if (store?.fs?.parentStore) {
-      storage(SPAN_NAMESPACE).enterWith(store.fs.parentStore)
+      storage('legacy').enterWith(store.fs.parentStore)
     }
   }
 }

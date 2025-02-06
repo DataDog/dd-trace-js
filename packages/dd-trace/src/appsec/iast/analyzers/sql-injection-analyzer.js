@@ -3,7 +3,7 @@
 const InjectionAnalyzer = require('./injection-analyzer')
 const { SQL_INJECTION } = require('../vulnerabilities')
 const { getRanges } = require('../taint-tracking/operations')
-const { storage, SPAN_NAMESPACE } = require('../../../../../datadog-core')
+const { storage } = require('../../../../../datadog-core')
 const { getNodeModulesPaths } = require('../path-line')
 
 const EXCLUDED_PATHS = getNodeModulesPaths('mysql', 'mysql2', 'sequelize', 'pg-pool', 'knex')
@@ -38,18 +38,18 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
   }
 
   getStoreAndAnalyze (query, dialect) {
-    const parentStore = storage(SPAN_NAMESPACE).getStore()
+    const parentStore = storage('legacy').getStore()
     if (parentStore) {
       this.analyze(query, parentStore, dialect)
 
-      storage(SPAN_NAMESPACE).enterWith({ ...parentStore, sqlAnalyzed: true, sqlParentStore: parentStore })
+      storage('legacy').enterWith({ ...parentStore, sqlAnalyzed: true, sqlParentStore: parentStore })
     }
   }
 
   returnToParentStore () {
-    const store = storage(SPAN_NAMESPACE).getStore()
+    const store = storage('legacy').getStore()
     if (store && store.sqlParentStore) {
-      storage(SPAN_NAMESPACE).enterWith(store.sqlParentStore)
+      storage('legacy').enterWith(store.sqlParentStore)
     }
   }
 
@@ -59,7 +59,7 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
   }
 
   analyze (value, store, dialect) {
-    store = store || storage(SPAN_NAMESPACE).getStore()
+    store = store || storage('legacy').getStore()
     if (!(store && store.sqlAnalyzed)) {
       super.analyze(value, store, dialect)
     }

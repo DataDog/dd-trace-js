@@ -2,7 +2,7 @@
 
 const { LOG } = require('../../../../ext/formats')
 const Plugin = require('./plugin')
-const { storage, SPAN_NAMESPACE } = require('../../../datadog-core')
+const { storage } = require('../../../datadog-core')
 
 const hasOwn = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop)
 
@@ -40,7 +40,7 @@ module.exports = class LogPlugin extends Plugin {
     super(...args)
 
     this.addSub(`apm:${this.constructor.id}:log`, (arg) => {
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
       const span = store && store.span
 
       // NOTE: This needs to run whether or not there is a span

@@ -4,7 +4,7 @@ const path = require('path')
 
 const InjectionAnalyzer = require('./injection-analyzer')
 const { getIastContext } = require('../iast-context')
-const { storage, SPAN_NAMESPACE } = require('../../../../../datadog-core')
+const { storage } = require('../../../../../datadog-core')
 const { PATH_TRAVERSAL } = require('../vulnerabilities')
 
 const ignoredOperations = ['dir.close', 'close']
@@ -29,7 +29,7 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
 
   onConfigure () {
     this.addSub('apm:fs:operation:start', (obj) => {
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
       const outOfReqOrChild = !store?.fs?.root
 
       // we could filter out all the nested fs.operations based on store.fs.root
@@ -84,7 +84,7 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
   }
 
   analyze (value) {
-    const iastContext = getIastContext(storage(SPAN_NAMESPACE).getStore())
+    const iastContext = getIastContext(storage('legacy').getStore())
     if (!iastContext) {
       return
     }

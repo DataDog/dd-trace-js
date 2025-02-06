@@ -1,7 +1,7 @@
 'use strict'
 
 const Limiter = require('../rate_limiter')
-const { storage, SPAN_NAMESPACE } = require('../../../datadog-core')
+const { storage } = require('../../../datadog-core')
 const web = require('../plugins/util/web')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const {
@@ -102,7 +102,7 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
 }
 
 function reportMetrics (metrics, raspRule) {
-  const store = storage(SPAN_NAMESPACE).getStore()
+  const store = storage('legacy').getStore()
   const rootSpan = store?.req && web.root(store.req)
   if (!rootSpan) return
 
@@ -117,7 +117,7 @@ function reportMetrics (metrics, raspRule) {
 }
 
 function reportAttack (attackData) {
-  const store = storage(SPAN_NAMESPACE).getStore()
+  const store = storage('legacy').getStore()
   const req = store?.req
   const rootSpan = web.root(req)
   if (!rootSpan) return
@@ -162,7 +162,7 @@ function isFingerprintDerivative (derivative) {
 function reportDerivatives (derivatives) {
   if (!derivatives) return
 
-  const req = storage(SPAN_NAMESPACE).getStore()?.req
+  const req = storage('legacy').getStore()?.req
   const rootSpan = web.root(req)
 
   if (!rootSpan) return

@@ -1,7 +1,7 @@
 'use strict'
 
 require('../src/knex')
-const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
+const { storage } = require('../../datadog-core')
 
 describe('Instrumentation', () => {
   let knex
@@ -24,10 +24,10 @@ describe('Instrumentation', () => {
         afterEach(() => client.destroy())
 
         it('should propagate context', () =>
-          storage(SPAN_NAMESPACE).run(store, () =>
+          storage('legacy').run(store, () =>
             client.raw('PRAGMA user_version')
               .finally(() => {
-                expect(storage(SPAN_NAMESPACE).getStore()).to.equal(store)
+                expect(storage('legacy').getStore()).to.equal(store)
               })
               .catch(() => {})
           )

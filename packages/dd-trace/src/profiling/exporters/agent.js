@@ -8,7 +8,7 @@ const { EventSerializer } = require('./event_serializer')
 // TODO: avoid using dd-trace internals. Make this a separate module?
 const docker = require('../../exporters/common/docker')
 const FormData = require('../../exporters/common/form-data')
-const { storage, SPAN_NAMESPACE } = require('../../../../datadog-core')
+const { storage } = require('../../../../datadog-core')
 const version = require('../../../../../package.json').version
 const { urlToHttpOptions } = require('url')
 const perf = require('perf_hooks').performance
@@ -40,8 +40,8 @@ function countStatusCode (statusCode) {
 function sendRequest (options, form, callback) {
   const request = options.protocol === 'https:' ? httpsRequest : httpRequest
 
-  const store = storage(SPAN_NAMESPACE).getStore()
-  storage(SPAN_NAMESPACE).enterWith({ noop: true })
+  const store = storage('legacy').getStore()
+  storage('legacy').enterWith({ noop: true })
   requestCounter.inc()
   const start = perf.now()
   const req = request(options, res => {
@@ -65,7 +65,7 @@ function sendRequest (options, form, callback) {
     sizeDistribution.track(form.size())
     form.pipe(req)
   }
-  storage(SPAN_NAMESPACE).enterWith(store)
+  storage('legacy').enterWith(store)
 }
 
 function getBody (stream, callback) {

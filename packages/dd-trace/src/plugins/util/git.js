@@ -26,7 +26,7 @@ const {
   TELEMETRY_GIT_COMMAND_ERRORS
 } = require('../../ci-visibility/telemetry')
 const { filterSensitiveInfoFromRepository } = require('./url')
-const { storage, SPAN_NAMESPACE } = require('../../../../datadog-core')
+const { storage } = require('../../../../datadog-core')
 
 const GIT_REV_LIST_MAX_BUFFER = 12 * 1024 * 1024 // 12MB
 
@@ -37,8 +37,8 @@ function sanitizedExec (
   durationMetric,
   errorMetric
 ) {
-  const store = storage(SPAN_NAMESPACE).getStore()
-  storage(SPAN_NAMESPACE).enterWith({ noop: true })
+  const store = storage('legacy').getStore()
+  storage('legacy').enterWith({ noop: true })
 
   let startTime
   if (operationMetric) {
@@ -64,7 +64,7 @@ function sanitizedExec (
     log.error('Git plugin error executing command', err)
     return ''
   } finally {
-    storage(SPAN_NAMESPACE).enterWith(store)
+    storage('legacy').enterWith(store)
   }
 }
 

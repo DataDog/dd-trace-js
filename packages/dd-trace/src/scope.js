@@ -1,6 +1,6 @@
 'use strict'
 
-const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
+const { storage } = require('../../datadog-core')
 
 // TODO: refactor bind to use shimmer once the new internal tracer lands
 
@@ -8,7 +8,7 @@ const originals = new WeakMap()
 
 class Scope {
   active () {
-    const store = storage(SPAN_NAMESPACE).getStore()
+    const store = storage('legacy').getStore()
 
     return (store && store.span) || null
   }
@@ -16,10 +16,10 @@ class Scope {
   activate (span, callback) {
     if (typeof callback !== 'function') return callback
 
-    const oldStore = storage(SPAN_NAMESPACE).getStore()
-    const newStore = span ? storage(SPAN_NAMESPACE).getStore(span._store) : oldStore
+    const oldStore = storage('legacy').getStore()
+    const newStore = span ? storage('legacy').getStore(span._store) : oldStore
 
-    storage(SPAN_NAMESPACE).enterWith({ ...newStore, span })
+    storage('legacy').enterWith({ ...newStore, span })
 
     try {
       return callback()
@@ -30,7 +30,7 @@ class Scope {
 
       throw e
     } finally {
-      storage(SPAN_NAMESPACE).enterWith(oldStore)
+      storage('legacy').enterWith(oldStore)
     }
   }
 

@@ -1,5 +1,5 @@
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
-const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
+const { storage } = require('../../datadog-core')
 
 const {
   TEST_STATUS,
@@ -318,7 +318,7 @@ class JestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:jest:test:start', (test) => {
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
       const span = this.startTestSpan(test)
 
       this.enter(span, store)
@@ -326,7 +326,7 @@ class JestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:jest:test:finish', ({ status, testStartLine }) => {
-      const span = storage(SPAN_NAMESPACE).getStore().span
+      const span = storage('legacy').getStore().span
       span.setTag(TEST_STATUS, status)
       if (testStartLine) {
         span.setTag(TEST_SOURCE_START, testStartLine)
@@ -351,7 +351,7 @@ class JestPlugin extends CiPlugin {
 
     this.addSub('ci:jest:test:err', ({ error, shouldSetProbe, promises }) => {
       if (error) {
-        const store = storage(SPAN_NAMESPACE).getStore()
+        const store = storage('legacy').getStore()
         if (store && store.span) {
           const span = store.span
           span.setTag(TEST_STATUS, 'fail')

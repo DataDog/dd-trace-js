@@ -6,7 +6,7 @@ const msgpack = require('@msgpack/msgpack')
 const express = require('express')
 const path = require('path')
 const ritm = require('../../src/ritm')
-const { storage, SPAN_NAMESPACE } = require('../../../datadog-core')
+const { storage } = require('../../../datadog-core')
 
 const traceHandlers = new Set()
 const statsHandlers = new Set()
@@ -325,7 +325,7 @@ module.exports = {
     const emit = server.emit
 
     server.emit = function () {
-      storage(SPAN_NAMESPACE).enterWith({ noop: true })
+      storage('legacy').enterWith({ noop: true })
       return emit.apply(this, arguments)
     }
 

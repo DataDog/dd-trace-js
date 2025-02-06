@@ -3,16 +3,6 @@
 const { AsyncLocalStorage } = require('async_hooks')
 
 /**
- * ⚠️THIS MAY NOT BE THE NAMESPACE YOU WANT!
- *
- * This mostly exists as a "default" namespace for storage and was added
- * retroactively throughout our codebase. There may be a better option for
- * different use cases
- * @type {string}
- */
-const SPAN_NAMESPACE = 'span'
-
-/**
  * This is exactly the same as AsyncLocalStorage, with the exception that it
  * uses a WeakMap to store the store object. This is because ALS stores the
  * store object as a property of the resource object, which causes all sorts
@@ -119,4 +109,4 @@ function storage (namespace) {
   return storages[namespace]
 }
 
-module.exports = { storage, SPAN_NAMESPACE }
+module.exports = { storage }

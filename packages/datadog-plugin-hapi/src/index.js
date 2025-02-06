@@ -1,6 +1,6 @@
 'use strict'
 
-const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
+const { storage } = require('../../datadog-core')
 const RouterPlugin = require('../../datadog-plugin-router/src')
 const web = require('../../dd-trace/src/plugins/util/web')
 
@@ -15,7 +15,7 @@ class HapiPlugin extends RouterPlugin {
     this._requestSpans = new WeakMap()
 
     this.addSub('apm:hapi:request:handle', ({ req }) => {
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
       const span = store && store.span
 
       this.setFramework(req, 'hapi', this.config)

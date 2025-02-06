@@ -1,7 +1,7 @@
 'use strict'
 
 const ChildProcessPlugin = require('../src')
-const { storage, SPAN_NAMESPACE } = require('../../datadog-core')
+const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const { NODE_MAJOR } = require('../../../version')
@@ -396,7 +396,7 @@ describe('Child process plugin', () => {
               parentSpan.finish()
               tracer.scope().activate(parentSpan, done)
             } else {
-              storage(SPAN_NAMESPACE).enterWith({})
+              storage('legacy').enterWith({})
               done()
             }
           })
@@ -425,7 +425,7 @@ describe('Child process plugin', () => {
 
               it('should maintain previous span after the execution', (done) => {
                 const res = childProcess[methodName]('ls')
-                const span = storage(SPAN_NAMESPACE).getStore()?.span
+                const span = storage('legacy').getStore()?.span
                 expect(span).to.be.equals(parentSpan)
                 if (async) {
                   res.on('close', () => {
@@ -440,7 +440,7 @@ describe('Child process plugin', () => {
               if (async) {
                 it('should maintain previous span in the callback', (done) => {
                   childProcess[methodName]('ls', () => {
-                    const span = storage(SPAN_NAMESPACE).getStore()?.span
+                    const span = storage('legacy').getStore()?.span
                     expect(span).to.be.equals(parentSpan)
                     done()
                   })

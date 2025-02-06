@@ -2,7 +2,7 @@
 
 const axios = require('axios')
 const Config = require('../../../../../src/config')
-const { storage, SPAN_NAMESPACE } = require('../../../../../../datadog-core')
+const { storage } = require('../../../../../../datadog-core')
 const iast = require('../../../../../src/appsec/iast')
 const iastContextFunctions = require('../../../../../src/appsec/iast/iast-context')
 const { isTainted, getRanges } = require('../../../../../src/appsec/iast/taint-tracking/operations')
@@ -16,7 +16,7 @@ describe('Cookies sourcing with cookies', () => {
   let cookie
   withVersions('cookie', 'cookie', version => {
     function app () {
-      const store = storage(SPAN_NAMESPACE).getStore()
+      const store = storage('legacy').getStore()
       const iastContext = iastContextFunctions.getIastContext(store)
 
       const rawCookies = 'cookie=value'
