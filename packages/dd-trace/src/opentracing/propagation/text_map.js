@@ -663,6 +663,7 @@ class TextMapPropagator {
     const tid = traceId.substring(0, 16)
 
     // don't set upper 64 bits if they are all zeros or 128 bit trace id generation is disabled
+    console.log(123123123, this._config.traceId128BitGenerationEnabled)
     if (tid === zeroTraceId || this._config.traceId128BitGenerationEnabled === false) return
 
     spanContext._trace.tags['_dd.p.tid'] = tid
