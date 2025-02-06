@@ -136,7 +136,7 @@ describe('sql-injection-analyzer', () => {
       const datadogCore = {
         storage: () => {
           return {
-            getStore: getStore
+            getStore
           }
         }
       }

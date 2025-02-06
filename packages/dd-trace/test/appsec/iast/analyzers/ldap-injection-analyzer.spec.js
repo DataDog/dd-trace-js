@@ -96,7 +96,7 @@ describe('ldap-injection-analyzer', () => {
     const datadogCore = {
       storage: () => {
         return {
-          getStore: getStore
+          getStore
         }
       }
     }

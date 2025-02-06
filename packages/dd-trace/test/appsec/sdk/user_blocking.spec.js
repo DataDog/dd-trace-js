@@ -57,7 +57,7 @@ describe('user_blocking', () => {
       userBlocking = proxyquire('../../../src/appsec/sdk/user_blocking', {
         './utils': { getRootSpan },
         '../blocking': { block },
-        '../../../../datadog-core': { storage },
+        '../../../../datadog-core': storage,
         '../../log': log
       })
     })
