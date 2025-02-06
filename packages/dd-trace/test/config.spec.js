@@ -1187,6 +1187,14 @@ describe('Config', () => {
     expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
   })
 
+  it('bluh', () => {
+    process.env.DD_TAGS = 'env:test aKey:aVal bKey:bVal cKey:'
+
+    const config = new Config()
+
+    expect(config.tags).to.include({ 'env': 'test', 'aKey': 'aVal', 'bKey': 'bVal', 'cKey': '' })
+  })
+
   it('should give priority to the options', () => {
     process.env.DD_TRACE_AGENT_URL = 'https://agent2:6218'
     process.env.DD_SITE = 'datadoghq.eu'

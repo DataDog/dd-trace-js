@@ -37,7 +37,8 @@ describe('encode', () => {
       type: 'foo',
       error: 0,
       meta: {
-        bar: 'baz'
+        bar: 'baz',
+        foo: ''
       },
       metrics: {
         example: 1
@@ -63,7 +64,7 @@ describe('encode', () => {
     expect(trace[0].start).to.equal(123n)
     expect(trace[0].duration).to.equal(456n)
     expect(trace[0].name).to.equal(data[0].name)
-    expect(trace[0].meta).to.deep.equal({ bar: 'baz' })
+    expect(trace[0].meta).to.deep.equal({ bar: 'baz', foo: '' })
     expect(trace[0].metrics).to.deep.equal({ example: 1 })
   })
 

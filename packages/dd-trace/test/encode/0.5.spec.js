@@ -29,7 +29,8 @@ describe('encode 0.5', () => {
       service: 'test-s',
       error: 0,
       meta: {
-        bar: 'baz'
+        bar: 'baz',
+        foo: '',
       },
       metrics: {
         example: 1
@@ -59,7 +60,8 @@ describe('encode 0.5', () => {
     expect(trace[0][6]).to.equal(BigInt(data[0].start))
     expect(trace[0][7]).to.equal(BigInt(data[0].duration))
     expect(trace[0][8]).to.equal(0)
-    expect(trace[0][9]).to.deep.equal({ [stringMap.indexOf('bar')]: stringMap.indexOf('baz') })
+    console.log(88, stringMap)
+    expect(trace[0][9]).to.deep.equal({ [stringMap.indexOf('bar')]: stringMap.indexOf('baz'), [stringMap.indexOf('foo')]: stringMap.indexOf('bar') })
     expect(trace[0][10]).to.deep.equal({ [stringMap.indexOf('example')]: 1 })
     expect(stringMap[trace[0][11]]).to.equal('') // unset
   })
