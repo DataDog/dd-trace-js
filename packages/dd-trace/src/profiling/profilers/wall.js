@@ -25,7 +25,7 @@ const ProfilingContext = Symbol('NativeWallProfiler.ProfilingContext')
 let kSampleCount
 
 function getActiveSpan () {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   return store && store.span
 }
 

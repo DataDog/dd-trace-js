@@ -20,7 +20,7 @@ class GrpcClientPlugin extends ClientPlugin {
   }
 
   bindStart (message) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const { metadata, path, type } = message
     const metadataFilter = this.config.metadataFilter
     const method = getMethodMetadata(path, type)
