@@ -84,6 +84,7 @@ module.exports = {
         bestMatch.scriptId = scriptId
         bestMatch.sourceMapURL = sourceMapURL
         bestMatch.source = source
+        log.warn(`found a match ${JSON.stringify(bestMatch, null, 2)}`)
       }
     }
 
@@ -115,6 +116,9 @@ module.exports = {
 session.on('Debugger.scriptParsed', ({ params }) => {
   scriptUrls.set(params.scriptId, params.url)
   if (params.url.startsWith('file:')) {
+    if (params.url.includes('dependency.js')) {
+      log.warn(`loading file: ${JSON.stringify(params, null, 2)}`)
+    }
     if (params.sourceMapURL) {
       const dir = dirname(new URL(params.url).pathname)
       let sources
