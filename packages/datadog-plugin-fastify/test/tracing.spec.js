@@ -309,7 +309,7 @@ describe('Plugin', () => {
             const storage = new AsyncLocalStorage()
             const store = {}
 
-            global.getStore = () => storage.getStore()
+            global.getStore = () => storage('legacy').getStore()
 
             app.addHook('onRequest', (request, reply, next) => {
               storage.run(store, () => next())

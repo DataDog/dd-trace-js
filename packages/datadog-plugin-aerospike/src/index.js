@@ -20,7 +20,7 @@ class AerospikePlugin extends DatabasePlugin {
   bindStart (ctx) {
     const { commandName, commandArgs } = ctx
     const resourceName = commandName.slice(0, commandName.indexOf('Command'))
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const childOf = store ? store.span : null
     const meta = getMeta(resourceName, commandArgs)
 

@@ -186,7 +186,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     describe(description, () => {
       describe('vulnerable', () => {
         testThatRequestHasVulnerability(function () {
-          const store = storage.getStore()
+          const store = storage('legacy').getStore()
           const iastCtx = iastContextFunctions.getIastContext(store)
           const callArgs = [...args]
           if (vulnerableIndex > -1) {

@@ -145,7 +145,7 @@ withVersions('passport', 'passport', version => {
       const cookie = login.headers['set-cookie'][0]
 
       subscriberStub.callsFake(({ abortController }) => {
-        const res = storage.getStore().req.res
+        const res = storage('legacy').getStore().req.res
         res.writeHead(403)
         res.constructor.prototype.end.call(res, 'Blocked')
         abortController.abort()

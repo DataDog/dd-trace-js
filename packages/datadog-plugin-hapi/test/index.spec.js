@@ -351,11 +351,11 @@ describe('Plugin', () => {
       })
 
       it('should persist AsyncLocalStorage context', (done) => {
-        const als = new AsyncLocalStorage()
+        const storage = new AsyncLocalStorage()
         const path = '/path'
 
         server.ext('onRequest', (request, h) => {
-          als.enterWith({ path: request.path })
+          storage.enterWith({ path: request.path })
           return reply(request, h)
         })
 
@@ -363,7 +363,7 @@ describe('Plugin', () => {
           method: 'GET',
           path,
           handler: async (request, h) => {
-            expect(als.getStore()).to.deep.equal({ path })
+            expect(storage.getStore()).to.deep.equal({ path })
             done()
             return h.response ? h.response() : h()
           }
