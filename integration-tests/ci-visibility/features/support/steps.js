@@ -1,3 +1,5 @@
+'use strict'
+
 const assert = require('assert')
 const { When, Then, Before } = require('@cucumber/cucumber')
 class Greeter {

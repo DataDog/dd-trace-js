@@ -1,3 +1,5 @@
+'use strict'
+
 const { spawn } = require('child_process')
 const { assert } = require('chai')
 const path = require('path')
