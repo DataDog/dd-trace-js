@@ -1,3 +1,5 @@
+'use strict'
+
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getMessageSize } = require('../../dd-trace/src/datastreams')
 const { convertToTextMap } = require('./utils')

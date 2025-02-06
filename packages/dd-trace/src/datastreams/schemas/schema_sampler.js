@@ -1,3 +1,5 @@
+'use strict'
+
 const SAMPLE_INTERVAL_MILLIS = 30 * 1000
 
 class SchemaSampler {

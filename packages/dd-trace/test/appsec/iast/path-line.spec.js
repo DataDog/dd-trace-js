@@ -1,3 +1,5 @@
+'use strict'
+
 const proxyquire = require('proxyquire')
 const path = require('path')
 const os = require('os')

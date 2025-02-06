@@ -1,3 +1,5 @@
+'use strict'
+
 const TracingPlugin = require('../../../plugins/tracing')
 const { performance } = require('perf_hooks')
 

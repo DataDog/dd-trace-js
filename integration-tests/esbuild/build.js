@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+'use strict'
 
 const ddPlugin = require('../../esbuild') // dd-trace/esbuild
 const esbuild = require('esbuild')
