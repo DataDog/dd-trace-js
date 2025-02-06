@@ -820,7 +820,7 @@ describe('AppSec Index', function () {
     describe('onPassportVerify', () => {
       beforeEach(() => {
         web.root.resetHistory()
-        sinon.stub(storage, 'getStore').returns({ req })
+        sinon.stub(storage('legacy'), 'getStore').returns({ req })
       })
 
       it('should block when UserTracking.trackLogin() returns action', () => {
@@ -902,7 +902,7 @@ describe('AppSec Index', function () {
     describe('onPassportDeserializeUser', () => {
       beforeEach(() => {
         web.root.resetHistory()
-        sinon.stub(storage, 'getStore').returns({ req })
+        sinon.stub(storage('legacy'), 'getStore').returns({ req })
       })
 
       it('should block when UserTracking.trackUser() returns action', () => {

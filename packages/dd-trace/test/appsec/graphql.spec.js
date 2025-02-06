@@ -95,7 +95,7 @@ describe('GraphQL', () => {
   describe('onGraphqlStartResolve', () => {
     beforeEach(() => {
       sinon.stub(waf, 'run').returns([''])
-      sinon.stub(storage, 'getStore').returns({ req: {} })
+      sinon.stub(storage('legacy'), 'getStore').returns({ req: {} })
       sinon.stub(web, 'root').returns({})
       graphql.enable()
     })
@@ -160,7 +160,7 @@ describe('GraphQL', () => {
     const res = {}
 
     beforeEach(() => {
-      sinon.stub(storage, 'getStore').returns({ req, res })
+      sinon.stub(storage('legacy'), 'getStore').returns({ req, res })
 
       graphql.enable()
       graphqlMiddlewareChannel.start.publish({ req, res })
