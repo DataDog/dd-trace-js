@@ -598,7 +598,7 @@ class TextMapPropagator {
   }
 
   _extractBaggageItems (carrier, spanContext) {
-    if (!carrier) return
+    if (!spanContext) return
     const baggages = carrier.baggage.split(',')
     for (const keyValue of baggages) {
       if (!keyValue.includes('=')) {
