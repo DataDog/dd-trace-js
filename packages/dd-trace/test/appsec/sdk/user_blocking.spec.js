@@ -25,7 +25,7 @@ describe('user_blocking', () => {
     const res = { headersSent: false }
     const tracer = {}
 
-    let rootSpan, getRootSpan, block, storage, datadogCore, log, userBlocking
+    let rootSpan, getRootSpan, block, legacyStorage, datadogCore, log, userBlocking
 
     before(() => {
       const runStub = sinon.stub(waf, 'run')
@@ -44,11 +44,8 @@ describe('user_blocking', () => {
 
       block = sinon.stub()
 
-      storage = {
+      legacyStorage = {
         getStore: sinon.stub().returns({ req, res })
-      }
-      datadogCore = {
-        storage: () => storage
       }
 
       log = {
@@ -58,7 +55,7 @@ describe('user_blocking', () => {
       userBlocking = proxyquire('../../../src/appsec/sdk/user_blocking', {
         './utils': { getRootSpan },
         '../blocking': { block },
-        '../../../../datadog-core': datadogCore,
+        '../../../../datadog-core': { storage: () => legacyStorage },
         '../../log': log
       })
     })
@@ -117,16 +114,16 @@ describe('user_blocking', () => {
       it('should get req and res from local storage when they are not passed', () => {
         const ret = userBlocking.blockRequest(tracer)
         expect(ret).to.be.true
-        expect(datadogCore('legacy').getStore).to.have.been.calledOnce
+        expect(legacyStorage.getStore).to.have.been.calledOnce
         expect(block).to.be.calledOnceWithExactly(req, res, rootSpan)
       })
 
       it('should log warning when req or res is not available', () => {
-        datadogCore('legacy').getStore.returns(undefined)
+        legacyStorage.getStore.returns(undefined)
 
         const ret = userBlocking.blockRequest(tracer)
         expect(ret).to.be.false
-        expect(datadogCore('legacy').getStore).to.have.been.calledOnce
+        expect(legacyStorage.getStore).to.have.been.calledOnce
         expect(log.warn)
           .to.have.been.calledOnceWithExactly('[ASM] Requests or response object not available in blockRequest')
         expect(block).to.not.have.been.called
