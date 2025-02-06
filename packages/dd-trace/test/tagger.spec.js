@@ -29,15 +29,6 @@ describe('tagger', () => {
     expect(carrier).to.not.have.property('invalid')
   })
 
-  it('should add tags as a string2', () => {
-    tagger.add(carrier, 'env:test,aKey:aVal,bKey:bVal,cKey:')
-
-    expect(carrier).to.have.property('env', 'test')
-    expect(carrier).to.have.property('aKey', 'aVal')
-    expect(carrier).to.have.property('bKey', 'bVal')
-    expect(carrier).to.have.property('cKey', '')
-  })
-
   it('should add tags from space separated string', () => {
     tagger.add(carrier, 'key1:value1 key2:value2')
 
@@ -45,16 +36,7 @@ describe('tagger', () => {
     expect(carrier).to.have.property('key2', 'value2')
   })
 
-  it('should add tags from space separated string2', () => {
-    tagger.add(carrier, 'env:test aKey:aVal bKey:bVal cKey:')
-
-    expect(carrier).to.have.property('env', 'test')
-    expect(carrier).to.have.property('aKey', 'aVal')
-    expect(carrier).to.have.property('bKey', 'bVal')
-    expect(carrier).to.have.property('cKey', '')
-  })
-
-  it('should add tags from space separated string3', () => {
+  it('should add tags from comma & space separated strings', () => {
     tagger.add(carrier, 'env:test,aKey:aVal bKey:bVal cKey:')
 
     expect(carrier).to.have.property('env', 'test')

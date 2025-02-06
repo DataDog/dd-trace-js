@@ -316,7 +316,6 @@ describe('format', () => {
       })
     })
 
-
     it('should discard user-defined tags with name HOSTNAME_KEY by default', () => {
       spanContext._tags[HOSTNAME_KEY] = 'some_hostname'
 
