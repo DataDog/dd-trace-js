@@ -1,4 +1,5 @@
 'use strict'
+
 const _tracer = require('../../../../dd-trace')
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))

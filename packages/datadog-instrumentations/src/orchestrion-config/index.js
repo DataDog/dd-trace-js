@@ -1,3 +1,5 @@
+'use strict'
+
 module.exports = `
 version: 1
 dc_module: dc-polyfill

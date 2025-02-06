@@ -1,3 +1,5 @@
+'use strict'
+
 const { PAYLOAD_TAGGING_MAX_TAGS } = require('../constants')
 
 const redactedKeys = new Set([

@@ -1,3 +1,5 @@
+'use strict'
+
 const RetryOperation = require('../operation')
 const oracledb = require('../../../../../versions/oracledb').get()
 

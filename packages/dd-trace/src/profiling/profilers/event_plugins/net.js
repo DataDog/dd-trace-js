@@ -1,3 +1,5 @@
+'use strict'
+
 const EventPlugin = require('./event')
 
 class NetPlugin extends EventPlugin {

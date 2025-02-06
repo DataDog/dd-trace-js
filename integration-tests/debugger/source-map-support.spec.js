@@ -38,7 +38,7 @@ describe('Dynamic Instrumentation', function () {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location } } } }] }) => {
           assert.deepEqual(location, {
             file: 'target-app/source-map-support/minify.js',
-            lines: ['6']
+            lines: ['8']
           })
           done()
         })

@@ -1,3 +1,5 @@
+'use strict'
+
 const { Before, Given, When, Then, setWorldConstructor } = require('@cucumber/cucumber')
 const { expect } = require('chai')
 

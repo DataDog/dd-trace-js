@@ -1,4 +1,5 @@
 'use strict'
+
 /* eslint-disable no-console */
 /* eslint n/no-unsupported-features/node-builtins: ['error', { version: '>=22.0.0' }] */
 

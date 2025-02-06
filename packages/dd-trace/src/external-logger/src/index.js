@@ -1,3 +1,5 @@
+'use strict'
+
 const tracerLogger = require('../../log')// path to require tracer logger
 
 const https = require('https')

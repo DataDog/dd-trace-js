@@ -1,3 +1,5 @@
+'use strict'
+
 const { expect } = require('chai')
 const { When, Then } = require('@cucumber/cucumber')
 

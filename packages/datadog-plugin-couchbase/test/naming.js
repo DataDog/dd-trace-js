@@ -1,3 +1,5 @@
+'use strict'
+
 const { resolveNaming } = require('../../dd-trace/test/plugins/helpers')
 
 const serviceName = {

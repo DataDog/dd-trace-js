@@ -1,5 +1,3 @@
-'use strict'
-
 import path from 'path'
 import { URL } from 'url'
 import { getName } from '../telemetry/verbosity.js'
