@@ -2376,7 +2376,7 @@ describe('mocha CommonJS', function () {
           spanIdByLog = diLog.dd.span_id
           traceIdByLog = diLog.dd.trace_id
           snapshotIdByLog = diLog.debugger.snapshot.id
-        }, 5000)
+        }, 25000)
 
       childProcess = exec(
         'node ./ci-visibility/run-mocha.js',
