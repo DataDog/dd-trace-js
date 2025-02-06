@@ -54,6 +54,13 @@ describe('tagger', () => {
     expect(carrier).to.have.property('cKey', '')
   })
 
+  it('should add tags from space separated string3', () => {
+    tagger.add(carrier, 'env:test,aKey:aVal bKey:bVal cKey:')
+
+    expect(carrier).to.have.property('env', 'test')
+    expect(carrier).to.have.property('aKey', 'aVal bKey:bVal cKey:')
+  })
+
   it('should add tags as an array', () => {
     tagger.add(carrier, ['foo:bar', 'baz:qux'])
 
