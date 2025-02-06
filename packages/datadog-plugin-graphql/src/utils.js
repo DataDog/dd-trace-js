@@ -26,14 +26,14 @@ function extractErrorIntoSpanEvent (config, span, exc) {
 
   if (config.graphqlErrorExtensions) {
     for (const ext of config.graphqlErrorExtensions) {
-      const value = exc.extensions[ext]
-
       if (exc.extensions?.[ext]) {
+        const value = exc.extensions[ext]
+
         // We should only stringify the value if it is not of type number or boolean
         if (typeof value === 'number' || typeof value === 'boolean') {
           attributes[`extensions.${ext}`] = value
         } else {
-          attributes[`extensions.${ext}`] = value.toString() // Convert to string
+          attributes[`extensions.${ext}`] = String(value)
         }
       }
     }
