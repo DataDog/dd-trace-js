@@ -117,6 +117,9 @@ async function addBreakpoint (probe) {
     }
   }
 
+  log.warn(`Source map: ${sourceMapURL}`)
+  log.warn(`Actual line number ${lineNumber}`)
+
   try {
     const { breakpointId } = await session.post('Debugger.setBreakpoint', {
       location: {
@@ -124,6 +127,7 @@ async function addBreakpoint (probe) {
         lineNumber: lineNumber - 1
       }
     })
+    log.warn(`breakpointId: ${breakpointId}`)
 
     breakpointIdToProbe.set(breakpointId, probe)
     probeIdToBreakpointId.set(probe.id, breakpointId)
