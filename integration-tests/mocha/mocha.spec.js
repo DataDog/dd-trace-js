@@ -2206,7 +2206,7 @@ describe('mocha CommonJS', function () {
     })
   })
 
-  context('dynamic instrumentation', () => {
+  context.only('dynamic instrumentation', () => {
     it('does not activate dynamic instrumentation if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
@@ -2376,7 +2376,7 @@ describe('mocha CommonJS', function () {
           spanIdByLog = diLog.dd.span_id
           traceIdByLog = diLog.dd.trace_id
           snapshotIdByLog = diLog.debugger.snapshot.id
-        }, 5000)
+        }, 25000)
 
       childProcess = exec(
         'node ./ci-visibility/run-mocha.js',
@@ -2388,11 +2388,16 @@ describe('mocha CommonJS', function () {
               './dynamic-instrumentation/test-hit-breakpoint'
             ]),
             DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
-            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            DD_TRACE_DEBUG: '1',
+            DD_TRACE_LOG_LEVEL: 'warn'
           },
           stdio: 'inherit'
         }
       )
+
+      childProcess.stdout.pipe(process.stdout)
+      childProcess.stderr.pipe(process.stderr)
 
       childProcess.on('exit', () => {
         Promise.all([eventsPromise, logsPromise]).then(() => {

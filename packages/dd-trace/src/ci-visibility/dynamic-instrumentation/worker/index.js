@@ -28,7 +28,9 @@ const breakpointIdToProbe = new Map()
 const probeIdToBreakpointId = new Map()
 
 session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint], callFrames } }) => {
+  log.warn(`Debugger.paused: ${JSON.stringify(hitBreakpoint, null, 2)}`)
   const probe = breakpointIdToProbe.get(hitBreakpoint)
+  log.warn(`probe: ${JSON.stringify(probe, null, 2)}`)
   if (!probe) {
     log.warn(`No probe found for breakpoint ${hitBreakpoint}`)
     return session.post('Debugger.resume')
@@ -52,6 +54,8 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
     language: 'javascript'
   }
 
+  log.warn(`snapshot: ${JSON.stringify(snapshot, null, 2)}`)
+
   const state = getLocalState()
   if (state) {
     snapshot.captures = {
@@ -63,13 +67,17 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
 })
 
 breakpointRemoveChannel.on('message', async (probeId) => {
+  log.warn(`remove breakpoint ${probeId}`)
   await removeBreakpoint(probeId)
+  log.warn(`removed breakpoint ${probeId}`)
   breakpointRemoveChannel.postMessage(probeId)
 })
 
 breakpointSetChannel.on('message', async (probe) => {
+  log.warn(`set breakpoint ${JSON.stringify(probe, null, 2)}`)
   await addBreakpoint(probe)
   breakpointSetChannel.postMessage(probe.id)
+  log.warn(`added breakpoint ${probe.id}`)
 })
 
 async function removeBreakpoint (probeId) {
@@ -99,23 +107,27 @@ async function addBreakpoint (probe) {
     throw new Error(`No loaded script found for ${file}`)
   }
 
-  const { url, scriptId, sourceMapURL, source } = script
+  const { url, scriptId, sourceMapURL } = script
 
   log.warn(`Adding breakpoint at ${url}:${line}`)
+  log.warn(`scriptId: ${scriptId}`)
 
   let lineNumber = line
 
-  if (sourceMapURL) {
-    try {
-      lineNumber = await getSourceMappedLine(url, source, line, sourceMapURL)
-    } catch (err) {
-      log.error('Error processing script with source map', err)
-    }
-    if (lineNumber === null) {
-      log.error('Could not find generated position for %s:%s', url, line)
-      lineNumber = line
-    }
-  }
+  // if (sourceMapURL) {
+  //   try {
+  //     lineNumber = await getSourceMappedLine(url, source, line, sourceMapURL)
+  //   } catch (err) {
+  //     log.error('Error processing script with source map', err)
+  //   }
+  //   if (lineNumber === null) {
+  //     log.error('Could not find generated position for %s:%s', url, line)
+  //     lineNumber = line
+  //   }
+  // }
+
+  log.warn(`Source map: ${sourceMapURL}`)
+  log.warn(`Actual line number ${lineNumber}`)
 
   try {
     const { breakpointId } = await session.post('Debugger.setBreakpoint', {
@@ -124,6 +136,7 @@ async function addBreakpoint (probe) {
         lineNumber: lineNumber - 1
       }
     })
+    log.warn(`breakpointId: ${breakpointId}`)
 
     breakpointIdToProbe.set(breakpointId, probe)
     probeIdToBreakpointId.set(probe.id, breakpointId)
