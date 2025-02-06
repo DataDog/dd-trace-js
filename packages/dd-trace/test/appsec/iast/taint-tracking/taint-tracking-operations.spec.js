@@ -44,12 +44,8 @@ describe('IAST TaintTracking Operations', () => {
 
   const store = {}
 
-  const datadogCore = {
-    storage: () => {
-      return {
-        getStore: () => store
-      }
-    }
+  const legacyStorage = {
+    getStore: () => store
   }
 
   beforeEach(() => {
@@ -60,11 +56,11 @@ describe('IAST TaintTracking Operations', () => {
     taintTrackingImpl = proxyquire('../../../../src/appsec/iast/taint-tracking/taint-tracking-impl', {
       '@datadog/native-iast-taint-tracking': taintedUtilsMock,
       './operations-taint-object': operationsTaintObject,
-      '../../../../../datadog-core': datadogCore
+      '../../../../../datadog-core': { storage: () => legacyStorage }
     })
     taintTrackingOperations = proxyquire('../../../../src/appsec/iast/taint-tracking/operations', {
       '@datadog/native-iast-taint-tracking': taintedUtilsMock,
-      '../../../../../datadog-core': datadogCore,
+      '../../../../../datadog-core': { storage: () => legacyStorage },
       './taint-tracking-impl': taintTrackingImpl,
       './operations-taint-object': operationsTaintObject,
       '../telemetry': iastTelemetry
@@ -181,7 +177,7 @@ describe('IAST TaintTracking Operations', () => {
         '../../../log': logSpy
       })
       const taintTrackingOperations = proxyquire('../../../../src/appsec/iast/taint-tracking/operations', {
-        '../../../../../datadog-core': datadogCore,
+        '../../../../../datadog-core': { storage: () => legacyStorage },
         './taint-tracking-impl': taintTrackingImpl,
         './operations-taint-object': operationsTaintObject
       })

@@ -7,15 +7,11 @@ const { FS_OPERATION_PATH } = require('../../../src/appsec/addresses')
 const { RASP_MODULE } = require('../../../src/appsec/rasp/fs-plugin')
 
 describe('RASP - lfi.js', () => {
-  let waf, datadogCore, lfi, web, blocking, appsecFsPlugin, config
+  let waf, legacyStorage, lfi, web, blocking, appsecFsPlugin, config
 
   beforeEach(() => {
-    datadogCore = {
-      storage: () => {
-        return {
-          getStore: sinon.stub()
-        }
-      }
+    legacyStorage = {
+      getStore: sinon.stub()
     }
 
     waf = {
@@ -36,7 +32,7 @@ describe('RASP - lfi.js', () => {
     }
 
     lfi = proxyquire('../../../src/appsec/rasp/lfi', {
-      '../../../../datadog-core': datadogCore,
+      '../../../../datadog-core': { storage: () => legacyStorage },
       '../waf': waf,
       '../../plugins/util/web': web,
       '../blocking': blocking,
@@ -108,7 +104,7 @@ describe('RASP - lfi.js', () => {
 
     it('should analyze lfi for root fs operations', () => {
       const fs = { root: true }
-      datadogCore.storage('legacy').getStore.returns({ req, fs })
+      legacyStorage.getStore.returns({ req, fs })
 
       fsOperationStart.publish(ctx)
 
@@ -118,7 +114,7 @@ describe('RASP - lfi.js', () => {
 
     it('should NOT analyze lfi for child fs operations', () => {
       const fs = {}
-      datadogCore.storage('legacy').getStore.returns({ req, fs })
+      legacyStorage.getStore.returns({ req, fs })
 
       fsOperationStart.publish(ctx)
 
@@ -127,7 +123,7 @@ describe('RASP - lfi.js', () => {
 
     it('should NOT analyze lfi for undefined fs (AppsecFsPlugin disabled)', () => {
       const fs = undefined
-      datadogCore.storage('legacy').getStore.returns({ req, fs })
+      legacyStorage.getStore.returns({ req, fs })
 
       fsOperationStart.publish(ctx)
 
@@ -136,7 +132,7 @@ describe('RASP - lfi.js', () => {
 
     it('should NOT analyze lfi for excluded operations', () => {
       const fs = { opExcluded: true, root: true }
-      datadogCore.storage('legacy').getStore.returns({ req, fs })
+      legacyStorage.getStore.returns({ req, fs })
 
       fsOperationStart.publish(ctx)
 

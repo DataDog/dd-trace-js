@@ -25,7 +25,7 @@ describe('user_blocking', () => {
     const res = { headersSent: false }
     const tracer = {}
 
-    let rootSpan, getRootSpan, block, legacyStorage, datadogCore, log, userBlocking
+    let rootSpan, getRootSpan, block, legacyStorage, log, userBlocking
 
     before(() => {
       const runStub = sinon.stub(waf, 'run')

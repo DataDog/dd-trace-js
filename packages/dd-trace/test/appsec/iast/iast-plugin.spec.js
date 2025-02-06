@@ -12,7 +12,7 @@ const SOURCE_TYPE = TagKey.SOURCE_TYPE
 describe('IAST Plugin', () => {
   const loadChannel = channel('dd-trace:instrumentation:load')
 
-  let logError, addSubMock, getIastContext, configureMock, datadogCore
+  let logError, addSubMock, getIastContext, configureMock, legacyStorage
 
   const handler = () => {
     throw new Error('handler error')
@@ -44,12 +44,8 @@ describe('IAST Plugin', () => {
         }
       }
 
-      datadogCore = {
-        storage: () => {
-          return {
-            getStore: () => sinon.stub()
-          }
-        }
+      legacyStorage = {
+        getStore: () => sinon.stub()
       }
 
       const iastPluginMod = proxyquire('../../../src/appsec/iast/iast-plugin', {
@@ -64,7 +60,7 @@ describe('IAST Plugin', () => {
           isEnabled: () => false
         },
         './telemetry/metrics': {},
-        '../../../../datadog-core': datadogCore
+        '../../../../datadog-core': { storage: () => legacyStorage }
       })
       iastPlugin = new iastPluginMod.IastPlugin()
     })
