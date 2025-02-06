@@ -120,6 +120,7 @@ session.on('Debugger.scriptParsed', ({ params }) => {
       log.warn(`loading file: ${JSON.stringify(params, null, 2)}`)
     }
     if (params.sourceMapURL) {
+      log.warn(`found source map ${JSON.stringify(params, null, 2)}`)
       const dir = dirname(new URL(params.url).pathname)
       let sources
       try {
@@ -131,6 +132,7 @@ session.on('Debugger.scriptParsed', ({ params }) => {
           log.error('[debugger:devtools_client] could not load source map "%s" from "%s" for "%s"',
             params.sourceMapURL, dir, params.url, err)
         }
+        log.warn('finished handling source map 1')
         return
       }
       for (const source of sources) {
@@ -142,6 +144,7 @@ session.on('Debugger.scriptParsed', ({ params }) => {
           source
         })
       }
+      log.warn('finished handling source map 2')
     } else {
       loadedScripts.push(params)
     }

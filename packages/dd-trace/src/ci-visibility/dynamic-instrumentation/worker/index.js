@@ -67,13 +67,17 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
 })
 
 breakpointRemoveChannel.on('message', async (probeId) => {
+  log.warn(`remove breakpoint ${probeId}`)
   await removeBreakpoint(probeId)
+  log.warn(`removed breakpoint ${probeId}`)
   breakpointRemoveChannel.postMessage(probeId)
 })
 
 breakpointSetChannel.on('message', async (probe) => {
+  log.warn(`set breakpoint ${JSON.stringify(probe, null, 2)}`)
   await addBreakpoint(probe)
   breakpointSetChannel.postMessage(probe.id)
+  log.warn(`added breakpoint ${probe.id}`)
 })
 
 async function removeBreakpoint (probeId) {
