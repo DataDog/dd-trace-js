@@ -23,6 +23,7 @@ describe('Plugin', () => {
         // mongoose.connect('mongodb://username:password@host:port/database?options...');
         // actually the first part of the path is the dbName and not the collection
         return mongoose.connect(`mongodb://localhost:27017/${dbName}`, {
+          bufferCommands: false,
           useNewUrlParser: true,
           useUnifiedTopology: true
         })
