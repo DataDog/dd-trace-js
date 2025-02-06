@@ -10,6 +10,8 @@
   * hook will always be active for ESM support.
   */
 
+/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['module.register'] }] */
+
 import { isMainThread } from 'worker_threads'
 
 import * as Module from 'node:module'

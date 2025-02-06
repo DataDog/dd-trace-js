@@ -287,6 +287,19 @@ export default [
     }
   },
   {
+    ...n.configs['flat/recommended'],
+    ignores: [
+      'integration-tests/debugger/target-app/re-evaluation/index.js',
+      'integration-tests/debugger/target-app/re-evaluation/unique-filename.js',
+      'packages/dd-trace/test/appsec/next/app-dir/**/*.js',
+      'packages/dd-trace/test/appsec/next/pages-dir/**/*.js',
+      'packages/datadog-plugin-next/test/app/**/*.js',
+      'packages/datadog-plugin-next/test/**/pages/**/*.js',
+      'packages/datadog-plugin-next/test/middleware.js',
+      '**/*.mjs' // TODO: This shoudln't be required, research why it is
+    ]
+  },
+  {
     name: 'dd-trace/defaults',
 
     plugins: {
@@ -328,6 +341,18 @@ export default [
       }],
       'import/no-extraneous-dependencies': 'error',
       'n/no-restricted-require': ['error', ['diagnostics_channel']],
+      'n/hashbang': 'off', // TODO: Enable this rule once we have a plan to address it
+      'n/no-process-exit': 'off', // TODO: Enable this rule once we have a plan to address it
+      'n/no-unsupported-features/node-builtins': ['error', {
+        ignores: [
+          'Response',
+          'async_hooks.createHook',
+          'async_hooks.executionAsyncId',
+          'async_hooks.executionAsyncResource',
+          'fetch',
+          'fs/promises.cp'
+        ]
+      }],
       'no-console': 'error',
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommended)
       'no-var': 'error',
@@ -447,6 +472,7 @@ export default [
       'mocha/no-skipped-tests': 'off',
       'mocha/no-top-level-hooks': 'off',
       'n/handle-callback-err': 'off',
+      'n/no-missing-require': 'off',
       'require-await': 'off'
     }
   },
