@@ -22,6 +22,7 @@ const TEST_FILES = [
 
 export default [
   {
+    name: 'dd-trace/global-ignore',
     ignores: [
       '**/coverage', // Just coverage reports.
       '**/dist', // Generated
