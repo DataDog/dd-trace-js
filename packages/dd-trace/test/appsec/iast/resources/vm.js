@@ -1,4 +1,5 @@
 'use strict'
+/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['vm.SourceTextModule'] }] */
 
 const tracer = require('dd-trace')
 tracer.init({

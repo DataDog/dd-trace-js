@@ -1,4 +1,3 @@
-const { expect } = require('chai')
 const dependency = require('./dependency')
 
 describe('subproject-test', () => {

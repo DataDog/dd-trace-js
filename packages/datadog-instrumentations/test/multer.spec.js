@@ -1,4 +1,5 @@
 'use strict'
+/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['FormData'] }] */
 
 const dc = require('dc-polyfill')
 const axios = require('axios')

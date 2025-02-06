@@ -1,4 +1,5 @@
 'use strict'
+/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['module.register'] }] */
 
 const Module = require('module')
 const { pathToFileURL } = require('url')

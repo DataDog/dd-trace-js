@@ -4,6 +4,7 @@ if (Number(process.env.USE_TRACER)) {
   require('../../..').init()
 }
 
+// eslint-disable-next-line n/no-missing-require
 const Promise = require('../../../versions/bluebird/node_modules/bluebird/js/release/bluebird')
 
 const count = process.env.COUNT ? Number(process.env.COUNT) : 50000
