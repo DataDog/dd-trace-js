@@ -41,16 +41,6 @@ describe('Plugin', () => {
         mongoose = require(`../../../versions/mongoose@${version}`).get()
 
         connect()
-
-        withPeerService(
-          () => tracer,
-          'mongodb-core',
-          (done) => {
-            const PeerCat = mongoose.model('PeerCat', { name: String })
-            new PeerCat({ name: 'PeerCat' }).save().catch(done)
-            done()
-          },
-          'db', 'peer.service')
       })
 
       after(() => {
@@ -60,6 +50,16 @@ describe('Plugin', () => {
       after(() => {
         return agent.close({ ritmReset: false })
       })
+
+      withPeerService(
+        () => tracer,
+        'mongodb-core',
+        (done) => {
+          const PeerCat = mongoose.model('PeerCat', { name: String })
+          new PeerCat({ name: 'PeerCat' }).save().catch(done)
+          done()
+        },
+        'db', 'peer.service')
 
       it('should propagate context with write operations', () => {
         const Cat = mongoose.model('Cat1', { name: String })
