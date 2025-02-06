@@ -1,3 +1,5 @@
+'use strict'
+
 // encoding used here is sha256
 // other languages use FNV1
 // this inconsistency is ok because hashes do not need to be consistent across services

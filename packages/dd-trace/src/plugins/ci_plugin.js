@@ -1,3 +1,5 @@
+'use strict'
+
 const { storage } = require('../../../datadog-core')
 const {
   getTestEnvironmentMetadata,

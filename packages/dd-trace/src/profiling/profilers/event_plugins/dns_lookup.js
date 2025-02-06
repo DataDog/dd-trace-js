@@ -1,3 +1,5 @@
+'use strict'
+
 const DNSPlugin = require('./dns')
 
 class DNSLookupPlugin extends DNSPlugin {

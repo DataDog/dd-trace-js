@@ -1,3 +1,5 @@
+'use strict'
+
 const { identityService, awsServiceV0 } = require('../util')
 
 function amqpServiceName ({ tracerService }) {
