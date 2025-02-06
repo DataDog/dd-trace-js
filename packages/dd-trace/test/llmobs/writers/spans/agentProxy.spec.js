@@ -1,4 +1,4 @@
-'use stict'
+'use strict'
 
 describe('LLMObsAgentProxySpanWriter', () => {
   let LLMObsAgentProxySpanWriter

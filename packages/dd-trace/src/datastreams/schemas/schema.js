@@ -1,3 +1,5 @@
+'use strict'
+
 class Schema {
   constructor (definition, id) {
     this.definition = definition

@@ -1,3 +1,5 @@
+'use strict'
+
 const tracer = require('dd-trace').init()
 const { TracerProvider } = tracer
 const provider = new TracerProvider()

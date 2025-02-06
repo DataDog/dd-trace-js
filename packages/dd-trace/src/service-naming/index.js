@@ -1,3 +1,5 @@
+'use strict'
+
 const { schemaDefinitions } = require('./schemas')
 
 class SchemaManager {

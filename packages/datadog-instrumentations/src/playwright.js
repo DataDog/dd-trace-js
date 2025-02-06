@@ -1,3 +1,5 @@
+'use strict'
+
 const semver = require('semver')
 
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
