@@ -1,13 +1,10 @@
 'use strict'
 
-const { join, dirname } = require('path')
-const { loadSourceMapSync } = require('./source-maps')
 const session = require('./session')
-const log = require('../../log')
 
 const WINDOWS_DRIVE_LETTER_REGEX = /[a-zA-Z]/
 
-const loadedScripts = []
+const scriptIds = []
 const scriptUrls = new Map()
 
 module.exports = {
@@ -18,17 +15,18 @@ module.exports = {
    * Find the script to inspect based on a partial or absolute path. Handles both Windows and POSIX paths.
    *
    * @param {string} path - Partial or absolute path to match against loaded scripts
-   * @returns {Object | null} - Object containing `url`, `scriptId`, `sourceMapURL`, and `source` - or null if no match
+   * @returns {[string, string, string | undefined] | null} - Array containing [url, scriptId, sourceMapURL]
+   *   or null if no match
    */
   findScriptFromPartialPath (path) {
     if (!path) return null // This shouldn't happen, but better safe than sorry
 
     path = path.toLowerCase()
 
-    const bestMatch = { url: null, scriptId: null, sourceMapURL: null, source: null }
+    const bestMatch = new Array(3)
     let maxMatchLength = -1
 
-    for (const { url, sourceUrl, scriptId, sourceMapURL, source } of loadedScripts) {
+    for (const [url, scriptId, sourceMapURL] of scriptIds) {
       let i = url.length - 1
       let j = path.length - 1
       let matchLength = 0
@@ -77,13 +75,12 @@ module.exports = {
       // If we found a valid match and it's better than our previous best
       if (atBoundary && (
         lastBoundaryPos > maxMatchLength ||
-        (lastBoundaryPos === maxMatchLength && url.length < bestMatch.url.length) // Prefer shorter paths
+        (lastBoundaryPos === maxMatchLength && url.length < bestMatch[0].length) // Prefer shorter paths
       )) {
         maxMatchLength = lastBoundaryPos
-        bestMatch.url = sourceUrl || url
-        bestMatch.scriptId = scriptId
-        bestMatch.sourceMapURL = sourceMapURL
-        bestMatch.source = source
+        bestMatch[0] = url
+        bestMatch[1] = scriptId
+        bestMatch[2] = sourceMapURL
       }
     }
 
@@ -115,31 +112,6 @@ module.exports = {
 session.on('Debugger.scriptParsed', ({ params }) => {
   scriptUrls.set(params.scriptId, params.url)
   if (params.url.startsWith('file:')) {
-    if (params.sourceMapURL) {
-      const dir = dirname(new URL(params.url).pathname)
-      let sources
-      try {
-        sources = loadSourceMapSync(dir, params.sourceMapURL).sources
-      } catch (err) {
-        if (typeof params.sourceMapURL === 'string' && params.sourceMapURL.startsWith('data:')) {
-          log.error('[debugger:devtools_client] could not load inline source map for "%s"', params.url, err)
-        } else {
-          log.error('[debugger:devtools_client] could not load source map "%s" from "%s" for "%s"',
-            params.sourceMapURL, dir, params.url, err)
-        }
-        return
-      }
-      for (const source of sources) {
-        // TODO: Take source map `sourceRoot` into account?
-        loadedScripts.push({
-          ...params,
-          sourceUrl: params.url,
-          url: new URL(join(dir, source), 'file:').href,
-          source
-        })
-      }
-    } else {
-      loadedScripts.push(params)
-    }
+    scriptIds.push([params.url, params.scriptId, params.sourceMapURL])
   }
 })

@@ -99,24 +99,24 @@ async function addBreakpoint (probe) {
     throw new Error(`No loaded script found for ${file}`)
   }
 
-  const { url, scriptId, sourceMapURL, source } = script
+  const { url, scriptId, sourceMapURL } = script
 
   log.warn(`Adding breakpoint at ${url}:${line}`)
   log.warn(`scriptId: ${scriptId}`)
 
   let lineNumber = line
 
-  if (sourceMapURL) {
-    try {
-      lineNumber = await getSourceMappedLine(url, source, line, sourceMapURL)
-    } catch (err) {
-      log.error('Error processing script with source map', err)
-    }
-    if (lineNumber === null) {
-      log.error('Could not find generated position for %s:%s', url, line)
-      lineNumber = line
-    }
-  }
+  // if (sourceMapURL) {
+  //   try {
+  //     lineNumber = await getSourceMappedLine(url, source, line, sourceMapURL)
+  //   } catch (err) {
+  //     log.error('Error processing script with source map', err)
+  //   }
+  //   if (lineNumber === null) {
+  //     log.error('Could not find generated position for %s:%s', url, line)
+  //     lineNumber = line
+  //   }
+  // }
 
   log.warn(`Source map: ${sourceMapURL}`)
   log.warn(`Actual line number ${lineNumber}`)
