@@ -19,10 +19,10 @@ describe('Plugin', () => {
       // This needs to be called synchronously right before each test to make
       // sure a connection is not already established and the request is added
       // to the queue.
-      function connect () {
+      async function connect () {
         // mongoose.connect('mongodb://username:password@host:port/database?options...');
         // actually the first part of the path is the dbName and not the collection
-        mongoose.connect(`mongodb://localhost:27017/${dbName}`, {
+        await mongoose.connect(`mongodb://localhost:27017/${dbName}`, {
           useNewUrlParser: true,
           useUnifiedTopology: true
         })
