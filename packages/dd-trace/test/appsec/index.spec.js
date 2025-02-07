@@ -51,6 +51,7 @@ describe('AppSec Index', function () {
   let graphql
   let apiSecuritySampler
   let rasp
+  let standalone
 
   const RULES = { rules: [{ a: 1 }] }
 
@@ -122,6 +123,11 @@ describe('AppSec Index', function () {
       disable: sinon.stub()
     }
 
+    standalone = {
+      configure: sinon.stub(),
+      disable: sinon.stub()
+    }
+
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
       '../plugins/util/web': web,
@@ -130,7 +136,8 @@ describe('AppSec Index', function () {
       './telemetry': appsecTelemetry,
       './graphql': graphql,
       './api_security_sampler': apiSecuritySampler,
-      './rasp': rasp
+      './rasp': rasp,
+      './standalone': standalone
     })
 
     sinon.stub(fs, 'readFileSync').returns(JSON.stringify(RULES))
@@ -233,6 +240,12 @@ describe('AppSec Index', function () {
 
       expect(rasp.enable).to.not.be.called
     })
+
+    it('should call standalone configure', () => {
+      AppSec.enable(config)
+
+      expect(standalone.configure).to.be.calledOnceWithExactly(config)
+    })
   })
 
   describe('disable', () => {
@@ -291,6 +304,12 @@ describe('AppSec Index', function () {
       AppSec.disable()
 
       expect(appsecTelemetry.disable).to.be.calledOnce
+    })
+
+    it('should call standalone disable', () => {
+      AppSec.disable()
+
+      expect(standalone.disable).to.be.calledOnce
     })
   })
 
