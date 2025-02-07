@@ -298,44 +298,24 @@ for (const shim of V4_PACKAGE_SHIMS) {
         return ch.start.runStores(ctx, () => {
           const apiProm = methodFn.apply(this, arguments)
 
+          // wrapping `_thenUnwrap` is necessary to handle responses
+          // when OpenAI makes use of this method from the APIPromise class
+          shimmer.wrap(apiProm, '_thenUnwrap', origApiPromParse => function () {
+            const unwrappedPromise = origApiPromParse.apply(this, arguments)
+              // the original response is wrapped in a promise, so we need to unwrap it
+              .then(body => Promise.all([this.responsePromise, body]))
+
+            return handleWrappedPromise(unwrappedPromise, ctx, stream, n)
+          })
+
           // wrapping `parse` avoids problematic wrapping of `then` when trying to call
           // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
           shimmer.wrap(apiProm, 'parse', origApiPromParse => function () {
-            return origApiPromParse.apply(this, arguments)
-            // the original response is wrapped in a promise, so we need to unwrap it
+            const unwrappedPromise = origApiPromParse.apply(this, arguments)
+              // the original response is wrapped in a promise, so we need to unwrap it
               .then(body => Promise.all([this.responsePromise, body]))
-              .then(([{ response, options }, body]) => {
-                if (stream) {
-                  if (body.iterator) {
-                    shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, n, ctx))
-                  } else {
-                    shimmer.wrap(
-                      body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, n, ctx)
-                    )
-                  }
-                } else {
-                  finish(ctx, {
-                    headers: response.headers,
-                    data: body,
-                    request: {
-                      path: response.url,
-                      method: options.method
-                    }
-                  })
-                }
 
-                return body
-              })
-              .catch(error => {
-                finish(ctx, undefined, error)
-
-                throw error
-              })
-              .finally(() => {
-              // maybe we don't want to unwrap here in case the promise is re-used?
-              // other hand: we want to avoid resource leakage
-                shimmer.unwrap(apiProm, 'parse')
-              })
+            return handleWrappedPromise(unwrappedPromise, ctx, stream, n)
           })
 
           ch.end.publish(ctx)
@@ -346,6 +326,41 @@ for (const shim of V4_PACKAGE_SHIMS) {
     }
     return exports
   })
+}
+
+function handleWrappedPromise (apiProm, ctx, stream, n) {
+  apiProm.then(([{ response, options }, body]) => {
+    if (stream) {
+      if (body.iterator) {
+        shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, n, ctx))
+      } else {
+        shimmer.wrap(
+          body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, n, ctx)
+        )
+      }
+    } else {
+      finish(ctx, {
+        headers: response.headers,
+        data: body,
+        request: {
+          path: response.url,
+          method: options.method
+        }
+      })
+    }
+
+    return body
+  })
+    .catch(error => {
+      finish(ctx, undefined, error)
+
+      throw error
+    })
+    .finally(() => {
+    // maybe we don't want to unwrap here in case the promise is re-used?
+    // other hand: we want to avoid resource leakage
+      shimmer.unwrap(apiProm, 'parse')
+    })
 }
 
 function finish (ctx, response, error) {
