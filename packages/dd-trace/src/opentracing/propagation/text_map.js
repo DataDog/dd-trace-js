@@ -35,9 +35,9 @@ const tagKeyExpr = /^_dd\.p\.[\x21-\x2b\x2d-\x7e]+$/ // ASCII minus spaces and c
 const tagValueExpr = /^[\x20-\x2b\x2d-\x7e]*$/ // ASCII minus commas
 const ddKeys = [traceKey, spanKey, samplingKey, originKey]
 const b3Keys = [b3TraceKey, b3SpanKey, b3ParentKey, b3SampledKey, b3FlagsKey, b3HeaderKey]
-const logKeys = ddKeys.concat(b3Keys)
 const traceparentExpr = /^([a-f0-9]{2})-([a-f0-9]{32})-([a-f0-9]{16})-([a-f0-9]{2})(-.*)?$/i
 const traceparentKey = 'traceparent'
+const logKeys = ddKeys.concat(b3Keys, traceparentKey)
 // Origin value in tracestate replaces '~', ',' and ';' with '_"
 const tracestateOriginFilter = /[^\x20-\x2b\x2d-\x3a\x3c-\x7d]/g
 // Tag keys in tracestate replace ' ', ',' and '=' with '_'
@@ -78,7 +78,12 @@ class TextMapPropagator {
       extractCh.publish({ spanContext, carrier })
     }
 
-    log.debug(() => `Extract from carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
+    log.debug(() => {
+      const keys = JSON.stringify(pick(carrier, logKeys))
+      const styles = this._config.tracePropagationStyle.extract.join(', ')
+
+      return `Extract from carrier (${styles}): ${keys}.`
+    })
 
     return spanContext
   }
