@@ -216,7 +216,7 @@ describe('Child process plugin', () => {
 
     describe('end', () => {
       it('should not call setTag if neither error nor result is passed', () => {
-        sinon.stub(storage, 'getStore').returns({ span: spanStub })
+        sinon.stub(storage('legacy'), 'getStore').returns({ span: spanStub })
         const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
 
         shellPlugin.end({})
@@ -226,7 +226,7 @@ describe('Child process plugin', () => {
       })
 
       it('should call setTag with proper code when result is a buffer', () => {
-        sinon.stub(storage, 'getStore').returns({ span: spanStub })
+        sinon.stub(storage('legacy'), 'getStore').returns({ span: spanStub })
         const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
 
         shellPlugin.end({ result: Buffer.from('test') })
@@ -236,7 +236,7 @@ describe('Child process plugin', () => {
       })
 
       it('should call setTag with proper code when result is a string', () => {
-        sinon.stub(storage, 'getStore').returns({ span: spanStub })
+        sinon.stub(storage('legacy'), 'getStore').returns({ span: spanStub })
         const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
 
         shellPlugin.end({ result: 'test' })
@@ -246,7 +246,7 @@ describe('Child process plugin', () => {
       })
 
       it('should call setTag with proper code when an error is thrown', () => {
-        sinon.stub(storage, 'getStore').returns({ span: spanStub })
+        sinon.stub(storage('legacy'), 'getStore').returns({ span: spanStub })
         const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
 
         shellPlugin.end({ error: { status: -1 } })
@@ -258,7 +258,7 @@ describe('Child process plugin', () => {
 
     describe('asyncEnd', () => {
       it('should call setTag with undefined code if neither error nor result is passed', () => {
-        sinon.stub(storage, 'getStore').returns({ span: spanStub })
+        sinon.stub(storage('legacy'), 'getStore').returns({ span: spanStub })
         const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
 
         shellPlugin.asyncEnd({})
@@ -268,7 +268,7 @@ describe('Child process plugin', () => {
       })
 
       it('should call setTag with proper code when a proper code is returned', () => {
-        sinon.stub(storage, 'getStore').returns({ span: spanStub })
+        sinon.stub(storage('legacy'), 'getStore').returns({ span: spanStub })
         const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
 
         shellPlugin.asyncEnd({ result: 0 })
@@ -396,7 +396,7 @@ describe('Child process plugin', () => {
               parentSpan.finish()
               tracer.scope().activate(parentSpan, done)
             } else {
-              storage.enterWith({})
+              storage('legacy').enterWith({})
               done()
             }
           })
@@ -425,7 +425,7 @@ describe('Child process plugin', () => {
 
               it('should maintain previous span after the execution', (done) => {
                 const res = childProcess[methodName]('ls')
-                const span = storage.getStore()?.span
+                const span = storage('legacy').getStore()?.span
                 expect(span).to.be.equals(parentSpan)
                 if (async) {
                   res.on('close', () => {
@@ -440,7 +440,7 @@ describe('Child process plugin', () => {
               if (async) {
                 it('should maintain previous span in the callback', (done) => {
                   childProcess[methodName]('ls', () => {
-                    const span = storage.getStore()?.span
+                    const span = storage('legacy').getStore()?.span
                     expect(span).to.be.equals(parentSpan)
                     done()
                   })
