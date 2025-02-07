@@ -397,6 +397,51 @@ describe('Plugin', () => {
           }
         )
       })
+
+      describe('with dbmPropagationMode service', () => {
+        before(() => {
+          return agent.load('mongodb-core', { service: 'custom', dbmPropagationMode: 'service' })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(done => {
+          const Server = getServer()
+
+          server = new Server({
+            host: '127.0.0.1',
+            port: 27017,
+            reconnect: false
+          })
+
+          server.on('connect', () => done())
+          server.on('error', done)
+
+          server.connect()
+        })
+
+        it('should be contain comment in command', done => {
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+            })
+            .then(done)
+            .catch(done)
+
+
+          const command = server.insert(`test.${collection}`, [{ a: 1 }], () => {
+            try {
+              expect(command.comment).to.equal('dddb=\'db\',dddbs=\'serviced\',dde=\'tester\',ddh=\'127.0.0.1\',' +
+              `ddps='test',ddpv='${ddpv}'`)
+            } catch (e) {
+              done(e)
+            }
+            done()
+          })
+        })
+      })
     })
   })
 })
