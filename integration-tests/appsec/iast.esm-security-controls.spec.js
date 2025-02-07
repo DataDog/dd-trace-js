@@ -24,6 +24,7 @@ describe('ESM Security controls', () => {
   after(async function () {
     await sandbox.remove()
   })
+
   const nodeOptions = '--import dd-trace/initialize.mjs'
 
   beforeEach(async () => {
