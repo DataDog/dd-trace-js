@@ -325,6 +325,7 @@ class TextMapPropagator {
       if (context === null) {
         context = extractedContext
         if (this._config.tracePropagationExtractFirst) {
+          this._extractBaggageItems(carrier, context)
           return context
         }
       } else {
@@ -344,10 +345,7 @@ class TextMapPropagator {
       }
     }
 
-    if (this._hasPropagationStyle('extract', 'baggage') && carrier.baggage) {
-      context = context || new DatadogSpanContext()
-      this._extractBaggageItems(carrier, context)
-    }
+    this._extractBaggageItems(carrier, context)
 
     return context || this._extractSqsdContext(carrier)
   }
@@ -596,6 +594,9 @@ class TextMapPropagator {
   }
 
   _extractBaggageItems (carrier, spanContext) {
+    if (!this._hasPropagationStyle('extract', 'baggage')) return
+    if (!carrier || !carrier.baggage) return
+    if (!spanContext) return
     const baggages = carrier.baggage.split(',')
     for (const keyValue of baggages) {
       if (!keyValue.includes('=')) {
