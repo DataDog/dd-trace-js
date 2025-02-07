@@ -281,16 +281,13 @@ describe('IAST Rewriter', () => {
           function onHardcodedSecret (literals) {
             expect(literals).to.deep.equal(literalsResult)
 
+            hardcodedSecretCh.unsubscribe(onHardcodedSecret)
             done()
           }
 
           hardcodedSecretCh.subscribe(onHardcodedSecret)
 
           port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
-
-          setTimeout(() => {
-            hardcodedSecretCh.unsubscribe(onHardcodedSecret)
-          })
         })
 
         it('should log the message', (done) => {
