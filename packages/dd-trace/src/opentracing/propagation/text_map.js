@@ -33,11 +33,13 @@ const b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}(-[01d](-[0-9a-f]{16})?)
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 const tagKeyExpr = /^_dd\.p\.[\x21-\x2b\x2d-\x7e]+$/ // ASCII minus spaces and commas
 const tagValueExpr = /^[\x20-\x2b\x2d-\x7e]*$/ // ASCII minus commas
-const ddKeys = [traceKey, spanKey, samplingKey, originKey]
-const b3Keys = [b3TraceKey, b3SpanKey, b3ParentKey, b3SampledKey, b3FlagsKey, b3HeaderKey]
 const traceparentExpr = /^([a-f0-9]{2})-([a-f0-9]{32})-([a-f0-9]{16})-([a-f0-9]{2})(-.*)?$/i
 const traceparentKey = 'traceparent'
-const logKeys = ddKeys.concat(b3Keys, traceparentKey)
+const tracestateKey = 'tracestate'
+const ddKeys = [traceKey, spanKey, samplingKey, originKey]
+const b3Keys = [b3TraceKey, b3SpanKey, b3ParentKey, b3SampledKey, b3FlagsKey, b3HeaderKey]
+const w3cKeys = [traceparentKey, tracestateKey]
+const logKeys = ddKeys.concat(b3Keys, w3cKeys)
 // Origin value in tracestate replaces '~', ',' and ';' with '_"
 const tracestateOriginFilter = /[^\x20-\x2b\x2d-\x3a\x3c-\x7d]/g
 // Tag keys in tracestate replace ' ', ',' and '=' with '_'
