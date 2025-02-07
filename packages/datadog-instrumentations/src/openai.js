@@ -305,7 +305,7 @@ for (const shim of V4_PACKAGE_SHIMS) {
               // the original response is wrapped in a promise, so we need to unwrap it
               .then(body => Promise.all([this.responsePromise, body]))
 
-            return handleWrappedPromise(unwrappedPromise, ctx, stream, n)
+            return handleUnwrappedAPIPromise(unwrappedPromise, ctx, stream, n)
           })
 
           // wrapping `parse` avoids problematic wrapping of `then` when trying to call
@@ -315,7 +315,7 @@ for (const shim of V4_PACKAGE_SHIMS) {
               // the original response is wrapped in a promise, so we need to unwrap it
               .then(body => Promise.all([this.responsePromise, body]))
 
-            return handleWrappedPromise(unwrappedPromise, ctx, stream, n)
+            return handleUnwrappedAPIPromise(unwrappedPromise, ctx, stream, n)
           })
 
           ch.end.publish(ctx)
@@ -328,7 +328,7 @@ for (const shim of V4_PACKAGE_SHIMS) {
   })
 }
 
-function handleWrappedPromise (apiProm, ctx, stream, n) {
+function handleUnwrappedAPIPromise (apiProm, ctx, stream, n) {
   apiProm.then(([{ response, options }, body]) => {
     if (stream) {
       if (body.iterator) {
