@@ -2,6 +2,8 @@
 
 const StoragePlugin = require('./storage')
 const { PEER_SERVICE_KEY, PEER_SERVICE_SOURCE_KEY } = require('../constants')
+const { re } = require('semver')
+const { type } = require('os')
 
 class DatabasePlugin extends StoragePlugin {
   static get operation () { return 'query' }
@@ -80,6 +82,40 @@ class DatabasePlugin extends StoragePlugin {
       const traceparent = span._spanContext.toTraceparent()
       return `/*${servicePropagation},traceparent='${traceparent}'*/ ${query}`
     }
+  }
+
+  injectDbmCommand (span, command, serviceName) {
+    const mode = this.config.dbmPropagationMode
+
+    if (mode === 'disabled') {
+      return command
+    }
+
+    let dbmTraceComment = ''
+
+    const dbmService = this.getDbmServiceName(span, serviceName)
+    const servicePropagation = this.createDBMPropagationCommentService(dbmService, span)
+
+    if (mode === 'service') {
+      dbmTraceComment = `${servicePropagation}`
+    } else if (mode === 'full') {
+      span.setTag('_dd.dbm_trace_injected', 'true')
+      const traceparent = span._spanContext.toTraceparent()
+      dbmTraceComment = `${servicePropagation},traceparent='${traceparent}'`
+    }
+
+    if (command.comment) {
+      // if the command already has a comment, append the dbm trace comment
+      if (typeof command.comment === 'string') {
+        command.comment += `,${dbmTraceComment}`
+      } else if (Array.isArray(command.comment)) {
+        command.comment.push(dbmTraceComment)
+      } // do nothing if the comment is not a string or an array
+    } else {
+      command.comment = dbmTraceComment
+    }
+
+    return command
   }
 
   maybeTruncate (query) {
