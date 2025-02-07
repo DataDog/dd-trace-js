@@ -31,7 +31,7 @@ const map = {
 }
 
 function format (span, exporter) {
-  const encoder = exporter?.writer?._encoder
+  const encoder = exporter?._writer?._encoder
 
   const formatted = formatSpan(span)
 
