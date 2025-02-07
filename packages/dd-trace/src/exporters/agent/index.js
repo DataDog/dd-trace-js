@@ -19,7 +19,7 @@ class AgentExporter {
       if (err) {
         return false
       }
-      return agentInfo?.span_events === 'true'
+      return agentInfo?.span_events === true
     })
 
     const headers = {}
