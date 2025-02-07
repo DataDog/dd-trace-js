@@ -255,7 +255,6 @@ SANITIZER:COMMAND_INJECTION:bar/foo/sanitizer.js:sanitize'
     })
 
     it('should parse valid multiple security control definitions for different files ignoring empty', () => {
-      // eslint-disable-next-line no-multi-str
       const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:bar/foo/custom_input_validator.js:validate:1,2;;'
       const securityControls = parse(conf)
 

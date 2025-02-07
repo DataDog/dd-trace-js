@@ -105,15 +105,18 @@ describe('IAST Security Controls', () => {
       return module
     }
 
-    it('should hook a module only once', () => {
+    it.only('should hook a module only once', () => {
       // eslint-disable-next-line no-multi-str
       const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
-      /security-controls/resources/custom_input_validator.js:validate'
+/security-controls/resources/custom_input_validator.js:validate'
       securityControls.configure({ securityControlsConfiguration: conf })
 
       requireAndPublish('./resources/custom_input_validator')
 
-      requireAndPublish('./resources/custom_input_validator')
+      const { validate } = requireAndPublish('./resources/custom_input_validator')
+      validate('input')
+
+      sinon.assert.calledOnceWithExactly(addSecureMark, iastContext, 'input', CUSTOM_COMMAND_INJECTION_MARK, false)
     })
 
     describe('in custom libs', () => {
