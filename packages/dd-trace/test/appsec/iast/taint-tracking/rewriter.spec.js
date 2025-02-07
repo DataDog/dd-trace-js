@@ -69,9 +69,14 @@ describe('IAST Rewriter', () => {
         '@datadog/native-iast-rewriter': {
           Rewriter,
           getPrepareStackTrace: function (fn) {
-            const testWrap = function testWrappedPrepareStackTrace (_, callsites) {
-              return fn(_, callsites)
+            const testWrap = function testWrappedPrepareStackTrace (error, callsites) {
+              if (typeof fn !== 'function') {
+                return error.stack
+              }
+
+              return fn?.(error, callsites)
             }
+
             Object.defineProperty(testWrap, kSymbolPrepareStackTrace, {
               value: true
             })
@@ -219,6 +224,21 @@ describe('IAST Rewriter', () => {
       describe('thread communication', () => {
         let port
 
+        function waitUntilCheckSuccess (check, maxMs = 500) {
+          setTimeout(() => {
+            try {
+              check()
+            } catch (e) {
+              if (maxMs > 0) {
+                waitUntilCheckSuccess(check, maxMs - 10)
+                return
+              }
+
+              throw e
+            }
+          }, 10)
+        }
+
         beforeEach(() => {
           process.execArgv = ['--loader', 'dd-trace/initialize.mjs']
           rewriter.enableRewriter()
@@ -237,7 +257,7 @@ describe('IAST Rewriter', () => {
 
           port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
 
-          setTimeout(() => {
+          waitUntilCheckSuccess(() => {
             expect(cacheRewrittenSourceMap).to.be.calledOnceWith('file.js', content)
 
             done()
@@ -257,7 +277,7 @@ describe('IAST Rewriter', () => {
 
           port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
 
-          setTimeout(() => {
+          waitUntilCheckSuccess(() => {
             expect(rewriterTelemetry.incrementTelemetryIfNeeded).to.be.calledOnceWith(metrics)
 
             done()
@@ -299,9 +319,8 @@ describe('IAST Rewriter', () => {
 
           port.postMessage({ type: constants.LOG_MESSAGE, data })
 
-          setTimeout(() => {
+          waitUntilCheckSuccess(() => {
             expect(log.error).to.be.calledOnceWith(...messages)
-
             done()
           })
         })
