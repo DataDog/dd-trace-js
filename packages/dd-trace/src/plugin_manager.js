@@ -143,6 +143,7 @@ module.exports = class PluginManager {
       ciVisibilityTestSessionName,
       ciVisAgentlessLogSubmissionEnabled,
       isTestDynamicInstrumentationEnabled,
+      isServiceUserProvided,
       middlewareTracingEnabled
     } = this._tracerConfig
 
@@ -155,7 +156,8 @@ module.exports = class PluginManager {
       headers: headerTags || [],
       ciVisibilityTestSessionName,
       ciVisAgentlessLogSubmissionEnabled,
-      isTestDynamicInstrumentationEnabled
+      isTestDynamicInstrumentationEnabled,
+      isServiceUserProvided
     }
 
     if (logInjection !== undefined) {

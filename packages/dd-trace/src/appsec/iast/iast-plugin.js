@@ -62,12 +62,12 @@ class IastPlugin extends Plugin {
 
   _getTelemetryHandler (iastSub) {
     return () => {
-      const iastContext = getIastContext(storage.getStore())
+      const iastContext = getIastContext(storage('legacy').getStore())
       iastSub.increaseExecuted(iastContext)
     }
   }
 
-  _execHandlerAndIncMetric ({ handler, metric, tags, iastContext = getIastContext(storage.getStore()) }) {
+  _execHandlerAndIncMetric ({ handler, metric, tags, iastContext = getIastContext(storage('legacy').getStore()) }) {
     try {
       const result = handler()
       if (iastTelemetry.isEnabled()) {

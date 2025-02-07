@@ -338,13 +338,13 @@ describe('Plugin', function () {
               clearTimeout(timer)
             })
 
-          const store = storage.getStore()
+          const store = storage('legacy').getStore()
 
-          storage.enterWith({ noop: true })
+          storage('legacy').enterWith({ noop: true })
 
           fetch(`http://localhost:${port}/user`).catch(() => {})
 
-          storage.enterWith(store)
+          storage('legacy').enterWith(store)
         })
       })
     })

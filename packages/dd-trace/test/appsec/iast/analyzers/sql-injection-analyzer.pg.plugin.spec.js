@@ -60,7 +60,7 @@ describe('sql-injection-analyzer with pg', () => {
             })
 
             testThatRequestHasVulnerability(() => {
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
               const iastCtx = iastContextFunctions.getIastContext(store)
               let sql = 'SELECT 1'
               sql = newTaintedString(iastCtx, sql, 'param', 'Request')
@@ -95,7 +95,7 @@ describe('sql-injection-analyzer with pg', () => {
             })
 
             testThatRequestHasVulnerability(() => {
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
               const iastCtx = iastContextFunctions.getIastContext(store)
               let sql = 'SELECT 1'
               sql = newTaintedString(iastCtx, sql, 'param', 'Request')
@@ -107,7 +107,7 @@ describe('sql-injection-analyzer with pg', () => {
             })
 
             testThatRequestHasVulnerability(() => {
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
               const iastCtx = iastContextFunctions.getIastContext(store)
               let sql = 'SELECT 1'
               sql = newTaintedString(iastCtx, sql, 'param', 'Request')

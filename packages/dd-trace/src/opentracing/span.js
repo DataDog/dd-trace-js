@@ -65,7 +65,7 @@ class DatadogSpan {
     this._debug = debug
     this._processor = processor
     this._prioritySampler = prioritySampler
-    this._store = storage.getHandle()
+    this._store = storage('legacy').getHandle()
     this._duration = undefined
 
     this._events = []

@@ -48,7 +48,7 @@ describe('sql-injection-analyzer with knex', () => {
 
           describe('simple raw query', () => {
             testThatRequestHasVulnerability(() => {
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
               const iastCtx = iastContextFunctions.getIastContext(store)
 
               let sql = 'SELECT 1'
@@ -70,7 +70,7 @@ describe('sql-injection-analyzer with knex', () => {
 
           describe('nested raw query', () => {
             testThatRequestHasVulnerability(() => {
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
               const iastCtx = iastContextFunctions.getIastContext(store)
 
               let taintedSql = 'SELECT 1'
@@ -90,7 +90,7 @@ describe('sql-injection-analyzer with knex', () => {
 
           describe('nested raw query - onRejected as then argument', () => {
             testThatRequestHasVulnerability(() => {
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
               const iastCtx = iastContextFunctions.getIastContext(store)
 
               let taintedSql = 'SELECT 1'
@@ -110,7 +110,7 @@ describe('sql-injection-analyzer with knex', () => {
 
           describe('nested raw query - with catch', () => {
             testThatRequestHasVulnerability(() => {
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
               const iastCtx = iastContextFunctions.getIastContext(store)
 
               let taintedSql = 'SELECT 1'
@@ -131,7 +131,7 @@ describe('sql-injection-analyzer with knex', () => {
           describe('nested raw query - asCallback', () => {
             testThatRequestHasVulnerability(() => {
               return new Promise((resolve, reject) => {
-                const store = storage.getStore()
+                const store = storage('legacy').getStore()
                 const iastCtx = iastContextFunctions.getIastContext(store)
 
                 let taintedSql = 'SELECT 1'

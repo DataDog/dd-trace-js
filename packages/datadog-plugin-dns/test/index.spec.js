@@ -232,7 +232,7 @@ describe('Plugin', () => {
             clearTimeout(timer)
           })
 
-        storage.run({ noop: true }, () => {
+        storage('legacy').run({ noop: true }, () => {
           resolver.resolve('lvh.me', () => {})
         })
       })

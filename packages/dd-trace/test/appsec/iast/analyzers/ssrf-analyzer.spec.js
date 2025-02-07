@@ -79,7 +79,7 @@ describe('ssrf analyzer', () => {
             describe(requestMethodData.httpMethodName, () => {
               describe('with url', () => {
                 testThatRequestHasVulnerability(() => {
-                  const store = storage.getStore()
+                  const store = storage('legacy').getStore()
                   const iastContext = iastContextFunctions.getIastContext(store)
 
                   const url = newTaintedString(iastContext, pluginName + '://www.google.com', 'param', 'Request')
@@ -97,7 +97,7 @@ describe('ssrf analyzer', () => {
 
               describe('with options', () => {
                 testThatRequestHasVulnerability(() => {
-                  const store = storage.getStore()
+                  const store = storage('legacy').getStore()
                   const iastContext = iastContextFunctions.getIastContext(store)
 
                   const host = newTaintedString(iastContext, 'www.google.com', 'param', 'Request')
@@ -126,7 +126,7 @@ describe('ssrf analyzer', () => {
 
       describe('http2', () => {
         testThatRequestHasVulnerability(() => {
-          const store = storage.getStore()
+          const store = storage('legacy').getStore()
           const iastContext = iastContextFunctions.getIastContext(store)
 
           const url = newTaintedString(iastContext, 'http://www.datadoghq.com', 'param', 'Request')

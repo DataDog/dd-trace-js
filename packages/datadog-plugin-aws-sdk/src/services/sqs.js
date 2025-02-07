@@ -20,7 +20,7 @@ class Sqs extends BaseAwsSdkPlugin {
 
     this.addSub('apm:aws:response:start:sqs', obj => {
       const { request, response } = obj
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const plugin = this
       const contextExtraction = this.responseExtract(request.params, request.operation, response)
       let span
@@ -47,7 +47,7 @@ class Sqs extends BaseAwsSdkPlugin {
     })
 
     this.addSub('apm:aws:response:finish:sqs', err => {
-      const { span } = storage.getStore()
+      const { span } = storage('legacy').getStore()
       this.finish(span, null, err)
     })
   }

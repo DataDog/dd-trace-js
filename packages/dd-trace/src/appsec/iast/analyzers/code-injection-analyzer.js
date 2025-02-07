@@ -15,7 +15,7 @@ class CodeInjectionAnalyzer extends InjectionAnalyzer {
   onConfigure () {
     this.addSub('datadog:eval:call', ({ script }) => {
       if (!this.evalInstrumentedInc) {
-        const store = storage.getStore()
+        const store = storage('legacy').getStore()
         const iastContext = getIastContext(store)
         const tags = INSTRUMENTED_SINK.formatTags(CODE_INJECTION)
 

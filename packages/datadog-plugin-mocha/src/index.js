@@ -155,13 +155,13 @@ class MochaPlugin extends CiPlugin {
       if (itrCorrelationId) {
         testSuiteSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
       }
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       this.enter(testSuiteSpan, store)
       this._testSuites.set(testSuite, testSuiteSpan)
     })
 
     this.addSub('ci:mocha:test-suite:finish', (status) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       if (store && store.span) {
         const span = store.span
         // the test status of the suite may have been set in ci:mocha:test-suite:error already
@@ -174,7 +174,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test-suite:error', (err) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       if (store && store.span) {
         const span = store.span
         span.setTag('error', err)
@@ -183,7 +183,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:start', (testInfo) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = this.startTestSpan(testInfo)
 
       this.enter(span, store)
@@ -195,7 +195,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:finish', ({ status, hasBeenRetried, isLastRetry }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = store?.span
 
       if (span) {
@@ -219,15 +219,15 @@ class MochaPlugin extends CiPlugin {
         span.finish()
         finishAllTraceSpans(span)
         this.activeTestSpan = null
-        if (this.di && this.libraryConfig?.isDiEnabled && this.runningTestProbeId && isLastRetry) {
-          this.removeDiProbe(this.runningTestProbeId)
-          this.runningTestProbeId = null
+        if (this.di && this.libraryConfig?.isDiEnabled && this.runningTestProbe && isLastRetry) {
+          this.removeDiProbe(this.runningTestProbe)
+          this.runningTestProbe = null
         }
       }
     })
 
     this.addSub('ci:mocha:test:skip', (testInfo) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       // skipped through it.skip, so the span is not created yet
       // for this test
       if (!store) {
@@ -237,7 +237,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:error', (err) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = store?.span
       if (err && span) {
         if (err.constructor.name === 'Pending' && !this.forbidPending) {
@@ -250,7 +250,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, willBeRetried, err, test }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = store?.span
       if (span) {
         span.setTag(TEST_STATUS, 'fail')
@@ -275,8 +275,8 @@ class MochaPlugin extends CiPlugin {
         if (isFirstAttempt && willBeRetried && this.di && this.libraryConfig?.isDiEnabled) {
           const probeInformation = this.addDiProbe(err)
           if (probeInformation) {
-            const { probeId, stackIndex } = probeInformation
-            this.runningTestProbeId = probeId
+            const { file, line, stackIndex } = probeInformation
+            this.runningTestProbe = { file, line }
             this.testErrorStackIndex = stackIndex
             test._ddShouldWaitForHitProbe = true
             // TODO: we're not waiting for setProbePromise to be resolved, so there might be race conditions

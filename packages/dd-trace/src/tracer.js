@@ -3,13 +3,11 @@
 const Tracer = require('./opentracing/tracer')
 const tags = require('../../../ext/tags')
 const Scope = require('./scope')
-const { storage } = require('../../datadog-core')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { DataStreamsProcessor } = require('./datastreams/processor')
 const { DsmPathwayCodec } = require('./datastreams/pathway')
-const { DD_MAJOR } = require('../../../version')
 const DataStreamsContext = require('./data_streams_context')
 const { DataStreamsCheckpointer } = require('./data_streams')
 const { flushStartupLogs } = require('../../datadog-instrumentations/src/check_require_cache')
@@ -60,10 +58,6 @@ class DatadogTracer extends Tracer {
       childOf: this.scope().active()
     }, options)
 
-    if (!options.childOf && options.orphanable === false && DD_MAJOR < 4) {
-      return fn(null, () => {})
-    }
-
     const span = this.startSpan(name, options)
 
     addTags(span, options)
@@ -106,17 +100,9 @@ class DatadogTracer extends Tracer {
     const tracer = this
 
     return function () {
-      const store = storage.getStore()
-
-      if (store && store.noop) return fn.apply(this, arguments)
-
       let optionsObj = options
       if (typeof optionsObj === 'function' && typeof fn === 'function') {
         optionsObj = optionsObj.apply(this, arguments)
-      }
-
-      if (optionsObj && optionsObj.orphanable === false && !tracer.scope().active() && DD_MAJOR < 4) {
-        return fn.apply(this, arguments)
       }
 
       const lastArgId = arguments.length - 1

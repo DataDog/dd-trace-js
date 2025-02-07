@@ -13,12 +13,12 @@ class MariadbPlugin extends MySQLPlugin {
     super(...args)
 
     this.addSub(`apm:${this.component}:pool:skip`, () => {
-      skippedStore = storage.getStore()
-      storage.enterWith({ noop: true })
+      skippedStore = storage('legacy').getStore()
+      storage('legacy').enterWith({ noop: true })
     })
 
     this.addSub(`apm:${this.component}:pool:unskip`, () => {
-      storage.enterWith(skippedStore)
+      storage('legacy').enterWith(skippedStore)
       skippedStore = undefined
     })
   }

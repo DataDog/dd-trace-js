@@ -38,7 +38,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     this.configureSanitizers()
 
     const onStart = ({ filters }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       if (store && !store.nosqlAnalyzed && filters?.length) {
         filters.forEach(filter => {
           this.analyze({ filter }, store)
@@ -51,14 +51,14 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     const onStartAndEnterWithStore = (message) => {
       const store = onStart(message || {})
       if (store) {
-        storage.enterWith({ ...store, nosqlAnalyzed: true, nosqlParentStore: store })
+        storage('legacy').enterWith({ ...store, nosqlAnalyzed: true, nosqlParentStore: store })
       }
     }
 
     const onFinish = () => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       if (store?.nosqlParentStore) {
-        storage.enterWith(store.nosqlParentStore)
+        storage('legacy').enterWith(store.nosqlParentStore)
       }
     }
 
@@ -74,7 +74,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
 
   configureSanitizers () {
     this.addNotSinkSub('datadog:express-mongo-sanitize:filter:finish', ({ sanitizedProperties, req }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const iastContext = getIastContext(store)
 
       if (iastContext) { // do nothing if we are not in an iast request
@@ -100,7 +100,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     })
 
     this.addNotSinkSub('datadog:express-mongo-sanitize:sanitize:finish', ({ sanitizedObject }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const iastContext = getIastContext(store)
 
       if (iastContext) { // do nothing if we are not in an iast request

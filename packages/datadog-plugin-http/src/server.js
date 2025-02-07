@@ -22,7 +22,7 @@ class HttpServerPlugin extends ServerPlugin {
   }
 
   start ({ req, res, abortController }) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const span = web.startSpan(
       this.tracer,
       {

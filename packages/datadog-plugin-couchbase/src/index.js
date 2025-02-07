@@ -42,7 +42,7 @@ class CouchBasePlugin extends StoragePlugin {
     super(...args)
 
     this.addSubs('query', ({ resource, bucket, seedNodes }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = this.startSpan(
         'query', {
           'span.type': 'sql',
@@ -64,7 +64,7 @@ class CouchBasePlugin extends StoragePlugin {
 
   _addCommandSubs (name) {
     this.addSubs(name, ({ bucket, collection, seedNodes }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = this.startSpan(name, {}, store, { bucket, collection, seedNodes })
       this.enter(span, store)
     })

@@ -10,7 +10,7 @@ class ApolloGatewayFetchPlugin extends ApolloBasePlugin {
   }
 
   bindStart (ctx) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const childOf = store ? store.span : null
 
     const spanData = {

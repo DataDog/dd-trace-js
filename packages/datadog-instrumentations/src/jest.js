@@ -313,10 +313,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const asyncResource = asyncResources.get(event.test)
 
         if (status === 'fail') {
+          const shouldSetProbe = this.isDiEnabled && willBeRetried && numTestExecutions === 1
           asyncResource.runInAsyncScope(() => {
             testErrCh.publish({
               error: formatJestError(event.test.errors[0]),
-              shouldSetProbe: this.isDiEnabled && willBeRetried && numTestExecutions === 1,
+              shouldSetProbe,
               promises
             })
           })
@@ -336,17 +337,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           testFinishCh.publish({
             status,
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite),
-            promises,
-            shouldRemoveProbe: this.isDiEnabled && !willBeRetried
+            promises
           })
         })
 
         if (promises.isProbeReady) {
           await promises.isProbeReady
-        }
-
-        if (promises.isProbeRemoved) {
-          await promises.isProbeRemoved
         }
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {

@@ -133,8 +133,16 @@ describe('sql-injection-analyzer', () => {
       const getStore = sinon.stub().returns(store)
       const getIastContext = sinon.stub().returns(iastContext)
 
+      const datadogCore = {
+        storage: () => {
+          return {
+            getStore
+          }
+        }
+      }
+
       const iastPlugin = proxyquire('../../../../src/appsec/iast/iast-plugin', {
-        '../../../../datadog-core': { storage: { getStore } },
+        '../../../../datadog-core': datadogCore,
         './iast-context': { getIastContext }
       })
 

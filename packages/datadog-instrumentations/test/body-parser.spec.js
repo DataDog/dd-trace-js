@@ -77,7 +77,7 @@ withVersions('body-parser', 'body-parser', version => {
       let payload
 
       function handler (data) {
-        store = storage.getStore()
+        store = storage('legacy').getStore()
         payload = data
       }
       bodyParserReadCh.subscribe(handler)

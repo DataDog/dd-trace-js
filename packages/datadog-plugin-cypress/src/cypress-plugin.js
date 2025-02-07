@@ -32,7 +32,8 @@ const {
   getTestSessionName,
   TEST_SESSION_NAME,
   TEST_LEVEL_EVENT_TYPES,
-  TEST_RETRY_REASON
+  TEST_RETRY_REASON,
+  DD_TEST_IS_USER_PROVIDED_SERVICE
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -221,6 +222,10 @@ class CypressPlugin {
     this._isInit = true
     this.tracer = tracer
     this.cypressConfig = cypressConfig
+
+    // we have to do it here because the tracer is not initialized in the constructor
+    this.testEnvironmentMetadata[DD_TEST_IS_USER_PROVIDED_SERVICE] =
+      tracer._tracer._config.isServiceUserProvided ? 'true' : 'false'
 
     this.libraryConfigurationPromise = getLibraryConfiguration(this.tracer, this.testConfiguration)
       .then((libraryConfigurationResponse) => {

@@ -37,8 +37,8 @@ function sanitizedExec (
   durationMetric,
   errorMetric
 ) {
-  const store = storage.getStore()
-  storage.enterWith({ noop: true })
+  const store = storage('legacy').getStore()
+  storage('legacy').enterWith({ noop: true })
 
   let startTime
   if (operationMetric) {
@@ -64,7 +64,7 @@ function sanitizedExec (
     log.error('Git plugin error executing command', err)
     return ''
   } finally {
-    storage.enterWith(store)
+    storage('legacy').enterWith(store)
   }
 }
 

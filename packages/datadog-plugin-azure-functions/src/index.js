@@ -24,7 +24,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const { functionName, methodName } = ctx
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
 
     const span = this.startSpan(this.operationName(), {
       service: this.serviceName(),

@@ -34,7 +34,7 @@ function checkUserAndSetUser (tracer, user) {
 
 function blockRequest (tracer, req, res) {
   if (!req || !res) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     if (store) {
       req = req || store.req
       res = res || store.res

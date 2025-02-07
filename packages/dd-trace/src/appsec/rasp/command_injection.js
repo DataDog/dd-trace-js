@@ -27,7 +27,7 @@ function disable () {
 function analyzeCommandInjection ({ file, fileArgs, shell, abortController }) {
   if (!file) return
 
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   const req = store?.req
   if (!req) return
 

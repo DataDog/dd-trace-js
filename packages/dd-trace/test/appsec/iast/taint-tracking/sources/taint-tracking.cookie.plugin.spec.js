@@ -16,7 +16,7 @@ describe('Cookies sourcing with cookies', () => {
   let cookie
   withVersions('cookie', 'cookie', version => {
     function app () {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const iastContext = iastContextFunctions.getIastContext(store)
 
       const rawCookies = 'cookie=value'

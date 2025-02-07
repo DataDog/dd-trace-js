@@ -27,8 +27,10 @@ describe('IAST Taint tracking plugin', () => {
   const store = {}
 
   const datadogCore = {
-    storage: {
-      getStore: () => store
+    storage: () => {
+      return {
+        getStore: () => store
+      }
     }
   }
 

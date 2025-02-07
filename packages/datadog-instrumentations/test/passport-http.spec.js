@@ -174,7 +174,7 @@ withVersions('passport-http', 'passport-http', version => {
 
     it('should block when subscriber aborts', async () => {
       subscriberStub = sinon.spy(({ abortController }) => {
-        storage.getStore().req.res.writeHead(403).end('Blocked')
+        storage('legacy').getStore().req.res.writeHead(403).end('Blocked')
         abortController.abort()
       })
 

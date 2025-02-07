@@ -29,7 +29,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       if (modelName.includes('embed')) {
         return
       }
-      const span = storage.getStore()?.span
+      const span = storage('legacy').getStore()?.span
       this.setLLMObsTags({ request, span, response, modelProvider, modelName })
     })
 

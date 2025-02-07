@@ -40,8 +40,8 @@ function countStatusCode (statusCode) {
 function sendRequest (options, form, callback) {
   const request = options.protocol === 'https:' ? httpsRequest : httpRequest
 
-  const store = storage.getStore()
-  storage.enterWith({ noop: true })
+  const store = storage('legacy').getStore()
+  storage('legacy').enterWith({ noop: true })
   requestCounter.inc()
   const start = perf.now()
   const req = request(options, res => {
@@ -65,7 +65,7 @@ function sendRequest (options, form, callback) {
     sizeDistribution.track(form.size())
     form.pipe(req)
   }
-  storage.enterWith(store)
+  storage('legacy').enterWith(store)
 }
 
 function getBody (stream, callback) {

@@ -1,5 +1,6 @@
 'use strict'
 
+const http = require('http')
 const { exec } = require('child_process')
 
 const getPort = require('get-port')
@@ -36,7 +37,8 @@ const {
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
   TEST_LEVEL_EVENT_TYPES,
-  TEST_RETRY_REASON
+  TEST_RETRY_REASON,
+  DD_TEST_IS_USER_PROVIDED_SERVICE
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -74,7 +76,7 @@ moduleTypes.forEach(({
   describe(`cypress@${version} ${type}`, function () {
     this.retries(2)
     this.timeout(60000)
-    let sandbox, cwd, receiver, childProcess, webAppPort
+    let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer
 
     if (type === 'commonJS') {
       testCommand = testCommand(version)
@@ -91,6 +93,9 @@ moduleTypes.forEach(({
     after(async () => {
       await sandbox.remove()
       await new Promise(resolve => webAppServer.close(resolve))
+      if (secondWebAppServer) {
+        await new Promise(resolve => secondWebAppServer.close(resolve))
+      }
     })
 
     beforeEach(async function () {
@@ -322,6 +327,7 @@ moduleTypes.forEach(({
             assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
             assert.equal(meta[TEST_SOURCE_FILE].startsWith('cypress/e2e/'), true)
             // Can read DD_TAGS
+            assert.propertyVal(meta, DD_TEST_IS_USER_PROVIDED_SERVICE, 'false')
             assert.propertyVal(meta, 'test.customtag', 'customvalue')
             assert.propertyVal(meta, 'test.customtag2', 'customvalue2')
             assert.exists(metrics[DD_HOST_CPU_COUNT])
@@ -341,7 +347,8 @@ moduleTypes.forEach(({
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-            DD_TEST_SESSION_NAME: 'my-test-session'
+            DD_TEST_SESSION_NAME: 'my-test-session',
+            DD_SERVICE: undefined
           },
           stdio: 'pipe'
         }
@@ -1634,6 +1641,94 @@ moduleTypes.forEach(({
             done()
           }).catch(done)
         })
+      })
+    })
+
+    // cy.origin is not available in old versions of Cypress
+    if (version === 'latest') {
+      it('does not crash for multi origin tests', async () => {
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const secondWebAppPort = await getPort()
+
+        secondWebAppServer = http.createServer((req, res) => {
+          res.setHeader('Content-Type', 'text/html')
+          res.writeHead(200)
+          res.end(`
+            <!DOCTYPE html>
+            <html>
+              <div class="hella-world">Hella World</div>
+            </html>
+          `)
+        })
+
+        secondWebAppServer.listen(secondWebAppPort)
+
+        const specToRun = 'cypress/e2e/multi-origin.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL_SECOND: `http://localhost:${secondWebAppPort}`,
+              SPEC_PATTERN: specToRun
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            assert.equal(events.length, 4)
+
+            const test = events.find(event => event.type === 'test').content
+            assert.equal(test.resource, 'cypress/e2e/multi-origin.js.tests multiple origins')
+            assert.equal(test.meta[TEST_STATUS], 'pass')
+          })
+      })
+    }
+
+    it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', (done) => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testEvents = events.filter(event => event.type === 'test')
+
+          testEvents.forEach(({ content: { meta } }) => {
+            assert.propertyVal(meta, DD_TEST_IS_USER_PROVIDED_SERVICE, 'true')
+          })
+        }, 25000)
+
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            DD_SERVICE: 'my-service'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        receiverPromise.then(() => {
+          done()
+        }).catch(done)
       })
     })
   })

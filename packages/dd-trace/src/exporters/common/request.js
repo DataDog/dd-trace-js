@@ -126,9 +126,9 @@ function request (data, options, callback) {
 
     activeRequests++
 
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
 
-    storage.enterWith({ noop: true })
+    storage('legacy').enterWith({ noop: true })
 
     const req = client.request(options, onResponse)
 
@@ -146,7 +146,7 @@ function request (data, options, callback) {
       req.end()
     }
 
-    storage.enterWith(store)
+    storage('legacy').enterWith(store)
   }
 
   // TODO: Figure out why setTimeout is needed to avoid losing the async context

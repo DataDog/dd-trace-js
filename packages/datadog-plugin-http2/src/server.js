@@ -17,7 +17,7 @@ class Http2ServerPlugin extends ServerPlugin {
   }
 
   start ({ req, res }) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const span = web.startSpan(
       this.tracer,
       {

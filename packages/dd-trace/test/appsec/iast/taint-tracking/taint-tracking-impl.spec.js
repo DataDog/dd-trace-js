@@ -66,7 +66,7 @@ describe('TaintTracking', () => {
         commands.forEach((command) => {
           describe(`with command: '${command}'`, () => {
             testThatRequestHasVulnerability(function () {
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
               const iastContext = iastContextFunctions.getIastContext(store)
               const commandTainted = newTaintedString(iastContext, command, 'param', 'Request')
 
@@ -93,7 +93,7 @@ describe('TaintTracking', () => {
 
     describe('using JSON.parse', () => {
       testThatRequestHasVulnerability(function () {
-        const store = storage.getStore()
+        const store = storage('legacy').getStore()
         const iastContext = iastContextFunctions.getIastContext(store)
 
         const json = '{"command":"ls -la"}'

@@ -49,7 +49,7 @@ describe('Code injection vulnerability', () => {
           testThatRequestHasVulnerability({
             fn: (req, res) => {
               const source = '1 + 2'
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
               const iastContext = iastContextFunctions.getIastContext(store)
               const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
 
@@ -110,7 +110,7 @@ describe('Code injection vulnerability', () => {
           testThatRequestHasVulnerability({
             fn: (req, res) => {
               const source = '1 + 2'
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
               const iastContext = iastContextFunctions.getIastContext(store)
               const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
 
@@ -149,7 +149,7 @@ describe('Code injection vulnerability', () => {
           testThatRequestHasVulnerability({
             fn: (req, res) => {
               const source = '1 + 2'
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
               const iastContext = iastContextFunctions.getIastContext(store)
               const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
 
@@ -188,7 +188,7 @@ describe('Code injection vulnerability', () => {
           testThatRequestHasVulnerability({
             fn: (req, res) => {
               const source = '1 + 2'
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
               const iastContext = iastContextFunctions.getIastContext(store)
               const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
 
@@ -228,7 +228,7 @@ describe('Code injection vulnerability', () => {
           testThatRequestHasVulnerability({
             fn: (req, res) => {
               const source = '1 + 2'
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
               const iastContext = iastContextFunctions.getIastContext(store)
               const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
 
@@ -269,7 +269,7 @@ describe('Code injection vulnerability', () => {
             testThatRequestHasVulnerability({
               fn: (req, res) => {
                 const source = '1 + 2'
-                const store = storage.getStore()
+                const store = storage('legacy').getStore()
                 const iastContext = iastContextFunctions.getIastContext(store)
                 const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
 
@@ -311,7 +311,7 @@ describe('Code injection vulnerability', () => {
             testThatRequestHasVulnerability({
               fn: (req, res) => {
                 const source = '1 + 2'
-                const store = storage.getStore()
+                const store = storage('legacy').getStore()
                 const iastContext = iastContextFunctions.getIastContext(store)
                 const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
 
@@ -353,7 +353,7 @@ describe('Code injection vulnerability', () => {
             testThatRequestHasVulnerability({
               fn: (req, res) => {
                 const source = '1 + 2'
-                const store = storage.getStore()
+                const store = storage('legacy').getStore()
                 const iastContext = iastContextFunctions.getIastContext(store)
                 const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
 

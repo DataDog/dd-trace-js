@@ -102,7 +102,7 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
 }
 
 function reportMetrics (metrics, raspRule) {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   const rootSpan = store?.req && web.root(store.req)
   if (!rootSpan) return
 
@@ -117,7 +117,7 @@ function reportMetrics (metrics, raspRule) {
 }
 
 function reportAttack (attackData) {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   const req = store?.req
   const rootSpan = web.root(req)
   if (!rootSpan) return
@@ -162,7 +162,7 @@ function isFingerprintDerivative (derivative) {
 function reportDerivatives (derivatives) {
   if (!derivatives) return
 
-  const req = storage.getStore()?.req
+  const req = storage('legacy').getStore()?.req
   const rootSpan = web.root(req)
 
   if (!rootSpan) return

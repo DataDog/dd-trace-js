@@ -45,6 +45,7 @@ module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
+    this.fileLineToProbeId = new Map()
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
 
     this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone }) => {
@@ -335,7 +336,22 @@ module.exports = class CiPlugin extends Plugin {
     })
   }
 
-  removeDiProbe (probeId) {
+  removeAllDiProbes () {
+    if (this.fileLineToProbeId.size === 0) {
+      return Promise.resolve()
+    }
+    log.debug('Removing all Dynamic Instrumentation probes')
+    return Promise.all(Array.from(this.fileLineToProbeId.keys())
+      .map((fileLine) => {
+        const [file, line] = fileLine.split(':')
+        return this.removeDiProbe({ file, line })
+      }))
+  }
+
+  removeDiProbe ({ file, line }) {
+    const probeId = this.fileLineToProbeId.get(`${file}:${line}`)
+    log.warn(`Removing probe from ${file}:${line}, with id: ${probeId}`)
+    this.fileLineToProbeId.delete(probeId)
     return this.di.removeProbe(probeId)
   }
 
@@ -346,8 +362,26 @@ module.exports = class CiPlugin extends Plugin {
       log.warn('Could not add breakpoint for dynamic instrumentation')
       return
     }
+    log.debug('Adding breakpoint for Dynamic Instrumentation')
+
+    this.testErrorStackIndex = stackIndex
+    const activeProbeKey = `${file}:${line}`
+
+    if (this.fileLineToProbeId.has(activeProbeKey)) {
+      log.warn('Probe already set for this line')
+      const oldProbeId = this.fileLineToProbeId.get(activeProbeKey)
+      return {
+        probeId: oldProbeId,
+        setProbePromise: Promise.resolve(),
+        stackIndex,
+        file,
+        line
+      }
+    }
 
     const [probeId, setProbePromise] = this.di.addLineProbe({ file, line }, this.onDiBreakpointHit.bind(this))
+
+    this.fileLineToProbeId.set(activeProbeKey, probeId)
 
     return {
       probeId,

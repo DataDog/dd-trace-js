@@ -22,14 +22,14 @@ describe('template-injection-analyzer with handlebars', () => {
           })
 
           testThatRequestHasVulnerability(() => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const template = newTaintedString(iastContext, source, 'param', 'Request')
             lib.compile(template)
           }, 'TEMPLATE_INJECTION')
 
           testThatRequestHasVulnerability(() => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const template = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
             lib.compile(template)
@@ -51,14 +51,14 @@ describe('template-injection-analyzer with handlebars', () => {
           })
 
           testThatRequestHasVulnerability(() => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const template = newTaintedString(iastContext, source, 'param', 'Request')
             lib.precompile(template)
           }, 'TEMPLATE_INJECTION')
 
           testThatRequestHasVulnerability(() => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const template = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
             lib.precompile(template)
@@ -80,7 +80,7 @@ describe('template-injection-analyzer with handlebars', () => {
           })
 
           testThatRequestHasVulnerability(() => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const partial = newTaintedString(iastContext, source, 'param', 'Request')
 
@@ -88,7 +88,7 @@ describe('template-injection-analyzer with handlebars', () => {
           }, 'TEMPLATE_INJECTION')
 
           testThatRequestHasVulnerability(() => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const partial = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
 

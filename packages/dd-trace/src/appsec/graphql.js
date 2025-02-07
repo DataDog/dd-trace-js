@@ -30,7 +30,7 @@ function disable () {
 }
 
 function onGraphqlStartResolve ({ context, resolverInfo }) {
-  const req = storage.getStore()?.req
+  const req = storage('legacy').getStore()?.req
 
   if (!req) return
 
@@ -49,7 +49,7 @@ function onGraphqlStartResolve ({ context, resolverInfo }) {
 }
 
 function enterInApolloMiddleware (data) {
-  const req = data?.req || storage.getStore()?.req
+  const req = data?.req || storage('legacy').getStore()?.req
   if (!req) return
 
   graphqlRequestData.set(req, {
@@ -59,7 +59,7 @@ function enterInApolloMiddleware (data) {
 }
 
 function enterInApolloServerCoreRequest () {
-  const req = storage.getStore()?.req
+  const req = storage('legacy').getStore()?.req
   if (!req) return
 
   graphqlRequestData.set(req, {
@@ -69,13 +69,13 @@ function enterInApolloServerCoreRequest () {
 }
 
 function exitFromApolloMiddleware (data) {
-  const req = data?.req || storage.getStore()?.req
+  const req = data?.req || storage('legacy').getStore()?.req
   const requestData = graphqlRequestData.get(req)
   if (requestData) requestData.inApolloMiddleware = false
 }
 
 function enterInApolloRequest () {
-  const req = storage.getStore()?.req
+  const req = storage('legacy').getStore()?.req
 
   const requestData = graphqlRequestData.get(req)
   if (requestData?.inApolloMiddleware) {
@@ -85,7 +85,7 @@ function enterInApolloRequest () {
 }
 
 function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
-  const req = storage.getStore()?.req
+  const req = storage('legacy').getStore()?.req
   if (!req) return
 
   const requestData = graphqlRequestData.get(req)

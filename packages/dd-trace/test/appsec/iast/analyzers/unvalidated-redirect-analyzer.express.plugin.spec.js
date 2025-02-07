@@ -28,7 +28,7 @@ describe('Unvalidated Redirect vulnerability', () => {
     prepareTestServerForIastInExpress('in express', version,
       (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
         testThatRequestHasVulnerability((req, res) => {
-          const store = storage.getStore()
+          const store = storage('legacy').getStore()
           const iastCtx = iastContextFunctions.getIastContext(store)
           const location = newTaintedString(iastCtx, 'https://app.com?id=tron', 'param', 'Request')
           redirectFunctions.insecureWithResHeaderMethod('location', location, res)
@@ -41,7 +41,7 @@ describe('Unvalidated Redirect vulnerability', () => {
         })
 
         testThatRequestHasVulnerability((req, res) => {
-          const store = storage.getStore()
+          const store = storage('legacy').getStore()
           const iastCtx = iastContextFunctions.getIastContext(store)
           const location = newTaintedString(iastCtx, 'http://user@app.com/', 'param', 'Request')
           redirectFunctions.insecureWithResRedirectMethod(location, res)
@@ -54,7 +54,7 @@ describe('Unvalidated Redirect vulnerability', () => {
         })
 
         testThatRequestHasVulnerability((req, res) => {
-          const store = storage.getStore()
+          const store = storage('legacy').getStore()
           const iastCtx = iastContextFunctions.getIastContext(store)
           const location = newTaintedString(iastCtx, 'http://user@app.com/', 'param', 'Request')
           redirectFunctions.insecureWithResLocationMethod(location, res)
@@ -67,7 +67,7 @@ describe('Unvalidated Redirect vulnerability', () => {
         })
 
         testThatRequestHasNoVulnerability((req, res) => {
-          const store = storage.getStore()
+          const store = storage('legacy').getStore()
           const iastCtx = iastContextFunctions.getIastContext(store)
           const location = newTaintedString(iastCtx, 'http://user@app.com/', 'pathParam', 'Request')
           res.header('X-test', location)

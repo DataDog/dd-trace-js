@@ -291,6 +291,7 @@ class JestPlugin extends CiPlugin {
       if (isJestWorker) {
         this.tracer._exporter.flush()
       }
+      this.removeAllDiProbes()
     })
 
     /**
@@ -317,15 +318,15 @@ class JestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:jest:test:start', (test) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = this.startTestSpan(test)
 
       this.enter(span, store)
       this.activeTestSpan = span
     })
 
-    this.addSub('ci:jest:test:finish', ({ status, testStartLine, promises, shouldRemoveProbe }) => {
-      const span = storage.getStore().span
+    this.addSub('ci:jest:test:finish', ({ status, testStartLine }) => {
+      const span = storage('legacy').getStore().span
       span.setTag(TEST_STATUS, status)
       if (testStartLine) {
         span.setTag(TEST_SOURCE_START, testStartLine)
@@ -346,15 +347,11 @@ class JestPlugin extends CiPlugin {
       span.finish()
       finishAllTraceSpans(span)
       this.activeTestSpan = null
-      if (shouldRemoveProbe && this.runningTestProbeId) {
-        promises.isProbeRemoved = withTimeout(this.removeDiProbe(this.runningTestProbeId), 2000)
-        this.runningTestProbeId = null
-      }
     })
 
     this.addSub('ci:jest:test:err', ({ error, shouldSetProbe, promises }) => {
       if (error) {
-        const store = storage.getStore()
+        const store = storage('legacy').getStore()
         if (store && store.span) {
           const span = store.span
           span.setTag(TEST_STATUS, 'fail')
@@ -362,9 +359,7 @@ class JestPlugin extends CiPlugin {
           if (shouldSetProbe) {
             const probeInformation = this.addDiProbe(error)
             if (probeInformation) {
-              const { probeId, setProbePromise, stackIndex } = probeInformation
-              this.runningTestProbeId = probeId
-              this.testErrorStackIndex = stackIndex
+              const { setProbePromise } = probeInformation
               promises.isProbeReady = withTimeout(setProbePromise, 2000)
             }
           }

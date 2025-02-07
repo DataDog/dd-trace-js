@@ -48,7 +48,7 @@ class IastContextPlugin extends IastPlugin {
     let isRequestAcquired = false
     let iastContext
 
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     if (store) {
       const topContext = this.getTopContext()
       const rootSpan = this.getRootSpan(store)
@@ -70,7 +70,7 @@ class IastContextPlugin extends IastPlugin {
   }
 
   finishContext () {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     if (store) {
       const topContext = this.getTopContext()
       const iastContext = iastContextFunctions.getIastContext(store, topContext)

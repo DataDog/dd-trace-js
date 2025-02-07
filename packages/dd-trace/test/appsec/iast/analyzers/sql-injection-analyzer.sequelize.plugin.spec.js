@@ -34,7 +34,7 @@ describe('sql-injection-analyzer with sequelize', () => {
           })
 
           testThatRequestHasVulnerability(() => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastCtx = iastContextFunctions.getIastContext(store)
 
             let sql = 'SELECT 1'
@@ -53,7 +53,7 @@ module.exports = function (sequelize, sql) {
             const filepath = path.join(os.tmpdir(), 'test-sequelize-sqli.js')
             fs.writeFileSync(filepath, externalFileContent)
 
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastCtx = iastContextFunctions.getIastContext(store)
 
             let sql = 'SELECT 1'

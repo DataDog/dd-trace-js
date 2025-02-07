@@ -61,7 +61,7 @@ class LangChainTracingPlugin extends TracingPlugin {
       }
     }, false)
 
-    const store = storage.getStore() || {}
+    const store = storage('legacy').getStore() || {}
     ctx.currentStore = { ...store, span }
 
     return ctx.currentStore

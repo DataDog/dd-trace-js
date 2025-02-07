@@ -22,7 +22,7 @@ class KafkaConsumerIastPlugin extends SourceIastPlugin {
   }
 
   taintKafkaMessage (message) {
-    const iastContext = getIastContext(storage.getStore())
+    const iastContext = getIastContext(storage('legacy').getStore())
 
     if (iastContext && message) {
       const { key, value } = message

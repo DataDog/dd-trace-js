@@ -39,7 +39,7 @@ class SeleniumPlugin extends CiPlugin {
       browserVersion,
       isRumActive
     }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = store?.span
       if (!span) {
         return

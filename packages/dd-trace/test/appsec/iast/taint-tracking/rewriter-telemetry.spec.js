@@ -6,7 +6,7 @@ const { INSTRUMENTED_PROPAGATION } = require('../../../../src/appsec/iast/teleme
 const { Verbosity } = require('../../../../src/appsec/iast/telemetry/verbosity')
 
 describe('rewriter telemetry', () => {
-  let iastTelemetry, rewriter, getRewriteFunction
+  let iastTelemetry, rewriter, getRewriteFunction, incrementTelemetryIfNeeded
   let instrumentedPropagationInc
 
   beforeEach(() => {
@@ -17,6 +17,7 @@ describe('rewriter telemetry', () => {
       '../telemetry': iastTelemetry
     })
     getRewriteFunction = rewriterTelemetry.getRewriteFunction
+    incrementTelemetryIfNeeded = rewriterTelemetry.incrementTelemetryIfNeeded
     rewriter = {
       rewrite: (content) => {
         return {
@@ -68,5 +69,27 @@ describe('rewriter telemetry', () => {
     const result = rewriteFn('const a = b + c', 'test.js')
 
     expect(instrumentedPropagationInc).to.be.calledOnceWith(undefined, result.metrics.instrumentedPropagation)
+  })
+
+  describe('incrementTelemetryIfNeeded', () => {
+    it('should not increment telemetry when verbosity is OFF', () => {
+      iastTelemetry.verbosity = Verbosity.OFF
+      const metrics = {
+        instrumentedPropagation: 2
+      }
+      incrementTelemetryIfNeeded(metrics)
+
+      expect(instrumentedPropagationInc).not.to.be.called
+    })
+
+    it('should increment telemetry when verbosity is not OFF', () => {
+      iastTelemetry.verbosity = Verbosity.DEBUG
+      const metrics = {
+        instrumentedPropagation: 2
+      }
+      incrementTelemetryIfNeeded(metrics)
+
+      expect(instrumentedPropagationInc).to.be.calledOnceWith(undefined, metrics.instrumentedPropagation)
+    })
   })
 })
