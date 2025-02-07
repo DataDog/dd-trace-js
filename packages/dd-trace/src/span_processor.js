@@ -45,7 +45,7 @@ class SpanProcessor {
 
       for (const span of started) {
         if (span._duration !== undefined) {
-          const formattedSpan = format(span, this._exporter._writer?._encoder)
+          const formattedSpan = format(span, this._exporter)
           this._stats.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
 

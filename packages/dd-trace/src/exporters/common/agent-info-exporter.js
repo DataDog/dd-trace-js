@@ -1,24 +1,7 @@
 const { URL, format } = require('url')
 
-const request = require('./request')
 const { incrementCountMetric, TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION } = require('../../ci-visibility/telemetry')
-
-function fetchAgentInfo (url, callback) {
-  request('', {
-    path: '/info',
-    url
-  }, (err, res) => {
-    if (err) {
-      return callback(err)
-    }
-    try {
-      const response = JSON.parse(res)
-      return callback(null, response)
-    } catch (e) {
-      return callback(e)
-    }
-  })
-}
+const { fetchAgentInfo } = require('./util')
 
 /**
  * Exporter that exposes a way to query /info endpoint from the agent and gives you the response.

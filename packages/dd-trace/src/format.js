@@ -30,11 +30,13 @@ const map = {
   'resource.name': 'resource'
 }
 
-function format (span, encoder) {
+function format (span, exporter) {
+  const encoder = exporter?.writer?._encoder
+
   const formatted = formatSpan(span)
 
   extractSpanLinks(formatted, span)
-  extractSpanEvents(formatted, span, encoder)
+  extractSpanEvents(formatted, span, encoder, exporter?._agentSupportsTopLevelSpanEvents)
   extractRootTags(formatted, span)
   extractChunkTags(formatted, span)
   extractTags(formatted, span)
@@ -90,7 +92,7 @@ function extractSpanLinks (formattedSpan, span) {
   if (links.length > 0) { formattedSpan.meta['_dd.span_links'] = JSON.stringify(links) }
 }
 
-function extractSpanEvents (formattedSpan, span, encoder) {
+function extractSpanEvents (formattedSpan, span, encoder, agentSupportsTopLevelSpanEvents) {
   const events = []
   if (span._events) {
     for (const event of span._events) {
@@ -104,14 +106,12 @@ function extractSpanEvents (formattedSpan, span, encoder) {
     }
   }
   if (events.length > 0) {
-    switch (encoder._format) {
-      case 'v0.4':
-        // the agent supports formattedSpan.span_events natively as a top-level field
-        formattedSpan.span_events = events
-        break
-      default:
-        // v0.5 case
-        formattedSpan.meta.events = JSON.stringify(events)
+    if (encoder._format === 'v0.4' && agentSupportsTopLevelSpanEvents) {
+      // the agent supports formattedSpan.span_events natively as a top-level field as of 7.63.0
+      formattedSpan.span_events = events
+    } else {
+      // v0.5 case && backwards compatibility for v0.4 where the agent is older than 7.63.0
+      formattedSpan.meta.events = JSON.stringify(events)
     }
   }
 }

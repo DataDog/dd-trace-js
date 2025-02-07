@@ -324,4 +324,4 @@ class AgentEncoder {
   }
 }
 
-module.exports = { AgentEncoder }
+module.exports = { AgentEncoder, SOFT_LIMIT }
