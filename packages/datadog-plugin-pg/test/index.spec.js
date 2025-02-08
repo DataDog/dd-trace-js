@@ -691,6 +691,56 @@ describe('Plugin', () => {
           queryText = client.queryQueue[0].text
         })
       })
+
+      describe.skip('with DBM propagation enabled with append comment configurations', () => {
+        before(() => {
+          return agent.load('pg', [{ dbmPropagationMode: 'service', service: () => 'serviced', appendComment: true }])
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(done => {
+          pg = require(`../../../versions/pg@${version}`).get()
+
+          client = new pg.Client({
+            host: '127.0.0.1',
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres'
+          })
+          client.connect(err => done(err))
+        })
+
+        it('should append comment in query text', done => {
+          const client = new pg.Client({
+            host: '127.0.0.1',
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres'
+          })
+
+          client.connect(err => done(err))
+
+          client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+            if (err) return done(err)
+
+            client.end((err) => {
+              if (err) return done(err)
+            })
+          })
+          if (client.queryQueue[0] !== undefined) {
+            try {
+              expect(client.queryQueue[0].text).to.equal(
+                'SELECT $1::text as message /*dddb=\'postgres\',dddbs=\'serviced\',dde=\'tester\',' +
+                `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/ `)
+            } catch (e) {
+              done(e)
+            }
+          }
+        })
+      })
     })
   })
 })
