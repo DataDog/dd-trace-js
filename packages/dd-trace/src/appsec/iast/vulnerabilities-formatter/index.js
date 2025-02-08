@@ -81,21 +81,16 @@ class VulnerabilityFormatter {
   }
 
   formatVulnerability (vulnerability, sourcesIndexes, sources) {
+    const { type, hash, stackId, evidence, location } = vulnerability
+
     const formattedVulnerability = {
-      type: vulnerability.type,
-      hash: vulnerability.hash,
-      stackId: vulnerability.stackId,
-      evidence: this.formatEvidence(vulnerability.type, vulnerability.evidence, sourcesIndexes, sources),
-      location: {
-        spanId: vulnerability.location.spanId
-      }
+      type,
+      hash,
+      stackId,
+      evidence: this.formatEvidence(type, evidence, sourcesIndexes, sources),
+      location
     }
-    if (vulnerability.location.path) {
-      formattedVulnerability.location.path = vulnerability.location.path
-    }
-    if (vulnerability.location.line) {
-      formattedVulnerability.location.line = vulnerability.location.line
-    }
+
     return formattedVulnerability
   }
 
