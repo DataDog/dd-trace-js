@@ -1,5 +1,6 @@
 'use strict'
 
+const { getSourceMappedLine } = require('./source-maps')
 const session = require('./session')
 const { MAX_SNAPSHOTS_PER_SECOND_PER_PROBE, MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE } = require('./defaults')
 const { findScriptFromPartialPath, probes, breakpoints } = require('./state')
@@ -16,7 +17,7 @@ async function addBreakpoint (probe) {
   if (!sessionStarted) await start()
 
   const file = probe.where.sourceFile
-  const line = Number(probe.where.lines[0]) // Tracer doesn't support multiple-line breakpoints
+  let line = Number(probe.where.lines[0]) // Tracer doesn't support multiple-line breakpoints
 
   // Optimize for sending data to /debugger/v1/input endpoint
   probe.location = { file, lines: [String(line)] }
@@ -34,11 +35,15 @@ async function addBreakpoint (probe) {
   // not continue untill all scripts have been parsed?
   const script = findScriptFromPartialPath(file)
   if (!script) throw new Error(`No loaded script found for ${file} (probe: ${probe.id}, version: ${probe.version})`)
-  const [path, scriptId] = script
+  const { url, scriptId, sourceMapURL, source } = script
+
+  if (sourceMapURL) {
+    line = await getSourceMappedLine(url, source, line, sourceMapURL)
+  }
 
   log.debug(
     '[debugger:devtools_client] Adding breakpoint at %s:%d (probe: %s, version: %d)',
-    path, line, probe.id, probe.version
+    url, line, probe.id, probe.version
   )
 
   const { breakpointId } = await session.post('Debugger.setBreakpoint', {
@@ -66,7 +71,7 @@ async function removeBreakpoint ({ id }) {
   probes.delete(id)
   breakpoints.delete(breakpointId)
 
-  if (breakpoints.size === 0) await stop()
+  if (breakpoints.size === 0) return stop() // return instead of await to reduce number of promises created
 }
 
 async function start () {
