@@ -212,7 +212,8 @@ function extractError (trace, error) {
 function addTag (meta, metrics, key, value, nested) {
   switch (typeof value) {
     case 'string':
-      if (!value) break
+      // want to align with the agent by allowing empty value tags
+      // if (!value) break
       meta[key] = value
       break
     case 'number':
