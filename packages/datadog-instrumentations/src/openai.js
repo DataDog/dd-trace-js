@@ -298,15 +298,16 @@ for (const shim of V4_PACKAGE_SHIMS) {
         return ch.start.runStores(ctx, () => {
           const apiProm = methodFn.apply(this, arguments)
 
-          // wrapping `_thenUnwrap` is necessary to handle responses
-          // when OpenAI makes use of this method from the APIPromise class
-          shimmer.wrap(apiProm, '_thenUnwrap', origApiPromParse => function () {
-            const unwrappedPromise = origApiPromParse.apply(this, arguments)
+          if (baseResource === 'chat.completions' && typeof apiProm._thenUnwrap === 'function') {
+            // this should only ever be invoked from a client.beta.chat.completions.parse call
+            shimmer.wrap(apiProm, '_thenUnwrap', origApiPromParse => function () {
+              const unwrappedPromise = origApiPromParse.apply(this, arguments)
               // the original response is wrapped in a promise, so we need to unwrap it
-              .then(body => Promise.all([this.responsePromise, body]))
+                .then(body => Promise.all([this.responsePromise, body]))
 
-            return handleUnwrappedAPIPromise('_thenUnwrap', unwrappedPromise, ctx, stream, n)
-          })
+              return handleUnwrappedAPIPromise(unwrappedPromise, ctx, stream, n)
+            })
+          }
 
           // wrapping `parse` avoids problematic wrapping of `then` when trying to call
           // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
@@ -315,7 +316,7 @@ for (const shim of V4_PACKAGE_SHIMS) {
               // the original response is wrapped in a promise, so we need to unwrap it
               .then(body => Promise.all([this.responsePromise, body]))
 
-            return handleUnwrappedAPIPromise('parse', unwrappedPromise, ctx, stream, n)
+            return handleUnwrappedAPIPromise(unwrappedPromise, ctx, stream, n)
           })
 
           ch.end.publish(ctx)
@@ -328,7 +329,7 @@ for (const shim of V4_PACKAGE_SHIMS) {
   })
 }
 
-function handleUnwrappedAPIPromise (name, apiProm, ctx, stream, n) {
+function handleUnwrappedAPIPromise (apiProm, ctx, stream, n) {
   return apiProm.then(([{ response, options }, body]) => {
     if (stream) {
       if (body.iterator) {
@@ -355,11 +356,6 @@ function handleUnwrappedAPIPromise (name, apiProm, ctx, stream, n) {
       finish(ctx, undefined, error)
 
       throw error
-    })
-    .finally(() => {
-    // maybe we don't want to unwrap here in case the promise is re-used?
-    // other hand: we want to avoid resource leakage
-      shimmer.unwrap(apiProm, name)
     })
 }
 
