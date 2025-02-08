@@ -11,8 +11,9 @@ class MongodbCorePlugin extends DatabasePlugin {
   start ({ ns, ops, options = {}, name }) {
     const query = getQuery(ops)
     const resource = truncate(getResource(this, ns, query, name))
-    this.startSpan(this.operationName(), {
-      service: this.serviceName({ pluginConfig: this.config }),
+    const service = this.serviceName({ pluginConfig: this.config })
+    const span = this.startSpan(this.operationName(), {
+      service,
       resource,
       type: 'mongodb',
       kind: 'client',
@@ -24,6 +25,7 @@ class MongodbCorePlugin extends DatabasePlugin {
         'out.port': options.port
       }
     })
+    ops = this.injectDbmCommand(span, ops, service)
   }
 
   getPeerService (tags) {
