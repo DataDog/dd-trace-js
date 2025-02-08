@@ -60,7 +60,7 @@ describe('format', () => {
         _service: 'test'
       }),
       setTag: sinon.stub(),
-      _startTime: 1500000000000.123456,
+      _startTime: 1500000000000.123,
       _duration: 100
     }
 

@@ -8,9 +8,9 @@ if (isMainThread) {
     throw e
   })
 } else {
-  function dummyOperation (a) {
-    return a + 'dummy operation with concat'
-  }
-
   dummyOperation('should not crash')
+}
+
+function dummyOperation (a) {
+  return a + 'dummy operation with concat'
 }

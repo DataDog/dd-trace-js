@@ -13,7 +13,7 @@
     "type:doc": "cd docs && yarn && yarn build",
     "type:test": "cd docs && yarn && yarn test",
     "lint": "node scripts/check_licenses.js && eslint . && yarn audit",
-    "lint-fix": "node scripts/check_licenses.js && eslint . --fix && yarn audit",
+    "lint:fix": "node scripts/check_licenses.js && eslint . --fix && yarn audit",
     "release:proposal": "node scripts/release/proposal",
     "services": "node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",
     "test": "SERVICES=* yarn services && mocha --expose-gc 'packages/dd-trace/test/setup/node.js' 'packages/*/test/**/*.spec.js'",
@@ -117,7 +117,7 @@
   "devDependencies": {
     "@apollo/server": "^4.11.0",
     "@eslint/eslintrc": "^3.1.0",
-    "@eslint/js": "^9.11.1",
+    "@eslint/js": "^8.57.1",
     "@msgpack/msgpack": "^3.0.0-beta3",
     "@stylistic/eslint-plugin-js": "^2.8.0",
     "@types/node": "^16.0.0",

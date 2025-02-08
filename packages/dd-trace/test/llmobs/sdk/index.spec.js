@@ -560,7 +560,7 @@ describe('sdk', () => {
           function myWorkflow (input, cb) {
             span = llmobs._active()
             setTimeout(() => {
-              cb('output', 'ignore')
+              cb('output', 'ignore') // eslint-disable-line n/no-callback-literal
             }, 1000)
           }
 
