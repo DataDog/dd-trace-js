@@ -329,7 +329,7 @@ for (const shim of V4_PACKAGE_SHIMS) {
 }
 
 function handleUnwrappedAPIPromise (apiProm, ctx, stream, n) {
-  apiProm.then(([{ response, options }, body]) => {
+  return apiProm.then(([{ response, options }, body]) => {
     if (stream) {
       if (body.iterator) {
         shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, n, ctx))
