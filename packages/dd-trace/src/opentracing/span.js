@@ -330,11 +330,11 @@ class DatadogSpan {
       startTime = dateNow()
       spanContext = new SpanContext({
         traceId: spanId,
-        spanId
+        spanId,
       })
       spanContext._trace.startTime = startTime
 
-      if (fields.traceId128BitGenerationEnabled) {
+      if (fields.traceId128BitGenerationEnabled !== false) {
         spanContext._trace.tags['_dd.p.tid'] = Math.floor(startTime / 1000).toString(16)
           .padStart(8, '0')
           .padEnd(16, '0')

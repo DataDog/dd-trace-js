@@ -43,13 +43,13 @@ class DatadogSpanContext {
     }
   }
 
-  toTraceId (get128bitId = false) {
-    if (get128bitId) {
-      return this._traceId.toBuffer().length <= 8 && this._trace.tags[TRACE_ID_128]
-        ? this._trace.tags[TRACE_ID_128] + this._traceId.toString(16).padStart(16, '0')
-        : this._traceId.toString(16).padStart(32, '0')
+  toTraceId (get128bitId = true) {
+    if (get128bitId == false) {
+      return this._traceId.toString(10)
     }
-    return this._traceId.toString(10)
+    return this._traceId.toBuffer().length <= 8 && this._trace.tags[TRACE_ID_128]
+    ? this._trace.tags[TRACE_ID_128] + this._traceId.toString(16).padStart(16, '0')
+    : this._traceId.toString(16).padStart(32, '0')
   }
 
   toSpanId (get128bitId = false) {
