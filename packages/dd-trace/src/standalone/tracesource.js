@@ -13,7 +13,6 @@ function addTraceSourceTag (tags, { id } = {}) {
 }
 
 function hasTraceSourcePropagationTag (tags) {
-  // TODO: should check if _dd.p.ts !== 00?
   return hasOwn(tags, TRACE_SOURCE_PROPAGATION_KEY)
 }
 

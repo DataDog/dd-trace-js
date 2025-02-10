@@ -482,6 +482,13 @@ describe('PrioritySampler', () => {
       expect(context._trace.tags[DECISION_MAKER_KEY]).to.equal('-5')
     })
 
+    it('should set sampling priority if no product is provided', () => {
+      prioritySampler.setPriority(span, USER_KEEP)
+
+      expect(context._sampling.priority).to.equal(USER_KEEP)
+      expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_MANUAL)
+    })
+
     it('should override previous priority but mantain previous decision maker tag', () => {
       prioritySampler.sample(span)
 

@@ -2345,22 +2345,22 @@ describe('Config', () => {
     })
 
     it('should win DD_APM_TRACING_ENABLED', () => {
-      process.env.DD_APM_TRACING_ENABLED = '0'
-      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'false'
+      process.env.DD_APM_TRACING_ENABLED = '1'
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'true'
 
       const config = new Config()
-      expect(config).to.have.property('apmTracingEnabled', false)
+      expect(config).to.have.property('apmTracingEnabled', true)
     })
 
     it('should disable apm tracing with legacy experimental.appsec.standalone.enabled option', () => {
-      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '1'
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '0'
 
       const config = new Config({ experimental: { appsec: { standalone: { enabled: true } } } })
       expect(config).to.have.property('apmTracingEnabled', false)
     })
 
     it('should win apmTracingEnabled option', () => {
-      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '1'
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '0'
 
       const config = new Config({
         apmTracingEnabled: false,

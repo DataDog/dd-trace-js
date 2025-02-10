@@ -346,6 +346,12 @@ declare namespace tracer {
    */
   export interface TracerOptions {
     /**
+     * Whether to disable APM Tracing
+     * @default true
+     */
+    apmTracingEnabled?: boolean
+
+    /**
      * Whether to enable trace ID injection in log records to be able to correlate
      * traces with logs.
      * @default false
@@ -528,6 +534,10 @@ declare namespace tracer {
       appsec?: {
         /**
          * Configuration of Standalone ASM mode
+         * Deprecated in favor of `apmTracingEnabled`.
+         *
+         * @deprecated
+         * @hidden
          */
         standalone?: {
           /**

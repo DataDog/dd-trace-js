@@ -37,7 +37,6 @@ function enable (config, _tracer) {
   overheadController.configure(config.iast)
   overheadController.startGlobalContext()
   vulnerabilityReporter.start(config, _tracer)
-
   standalone.configure(config)
 
   isEnabled = true
