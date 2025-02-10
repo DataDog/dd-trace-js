@@ -63,7 +63,7 @@ function disable () {
 
 function onIncomingHttpRequestStart (data) {
   if (data?.req) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     if (store) {
       const topContext = web.getContext(data.req)
       if (topContext) {
@@ -88,7 +88,7 @@ function onIncomingHttpRequestStart (data) {
 
 function onIncomingHttpRequestEnd (data) {
   if (data?.req) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const topContext = web.getContext(data.req)
     const iastContext = iastContextFunctions.getIastContext(store, topContext)
     if (iastContext?.rootSpan) {

@@ -15,7 +15,7 @@ class HapiPlugin extends RouterPlugin {
     this._requestSpans = new WeakMap()
 
     this.addSub('apm:hapi:request:handle', ({ req }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = store && store.span
 
       this.setFramework(req, 'hapi', this.config)

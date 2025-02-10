@@ -135,11 +135,11 @@ describe('reporter', () => {
 
     beforeEach(() => {
       req = {}
-      storage.enterWith({ req })
+      storage('legacy').enterWith({ req })
     })
 
     afterEach(() => {
-      storage.disable()
+      storage('legacy').disable()
     })
 
     it('should do nothing when passed incomplete objects', () => {
@@ -178,7 +178,7 @@ describe('reporter', () => {
 
     it('should call updateWafRequestsMetricTags', () => {
       const metrics = { rulesVersion: '1.2.3' }
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
 
       Reporter.reportMetrics(metrics)
 
@@ -188,7 +188,7 @@ describe('reporter', () => {
 
     it('should call updateRaspRequestsMetricTags when raspRule is provided', () => {
       const metrics = { rulesVersion: '1.2.3' }
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
 
       const raspRule = { type: 'rule_type', variant: 'rule_variant' }
 
@@ -212,11 +212,11 @@ describe('reporter', () => {
           'user-agent': 'arachni'
         }
       }
-      storage.enterWith({ req })
+      storage('legacy').enterWith({ req })
     })
 
     afterEach(() => {
-      storage.disable()
+      storage('legacy').disable()
     })
 
     it('should add tags to request span when socket is not there', () => {
