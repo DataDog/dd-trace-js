@@ -78,13 +78,15 @@ class AgentEncoder {
       span = formatSpan(span)
       bytes.reserve(1)
 
-      if (span.type && span.meta_struct) {
-        bytes.buffer[bytes.length - 1] = 0x8d
-      } else if (span.type || span.meta_struct) {
-        bytes.buffer[bytes.length - 1] = 0x8c
-      } else {
-        bytes.buffer[bytes.length - 1] = 0x8b
-      }
+      // this is the original size of the fixed map for span attributes that always exist
+      let mapSize = 11
+
+      // increment the payload map size depending on if some optional fields exist
+      if (span.type) mapSize += 1
+      if (span.meta_struct) mapSize += 1
+      if (span.span_events) mapSize += 1
+
+      bytes.buffer[bytes.length - 1] = 0x80 + mapSize
 
       if (span.type) {
         this._encodeString(bytes, 'type')
@@ -205,6 +207,9 @@ class AgentEncoder {
       case 'number':
         this._encodeFloat(bytes, value)
         break
+      case 'boolean':
+        this._encodeBool(bytes, value)
+        break
       default:
         // should not happen
     }
@@ -263,7 +268,7 @@ class AgentEncoder {
       this._encodeObjectAsArray(bytes, value, circularReferencesDetector)
     } else if (value !== null && typeof value === 'object') {
       this._encodeObjectAsMap(bytes, value, circularReferencesDetector)
-    } else if (typeof value === 'string' || typeof value === 'number') {
+    } else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
       this._encodeValue(bytes, value)
     }
   }
@@ -273,7 +278,7 @@ class AgentEncoder {
     const validKeys = keys.filter(key => {
       const v = value[key]
       return typeof v === 'string' ||
-        typeof v === 'number' ||
+        typeof v === 'number' || typeof v === 'boolean' ||
         (v !== null && typeof v === 'object' && !circularReferencesDetector.has(v))
     })
 
