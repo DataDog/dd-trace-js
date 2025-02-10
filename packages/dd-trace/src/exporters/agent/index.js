@@ -15,11 +15,11 @@ class AgentExporter {
       port
     }))
 
-    this._agentSupportsTopLevelSpanEvents = fetchAgentInfo(this._url, (err, agentInfo) => {
+    fetchAgentInfo(this._url, (err, agentInfo) => {
       if (err) {
-        return false
+        this._agentSupportsTopLevelSpanEvents = false
       }
-      return agentInfo?.span_events === true
+      this._agentSupportsTopLevelSpanEvents = agentInfo?.span_events === true
     })
 
     const headers = {}
