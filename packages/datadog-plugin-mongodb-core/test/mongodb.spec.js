@@ -389,8 +389,6 @@ describe('Plugin', () => {
           collection.find({
             _id: Buffer.from('1234')
           }).toArray()
-          .then(done)
-          .catch(done)
         })
       })
 
@@ -447,8 +445,6 @@ describe('Plugin', () => {
           collection.find({
             _id: Buffer.from('1234')
           }).toArray()
-            .then(done)
-            .catch(done)
         })
       })
     })
