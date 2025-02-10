@@ -150,18 +150,18 @@ function maybeFile (filepath) {
   }
 }
 
-function lowerCaseValues(data) {
+function lowerCaseValues (data) {
   if (typeof data === 'string') {
-    return data.toLowerCase();
+    return data.toLowerCase()
   } else if (Array.isArray(data)) {
-    return data.map(lowerCaseValues);
+    return data.map(lowerCaseValues)
   } else if (data !== null && typeof data === 'object') {
     return Object.keys(data).reduce((acc, key) => {
-      acc[key] = lowerCaseValues(data[key]);
-      return acc;
-    }, {});
+      acc[key] = lowerCaseValues(data[key])
+      return acc
+    }, {})
   }
-  return data;
+  return data
 }
 
 function safeJsonParse (input) {

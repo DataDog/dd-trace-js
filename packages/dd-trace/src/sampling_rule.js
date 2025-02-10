@@ -20,7 +20,6 @@ class GlobMatcher {
     const subject = this.locator(span)
 
     if (!subject) return false
-    console.log(888, this.pattern, subject, globMatch(this.pattern, subject))
     return globMatch(this.pattern, subject)
   }
 }
@@ -46,7 +45,6 @@ function matcher (pattern, locator) {
   if (typeof pattern === 'string' && pattern !== '*' && pattern !== '**' && pattern !== '***') {
     return new GlobMatcher(pattern, locator)
   }
-  console.log(8888, pattern, locator)
   return new AlwaysMatcher()
 }
 
