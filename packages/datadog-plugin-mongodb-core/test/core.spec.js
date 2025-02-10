@@ -460,7 +460,7 @@ describe('Plugin', () => {
 
       describe('with dbmPropagationMode full', () => {
         before(() => {
-          return agent.load('mongodb-core', { dbmPropagationMode: 'service' })
+          return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
         })
 
         after(() => {
