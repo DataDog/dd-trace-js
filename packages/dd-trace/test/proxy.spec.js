@@ -75,6 +75,7 @@ describe('TracerProxy', () => {
 
     noopDogStatsDClient = {
       increment: sinon.spy(),
+      decrement: sinon.spy(),
       gauge: sinon.spy(),
       distribution: sinon.spy(),
       histogram: sinon.spy(),
@@ -654,6 +655,8 @@ describe('TracerProxy', () => {
       it('should not throw when calling noop methods', () => {
         proxy.dogstatsd.increment('inc')
         expect(noopDogStatsDClient.increment).to.have.been.calledWith('inc')
+        proxy.dogstatsd.increment('dec')
+        expect(noopDogStatsDClient.decrement).to.have.been.calledWith('dec')
         proxy.dogstatsd.distribution('dist')
         expect(noopDogStatsDClient.distribution).to.have.been.calledWith('dist')
         proxy.dogstatsd.histogram('hist')
