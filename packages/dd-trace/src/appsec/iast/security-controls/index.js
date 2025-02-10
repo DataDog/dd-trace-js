@@ -152,7 +152,7 @@ function wrapInputValidator (target, parameters, secureMarks) {
 function addSecureMarks (value, secureMarks, createNewTainted = true) {
   if (!value) return
 
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   const iastContext = getIastContext(store)
 
   if (typeof value === 'string') {

@@ -105,7 +105,7 @@ describe('IAST Security Controls', () => {
       return module
     }
 
-    it.only('should hook a module only once', () => {
+    it('should hook a module only once', () => {
       // eslint-disable-next-line no-multi-str
       const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
 /security-controls/resources/custom_input_validator.js:validate'
