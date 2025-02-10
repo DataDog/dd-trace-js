@@ -519,6 +519,7 @@ class Config {
     this._setValue(defaults, 'ciVisAgentlessLogSubmissionEnabled', false)
     this._setValue(defaults, 'legacyBaggageEnabled', true)
     this._setValue(defaults, 'isTestDynamicInstrumentationEnabled', false)
+    this._setValue(defaults, 'isServiceUserProvided', false)
     this._setValue(defaults, 'logInjection', false)
     this._setValue(defaults, 'lookup', undefined)
     this._setValue(defaults, 'inferredProxyServicesEnabled', false)
@@ -1160,6 +1161,7 @@ class Config {
       this._setString(calc, 'ciVisibilityTestSessionName', DD_TEST_SESSION_NAME)
       this._setBoolean(calc, 'ciVisAgentlessLogSubmissionEnabled', isTrue(DD_AGENTLESS_LOG_SUBMISSION_ENABLED))
       this._setBoolean(calc, 'isTestDynamicInstrumentationEnabled', isTrue(DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED))
+      this._setBoolean(calc, 'isServiceUserProvided', !!this._env.service)
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())
     this._setBoolean(calc, 'isGitUploadEnabled',

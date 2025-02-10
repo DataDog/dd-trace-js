@@ -29,12 +29,12 @@ describe('Plugin', () => {
       it('should propagate context', done => {
         const span = {}
 
-        storage.run(span, () => {
+        storage('legacy').run(span, () => {
           limitd.take('user', 'test', function (err, resp) {
             if (err) return done(err)
 
             try {
-              expect(storage.getStore()).to.equal(span)
+              expect(storage('legacy').getStore()).to.equal(span)
               done()
             } catch (e) {
               done(e)

@@ -49,7 +49,7 @@ function analyzePgSqlInjection (ctx) {
 }
 
 function analyzeSqlInjection (query, dbSystem, abortController) {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   if (!store) return
 
   const { req, res } = store
@@ -91,7 +91,7 @@ function hasAddressesObjectInputAddress (addressesObject) {
 function clearQuerySet ({ payload }) {
   if (!payload) return
 
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   if (!store) return
 
   const { req } = store

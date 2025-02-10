@@ -37,7 +37,8 @@ const {
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
   TEST_LEVEL_EVENT_TYPES,
-  TEST_RETRY_REASON
+  TEST_RETRY_REASON,
+  DD_TEST_IS_USER_PROVIDED_SERVICE
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -326,6 +327,7 @@ moduleTypes.forEach(({
             assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
             assert.equal(meta[TEST_SOURCE_FILE].startsWith('cypress/e2e/'), true)
             // Can read DD_TAGS
+            assert.propertyVal(meta, DD_TEST_IS_USER_PROVIDED_SERVICE, 'false')
             assert.propertyVal(meta, 'test.customtag', 'customvalue')
             assert.propertyVal(meta, 'test.customtag2', 'customvalue2')
             assert.exists(metrics[DD_HOST_CPU_COUNT])
@@ -345,7 +347,8 @@ moduleTypes.forEach(({
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-            DD_TEST_SESSION_NAME: 'my-test-session'
+            DD_TEST_SESSION_NAME: 'my-test-session',
+            DD_SERVICE: undefined
           },
           stdio: 'pipe'
         }
@@ -1691,5 +1694,42 @@ moduleTypes.forEach(({
           })
       })
     }
+
+    it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', (done) => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testEvents = events.filter(event => event.type === 'test')
+
+          testEvents.forEach(({ content: { meta } }) => {
+            assert.propertyVal(meta, DD_TEST_IS_USER_PROVIDED_SERVICE, 'true')
+          })
+        }, 25000)
+
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            DD_SERVICE: 'my-service'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        receiverPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
   })
 })

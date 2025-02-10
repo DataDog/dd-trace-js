@@ -325,7 +325,7 @@ module.exports = {
     const emit = server.emit
 
     server.emit = function () {
-      storage.enterWith({ noop: true })
+      storage('legacy').enterWith({ noop: true })
       return emit.apply(this, arguments)
     }
 

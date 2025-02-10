@@ -19,7 +19,7 @@ function disable () {
 }
 
 function analyzeSsrf (ctx) {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   const req = store?.req
   const outgoingUrl = (ctx.args.options?.uri && format(ctx.args.options.uri)) ?? ctx.args.uri
 
