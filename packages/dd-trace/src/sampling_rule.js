@@ -18,7 +18,9 @@ class GlobMatcher {
 
   match (span) {
     const subject = this.locator(span)
+
     if (!subject) return false
+    console.log(888, this.pattern, subject, globMatch(this.pattern, subject))
     return globMatch(this.pattern, subject)
   }
 }
@@ -41,10 +43,10 @@ function matcher (pattern, locator) {
     return new RegExpMatcher(pattern, locator)
   }
 
-  if (typeof pattern === 'string' && pattern !== '*') {
+  if (typeof pattern === 'string' && pattern !== '*' && pattern !== '**' && pattern !== '***') {
     return new GlobMatcher(pattern, locator)
   }
-
+  console.log(8888, pattern, locator)
   return new AlwaysMatcher()
 }
 
@@ -74,7 +76,7 @@ class SamplingRule {
       this.matchers.push(matcher(service, serviceLocator))
     }
     if (resource) {
-      this.matchers.push(matcher(resource, makeTagLocator('resource.name')))
+      this.matchers.push(matcher(resource, makeTagLocator('resource')))
     }
     for (const [key, value] of Object.entries(tags || {})) {
       this.matchers.push(matcher(value, makeTagLocator(key)))

@@ -24,8 +24,11 @@ function isError (value) {
 
 // Matches a glob pattern to a given subject string
 function globMatch (pattern, subject) {
+  console.log(666666, pattern, subject, typeof pattern, typeof subject)
   if (typeof pattern === 'string') pattern = pattern.toLowerCase()
   if (typeof subject === 'string') subject = subject.toLowerCase()
+  if (typeof subject === 'number' && Number.isInteger(subject)) subject = String(subject)
+
   let px = 0 // [p]attern inde[x]
   let sx = 0 // [s]ubject inde[x]
   let nextPx = 0
