@@ -107,16 +107,20 @@ class AgentEncoder {
       this._encodeInteger(bytes, span.error)
       this._encodeString(bytes, 'start')
       this._encodeLong(bytes, span.start)
+      if (span.span_events) {
+        this._encodeString(bytes, 'span_events')
+        this._encodeArrayPrefix(bytes, span.span_events)
+        const circularReferencesDetector = new Set()
+        for (const spanEvent of span.span_events) {
+          this._encodeObject(bytes, spanEvent, circularReferencesDetector)
+        }
+      }
       this._encodeString(bytes, 'duration')
       this._encodeLong(bytes, span.duration)
       this._encodeString(bytes, 'meta')
       this._encodeMap(bytes, span.meta)
       this._encodeString(bytes, 'metrics')
       this._encodeMap(bytes, span.metrics)
-      if (span.span_events) {
-        this._encodeString(bytes, 'span_events')
-        this._encodeObjectAsArray(bytes, span.span_events, new Set())
-      }
       if (span.meta_struct) {
         this._encodeString(bytes, 'meta_struct')
         this._encodeMetaStruct(bytes, span.meta_struct)
@@ -265,6 +269,8 @@ class AgentEncoder {
       this._encodeObjectAsMap(bytes, value, circularReferencesDetector)
     } else if (typeof value === 'string' || typeof value === 'number') {
       this._encodeValue(bytes, value)
+    } else if (typeof value === 'boolean') {
+      this._encodeBool(bytes, value)
     }
   }
 
@@ -273,7 +279,7 @@ class AgentEncoder {
     const validKeys = keys.filter(key => {
       const v = value[key]
       return typeof v === 'string' ||
-        typeof v === 'number' ||
+        typeof v === 'number' || typeof v === 'boolean' ||
         (v !== null && typeof v === 'object' && !circularReferencesDetector.has(v))
     })
 

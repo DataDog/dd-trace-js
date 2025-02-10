@@ -19,7 +19,7 @@ class AgentExporter {
       if (err) {
         this._agentSupportsTopLevelSpanEvents = false
       }
-      this._agentSupportsTopLevelSpanEvents = agentInfo?.span_events === true
+      this._agentSupportsTopLevelSpanEvents = true // agentInfo?.span_events === true
     })
 
     const headers = {}
