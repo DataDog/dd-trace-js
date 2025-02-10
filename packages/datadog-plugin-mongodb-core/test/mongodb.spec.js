@@ -344,7 +344,7 @@ describe('Plugin', () => {
       describe('with dbmPropagationMode service', () => {
         before(() => {
           return agent.load('mongodb-core', {
-            dbmPropagationMode: 'service',
+            dbmPropagationMode: 'service'
           })
         })
 
@@ -375,25 +375,25 @@ describe('Plugin', () => {
               expect(instrumentedCommand).to.have.property('comment')
               expect(instrumentedCommand.comment).to.equal(
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
-                `dddbs='test-mongodb',` +
-                `dde='tester',` +
+                'dddbs=\'test-mongodb\',' +
+                'dde=\'tester\',' +
                 `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
                 `ddps='${encodeURIComponent(span.meta.service)}',` +
                 `ddpv='${ddpv}',` +
                 `ddprs='${encodeURIComponent(span.meta['peer.service'])}'`
-              );
+              )
             })
             .then(done)
             .catch(done)
 
-            collection.insertOne({ a: 1 }, {}, () => {})
+          collection.insertOne({ a: 1 }, {}, () => {})
         })
       })
 
       describe('with dbmPropagationMode full', () => {
         before(() => {
           return agent.load('mongodb-core', {
-            dbmPropagationMode: 'full',
+            dbmPropagationMode: 'full'
           })
         })
 
@@ -420,7 +420,7 @@ describe('Plugin', () => {
             .use(traces => {
               const span = traces[0][0]
               const expectedTimePrefix = Math.floor(clock.now / 1000).toString(16).padStart(8, '0').padEnd(16, '0')
-              const traceId = expectedTimePrefix +span.trace_id.toString(16).padStart(16, '0')
+              const traceId = expectedTimePrefix + span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')
 
               expect(injectDbmCommandSpy.called).to.be.true
@@ -428,18 +428,18 @@ describe('Plugin', () => {
               expect(instrumentedCommand).to.have.property('comment')
               expect(instrumentedCommand.comment).to.equal(
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
-                `dddbs='test-mongodb',` +
-                `dde='tester',` +
+                'dddbs=\'test-mongodb\',' +
+                'dde=\'tester\',' +
                 `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
                 `ddps='${encodeURIComponent(span.meta.service)}',` +
                 `ddpv='${ddpv}',` +
-                `ddprs='${encodeURIComponent(span.meta['peer.service'])}',`+
+                `ddprs='${encodeURIComponent(span.meta['peer.service'])}',` +
                 `traceparent='00-${traceId}-${spanId}-00'`
-              );
+              )
             })
             .then(done)
             .catch(done)
-          
+
           collection.insertOne({ a: 1 }, {}, () => {})
         })
       })

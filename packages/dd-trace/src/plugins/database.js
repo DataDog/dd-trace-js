@@ -2,8 +2,6 @@
 
 const StoragePlugin = require('./storage')
 const { PEER_SERVICE_KEY, PEER_SERVICE_SOURCE_KEY } = require('../constants')
-const { re } = require('semver')
-const { type } = require('os')
 
 class DatabasePlugin extends StoragePlugin {
   static get operation () { return 'query' }
