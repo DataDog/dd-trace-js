@@ -106,7 +106,7 @@ function extractSpanEvents (formattedSpan, span, encoder, agentSupportsTopLevelS
     }
   }
   if (events.length > 0) {
-    if (encoder._format === 'v0.4' && agentSupportsTopLevelSpanEvents) {
+    if (encoder?._format === 'v0.4' && agentSupportsTopLevelSpanEvents) {
       // the agent supports formattedSpan.span_events natively as a top-level field as of 7.63.0
       formattedSpan.span_events = events
     } else {
