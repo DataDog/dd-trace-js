@@ -220,6 +220,20 @@ describe('Plugin', () => {
     describeMethod('extract', null)
     describeMethod('getRumData', '')
     describeMethod('trace')
+
+    describe('trace with return value', () => {
+      it('should return the exact same value', () => {
+        const obj = { mustBeThis: 'value' }
+        tracer.trace.resetHistory() // clear previous call to `trace`
+        testChannel({
+          name: 'trace',
+          fn: tracer.trace,
+          ret: obj,
+          proxy: false,
+          args: ['foo', {}, () => obj]
+        })
+      })
+    })
     describeMethod('wrap')
     describeMethod('use', SELF)
     describeMethod('profilerStarted', Promise.resolve(false))
@@ -268,16 +282,13 @@ describe('Plugin', () => {
       })
     }
 
-    function testChannel ({ name, fn, self = dummyTracer, ret = undefined, args = [] }) {
+    function testChannel ({ name, fn, self = dummyTracer, ret, args = [], proxy }) {
       testedChannels.add('datadog-api:v1:' + name)
       const ch = dc.channel('datadog-api:v1:' + name)
-      const payload = {
-        self,
-        args,
-        ret: {},
-        proxy: ret && typeof ret === 'object' ? () => ret : undefined,
-        revProxy: []
+      if (proxy === undefined) {
+        proxy = ret && typeof ret === 'object' ? () => ret : undefined
       }
+      const payload = { self, args, ret: {}, proxy, revProxy: [] }
       ch.publish(payload)
       if (payload.ret.error) {
         throw payload.ret.error
