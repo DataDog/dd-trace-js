@@ -370,7 +370,7 @@ describe('Plugin', () => {
             .use(traces => {
               const span = traces[0][0]
 
-              expect(injectDbmCommandSpy.calledOnce).to.be.true
+              expect(injectDbmCommandSpy.called).to.be.true
               const instrumentedCommand = injectDbmCommandSpy.getCall(0).returnValue
               expect(instrumentedCommand).to.have.property('comment')
               expect(instrumentedCommand.comment).to.equal(
@@ -423,7 +423,7 @@ describe('Plugin', () => {
               const traceId = expectedTimePrefix +span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')
 
-              expect(injectDbmCommandSpy.calledOnce).to.be.true
+              expect(injectDbmCommandSpy.called).to.be.true
               const instrumentedCommand = injectDbmCommandSpy.getCall(0).returnValue
               expect(instrumentedCommand).to.have.property('comment')
               expect(instrumentedCommand.comment).to.equal(
