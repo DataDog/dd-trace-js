@@ -81,8 +81,10 @@ describe('IAST Security Controls', () => {
           addSecureMark
         },
         '../../../../../datadog-core': {
-          storage: {
-            getStore: sinon.stub().returns(context)
+          storage: () => {
+            return {
+              getStore: sinon.stub().returns(context)
+            }
           }
         }
       })
