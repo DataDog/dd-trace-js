@@ -440,7 +440,9 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          collection.insertOne({ a: 1 }, {}, () => {})
+            collection.find({
+              _id: Buffer.from('1234')
+            }).toArray()
         })
       })
     })
