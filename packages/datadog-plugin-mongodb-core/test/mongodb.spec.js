@@ -341,8 +341,7 @@ describe('Plugin', () => {
       })
 
       describe('with dbmPropagationMode service', () => {
-        before(function () {
-          this.timeout(10000)
+        before(() => {
           return agent.load('mongodb-core', {
             dbmPropagationMode: 'service'
           })
@@ -392,8 +391,7 @@ describe('Plugin', () => {
       })
 
       describe('with dbmPropagationMode full', () => {
-        before(function () {
-          this.timeout(10000)
+        before(() => {
           return agent.load('mongodb-core', {
             dbmPropagationMode: 'full'
           })
