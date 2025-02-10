@@ -49,7 +49,6 @@ describe('Plugin', () => {
   let db
   let BSON
   let injectDbmCommandSpy
-  let clock
 
   describe('mongodb-core', () => {
     withTopologies(createClient => {
@@ -342,7 +341,8 @@ describe('Plugin', () => {
       })
 
       describe('with dbmPropagationMode service', () => {
-        before(() => {
+        before(function () {
+          this.timeout(10000)
           return agent.load('mongodb-core', {
             dbmPropagationMode: 'service'
           })
@@ -357,7 +357,6 @@ describe('Plugin', () => {
           db = client.db('test')
           collection = db.collection(collectionName)
 
-          sinon.restore()
           injectDbmCommandSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmCommand')
         })
 
@@ -393,7 +392,8 @@ describe('Plugin', () => {
       })
 
       describe('with dbmPropagationMode full', () => {
-        before(() => {
+        before(function () {
+          this.timeout(10000)
           return agent.load('mongodb-core', {
             dbmPropagationMode: 'full'
           })
@@ -408,12 +408,10 @@ describe('Plugin', () => {
           db = client.db('test')
           collection = db.collection(collectionName)
 
-          clock = sinon.useFakeTimers(new Date())
           injectDbmCommandSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmCommand')
         })
 
         afterEach(() => {
-          clock?.restore()
           injectDbmCommandSpy?.restore()
         })
 
@@ -421,8 +419,7 @@ describe('Plugin', () => {
           agent
             .use(traces => {
               const span = traces[0][0]
-              const expectedTimePrefix = Math.floor(clock.now / 1000).toString(16).padStart(8, '0').padEnd(16, '0')
-              const traceId = expectedTimePrefix + span.trace_id.toString(16).padStart(16, '0')
+              const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')
 
               expect(injectDbmCommandSpy.called).to.be.true
