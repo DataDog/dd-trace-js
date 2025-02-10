@@ -150,20 +150,6 @@ function maybeFile (filepath) {
   }
 }
 
-function lowerCaseValues (data) {
-  if (typeof data === 'string') {
-    return data.toLowerCase()
-  } else if (Array.isArray(data)) {
-    return data.map(lowerCaseValues)
-  } else if (data !== null && typeof data === 'object') {
-    return Object.keys(data).reduce((acc, key) => {
-      acc[key] = lowerCaseValues(data[key])
-      return acc
-    }, {})
-  }
-  return data
-}
-
 function safeJsonParse (input) {
   try {
     return JSON.parse(input)
@@ -870,7 +856,7 @@ class Config {
     this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE ||
     getFromOtelSamplerMap(OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG))
     this._setValue(env, 'sampler.rateLimit', DD_TRACE_RATE_LIMIT)
-    this._setSamplingRule(env, 'sampler.rules', lowerCaseValues(safeJsonParse(DD_TRACE_SAMPLING_RULES)))
+    this._setSamplingRule(env, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
     this._envUnprocessed['sampler.rules'] = DD_TRACE_SAMPLING_RULES
     this._setString(env, 'scope', DD_TRACE_SCOPE)
     this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service || OTEL_SERVICE_NAME)
