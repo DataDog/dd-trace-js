@@ -39,7 +39,7 @@ describe('sql-injection-analyzer', () => {
           return getRanges(string, SQL_INJECTION_MARK)
 
         case TAINTED_CMDI_SECURED:
-          return getRanges(COMMAND_INJECTION_MARK)
+          return getRanges(string, COMMAND_INJECTION_MARK)
 
         default:
           return []
