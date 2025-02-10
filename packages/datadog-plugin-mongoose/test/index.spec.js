@@ -43,8 +43,8 @@ describe('Plugin', () => {
         await connect()
       })
 
-      after(() => {
-        return mongoose.disconnect()
+      after(async () => {
+        return await mongoose.disconnect()
       })
 
       after(() => {
