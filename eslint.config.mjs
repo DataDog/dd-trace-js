@@ -1,19 +1,24 @@
-import mocha from 'eslint-plugin-mocha'
-import n from 'eslint-plugin-n'
-import stylistic from '@stylistic/eslint-plugin-js'
-import globals from 'globals'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import js from '@eslint/js'
+
 import { FlatCompat } from '@eslint/eslintrc'
+import js from '@eslint/js'
+import stylistic from '@stylistic/eslint-plugin-js'
+import mocha from 'eslint-plugin-mocha'
+import n from 'eslint-plugin-n'
+import globals from 'globals'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-  recommendedConfig: js.configs.recommended,
-  allConfig: js.configs.all
-})
+const compat = new FlatCompat({ baseDirectory: __dirname })
+
+const TEST_FILES = [
+  'packages/*/test/**/*.js',
+  'packages/*/test/**/*.mjs',
+  'integration-tests/**/*.js',
+  'integration-tests/**/*.mjs',
+  '**/*.spec.js'
+]
 
 export default [
   {
@@ -31,9 +36,13 @@ export default [
       'packages/dd-trace/src/appsec/blocked_templates.js', // TODO Why is this ignored?
       'packages/dd-trace/src/payload-tagging/jsonpath-plus.js' // Vendored
     ]
-  }, ...compat.extends('eslint:recommended', 'standard', 'plugin:mocha/recommended'), {
+  },
+  { name: '@eslint/js/recommnded', ...js.configs.recommended },
+  ...compat.extends('standard').map((config, i) => ({ name: config.name || `standard/${i + 1}`, ...config })),
+  {
+    name: 'dd-trace/defaults',
+
     plugins: {
-      mocha,
       n,
       '@stylistic/js': stylistic
     },
@@ -48,47 +57,43 @@ export default [
 
     settings: {
       node: {
-        version: '>=16.0.0'
+        // Used by `eslint-plugin-n` to determine the minimum version of Node.js to support.
+        // Normally setting this in the `package.json` engines field is enough, but when we have more than one active
+        // major release line at the same time, we need to specify the lowest version here to ensure backporting will
+        // not fail.
+        version: '>=18.0.0'
       }
     },
 
     rules: {
       '@stylistic/js/max-len': ['error', { code: 120, tabWidth: 2 }],
-      '@stylistic/js/object-curly-newline': ['error', {
-        multiline: true,
-        consistent: true
-      }],
+      '@stylistic/js/object-curly-newline': ['error', { multiline: true, consistent: true }],
       '@stylistic/js/object-curly-spacing': ['error', 'always'],
-      'import/no-absolute-path': 'off',
       'import/no-extraneous-dependencies': 'error',
-      'n/no-callback-literal': 'off',
       'n/no-restricted-require': ['error', ['diagnostics_channel']],
       'no-console': 'error',
-      'no-prototype-builtins': 'off',
-      'no-unused-expressions': 'off',
-      'no-var': 'error',
-      'prefer-const': 'error',
-      'standard/no-callback-literal': 'off'
+      'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommnded)
+      'no-unused-expressions': 'off', // Override (turned on by standard)
+      'no-var': 'error' // Override (set to warn in standard)
     }
   },
   {
-    files: [
-      'packages/*/test/**/*.js',
-      'packages/*/test/**/*.mjs',
-      'integration-tests/**/*.js',
-      'integration-tests/**/*.mjs',
-      '**/*.spec.js'
-    ],
+    name: 'mocha/recommnded',
+    ...mocha.configs.flat.recommended,
+    files: TEST_FILES
+  },
+  {
+    name: 'dd-trace/tests/all',
+    files: TEST_FILES,
     languageOptions: {
       globals: {
-        ...globals.mocha,
-        sinon: false,
-        expect: false,
-        proxyquire: false,
-        withVersions: false,
-        withPeerService: false,
-        withNamingSchema: false,
-        withExports: false
+        sinon: 'readonly',
+        expect: 'readonly',
+        proxyquire: 'readonly',
+        withVersions: 'readonly',
+        withPeerService: 'readonly',
+        withNamingSchema: 'readonly',
+        withExports: 'readonly'
       }
     },
     rules: {
@@ -101,11 +106,11 @@ export default [
       'mocha/no-sibling-hooks': 'off',
       'mocha/no-skipped-tests': 'off',
       'mocha/no-top-level-hooks': 'off',
-      'n/handle-callback-err': 'off',
-      'no-loss-of-precision': 'off'
+      'n/handle-callback-err': 'off'
     }
   },
   {
+    name: 'dd-trace/tests/integration',
     files: [
       'integration-tests/**/*.js',
       'integration-tests/**/*.mjs',
