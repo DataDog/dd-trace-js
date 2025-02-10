@@ -3,9 +3,9 @@
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { NODE_MAJOR } = require('../../../version')
+const id = require('../../dd-trace/src/id')
 
 describe('Plugin', () => {
-  let id
   let tracer
   let dbName
 
@@ -23,7 +23,8 @@ describe('Plugin', () => {
       function connect () {
         // mongoose.connect('mongodb://username:password@host:port/database?options...');
         // actually the first part of the path is the dbName and not the collection
-        mongoose.connect(`mongodb://localhost:27017/${dbName}`, {
+        return mongoose.connect(`mongodb://localhost:27017/${dbName}`, {
+          bufferCommands: false,
           useNewUrlParser: true,
           useUnifiedTopology: true
         })
@@ -33,25 +34,14 @@ describe('Plugin', () => {
         return agent.load(['mongodb-core'])
       })
 
-      before(() => {
-        id = require('../../dd-trace/src/id')
+      before(async () => {
         tracer = require('../../dd-trace')
-
-        dbName = id().toString()
 
         mongoose = require(`../../../versions/mongoose@${version}`).get()
 
-        connect()
+        dbName = id().toString()
 
-        withPeerService(
-          () => tracer,
-          'mongodb-core',
-          (done) => {
-            const PeerCat = mongoose.model('PeerCat', { name: String })
-            new PeerCat({ name: 'PeerCat' }).save().catch(done)
-            done()
-          },
-          'db', 'peer.service')
+        await connect()
       })
 
       after(() => {
@@ -61,6 +51,15 @@ describe('Plugin', () => {
       after(() => {
         return agent.close({ ritmReset: false })
       })
+
+      withPeerService(
+        () => tracer,
+        'mongodb-core',
+        (done) => {
+          const PeerCat = mongoose.model('PeerCat', { name: String })
+          new PeerCat({ name: 'PeerCat' }).save().catch(done)
+        },
+        () => dbName, 'peer.service')
 
       it('should propagate context with write operations', () => {
         const Cat = mongoose.model('Cat1', { name: String })
