@@ -7,7 +7,7 @@ const { ASM } = require('../../src/standalone/product')
 const { TRACE_SOURCE_PROPAGATION_KEY } = require('../../src/constants')
 const { addTraceSourceTag } = require('../../src/standalone/tracesource')
 
-describe('Tracesource propagation tag', () => {
+describe('Disabled APM Tracing or Standalone - Tracesource propagation tag', () => {
   let tags
 
   beforeEach(() => {

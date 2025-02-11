@@ -8,7 +8,7 @@ const DatadogSpan = require('../../src/opentracing/span')
 const TraceSourcePrioritySampler = require('../../src/standalone/tracesource_priority_sampler')
 const { TRACE_SOURCE_PROPAGATION_KEY } = require('../../src/constants')
 
-describe('TraceSourcePrioritySampler', () => {
+describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () => {
   let prioritySampler
   let tags
   let context
