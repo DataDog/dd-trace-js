@@ -15,7 +15,6 @@ let normalize
 
 function safeRequire (path) {
   try {
-    // eslint-disable-next-line import/no-extraneous-dependencies
     return require(path)
   } catch {
     return null
