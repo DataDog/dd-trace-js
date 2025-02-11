@@ -1,4 +1,3 @@
-// eslint-disable-next-line
 const workerpool = require('workerpool')
 const pool = workerpool.pool({ workerType: 'process' })
 

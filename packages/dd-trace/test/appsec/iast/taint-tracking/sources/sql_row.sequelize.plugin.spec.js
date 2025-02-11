@@ -39,7 +39,7 @@ describe('db sources with sequelize', () => {
 
           res.end('OK')
         }, 'SQL_INJECTION', { occurrences: 1 }, null, null,
-        'Should have SQL_INJECTION using the first row of the result')
+        'Should have SQL_INJECTION using the first row of the result', false)
 
         testThatRequestHasNoVulnerability(async (req, res) => {
           const result = await sequelize.query('SELECT * from examples')
@@ -82,7 +82,7 @@ describe('db sources with sequelize', () => {
 
           res.end('OK')
         }, 'SQL_INJECTION', { occurrences: 1 }, null, null,
-        'Should have SQL_INJECTION using the first row of the result')
+        'Should have SQL_INJECTION using the first row of the result', false)
 
         testThatRequestHasNoVulnerability(async (req, res) => {
           const examples = await Example.findAll()

@@ -51,8 +51,8 @@ describe('RASP - ssrf.js', () => {
 
       httpClientRequestStart.publish(ctx)
 
-      const persistent = { [addresses.HTTP_OUTGOING_URL]: 'http://example.com' }
-      sinon.assert.calledOnceWithExactly(waf.run, { persistent }, req, { type: 'ssrf' })
+      const ephemeral = { [addresses.HTTP_OUTGOING_URL]: 'http://example.com' }
+      sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req, { type: 'ssrf' })
     })
 
     it('should not analyze ssrf if rasp is disabled', () => {
