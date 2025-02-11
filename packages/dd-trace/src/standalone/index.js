@@ -42,9 +42,9 @@ function onSpanInject ({ spanContext, carrier }) {
   if (!hasTraceSourcePropagationTag(spanContext._trace.tags)) {
     for (const key in carrier) {
       const lKey = key.toLowerCase()
-      if (lKey.startsWith('x-datadog') || lKey.startsWith('x-b3')) {
+      if (lKey.startsWith('x-datadog') || lKey.startsWith('x-b3') || lKey === 'traceparent') {
         delete carrier[key]
-      } else if (lKey === 'tracestate' || lKey === 'traceparent') {
+      } else if (lKey === 'tracestate') {
         const tracestate = TraceState.fromString(carrier[key])
         tracestate.forVendor('dd', state => state.clear())
         carrier[key] = tracestate.toString()

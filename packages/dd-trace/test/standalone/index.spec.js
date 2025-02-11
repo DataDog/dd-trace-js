@@ -31,7 +31,7 @@ describe('Disabled APM Tracing or Standalone', () => {
       apmTracingEnabled: false,
 
       tracePropagationStyle: {
-        inject: ['datadog', 'tracecontext'],
+        inject: ['datadog', 'tracecontext', 'b3'],
         extract: ['datadog']
       }
     }
@@ -280,6 +280,9 @@ describe('Disabled APM Tracing or Standalone', () => {
       assert.notProperty(carrier, 'x-datadog-trace-id')
       assert.notProperty(carrier, 'x-datadog-parent-id')
       assert.notProperty(carrier, 'x-datadog-sampling-priority')
+
+      assert.notProperty(carrier, 'x-b3-traceid')
+      assert.notProperty(carrier, 'x-b3-spanid')
     })
 
     it('should keep priority if apm tracing is disabled and there is an appsec event', () => {
@@ -326,6 +329,9 @@ describe('Disabled APM Tracing or Standalone', () => {
       assert.property(carrier, 'x-datadog-trace-id')
       assert.property(carrier, 'x-datadog-parent-id')
       assert.property(carrier, 'x-datadog-sampling-priority')
+
+      assert.property(carrier, 'x-b3-traceid')
+      assert.property(carrier, 'x-b3-spanid')
     })
 
     it('should clear tracestate datadog info', () => {
@@ -350,6 +356,7 @@ describe('Disabled APM Tracing or Standalone', () => {
       propagator.inject(span._spanContext, carrier)
 
       assert.propertyVal(carrier, 'tracestate', 'other=id:0xC0FFEE')
+      assert.notProperty(carrier, 'traceparent')
     })
   })
 })
