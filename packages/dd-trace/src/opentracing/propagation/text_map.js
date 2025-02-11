@@ -46,6 +46,7 @@ const tracestateTagKeyFilter = /[^\x21-\x2b\x2d-\x3c\x3e-\x7e]/g
 const tracestateTagValueFilter = /[^\x20-\x2b\x2d-\x3a\x3c-\x7d]/g
 const invalidSegment = /^0+$/
 const zeroTraceId = '0000000000000000'
+const hex16 = /^[0-9A-Fa-f]{16}$/
 
 class TextMapPropagator {
   constructor (config) {
@@ -487,20 +488,14 @@ class TextMapPropagator {
               const subKey = key.slice(2) // e.g. t.tid -> tid
               const transformedValue = value.replace(/[\x7e]/gm, '=')
 
+              // If subkey is tid  then do nothing because trace header tid should always be preserved
               if (subKey === 'tid') {
-              // Only accept 16 hex digits as a valid TID
-                const isHex16 = /^[0-9A-Fa-f]{16}$/.test(value)
-                if (isHex16) {
-                // Only overwrite if it matches the originally stored _dd.p.tid
-                  if (spanContext._trace.tags['_dd.p.tid'] === transformedValue) {
-                    spanContext._trace.tags['_dd.p.tid'] = transformedValue
-                  }
+                if (!hex16.test(value) || spanContext._trace.tags['_dd.p.tid'] !== transformedValue) {
+                  log.error(`Invalid trace id ${value} in tracestate, skipping`)
                 }
-              // If not valid, do nothing — so we preserve the TID from `traceparent`.
-              } else {
-              // For any other t.* key, store as _dd.p.<rest-of-key>
-                spanContext._trace.tags[`_dd.p.${subKey}`] = transformedValue
+                continue
               }
+              spanContext._trace.tags[`_dd.p.${subKey}`] = transformedValue
             }
           }
         }
