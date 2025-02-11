@@ -40,7 +40,9 @@ const {
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
-  DD_TEST_IS_USER_PROVIDED_SERVICE
+  DD_TEST_IS_USER_PROVIDED_SERVICE,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -2939,7 +2941,7 @@ describe('jest CommonJS', () => {
     })
   })
 
-  context.only('quarantine', () => {
+  context('quarantine', () => {
     it('can quarantine tests', (done) => {
       receiver.setSettings({
         test_management: {
@@ -2966,6 +2968,9 @@ describe('jest CommonJS', () => {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
 
           const resourceNames = tests.map(span => span.resource)
 
@@ -2981,6 +2986,7 @@ describe('jest CommonJS', () => {
           )
           // The test fails but the exit code is still 0
           assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+          assert.equal(failedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
         })
 
       childProcess = exec(
@@ -2996,7 +3002,7 @@ describe('jest CommonJS', () => {
         }
       )
 
-      childProcess.stdout.pipe(process.stdout)
+      childProcess.on('exit', exitCode => {
         eventsPromise.then(() => {
           // even though a test fails, the exit code is 1 because the test is quarantined
           assert.equal(exitCode, 0)
@@ -3016,10 +3022,14 @@ describe('jest CommonJS', () => {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
 
           const failedTest = tests.find(
             test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
           )
+          assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
           assert.equal(failedTest.meta[TEST_STATUS], 'fail')
         })
 
@@ -3037,6 +3047,75 @@ describe('jest CommonJS', () => {
       )
 
       childProcess.on('close', (exitCode) => {
+        eventsPromise.then(() => {
+          assert.equal(exitCode, 1)
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+      receiver.setSettings({
+        test_management: {
+          enabled: true
+        }
+      })
+      receiver.setQuarantinedTests({
+        jest: {
+          suites: {
+            'ci-visibility/quarantine/test-quarantine-1.js': {
+              tests: {
+                'quarantine tests can quarantine a test': {
+                  properties: {
+                    quarantined: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+
+          const resourceNames = tests.map(span => span.resource)
+
+          assert.includeMembers(resourceNames,
+            [
+              'ci-visibility/quarantine/test-quarantine-1.js.quarantine tests can quarantine a test',
+              'ci-visibility/quarantine/test-quarantine-1.js.quarantine tests can pass normally'
+            ]
+          )
+
+          const failedTest = tests.find(
+            test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
+          )
+          assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+          // The test fails but the exit code is still 0
+          assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'quarantine/test-quarantine-1',
+            SHOULD_CHECK_RESULTS: '1',
+            DD_TEST_MANAGEMENT_ENABLED: 'false'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', exitCode => {
         eventsPromise.then(() => {
           assert.equal(exitCode, 1)
           done()

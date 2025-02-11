@@ -218,7 +218,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
       flakyTestRetriesCount: this._config.flakyTestRetriesCount,
       isDiEnabled: isDiEnabled && this._config.isTestDynamicInstrumentationEnabled,
       isKnownTestsEnabled,
-      isQuarantinedTestsEnabled // TODO: kill switch / enable via env var
+      isQuarantinedTestsEnabled: isQuarantinedTestsEnabled && this._config.isTestManagementEnabled
     }
   }
 

@@ -338,10 +338,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             }
           }
         }
+        let isQuarantined = false
 
         if (this.isQuarantinedTestsEnabled) {
           const testName = getJestTestName(event.test)
-          const isQuarantined = this.quarantinedTestsForThisSuite?.includes(testName)
+          isQuarantined = this.quarantinedTestsForThisSuite?.includes(testName)
           if (isQuarantined && status === 'fail') {
             failedTestsToIgnore++
           }
@@ -380,7 +381,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           testFinishCh.publish({
             status,
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite),
-            promises
+            isQuarantined
           })
         })
 
@@ -664,6 +665,7 @@ function cliWrapper (cli, jestVersion) {
         error,
         isEarlyFlakeDetectionEnabled,
         isEarlyFlakeDetectionFaulty,
+        isQuarantinedTestsEnabled,
         onDone
       })
     })

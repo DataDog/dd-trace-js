@@ -24,7 +24,9 @@ const {
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_DRIVER,
   getFormattedError,
-  TEST_RETRY_REASON
+  TEST_RETRY_REASON,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -106,6 +108,7 @@ class JestPlugin extends CiPlugin {
       error,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
+      isQuarantinedTestsEnabled,
       onDone
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -136,6 +139,9 @@ class JestPlugin extends CiPlugin {
       }
       if (isEarlyFlakeDetectionFaulty) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+      }
+      if (isQuarantinedTestsEnabled) {
+        this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
 
       this.testModuleSpan.finish()
@@ -326,11 +332,14 @@ class JestPlugin extends CiPlugin {
       this.activeTestSpan = span
     })
 
-    this.addSub('ci:jest:test:finish', ({ status, testStartLine }) => {
+    this.addSub('ci:jest:test:finish', ({ status, testStartLine, isQuarantined }) => {
       const span = storage('legacy').getStore().span
       span.setTag(TEST_STATUS, status)
       if (testStartLine) {
         span.setTag(TEST_SOURCE_START, testStartLine)
+      }
+      if (isQuarantined) {
+        span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
       }
 
       const spanTags = span.context()._tags
