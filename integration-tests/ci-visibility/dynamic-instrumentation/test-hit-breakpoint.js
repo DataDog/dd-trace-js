@@ -1,4 +1,3 @@
-/* eslint-disable */
 const sum = require('./dependency')
 const { expect } = require('chai')
 
