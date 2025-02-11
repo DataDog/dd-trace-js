@@ -482,29 +482,26 @@ class TextMapPropagator {
               }
               break
             }
-            case 't.tid': {
-              // we only accept 16 hex digits as a valid tid
-
-              const isHex16 = /^[0-9A-Fa-f]{16}$/.test(value)
-              console.log('bluhh', spanContext._trace.tags['_dd.p.tid'], value, traceparent, isHex16)
-              if (isHex16) {
-                const transformedValue = value.replace(/[\x7e]/gm, '=')
-
-                // Only overwrite if it matches the originally stored _dd.p.tid
-                if (spanContext._trace.tags['_dd.p.tid'] === transformedValue) {
-                  spanContext._trace.tags['_dd.p.tid'] = transformedValue
-                }
-              }
-              console.log('yupppp', spanContext._trace.tags['_dd.p.tid'])
-              // If not valid, do nothing — so we preserve the TID from `traceparent`.
-              break
-            }
-            default:
-              console.log(123123123, spanContext._trace.tags['_dd.p.tid'])
+            default: {
               if (!key.startsWith('t.')) continue
-              spanContext._trace.tags[`_dd.p.${key.slice(2)}`] = value
-                .replace(/[\x7e]/gm, '=')
-              console.log(123123123, spanContext._trace.tags['_dd.p.tid'])
+              const subKey = key.slice(2) // e.g. t.tid -> tid
+              const transformedValue = value.replace(/[\x7e]/gm, '=')
+
+              if (subKey === 'tid') {
+              // Only accept 16 hex digits as a valid TID
+                const isHex16 = /^[0-9A-Fa-f]{16}$/.test(value)
+                if (isHex16) {
+                // Only overwrite if it matches the originally stored _dd.p.tid
+                  if (spanContext._trace.tags['_dd.p.tid'] === transformedValue) {
+                    spanContext._trace.tags['_dd.p.tid'] = transformedValue
+                  }
+                }
+              // If not valid, do nothing — so we preserve the TID from `traceparent`.
+              } else {
+              // For any other t.* key, store as _dd.p.<rest-of-key>
+                spanContext._trace.tags[`_dd.p.${subKey}`] = transformedValue
+              }
+            }
           }
         }
       })
