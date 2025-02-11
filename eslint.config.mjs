@@ -186,6 +186,15 @@ export default [
     files: TEST_FILES
   },
   {
+    name: 'dd-trace/benchmarks',
+    files: [
+      'benchmark/**/*'
+    ],
+    rules: {
+      'n/no-missing-require': 'off'
+    }
+  },
+  {
     name: 'dd-trace/tests/all',
     files: TEST_FILES,
     languageOptions: {
