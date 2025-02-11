@@ -2941,6 +2941,7 @@ describe('jest CommonJS', () => {
     })
   })
 
+  // TODO: add test for parallel mode
   context('quarantine', () => {
     it('can quarantine tests', (done) => {
       receiver.setSettings({
