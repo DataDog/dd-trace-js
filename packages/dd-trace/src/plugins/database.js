@@ -63,43 +63,40 @@ class DatabasePlugin extends StoragePlugin {
     return tracerService
   }
 
-  injectDbmQuery (span, query, serviceName, isPreparedStatement = false) {
+  createDbmComment (span, serviceName, isPreparedStatement = false) {
     const mode = this.config.dbmPropagationMode
     const dbmService = this.getDbmServiceName(span, serviceName)
 
     if (mode === 'disabled') {
-      return query
+      return null
     }
 
     const servicePropagation = this.createDBMPropagationCommentService(dbmService, span)
 
     if (isPreparedStatement || mode === 'service') {
-      return `/*${servicePropagation}*/ ${query}`
+      return servicePropagation
     } else if (mode === 'full') {
       span.setTag('_dd.dbm_trace_injected', 'true')
       const traceparent = span._spanContext.toTraceparent()
-      return `/*${servicePropagation},traceparent='${traceparent}'*/ ${query}`
+      return `${servicePropagation},traceparent='${traceparent}'`
     }
   }
 
-  injectDbmCommand (span, command, serviceName) {
-    const mode = this.config.dbmPropagationMode
+  injectDbmQuery (span, query, serviceName, isPreparedStatement = false) {
+    const dbmTraceComment = this.createDbmComment(span, serviceName, isPreparedStatement)
 
-    if (mode === 'disabled') {
-      return command
+    if (!dbmTraceComment) {
+      return query
     }
 
-    let dbmTraceComment = ''
+    return `/*${dbmTraceComment}*/ ${query}`
+  }
 
-    const dbmService = this.getDbmServiceName(span, serviceName)
-    const servicePropagation = this.createDBMPropagationCommentService(dbmService, span)
+  injectDbmCommand (span, command, serviceName) {
+    const dbmTraceComment = this.createDbmComment(span, serviceName)
 
-    if (mode === 'service') {
-      dbmTraceComment = servicePropagation
-    } else if (mode === 'full') {
-      span.setTag('_dd.dbm_trace_injected', 'true')
-      const traceparent = span._spanContext.toTraceparent()
-      dbmTraceComment = `${servicePropagation},traceparent='${traceparent}'`
+    if (!dbmTraceComment) {
+      return command
     }
 
     if (command.comment) {
