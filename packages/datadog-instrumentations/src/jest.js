@@ -71,7 +71,7 @@ let earlyFlakeDetectionFaultyThreshold = 30
 let isEarlyFlakeDetectionFaulty = false
 let hasFilteredSkippableSuites = false
 let isKnownTestsEnabled = false
-let isQuarantineEnabled = false
+let isQuarantinedTestsEnabled = false
 let quarantinedTests = {} // TODO: dictionary?
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
@@ -80,6 +80,7 @@ const asyncResources = new WeakMap()
 const originalTestFns = new WeakMap()
 const retriedTestsToNumAttempts = new Map()
 const newTestsTestStatuses = new Map()
+let failedTestsToIgnore = 0 // test name to num executions
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 
@@ -143,6 +144,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.flakyTestRetriesCount = this.testEnvironmentOptions._ddFlakyTestRetriesCount
       this.isDiEnabled = this.testEnvironmentOptions._ddIsDiEnabled
       this.isKnownTestsEnabled = this.testEnvironmentOptions._ddIsKnownTestsEnabled
+      this.isQuarantinedTestsEnabled = this.testEnvironmentOptions._ddIsQuarantinedTestsEnabled
 
       if (this.isKnownTestsEnabled) {
         try {
@@ -162,6 +164,17 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const currentNumRetries = this.global[RETRY_TIMES]
         if (!currentNumRetries) {
           this.global[RETRY_TIMES] = this.flakyTestRetriesCount
+        }
+      }
+
+      if (this.isQuarantinedTestsEnabled) {
+        try {
+          const hasQuarantinedTests = !!quarantinedTests.jest
+          this.quarantinedTestsForThisSuite = hasQuarantinedTests
+            ? this.getQuarantinedTestsForSuite(quarantinedTests.jest.suites[this.testSuite].tests)
+            : this.getQuarantinedTestsForSuite(this.testEnvironmentOptions._ddQuarantinedTests.tests)
+        } catch (e) {
+          this.isQuarantinedTestsEnabled = false
         }
       }
     }
@@ -194,6 +207,24 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         knownTestsForSuite = JSON.parse(knownTestsForSuite)
       }
       return knownTestsForSuite
+    }
+
+    getQuarantinedTestsForSuite (quaratinedTests) {
+      if (this.quarantinedTestsForThisSuite) {
+        return this.quarantinedTestsForThisSuite
+      }
+      let quarantinedTestsForSuite = quaratinedTests
+      // If jest is using workers, quarantined tests are serialized to json.
+      // If jest runs in band, they are not.
+      if (typeof quarantinedTestsForSuite === 'string') {
+        quarantinedTestsForSuite = JSON.parse(quarantinedTestsForSuite)
+      }
+      return Object.entries(quarantinedTestsForSuite).reduce((acc, [testName, { properties }]) => {
+        if (properties?.quarantined) {
+          acc.push(testName)
+        }
+        return acc
+      }, [])
     }
 
     // Add the `add_test` event we don't have the test object yet, so
@@ -304,6 +335,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             } else {
               newTestsTestStatuses.set(originalTestName, [status])
             }
+          }
+        }
+
+        if (this.isQuarantinedTestsEnabled) {
+          const testName = getJestTestName(event.test)
+          const isQuarantined = this.quarantinedTestsForThisSuite?.includes(testName)
+          if (isQuarantined && status === 'fail') {
+            failedTestsToIgnore++
           }
         }
 
@@ -488,7 +527,7 @@ function cliWrapper (cli, jestVersion) {
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
         earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
-        isQuarantineEnabled = libraryConfig.isTestManagementEnabled
+        isQuarantinedTestsEnabled = libraryConfig.isQuarantinedTestsEnabled
       }
     } catch (err) {
       log.error('Jest library configuration error', err)
@@ -536,7 +575,7 @@ function cliWrapper (cli, jestVersion) {
       }
     }
 
-    if (isQuarantineEnabled) {
+    if (isQuarantinedTestsEnabled) {
       const quarantinedTestsPromise = new Promise((resolve) => {
         onDone = resolve
       })
@@ -653,6 +692,13 @@ function cliWrapper (cli, jestVersion) {
       }
       // If every test that failed was an EFD retry, we'll consider the suite passed
       if (numFailedTestsToIgnore !== 0 && result.results.numFailedTests === numFailedTestsToIgnore) {
+        result.results.success = true
+      }
+    }
+
+    if (isQuarantinedTestsEnabled) {
+      // If every test that failed was quarantined, we'll consider the suite passed
+      if (failedTestsToIgnore !== 0 && result.results.numFailedTests === failedTestsToIgnore) {
         result.results.success = true
       }
     }
@@ -848,6 +894,7 @@ addHook({
       _ddFlakyTestRetriesCount,
       _ddIsDiEnabled,
       _ddIsKnownTestsEnabled,
+      _ddIsQuarantinedTestsEnabled,
       _ddQuarantinedTests,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
@@ -992,7 +1039,7 @@ addHook({
       const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
       const suiteKnownTests = knownTests.jest?.[testSuite] || []
-      const suiteQuarantinedTests = quarantinedTests.jest?.[testSuite] || []
+      const suiteQuarantinedTests = quarantinedTests.jest?.suites?.[testSuite]?.tests || []
       args[0].config = {
         ...config,
         testEnvironmentOptions: {

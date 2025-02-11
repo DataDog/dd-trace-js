@@ -204,7 +204,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
       isFlakyTestRetriesEnabled,
       isDiEnabled,
       isKnownTestsEnabled,
-      isTestManagementEnabled
+      isQuarantinedTestsEnabled
     } = remoteConfiguration
     return {
       isCodeCoverageEnabled,
@@ -218,7 +218,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
       flakyTestRetriesCount: this._config.flakyTestRetriesCount,
       isDiEnabled: isDiEnabled && this._config.isTestDynamicInstrumentationEnabled,
       isKnownTestsEnabled,
-      isTestManagementEnabled // TODO: kill switch / enable via env var
+      isQuarantinedTestsEnabled // TODO: kill switch / enable via env var
     }
   }
 
