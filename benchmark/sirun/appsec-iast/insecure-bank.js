@@ -1,5 +1,5 @@
 const http = require('http')
-const app = require('/opt/insecure-bank-js/app') // eslint-disable-line import/no-absolute-path, n/no-missing-require
+const app = require('/opt/insecure-bank-js/app') // eslint-disable-line import/no-absolute-path
 
 const { port } = require('./common')
 
