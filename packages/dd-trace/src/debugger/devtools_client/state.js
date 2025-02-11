@@ -115,6 +115,7 @@ module.exports = {
 session.on('Debugger.scriptParsed', ({ params }) => {
   scriptUrls.set(params.scriptId, params.url)
   if (params.url.startsWith('file:')) {
+    process._rawDebug('Debugger.scriptParsed')
     if (params.sourceMapURL) {
       const dir = dirname(new URL(params.url).pathname)
       let sources

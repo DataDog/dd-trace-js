@@ -155,6 +155,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
 
 function getOnTestHandler (isMain) {
   return function (test) {
+    // process._rawDebug('-- getOnTestHandler start')
     const testStartLine = testToStartLine.get(test)
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -200,6 +201,7 @@ function getOnTestHandler (isMain) {
     asyncResource.runInAsyncScope(() => {
       testStartCh.publish(testInfo)
     })
+    // process._rawDebug('-- getOnTestHandler end')
   }
 }
 
@@ -304,6 +306,13 @@ function getOnTestRetryHandler () {
       asyncResource.runInAsyncScope(() => {
         testRetryCh.publish({ isFirstAttempt, err, willBeRetried, test })
       })
+      // process._rawDebug('-- waiting for breakpoint to be set', test._setProbePromise)
+      // const now = Date.now()
+      // await test._setProbePromise
+      // for (let i = 0; i < 10_000_000; i++) {
+      //   // waiting...
+      // }
+      // process._rawDebug('-- done waiting...', Date.now() - now)
     }
     const key = getTestToArKey(test)
     testToAr.delete(key)

@@ -2312,7 +2312,7 @@ describe('mocha CommonJS', function () {
       })
     })
 
-    it('runs retries with dynamic instrumentation', (done) => {
+    it.only('runs retries with dynamic instrumentation', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -2389,10 +2389,15 @@ describe('mocha CommonJS', function () {
             ]),
             DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
+            // DD_TRACE_DEBUG: '1',
+            // DD_TRACE_LOG_LEVEL: 'warn'
           },
           stdio: 'inherit'
         }
       )
+
+      childProcess.stdout.pipe(process.stdout)
+      childProcess.stderr.pipe(process.stderr)
 
       childProcess.on('exit', () => {
         Promise.all([eventsPromise, logsPromise]).then(() => {

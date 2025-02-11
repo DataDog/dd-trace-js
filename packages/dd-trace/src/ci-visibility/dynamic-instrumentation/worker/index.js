@@ -93,7 +93,10 @@ async function addBreakpoint (probe) {
 
   probe.location = { file, lines: [String(line)] }
 
+  process._rawDebug('** Calling findScriptFromPartialPath')
+  const now = Date.now()
   const script = findScriptFromPartialPath(file)
+  process._rawDebug('** Returned from findScriptFromPartialPath', Date.now() - now)
   if (!script) {
     log.error(`No loaded script found for ${file}`)
     throw new Error(`No loaded script found for ${file}`)
@@ -107,7 +110,10 @@ async function addBreakpoint (probe) {
 
   if (sourceMapURL) {
     try {
+      process._rawDebug('** Calling getSourceMappedLine')
+      const now = Date.now()
       lineNumber = await getSourceMappedLine(url, source, line, sourceMapURL)
+      process._rawDebug('** Returned from getSourceMappedLine', Date.now() - now)
     } catch (err) {
       log.error('Error processing script with source map', err)
     }
@@ -118,12 +124,15 @@ async function addBreakpoint (probe) {
   }
 
   try {
+    process._rawDebug('** Calling Debugger.setBreakpoint')
+    const now = Date.now()
     const { breakpointId } = await session.post('Debugger.setBreakpoint', {
       location: {
         scriptId,
         lineNumber: lineNumber - 1
       }
     })
+    process._rawDebug('** Returned from Debugger.setBreakpoint', Date.now() - now)
 
     breakpointIdToProbe.set(breakpointId, probe)
     probeIdToBreakpointId.set(probe.id, breakpointId)
@@ -132,7 +141,10 @@ async function addBreakpoint (probe) {
   }
 }
 
-function start () {
+async function start () {
   sessionStarted = true
-  return session.post('Debugger.enable') // return instead of await to reduce number of promises created
+  process._rawDebug('** Calling Debugger.enable')
+  const now = Date.now()
+  await session.post('Debugger.enable') // return instead of await to reduce number of promises created
+  process._rawDebug('** Returned from Debugger.enable', Date.now() - now)
 }

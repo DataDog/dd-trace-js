@@ -20,6 +20,7 @@ const self = module.exports = {
     if (url.startsWith('data:')) return loadInlineSourceMap(url)
     const path = join(dir, url)
     if (cache.has(path)) return cache.get(path)
+    // Comment out the line below to make the ci-visibilty tests pass
     return cacheIt(path, JSON.parse(readFileSync(path, 'utf8')))
   },
 
