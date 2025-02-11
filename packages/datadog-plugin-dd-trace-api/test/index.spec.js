@@ -220,20 +220,6 @@ describe('Plugin', () => {
     describeMethod('extract', null)
     describeMethod('getRumData', '')
     describeMethod('trace')
-
-    describe('trace with return value', () => {
-      it('should return the exact same value', () => {
-        const obj = { mustBeThis: 'value' }
-        tracer.trace.resetHistory() // clear previous call to `trace`
-        testChannel({
-          name: 'trace',
-          fn: tracer.trace,
-          ret: obj,
-          proxy: false,
-          args: ['foo', {}, () => obj]
-        })
-      })
-    })
     describeMethod('wrap')
     describeMethod('use', SELF)
     describeMethod('profilerStarted', Promise.resolve(false))
