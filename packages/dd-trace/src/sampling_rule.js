@@ -18,7 +18,6 @@ class GlobMatcher {
 
   match (span) {
     const subject = this.locator(span)
-
     if (!subject) return false
     return globMatch(this.pattern, subject)
   }
