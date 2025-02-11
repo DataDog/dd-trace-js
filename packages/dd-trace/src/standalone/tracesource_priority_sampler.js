@@ -6,17 +6,13 @@ const { MANUAL_KEEP } = require('../../../../ext/tags')
 const { USER_KEEP, AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
 const { SAMPLING_MECHANISM_DEFAULT } = require('../constants')
 const { addTraceSourceTag, hasTraceSourcePropagationTag } = require('./tracesource')
-const RateLimiter = require('../rate_limiter')
+const { getProductRateLimiter } = require('./product')
 
 class TraceSourcePrioritySampler extends PrioritySampler {
-  constructor (env, opts) {
-    super(env, { sampleRate: 0, rateLimit: 0, rules: [] })
-    this._limiter = new RateLimiter(0)
-  }
-
-  configure (env, config) {
+  configure (env, sampler, config) {
     // rules not supported
     this._env = env
+    this._limiter = getProductRateLimiter(config)
   }
 
   _getPriorityFromTags (tags, context) {

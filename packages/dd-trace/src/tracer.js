@@ -1,6 +1,5 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
 const Tracer = require('./opentracing/tracer')
 const tags = require('../../../ext/tags')
 const Scope = require('./scope')
@@ -19,8 +18,6 @@ const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
 const MEASURED = tags.MEASURED
 
-const onConfigureCh = channel('datadog:tracer:configure')
-
 class DatadogTracer extends Tracer {
   constructor (config, prioritySampler) {
     super(config, prioritySampler)
@@ -31,9 +28,9 @@ class DatadogTracer extends Tracer {
     flushStartupLogs(log)
   }
 
-  configure ({ env, sampler }) {
-    this._prioritySampler.configure(env, sampler)
-    onConfigureCh.publish({ tracer: this })
+  configure (config) {
+    const { env, sampler } = config
+    this._prioritySampler.configure(env, sampler, config)
   }
 
   // todo[piochelepiotr] These two methods are not related to the tracer, but to data streams monitoring.

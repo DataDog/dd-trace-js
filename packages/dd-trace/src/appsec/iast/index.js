@@ -15,7 +15,6 @@ const {
 const { IAST_ENABLED_TAG_KEY } = require('./tags')
 const iastTelemetry = require('./telemetry')
 const { enable: enableFsPlugin, disable: disableFsPlugin, IAST_MODULE } = require('../rasp/fs-plugin')
-const standalone = require('../standalone')
 
 // TODO Change to `apm:http:server:request:[start|close]` when the subscription
 //  order of the callbacks can be enforce
@@ -37,7 +36,6 @@ function enable (config, _tracer) {
   overheadController.configure(config.iast)
   overheadController.startGlobalContext()
   vulnerabilityReporter.start(config, _tracer)
-  standalone.configure(config)
 
   isEnabled = true
 }
@@ -52,7 +50,6 @@ function disable () {
   disableAllAnalyzers()
   disableTaintTracking()
   overheadController.finishGlobalContext()
-  standalone.disable()
 
   if (requestStart.hasSubscribers) requestStart.unsubscribe(onIncomingHttpRequestStart)
   if (requestClose.hasSubscribers) requestClose.unsubscribe(onIncomingHttpRequestEnd)

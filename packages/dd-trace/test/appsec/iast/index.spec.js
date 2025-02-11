@@ -160,11 +160,6 @@ describe('IAST Index', () => {
         expect(appsecFsPlugin.enable).to.have.been.calledOnceWithExactly(IAST_MODULE)
         expect(analyzers.enableAllAnalyzers).to.have.been.calledAfter(appsecFsPlugin.enable)
       })
-
-      it('should configure standalone', () => {
-        mockIast.enable(config)
-        expect(standalone.configure).to.have.been.calledOnceWithExactly(config)
-      })
     })
 
     describe('disable', () => {
@@ -172,12 +167,6 @@ describe('IAST Index', () => {
         mockIast.enable(config)
         mockIast.disable()
         expect(appsecFsPlugin.disable).to.have.been.calledOnceWithExactly(IAST_MODULE)
-      })
-
-      it('should disable standalone', () => {
-        mockIast.enable(config)
-        mockIast.disable()
-        expect(standalone.disable).to.have.been.calledOnce
       })
     })
 

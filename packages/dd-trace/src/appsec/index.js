@@ -33,7 +33,6 @@ const UserTracking = require('./user_tracking')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
 const rasp = require('./rasp')
-const standalone = require('./standalone')
 
 const responseAnalyzedSet = new WeakSet()
 
@@ -62,8 +61,6 @@ function enable (_config) {
     apiSecuritySampler.configure(_config.appsec)
 
     UserTracking.setCollectionMode(_config.appsec.eventTracking.mode, false)
-
-    standalone.configure(_config)
 
     bodyParser.subscribe(onRequestBodyParsed)
     multerParser.subscribe(onRequestBodyParsed)
@@ -321,8 +318,6 @@ function disable () {
   remoteConfig.disableWafUpdate()
 
   apiSecuritySampler.disable()
-
-  standalone.disable('appsec')
 
   // Channel#unsubscribe() is undefined for non active channels
   if (bodyParser.hasSubscribers) bodyParser.unsubscribe(onRequestBodyParsed)

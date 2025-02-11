@@ -240,12 +240,6 @@ describe('AppSec Index', function () {
 
       expect(rasp.enable).to.not.be.called
     })
-
-    it('should call standalone configure', () => {
-      AppSec.enable(config)
-
-      expect(standalone.configure).to.be.calledOnceWithExactly(config)
-    })
   })
 
   describe('disable', () => {
@@ -304,12 +298,6 @@ describe('AppSec Index', function () {
       AppSec.disable()
 
       expect(appsecTelemetry.disable).to.be.calledOnce
-    })
-
-    it('should call standalone disable', () => {
-      AppSec.disable()
-
-      expect(standalone.disable).to.be.calledOnce
     })
   })
 

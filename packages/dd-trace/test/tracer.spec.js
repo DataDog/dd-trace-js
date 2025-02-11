@@ -60,13 +60,6 @@ describe('Tracer', () => {
       tracer.configure(options)
       expect(tracer._prioritySampler.configure).to.have.been.calledWith(env, sampler)
     })
-
-    it('should publish itself via datadog:tracer:configure', () => {
-      const options = { }
-      tracer.configure(options)
-
-      expect(tracerConfigureCh.publish).to.have.been.calledWith({ tracer })
-    })
   })
 
   describe('setUrl', () => {
