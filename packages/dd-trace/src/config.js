@@ -718,7 +718,7 @@ class Config {
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
     this._setBoolean(env, 'apmTracingEnabled', coalesce(
-      DD_APM_TRACING_ENABLED && isTrue(DD_APM_TRACING_ENABLED),
+      DD_APM_TRACING_ENABLED,
       DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED && isFalse(DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED)
     ))
     this._setBoolean(env, 'appsec.apiSecurity.enabled', coalesce(

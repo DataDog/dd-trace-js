@@ -16,7 +16,12 @@ describe('Tracesource propagation tag', () => {
 
   describe('addTraceSourceTag', () => {
     it('should not fail', () => {
-      assert.propertyVal(addTraceSourceTag(tags), TRACE_SOURCE_PROPAGATION_KEY, '00')
+      assert.notProperty(addTraceSourceTag(tags), TRACE_SOURCE_PROPAGATION_KEY)
+    })
+
+    it('should not modify original tag value', () => {
+      tags[TRACE_SOURCE_PROPAGATION_KEY] = '04'
+      assert.propertyVal(addTraceSourceTag(tags), TRACE_SOURCE_PROPAGATION_KEY, '04')
     })
 
     it('should add product', () => {

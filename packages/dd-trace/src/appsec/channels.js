@@ -32,6 +32,5 @@ module.exports = {
   wafRunFinished: dc.channel('datadog:waf:run:finish'),
   fsOperationStart: dc.channel('apm:fs:operation:start'),
   expressMiddlewareError: dc.channel('apm:express:middleware:error'),
-  childProcessExecutionTracingChannel: dc.tracingChannel('datadog:child_process:execution'),
-  tracerConfigure: dc.channel('datadog:tracer:configure')
+  childProcessExecutionTracingChannel: dc.tracingChannel('datadog:child_process:execution')
 }

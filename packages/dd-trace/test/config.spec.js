@@ -2360,11 +2360,11 @@ describe('Config', () => {
     })
 
     it('should win apmTracingEnabled option', () => {
-      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '0'
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'true'
 
       const config = new Config({
         apmTracingEnabled: false,
-        experimental: { appsec: { standalone: { enabled: false } } }
+        experimental: { appsec: { standalone: { enabled: true } } }
       })
       expect(config).to.have.property('apmTracingEnabled', false)
     })

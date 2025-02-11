@@ -32,7 +32,6 @@ function enable (config, _tracer) {
   enableTaintTracking(config.iast, iastTelemetry.verbosity)
   requestStart.subscribe(onIncomingHttpRequestStart)
   requestClose.subscribe(onIncomingHttpRequestEnd)
-
   overheadController.configure(config.iast)
   overheadController.startGlobalContext()
   vulnerabilityReporter.start(config, _tracer)
@@ -50,10 +49,8 @@ function disable () {
   disableAllAnalyzers()
   disableTaintTracking()
   overheadController.finishGlobalContext()
-
   if (requestStart.hasSubscribers) requestStart.unsubscribe(onIncomingHttpRequestStart)
   if (requestClose.hasSubscribers) requestClose.unsubscribe(onIncomingHttpRequestEnd)
-
   vulnerabilityReporter.stop()
 }
 
