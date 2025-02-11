@@ -195,9 +195,9 @@ class LLMObsTagger {
 
         const documentObj = { text }
 
-        validDocument = this._tagConditional('string', name, 'Document name', documentObj, 'name') && validDocument
-        validDocument = this._tagConditional('string', id, 'Document ID', documentObj, 'id') && validDocument
-        validDocument = this._tagConditional('number', score, 'Document score', documentObj, 'score') && validDocument
+        validDocument = this._tagConditionalString(name, 'Document name', documentObj, 'name') && validDocument
+        validDocument = this._tagConditionalString(id, 'Document ID', documentObj, 'id') && validDocument
+        validDocument = this._tagConditionalNumber(score, 'Document score', documentObj, 'score') && validDocument
 
         return validDocument ? documentObj : undefined
       }).filter(doc => !!doc)
@@ -235,7 +235,7 @@ class LLMObsTagger {
           validMessage = false
         }
 
-        validMessage = this._tagConditional('string', role, 'Message role', messageObj, 'role') && validMessage
+        validMessage = this._tagConditionalString(role, 'Message role', messageObj, 'role') && validMessage
 
         if (toolCalls) {
           if (!Array.isArray(toolCalls)) {
@@ -253,10 +253,10 @@ class LLMObsTagger {
             const { name, arguments: args, toolId, type } = toolCall
             const toolCallObj = {}
 
-            validTool = this._tagConditional('string', name, 'Tool name', toolCallObj, 'name') && validTool
-            validTool = this._tagConditional('object', args, 'Tool arguments', toolCallObj, 'arguments') && validTool
-            validTool = this._tagConditional('string', toolId, 'Tool ID', toolCallObj, 'tool_id') && validTool
-            validTool = this._tagConditional('string', type, 'Tool type', toolCallObj, 'type') && validTool
+            validTool = this._tagConditionalString(name, 'Tool name', toolCallObj, 'name') && validTool
+            validTool = this._tagConditionalObject(args, 'Tool arguments', toolCallObj, 'arguments') && validTool
+            validTool = this._tagConditionalString(toolId, 'Tool ID', toolCallObj, 'tool_id') && validTool
+            validTool = this._tagConditionalString(type, 'Tool type', toolCallObj, 'type') && validTool
 
             return validTool ? toolCallObj : undefined
           }).filter(toolCall => !!toolCall)
@@ -275,10 +275,30 @@ class LLMObsTagger {
     }
   }
 
-  _tagConditional (dataType, data, type, carrier, key) {
+  _tagConditionalString (data, type, carrier, key) {
     if (!data) return true
-    if (typeof data !== dataType) { // eslint-disable-line valid-typeof
-      this._handleFailure(`"${type}" must be of type "${dataType}".`)
+    if (typeof data !== 'string') {
+      this._handleFailure(`"${type}" must be a string.`)
+      return false
+    }
+    carrier[key] = data
+    return true
+  }
+
+  _tagConditionalNumber (data, type, carrier, key) {
+    if (!data) return true
+    if (typeof data !== 'number') {
+      this._handleFailure(`"${type}" must be a number.`)
+      return false
+    }
+    carrier[key] = data
+    return true
+  }
+
+  _tagConditionalObject (data, type, carrier, key) {
+    if (!data) return true
+    if (typeof data !== 'object') {
+      this._handleFailure(`"${type}" must be an object.`)
       return false
     }
     carrier[key] = data
