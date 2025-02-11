@@ -95,7 +95,7 @@ class DatabasePlugin extends StoragePlugin {
     const servicePropagation = this.createDBMPropagationCommentService(dbmService, span)
 
     if (mode === 'service') {
-      dbmTraceComment = `${servicePropagation}`
+      dbmTraceComment = servicePropagation
     } else if (mode === 'full') {
       span.setTag('_dd.dbm_trace_injected', 'true')
       const traceparent = span._spanContext.toTraceparent()
