@@ -1,9 +1,11 @@
 'use strict'
 
 const coalesce = require('koalas')
+const { inspect } = require('util')
 const { isTrue } = require('../util')
-const { debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
+const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
+const { Log } = require('./log')
 
 const memoize = func => {
   const cache = {}
@@ -16,10 +18,6 @@ const memoize = func => {
   }
 
   return memoized
-}
-
-function processMsg (msg) {
-  return typeof msg === 'function' ? msg() : msg
 }
 
 const config = {
@@ -52,37 +50,55 @@ const log = {
   reset () {
     logWriter.reset()
     this._deprecate = memoize((code, message) => {
-      errorChannel.publish(message)
+      errorChannel.publish(Log.parse(message))
       return true
     })
 
     return this
   },
 
-  debug (message) {
+  trace (...args) {
+    if (traceChannel.hasSubscribers) {
+      const logRecord = {}
+
+      Error.captureStackTrace(logRecord, this.trace)
+
+      const stack = logRecord.stack.split('\n')
+      const fn = stack[1].replace(/^\s+at ([^\s]+) .+/, '$1')
+      const options = { depth: 2, breakLength: Infinity, compact: true, maxArrayLength: Infinity }
+      const params = args.map(a => inspect(a, options)).join(', ')
+
+      stack[0] = `Trace: ${fn}(${params})`
+
+      traceChannel.publish(Log.parse(stack.join('\n')))
+    }
+    return this
+  },
+
+  debug (...args) {
     if (debugChannel.hasSubscribers) {
-      debugChannel.publish(processMsg(message))
+      debugChannel.publish(Log.parse(...args))
     }
     return this
   },
 
-  info (message) {
+  info (...args) {
     if (infoChannel.hasSubscribers) {
-      infoChannel.publish(processMsg(message))
+      infoChannel.publish(Log.parse(...args))
     }
     return this
   },
 
-  warn (message) {
+  warn (...args) {
     if (warnChannel.hasSubscribers) {
-      warnChannel.publish(processMsg(message))
+      warnChannel.publish(Log.parse(...args))
     }
     return this
   },
 
-  error (err) {
+  error (...args) {
     if (errorChannel.hasSubscribers) {
-      errorChannel.publish(processMsg(err))
+      errorChannel.publish(Log.parse(...args))
     }
     return this
   },

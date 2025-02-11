@@ -41,17 +41,17 @@ class Writer extends BaseWriter {
       startupLog({ agentError: err })
 
       if (err) {
-        log.error(err)
+        log.error('Error sending payload to the agent (status code: %s)', err.status, err)
         done()
         return
       }
 
-      log.debug(`Response from the agent: ${res}`)
+      log.debug('Response from the agent: %s', res)
 
       try {
         this._prioritySampler.update(JSON.parse(res).rate_by_service)
       } catch (e) {
-        log.error(e)
+        log.error('Error updating prioritySampler rates', e)
 
         runtimeMetrics.increment(`${METRIC_PREFIX}.errors`, true)
         runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true)

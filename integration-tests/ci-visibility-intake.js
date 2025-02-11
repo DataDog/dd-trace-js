@@ -1,7 +1,6 @@
 const express = require('express')
 const bodyParser = require('body-parser')
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
+const msgpack = require('@msgpack/msgpack')
 const http = require('http')
 const multer = require('multer')
 const upload = multer()
@@ -25,7 +24,7 @@ const DEFAULT_SUITES_TO_SKIP = []
 const DEFAULT_GIT_UPLOAD_STATUS = 200
 const DEFAULT_KNOWN_TESTS_UPLOAD_STATUS = 200
 const DEFAULT_INFO_RESPONSE = {
-  endpoints: ['/evp_proxy/v2']
+  endpoints: ['/evp_proxy/v2', '/debugger/v1/input']
 }
 const DEFAULT_CORRELATION_ID = '1234'
 const DEFAULT_KNOWN_TESTS = ['test-suite1.js.test-name1', 'test-suite2.js.test-name2']
@@ -81,7 +80,7 @@ class FakeCiVisIntake extends FakeAgent {
       res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
       this.emit('message', {
         headers: req.headers,
-        payload: msgpack.decode(req.body, { codec }),
+        payload: msgpack.decode(req.body, { useBigInt64: true }),
         url: req.url
       })
     })
@@ -100,7 +99,7 @@ class FakeCiVisIntake extends FakeAgent {
         res.status(200).send('OK')
         this.emit('message', {
           headers: req.headers,
-          payload: msgpack.decode(req.body, { codec }),
+          payload: msgpack.decode(req.body, { useBigInt64: true }),
           url: req.url
         })
       }, waitingTime || 0)
@@ -208,7 +207,10 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
-    app.post('/api/v2/logs', express.json(), (req, res) => {
+    app.post([
+      '/api/v2/logs',
+      '/debugger/v1/input'
+    ], express.json(), (req, res) => {
       res.status(200).send('OK')
       this.emit('message', {
         headers: req.headers,

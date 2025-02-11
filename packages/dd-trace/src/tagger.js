@@ -44,7 +44,7 @@ function add (carrier, keyValuePairs, parseOtelTags = false) {
       Object.assign(carrier, keyValuePairs)
     }
   } catch (e) {
-    log.error(e)
+    log.error('Error adding tags', e)
   }
 }
 

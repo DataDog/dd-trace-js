@@ -83,7 +83,7 @@ const flare = {
       headers: form.getHeaders()
     }, (err) => {
       if (err) {
-        log.error(err)
+        log.error('Error sending flare payload', err)
       }
     })
   }

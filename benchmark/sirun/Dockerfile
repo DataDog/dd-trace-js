@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 	git hwinfo jq procps \
 	software-properties-common build-essential libnss3-dev zlib1g-dev libgdbm-dev libncurses5-dev libssl-dev libffi-dev libreadline-dev libsqlite3-dev libbz2-dev
 
-RUN git clone --depth 1 https://github.com/pyenv/pyenv.git --branch "v2.0.4" --single-branch /pyenv
+RUN git clone --depth 1 https://github.com/pyenv/pyenv.git --branch "v2.4.1" --single-branch /pyenv
 ENV PYENV_ROOT "/pyenv"
 ENV PATH "/pyenv/shims:/pyenv/bin:$PATH"
 RUN eval "$(pyenv init -)"
@@ -34,6 +34,7 @@ RUN mkdir -p /usr/local/nvm \
 	&& nvm install --no-progress 16.20.1 \
 	&& nvm install --no-progress 18.16.1 \
 	&& nvm install --no-progress 20.4.0 \
+	&& nvm install --no-progress 22.10.0 \
 	&& nvm alias default 18 \
 	&& nvm use 18
 

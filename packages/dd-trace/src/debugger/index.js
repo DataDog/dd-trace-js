@@ -18,7 +18,7 @@ module.exports = {
 function start (config, rc) {
   if (worker !== null) return
 
-  log.debug('Starting Dynamic Instrumentation client...')
+  log.debug('[debugger] Starting Dynamic Instrumentation client...')
 
   const rcAckCallbacks = new Map()
   const rcChannel = new MessageChannel()
@@ -33,14 +33,14 @@ function start (config, rc) {
     const ack = rcAckCallbacks.get(ackId)
     if (ack === undefined) {
       // This should never happen, but just in case something changes in the future, we should guard against it
-      log.error(`Received an unknown ackId: ${ackId}`)
-      if (error) log.error(error)
+      log.error('[debugger] Received an unknown ackId: %s', ackId)
+      if (error) log.error('[debugger] Error starting Dynamic Instrumentation client', error)
       return
     }
     ack(error)
     rcAckCallbacks.delete(ackId)
   })
-  rcChannel.port2.on('messageerror', (err) => log.error(err))
+  rcChannel.port2.on('messageerror', (err) => log.error('[debugger] received "messageerror" on RC port', err))
 
   worker = new Worker(
     join(__dirname, 'devtools_client', 'index.js'),
@@ -48,7 +48,7 @@ function start (config, rc) {
       execArgv: [], // Avoid worker thread inheriting the `-r` command line argument
       env, // Avoid worker thread inheriting the `NODE_OPTIONS` environment variable (in case it contains `-r`)
       workerData: {
-        config: serializableConfig(config),
+        config: config.serialize(),
         parentThreadId,
         rcPort: rcChannel.port1,
         configPort: configChannel.port1
@@ -57,19 +57,17 @@ function start (config, rc) {
     }
   )
 
-  worker.unref()
-
   worker.on('online', () => {
-    log.debug(`Dynamic Instrumentation worker thread started successfully (thread id: ${worker.threadId})`)
+    log.debug('[debugger] Dynamic Instrumentation worker thread started successfully (thread id: %d)', worker.threadId)
   })
 
-  worker.on('error', (err) => log.error(err))
-  worker.on('messageerror', (err) => log.error(err))
+  worker.on('error', (err) => log.error('[debugger] worker thread error', err))
+  worker.on('messageerror', (err) => log.error('[debugger] received "messageerror" from worker', err))
 
   worker.on('exit', (code) => {
     const error = new Error(`Dynamic Instrumentation worker thread exited unexpectedly with code ${code}`)
 
-    log.error(error)
+    log.error('[debugger] worker thread exited unexpectedly', error)
 
     // Be nice, clean up now that the worker thread encounted an issue and we can't continue
     rc.removeProductHandler('LIVE_DEBUGGING')
@@ -80,20 +78,15 @@ function start (config, rc) {
       rcAckCallbacks.delete(ackId)
     }
   })
+
+  worker.unref()
+  rcChannel.port1.unref()
+  rcChannel.port2.unref()
+  configChannel.port1.unref()
+  configChannel.port2.unref()
 }
 
 function configure (config) {
   if (configChannel === null) return
-  configChannel.port2.postMessage(serializableConfig(config))
-}
-
-// TODO: Refactor the Config class so it never produces any config objects that are incompatible with MessageChannel
-function serializableConfig (config) {
-  // URL objects cannot be serialized over the MessageChannel, so we need to convert them to strings first
-  if (config.url instanceof URL) {
-    config = { ...config }
-    config.url = config.url.toString()
-  }
-
-  return config
+  configChannel.port2.postMessage(config.serialize())
 }

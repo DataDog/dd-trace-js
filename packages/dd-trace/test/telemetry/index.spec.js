@@ -24,7 +24,7 @@ describe('telemetry', () => {
     // If we don't no-op the server inside it, it will trace it, which will
     // screw up this test file entirely. -- bengl
 
-    storage.run({ noop: true }, () => {
+    storage('legacy').run({ noop: true }, () => {
       traceAgent = http.createServer(async (req, res) => {
         const chunks = []
         for await (const chunk of req) {
@@ -409,7 +409,7 @@ describe('Telemetry extended heartbeat', () => {
         {
           name: 'DD_TRACE_SAMPLING_RULES',
           value:
-          // eslint-disable-next-line max-len
+          // eslint-disable-next-line @stylistic/js/max-len
           '[{"service":"*","sampling_rate":1},{"service":"svc*","resource":"*abc","name":"op-??","tags":{"tag-a":"ta-v*","tag-b":"tb-v?","tag-c":"tc-v"},"sample_rate":0.5}]',
           origin: 'code'
         }
@@ -832,7 +832,7 @@ describe('AVM OSS', () => {
         before((done) => {
           clock = sinon.useFakeTimers()
 
-          storage.run({ noop: true }, () => {
+          storage('legacy').run({ noop: true }, () => {
             traceAgent = http.createServer(async (req, res) => {
               const chunks = []
               for await (const chunk of req) {

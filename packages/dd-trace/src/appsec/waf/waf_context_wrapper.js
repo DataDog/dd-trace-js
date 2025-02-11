@@ -19,12 +19,23 @@ class WAFContextWrapper {
     this.rulesVersion = rulesVersion
     this.addressesToSkip = new Set()
     this.knownAddresses = knownAddresses
+    this.cachedUserIdActions = new Map()
   }
 
-  run ({ persistent, ephemeral }, raspRuleType) {
+  run ({ persistent, ephemeral }, raspRule) {
     if (this.ddwafContext.disposed) {
-      log.warn('Calling run on a disposed context')
+      log.warn('[ASM] Calling run on a disposed context')
       return
+    }
+
+    // SPECIAL CASE FOR USER_ID
+    // TODO: make this universal
+    const userId = persistent?.[addresses.USER_ID] || ephemeral?.[addresses.USER_ID]
+    if (userId) {
+      const cachedAction = this.cachedUserIdActions.get(userId)
+      if (cachedAction) {
+        return cachedAction
+      }
     }
 
     const payload = {}
@@ -79,6 +90,12 @@ class WAFContextWrapper {
 
       const blockTriggered = !!getBlockingAction(result.actions)
 
+      // SPECIAL CASE FOR USER_ID
+      // TODO: make this universal
+      if (userId && ruleTriggered && blockTriggered) {
+        this.setUserIdCache(userId, result)
+      }
+
       Reporter.reportMetrics({
         duration: result.totalRuntime / 1e3,
         durationExt: parseInt(end - start) / 1e3,
@@ -87,7 +104,7 @@ class WAFContextWrapper {
         blockTriggered,
         wafVersion: this.wafVersion,
         wafTimeout: result.timeout
-      }, raspRuleType)
+      }, raspRule)
 
       if (ruleTriggered) {
         Reporter.reportAttack(JSON.stringify(result.events))
@@ -101,8 +118,27 @@ class WAFContextWrapper {
 
       return result.actions
     } catch (err) {
-      log.error('Error while running the AppSec WAF')
-      log.error(err)
+      log.error('[ASM] Error while running the AppSec WAF', err)
+    }
+  }
+
+  setUserIdCache (userId, result) {
+    // using old loops for speed
+    for (let i = 0; i < result.events.length; i++) {
+      const event = result.events[i]
+
+      for (let j = 0; j < event?.rule_matches?.length; j++) {
+        const match = event.rule_matches[j]
+
+        for (let k = 0; k < match?.parameters?.length; k++) {
+          const parameter = match.parameters[k]
+
+          if (parameter?.address === addresses.USER_ID) {
+            this.cachedUserIdActions.set(userId, result.actions)
+            return
+          }
+        }
+      }
     }
   }
 

@@ -11,10 +11,12 @@ const {
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   passportVerify,
+  passportUser,
   queryParser,
   nextBodyParsed,
   nextQueryParsed,
   expressProcessParams,
+  routerParam,
   responseBody,
   responseWriteHead,
   responseSetHeader
@@ -43,7 +45,7 @@ describe('AppSec Index', function () {
   let AppSec
   let web
   let blocking
-  let passport
+  let UserTracking
   let log
   let appsecTelemetry
   let graphql
@@ -64,8 +66,7 @@ describe('AppSec Index', function () {
         blockedTemplateHtml: blockedTemplate.html,
         blockedTemplateJson: blockedTemplate.json,
         eventTracking: {
-          enabled: true,
-          mode: 'safe'
+          mode: 'anon'
         },
         apiSecurity: {
           enabled: false,
@@ -89,8 +90,10 @@ describe('AppSec Index', function () {
       setTemplates: sinon.stub()
     }
 
-    passport = {
-      passportTrackEvent: sinon.stub()
+    UserTracking = {
+      setCollectionMode: sinon.stub(),
+      trackLogin: sinon.stub(),
+      trackUser: sinon.stub()
     }
 
     log = {
@@ -123,7 +126,7 @@ describe('AppSec Index', function () {
       '../log': log,
       '../plugins/util/web': web,
       './blocking': blocking,
-      './passport': passport,
+      './user_tracking': UserTracking,
       './telemetry': appsecTelemetry,
       './graphql': graphql,
       './api_security_sampler': apiSecuritySampler,
@@ -151,6 +154,7 @@ describe('AppSec Index', function () {
       expect(blocking.setTemplates).to.have.been.calledOnceWithExactly(config)
       expect(RuleManager.loadRules).to.have.been.calledOnceWithExactly(config.appsec)
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
+      expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly('anon', false)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
@@ -165,9 +169,7 @@ describe('AppSec Index', function () {
 
       AppSec.enable(config)
 
-      expect(log.error).to.have.been.calledTwice
-      expect(log.error.firstCall).to.have.been.calledWithExactly('Unable to start AppSec')
-      expect(log.error.secondCall).to.have.been.calledWithExactly(err)
+      expect(log.error).to.have.been.calledOnceWithExactly('[ASM] Unable to start AppSec', err)
       expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
     })
@@ -176,10 +178,12 @@ describe('AppSec Index', function () {
       expect(bodyParser.hasSubscribers).to.be.false
       expect(cookieParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
+      expect(passportUser.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(nextBodyParsed.hasSubscribers).to.be.false
       expect(nextQueryParsed.hasSubscribers).to.be.false
       expect(expressProcessParams.hasSubscribers).to.be.false
+      expect(routerParam.hasSubscribers).to.be.false
       expect(responseWriteHead.hasSubscribers).to.be.false
       expect(responseSetHeader.hasSubscribers).to.be.false
 
@@ -188,21 +192,23 @@ describe('AppSec Index', function () {
       expect(bodyParser.hasSubscribers).to.be.true
       expect(cookieParser.hasSubscribers).to.be.true
       expect(passportVerify.hasSubscribers).to.be.true
+      expect(passportUser.hasSubscribers).to.be.true
       expect(queryParser.hasSubscribers).to.be.true
       expect(nextBodyParsed.hasSubscribers).to.be.true
       expect(nextQueryParsed.hasSubscribers).to.be.true
       expect(expressProcessParams.hasSubscribers).to.be.true
+      expect(routerParam.hasSubscribers).to.be.true
       expect(responseWriteHead.hasSubscribers).to.be.true
       expect(responseSetHeader.hasSubscribers).to.be.true
     })
 
-    it('should not subscribe to passportVerify if eventTracking is disabled', () => {
-      config.appsec.eventTracking.enabled = false
+    it('should still subscribe to passportVerify if eventTracking is disabled', () => {
+      config.appsec.eventTracking.mode = 'disabled'
 
       AppSec.disable()
       AppSec.enable(config)
 
-      expect(passportVerify.hasSubscribers).to.be.false
+      expect(passportVerify.hasSubscribers).to.be.true
     })
 
     it('should call appsec telemetry enable', () => {
@@ -269,10 +275,12 @@ describe('AppSec Index', function () {
       expect(bodyParser.hasSubscribers).to.be.false
       expect(cookieParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
+      expect(passportUser.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(nextBodyParsed.hasSubscribers).to.be.false
       expect(nextQueryParsed.hasSubscribers).to.be.false
       expect(expressProcessParams.hasSubscribers).to.be.false
+      expect(routerParam.hasSubscribers).to.be.false
       expect(responseWriteHead.hasSubscribers).to.be.false
       expect(responseSetHeader.hasSubscribers).to.be.false
     })
@@ -363,7 +371,7 @@ describe('AppSec Index', function () {
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-lenght': 42
+          'content-length': 42
         }),
         statusCode: 201
       }
@@ -401,7 +409,7 @@ describe('AppSec Index', function () {
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-lenght': 42
+          'content-length': 42
         }),
         statusCode: 201
       }
@@ -447,7 +455,7 @@ describe('AppSec Index', function () {
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-lenght': 42
+          'content-length': 42
         }),
         statusCode: 201
       }
@@ -513,7 +521,7 @@ describe('AppSec Index', function () {
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-lenght': 42
+          'content-length': 42
         }),
         statusCode: 201
       }
@@ -559,7 +567,7 @@ describe('AppSec Index', function () {
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-lenght': 42
+          'content-length': 42
         }),
         statusCode: 201
       }
@@ -647,6 +655,20 @@ describe('AppSec Index', function () {
 
       abortController = { abort: sinon.stub() }
 
+      res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-length': 42
+        }),
+        writeHead: sinon.stub(),
+        getHeaderNames: sinon.stub().returns([]),
+        constructor: {
+          prototype: {
+            end: sinon.stub()
+          }
+        }
+      }
+
       req = {
         url: '/path',
         headers: {
@@ -657,18 +679,9 @@ describe('AppSec Index', function () {
         socket: {
           remoteAddress: '127.0.0.1',
           remotePort: 8080
-        }
+        },
+        res
       }
-      res = {
-        getHeaders: () => ({
-          'content-type': 'application/json',
-          'content-lenght': 42
-        }),
-        writeHead: sinon.stub(),
-        end: sinon.stub(),
-        getHeaderNames: sinon.stub().returns([])
-      }
-      res.writeHead.returns(res)
 
       AppSec.enable(config)
       AppSec.incomingHttpStartTranslator({ req, res })
@@ -682,7 +695,7 @@ describe('AppSec Index', function () {
 
         expect(waf.run).not.to.have.been.called
         expect(abortController.abort).not.to.have.been.called
-        expect(res.end).not.to.have.been.called
+        expect(res.constructor.prototype.end).not.to.have.been.called
       })
 
       it('Should not block with body by default', () => {
@@ -698,7 +711,7 @@ describe('AppSec Index', function () {
           }
         })
         expect(abortController.abort).not.to.have.been.called
-        expect(res.end).not.to.have.been.called
+        expect(res.constructor.prototype.end).not.to.have.been.called
       })
 
       it('Should block when it is detected as attack', () => {
@@ -714,7 +727,7 @@ describe('AppSec Index', function () {
           }
         })
         expect(abortController.abort).to.have.been.called
-        expect(res.end).to.have.been.called
+        expect(res.constructor.prototype.end).to.have.been.called
       })
     })
 
@@ -726,7 +739,7 @@ describe('AppSec Index', function () {
 
         expect(waf.run).not.to.have.been.called
         expect(abortController.abort).not.to.have.been.called
-        expect(res.end).not.to.have.been.called
+        expect(res.constructor.prototype.end).not.to.have.been.called
       })
 
       it('Should not block with cookie by default', () => {
@@ -741,7 +754,7 @@ describe('AppSec Index', function () {
           }
         })
         expect(abortController.abort).not.to.have.been.called
-        expect(res.end).not.to.have.been.called
+        expect(res.constructor.prototype.end).not.to.have.been.called
       })
 
       it('Should block when it is detected as attack', () => {
@@ -756,7 +769,7 @@ describe('AppSec Index', function () {
           }
         })
         expect(abortController.abort).to.have.been.called
-        expect(res.end).to.have.been.called
+        expect(res.constructor.prototype.end).to.have.been.called
       })
     })
 
@@ -768,7 +781,7 @@ describe('AppSec Index', function () {
 
         expect(waf.run).not.to.have.been.called
         expect(abortController.abort).not.to.have.been.called
-        expect(res.end).not.to.have.been.called
+        expect(res.constructor.prototype.end).not.to.have.been.called
       })
 
       it('Should not block with query by default', () => {
@@ -784,7 +797,7 @@ describe('AppSec Index', function () {
           }
         })
         expect(abortController.abort).not.to.have.been.called
-        expect(res.end).not.to.have.been.called
+        expect(res.constructor.prototype.end).not.to.have.been.called
       })
 
       it('Should block when it is detected as attack', () => {
@@ -800,36 +813,156 @@ describe('AppSec Index', function () {
           }
         })
         expect(abortController.abort).to.have.been.called
-        expect(res.end).to.have.been.called
+        expect(res.constructor.prototype.end).to.have.been.called
       })
     })
 
     describe('onPassportVerify', () => {
-      it('Should call passportTrackEvent', () => {
-        const credentials = { type: 'local', username: 'test' }
-        const user = { id: '1234', username: 'Test' }
-
-        sinon.stub(storage, 'getStore').returns({ req: {} })
-
-        passportVerify.publish({ credentials, user })
-
-        expect(passport.passportTrackEvent).to.have.been.calledOnceWithExactly(
-          credentials,
-          user,
-          rootSpan,
-          config.appsec.eventTracking.mode)
+      beforeEach(() => {
+        web.root.resetHistory()
+        sinon.stub(storage('legacy'), 'getStore').returns({ req })
       })
 
-      it('Should call log if no rootSpan is found', () => {
-        const credentials = { type: 'local', username: 'test' }
-        const user = { id: '1234', username: 'Test' }
+      it('should block when UserTracking.trackLogin() returns action', () => {
+        UserTracking.trackLogin.returns(resultActions)
 
-        sinon.stub(storage, 'getStore').returns(undefined)
+        const abortController = new AbortController()
+        const payload = {
+          framework: 'passport-local',
+          login: 'test',
+          user: { _id: 1, username: 'test', password: '1234' },
+          success: true,
+          abortController
+        }
 
-        passportVerify.publish({ credentials, user })
+        passportVerify.publish(payload)
 
-        expect(log.warn).to.have.been.calledOnceWithExactly('No rootSpan found in onPassportVerify')
-        expect(passport.passportTrackEvent).not.to.have.been.called
+        expect(storage('legacy').getStore).to.have.been.calledOnce
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(UserTracking.trackLogin).to.have.been.calledOnceWithExactly(
+          payload.framework,
+          payload.login,
+          payload.user,
+          payload.success,
+          rootSpan
+        )
+        expect(abortController.signal.aborted).to.be.true
+        expect(res.constructor.prototype.end).to.have.been.called
+      })
+
+      it('should not block when UserTracking.trackLogin() returns nothing', () => {
+        UserTracking.trackLogin.returns(undefined)
+
+        const abortController = new AbortController()
+        const payload = {
+          framework: 'passport-local',
+          login: 'test',
+          user: { _id: 1, username: 'test', password: '1234' },
+          success: true,
+          abortController
+        }
+
+        passportVerify.publish(payload)
+
+        expect(storage('legacy').getStore).to.have.been.calledOnce
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(UserTracking.trackLogin).to.have.been.calledOnceWithExactly(
+          payload.framework,
+          payload.login,
+          payload.user,
+          payload.success,
+          rootSpan
+        )
+        expect(abortController.signal.aborted).to.be.false
+        expect(res.constructor.prototype.end).to.not.have.been.called
+      })
+
+      it('should not block and call log if no rootSpan is found', () => {
+        storage('legacy').getStore.returns(undefined)
+
+        const abortController = new AbortController()
+        const payload = {
+          framework: 'passport-local',
+          login: 'test',
+          user: { _id: 1, username: 'test', password: '1234' },
+          success: true,
+          abortController
+        }
+
+        passportVerify.publish(payload)
+
+        expect(storage('legacy').getStore).to.have.been.calledOnce
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] No rootSpan found in onPassportVerify')
+        expect(UserTracking.trackLogin).to.not.have.been.called
+        expect(abortController.signal.aborted).to.be.false
+        expect(res.constructor.prototype.end).to.not.have.been.called
+      })
+    })
+
+    describe('onPassportDeserializeUser', () => {
+      beforeEach(() => {
+        web.root.resetHistory()
+        sinon.stub(storage('legacy'), 'getStore').returns({ req })
+      })
+
+      it('should block when UserTracking.trackUser() returns action', () => {
+        UserTracking.trackUser.returns(resultActions)
+
+        const abortController = new AbortController()
+        const payload = {
+          user: { _id: 1, username: 'test', password: '1234' },
+          abortController
+        }
+
+        passportUser.publish(payload)
+
+        expect(storage('legacy').getStore).to.have.been.calledOnce
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(UserTracking.trackUser).to.have.been.calledOnceWithExactly(
+          payload.user,
+          rootSpan
+        )
+        expect(abortController.signal.aborted).to.be.true
+        expect(res.constructor.prototype.end).to.have.been.called
+      })
+
+      it('should not block when UserTracking.trackUser() returns nothing', () => {
+        UserTracking.trackUser.returns(undefined)
+
+        const abortController = new AbortController()
+        const payload = {
+          user: { _id: 1, username: 'test', password: '1234' },
+          abortController
+        }
+
+        passportUser.publish(payload)
+
+        expect(storage('legacy').getStore).to.have.been.calledOnce
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(UserTracking.trackUser).to.have.been.calledOnceWithExactly(
+          payload.user,
+          rootSpan
+        )
+        expect(abortController.signal.aborted).to.be.false
+        expect(res.constructor.prototype.end).to.not.have.been.called
+      })
+
+      it('should not block and call log if no rootSpan is found', () => {
+        storage('legacy').getStore.returns(undefined)
+
+        const abortController = new AbortController()
+        const payload = {
+          user: { _id: 1, username: 'test', password: '1234' },
+          abortController
+        }
+
+        passportUser.publish(payload)
+
+        expect(storage('legacy').getStore).to.have.been.calledOnce
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] No rootSpan found in onPassportDeserializeUser')
+        expect(UserTracking.trackUser).to.not.have.been.called
+        expect(abortController.signal.aborted).to.be.false
+        expect(res.constructor.prototype.end).to.not.have.been.called
       })
     })
 
@@ -839,7 +972,7 @@ describe('AppSec Index', function () {
 
         const responseHeaders = {
           'content-type': 'application/json',
-          'content-lenght': 42,
+          'content-length': 42,
           'set-cookie': 'a=1;b=2'
         }
 
@@ -850,12 +983,12 @@ describe('AppSec Index', function () {
             'server.response.status': '404',
             'server.response.headers.no_cookies': {
               'content-type': 'application/json',
-              'content-lenght': 42
+              'content-length': 42
             }
           }
         }, req)
         expect(abortController.abort).to.have.been.calledOnce
-        expect(res.end).to.have.been.calledOnce
+        expect(res.constructor.prototype.end).to.have.been.calledOnce
 
         abortController.abort.resetHistory()
 
@@ -863,7 +996,7 @@ describe('AppSec Index', function () {
 
         expect(waf.run).to.have.been.calledOnce
         expect(abortController.abort).to.have.been.calledOnce
-        expect(res.end).to.have.been.calledOnce
+        expect(res.constructor.prototype.end).to.have.been.calledOnce
       })
 
       it('should not call the WAF if response was already analyzed', () => {
@@ -871,7 +1004,7 @@ describe('AppSec Index', function () {
 
         const responseHeaders = {
           'content-type': 'application/json',
-          'content-lenght': 42,
+          'content-length': 42,
           'set-cookie': 'a=1;b=2'
         }
 
@@ -882,18 +1015,18 @@ describe('AppSec Index', function () {
             'server.response.status': '404',
             'server.response.headers.no_cookies': {
               'content-type': 'application/json',
-              'content-lenght': 42
+              'content-length': 42
             }
           }
         }, req)
         expect(abortController.abort).to.have.not.been.called
-        expect(res.end).to.have.not.been.called
+        expect(res.constructor.prototype.end).to.have.not.been.called
 
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
 
         expect(waf.run).to.have.been.calledOnce
         expect(abortController.abort).to.have.not.been.called
-        expect(res.end).to.have.not.been.called
+        expect(res.constructor.prototype.end).to.have.not.been.called
       })
 
       it('should not do anything without a root span', () => {
@@ -902,7 +1035,7 @@ describe('AppSec Index', function () {
 
         const responseHeaders = {
           'content-type': 'application/json',
-          'content-lenght': 42,
+          'content-length': 42,
           'set-cookie': 'a=1;b=2'
         }
 
@@ -910,7 +1043,7 @@ describe('AppSec Index', function () {
 
         expect(waf.run).to.have.not.been.called
         expect(abortController.abort).to.have.not.been.called
-        expect(res.end).to.have.not.been.called
+        expect(res.constructor.prototype.end).to.have.not.been.called
       })
 
       it('should call the WAF with responde code and headers', () => {
@@ -918,7 +1051,7 @@ describe('AppSec Index', function () {
 
         const responseHeaders = {
           'content-type': 'application/json',
-          'content-lenght': 42,
+          'content-length': 42,
           'set-cookie': 'a=1;b=2'
         }
 
@@ -929,12 +1062,12 @@ describe('AppSec Index', function () {
             'server.response.status': '404',
             'server.response.headers.no_cookies': {
               'content-type': 'application/json',
-              'content-lenght': 42
+              'content-length': 42
             }
           }
         }, req)
         expect(abortController.abort).to.have.been.calledOnce
-        expect(res.end).to.have.been.calledOnce
+        expect(res.constructor.prototype.end).to.have.been.calledOnce
       })
     })
 
@@ -945,7 +1078,7 @@ describe('AppSec Index', function () {
 
         const responseHeaders = {
           'content-type': 'application/json',
-          'content-lenght': 42,
+          'content-length': 42,
           'set-cookie': 'a=1;b=2'
         }
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })

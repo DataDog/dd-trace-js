@@ -9,6 +9,7 @@ const log = require('../../log')
 const { getExtraServices } = require('../../service-naming/extra-services')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 const Scheduler = require('./scheduler')
+const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
 
 const clientId = uuid()
 
@@ -32,6 +33,14 @@ class RemoteConfigManager extends EventEmitter {
       hostname: config.hostname || 'localhost',
       port: config.port
     }))
+
+    const tags = config.repositoryUrl
+      ? {
+          ...config.tags,
+          [GIT_REPOSITORY_URL]: config.repositoryUrl,
+          [GIT_COMMIT_SHA]: config.commitSHA
+        }
+      : config.tags
 
     this._handlers = new Map()
     const appliedConfigs = this.appliedConfigs = new Map()
@@ -67,7 +76,8 @@ class RemoteConfigManager extends EventEmitter {
           service: config.service,
           env: config.env,
           app_version: config.version,
-          extra_services: []
+          extra_services: [],
+          tags: Object.entries(tags).map((pair) => pair.join(':'))
         },
         capabilities: DEFAULT_CAPABILITY // updated by `updateCapabilities()`
       },
@@ -134,7 +144,7 @@ class RemoteConfigManager extends EventEmitter {
       if (statusCode === 404) return cb()
 
       if (err) {
-        log.error(err)
+        log.error('[RC] Error in request', err)
         return cb()
       }
 
@@ -148,7 +158,7 @@ class RemoteConfigManager extends EventEmitter {
         try {
           this.parseConfig(JSON.parse(data))
         } catch (err) {
-          log.error(`Could not parse remote config response: ${err}`)
+          log.error('[RC] Could not parse remote config response', err)
 
           this.state.client.state.has_error = true
           this.state.client.state.error = err.toString()

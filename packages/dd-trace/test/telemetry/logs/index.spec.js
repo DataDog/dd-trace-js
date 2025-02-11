@@ -4,6 +4,7 @@ require('../../setup/tap')
 
 const { match } = require('sinon')
 const proxyquire = require('proxyquire')
+const { Log } = require('../../../src/log/log')
 
 describe('telemetry logs', () => {
   let defaultConfig
@@ -141,13 +142,19 @@ describe('telemetry logs', () => {
       it('should be called when an Error object is published to datadog:log:error', () => {
         const error = new Error('message')
         const stack = error.stack
-        errorLog.publish(error)
+        errorLog.publish({ cause: error })
 
-        expect(logCollectorAdd).to.be.calledOnceWith(match({ message: 'message', level: 'ERROR', stack_trace: stack }))
+        expect(logCollectorAdd)
+          .to.be.calledOnceWith(match({
+            message: 'Generic Error',
+            level: 'ERROR',
+            errorType: 'Error',
+            stack_trace: stack
+          }))
       })
 
       it('should be called when an error string is published to datadog:log:error', () => {
-        errorLog.publish('custom error message')
+        errorLog.publish({ message: 'custom error message' })
 
         expect(logCollectorAdd).to.be.calledOnceWith(match({
           message: 'custom error message',
@@ -158,6 +165,12 @@ describe('telemetry logs', () => {
 
       it('should not be called when an invalid object is published to datadog:log:error', () => {
         errorLog.publish({ invalid: 'field' })
+
+        expect(logCollectorAdd).not.to.be.called
+      })
+
+      it('should not be called when an object without message and stack is published to datadog:log:error', () => {
+        errorLog.publish(Log.parse(() => new Error('error')))
 
         expect(logCollectorAdd).not.to.be.called
       })

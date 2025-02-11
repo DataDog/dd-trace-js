@@ -5,42 +5,25 @@ const appsec = require('../../../src/appsec')
 const Config = require('../../../src/config')
 const path = require('path')
 const Axios = require('axios')
-const { getWebSpan, checkRaspExecutedAndHasThreat, checkRaspExecutedAndNotThreat } = require('./utils')
+const { checkRaspExecutedAndHasThreat, checkRaspExecutedAndNotThreat } = require('./utils')
 const { assert } = require('chai')
 
 describe('RASP - command_injection', () => {
   withVersions('express', 'express', expressVersion => {
     let app, server, axios
-
-    async function testBlockingRequest () {
-      try {
-        await axios.get('/?dir=$(cat /etc/passwd 1>%262 ; echo .)')
-      } catch (e) {
-        if (!e.response) {
-          throw e
-        }
-
-        return checkRaspExecutedAndHasThreat(agent, 'rasp-command_injection-rule-id-3')
-      }
-
-      assert.fail('Request should be blocked')
-    }
-
-    function checkRaspNotExecutedAndNotThreat (agent, checkRuleEval = true) {
-      return agent.use((traces) => {
-        const span = getWebSpan(traces)
-
-        assert.notProperty(span.meta, '_dd.appsec.json')
-        assert.notProperty(span.meta_struct || {}, '_dd.stack')
-        if (checkRuleEval) {
-          assert.notProperty(span.metrics, '_dd.appsec.rasp.rule.eval')
-        }
-      })
-    }
-
-    function testBlockingAndSafeRequests () {
+    function testShellBlockingAndSafeRequests () {
       it('should block the threat', async () => {
-        await testBlockingRequest()
+        try {
+          await axios.get('/?dir=$(cat /etc/passwd 1>%262 ; echo .)')
+        } catch (e) {
+          if (!e.response) {
+            throw e
+          }
+
+          return checkRaspExecutedAndHasThreat(agent, 'rasp-command_injection-rule-id-3')
+        }
+
+        assert.fail('Request should be blocked')
       })
 
       it('should not block safe request', async () => {
@@ -50,17 +33,25 @@ describe('RASP - command_injection', () => {
       })
     }
 
-    function testSafeInNonShell () {
-      it('should not block the threat', async () => {
-        await axios.get('/?dir=$(cat /etc/passwd 1>%262 ; echo .)')
+    function testNonShellBlockingAndSafeRequests () {
+      it('should block the threat', async () => {
+        try {
+          await axios.get('/?command=/usr/bin/reboot')
+        } catch (e) {
+          if (!e.response) {
+            throw e
+          }
 
-        return checkRaspNotExecutedAndNotThreat(agent)
+          return checkRaspExecutedAndHasThreat(agent, 'rasp-command_injection-rule-id-4')
+        }
+
+        assert.fail('Request should be blocked')
       })
 
       it('should not block safe request', async () => {
-        await axios.get('/?dir=.')
+        await axios.get('/?command=.')
 
-        return checkRaspNotExecutedAndNotThreat(agent)
+        return checkRaspExecutedAndNotThreat(agent)
       })
     }
 
@@ -116,7 +107,7 @@ describe('RASP - command_injection', () => {
           }
         })
 
-        testBlockingAndSafeRequests()
+        testShellBlockingAndSafeRequests()
       })
 
       describe('with promise', () => {
@@ -137,7 +128,7 @@ describe('RASP - command_injection', () => {
           }
         })
 
-        testBlockingAndSafeRequests()
+        testShellBlockingAndSafeRequests()
       })
 
       describe('with event emitter', () => {
@@ -158,7 +149,7 @@ describe('RASP - command_injection', () => {
           }
         })
 
-        testBlockingAndSafeRequests()
+        testShellBlockingAndSafeRequests()
       })
 
       describe('execSync', () => {
@@ -178,7 +169,7 @@ describe('RASP - command_injection', () => {
           }
         })
 
-        testBlockingAndSafeRequests()
+        testShellBlockingAndSafeRequests()
       })
     })
 
@@ -199,7 +190,7 @@ describe('RASP - command_injection', () => {
             }
           })
 
-          testBlockingAndSafeRequests()
+          testShellBlockingAndSafeRequests()
         })
 
         describe('with promise', () => {
@@ -220,7 +211,7 @@ describe('RASP - command_injection', () => {
             }
           })
 
-          testBlockingAndSafeRequests()
+          testShellBlockingAndSafeRequests()
         })
 
         describe('with event emitter', () => {
@@ -241,7 +232,7 @@ describe('RASP - command_injection', () => {
             }
           })
 
-          testBlockingAndSafeRequests()
+          testShellBlockingAndSafeRequests()
         })
 
         describe('execFileSync', () => {
@@ -261,7 +252,7 @@ describe('RASP - command_injection', () => {
             }
           })
 
-          testBlockingAndSafeRequests()
+          testShellBlockingAndSafeRequests()
         })
       })
 
@@ -271,7 +262,7 @@ describe('RASP - command_injection', () => {
             app = (req, res) => {
               const childProcess = require('child_process')
 
-              childProcess.execFile('ls', [req.query.dir], function (e) {
+              childProcess.execFile(req.query.command, function (e) {
                 if (e?.name === 'DatadogRaspAbortError') {
                   res.writeHead(500)
                 }
@@ -281,7 +272,7 @@ describe('RASP - command_injection', () => {
             }
           })
 
-          testSafeInNonShell()
+          testNonShellBlockingAndSafeRequests()
         })
 
         describe('with promise', () => {
@@ -291,7 +282,7 @@ describe('RASP - command_injection', () => {
               const execFile = util.promisify(require('child_process').execFile)
 
               try {
-                await execFile('ls', [req.query.dir])
+                await execFile([req.query.command])
               } catch (e) {
                 if (e.name === 'DatadogRaspAbortError') {
                   res.writeHead(500)
@@ -302,15 +293,14 @@ describe('RASP - command_injection', () => {
             }
           })
 
-          testSafeInNonShell()
+          testNonShellBlockingAndSafeRequests()
         })
 
         describe('with event emitter', () => {
           beforeEach(() => {
             app = (req, res) => {
               const childProcess = require('child_process')
-
-              const child = childProcess.execFile('ls', [req.query.dir])
+              const child = childProcess.execFile(req.query.command)
               child.on('error', (e) => {
                 if (e.name === 'DatadogRaspAbortError') {
                   res.writeHead(500)
@@ -323,7 +313,7 @@ describe('RASP - command_injection', () => {
             }
           })
 
-          testSafeInNonShell()
+          testNonShellBlockingAndSafeRequests()
         })
 
         describe('execFileSync', () => {
@@ -332,7 +322,7 @@ describe('RASP - command_injection', () => {
               const childProcess = require('child_process')
 
               try {
-                childProcess.execFileSync('ls', [req.query.dir])
+                childProcess.execFileSync([req.query.command])
               } catch (e) {
                 if (e.name === 'DatadogRaspAbortError') {
                   res.writeHead(500)
@@ -343,7 +333,7 @@ describe('RASP - command_injection', () => {
             }
           })
 
-          testSafeInNonShell()
+          testNonShellBlockingAndSafeRequests()
         })
       })
     })
@@ -368,7 +358,7 @@ describe('RASP - command_injection', () => {
             }
           })
 
-          testBlockingAndSafeRequests()
+          testShellBlockingAndSafeRequests()
         })
 
         describe('spawnSync', () => {
@@ -385,7 +375,7 @@ describe('RASP - command_injection', () => {
             }
           })
 
-          testBlockingAndSafeRequests()
+          testShellBlockingAndSafeRequests()
         })
       })
 
@@ -395,7 +385,7 @@ describe('RASP - command_injection', () => {
             app = (req, res) => {
               const childProcess = require('child_process')
 
-              const child = childProcess.spawn('ls', [req.query.dir])
+              const child = childProcess.spawn(req.query.command)
               child.on('error', (e) => {
                 if (e.name === 'DatadogRaspAbortError') {
                   res.writeHead(500)
@@ -408,7 +398,7 @@ describe('RASP - command_injection', () => {
             }
           })
 
-          testSafeInNonShell()
+          testNonShellBlockingAndSafeRequests()
         })
 
         describe('spawnSync', () => {
@@ -416,7 +406,7 @@ describe('RASP - command_injection', () => {
             app = (req, res) => {
               const childProcess = require('child_process')
 
-              const child = childProcess.spawnSync('ls', [req.query.dir])
+              const child = childProcess.spawnSync(req.query.command)
               if (child.error?.name === 'DatadogRaspAbortError') {
                 res.writeHead(500)
               }
@@ -425,7 +415,7 @@ describe('RASP - command_injection', () => {
             }
           })
 
-          testSafeInNonShell()
+          testNonShellBlockingAndSafeRequests()
         })
       })
     })

@@ -11,7 +11,7 @@ class RheaConsumerPlugin extends ConsumerPlugin {
     super(...args)
 
     this.addTraceSub('dispatch', ({ state }) => {
-      const span = storage.getStore().span
+      const span = storage('legacy').getStore().span
       span.setTag('amqp.delivery.state', state)
     })
   }
@@ -28,8 +28,7 @@ class RheaConsumerPlugin extends ConsumerPlugin {
         component: 'rhea',
         'amqp.link.source.address': name,
         'amqp.link.role': 'receiver'
-      },
-      extractedLinks: childOf?._links
+      }
     })
 
     if (

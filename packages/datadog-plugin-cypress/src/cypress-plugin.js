@@ -31,7 +31,9 @@ const {
   TEST_EARLY_FLAKE_ENABLED,
   getTestSessionName,
   TEST_SESSION_NAME,
-  TEST_LEVEL_EVENT_TYPES
+  TEST_LEVEL_EVENT_TYPES,
+  TEST_RETRY_REASON,
+  DD_TEST_IS_USER_PROVIDED_SERVICE
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -112,7 +114,7 @@ function getCypressCommand (details) {
 function getLibraryConfiguration (tracer, testConfiguration) {
   return new Promise(resolve => {
     if (!tracer._tracer._exporter?.getLibraryConfiguration) {
-      return resolve({ err: new Error('CI Visibility was not initialized correctly') })
+      return resolve({ err: new Error('Test Optimization was not initialized correctly') })
     }
 
     tracer._tracer._exporter.getLibraryConfiguration(testConfiguration, (err, libraryConfig) => {
@@ -124,7 +126,7 @@ function getLibraryConfiguration (tracer, testConfiguration) {
 function getSkippableTests (tracer, testConfiguration) {
   return new Promise(resolve => {
     if (!tracer._tracer._exporter?.getSkippableSuites) {
-      return resolve({ err: new Error('CI Visibility was not initialized correctly') })
+      return resolve({ err: new Error('Test Optimization was not initialized correctly') })
     }
     tracer._tracer._exporter.getSkippableSuites(testConfiguration, (err, skippableTests, correlationId) => {
       resolve({
@@ -139,7 +141,7 @@ function getSkippableTests (tracer, testConfiguration) {
 function getKnownTests (tracer, testConfiguration) {
   return new Promise(resolve => {
     if (!tracer._tracer._exporter?.getKnownTests) {
-      return resolve({ err: new Error('CI Visibility was not initialized correctly') })
+      return resolve({ err: new Error('Test Optimization was not initialized correctly') })
     }
     tracer._tracer._exporter.getKnownTests(testConfiguration, (err, knownTests) => {
       resolve({
@@ -203,6 +205,7 @@ class CypressPlugin {
     this.isSuitesSkippingEnabled = false
     this.isCodeCoverageEnabled = false
     this.isEarlyFlakeDetectionEnabled = false
+    this.isKnownTestsEnabled = false
     this.earlyFlakeDetectionNumRetries = 0
     this.testsToSkip = []
     this.skippedTests = []
@@ -220,10 +223,14 @@ class CypressPlugin {
     this.tracer = tracer
     this.cypressConfig = cypressConfig
 
+    // we have to do it here because the tracer is not initialized in the constructor
+    this.testEnvironmentMetadata[DD_TEST_IS_USER_PROVIDED_SERVICE] =
+      tracer._tracer._config.isServiceUserProvided ? 'true' : 'false'
+
     this.libraryConfigurationPromise = getLibraryConfiguration(this.tracer, this.testConfiguration)
       .then((libraryConfigurationResponse) => {
         if (libraryConfigurationResponse.err) {
-          log.error(libraryConfigurationResponse.err)
+          log.error('Cypress plugin library config response error', libraryConfigurationResponse.err)
         } else {
           const {
             libraryConfig: {
@@ -232,13 +239,15 @@ class CypressPlugin {
               isEarlyFlakeDetectionEnabled,
               earlyFlakeDetectionNumRetries,
               isFlakyTestRetriesEnabled,
-              flakyTestRetriesCount
+              flakyTestRetriesCount,
+              isKnownTestsEnabled
             }
           } = libraryConfigurationResponse
           this.isSuitesSkippingEnabled = isSuitesSkippingEnabled
           this.isCodeCoverageEnabled = isCodeCoverageEnabled
           this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
           this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+          this.isKnownTestsEnabled = isKnownTestsEnabled
           if (isFlakyTestRetriesEnabled) {
             this.cypressConfig.retries.runMode = flakyTestRetriesCount
           }
@@ -354,14 +363,15 @@ class CypressPlugin {
     this.frameworkVersion = getCypressVersion(details)
     this.rootDir = getRootDir(details)
 
-    if (this.isEarlyFlakeDetectionEnabled) {
+    if (this.isKnownTestsEnabled) {
       const knownTestsResponse = await getKnownTests(
         this.tracer,
         this.testConfiguration
       )
       if (knownTestsResponse.err) {
-        log.error(knownTestsResponse.err)
+        log.error('Cypress known tests response error', knownTestsResponse.err)
         this.isEarlyFlakeDetectionEnabled = false
+        this.isKnownTestsEnabled = false
       } else {
         // We use TEST_FRAMEWORK_NAME for the name of the module
         this.knownTestsByTestSuite = knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]
@@ -374,7 +384,7 @@ class CypressPlugin {
         this.testConfiguration
       )
       if (skippableTestsResponse.err) {
-        log.error(skippableTestsResponse.err)
+        log.error('Cypress skippable tests response error', skippableTestsResponse.err)
       } else {
         const { skippableTests, correlationId } = skippableTestsResponse
         this.testsToSkip = skippableTests || []
@@ -567,6 +577,9 @@ class CypressPlugin {
           cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.attempts[attemptIndex].state]
           if (attemptIndex > 0) {
             finishedTest.testSpan.setTag(TEST_IS_RETRY, 'true')
+            if (finishedTest.isEfdRetry) {
+              finishedTest.testSpan.setTag(TEST_RETRY_REASON, 'efd')
+            }
           }
         }
         if (cypressTest.displayError) {
@@ -618,7 +631,8 @@ class CypressPlugin {
         const suitePayload = {
           isEarlyFlakeDetectionEnabled: this.isEarlyFlakeDetectionEnabled,
           knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
-          earlyFlakeDetectionNumRetries: this.earlyFlakeDetectionNumRetries
+          earlyFlakeDetectionNumRetries: this.earlyFlakeDetectionNumRetries,
+          isKnownTestsEnabled: this.isKnownTestsEnabled
         }
 
         if (this.testSuiteSpan) {
@@ -658,10 +672,22 @@ class CypressPlugin {
           log.warn('There is no active test span in dd:afterEach handler')
           return null
         }
-        const { state, error, isRUMActive, testSourceLine, testSuite, testName, isNew, isEfdRetry } = test
+        const {
+          state,
+          error,
+          isRUMActive,
+          testSourceLine,
+          testSuite,
+          testSuiteAbsolutePath,
+          testName,
+          isNew,
+          isEfdRetry
+        } = test
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
-          const relativeCoverageFiles = coverageFiles.map(file => getTestSuitePath(file, this.rootDir))
+          const relativeCoverageFiles = [...coverageFiles, testSuiteAbsolutePath].map(
+            file => getTestSuitePath(file, this.repositoryRoot || this.rootDir)
+          )
           if (!relativeCoverageFiles.length) {
             incrementCountMetric(TELEMETRY_CODE_COVERAGE_EMPTY)
           }
@@ -691,13 +717,15 @@ class CypressPlugin {
           this.activeTestSpan.setTag(TEST_IS_NEW, 'true')
           if (isEfdRetry) {
             this.activeTestSpan.setTag(TEST_IS_RETRY, 'true')
+            this.activeTestSpan.setTag(TEST_RETRY_REASON, 'efd')
           }
         }
         const finishedTest = {
           testName,
           testStatus,
           finishTime: this.activeTestSpan._getTime(), // we store the finish time here
-          testSpan: this.activeTestSpan
+          testSpan: this.activeTestSpan,
+          isEfdRetry
         }
         if (this.finishedTestsByFile[testSuite]) {
           this.finishedTestsByFile[testSuite].push(finishedTest)

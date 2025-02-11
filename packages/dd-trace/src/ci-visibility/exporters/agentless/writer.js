@@ -64,7 +64,7 @@ class Writer extends BaseWriter {
           TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
           { endpoint: 'test_cycle' }
         )
-        log.error(err)
+        log.error('Error sending CI agentless payload', err)
         done()
         return
       }

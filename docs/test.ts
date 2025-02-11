@@ -111,7 +111,7 @@ tracer.init({
     blockedTemplateJson: './blocked.json',
     blockedTemplateGraphql: './blockedgraphql.json',
     eventTracking: {
-      mode: 'safe'
+      mode: 'anon'
     },
     apiSecurity: {
       enabled: true,
@@ -131,11 +131,15 @@ tracer.init({
     requestSampling: 50,
     maxConcurrentRequests: 4,
     maxContextOperations: 30,
+    dbRowsToTaint: 12,
     deduplicationEnabled: true,
     redactionEnabled: true,
     redactionNamePattern: 'password',
     redactionValuePattern: 'bearer',
-    telemetryVerbosity: 'OFF'
+    telemetryVerbosity: 'OFF',
+    stackTrace: {
+      enabled: true
+    }
   }
 });
 
@@ -147,6 +151,7 @@ tracer.init({
       requestSampling: 50,
       maxConcurrentRequests: 4,
       maxContextOperations: 30,
+      dbRowsToTaint: 6,
       deduplicationEnabled: true,
       redactionEnabled: true,
       redactionNamePattern: 'password',
@@ -342,6 +347,7 @@ tracer.use('kafkajs');
 tracer.use('knex');
 tracer.use('koa');
 tracer.use('koa', httpServerOptions);
+tracer.use('langchain');
 tracer.use('mariadb', { service: () => `my-custom-mariadb` })
 tracer.use('memcached');
 tracer.use('microgateway-core');

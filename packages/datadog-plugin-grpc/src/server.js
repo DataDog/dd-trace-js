@@ -27,7 +27,7 @@ class GrpcServerPlugin extends ServerPlugin {
   }
 
   bindStart (message) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const { name, metadata, type } = message
     const metadataFilter = this.config.metadataFilter
     const childOf = extract(this.tracer, metadata)
@@ -48,8 +48,7 @@ class GrpcServerPlugin extends ServerPlugin {
       },
       metrics: {
         'grpc.status.code': 0
-      },
-      extractedLinks: childOf?._links
+      }
     })
 
     addMetadataTags(span, metadata, metadataFilter, 'request')

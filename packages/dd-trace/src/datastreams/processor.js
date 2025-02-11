@@ -1,7 +1,5 @@
 const os = require('os')
 const pkg = require('../../../../package.json')
-// Message pack int encoding is done in big endian, but data streams uses little endian
-const Uint64 = require('int64-buffer').Uint64BE
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 const { DsmPathwayCodec } = require('./pathway')
@@ -19,8 +17,8 @@ const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
-    this.hash = new Uint64(hash)
-    this.parentHash = new Uint64(parentHash)
+    this.hash = hash.readBigUInt64BE()
+    this.parentHash = parentHash.readBigUInt64BE()
     this.edgeTags = edgeTags
     this.edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
     this.pathwayLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
@@ -344,8 +342,8 @@ class DataStreamsProcessor {
         backlogs.push(backlog.encode())
       }
       serializedBuckets.push({
-        Start: new Uint64(timeNs),
-        Duration: new Uint64(this.bucketSizeNs),
+        Start: BigInt(timeNs),
+        Duration: BigInt(this.bucketSizeNs),
         Stats: points,
         Backlogs: backlogs
       })

@@ -137,6 +137,7 @@ function appClosing () {
   sendData(config, application, host, reqType, payload)
   // We flush before shutting down.
   metricsManager.send(config, application, host)
+  telemetryLogger.send(config, application, host)
 }
 
 function onBeforeExit () {
@@ -305,6 +306,8 @@ function formatMapForTelemetry (map) {
 function updateConfig (changes, config) {
   if (!config.telemetry.enabled) return
   if (changes.length === 0) return
+
+  logger.trace(changes)
 
   const application = createAppObject(config)
   const host = createHostObject()

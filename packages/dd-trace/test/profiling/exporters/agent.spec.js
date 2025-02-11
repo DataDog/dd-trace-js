@@ -40,7 +40,6 @@ async function createProfile (periodType) {
       error (err) {
         throw err
       },
-      // eslint-disable-next-line n/handle-callback-err
       warn (err) {
       }
     }
@@ -115,7 +114,8 @@ describe('exporters/agent', function () {
     expect(event.info.profiler.ssi).to.have.property('mechanism', 'none')
     expect(event.info.profiler).to.have.property('version', version)
     expect(event.info).to.have.property('runtime')
-    expect(Object.keys(event.info.runtime)).to.have.length(2)
+    expect(Object.keys(event.info.runtime)).to.have.length(3)
+    expect(event.info.runtime).to.have.property('available_processors')
     expect(event.info.runtime).to.have.property('engine', 'nodejs')
     expect(event.info.runtime).to.have.property('version', process.version.substring(1))
 
@@ -316,7 +316,7 @@ describe('exporters/agent', function () {
       }
 
       let index = 0
-      const exporter = newAgentExporter({ url, logger: { debug: onMessage, error: onMessage } })
+      const exporter = newAgentExporter({ url, logger: { debug: onMessage, warn: onMessage } })
       const start = new Date()
       const end = new Date()
       const tags = { foo: 'bar' }
@@ -353,7 +353,7 @@ describe('exporters/agent', function () {
     })
 
     it('should not retry on 4xx errors', async function () {
-      const exporter = newAgentExporter({ url, logger: { debug: () => {}, error: () => {} } })
+      const exporter = newAgentExporter({ url, logger: { debug: () => {}, warn: () => {} } })
       const start = new Date()
       const end = new Date()
       const tags = { foo: 'bar' }

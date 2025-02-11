@@ -151,7 +151,7 @@ describe('WAFContextWrapper', () => {
       wafContextWrapper.run(payload)
 
       sinon.assert.notCalled(ddwafContext.run)
-      sinon.assert.calledOnceWithExactly(log.warn, 'Calling run on a disposed context')
+      sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Calling run on a disposed context')
     })
   })
 })

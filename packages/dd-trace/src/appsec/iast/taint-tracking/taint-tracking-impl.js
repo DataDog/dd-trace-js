@@ -4,10 +4,10 @@ const dc = require('dc-polyfill')
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../iast-context')
-const iastLog = require('../iast-log')
 const { EXECUTED_PROPAGATION } = require('../telemetry/iast-metric')
 const { isDebugAllowed } = require('../telemetry/verbosity')
 const { taintObject } = require('./operations-taint-object')
+const log = require('../../../log')
 
 const mathRandomCallCh = dc.channel('datadog:random:call')
 const evalCallCh = dc.channel('datadog:eval:call')
@@ -39,7 +39,7 @@ function getTransactionId (iastContext) {
 }
 
 function getContextDefault () {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   return iastContextFunctions.getIastContext(store)
 }
 
@@ -60,8 +60,7 @@ function getFilteredCsiFn (cb, filter, getContext) {
         return cb(transactionId, res, target, ...rest)
       }
     } catch (e) {
-      iastLog.error(`Error invoking CSI ${target}`)
-        .errorAndPublish(e)
+      log.error('[ASM] Error invoking CSI %s', target, e)
     }
     return res
   }
@@ -112,8 +111,7 @@ function csiMethodsOverrides (getContext) {
           return TaintedUtils.concat(transactionId, res, op1, op2)
         }
       } catch (e) {
-        iastLog.error('Error invoking CSI plusOperator')
-          .errorAndPublish(e)
+        log.error('[ASM] Error invoking CSI plusOperator', e)
       }
       return res
     },
@@ -126,8 +124,7 @@ function csiMethodsOverrides (getContext) {
           return TaintedUtils.concat(transactionId, res, ...rest)
         }
       } catch (e) {
-        iastLog.error('Error invoking CSI tplOperator')
-          .errorAndPublish(e)
+        log.error('[ASM] Error invoking CSI tplOperator', e)
       }
       return res
     },
@@ -178,7 +175,7 @@ function csiMethodsOverrides (getContext) {
             }
           }
         } catch (e) {
-          iastLog.error(e)
+          log.error('[ASM] Error invoking CSI JSON.parse', e)
         }
       }
 
@@ -194,7 +191,7 @@ function csiMethodsOverrides (getContext) {
             res = TaintedUtils.arrayJoin(transactionId, res, target, separator)
           }
         } catch (e) {
-          iastLog.error(e)
+          log.error('[ASM] Error invoking CSI join', e)
         }
       }
 
@@ -250,8 +247,7 @@ function lodashTaintTrackingHandler (message) {
       message.result = getLodashTaintedUtilFn(message.operation)(transactionId, message.result, ...message.arguments)
     }
   } catch (e) {
-    iastLog.error(`Error invoking CSI lodash ${message.operation}`)
-      .errorAndPublish(e)
+    log.error('[ASM] Error invoking CSI lodash %s', message.operation, e)
   }
 }
 

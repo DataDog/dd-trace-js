@@ -49,7 +49,7 @@ function analyzePgSqlInjection (ctx) {
 }
 
 function analyzeSqlInjection (query, dbSystem, abortController) {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   if (!store) return
 
   const { req, res } = store
@@ -67,12 +67,14 @@ function analyzeSqlInjection (query, dbSystem, abortController) {
   }
   executedQueries.add(query)
 
-  const persistent = {
+  const ephemeral = {
     [addresses.DB_STATEMENT]: query,
     [addresses.DB_SYSTEM]: dbSystem
   }
 
-  const result = waf.run({ persistent }, req, RULE_TYPES.SQL_INJECTION)
+  const raspRule = { type: RULE_TYPES.SQL_INJECTION }
+
+  const result = waf.run({ ephemeral }, req, raspRule)
 
   handleResult(result, req, res, abortController, config)
 }
@@ -89,7 +91,7 @@ function hasAddressesObjectInputAddress (addressesObject) {
 function clearQuerySet ({ payload }) {
   if (!payload) return
 
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   if (!store) return
 
   const { req } = store

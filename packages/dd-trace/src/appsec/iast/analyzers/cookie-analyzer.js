@@ -2,7 +2,7 @@
 
 const Analyzer = require('./vulnerability-analyzer')
 const { getNodeModulesPaths } = require('../path-line')
-const iastLog = require('../iast-log')
+const log = require('../../../log')
 
 const EXCLUDED_PATHS = getNodeModulesPaths('express/lib/response.js')
 
@@ -16,7 +16,7 @@ class CookieAnalyzer extends Analyzer {
     try {
       this.cookieFilterRegExp = new RegExp(config.iast.cookieFilterPattern)
     } catch {
-      iastLog.error('Invalid regex in cookieFilterPattern')
+      log.error('[ASM] Invalid regex in cookieFilterPattern')
       this.cookieFilterRegExp = /.{32,}/
     }
 
@@ -54,15 +54,15 @@ class CookieAnalyzer extends Analyzer {
     return super._checkOCE(context, value)
   }
 
-  _getLocation (value) {
+  _getLocation (value, callSiteFrames) {
     if (!value) {
-      return super._getLocation()
+      return super._getLocation(value, callSiteFrames)
     }
 
     if (value.location) {
       return value.location
     }
-    const location = super._getLocation(value)
+    const location = super._getLocation(value, callSiteFrames)
     value.location = location
     return location
   }

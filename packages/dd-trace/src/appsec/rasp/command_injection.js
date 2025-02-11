@@ -25,19 +25,26 @@ function disable () {
 }
 
 function analyzeCommandInjection ({ file, fileArgs, shell, abortController }) {
-  if (!file || !shell) return
+  if (!file) return
 
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   const req = store?.req
   if (!req) return
 
-  const commandParams = fileArgs ? [file, ...fileArgs] : file
+  const ephemeral = {}
+  const raspRule = { type: RULE_TYPES.COMMAND_INJECTION }
+  const params = fileArgs ? [file, ...fileArgs] : file
 
-  const persistent = {
-    [addresses.SHELL_COMMAND]: commandParams
+  if (shell) {
+    ephemeral[addresses.SHELL_COMMAND] = params
+    raspRule.variant = 'shell'
+  } else {
+    const commandParams = Array.isArray(params) ? params : [params]
+    ephemeral[addresses.EXEC_COMMAND] = commandParams
+    raspRule.variant = 'exec'
   }
 
-  const result = waf.run({ persistent }, req, RULE_TYPES.COMMAND_INJECTION)
+  const result = waf.run({ ephemeral }, req, raspRule)
 
   const res = store?.res
   handleResult(result, req, res, abortController, config)

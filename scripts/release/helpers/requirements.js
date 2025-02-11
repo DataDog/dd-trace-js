@@ -1,6 +1,6 @@
 'use strict'
 
-/* eslint-disable max-len */
+/* eslint-disable @stylistic/js/max-len */
 
 const { capture, fatal, run } = require('./terminal')
 

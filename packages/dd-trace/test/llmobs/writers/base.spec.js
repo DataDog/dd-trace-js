@@ -138,14 +138,16 @@ describe('BaseLLMObsWriter', () => {
     writer.append({ foo: 'bar' })
 
     const error = new Error('boom')
+    let reqUrl
     request.callsFake((url, options, callback) => {
+      reqUrl = options.url
       callback(error)
     })
 
     writer.flush()
 
     expect(logger.error).to.have.been.calledWith(
-      'Error sending 1 LLMObs undefined events to https://llmobs-intake.datadoghq.com/api/v2/llmobs: boom'
+      'Error sending %d LLMObs %s events to %s: %s', 1, undefined, reqUrl, 'boom', error
     )
   })
 

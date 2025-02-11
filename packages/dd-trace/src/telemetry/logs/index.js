@@ -35,18 +35,23 @@ function onLog (log) {
 }
 
 function onErrorLog (msg) {
-  if (msg instanceof Error) {
-    onLog({
-      level: 'ERROR',
-      message: msg.message,
-      stack_trace: msg.stack
-    })
-  } else if (typeof msg === 'string') {
-    onLog({
-      level: 'ERROR',
-      message: msg
-    })
+  const { message, cause } = msg
+  if (!message && !cause) return
+
+  const telLog = {
+    level: 'ERROR',
+    count: 1,
+
+    // existing log.error(err) without message will be reported as 'Generic Error'
+    message: message ?? 'Generic Error'
   }
+
+  if (cause) {
+    telLog.stack_trace = cause.stack
+    telLog.errorType = cause.constructor.name
+  }
+
+  onLog(telLog)
 }
 
 function start (config) {

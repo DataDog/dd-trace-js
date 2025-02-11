@@ -11,6 +11,7 @@ const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')
 const { schemaDefinitions } = require('../../src/service-naming/schemas')
+const { getInstrumentation } = require('./helpers/load-inst')
 
 global.withVersions = withVersions
 global.withExports = withExports
@@ -18,38 +19,6 @@ global.withNamingSchema = withNamingSchema
 global.withPeerService = withPeerService
 
 const testedPlugins = agent.testedPlugins
-
-function loadInst (plugin) {
-  const instrumentations = []
-
-  try {
-    loadInstFile(`${plugin}/server.js`, instrumentations)
-    loadInstFile(`${plugin}/client.js`, instrumentations)
-  } catch (e) {
-    try {
-      loadInstFile(`${plugin}/main.js`, instrumentations)
-    } catch (e) {
-      loadInstFile(`${plugin}.js`, instrumentations)
-    }
-  }
-
-  return instrumentations
-}
-
-function loadInstFile (file, instrumentations) {
-  const instrument = {
-    addHook (instrumentation) {
-      instrumentations.push(instrumentation)
-    }
-  }
-
-  const instPath = path.join(__dirname, `../../../datadog-instrumentations/src/${file}`)
-
-  proxyquire.noPreserveCache()(instPath, {
-    './helpers/instrument': instrument,
-    '../helpers/instrument': instrument
-  })
-}
 
 function withNamingSchema (
   spanProducerFn,
@@ -162,7 +131,7 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
       agent
         .use(traces => {
           const span = traces[0][0]
-          expect(span.meta).to.have.property('peer.service', service)
+          expect(span.meta).to.have.property('peer.service', typeof service === 'function' ? service() : service)
           expect(span.meta).to.have.property('_dd.peer.service.source', serviceSource)
         })
         .then(done)
@@ -174,7 +143,7 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
 }
 
 function withVersions (plugin, modules, range, cb) {
-  const instrumentations = typeof plugin === 'string' ? loadInst(plugin) : [].concat(plugin)
+  const instrumentations = typeof plugin === 'string' ? getInstrumentation(plugin) : [].concat(plugin)
   const names = instrumentations.map(instrumentation => instrumentation.name)
 
   modules = [].concat(modules)
@@ -283,6 +252,6 @@ exports.mochaHooks = {
   afterEach () {
     agent.reset()
     runtimeMetrics.stop()
-    storage.enterWith(undefined)
+    storage('legacy').enterWith(undefined)
   }
 }

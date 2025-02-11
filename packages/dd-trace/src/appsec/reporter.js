@@ -101,23 +101,23 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
   incrementWafInitMetric(wafVersion, rulesVersion)
 }
 
-function reportMetrics (metrics, raspRuleType) {
-  const store = storage.getStore()
+function reportMetrics (metrics, raspRule) {
+  const store = storage('legacy').getStore()
   const rootSpan = store?.req && web.root(store.req)
   if (!rootSpan) return
 
   if (metrics.rulesVersion) {
     rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
   }
-  if (raspRuleType) {
-    updateRaspRequestsMetricTags(metrics, store.req, raspRuleType)
+  if (raspRule) {
+    updateRaspRequestsMetricTags(metrics, store.req, raspRule)
   } else {
     updateWafRequestsMetricTags(metrics, store.req)
   }
 }
 
 function reportAttack (attackData) {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   const req = store?.req
   const rootSpan = web.root(req)
   if (!rootSpan) return
@@ -148,7 +148,9 @@ function reportAttack (attackData) {
     newTags['_dd.appsec.json'] = '{"triggers":' + attackData + '}'
   }
 
-  newTags['network.client.ip'] = req.socket.remoteAddress
+  if (req.socket) {
+    newTags['network.client.ip'] = req.socket.remoteAddress
+  }
 
   rootSpan.addTags(newTags)
 }
@@ -160,7 +162,7 @@ function isFingerprintDerivative (derivative) {
 function reportDerivatives (derivatives) {
   if (!derivatives) return
 
-  const req = storage.getStore()?.req
+  const req = storage('legacy').getStore()?.req
   const rootSpan = web.root(req)
 
   if (!rootSpan) return

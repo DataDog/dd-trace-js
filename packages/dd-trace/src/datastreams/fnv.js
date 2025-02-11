@@ -15,7 +15,7 @@ function fnv64 (data) {
     data = Buffer.from(data, 'utf-8')
   }
   const byteArray = new Uint8Array(data)
-  return fnv(byteArray, FNV1_64_INIT, FNV_64_PRIME, BigInt(2) ** BigInt(64))
+  return fnv(byteArray, FNV1_64_INIT, FNV_64_PRIME, 2n ** 64n)
 }
 
 module.exports = {

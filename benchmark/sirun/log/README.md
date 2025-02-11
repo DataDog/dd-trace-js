@@ -1,4 +1,4 @@
-This test calls the internal logger on various log levels for 1000 iterations.
+This test calls the internal logger on various log levels for many iterations.
 
 * `without-log` is the baseline that has logging disabled completely.
 * `skip-log` has logs enabled but uses a log level that isn't so that the handler doesn't run.

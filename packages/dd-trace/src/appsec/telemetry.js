@@ -79,7 +79,7 @@ function getOrCreateMetricTags (store, versionsTags) {
   return metricTags
 }
 
-function updateRaspRequestsMetricTags (metrics, req, raspRuleType) {
+function updateRaspRequestsMetricTags (metrics, req, raspRule) {
   if (!req) return
 
   const store = getStore(req)
@@ -89,7 +89,12 @@ function updateRaspRequestsMetricTags (metrics, req, raspRuleType) {
 
   if (!enabled) return
 
-  const tags = { rule_type: raspRuleType, waf_version: metrics.wafVersion }
+  const tags = { rule_type: raspRule.type, waf_version: metrics.wafVersion }
+
+  if (raspRule.variant) {
+    tags.rule_variant = raspRule.variant
+  }
+
   appsecMetrics.count('rasp.rule.eval', tags).inc(1)
 
   if (metrics.wafTimeout) {
@@ -172,6 +177,24 @@ function addRaspRequestMetrics (store, { duration, durationExt }) {
   store[DD_TELEMETRY_REQUEST_METRICS].raspEvalCount++
 }
 
+function incrementMissingUserLoginMetric (framework, eventType) {
+  if (!enabled) return
+
+  appsecMetrics.count('instrum.user_auth.missing_user_login', {
+    framework,
+    event_type: eventType
+  }).inc()
+}
+
+function incrementMissingUserIdMetric (framework, eventType) {
+  if (!enabled) return
+
+  appsecMetrics.count('instrum.user_auth.missing_user_id', {
+    framework,
+    event_type: eventType
+  }).inc()
+}
+
 function getRequestMetrics (req) {
   if (req) {
     const store = getStore(req)
@@ -188,6 +211,8 @@ module.exports = {
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,
+  incrementMissingUserLoginMetric,
+  incrementMissingUserIdMetric,
 
   getRequestMetrics
 }

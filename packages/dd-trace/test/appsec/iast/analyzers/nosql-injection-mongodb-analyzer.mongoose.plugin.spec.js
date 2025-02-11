@@ -10,7 +10,7 @@ const fs = require('fs')
 const { NODE_MAJOR } = require('../../../../../../version')
 
 describe('nosql injection detection in mongodb - whole feature', () => {
-  withVersions('express', 'express', '>4.18.0', expressVersion => {
+  withVersions('mongoose', 'express', expressVersion => {
     withVersions('mongoose', 'mongoose', '>4.0.0', mongooseVersion => {
       const specificMongooseVersion = require(`../../../../../../versions/mongoose@${mongooseVersion}`).version()
       if (NODE_MAJOR === 14 && semver.satisfies(specificMongooseVersion, '>=8')) return
@@ -27,10 +27,15 @@ describe('nosql injection detection in mongodb - whole feature', () => {
         const dbName = id().toString()
         mongoose = require(`../../../../../../versions/mongoose@${mongooseVersion}`).get()
 
-        mongoose.connect(`mongodb://localhost:27017/${dbName}`, {
+        await mongoose.connect(`mongodb://localhost:27017/${dbName}`, {
           useNewUrlParser: true,
           useUnifiedTopology: true
         })
+
+        if (mongoose.models.Test) {
+          delete mongoose.models?.Test
+          delete mongoose.modelSchemas?.Test
+        }
 
         Test = mongoose.model('Test', { name: String })
 
@@ -46,7 +51,12 @@ describe('nosql injection detection in mongodb - whole feature', () => {
       })
 
       after(() => {
-        fs.unlinkSync(tmpFilePath)
+        try {
+          fs.unlinkSync(tmpFilePath)
+        } catch (e) {
+          // ignore the error
+        }
+
         return mongoose.disconnect()
       })
 

@@ -177,45 +177,6 @@ describe('end to end sdk integration tests', () => {
     check(expected, llmobsSpans)
   })
 
-  it('instruments and uninstruments as needed', () => {
-    payloadGenerator = function () {
-      llmobs.disable()
-      llmobs.trace({ kind: 'agent', name: 'llmobsParent' }, () => {
-        llmobs.annotate({ inputData: 'hello', outputData: 'world' })
-        llmobs.enable({ mlApp: 'test1' })
-        llmobs.trace({ kind: 'workflow', name: 'child1' }, () => {
-          llmobs.disable()
-          llmobs.trace({ kind: 'workflow', name: 'child2' }, () => {
-            llmobs.enable({ mlApp: 'test2' })
-            llmobs.trace({ kind: 'workflow', name: 'child3' }, () => {})
-          })
-        })
-      })
-    }
-
-    const { spans, llmobsSpans } = run(payloadGenerator)
-    expect(spans).to.have.lengthOf(4)
-    expect(llmobsSpans).to.have.lengthOf(2)
-
-    const expected = [
-      expectedLLMObsNonLLMSpanEvent({
-        span: spans[1],
-        spanKind: 'workflow',
-        tags: { ...tags, ml_app: 'test1' },
-        name: 'child1'
-      }),
-      expectedLLMObsNonLLMSpanEvent({
-        span: spans[3],
-        spanKind: 'workflow',
-        tags: { ...tags, ml_app: 'test2' },
-        name: 'child3',
-        parentId: spans[1].context().toSpanId()
-      })
-    ]
-
-    check(expected, llmobsSpans)
-  })
-
   it('submits evaluations', () => {
     sinon.stub(Date, 'now').returns(1234567890)
     payloadGenerator = function () {

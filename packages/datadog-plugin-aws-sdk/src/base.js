@@ -67,13 +67,13 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         span.addTags(requestTags)
       }
 
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
 
       this.enter(span, store)
     })
 
     this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, region => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       if (!store) return
       const { span } = store
       if (!span) return
@@ -82,7 +82,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     })
 
     this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ({ response, cbExists = false }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       if (!store) return
       const { span } = store
       if (!span) return
@@ -93,12 +93,17 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         this.responseExtractDSMContext(operation, params, response.data ?? response, span)
       }
       this.addResponseTags(span, response)
+      this.addSpanPointers(span, response)
       this.finish(span, response, response.error)
     })
   }
 
   requestInject (span, request) {
     // implemented by subclasses, or not
+  }
+
+  addSpanPointers (span, response) {
+    // Optionally implemented by subclasses, for services where we're unable to inject trace context
   }
 
   operationFromRequest (request) {

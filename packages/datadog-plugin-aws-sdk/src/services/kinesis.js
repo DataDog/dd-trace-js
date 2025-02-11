@@ -21,7 +21,7 @@ class Kinesis extends BaseAwsSdkPlugin {
 
     this.addSub('apm:aws:response:start:kinesis', obj => {
       const { request, response } = obj
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const plugin = this
 
       // if we have either of these operations, we want to store the streamName param
@@ -42,15 +42,14 @@ class Kinesis extends BaseAwsSdkPlugin {
               {},
               this.requestTags.get(request) || {},
               { 'span.kind': 'server' }
-            ),
-            extractedLinks: responseExtraction.maybeChildOf._links
+            )
           }
           span = plugin.tracer.startSpan('aws.response', options)
           this.enter(span, store)
         }
 
         // get the stream name that should have been stored previously
-        const { streamName } = storage.getStore()
+        const { streamName } = storage('legacy').getStore()
 
         // extract DSM context after as we might not have a parent-child but may have a DSM context
         this.responseExtractDSMContext(
@@ -60,7 +59,7 @@ class Kinesis extends BaseAwsSdkPlugin {
     })
 
     this.addSub('apm:aws:response:finish:kinesis', err => {
-      const { span } = storage.getStore()
+      const { span } = storage('legacy').getStore()
       this.finish(span, null, err)
     })
   }
@@ -80,7 +79,7 @@ class Kinesis extends BaseAwsSdkPlugin {
     if (!params || !params.StreamName) return
 
     const streamName = params.StreamName
-    storage.enterWith({ ...store, streamName })
+    storage('legacy').enterWith({ ...store, streamName })
   }
 
   responseExtract (params, operation, response) {
@@ -98,7 +97,7 @@ class Kinesis extends BaseAwsSdkPlugin {
         parsedAttributes: decodedData._datadog
       }
     } catch (e) {
-      log.error(e)
+      log.error('Kinesis error extracting response', e)
     }
   }
 

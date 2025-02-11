@@ -20,7 +20,7 @@ class Sqs extends BaseAwsSdkPlugin {
 
     this.addSub('apm:aws:response:start:sqs', obj => {
       const { request, response } = obj
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const plugin = this
       const contextExtraction = this.responseExtract(request.params, request.operation, response)
       let span
@@ -33,8 +33,7 @@ class Sqs extends BaseAwsSdkPlugin {
             {},
             this.requestTags.get(request) || {},
             { 'span.kind': 'server' }
-          ),
-          extractedLinks: contextExtraction.datadogContext._links
+          )
         }
         parsedMessageAttributes = contextExtraction.parsedAttributes
         span = plugin.tracer.startSpan('aws.response', options)
@@ -48,7 +47,7 @@ class Sqs extends BaseAwsSdkPlugin {
     })
 
     this.addSub('apm:aws:response:finish:sqs', err => {
-      const { span } = storage.getStore()
+      const { span } = storage('legacy').getStore()
       this.finish(span, null, err)
     })
   }
@@ -164,7 +163,7 @@ class Sqs extends BaseAwsSdkPlugin {
         return JSON.parse(buffer)
       }
     } catch (e) {
-      log.error(e)
+      log.error('Sqs error parsing DD attributes', e)
     }
   }
 

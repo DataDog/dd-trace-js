@@ -1,8 +1,13 @@
 /* eslint-disable */
 let isEarlyFlakeDetectionEnabled = false
+let isKnownTestsEnabled = false
 let knownTestsForSuite = []
 let suiteTests = []
 let earlyFlakeDetectionNumRetries = 0
+// We need to grab the original window as soon as possible,
+// in case the test changes the origin. If the test does change the origin,
+// any call to `cy.window()` will result in a cross origin error.
+let originalWindow
 
 // If the test is using multi domain with cy.origin, trying to access
 // window properties will result in a cross origin error.
@@ -33,7 +38,7 @@ function retryTest (test, suiteTests) {
 
 const oldRunTests = Cypress.mocha.getRunner().runTests
 Cypress.mocha.getRunner().runTests = function (suite, fn) {
-  if (!isEarlyFlakeDetectionEnabled) {
+  if (!isKnownTestsEnabled) {
     return oldRunTests.apply(this, arguments)
   }
   // We copy the new tests at the beginning of the suite run (runTests), so that they're run
@@ -41,7 +46,9 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
   suite.tests.forEach(test => {
     if (!test._ddIsNew && !test.isPending() && isNewTest(test)) {
       test._ddIsNew = true
-      retryTest(test, suite.tests)
+      if (isEarlyFlakeDetectionEnabled) {
+        retryTest(test, suite.tests)
+      }
     }
   })
 
@@ -58,6 +65,9 @@ beforeEach(function () {
       this.skip()
     }
   })
+  cy.window().then(win => {
+    originalWindow = win
+  })
 })
 
 before(function () {
@@ -67,6 +77,7 @@ before(function () {
   }).then((suiteConfig) => {
     if (suiteConfig) {
       isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled
+      isKnownTestsEnabled = suiteConfig.isKnownTestsEnabled
       knownTestsForSuite = suiteConfig.knownTestsForSuite
       earlyFlakeDetectionNumRetries = suiteConfig.earlyFlakeDetectionNumRetries
     }
@@ -74,38 +85,39 @@ before(function () {
 })
 
 after(() => {
-  cy.window().then(win => {
-    if (safeGetRum(win)) {
-      win.dispatchEvent(new Event('beforeunload'))
+  try {
+    if (safeGetRum(originalWindow)) {
+      originalWindow.dispatchEvent(new Event('beforeunload'))
     }
-  })
+  } catch (e) {
+    // ignore error. It's usually a multi origin issue.
+  }
 })
 
 
 afterEach(function () {
-  cy.window().then(win => {
-    const currentTest = Cypress.mocha.getRunner().suite.ctx.currentTest
-    const testInfo = {
-      testName: currentTest.fullTitle(),
-      testSuite: Cypress.mocha.getRootSuite().file,
-      state: currentTest.state,
-      error: currentTest.err,
-      isNew: currentTest._ddIsNew,
-      isEfdRetry: currentTest._ddIsEfdRetry
-    }
-    try {
-      testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line
-    } catch (e) {}
+  const currentTest = Cypress.mocha.getRunner().suite.ctx.currentTest
+  const testInfo = {
+    testName: currentTest.fullTitle(),
+    testSuite: Cypress.mocha.getRootSuite().file,
+    testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
+    state: currentTest.state,
+    error: currentTest.err,
+    isNew: currentTest._ddIsNew,
+    isEfdRetry: currentTest._ddIsEfdRetry
+  }
+  try {
+    testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line
+  } catch (e) {}
 
-    if (safeGetRum(win)) {
-      testInfo.isRUMActive = true
-    }
-    let coverage
-    try {
-      coverage = win.__coverage__
-    } catch (e) {
-      // ignore error and continue
-    }
-    cy.task('dd:afterEach', { test: testInfo, coverage })
-  })
+  if (safeGetRum(originalWindow)) {
+    testInfo.isRUMActive = true
+  }
+  let coverage
+  try {
+    coverage = originalWindow.__coverage__
+  } catch (e) {
+    // ignore error and continue
+  }
+  cy.task('dd:afterEach', { test: testInfo, coverage })
 })

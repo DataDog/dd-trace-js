@@ -22,7 +22,9 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   JEST_DISPLAY_NAME,
   TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_DRIVER
+  TEST_BROWSER_DRIVER,
+  getFormattedError,
+  TEST_RETRY_REASON
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -42,6 +44,16 @@ const isJestWorker = !!process.env.JEST_WORKER_ID
 
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
+
+function withTimeout (promise, timeoutMs) {
+  return new Promise(resolve => {
+    // Set a timeout to resolve after 1s
+    setTimeout(resolve, timeoutMs)
+
+    // Also resolve if the original promise resolves
+    promise.then(resolve)
+  })
+}
 
 class JestPlugin extends CiPlugin {
   static get id () {
@@ -155,6 +167,8 @@ class JestPlugin extends CiPlugin {
         config._ddRepositoryRoot = this.repositoryRoot
         config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
         config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
+        config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
+        config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
       })
     })
 
@@ -219,8 +233,7 @@ class JestPlugin extends CiPlugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
-        },
-        extractedLinks: testSessionSpanContext?._links
+        }
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (_ddTestCodeCoverageEnabled) {
@@ -254,6 +267,12 @@ class JestPlugin extends CiPlugin {
       })
     })
 
+    this.addSub('ci:jest:worker-report:logs', (logsPayloads) => {
+      JSON.parse(logsPayloads).forEach(({ testConfiguration, logMessage }) => {
+        this.tracer._exporter.exportDiLogs(testConfiguration, logMessage)
+      })
+    })
+
     this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage, error }) => {
       this.testSuiteSpan.setTag(TEST_STATUS, status)
       if (error) {
@@ -272,6 +291,7 @@ class JestPlugin extends CiPlugin {
       if (isJestWorker) {
         this.tracer._exporter.flush()
       }
+      this.removeAllDiProbes()
     })
 
     /**
@@ -298,14 +318,15 @@ class JestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:jest:test:start', (test) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = this.startTestSpan(test)
 
       this.enter(span, store)
+      this.activeTestSpan = span
     })
 
     this.addSub('ci:jest:test:finish', ({ status, testStartLine }) => {
-      const span = storage.getStore().span
+      const span = storage('legacy').getStore().span
       span.setTag(TEST_STATUS, status)
       if (testStartLine) {
         span.setTag(TEST_SOURCE_START, testStartLine)
@@ -325,15 +346,23 @@ class JestPlugin extends CiPlugin {
 
       span.finish()
       finishAllTraceSpans(span)
+      this.activeTestSpan = null
     })
 
-    this.addSub('ci:jest:test:err', (error) => {
+    this.addSub('ci:jest:test:err', ({ error, shouldSetProbe, promises }) => {
       if (error) {
-        const store = storage.getStore()
+        const store = storage('legacy').getStore()
         if (store && store.span) {
           const span = store.span
           span.setTag(TEST_STATUS, 'fail')
-          span.setTag('error', error)
+          span.setTag('error', getFormattedError(error, this.repositoryRoot))
+          if (shouldSetProbe) {
+            const probeInformation = this.addDiProbe(error)
+            if (probeInformation) {
+              const { setProbePromise } = probeInformation
+              promises.isProbeReady = withTimeout(setProbePromise, 2000)
+            }
+          }
         }
       }
     })
@@ -349,7 +378,6 @@ class JestPlugin extends CiPlugin {
     const {
       suite,
       name,
-      runner,
       displayName,
       testParameters,
       frameworkVersion,
@@ -361,7 +389,7 @@ class JestPlugin extends CiPlugin {
     } = test
 
     const extraTags = {
-      [JEST_TEST_RUNNER]: runner,
+      [JEST_TEST_RUNNER]: 'jest-circus',
       [TEST_PARAMETERS]: testParameters,
       [TEST_FRAMEWORK_VERSION]: frameworkVersion
     }
@@ -379,6 +407,7 @@ class JestPlugin extends CiPlugin {
       extraTags[TEST_IS_NEW] = 'true'
       if (isEfdRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
+        extraTags[TEST_RETRY_REASON] = 'efd'
       }
     }
 

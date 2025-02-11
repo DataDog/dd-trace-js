@@ -2,8 +2,7 @@
 
 require('../setup/tap')
 
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
+const msgpack = require('@msgpack/msgpack')
 const id = require('../../src/id')
 
 function randString (length) {
@@ -36,7 +35,7 @@ describe('encode 0.5', () => {
         example: 1
       },
       start: 123123123123123120,
-      duration: 456456456456456456,
+      duration: 4564564564564564,
       links: []
     }]
   })
@@ -45,7 +44,7 @@ describe('encode 0.5', () => {
     encoder.encode(data)
 
     const buffer = encoder.makePayload()
-    const decoded = msgpack.decode(buffer, { codec })
+    const decoded = msgpack.decode(buffer, { useBigInt64: true })
     const stringMap = decoded[0]
     const trace = decoded[1][0]
 
@@ -57,8 +56,8 @@ describe('encode 0.5', () => {
     expect(trace[0][3].toString(16)).to.equal(data[0].trace_id.toString())
     expect(trace[0][4].toString(16)).to.equal(data[0].span_id.toString())
     expect(trace[0][5].toString(16)).to.equal(data[0].parent_id.toString())
-    expect(trace[0][6].toNumber()).to.equal(data[0].start)
-    expect(trace[0][7].toNumber()).to.equal(data[0].duration)
+    expect(trace[0][6]).to.equal(BigInt(data[0].start))
+    expect(trace[0][7]).to.equal(BigInt(data[0].duration))
     expect(trace[0][8]).to.equal(0)
     expect(trace[0][9]).to.deep.equal({ [stringMap.indexOf('bar')]: stringMap.indexOf('baz') })
     expect(trace[0][10]).to.deep.equal({ [stringMap.indexOf('example')]: 1 })
@@ -75,7 +74,7 @@ describe('encode 0.5', () => {
     encoder.encode(data)
 
     const buffer = encoder.makePayload()
-    const decoded = msgpack.decode(buffer, { codec })
+    const decoded = msgpack.decode(buffer, { useBigInt64: true })
     const stringMap = decoded[0]
     const trace = decoded[1][0]
     expect(stringMap).to.include('events')
@@ -101,7 +100,7 @@ describe('encode 0.5', () => {
     encoder.encode(data)
 
     const buffer = encoder.makePayload()
-    const decoded = msgpack.decode(buffer, { codec })
+    const decoded = msgpack.decode(buffer, { useBigInt64: true })
     const stringMap = decoded[0]
     const trace = decoded[1][0]
 
@@ -115,8 +114,8 @@ describe('encode 0.5', () => {
     expect(trace[0][3].toString(16)).to.equal(data[0].trace_id.toString())
     expect(trace[0][4].toString(16)).to.equal(data[0].span_id.toString())
     expect(trace[0][5].toString(16)).to.equal(data[0].parent_id.toString())
-    expect(trace[0][6].toNumber()).to.equal(data[0].start)
-    expect(trace[0][7].toNumber()).to.equal(data[0].duration)
+    expect(trace[0][6]).to.equal(BigInt(data[0].start))
+    expect(trace[0][7]).to.equal(BigInt(data[0].duration))
     expect(trace[0][8]).to.equal(0)
     expect(trace[0][9]).to.deep.equal({
       [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
@@ -135,7 +134,7 @@ describe('encode 0.5', () => {
     encoder.encode(data)
 
     const buffer = encoder.makePayload()
-    const decoded = msgpack.decode(buffer, { codec })
+    const decoded = msgpack.decode(buffer, { useBigInt64: true })
     const stringMap = decoded[0]
     const trace = decoded[1][0]
 
@@ -149,8 +148,8 @@ describe('encode 0.5', () => {
     expect(trace[0][3].toString(16)).to.equal(data[0].trace_id.toString())
     expect(trace[0][4].toString(16)).to.equal(data[0].span_id.toString())
     expect(trace[0][5].toString(16)).to.equal(data[0].parent_id.toString())
-    expect(trace[0][6].toNumber()).to.equal(data[0].start)
-    expect(trace[0][7].toNumber()).to.equal(data[0].duration)
+    expect(trace[0][6]).to.equal(BigInt(data[0].start))
+    expect(trace[0][7]).to.equal(BigInt(data[0].duration))
     expect(trace[0][8]).to.equal(0)
     expect(trace[0][9]).to.deep.equal({
       [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
@@ -168,7 +167,7 @@ describe('encode 0.5', () => {
     encoder.encode(data)
 
     const buffer = encoder.makePayload()
-    const decoded = msgpack.decode(buffer, { codec })
+    const decoded = msgpack.decode(buffer, { useBigInt64: true })
     const trace = decoded[1][0]
 
     expect(trace[0][3].toString(16)).to.equal('1234abcd1234abcd')
@@ -217,7 +216,7 @@ describe('encode 0.5', () => {
     encoder.encode(data)
 
     const buffer = encoder.makePayload()
-    const decoded = msgpack.decode(buffer, { codec })
+    const decoded = msgpack.decode(buffer, { useBigInt64: true })
     const stringMap = decoded[0]
     const trace = decoded[1][0]
 
@@ -229,8 +228,8 @@ describe('encode 0.5', () => {
     expect(trace[0][3].toString(16)).to.equal(data[0].trace_id.toString())
     expect(trace[0][4].toString(16)).to.equal(data[0].span_id.toString())
     expect(trace[0][5].toString(16)).to.equal(data[0].parent_id.toString())
-    expect(trace[0][6].toNumber()).to.equal(data[0].start)
-    expect(trace[0][7].toNumber()).to.equal(data[0].duration)
+    expect(trace[0][6]).to.equal(BigInt(data[0].start))
+    expect(trace[0][7]).to.equal(BigInt(data[0].duration))
     expect(trace[0][8]).to.equal(0)
     expect(trace[0][9]).to.deep.equal({ [stringMap.indexOf('bar')]: stringMap.indexOf('baz') })
     expect(trace[0][10]).to.deep.equal({ [stringMap.indexOf('example')]: 1 })

@@ -91,7 +91,7 @@ class DatadogTracer {
       }
       this._propagators[format].inject(context, carrier)
     } catch (e) {
-      log.error(e)
+      log.error('Error injecting trace', e)
       runtimeMetrics.increment('datadog.tracer.node.inject.errors', true)
     }
   }
@@ -100,7 +100,7 @@ class DatadogTracer {
     try {
       return this._propagators[format].extract(carrier)
     } catch (e) {
-      log.error(e)
+      log.error('Error extracting trace', e)
       runtimeMetrics.increment('datadog.tracer.node.extract.errors', true)
       return null
     }

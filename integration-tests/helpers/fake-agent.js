@@ -5,8 +5,7 @@ const EventEmitter = require('events')
 const http = require('http')
 const express = require('express')
 const bodyParser = require('body-parser')
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
+const msgpack = require('@msgpack/msgpack')
 const upload = require('multer')()
 
 module.exports = class FakeAgent extends EventEmitter {
@@ -241,7 +240,7 @@ function buildExpressServer (agent) {
     res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
     agent.emit('message', {
       headers: req.headers,
-      payload: msgpack.decode(req.body, { codec })
+      payload: msgpack.decode(req.body, { useBigInt64: true })
     })
   })
 
@@ -326,6 +325,7 @@ function buildExpressServer (agent) {
     res.status(200).send()
     agent.emit('debugger-input', {
       headers: req.headers,
+      query: req.query,
       payload: req.body
     })
   })
@@ -360,6 +360,14 @@ function buildExpressServer (agent) {
     agent.emit('llmobs', {
       headers: req.headers,
       payload: req.body
+    })
+  })
+
+  // Ensure that any failure inside of Express isn't swallowed and returned as a 500, but instead crashes the test
+  app.use((err, req, res, next) => {
+    if (!err) next()
+    process.nextTick(() => {
+      throw err
     })
   })
 

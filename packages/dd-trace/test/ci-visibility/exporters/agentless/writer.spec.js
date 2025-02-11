@@ -113,7 +113,7 @@ describe('CI Visibility Writer', () => {
         encoder.count.returns(1)
 
         writer.flush(() => {
-          expect(log.error).to.have.been.calledWith(error)
+          expect(log.error).to.have.been.calledWith('Error sending CI agentless payload', error)
           done()
         })
       })

@@ -15,7 +15,8 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
-  TELEMETRY_TEST_SESSION
+  TELEMETRY_TEST_SESSION,
+  TEST_RETRY_REASON
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -67,7 +68,7 @@ class PlaywrightPlugin extends CiPlugin {
     })
 
     this.addSub('ci:playwright:test-suite:start', (testSuiteAbsolutePath) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
       const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
 
@@ -101,7 +102,7 @@ class PlaywrightPlugin extends CiPlugin {
     })
 
     this.addSub('ci:playwright:test-suite:finish', ({ status, error }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = store && store.span
       if (!span) return
       if (error) {
@@ -120,7 +121,7 @@ class PlaywrightPlugin extends CiPlugin {
     })
 
     this.addSub('ci:playwright:test:start', ({ testName, testSuiteAbsolutePath, testSourceLine, browserName }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
       const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const span = this.startTestSpan(testName, testSuite, testSourceFile, testSourceLine, browserName)
@@ -128,7 +129,7 @@ class PlaywrightPlugin extends CiPlugin {
       this.enter(span, store)
     })
     this.addSub('ci:playwright:test:finish', ({ testStatus, steps, error, extraTags, isNew, isEfdRetry, isRetry }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = store && store.span
       if (!span) return
 
@@ -144,6 +145,7 @@ class PlaywrightPlugin extends CiPlugin {
         span.setTag(TEST_IS_NEW, 'true')
         if (isEfdRetry) {
           span.setTag(TEST_IS_RETRY, 'true')
+          span.setTag(TEST_RETRY_REASON, 'efd')
         }
       }
       if (isRetry) {

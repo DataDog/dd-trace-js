@@ -111,14 +111,16 @@ describe('tagger', () => {
         const parentSpan = {
           context () {
             return {
-              _tags: {
-                '_ml_obs.meta.ml_app': 'my-ml-app',
-                '_ml_obs.session_id': 'my-session'
-              },
               toSpanId () { return '5678' }
             }
           }
         }
+
+        Tagger.tagMap.set(parentSpan, {
+          '_ml_obs.meta.ml_app': 'my-ml-app',
+          '_ml_obs.session_id': 'my-session'
+        })
+
         tagger.registerLLMObsSpan(span, { kind: 'llm', parent: parentSpan })
 
         expect(Tagger.tagMap.get(span)).to.deep.equal({
@@ -470,6 +472,29 @@ describe('tagger', () => {
       it('throws when the value is not JSON serializable', () => {
         const data = unserializbleObject()
         expect(() => tagger.tagTextIO(span, data, 'output')).to.throw()
+      })
+    })
+
+    describe('changeKind', () => {
+      it('changes the span kind', () => {
+        tagger._register(span)
+        tagger._setTag(span, '_ml_obs.meta.span.kind', 'old-kind')
+        expect(Tagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'old-kind'
+        })
+        tagger.changeKind(span, 'new-kind')
+        expect(Tagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'new-kind'
+        })
+      })
+
+      it('sets the kind if it is not already set', () => {
+        tagger._register(span)
+        expect(Tagger.tagMap.get(span)).to.deep.equal({})
+        tagger.changeKind(span, 'new-kind')
+        expect(Tagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'new-kind'
+        })
       })
     })
   })

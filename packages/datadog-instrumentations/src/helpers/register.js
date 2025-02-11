@@ -7,7 +7,7 @@ const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
 const checkRequireCache = require('../check_require_cache')
-const telemetry = require('../../../dd-trace/src/telemetry/init-telemetry')
+const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 
 const {
   DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
@@ -103,8 +103,7 @@ for (const packageName of names) {
         try {
           version = version || getVersion(moduleBaseDir)
         } catch (e) {
-          log.error(`Error getting version for "${name}": ${e.message}`)
-          log.error(e)
+          log.error('Error getting version for "%s": %s', name, e.message, e)
           continue
         }
         if (typeof namesAndSuccesses[`${name}@${version}`] === 'undefined') {
@@ -146,7 +145,7 @@ for (const packageName of names) {
           `integration:${name}`,
           `integration_version:${version}`
         ])
-        log.info(`Found incompatible integration version: ${nameVersion}`)
+        log.info('Found incompatible integration version: %s', nameVersion)
         seenCombo.add(nameVersion)
       }
     }

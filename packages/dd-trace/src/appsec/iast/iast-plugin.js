@@ -2,7 +2,6 @@
 
 const { channel } = require('dc-polyfill')
 
-const iastLog = require('./iast-log')
 const Plugin = require('../../plugins/plugin')
 const iastTelemetry = require('./telemetry')
 const { getInstrumentedMetric, getExecutedMetric, TagKey, EXECUTED_SOURCE, formatTags } =
@@ -10,6 +9,7 @@ const { getInstrumentedMetric, getExecutedMetric, TagKey, EXECUTED_SOURCE, forma
 const { storage } = require('../../../../datadog-core')
 const { getIastContext } = require('./iast-context')
 const instrumentations = require('../../../../datadog-instrumentations/src/helpers/instrumentations')
+const log = require('../../log')
 
 /**
  * Used by vulnerability sources and sinks to subscribe diagnostic channel events
@@ -60,28 +60,14 @@ class IastPlugin extends Plugin {
     this.pluginSubs = []
   }
 
-  _wrapHandler (handler) {
-    return (message, name) => {
-      try {
-        handler(message, name)
-      } catch (e) {
-        iastLog.errorAndPublish(e)
-      }
-    }
-  }
-
   _getTelemetryHandler (iastSub) {
     return () => {
-      try {
-        const iastContext = getIastContext(storage.getStore())
-        iastSub.increaseExecuted(iastContext)
-      } catch (e) {
-        iastLog.errorAndPublish(e)
-      }
+      const iastContext = getIastContext(storage('legacy').getStore())
+      iastSub.increaseExecuted(iastContext)
     }
   }
 
-  _execHandlerAndIncMetric ({ handler, metric, tags, iastContext = getIastContext(storage.getStore()) }) {
+  _execHandlerAndIncMetric ({ handler, metric, tags, iastContext = getIastContext(storage('legacy').getStore()) }) {
     try {
       const result = handler()
       if (iastTelemetry.isEnabled()) {
@@ -93,17 +79,17 @@ class IastPlugin extends Plugin {
       }
       return result
     } catch (e) {
-      iastLog.errorAndPublish(e)
+      log.error('[ASM] Error executing handler or increasing metrics', e)
     }
   }
 
   addSub (iastSub, handler) {
     if (typeof iastSub === 'string') {
-      super.addSub(iastSub, this._wrapHandler(handler))
+      super.addSub(iastSub, handler)
     } else {
       iastSub = this._getAndRegisterSubscription(iastSub)
       if (iastSub) {
-        super.addSub(iastSub.channelName, this._wrapHandler(handler))
+        super.addSub(iastSub.channelName, handler)
 
         if (iastTelemetry.isEnabled()) {
           super.addSub(iastSub.channelName, this._getTelemetryHandler(iastSub))
@@ -112,7 +98,8 @@ class IastPlugin extends Plugin {
     }
   }
 
-  enable () {
+  enable (iastConfig) {
+    this.iastConfig = iastConfig
     this.configure(true)
   }
 

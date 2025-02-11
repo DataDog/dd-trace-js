@@ -14,6 +14,7 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const spanleak = require('../spanleak')
+const util = require('util')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -64,7 +65,7 @@ class DatadogSpan {
     this._debug = debug
     this._processor = processor
     this._prioritySampler = prioritySampler
-    this._store = storage.getStore()
+    this._store = storage('legacy').getHandle()
     this._duration = undefined
 
     this._events = []
@@ -105,9 +106,18 @@ class DatadogSpan {
     }
   }
 
+  [util.inspect.custom] () {
+    return {
+      ...this,
+      _parentTracer: `[${this._parentTracer.constructor.name}]`,
+      _prioritySampler: `[${this._prioritySampler.constructor.name}]`,
+      _processor: `[${this._processor.constructor.name}]`
+    }
+  }
+
   toString () {
     const spanContext = this.context()
-    const resourceName = spanContext._tags['resource.name']
+    const resourceName = spanContext._tags['resource.name'] || ''
     const resource = resourceName.length > 100
       ? `${resourceName.substring(0, 97)}...`
       : resourceName
@@ -180,6 +190,20 @@ class DatadogSpan {
     })
   }
 
+  addSpanPointer (ptrKind, ptrDir, ptrHash) {
+    const zeroContext = new SpanContext({
+      traceId: id('0'),
+      spanId: id('0')
+    })
+    const attributes = {
+      'ptr.kind': ptrKind,
+      'ptr.dir': ptrDir,
+      'ptr.hash': ptrHash,
+      'link.kind': 'span-pointer'
+    }
+    this.addLink(zeroContext, attributes)
+  }
+
   addEvent (name, attributesOrStartTime, startTime) {
     const event = { name }
     if (attributesOrStartTime) {
@@ -200,7 +224,7 @@ class DatadogSpan {
 
     if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true') {
       if (!this._spanContext._tags['service.name']) {
-        log.error(`Finishing invalid span: ${this}`)
+        log.error('Finishing invalid span: %s', this)
       }
     }
 

@@ -15,7 +15,7 @@ function isUserBlocked (user) {
 
 function checkUserAndSetUser (tracer, user) {
   if (!user || !user.id) {
-    log.warn('Invalid user provided to isUserBlocked')
+    log.warn('[ASM] Invalid user provided to isUserBlocked')
     return false
   }
 
@@ -23,9 +23,10 @@ function checkUserAndSetUser (tracer, user) {
   if (rootSpan) {
     if (!rootSpan.context()._tags['usr.id']) {
       setUserTags(user, rootSpan)
+      rootSpan.setTag('_dd.appsec.user.collection_mode', 'sdk')
     }
   } else {
-    log.warn('Root span not available in isUserBlocked')
+    log.warn('[ASM] Root span not available in isUserBlocked')
   }
 
   return isUserBlocked(user)
@@ -33,7 +34,7 @@ function checkUserAndSetUser (tracer, user) {
 
 function blockRequest (tracer, req, res) {
   if (!req || !res) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     if (store) {
       req = req || store.req
       res = res || store.res
@@ -41,13 +42,13 @@ function blockRequest (tracer, req, res) {
   }
 
   if (!req || !res) {
-    log.warn('Requests or response object not available in blockRequest')
+    log.warn('[ASM] Requests or response object not available in blockRequest')
     return false
   }
 
   const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
-    log.warn('Root span not available in blockRequest')
+    log.warn('[ASM] Root span not available in blockRequest')
     return false
   }
 

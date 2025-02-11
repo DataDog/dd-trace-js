@@ -13,7 +13,7 @@ addHook({ name: 'sequelize', versions: ['>=4'] }, Sequelize => {
   const finishCh = channel('datadog:sequelize:query:finish')
 
   shimmer.wrap(Sequelize.prototype, 'query', query => {
-    return function (sql) {
+    return function (sql, options) {
       if (!startCh.hasSubscribers) {
         return query.apply(this, arguments)
       }
@@ -27,9 +27,14 @@ addHook({ name: 'sequelize', versions: ['>=4'] }, Sequelize => {
         dialect = this.dialect.name
       }
 
-      function onFinish () {
+      function onFinish (result) {
+        const type = options?.type || 'RAW'
+        if (type === 'RAW' && result?.length > 1) {
+          result = result[0]
+        }
+
         asyncResource.bind(function () {
-          finishCh.publish()
+          finishCh.publish({ result })
         }, this).apply(this)
       }
 
@@ -40,7 +45,7 @@ addHook({ name: 'sequelize', versions: ['>=4'] }, Sequelize => {
         })
 
         const promise = query.apply(this, arguments)
-        promise.then(onFinish, onFinish)
+        promise.then(onFinish, () => { onFinish() })
 
         return promise
       }, this).apply(this, arguments)

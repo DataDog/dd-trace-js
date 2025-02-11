@@ -85,10 +85,6 @@ interface Tracer extends opentracing.Tracer {
    * span will finish when that callback is called.
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
-   *
-   * If the `orphanable` option is set to false, the function will not be traced
-   * unless there is already an active span or `childOf` option. Note that this
-   * option is deprecated and has been removed in version 4.0.
    */
   trace<T> (name: string, fn: (span: tracer.Span) => T): T;
   trace<T> (name: string, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T;
@@ -179,6 +175,7 @@ interface Plugins {
   "kafkajs": tracer.plugins.kafkajs
   "knex": tracer.plugins.knex;
   "koa": tracer.plugins.koa;
+  "langchain": tracer.plugins.langchain;
   "mariadb": tracer.plugins.mariadb;
   "memcached": tracer.plugins.memcached;
   "microgateway-core": tracer.plugins.microgateway_core;
@@ -654,12 +651,24 @@ declare namespace tracer {
        */
       eventTracking?: {
         /**
-         * Controls the automated user event tracking mode. Possible values are disabled, safe and extended.
-         * On safe mode, any detected Personally Identifiable Information (PII) about the user will be redacted from the event.
-         * On extended mode, no redaction will take place.
-         * @default 'safe'
+         * Controls the automated user tracking mode for user IDs and logins collections. Possible values:
+         * *  'anonymous': will hash user IDs and user logins before collecting them
+         * *  'anon': alias for 'anonymous'
+         * *  'safe': deprecated alias for 'anonymous'
+         *
+         * *  'identification': will collect user IDs and logins without redaction
+         * *  'ident': alias for 'identification'
+         * *  'extended': deprecated alias for 'identification'
+         *
+         * *  'disabled': will not collect user IDs and logins
+         *
+         * Unknown values will be considered as 'disabled'
+         * @default 'identification'
          */
-        mode?: 'safe' | 'extended' | 'disabled'
+        mode?:
+          'anonymous' | 'anon' | 'safe' |
+          'identification' | 'ident' | 'extended' |
+          'disabled'
       },
       /**
        * Configuration for Api Security
@@ -751,7 +760,7 @@ declare namespace tracer {
        */
       maxDepth?: number
     }
-    
+
     /**
      * Configuration enabling LLM Observability. Enablement is superceded by the DD_LLMOBS_ENABLED environment variable.
      */
@@ -1594,6 +1603,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [langchain](https://js.langchain.com/) module
+     */
+    interface langchain extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [ldapjs](https://github.com/ldapjs/node-ldapjs/) module.
      */
     interface ldapjs extends Instrumentation {}
@@ -2185,6 +2200,12 @@ declare namespace tracer {
     cookieFilterPattern?: string,
 
     /**
+     * Defines the number of rows to taint in data coming from databases
+     * @default 1
+     */
+    dbRowsToTaint?: number,
+
+    /**
      * Whether to enable vulnerability deduplication
      */
     deduplicationEnabled?: boolean,
@@ -2208,7 +2229,17 @@ declare namespace tracer {
     /**
      * Specifies the verbosity of the sent telemetry. Default 'INFORMATION'
      */
-    telemetryVerbosity?: string
+    telemetryVerbosity?: string,
+
+    /**
+     * Configuration for stack trace reporting
+     */
+    stackTrace?: {
+      /** Whether to enable stack trace reporting.
+       * @default true
+       */
+      enabled?: boolean,
+    }
   }
 
   export namespace llmobs {
@@ -2228,7 +2259,7 @@ declare namespace tracer {
        * Disable LLM Observability tracing.
        */
       disable (): void,
-      
+
       /**
        * Instruments a function by automatically creating a span activated on its
        * scope.
@@ -2270,10 +2301,10 @@ declare namespace tracer {
       /**
        * Decorate a function in a javascript runtime that supports function decorators.
        * Note that this is **not** supported in the Node.js runtime, but is in TypeScript.
-       * 
+       *
        * In TypeScript, this decorator is only supported in contexts where general TypeScript
        * function decorators are supported.
-       * 
+       *
        * @param options Optional LLM Observability span options.
        */
       decorate (options: llmobs.LLMObsNamelessSpanOptions): any
@@ -2290,7 +2321,7 @@ declare namespace tracer {
       /**
        * Sets inputs, outputs, tags, metadata, and metrics as provided for a given LLM Observability span.
        * Note that with the exception of tags, this method will override any existing values for the provided fields.
-       * 
+       *
        * For example:
        * ```javascript
        * llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'gpt-4o', modelProvider: 'openai' }, () => {
@@ -2303,7 +2334,7 @@ declare namespace tracer {
        *  })
        * })
        * ```
-       * 
+       *
        * @param span The span to annotate (defaults to the current LLM Observability span if not provided)
        * @param options An object containing the inputs, outputs, tags, metadata, and metrics to set on the span.
        */
@@ -2479,14 +2510,14 @@ declare namespace tracer {
        * LLM Observability span kind. One of `agent`, `workflow`, `task`, `tool`, `retrieval`, `embedding`, or `llm`.
        */
       kind: llmobs.spanKind,
-  
+
       /**
        * The ID of the underlying user session. Required for tracking sessions.
        */
       sessionId?: string,
 
       /**
-       * The name of the ML application that the agent is orchestrating. 
+       * The name of the ML application that the agent is orchestrating.
        * If not provided, the default value will be set to mlApp provided during initalization, or `DD_LLMOBS_ML_APP`.
        */
       mlApp?: string,

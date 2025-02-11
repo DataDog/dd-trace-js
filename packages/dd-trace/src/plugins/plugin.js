@@ -10,7 +10,7 @@ class Subscription {
   constructor (event, handler) {
     this._channel = dc.channel(event)
     this._handler = (message, name) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       if (!store || !store.noop) {
         handler(message, name)
       }
@@ -30,7 +30,7 @@ class StoreBinding {
   constructor (event, transform) {
     this._channel = dc.channel(event)
     this._transform = data => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
 
       return !store || !store.noop
         ? transform(data)
@@ -39,11 +39,11 @@ class StoreBinding {
   }
 
   enable () {
-    this._channel.bindStore(storage, this._transform)
+    this._channel.bindStore(storage('legacy'), this._transform)
   }
 
   disable () {
-    this._channel.unbindStore(storage, this._transform)
+    this._channel.unbindStore(storage('legacy'))
   }
 }
 
@@ -62,14 +62,14 @@ module.exports = class Plugin {
   }
 
   enter (span, store) {
-    store = store || storage.getStore()
-    storage.enterWith({ ...store, span })
+    store = store || storage('legacy').getStore()
+    storage('legacy').enterWith({ ...store, span })
   }
 
   // TODO: Implement filters on resource name for all plugins.
   /** Prevents creation of spans here and for all async descendants. */
   skip () {
-    storage.enterWith({ noop: true })
+    storage('legacy').enterWith({ noop: true })
   }
 
   addSub (channelName, handler) {
@@ -79,7 +79,7 @@ module.exports = class Plugin {
         return handler.apply(this, arguments)
       } catch (e) {
         logger.error('Error in plugin handler:', e)
-        logger.info('Disabling plugin:', plugin.id)
+        logger.info('Disabling plugin: %s', plugin.id)
         plugin.configure(false)
       }
     }
@@ -91,7 +91,7 @@ module.exports = class Plugin {
   }
 
   addError (error) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
 
     if (!store || !store.span) return
 

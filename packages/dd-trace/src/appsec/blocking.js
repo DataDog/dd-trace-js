@@ -101,7 +101,7 @@ function getBlockingData (req, specificType, actionParameters) {
 
 function block (req, res, rootSpan, abortController, actionParameters = defaultBlockingActionParameters) {
   if (res.headersSent) {
-    log.warn('Cannot send blocking response when headers have already been sent')
+    log.warn('[ASM] Cannot send blocking response when headers have already been sent')
     return
   }
 
@@ -115,7 +115,10 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
     res.removeHeader(headerName)
   }
 
-  res.writeHead(statusCode, headers).end(body)
+  res.writeHead(statusCode, headers)
+
+  // this is needed to call the original end method, since express-session replaces it
+  res.constructor.prototype.end.call(res, body)
 
   responseBlockedSet.add(res)
 

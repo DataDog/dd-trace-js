@@ -3,7 +3,6 @@
 require('../setup/tap')
 
 const { hostname } = require('os')
-const Uint64 = require('int64-buffer').Uint64BE
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 
@@ -66,8 +65,8 @@ describe('StatsPoint', () => {
     payloadSize.accept(100)
 
     const encoded = aggStats.encode()
-    expect(encoded.Hash.toString()).to.equal(new Uint64(DEFAULT_CURRENT_HASH).toString())
-    expect(encoded.ParentHash.toString()).to.equal(new Uint64(DEFAULT_PARENT_HASH).toString())
+    expect(encoded.Hash.toString(16)).to.equal(DEFAULT_CURRENT_HASH.toString('hex'))
+    expect(encoded.ParentHash.toString(16)).to.equal(DEFAULT_PARENT_HASH.toString('hex'))
     expect(encoded.EdgeTags).to.deep.equal(aggStats.edgeTags)
     expect(encoded.EdgeLatency).to.deep.equal(edgeLatency.toProto())
     expect(encoded.PathwayLatency).to.deep.equal(pathwayLatency.toProto())
@@ -278,8 +277,8 @@ describe('DataStreamsProcessor', () => {
     payloadSize.accept(mockCheckpoint.payloadSize)
 
     const encoded = checkpointBucket.encode()
-    expect(encoded.Hash.toString()).to.equal(new Uint64(DEFAULT_CURRENT_HASH).toString())
-    expect(encoded.ParentHash.toString()).to.equal(new Uint64(DEFAULT_PARENT_HASH).toString())
+    expect(encoded.Hash.toString(16)).to.equal(DEFAULT_CURRENT_HASH.toString('hex'))
+    expect(encoded.ParentHash.toString(16)).to.equal(DEFAULT_PARENT_HASH.toString('hex'))
     expect(encoded.EdgeTags).to.deep.equal(mockCheckpoint.edgeTags)
     expect(encoded.EdgeLatency).to.deep.equal(edgeLatency.toProto())
     expect(encoded.PathwayLatency).to.deep.equal(pathwayLatency.toProto())
@@ -294,11 +293,11 @@ describe('DataStreamsProcessor', () => {
       Service: 'service1',
       Version: 'v1',
       Stats: [{
-        Start: new Uint64(1680000000000),
-        Duration: new Uint64(10000000000),
+        Start: 1680000000000n,
+        Duration: 10000000000n,
         Stats: [{
-          Hash: new Uint64(DEFAULT_CURRENT_HASH),
-          ParentHash: new Uint64(DEFAULT_PARENT_HASH),
+          Hash: DEFAULT_CURRENT_HASH.readBigUInt64BE(),
+          ParentHash: DEFAULT_PARENT_HASH.readBigUInt64BE(),
           EdgeTags: mockCheckpoint.edgeTags,
           EdgeLatency: edgeLatency.toProto(),
           PathwayLatency: pathwayLatency.toProto(),

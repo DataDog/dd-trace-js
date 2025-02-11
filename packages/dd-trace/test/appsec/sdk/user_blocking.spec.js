@@ -25,7 +25,7 @@ describe('user_blocking', () => {
     const res = { headersSent: false }
     const tracer = {}
 
-    let rootSpan, getRootSpan, block, storage, log, userBlocking
+    let rootSpan, getRootSpan, block, legacyStorage, log, userBlocking
 
     before(() => {
       const runStub = sinon.stub(waf, 'run')
@@ -44,7 +44,7 @@ describe('user_blocking', () => {
 
       block = sinon.stub()
 
-      storage = {
+      legacyStorage = {
         getStore: sinon.stub().returns({ req, res })
       }
 
@@ -55,7 +55,7 @@ describe('user_blocking', () => {
       userBlocking = proxyquire('../../../src/appsec/sdk/user_blocking', {
         './utils': { getRootSpan },
         '../blocking': { block },
-        '../../../../datadog-core': { storage },
+        '../../../../datadog-core': { storage: () => legacyStorage },
         '../../log': log
       })
     })
@@ -64,20 +64,21 @@ describe('user_blocking', () => {
       it('should return false and log warn when passed no user', () => {
         const ret = userBlocking.checkUserAndSetUser()
         expect(ret).to.be.false
-        expect(log.warn).to.have.been.calledOnceWithExactly('Invalid user provided to isUserBlocked')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Invalid user provided to isUserBlocked')
       })
 
       it('should return false and log warn when passed invalid user', () => {
         const ret = userBlocking.checkUserAndSetUser({})
         expect(ret).to.be.false
-        expect(log.warn).to.have.been.calledOnceWithExactly('Invalid user provided to isUserBlocked')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Invalid user provided to isUserBlocked')
       })
 
       it('should set user when not already set', () => {
         const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'user' })
         expect(ret).to.be.true
         expect(getRootSpan).to.have.been.calledOnceWithExactly(tracer)
-        expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('usr.id', 'user')
+        expect(rootSpan.setTag).to.have.been.calledWithExactly('usr.id', 'user')
+        expect(rootSpan.setTag).to.have.been.calledWithExactly('_dd.appsec.user.collection_mode', 'sdk')
       })
 
       it('should not override user when already set', () => {
@@ -97,14 +98,15 @@ describe('user_blocking', () => {
         const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'user' })
         expect(ret).to.be.true
         expect(getRootSpan).to.have.been.calledOnceWithExactly(tracer)
-        expect(log.warn).to.have.been.calledOnceWithExactly('Root span not available in isUserBlocked')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Root span not available in isUserBlocked')
         expect(rootSpan.setTag).to.not.have.been.called
       })
 
       it('should return false when received no results', () => {
         const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'gooduser' })
         expect(ret).to.be.false
-        expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('usr.id', 'gooduser')
+        expect(rootSpan.setTag).to.have.been.calledWithExactly('usr.id', 'gooduser')
+        expect(rootSpan.setTag).to.have.been.calledWithExactly('_dd.appsec.user.collection_mode', 'sdk')
       })
     })
 
@@ -112,17 +114,18 @@ describe('user_blocking', () => {
       it('should get req and res from local storage when they are not passed', () => {
         const ret = userBlocking.blockRequest(tracer)
         expect(ret).to.be.true
-        expect(storage.getStore).to.have.been.calledOnce
+        expect(legacyStorage.getStore).to.have.been.calledOnce
         expect(block).to.be.calledOnceWithExactly(req, res, rootSpan)
       })
 
       it('should log warning when req or res is not available', () => {
-        storage.getStore.returns(undefined)
+        legacyStorage.getStore.returns(undefined)
 
         const ret = userBlocking.blockRequest(tracer)
         expect(ret).to.be.false
-        expect(storage.getStore).to.have.been.calledOnce
-        expect(log.warn).to.have.been.calledOnceWithExactly('Requests or response object not available in blockRequest')
+        expect(legacyStorage.getStore).to.have.been.calledOnce
+        expect(log.warn)
+          .to.have.been.calledOnceWithExactly('[ASM] Requests or response object not available in blockRequest')
         expect(block).to.not.have.been.called
       })
 
@@ -131,7 +134,7 @@ describe('user_blocking', () => {
 
         const ret = userBlocking.blockRequest(tracer, {}, {})
         expect(ret).to.be.false
-        expect(log.warn).to.have.been.calledOnceWithExactly('Root span not available in blockRequest')
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Root span not available in blockRequest')
         expect(block).to.not.have.been.called
       })
 
@@ -197,6 +200,7 @@ describe('user_blocking', () => {
         }
         agent.use(traces => {
           expect(traces[0][0].meta).to.have.property('usr.id', 'testUser3')
+          expect(traces[0][0].meta).to.have.property('_dd.appsec.user.collection_mode', 'sdk')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
@@ -211,12 +215,27 @@ describe('user_blocking', () => {
         }
         agent.use(traces => {
           expect(traces[0][0].meta).to.have.property('usr.id', 'testUser')
+          expect(traces[0][0].meta).to.have.property('_dd.appsec.user.collection_mode', 'sdk')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
 
       it('should return true if user is in the blocklist', (done) => {
         controller = (req, res) => {
+          const ret = tracer.appsec.isUserBlocked({ id: 'blockedUser' })
+          expect(ret).to.be.true
+          res.end()
+        }
+        agent.use(traces => {
+          expect(traces[0][0].meta).to.have.property('usr.id', 'blockedUser')
+          expect(traces[0][0].meta).to.have.property('_dd.appsec.user.collection_mode', 'sdk')
+        }).then(done).catch(done)
+        axios.get(`http://localhost:${port}/`)
+      })
+
+      it('should return true action if userID was matched before with trackUserLoginSuccessEvent()', (done) => {
+        controller = (req, res) => {
+          tracer.appsec.trackUserLoginSuccessEvent({ id: 'blockedUser' })
           const ret = tracer.appsec.isUserBlocked({ id: 'blockedUser' })
           expect(ret).to.be.true
           res.end()

@@ -1,6 +1,7 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const { extractErrorIntoSpanEvent } = require('./utils')
 
 class GraphQLValidatePlugin extends TracingPlugin {
   static get id () { return 'graphql' }
@@ -21,6 +22,11 @@ class GraphQLValidatePlugin extends TracingPlugin {
   finish ({ document, errors }) {
     const span = this.activeSpan
     this.config.hooks.validate(span, document, errors)
+    if (errors) {
+      for (const err of errors) {
+        extractErrorIntoSpanEvent(this._tracerConfig, span, err)
+      }
+    }
     super.finish()
   }
 }

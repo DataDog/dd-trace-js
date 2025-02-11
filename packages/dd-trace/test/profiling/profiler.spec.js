@@ -272,7 +272,7 @@ describe('profiler', function () {
 
       await waitForExport()
 
-      sinon.assert.calledOnce(consoleLogger.error)
+      sinon.assert.calledOnce(consoleLogger.warn)
     })
 
     it('should log encoded profile', async () => {

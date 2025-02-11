@@ -1,6 +1,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { assert } = require('chai')
 const { channel } = require('../src/helpers/instrument')
 const names = ['url', 'node:url']
 
@@ -33,7 +34,6 @@ names.forEach(name => {
 
     describe('url.parse', () => {
       it('should publish', () => {
-        // eslint-disable-next-line n/no-deprecated-api
         const result = url.parse('https://www.datadoghq.com')
 
         sinon.assert.calledOnceWithExactly(parseFinishedChannelCb, {
@@ -66,6 +66,13 @@ names.forEach(name => {
             parsed: result,
             isURL: true
           }, sinon.match.any)
+        })
+
+        it('instanceof should work also for original instances', () => {
+          const OriginalUrl = Object.getPrototypeOf(url.URL)
+          const originalUrl = new OriginalUrl('https://www.datadoghq.com')
+
+          assert.isTrue(originalUrl instanceof url.URL)
         })
 
         ;['host', 'origin', 'hostname'].forEach(property => {

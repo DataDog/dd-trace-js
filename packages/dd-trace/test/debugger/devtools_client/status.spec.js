@@ -2,12 +2,15 @@
 
 require('../../setup/mocha')
 
+const { expectWithin, getRequestOptions } = require('./utils')
+const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
+
 const ddsource = 'dd_debugger'
 const service = 'my-service'
 const runtimeId = 'my-runtime-id'
 
-describe('diagnostic message http request caching', function () {
-  let statusproxy, request
+describe('diagnostic message http requests', function () {
+  let statusproxy, request, jsonBuffer
 
   const acks = [
     ['ackReceived', 'RECEIVED'],
@@ -20,8 +23,17 @@ describe('diagnostic message http request caching', function () {
     request = sinon.spy()
     request['@noCallThru'] = true
 
+    class JSONBufferSpy extends JSONBuffer {
+      constructor (...args) {
+        super(...args)
+        jsonBuffer = this
+        sinon.spy(this, 'write')
+      }
+    }
+
     statusproxy = proxyquire('../src/debugger/devtools_client/status', {
       './config': { service, runtimeId, '@noCallThru': true },
+      './json-buffer': JSONBufferSpy,
       '../../exporters/common/request': request
     })
   })
@@ -45,54 +57,85 @@ describe('diagnostic message http request caching', function () {
         }
       })
 
-      it('should only call once if no change', function () {
+      it('should buffer instead of calling request directly', function () {
         ackFn({ id: 'foo', version: 0 })
-        expect(request).to.have.been.calledOnce
-        assertRequestData(request, { probeId: 'foo', version: 0, status, exception })
-
-        ackFn({ id: 'foo', version: 0 })
-        expect(request).to.have.been.calledOnce
+        expect(request).to.not.have.been.called
+        expect(jsonBuffer.write).to.have.been.calledOnceWith(
+          JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }))
+        )
       })
 
-      it('should call again if version changes', function () {
+      it('should only add to buffer once if no change', function () {
         ackFn({ id: 'foo', version: 0 })
-        expect(request).to.have.been.calledOnce
-        assertRequestData(request, { probeId: 'foo', version: 0, status, exception })
+        expect(jsonBuffer.write).to.have.been.calledOnceWith(
+          JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }))
+        )
+
+        ackFn({ id: 'foo', version: 0 })
+        expect(jsonBuffer.write).to.have.been.calledOnce
+      })
+
+      it('should add to buffer again if version changes', function () {
+        ackFn({ id: 'foo', version: 0 })
+        expect(jsonBuffer.write).to.have.been.calledOnceWith(
+          JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }))
+        )
 
         ackFn({ id: 'foo', version: 1 })
-        expect(request).to.have.been.calledTwice
-        assertRequestData(request, { probeId: 'foo', version: 1, status, exception })
+        expect(jsonBuffer.write).to.have.been.calledTwice
+        expect(jsonBuffer.write.lastCall).to.have.been.calledWith(
+          JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 1, status, exception }))
+        )
       })
 
-      it('should call again if probeId changes', function () {
+      it('should add to buffer again if probeId changes', function () {
         ackFn({ id: 'foo', version: 0 })
-        expect(request).to.have.been.calledOnce
-        assertRequestData(request, { probeId: 'foo', version: 0, status, exception })
+        expect(jsonBuffer.write).to.have.been.calledOnceWith(
+          JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }))
+        )
 
         ackFn({ id: 'bar', version: 0 })
-        expect(request).to.have.been.calledTwice
-        assertRequestData(request, { probeId: 'bar', version: 0, status, exception })
+        expect(jsonBuffer.write).to.have.been.calledTwice
+        expect(jsonBuffer.write.lastCall).to.have.been.calledWith(
+          JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'bar', version: 0, status, exception }))
+        )
+      })
+
+      it('should call request with the expected payload once the buffer is flushed', function (done) {
+        ackFn({ id: 'foo', version: 0 })
+        ackFn({ id: 'foo', version: 1 })
+        ackFn({ id: 'bar', version: 0 })
+        expect(request).to.not.have.been.called
+
+        expectWithin(1200, () => {
+          expect(request).to.have.been.calledOnce
+
+          const payload = getFormPayload(request)
+
+          expect(payload).to.deep.equal([
+            formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }),
+            formatAsDiagnosticsEvent({ probeId: 'foo', version: 1, status, exception }),
+            formatAsDiagnosticsEvent({ probeId: 'bar', version: 0, status, exception })
+          ])
+
+          const opts = getRequestOptions(request)
+          expect(opts).to.have.property('method', 'POST')
+          expect(opts).to.have.property('path', '/debugger/v1/diagnostics')
+
+          done()
+        })
       })
     })
   }
 })
 
-function assertRequestData (request, { probeId, version, status, exception }) {
-  const payload = getFormPayload(request)
-  const diagnostics = { probeId, runtimeId, version, status }
+function formatAsDiagnosticsEvent ({ probeId, version, status, exception }) {
+  const diagnostics = { probeId, runtimeId, probeVersion: version, status }
 
   // Error requests will also contain an `exception` property
   if (exception) diagnostics.exception = exception
 
-  expect(payload).to.deep.equal({ ddsource, service, debugger: { diagnostics } })
-
-  const opts = getRequestOptions(request)
-  expect(opts).to.have.property('method', 'POST')
-  expect(opts).to.have.property('path', '/debugger/v1/diagnostics')
-}
-
-function getRequestOptions (request) {
-  return request.lastCall.args[1]
+  return { ddsource, service, debugger: { diagnostics } }
 }
 
 function getFormPayload (request) {

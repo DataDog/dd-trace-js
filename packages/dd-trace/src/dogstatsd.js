@@ -71,7 +71,7 @@ class DogStatsDClient {
     const buffer = Buffer.concat(queue)
     request(buffer, this._httpOptions, (err) => {
       if (err) {
-        log.error('HTTP error from agent: ' + err.stack)
+        log.error('DogStatsDClient: HTTP error from agent: %s', err.message, err)
         if (err.status === 404) {
           // Inside this if-block, we have connectivity to the agent, but
           // we're not getting a 200 from the proxy endpoint. If it's a 404,
@@ -89,7 +89,7 @@ class DogStatsDClient {
       this._sendUdpFromQueue(queue, this._host, this._family)
     } else {
       lookup(this._host, (err, address, family) => {
-        if (err) return log.error(err)
+        if (err) return log.error('DogStatsDClient: Host not found', err)
         this._sendUdpFromQueue(queue, address, family)
       })
     }

@@ -44,10 +44,8 @@ describe('IAST TaintTracking Operations', () => {
 
   const store = {}
 
-  const datadogCore = {
-    storage: {
-      getStore: () => store
-    }
+  const legacyStorage = {
+    getStore: () => store
   }
 
   beforeEach(() => {
@@ -58,11 +56,11 @@ describe('IAST TaintTracking Operations', () => {
     taintTrackingImpl = proxyquire('../../../../src/appsec/iast/taint-tracking/taint-tracking-impl', {
       '@datadog/native-iast-taint-tracking': taintedUtilsMock,
       './operations-taint-object': operationsTaintObject,
-      '../../../../../datadog-core': datadogCore
+      '../../../../../datadog-core': { storage: () => legacyStorage }
     })
     taintTrackingOperations = proxyquire('../../../../src/appsec/iast/taint-tracking/operations', {
       '@datadog/native-iast-taint-tracking': taintedUtilsMock,
-      '../../../../../datadog-core': datadogCore,
+      '../../../../../datadog-core': { storage: () => legacyStorage },
       './taint-tracking-impl': taintTrackingImpl,
       './operations-taint-object': operationsTaintObject,
       '../telemetry': iastTelemetry
@@ -169,18 +167,17 @@ describe('IAST TaintTracking Operations', () => {
         trim: id => id
       }
 
-      const iastLogStub = {
-        error (data) { return this },
-        errorAndPublish (data) { return this }
+      const logStub = {
+        error (data) { return this }
       }
 
-      const logSpy = sinon.spy(iastLogStub)
+      const logSpy = sinon.spy(logStub)
       const operationsTaintObject = proxyquire('../../../../src/appsec/iast/taint-tracking/operations-taint-object', {
         '@datadog/native-iast-taint-tracking': taintedUtils,
-        '../iast-log': logSpy
+        '../../../log': logSpy
       })
       const taintTrackingOperations = proxyquire('../../../../src/appsec/iast/taint-tracking/operations', {
-        '../../../../../datadog-core': datadogCore,
+        '../../../../../datadog-core': { storage: () => legacyStorage },
         './taint-tracking-impl': taintTrackingImpl,
         './operations-taint-object': operationsTaintObject
       })
@@ -188,7 +185,6 @@ describe('IAST TaintTracking Operations', () => {
       taintTrackingOperations.createTransaction(transactionId, iastContext)
       const result = taintTrackingOperations.taintObject(iastContext, obj, null)
       expect(logSpy.error).to.have.been.calledOnce
-      expect(logSpy.errorAndPublish).to.have.been.calledOnce
       expect(result).to.equal(obj)
     })
   })
@@ -533,8 +529,10 @@ describe('IAST TaintTracking Operations', () => {
 
     it('Should not call taintedUtils.trim method if an Error happens', () => {
       const datadogCoreErr = {
-        storage: {
-          getStore: () => { throw new Error() }
+        storage: () => {
+          return {
+            getStore: () => { throw new Error() }
+          }
         }
       }
       const taintTrackingImpl = proxyquire('../../../../src/appsec/iast/taint-tracking/taint-tracking-impl', {

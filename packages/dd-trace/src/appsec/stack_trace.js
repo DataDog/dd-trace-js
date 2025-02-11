@@ -6,11 +6,18 @@ const ddBasePath = calculateDDBasePath(__dirname)
 
 const LIBRARY_FRAMES_BUFFER = 20
 
+const STACK_TRACE_NAMESPACES = {
+  RASP: 'exploit',
+  IAST: 'vulnerability'
+}
+
 function getCallSiteList (maxDepth = 100) {
   const previousPrepareStackTrace = Error.prepareStackTrace
   const previousStackTraceLimit = Error.stackTraceLimit
   let callsiteList
-  Error.stackTraceLimit = maxDepth
+  // Since some frames will be discarded because they come from tracer codebase, a buffer is added
+  // to the limit in order to get as close as `maxDepth` number of frames.
+  Error.stackTraceLimit = maxDepth + LIBRARY_FRAMES_BUFFER
 
   try {
     Error.prepareStackTrace = function (_, callsites) {
@@ -30,7 +37,10 @@ function filterOutFramesFromLibrary (callSiteList) {
   return callSiteList.filter(callSite => !callSite.getFileName()?.startsWith(ddBasePath))
 }
 
-function getFramesForMetaStruct (callSiteList, maxDepth = 32) {
+function getCallsiteFrames (maxDepth = 32, callSiteListGetter = getCallSiteList) {
+  if (maxDepth < 1) maxDepth = Infinity
+
+  const callSiteList = callSiteListGetter(maxDepth)
   const filteredFrames = filterOutFramesFromLibrary(callSiteList)
 
   const half = filteredFrames.length > maxDepth ? Math.round(maxDepth / 2) : Infinity
@@ -45,46 +55,46 @@ function getFramesForMetaStruct (callSiteList, maxDepth = 32) {
       line: callSite.getLineNumber(),
       column: callSite.getColumnNumber(),
       function: callSite.getFunctionName(),
-      class_name: callSite.getTypeName()
+      class_name: callSite.getTypeName(),
+      isNative: callSite.isNative()
     })
   }
 
   return indexedFrames
 }
 
-function reportStackTrace (rootSpan, stackId, maxDepth, maxStackTraces, callSiteListGetter = getCallSiteList) {
+function reportStackTrace (rootSpan, stackId, frames, namespace = STACK_TRACE_NAMESPACES.RASP) {
   if (!rootSpan) return
+  if (!Array.isArray(frames)) return
 
-  if (maxStackTraces < 1 || (rootSpan.meta_struct?.['_dd.stack']?.exploit?.length ?? 0) < maxStackTraces) {
-    // Since some frames will be discarded because they come from tracer codebase, a buffer is added
-    // to the limit in order to get as close as `maxDepth` number of frames.
-    if (maxDepth < 1) maxDepth = Infinity
-    const callSiteList = callSiteListGetter(maxDepth + LIBRARY_FRAMES_BUFFER)
-    if (!Array.isArray(callSiteList)) return
-
-    if (!rootSpan.meta_struct) {
-      rootSpan.meta_struct = {}
-    }
-
-    if (!rootSpan.meta_struct['_dd.stack']) {
-      rootSpan.meta_struct['_dd.stack'] = {}
-    }
-
-    if (!rootSpan.meta_struct['_dd.stack'].exploit) {
-      rootSpan.meta_struct['_dd.stack'].exploit = []
-    }
-
-    const frames = getFramesForMetaStruct(callSiteList, maxDepth)
-
-    rootSpan.meta_struct['_dd.stack'].exploit.push({
-      id: stackId,
-      language: 'nodejs',
-      frames
-    })
+  if (!rootSpan.meta_struct) {
+    rootSpan.meta_struct = {}
   }
+
+  if (!rootSpan.meta_struct['_dd.stack']) {
+    rootSpan.meta_struct['_dd.stack'] = {}
+  }
+
+  if (!rootSpan.meta_struct['_dd.stack'][namespace]) {
+    rootSpan.meta_struct['_dd.stack'][namespace] = []
+  }
+
+  rootSpan.meta_struct['_dd.stack'][namespace].push({
+    id: stackId,
+    language: 'nodejs',
+    frames
+  })
+}
+
+function canReportStackTrace (rootSpan, maxStackTraces, namespace = STACK_TRACE_NAMESPACES.RASP) {
+  if (!rootSpan) return false
+
+  return maxStackTraces < 1 || (rootSpan.meta_struct?.['_dd.stack']?.[namespace]?.length ?? 0) < maxStackTraces
 }
 
 module.exports = {
-  getCallSiteList,
-  reportStackTrace
+  getCallsiteFrames,
+  reportStackTrace,
+  canReportStackTrace,
+  STACK_TRACE_NAMESPACES
 }

@@ -98,7 +98,8 @@ describe('RemoteConfigManager', () => {
           service: config.service,
           env: config.env,
           app_version: config.version,
-          extra_services: []
+          extra_services: [],
+          tags: ['runtime-id:runtimeId']
         },
         capabilities: 'AA=='
       },
@@ -106,6 +107,20 @@ describe('RemoteConfigManager', () => {
     })
 
     expect(rc.appliedConfigs).to.be.an.instanceOf(Map)
+  })
+
+  it('should add git metadata to tags if present', () => {
+    const configWithGit = {
+      ...config,
+      repositoryUrl: 'https://github.com/DataDog/dd-trace-js',
+      commitSHA: '1234567890'
+    }
+    const rc = new RemoteConfigManager(configWithGit)
+    expect(rc.state.client.client_tracer.tags).to.deep.equal([
+      'runtime-id:runtimeId',
+      'git.repository_url:https://github.com/DataDog/dd-trace-js',
+      'git.commit.sha:1234567890'
+    ])
   })
 
   describe('updateCapabilities', () => {
@@ -212,7 +227,7 @@ describe('RemoteConfigManager', () => {
 
       rc.poll(() => {
         expect(request).to.have.been.calledOnceWith(payload, expectedPayload)
-        expect(log.error).to.have.been.calledOnceWithExactly(err)
+        expect(log.error).to.have.been.calledOnceWithExactly('[RC] Error in request', err)
         expect(rc.parseConfig).to.not.have.been.called
         cb()
       })
@@ -232,10 +247,11 @@ describe('RemoteConfigManager', () => {
     })
 
     it('should catch exceptions, update the error state, and clear the error state at next request', (cb) => {
+      const error = new Error('Unable to parse config')
       request
         .onFirstCall().yieldsRight(null, '{"a":"b"}', 200)
         .onSecondCall().yieldsRight(null, null, 200)
-      rc.parseConfig.onFirstCall().throws(new Error('Unable to parse config'))
+      rc.parseConfig.onFirstCall().throws(error)
 
       const payload = JSON.stringify(rc.state)
 
@@ -243,7 +259,7 @@ describe('RemoteConfigManager', () => {
         expect(request).to.have.been.calledOnceWith(payload, expectedPayload)
         expect(rc.parseConfig).to.have.been.calledOnceWithExactly({ a: 'b' })
         expect(log.error).to.have.been
-          .calledOnceWithExactly('Could not parse remote config response: Error: Unable to parse config')
+          .calledOnceWithExactly('[RC] Could not parse remote config response', error)
         expect(rc.state.client.state.has_error).to.be.true
         expect(rc.state.client.state.error).to.equal('Error: Unable to parse config')
 

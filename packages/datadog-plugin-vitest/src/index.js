@@ -17,7 +17,8 @@ const {
   TEST_SOURCE_START,
   TEST_IS_NEW,
   TEST_EARLY_FLAKE_ENABLED,
-  TEST_EARLY_FLAKE_ABORT_REASON
+  TEST_EARLY_FLAKE_ABORT_REASON,
+  TEST_RETRY_REASON
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -60,9 +61,16 @@ class VitestPlugin extends CiPlugin {
       onDone(isFaulty)
     })
 
-    this.addSub('ci:vitest:test:start', ({ testName, testSuiteAbsolutePath, isRetry, isNew }) => {
+    this.addSub('ci:vitest:test:start', ({
+      testName,
+      testSuiteAbsolutePath,
+      isRetry,
+      isNew,
+      mightHitProbe,
+      isRetryReasonEfd
+    }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
 
       const extraTags = {
         [TEST_SOURCE_FILE]: testSuite
@@ -73,6 +81,9 @@ class VitestPlugin extends CiPlugin {
       if (isNew) {
         extraTags[TEST_IS_NEW] = 'true'
       }
+      if (isRetryReasonEfd) {
+        extraTags[TEST_RETRY_REASON] = 'efd'
+      }
 
       const span = this.startTestSpan(
         testName,
@@ -82,10 +93,16 @@ class VitestPlugin extends CiPlugin {
       )
 
       this.enter(span, store)
+
+      // TODO: there might be multiple tests for which mightHitProbe is true, so activeTestSpan
+      // might be wrongly overwritten.
+      if (mightHitProbe) {
+        this.activeTestSpan = span
+      }
     })
 
     this.addSub('ci:vitest:test:finish-time', ({ status, task }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = store?.span
 
       // we store the finish time to finish at a later hook
@@ -97,7 +114,7 @@ class VitestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:vitest:test:pass', ({ task }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = store?.span
 
       if (span) {
@@ -110,11 +127,20 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:test:error', ({ duration, error }) => {
-      const store = storage.getStore()
+    this.addSub('ci:vitest:test:error', ({ duration, error, shouldSetProbe, promises }) => {
+      const store = storage('legacy').getStore()
       const span = store?.span
 
       if (span) {
+        if (shouldSetProbe && this.di) {
+          const probeInformation = this.addDiProbe(error)
+          if (probeInformation) {
+            const { file, line, stackIndex, setProbePromise } = probeInformation
+            this.runningTestProbe = { file, line }
+            this.testErrorStackIndex = stackIndex
+            promises.setProbePromise = setProbePromise
+          }
+        }
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
           hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS]
         })
@@ -126,13 +152,13 @@ class VitestPlugin extends CiPlugin {
         if (duration) {
           span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
         } else {
-          span.finish() // retries will not have a duration
+          span.finish() // `duration` is empty for retries, so we'll use clock time
         }
         finishAllTraceSpans(span)
       }
     })
 
-    this.addSub('ci:vitest:test:skip', ({ testName, testSuiteAbsolutePath }) => {
+    this.addSub('ci:vitest:test:skip', ({ testName, testSuiteAbsolutePath, isNew }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const testSpan = this.startTestSpan(
         testName,
@@ -141,7 +167,8 @@ class VitestPlugin extends CiPlugin {
         {
           [TEST_SOURCE_FILE]: testSuite,
           [TEST_SOURCE_START]: 1, // we can't get the proper start line in vitest
-          [TEST_STATUS]: 'skip'
+          [TEST_STATUS]: 'skip',
+          ...(isNew ? { [TEST_IS_NEW]: 'true' } : {})
         }
       )
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
@@ -191,17 +218,16 @@ class VitestPlugin extends CiPlugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
-        },
-        extractedLinks: testSessionSpanContext?._links
+        }
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       this.enter(testSuiteSpan, store)
       this.testSuiteSpan = testSuiteSpan
     })
 
     this.addSub('ci:vitest:test-suite:finish', ({ status, onFinish }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = store?.span
       if (span) {
         span.setTag(TEST_STATUS, status)
@@ -211,10 +237,13 @@ class VitestPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       // TODO: too frequent flush - find for method in worker to decrease frequency
       this.tracer._exporter.flush(onFinish)
+      if (this.runningTestProbe) {
+        this.removeDiProbe(this.runningTestProbe)
+      }
     })
 
     this.addSub('ci:vitest:test-suite:error', ({ error }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = store?.span
       if (span && error) {
         span.setTag('error', error)

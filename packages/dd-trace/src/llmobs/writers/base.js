@@ -74,11 +74,11 @@ class BaseLLMObsWriter {
     request(payload, options, (err, resp, code) => {
       if (err) {
         logger.error(
-          `Error sending ${events.length} LLMObs ${this._eventType} events to ${this._url}: ${err.message}`
+          'Error sending %d LLMObs %s events to %s: %s', events.length, this._eventType, this._url, err.message, err
         )
       } else if (code >= 300) {
         logger.error(
-          `Error sending ${events.length} LLMObs ${this._eventType} events to ${this._url}: ${code}`
+          'Error sending %d LLMObs %s events to %s: %s', events.length, this._eventType, this._url, code
         )
       } else {
         logger.debug(`Sent ${events.length} LLMObs ${this._eventType} events to ${this._url}`)

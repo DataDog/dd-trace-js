@@ -38,18 +38,18 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
   }
 
   getStoreAndAnalyze (query, dialect) {
-    const parentStore = storage.getStore()
+    const parentStore = storage('legacy').getStore()
     if (parentStore) {
       this.analyze(query, parentStore, dialect)
 
-      storage.enterWith({ ...parentStore, sqlAnalyzed: true, sqlParentStore: parentStore })
+      storage('legacy').enterWith({ ...parentStore, sqlAnalyzed: true, sqlParentStore: parentStore })
     }
   }
 
   returnToParentStore () {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     if (store && store.sqlParentStore) {
-      storage.enterWith(store.sqlParentStore)
+      storage('legacy').enterWith(store.sqlParentStore)
     }
   }
 
@@ -59,7 +59,7 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
   }
 
   analyze (value, store, dialect) {
-    store = store || storage.getStore()
+    store = store || storage('legacy').getStore()
     if (!(store && store.sqlAnalyzed)) {
       super.analyze(value, store, dialect)
     }
@@ -81,6 +81,10 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
     if (typeof knexDialect === 'string') {
       return knexDialect.toUpperCase()
     }
+  }
+
+  _areRangesVulnerable () {
+    return true
   }
 }
 
