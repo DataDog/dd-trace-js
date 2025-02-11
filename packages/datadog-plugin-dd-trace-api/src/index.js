@@ -84,7 +84,17 @@ module.exports = class DdTraceApiPlugin extends Plugin {
             objectMap.set(proxyVal, ret.value)
             ret.value = proxyVal
           } else if (ret.value && typeof ret.value === 'object' && passthroughRetVal !== ret.value) {
-            throw new TypeError(`Objects need proxies when returned via API (${name})`)
+            if (typeof ret.value.then === 'function') {
+              return Promise.all([ret.value, passthroughRetVal]).then(([value, passthroughRetVal]) => {
+                if (value !== passthroughRetVal) {
+                  // TODO(bengl) creating all these promises isn't great. Maybe we should only enable
+                  // this in test/debug mode?
+                  throw new TypeError(`Objects need proxies when returned via API (${name})`)
+                }
+              })
+            } else {
+              throw new TypeError(`Objects need proxies when returned via API (${name})`)
+            }
           }
         } catch (e) {
           ret.error = e

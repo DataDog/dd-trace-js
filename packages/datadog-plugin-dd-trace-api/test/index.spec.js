@@ -51,9 +51,9 @@ describe('Plugin', () => {
       let dummyScope
       let scope
 
-      it('should call underlying api', () => {
+      it('should call underlying api', async () => {
         dummyScope = {}
-        testChannel({
+        await testChannel({
           name: 'scope',
           fn: tracer.scope,
           ret: dummyScope
@@ -61,10 +61,10 @@ describe('Plugin', () => {
       })
 
       describe('scope:active', () => {
-        it('should call underlying api', () => {
+        it('should call underlying api', async () => {
           scope = tracer.scope()
           sinon.spy(scope, 'active')
-          testChannel({
+          await testChannel({
             name: 'scope:active',
             fn: scope.active,
             self: dummyScope,
@@ -75,10 +75,10 @@ describe('Plugin', () => {
       })
 
       describe('scope:activate', () => {
-        it('should call underlying api', () => {
+        it('should call underlying api', async () => {
           scope = tracer.scope()
           sinon.spy(scope, 'activate')
-          testChannel({
+          await testChannel({
             name: 'scope:activate',
             fn: scope.activate,
             self: dummyScope
@@ -107,9 +107,9 @@ describe('Plugin', () => {
       let span
       let spanContext
 
-      it('should call underlying api', () => {
+      it('should call underlying api', async () => {
         dummySpan = {}
-        testChannel({
+        await testChannel({
           name: 'startSpan',
           fn: tracer.startSpan,
           ret: dummySpan
@@ -123,9 +123,9 @@ describe('Plugin', () => {
         const spanId = 'abcdef1234567890'
         const traceparent = `00-${traceId}-${spanId}-01`
 
-        it('should call underlying api', () => {
+        it('should call underlying api', async () => {
           dummySpanContext = {}
-          testChannel({
+          await testChannel({
             name: 'span:context',
             fn: span.context,
             self: dummySpan,
@@ -139,7 +139,7 @@ describe('Plugin', () => {
 
         describe('context:toTraceId', () => {
           it('should call underlying api', () => {
-            testChannel({
+            return testChannel({
               name: 'context:toTraceId',
               fn: spanContext.toTraceId,
               self: dummySpanContext,
@@ -150,7 +150,7 @@ describe('Plugin', () => {
 
         describe('context:toSpanId', () => {
           it('should call underlying api', () => {
-            testChannel({
+            return testChannel({
               name: 'context:toSpanId',
               fn: spanContext.toSpanId,
               self: dummySpanContext,
@@ -161,7 +161,7 @@ describe('Plugin', () => {
 
         describe('context:toTraceparent', () => {
           it('should call underlying api', () => {
-            testChannel({
+            return testChannel({
               name: 'context:toTraceparent',
               fn: spanContext.toTraceparent,
               self: dummySpanContext,
@@ -173,7 +173,7 @@ describe('Plugin', () => {
 
       describe('span:setTag', () => {
         it('should call underlying api', () => {
-          testChannel({
+          return testChannel({
             name: 'span:setTag',
             fn: span.setTag,
             self: dummySpan,
@@ -184,7 +184,7 @@ describe('Plugin', () => {
 
       describe('span:addTags', () => {
         it('should call underlying api', () => {
-          testChannel({
+          return testChannel({
             name: 'span:addTags',
             fn: span.addTags,
             self: dummySpan,
@@ -195,7 +195,7 @@ describe('Plugin', () => {
 
       describe('span:finish', () => {
         it('should call underlying api', () => {
-          testChannel({
+          return testChannel({
             name: 'span:finish',
             fn: span.finish,
             self: dummySpan
@@ -205,7 +205,7 @@ describe('Plugin', () => {
 
       describe('span:addLink', () => {
         it('should call underlying api', () => {
-          testChannel({
+          return testChannel({
             name: 'span:addLink',
             fn: span.addLink,
             self: dummySpan,
@@ -225,7 +225,19 @@ describe('Plugin', () => {
       it('should return the exact same value', () => {
         const obj = { mustBeThis: 'value' }
         tracer.trace.resetHistory() // clear previous call to `trace`
-        testChannel({
+        return testChannel({
+          name: 'trace',
+          fn: tracer.trace,
+          ret: obj,
+          proxy: false,
+          args: ['foo', {}, () => obj]
+        })
+      })
+
+      it('should return the exact same value (promise)', () => {
+        const obj = Promise.resolve({ mustBeThis: 'value' })
+        tracer.trace.resetHistory() // clear previous call to `trace`
+        return testChannel({
           name: 'trace',
           fn: tracer.trace,
           ret: obj,
@@ -261,7 +273,7 @@ describe('Plugin', () => {
           if (ret === SELF) {
             ret = dummyTracer
           }
-          testChannel({ name, fn: tracer[name], ret })
+          return testChannel({ name, fn: tracer[name], ret })
         })
       })
     }
@@ -277,12 +289,12 @@ describe('Plugin', () => {
           if (typeof ret !== 'undefined') {
             options.ret = ret
           }
-          testChannel(options)
+          return testChannel(options)
         })
       })
     }
 
-    function testChannel ({ name, fn, self = dummyTracer, ret, args = [], proxy }) {
+    async function testChannel ({ name, fn, self = dummyTracer, ret, args = [], proxy }) {
       testedChannels.add('datadog-api:v1:' + name)
       const ch = dc.channel('datadog-api:v1:' + name)
       if (proxy === undefined) {
@@ -293,7 +305,7 @@ describe('Plugin', () => {
       if (payload.ret.error) {
         throw payload.ret.error
       }
-      expect(payload.ret.value).to.equal(ret)
+      expect(await payload.ret.value).to.equal(await ret)
       expect(fn).to.have.been.calledOnceWithExactly(...args)
     }
   })
