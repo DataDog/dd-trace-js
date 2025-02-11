@@ -657,7 +657,8 @@ class TextMapPropagator {
           return
         }
         // Check if value is a valid 16 character lower-case hexadecimal encoded number as per spec
-        if (key === '_dd.p.tid' && !(/^[a-f0-9]{16}$/.test(value))) {
+        if (key === '_dd.p.tid' && !(hex16.test(value))) {
+          log.error(`Invalid _dd.p.tid tag ${value}, skipping`)
           continue
         }
         tags[key] = value
