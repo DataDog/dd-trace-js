@@ -2938,4 +2938,110 @@ describe('jest CommonJS', () => {
       }).catch(done)
     })
   })
+
+  context.only('quarantine', () => {
+    it('can quarantine tests', (done) => {
+      receiver.setSettings({
+        test_management: {
+          enabled: true
+        }
+      })
+      receiver.setQuarantinedTests({
+        jest: {
+          suites: {
+            'ci-visibility/quarantine/test-quarantine-1.js': {
+              tests: {
+                'quarantine tests can quarantine a test': {
+                  properties: {
+                    quarantined: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const resourceNames = tests.map(span => span.resource)
+
+          assert.includeMembers(resourceNames,
+            [
+              'ci-visibility/quarantine/test-quarantine-1.js.quarantine tests can quarantine a test',
+              'ci-visibility/quarantine/test-quarantine-1.js.quarantine tests can pass normally'
+            ]
+          )
+
+          const failedTest = tests.find(
+            test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
+          )
+          // The test fails but the exit code is still 0
+          assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'quarantine/test-quarantine-1',
+            SHOULD_CHECK_RESULTS: '1'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.stdout.pipe(process.stdout)
+        eventsPromise.then(() => {
+          // even though a test fails, the exit code is 1 because the test is quarantined
+          assert.equal(exitCode, 0)
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('fails if quarantine is not enabled', (done) => {
+      receiver.setSettings({
+        test_management: {
+          enabled: false
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const failedTest = tests.find(
+            test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
+          )
+          assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'quarantine/test-quarantine-1',
+            SHOULD_CHECK_RESULTS: '1'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('close', (exitCode) => {
+        eventsPromise.then(() => {
+          assert.equal(exitCode, 1)
+          done()
+        }).catch(done)
+      })
+    })
+  })
 })

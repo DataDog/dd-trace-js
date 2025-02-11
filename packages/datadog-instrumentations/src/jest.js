@@ -174,6 +174,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             ? this.getQuarantinedTestsForSuite(quarantinedTests.jest.suites[this.testSuite].tests)
             : this.getQuarantinedTestsForSuite(this.testEnvironmentOptions._ddQuarantinedTests.tests)
         } catch (e) {
+          log.error('Error parsing quarantined tests', e)
           this.isQuarantinedTestsEnabled = false
         }
       }
