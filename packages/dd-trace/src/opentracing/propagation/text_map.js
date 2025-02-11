@@ -362,7 +362,6 @@ class TextMapPropagator {
 
     if (this._config.tracePropagationExtractFirst) return spanContext
 
-
     const tc = this._extractTraceparentContext(carrier)
 
     if (tc && spanContext._traceId.equals(tc._traceId)) {
@@ -488,12 +487,12 @@ class TextMapPropagator {
 
               const isHex16 = /^[0-9A-Fa-f]{16}$/.test(value)
               console.log('bluhh', spanContext._trace.tags['_dd.p.tid'], value, traceparent, isHex16)
-              if (isHex16 ) {
-                const transformedValue = value.replace(/[\x7e]/gm, '=');
+              if (isHex16) {
+                const transformedValue = value.replace(/[\x7e]/gm, '=')
 
                 // Only overwrite if it matches the originally stored _dd.p.tid
                 if (spanContext._trace.tags['_dd.p.tid'] === transformedValue) {
-                  spanContext._trace.tags['_dd.p.tid'] = transformedValue;
+                  spanContext._trace.tags['_dd.p.tid'] = transformedValue
                 }
               }
               console.log('yupppp', spanContext._trace.tags['_dd.p.tid'])
@@ -684,8 +683,6 @@ class TextMapPropagator {
     if (buffer.length !== 16) return
 
     const tid = traceId.substring(0, 16)
-
-    // don't set upper 64 bits if they are all zeros or 128 bit trace id generation is disabled
 
     if (tid === zeroTraceId) return
 
