@@ -326,12 +326,15 @@ describe('TracerProxy', () => {
           './tracer': DatadogTracer,
           './appsec': appsec,
           './appsec/iast': iast,
-          './appsec/remote_config': remoteConfig
+          './appsec/remote_config': remoteConfig,
+          './appsec/sdk': AppsecSdk
         })
 
         const remoteConfigProxy = new RemoteConfigProxy()
         remoteConfigProxy.init()
+        remoteConfigProxy.appsec // Eagerly trigger lazy loading.
         expect(DatadogTracer).to.have.been.calledOnce
+        expect(AppsecSdk).to.have.been.calledOnce
         expect(appsec.enable).to.not.have.been.called
         expect(iast.enable).to.not.have.been.called
 
@@ -343,6 +346,7 @@ describe('TracerProxy', () => {
         conf = { tracing_enabled: true }
         handlers.get('APM_TRACING')('apply', { lib_config: conf })
         expect(DatadogTracer).to.have.been.calledOnce
+        expect(AppsecSdk).to.have.been.calledOnce
         expect(appsec.enable).to.not.have.been.called
         expect(iast.enable).to.not.have.been.called
       })
@@ -417,7 +421,7 @@ describe('TracerProxy', () => {
         }
 
         proxy.init()
-        proxy.dogstatsd.increment('foo', 1)
+        proxy.dogstatsd // Eagerly trigger lazy loading.
 
         expect(dogStatsD._flushes()).to.equal(0)
 
@@ -553,7 +557,7 @@ describe('TracerProxy', () => {
 
         const proxy = new DatadogProxy()
         proxy.init(options)
-        proxy.appsec.trackCustomEvent('foo')
+        proxy.appsec // Eagerly trigger lazy loading.
 
         const config = AppsecSdk.firstCall.args[1]
         expect(standalone.configure).to.have.been.calledOnceWithExactly(config)
