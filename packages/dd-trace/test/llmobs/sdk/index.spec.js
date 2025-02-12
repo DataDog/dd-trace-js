@@ -27,6 +27,7 @@ describe('sdk', () => {
         mlApp: 'mlApp'
       }
     })
+    tracer.llmobs.flush() // Eagerly trigger lazy loading.
     llmobs = tracer.llmobs
 
     // spy on properties
