@@ -9,7 +9,6 @@ const DynamicInstrumentation = require('./debugger')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
-const remoteConfig = require('./appsec/remote_config')
 const AppsecSdk = require('./appsec/sdk')
 const dogstatsd = require('./dogstatsd')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
@@ -25,7 +24,7 @@ class LazyModule {
 
   enable (...args) {
     this.module = this.provider()
-    this.module.enable(...args)
+    return this.module.enable(...args)
   }
 
   disable () {
@@ -48,7 +47,8 @@ class Tracer extends NoopProxy {
     this._modules = {
       appsec: new LazyModule(() => require('./appsec')),
       iast: new LazyModule(() => require('./appsec/iast')),
-      llmobs: new LazyModule(() => require('./llmobs'))
+      llmobs: new LazyModule(() => require('./llmobs')),
+      rc: new LazyModule(() => require('./appsec/remote_config'))
     }
   }
 
@@ -89,7 +89,7 @@ class Tracer extends NoopProxy {
       }
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
-        const rc = remoteConfig.enable(config, this._modules.appsec)
+        const rc = this._modules.rc.enable(config, this._modules.appsec)
 
         rc.setProductHandler('APM_TRACING', (action, conf) => {
           if (action === 'unapply') {
