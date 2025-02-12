@@ -12,6 +12,15 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const compat = new FlatCompat({ baseDirectory: __dirname })
 
+const SRC_FILES = [
+  '*.js',
+  '*.mjs',
+  'ext/**/*.js',
+  'ext/**/*.mjs',
+  'packages/*/src/**/*.js',
+  'packages/*/src/**/*.mjs'
+]
+
 const TEST_FILES = [
   'packages/*/test/**/*.js',
   'packages/*/test/**/*.mjs',
@@ -82,6 +91,22 @@ export default [
     name: 'mocha/recommnded',
     ...mocha.configs.flat.recommended,
     files: TEST_FILES
+  },
+  {
+    name: 'dd-trace/src/all',
+    files: SRC_FILES,
+    rules: {
+      'n/no-restricted-require': ['error', [
+        {
+          name: 'diagnostics_channel',
+          message: 'Please use dc-polyfill instead.'
+        },
+        {
+          name: 'semver',
+          message: 'Please use semifies instead.'
+        }
+      ]]
+    }
   },
   {
     name: 'dd-trace/tests/all',
