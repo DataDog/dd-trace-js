@@ -456,6 +456,68 @@ describe('Plugin', () => {
 
           server.insert(`test.${collection}`, [{ a: 1 }], () => {})
         })
+
+        it('DBM propagation should inject service mode after eixsting str comment', done => {
+          agent
+            .use(traces => {
+              const span = traces[0][0]
+
+              expect(injectDbmCommandSpy.called).to.be.true
+              const instrumentedCommand = injectDbmCommandSpy.getCall(0).returnValue
+              expect(instrumentedCommand).to.have.property('comment')
+              expect(instrumentedCommand.comment).to.equal(
+                `test comment,` +
+                `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
+                'dddbs=\'test-mongodb\',' +
+                'dde=\'tester\',' +
+                `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
+                `ddps='${encodeURIComponent(span.meta.service)}',` +
+                `ddpv='${ddpv}',` +
+                `ddprs='${encodeURIComponent(span.meta['peer.service'])}'`
+              )
+            })
+            .then(done)
+            .catch(done)
+
+            server.command(`test.${collection}`, {
+              find: `test.${collection}`,
+              query: {
+                _id: Buffer.from('1234')
+              },
+              comment: "test comment"
+            }, () => {})
+        })
+
+        it('DBM propagation should inject service mode after eixsting array comment', done => {
+          agent
+            .use(traces => {
+              const span = traces[0][0]
+
+              expect(injectDbmCommandSpy.called).to.be.true
+              const instrumentedCommand = injectDbmCommandSpy.getCall(0).returnValue
+              expect(instrumentedCommand).to.have.property('comment')
+              expect(instrumentedCommand.comment).to.deep.equal([
+                `test comment`,
+                `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
+                'dddbs=\'test-mongodb\',' +
+                'dde=\'tester\',' +
+                `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
+                `ddps='${encodeURIComponent(span.meta.service)}',` +
+                `ddpv='${ddpv}',` +
+                `ddprs='${encodeURIComponent(span.meta['peer.service'])}'`
+              ])
+            })
+            .then(done)
+            .catch(done)
+
+            server.command(`test.${collection}`, {
+              find: `test.${collection}`,
+              query: {
+                _id: Buffer.from('1234')
+              },
+              comment: ["test comment"]
+            }, () => {})
+        })
       })
 
       describe('with dbmPropagationMode full', () => {
