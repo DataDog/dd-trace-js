@@ -1,7 +1,7 @@
 'use strict'
 
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
-const { AgentEncoder: BaseEncoder } = require('./0.4')
+const { AgentEncoder: BaseEncoder, SOFT_LIMIT } = require('./0.4')
 
 const ARRAY_OF_TWO = 0x92
 const ARRAY_OF_TWELVE = 0x9c
@@ -11,6 +11,11 @@ function formatSpan (span) {
 }
 
 class AgentEncoder extends BaseEncoder {
+  constructor (writer, limit = SOFT_LIMIT) {
+    super(writer, limit)
+    this._format = 'v0.5'
+  }
+
   makePayload () {
     const prefixSize = 1
     const stringSize = this._stringBytes.length + 5
