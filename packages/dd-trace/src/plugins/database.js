@@ -92,27 +92,6 @@ class DatabasePlugin extends StoragePlugin {
     return `/*${dbmTraceComment}*/ ${query}`
   }
 
-  injectDbmCommand (span, command, serviceName) {
-    const dbmTraceComment = this.createDbmComment(span, serviceName)
-
-    if (!dbmTraceComment) {
-      return command
-    }
-
-    if (command.comment) {
-      // if the command already has a comment, append the dbm trace comment
-      if (typeof command.comment === 'string') {
-        command.comment += `,${dbmTraceComment}`
-      } else if (Array.isArray(command.comment)) {
-        command.comment.push(dbmTraceComment)
-      } // do nothing if the comment is not a string or an array
-    } else {
-      command.comment = dbmTraceComment
-    }
-
-    return command
-  }
-
   maybeTruncate (query) {
     const maxLength = typeof this.config.truncate === 'number'
       ? this.config.truncate
