@@ -96,7 +96,7 @@ export default [
     name: 'dd-trace/src/all',
     files: SRC_FILES,
     rules: {
-      'n/no-restricted-require': ['error', ['semver']]
+      'n/no-restricted-require': ['error', ['diagnostics_channel', 'semver']]
     }
   },
   {
