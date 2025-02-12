@@ -35,7 +35,7 @@ function add (carrier, keyValuePairs, parseOtelTags = false, emptyUserTags = tru
 
         const trimmedValue = value.trim()
         // add an identifier for user tags with empty values
-        carrier[key.trim()] = emptyUserTags && trimmedValue === '' ? 'DD_EMPTY_USER_TAG' : trimmedValue
+        carrier[key.trim()] = emptyUserTags && trimmedValue === '' ? constants.DD_EMPTY_USER_TAG : trimmedValue
       }
     } else {
       // HACK: to ensure otel.recordException does not influence trace.error
