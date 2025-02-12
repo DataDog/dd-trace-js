@@ -28,7 +28,7 @@ function generateProbeConfig (breakpoint, overrides = {}) {
     version: 0,
     type: 'LOG_PROBE',
     language: 'javascript',
-    where: { sourceFile: breakpoint.file, lines: [String(breakpoint.line)] },
+    where: { sourceFile: breakpoint.sourceFile, lines: [String(breakpoint.line)] },
     tags: [],
     template: 'Hello World!',
     segments: [{ str: 'Hello World!' }],

@@ -1,5 +1,5 @@
 'use strict'
-const path = require('path')
+
 const {
   workerData: {
     breakpointSetChannel,
@@ -8,10 +8,11 @@ const {
   }
 } = require('worker_threads')
 const { randomUUID } = require('crypto')
-const sourceMap = require('source-map')
 
 // TODO: move debugger/devtools_client/session to common place
 const session = require('../../../debugger/devtools_client/session')
+// TODO: move debugger/devtools_client/source-maps to common place
+const { getSourceMappedLine } = require('../../../debugger/devtools_client/source-maps')
 // TODO: move debugger/devtools_client/snapshot to common place
 const { getLocalStateForCallFrame } = require('../../../debugger/devtools_client/snapshot')
 // TODO: move debugger/devtools_client/state to common place
@@ -92,82 +93,58 @@ async function addBreakpoint (probe) {
 
   probe.location = { file, lines: [String(line)] }
 
+  process._rawDebug('** Calling findScriptFromPartialPath')
+  const now = Date.now()
   const script = findScriptFromPartialPath(file)
+  process._rawDebug('** Returned from findScriptFromPartialPath', Date.now() - now)
   if (!script) {
     log.error(`No loaded script found for ${file}`)
     throw new Error(`No loaded script found for ${file}`)
   }
 
-  const [path, scriptId, sourceMapURL] = script
+  const { url, scriptId, sourceMapURL, source } = script
 
-  log.warn(`Adding breakpoint at ${path}:${line}`)
+  log.warn(`Adding breakpoint at ${url}:${line}`)
 
   let lineNumber = line
 
-  if (sourceMapURL && sourceMapURL.startsWith('data:')) {
+  if (sourceMapURL) {
     try {
-      lineNumber = await processScriptWithInlineSourceMap({ file, line, sourceMapURL })
+      process._rawDebug('** Calling getSourceMappedLine')
+      const now = Date.now()
+      lineNumber = await getSourceMappedLine(url, source, line, sourceMapURL)
+      process._rawDebug('** Returned from getSourceMappedLine', Date.now() - now)
     } catch (err) {
-      log.error('Error processing script with inline source map', err)
+      log.error('Error processing script with source map', err)
+    }
+    if (lineNumber === null) {
+      log.error('Could not find generated position for %s:%s', url, line)
+      lineNumber = line
     }
   }
 
   try {
+    process._rawDebug('** Calling Debugger.setBreakpoint')
+    const now = Date.now()
     const { breakpointId } = await session.post('Debugger.setBreakpoint', {
       location: {
         scriptId,
         lineNumber: lineNumber - 1
       }
     })
+    process._rawDebug('** Returned from Debugger.setBreakpoint', Date.now() - now)
 
     breakpointIdToProbe.set(breakpointId, probe)
     probeIdToBreakpointId.set(probe.id, breakpointId)
   } catch (e) {
-    log.error(`Error setting breakpoint at ${path}:${line}:`, e)
+    log.error('Error setting breakpoint at %s:%s', url, line, e)
   }
 }
 
-function start () {
+async function start () {
   sessionStarted = true
-  return session.post('Debugger.enable') // return instead of await to reduce number of promises created
-}
-
-async function processScriptWithInlineSourceMap (params) {
-  const { file, line, sourceMapURL } = params
-
-  // Extract the base64-encoded source map
-  const base64SourceMap = sourceMapURL.split('base64,')[1]
-
-  // Decode the base64 source map
-  const decodedSourceMap = Buffer.from(base64SourceMap, 'base64').toString('utf8')
-
-  // Parse the source map
-  const consumer = await new sourceMap.SourceMapConsumer(decodedSourceMap)
-
-  let generatedPosition
-
-  // Map to the generated position. We'll attempt with the full file path first, then with the basename.
-  // TODO: figure out why sometimes the full path doesn't work
-  generatedPosition = consumer.generatedPositionFor({
-    source: file,
-    line,
-    column: 0
-  })
-  if (generatedPosition.line === null) {
-    generatedPosition = consumer.generatedPositionFor({
-      source: path.basename(file),
-      line,
-      column: 0
-    })
-  }
-
-  consumer.destroy()
-
-  // If we can't find the line, just return the original line
-  if (generatedPosition.line === null) {
-    log.error(`Could not find generated position for ${file}:${line}`)
-    return line
-  }
-
-  return generatedPosition.line
+  process._rawDebug('** Calling Debugger.enable')
+  const now = Date.now()
+  await session.post('Debugger.enable') // return instead of await to reduce number of promises created
+  process._rawDebug('** Returned from Debugger.enable', Date.now() - now)
 }

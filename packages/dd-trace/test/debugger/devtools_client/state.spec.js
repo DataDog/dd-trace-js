@@ -14,6 +14,14 @@ describe('findScriptFromPartialPath', function () {
 
   before(function () {
     state = proxyquire('../src/debugger/devtools_client/state', {
+      './source-maps': proxyquire('../src/debugger/devtools_client/source-maps', {
+        fs: {
+          // Mock reading the source map file
+          readFileSync: () => JSON.stringify({
+            sources: ['index.ts']
+          })
+        }
+      }),
       './session': {
         '@noCallThru': true,
         on (event, listener) {
@@ -32,6 +40,15 @@ describe('findScriptFromPartialPath', function () {
             // The same, but in reverse order to ensure this doesn't influence the result
             listener({ params: { scriptId: 'should-match-shortest-b', url: 'file:///bar/index.js' } })
             listener({ params: { scriptId: 'should-not-match-longest-b', url: 'file:///node_modules/bar/index.js' } })
+
+            // Test case for source maps
+            listener({
+              params: {
+                scriptId: 'should-match-source-mapped',
+                url: 'file:///source-mapped/index.js',
+                sourceMapURL: 'index.js.map'
+              }
+            })
           }
         }
       }
@@ -117,7 +134,7 @@ describe('findScriptFromPartialPath', function () {
       function testPath (path) {
         return function () {
           const result = state.findScriptFromPartialPath(path)
-          expect(result).to.deep.equal([url, scriptId, undefined])
+          expect(result).to.deep.equal({ url, scriptId, sourceMapURL: undefined, source: undefined })
         }
       }
     })
@@ -126,15 +143,33 @@ describe('findScriptFromPartialPath', function () {
   describe('multiple partial matches', function () {
     it('should match the longest partial match', function () {
       const result = state.findScriptFromPartialPath('server/index.js')
-      expect(result).to.deep.equal(['file:///server/index.js', 'should-match', undefined])
+      expect(result).to.deep.equal({
+        url: 'file:///server/index.js', scriptId: 'should-match', sourceMapURL: undefined, source: undefined
+      })
     })
 
     it('should match the shorter of two equal length partial matches', function () {
       const result1 = state.findScriptFromPartialPath('foo/index.js')
-      expect(result1).to.deep.equal(['file:///foo/index.js', 'should-match-shortest-a', undefined])
+      expect(result1).to.deep.equal({
+        url: 'file:///foo/index.js', scriptId: 'should-match-shortest-a', sourceMapURL: undefined, source: undefined
+      })
 
       const result2 = state.findScriptFromPartialPath('bar/index.js')
-      expect(result2).to.deep.equal(['file:///bar/index.js', 'should-match-shortest-b', undefined])
+      expect(result2).to.deep.equal({
+        url: 'file:///bar/index.js', scriptId: 'should-match-shortest-b', sourceMapURL: undefined, source: undefined
+      })
+    })
+  })
+
+  describe('source maps', function () {
+    it('should match the source map path', function () {
+      const result = state.findScriptFromPartialPath('source-mapped/index.ts')
+      expect(result).to.deep.equal({
+        url: 'file:///source-mapped/index.js',
+        scriptId: 'should-match-source-mapped',
+        sourceMapURL: 'index.js.map',
+        source: 'index.ts'
+      })
     })
   })
 
