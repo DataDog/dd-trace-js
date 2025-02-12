@@ -9,7 +9,7 @@ const { execSync } = require('child_process')
 const ddtracePath = path.join(__dirname, '..')
 const defaultTestPath = process.env.DD_ST_PATH || path.join(ddtracePath, '..', 'system-tests')
 
-const { buildAll, npm, testDir, testArgs } = parseArgs()
+let { buildAll, npm, testDir, testArgs } = parseArgs()
 
 const binariesPath = path.join(testDir, 'binaries')
 
@@ -30,9 +30,25 @@ if (npm) {
 }
 
 try {
-  execSync(`./build.sh ${buildAll ? '' : '-i weblog'} && ./run.sh ${testArgs}`, {
+  let buildArgs = '-i weblog'
+  let env = {}
+
+  if (buildAll) {
+    buildArgs = ''
+  } else if (parametric) {
+    buildArgs = '-i runner'
+
+    if (!testArgs) {
+      testArgs = 'PARAMETRIC'
+    }
+
+    env.TEST_LIBRARY = 'nodejs'
+  }
+
+  execSync(`./build.sh ${buildArgs} && ./run.sh ${testArgs}`, {
     cwd: testDir,
-    stdio: [null, 'inherit', 'inherit']
+    stdio: [null, 'inherit', 'inherit'],
+    env: Object.assign(env, process.env)
   })
 } catch (err) {
   process.exit(err.status || 1)
@@ -96,6 +112,7 @@ function helpAndExit () {
   console.log('Options:')
   console.log('  -b, --build-all       Rebuild all images (default: only build weblog)')
   console.log('  -h, --help            Print this message')
+  console.log('  -p, --parametric      Shorthand to build runner image only, set TEST_LIBRARY to nodejs, and scenario to PARAMETRIC')
   console.log('  -n, --npm [package]   Build a remote package instead of the local repo (default: "dd-trace")')
   console.log('                        Can be a package name (e.g. "dd-trace@4.2.0") or a git URL (e.g.')
   console.log('                        "git+https://github.com/DataDog/dd-trace-js.git#mybranch")')
