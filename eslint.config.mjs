@@ -96,7 +96,16 @@ export default [
     name: 'dd-trace/src/all',
     files: SRC_FILES,
     rules: {
-      'n/no-restricted-require': ['error', ['diagnostics_channel', 'semver']]
+      'n/no-restricted-require': ['error', [
+        {
+          name: 'diagnostics_channel',
+          message: 'Please use dc-polyfill instead.'
+        },
+        {
+          name: 'semver',
+          message: 'Please use semifies instead.'
+        }
+      ]]
     }
   },
   {
