@@ -18,7 +18,7 @@ const logger = require('pino')()
 const server = http
   .createServer((req, res) => {
     const span = tracer.scope().active()
-    const contextTraceId = span.context().toTraceId()
+    const contextTraceId = span.context().toTraceId(true)
     const contextSpanId = span.context().toSpanId()
     logger.info(
       { custom: { trace_id: contextTraceId, span_id: contextSpanId } },
