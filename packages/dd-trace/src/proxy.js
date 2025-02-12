@@ -27,17 +27,19 @@ class LazyModule {
 }
 
 function lazyProxy (obj, property, getClass, ...args) {
-  const proxy = obj[property] = new Proxy(obj[property], {
-    get: (target, key) => {
-      if (obj[property] === proxy) {
-        const RealClass = getClass()
-        obj[property] = new RealClass(...args)
-      }
-      return obj[property][key]
-    }
-  })
+  const attributes = { configurable: true, enumerable: true }
 
-  return proxy
+  Reflect.defineProperty(obj, property, {
+    get () {
+      const RealClass = getClass()
+      const value = new RealClass(...args)
+
+      Reflect.defineProperty(obj, property, { value, ...attributes })
+
+      return value
+    },
+    ...attributes
+  })
 }
 
 class Tracer extends NoopProxy {
