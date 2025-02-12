@@ -2943,12 +2943,7 @@ describe('jest CommonJS', () => {
 
   // TODO: add test for parallel mode
   context('quarantine', () => {
-    it('can quarantine tests', (done) => {
-      receiver.setSettings({
-        test_management: {
-          enabled: true
-        }
-      })
+    beforeEach(() => {
       receiver.setQuarantinedTests({
         jest: {
           suites: {
@@ -2962,6 +2957,13 @@ describe('jest CommonJS', () => {
               }
             }
           }
+        }
+      })
+    })
+    it('can quarantine tests', (done) => {
+      receiver.setSettings({
+        test_management: {
+          enabled: true
         }
       })
 
@@ -3059,21 +3061,6 @@ describe('jest CommonJS', () => {
       receiver.setSettings({
         test_management: {
           enabled: true
-        }
-      })
-      receiver.setQuarantinedTests({
-        jest: {
-          suites: {
-            'ci-visibility/quarantine/test-quarantine-1.js': {
-              tests: {
-                'quarantine tests can quarantine a test': {
-                  properties: {
-                    quarantined: true
-                  }
-                }
-              }
-            }
-          }
         }
       })
 
