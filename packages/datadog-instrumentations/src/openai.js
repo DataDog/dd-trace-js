@@ -300,12 +300,19 @@ for (const shim of V4_PACKAGE_SHIMS) {
 
           if (baseResource === 'chat.completions' && typeof apiProm._thenUnwrap === 'function') {
             // this should only ever be invoked from a client.beta.chat.completions.parse call
-            shimmer.wrap(apiProm, '_thenUnwrap', origApiPromParse => function () {
-              const unwrappedPromise = origApiPromParse.apply(this, arguments)
-              // the original response is wrapped in a promise, so we need to unwrap it
-                .then(body => Promise.all([this.responsePromise, body]))
+            shimmer.wrap(apiProm, '_thenUnwrap', origApiPromThenUnwrap => function () {
+              // this is a new apipromise instance...
+              const unwrappedPromise = origApiPromThenUnwrap.apply(this, arguments)
 
-              return handleUnwrappedAPIPromise(unwrappedPromise, ctx, stream, n)
+              shimmer.wrap(unwrappedPromise, 'parse', origApiPromParse => function () {
+                const unwrappedPromise = origApiPromParse.apply(this, arguments)
+                // the original response is wrapped in a promise, so we need to unwrap it
+                  .then(body => Promise.all([this.responsePromise, body]))
+
+                return handleUnwrappedAPIPromise(unwrappedPromise, ctx, stream, n)
+              })
+
+              return unwrappedPromise
             })
           }
 

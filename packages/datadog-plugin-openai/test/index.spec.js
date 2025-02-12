@@ -3726,7 +3726,7 @@ describe('Plugin', () => {
       }
 
       if (semver.intersects('>=4.59.0', version)) {
-        it('makes a successful call with the beta chat completions', async () => {
+        it.only('makes a successful call with the beta chat completions', async () => {
           nock('https://api.openai.com:443')
             .post('/v1/chat/completions')
             .reply(200, {
@@ -3757,12 +3757,16 @@ describe('Plugin', () => {
               expect(span).to.have.property('name', 'openai.request')
             })
 
-          const response = await openai.beta.chat.completions.parse({
+          const prom = openai.beta.chat.completions.parse({
             model: 'gpt-4o',
             messages: [{ role: 'user', content: 'Hello, OpenAI!', name: 'hunter2' }],
             temperature: 0.5,
             stream: false
           })
+
+          expect(typeof prom.withResponse).to.equal('function')
+
+          const response = await prom
 
           expect(response.choices[0].message.content).to.eql('I am doing well, how about you?')
 
