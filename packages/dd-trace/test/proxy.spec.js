@@ -545,7 +545,7 @@ describe('TracerProxy', () => {
           './appsec/iast': iast,
           './appsec/remote_config': remoteConfig,
           './appsec/sdk': AppsecSdk,
-          './appsec/standalone': standalone,
+          './standalone': standalone,
           './telemetry': telemetry
         })
 

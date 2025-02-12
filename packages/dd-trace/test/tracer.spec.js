@@ -20,6 +20,7 @@ describe('Tracer', () => {
   let config
   let instrumenter
   let Instrumenter
+  let tracerConfigureCh
 
   beforeEach(() => {
     config = new Config({ service: 'service' })
@@ -30,7 +31,18 @@ describe('Tracer', () => {
     }
     Instrumenter = sinon.stub().returns(instrumenter)
 
+    tracerConfigureCh = {
+      publish: sinon.stub()
+    }
+
+    const channels = {
+      'datadog:tracer:configure': tracerConfigureCh
+    }
+
     Tracer = proxyquire('../src/tracer', {
+      'dc-polyfill': {
+        channel: (name) => channels[name]
+      },
       './instrumenter': Instrumenter
     })
 

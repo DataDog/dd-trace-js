@@ -47,7 +47,7 @@ describe('Standalone ASM', () => {
     function assertKeep (payload) {
       const { meta, metrics } = payload
 
-      assert.propertyVal(meta, '_dd.p.appsec', '1')
+      assert.propertyVal(meta, '_dd.p.ts', '02')
 
       assert.propertyVal(metrics, '_sampling_priority_v1', USER_KEEP)
       assert.propertyVal(metrics, '_dd.apm.enabled', 0)
@@ -57,7 +57,7 @@ describe('Standalone ASM', () => {
       const { metrics } = payload
       assert.propertyVal(metrics, '_sampling_priority_v1', AUTO_REJECT)
       assert.propertyVal(metrics, '_dd.apm.enabled', 0)
-      assert.notProperty(metrics, '_dd.p.appsec')
+      assert.notProperty(metrics, '_dd.p.ts')
     }
 
     async function doWarmupRequests (procOrUrl, number = 3) {
@@ -99,7 +99,7 @@ describe('Standalone ASM', () => {
 
           const { meta, metrics } = fifthReq[0]
           assert.notProperty(meta, 'manual.keep')
-          assert.notProperty(meta, '_dd.p.appsec')
+          assert.notProperty(meta, '_dd.p.ts')
 
           assert.propertyVal(metrics, '_sampling_priority_v1', AUTO_KEEP)
           assert.propertyVal(metrics, '_dd.apm.enabled', 0)
@@ -207,7 +207,7 @@ describe('Standalone ASM', () => {
       })
 
       // proc/propagation-with-event triggers an appsec event and calls downstream proc2/down with no event
-      it('should keep if parent trace is (prio:2, _dd.p.appsec:1) but there is no event in the local trace',
+      it('should keep if parent trace is (prio:2, _dd.p.ts:02) but there is no event in the local trace',
         async () => {
           await doWarmupRequests(proc)
           await doWarmupRequests(proc2)
@@ -284,7 +284,7 @@ describe('Standalone ASM', () => {
         const { meta, metrics } = payload[0][0]
         assert.property(meta, '_dd.iast.json') // WEAK_HASH and XCONTENTTYPE_HEADER_MISSING reported
 
-        assert.notProperty(meta, '_dd.p.appsec')
+        assert.notProperty(meta, '_dd.p.ts')
         assert.notProperty(metrics, '_dd.apm.enabled')
       })
     })
@@ -304,7 +304,7 @@ describe('Standalone ASM', () => {
         const { meta, metrics } = payload[0][0]
         assert.property(meta, '_dd.appsec.json') // crs-942-100 triggered
 
-        assert.notProperty(meta, '_dd.p.appsec')
+        assert.notProperty(meta, '_dd.p.ts')
         assert.notProperty(metrics, '_dd.apm.enabled')
       })
     })
