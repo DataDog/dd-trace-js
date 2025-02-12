@@ -100,7 +100,12 @@ class LLMObsTagger {
   }
 
   tagMetadata (span, metadata) {
-    this._setTag(span, METADATA, metadata)
+    const existingMetadata = registry.get(span)?.[METADATA]
+    if (existingMetadata) {
+      Object.assign(existingMetadata, metadata)
+    } else {
+      this._setTag(span, METADATA, metadata)
+    }
   }
 
   tagMetrics (span, metrics) {
@@ -128,7 +133,12 @@ class LLMObsTagger {
       }
     }
 
-    this._setTag(span, METRICS, filterdMetrics)
+    const existingMetrics = registry.get(span)?.[METRICS]
+    if (existingMetrics) {
+      Object.assign(existingMetrics, filterdMetrics)
+    } else {
+      this._setTag(span, METRICS, filterdMetrics)
+    }
   }
 
   tagSpanTags (span, tags) {
