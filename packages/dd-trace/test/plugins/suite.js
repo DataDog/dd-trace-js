@@ -186,7 +186,6 @@ function defaultRunner ({ withoutTracer, withTracer }) {
   try {
     expect(withTracer.code).to.equal(withoutTracer.code)
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.log(`======= BEGIN STDOUT WITHOUT TRACER
 ${withoutTracer.stdout}
 ======= BEGIN STDERR WITHOUT TRACER
@@ -238,7 +237,6 @@ module.exports = async function runWithOptions (options) {
     } = options
     return runner(await run(modName, repoUrl, commitish, testCmd, parallel))
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.error(e)
     process.exitCode = 1
   }
@@ -266,7 +264,6 @@ if (require.main === module) {
           break
         }
       } else {
-        // eslint-disable-next-line no-console
         console.log('no test file found at', suitePath, 'or', altSuitePath)
       }
     }
