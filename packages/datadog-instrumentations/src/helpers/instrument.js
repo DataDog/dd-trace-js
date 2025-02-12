@@ -1,7 +1,7 @@
 'use strict'
 
 const dc = require('dc-polyfill')
-const semver = require('semver')
+const satisfies = require('semifies')
 const instrumentations = require('./instrumentations')
 const { AsyncResource } = require('async_hooks')
 
@@ -36,7 +36,7 @@ exports.addHook = function addHook ({ name, versions, file, filePattern }, hook)
 
 // AsyncResource.bind exists and binds `this` properly only from 17.8.0 and up.
 // https://nodejs.org/api/async_context.html#asyncresourcebindfn-thisarg
-if (semver.satisfies(process.versions.node, '>=17.8.0')) {
+if (satisfies(process.versions.node, '>=17.8.0')) {
   exports.AsyncResource = AsyncResource
 } else {
   exports.AsyncResource = class extends AsyncResource {
