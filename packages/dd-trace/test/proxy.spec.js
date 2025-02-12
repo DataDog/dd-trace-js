@@ -539,7 +539,7 @@ describe('TracerProxy', () => {
           configure: sinon.stub()
         }
 
-        const options = { }
+        const options = {}
         const DatadogProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
           './config': Config,
