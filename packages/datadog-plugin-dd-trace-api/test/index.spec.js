@@ -22,6 +22,10 @@ describe('Plugin', () => {
 
       tracer = require('../../dd-trace')
 
+      // Eagerly trigger lazy loading.
+      tracer.appsec.toString()
+      tracer.dogstatsd.toString()
+
       sinon.spy(tracer)
       sinon.spy(tracer.appsec)
       sinon.spy(tracer.dogstatsd)
