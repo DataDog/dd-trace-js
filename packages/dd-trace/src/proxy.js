@@ -2,36 +2,42 @@
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
-// const runtimeMetrics = require('./runtime_metrics')
+const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
-// const { setStartupLogPluginManager } = require('./startup-log')
-// const DynamicInstrumentation = require('./debugger')
-// const telemetry = require('./telemetry')
+const { setStartupLogPluginManager } = require('./startup-log')
+const telemetry = require('./telemetry')
 // const nomenclature = require('./service-naming')
 // const PluginManager = require('./plugin_manager')
-// const remoteConfig = require('./appsec/remote_config')
-// const AppsecSdk = require('./appsec/sdk')
-// const dogstatsd = require('./dogstatsd')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
-// const spanleak = require('./spanleak')
-// const { SSIHeuristics } = require('./profiling/ssi-heuristics')
-// const appsecStandalone = require('./appsec/standalone')
-// const LLMObsSDK = require('./llmobs/sdk')
 
-// class LazyModule {
-//   constructor (provider) {
-//     this.provider = provider
-//   }
+class LazyModule {
+  constructor (provider) {
+    this.provider = provider
+  }
 
-//   enable (...args) {
-//     this.module = this.provider()
-//     this.module.enable(...args)
-//   }
+  enable (...args) {
+    this.module = this.provider()
+    this.module.enable(...args)
+  }
 
-//   disable () {
-//     this.module?.disable()
-//   }
-// }
+  disable () {
+    this.module?.disable()
+  }
+}
+
+function lazyProxy (obj, property, getClass, ...args) {
+  const proxy = obj[property] = new Proxy(obj[property], {
+    get: (target, key) => {
+      if (obj[property] === proxy) {
+        const RealClass = getClass()
+        obj[property] = new RealClass(...args)
+      }
+      return obj[property][key]
+    }
+  })
+
+  return proxy
+}
 
 class Tracer extends NoopProxy {
   constructor () {
@@ -42,13 +48,13 @@ class Tracer extends NoopProxy {
     // this._pluginManager = new PluginManager(this)
     this.dogstatsd = new NoopDogStatsDClient()
     this._tracingInitialized = false
-    // this._flare = new LazyModule(() => require('./flare'))
+    this._flare = new LazyModule(() => require('./flare'))
 
     // these requires must work with esm bundler
     this._modules = {
-      // appsec: new LazyModule(() => require('./appsec')),
-      // iast: new LazyModule(() => require('./appsec/iast')),
-      // llmobs: new LazyModule(() => require('./llmobs'))
+      appsec: new LazyModule(() => require('./appsec')),
+      iast: new LazyModule(() => require('./appsec/iast')),
+      llmobs: new LazyModule(() => require('./llmobs'))
     }
   }
 
@@ -60,75 +66,81 @@ class Tracer extends NoopProxy {
     try {
       const config = new Config(options) // TODO: support dynamic code config
 
-      // if (config.crashtracking.enabled) {
-      //   require('./crashtracking').start(config)
-      // }
+      if (config.crashtracking.enabled) {
+        require('./crashtracking').start(config)
+      }
 
-      // telemetry.start(config, this._pluginManager)
+      telemetry.start(config, this._pluginManager)
 
-      // if (config.dogstatsd) {
-      //   // Custom Metrics
-      //   this.dogstatsd = new dogstatsd.CustomMetrics(config)
+      if (config.dogstatsd) {
+        // Custom Metrics
+        lazyProxy(this, 'dogstatsd', () => {
+          const { CustomMetrics } = require('./dogstatsd')
 
-      //   setInterval(() => {
-      //     this.dogstatsd.flush()
-      //   }, 10 * 1000).unref()
+          setInterval(() => {
+            this.dogstatsd.flush()
+          }, 10 * 1000).unref()
 
-      //   process.once('beforeExit', () => {
-      //     this.dogstatsd.flush()
-      //   })
-      // }
+          process.once('beforeExit', () => {
+            this.dogstatsd.flush()
+          })
 
-      // if (config.spanLeakDebug > 0) {
-      //   if (config.spanLeakDebug === spanleak.MODES.LOG) {
-      //     spanleak.enableLogging()
-      //   } else if (config.spanLeakDebug === spanleak.MODES.GC_AND_LOG) {
-      //     spanleak.enableGarbageCollection()
-      //   }
-      //   spanleak.startScrubber()
-      // }
+          return CustomMetrics
+        }, config)
+      }
 
-      // if (config.remoteConfig.enabled && !config.isCiVisibility) {
-      //   const rc = remoteConfig.enable(config, this._modules.appsec)
+      if (config.spanLeakDebug > 0) {
+        const spanleak = require('./spanleak')
+        if (config.spanLeakDebug === spanleak.MODES.LOG) {
+          spanleak.enableLogging()
+        } else if (config.spanLeakDebug === spanleak.MODES.GC_AND_LOG) {
+          spanleak.enableGarbageCollection()
+        }
+        spanleak.startScrubber()
+      }
 
-      //   rc.setProductHandler('APM_TRACING', (action, conf) => {
-      //     if (action === 'unapply') {
-      //       config.configure({}, true)
-      //     } else {
-      //       config.configure(conf.lib_config, true)
-      //     }
-      //     this._enableOrDisableTracing(config)
-      //   })
+      if (config.remoteConfig.enabled && !config.isCiVisibility) {
+        const rc = require('./appsec/remote_config').enable(config, this._modules.appsec)
 
-      //   rc.setProductHandler('AGENT_CONFIG', (action, conf) => {
-      //     if (!conf?.name?.startsWith('flare-log-level.')) return
+        rc.setProductHandler('APM_TRACING', (action, conf) => {
+          if (action === 'unapply') {
+            config.configure({}, true)
+          } else {
+            config.configure(conf.lib_config, true)
+          }
+          this._enableOrDisableTracing(config)
+        })
 
-      //     if (action === 'unapply') {
-      //       this._flare.disable()
-      //     } else if (conf.config?.log_level) {
-      //       this._flare.enable(config)
-      //       this._flare.module.prepare(conf.config.log_level)
-      //     }
-      //   })
+        rc.setProductHandler('AGENT_CONFIG', (action, conf) => {
+          if (!conf?.name?.startsWith('flare-log-level.')) return
 
-      //   rc.setProductHandler('AGENT_TASK', (action, conf) => {
-      //     if (action === 'unapply' || !conf) return
-      //     if (conf.task_type !== 'tracer_flare' || !conf.args) return
+          if (action === 'unapply') {
+            this._flare.disable()
+          } else if (conf.config?.log_level) {
+            this._flare.enable(config)
+            this._flare.module.prepare(conf.config.log_level)
+          }
+        })
 
-      //     this._flare.enable(config)
-      //     this._flare.module.send(conf.args)
-      //   })
+        rc.setProductHandler('AGENT_TASK', (action, conf) => {
+          if (action === 'unapply' || !conf) return
+          if (conf.task_type !== 'tracer_flare' || !conf.args) return
 
-      //   if (config.dynamicInstrumentation.enabled) {
-      //     DynamicInstrumentation.start(config, rc)
-      //   }
-      // }
+          this._flare.enable(config)
+          this._flare.module.send(conf.args)
+        })
+
+        if (config.dynamicInstrumentation.enabled) {
+          require('./debugger').start(config, rc)
+        }
+      }
 
       if (config.isGCPFunction || config.isAzureFunction) {
         require('./serverless').maybeStartServerlessMiniAgent(config)
       }
 
       // if (config.profiling.enabled !== 'false') {
+      //   const { SSIHeuristics } = require('./profiling/ssi-heuristics')
       //   const ssiHeuristics = new SSIHeuristics(config)
       //   ssiHeuristics.start()
       //   let mockProfiler = null
@@ -156,9 +168,9 @@ class Tracer extends NoopProxy {
       //   }
       // }
 
-      // if (config.runtimeMetrics) {
-      //   runtimeMetrics.start(config)
-      // }
+      if (config.runtimeMetrics) {
+        runtimeMetrics.start(config)
+      }
 
       this._enableOrDisableTracing(config)
 
@@ -207,18 +219,15 @@ class Tracer extends NoopProxy {
 
   _enableOrDisableTracing (config) {
     if (config.tracing !== false) {
-      if (config.appsec.enabled) {
-        this._modules.appsec.enable(config)
-      }
       if (config.llmobs.enabled) {
         this._modules.llmobs.enable(config)
       }
       if (!this._tracingInitialized) {
-        // const prioritySampler = appsecStandalone.configure(config)
-        this._tracer = new DatadogTracer(config)
+        const prioritySampler = config.appsec.standalone.enabled && require('./appsec/standalone').configure(config)
+        this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
-        // this.appsec = new AppsecSdk(this._tracer, config)
-        // this.llmobs = new LLMObsSDK(this._tracer, this._modules.llmobs, config)
+        lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
+        lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {
@@ -232,9 +241,9 @@ class Tracer extends NoopProxy {
 
     if (this._tracingInitialized) {
       this._tracer.configure(config)
-      this._pluginManager.configure(config)
-      // DynamicInstrumentation.configure(config)
-      // setStartupLogPluginManager(this._pluginManager)
+      // this._pluginManager.configure(config)
+      // require('./debugger').configure(config)
+      setStartupLogPluginManager(this._pluginManager)
     }
   }
 
@@ -247,13 +256,13 @@ class Tracer extends NoopProxy {
   }
 
   use () {
-    this._pluginManager.configurePlugin(...arguments)
+    // this._pluginManager.configurePlugin(...arguments)
     return this
   }
 
-  // get TracerProvider () {
-  //   // return require('./opentelemetry/tracer_provider')
-  // }
+  get TracerProvider () {
+    return require('./opentelemetry/tracer_provider')
+  }
 }
 
 module.exports = Tracer

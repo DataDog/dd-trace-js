@@ -2,12 +2,12 @@
 
 const request = require('../common/request')
 const { startupLog } = require('../../startup-log')
-// const runtimeMetrics = require('../../runtime_metrics')
+const runtimeMetrics = require('../../runtime_metrics')
 const log = require('../../log')
 const tracerVersion = require('../../../../../package.json').version
 const BaseWriter = require('../common/writer')
 
-// const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
+const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
 class Writer extends BaseWriter {
   constructor ({ prioritySampler, lookup, protocolVersion, headers }) {
@@ -22,21 +22,21 @@ class Writer extends BaseWriter {
   }
 
   _sendPayload (data, count, done) {
-    // runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
+    runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
 
     const { _headers, _lookup, _protocolVersion, _url } = this
     makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, true, (err, res, status) => {
-      // if (status) {
-      //   runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
-      //   runtimeMetrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
-      // } else if (err) {
-      //   runtimeMetrics.increment(`${METRIC_PREFIX}.errors`, true)
-      //   runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${err.name}`, true)
+      if (status) {
+        runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
+        runtimeMetrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
+      } else if (err) {
+        runtimeMetrics.increment(`${METRIC_PREFIX}.errors`, true)
+        runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${err.name}`, true)
 
-      //   if (err.code) {
-      //     runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true)
-      //   }
-      // }
+        if (err.code) {
+          runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true)
+        }
+      }
 
       startupLog({ agentError: err })
 
@@ -53,8 +53,8 @@ class Writer extends BaseWriter {
       } catch (e) {
         log.error('Error updating prioritySampler rates', e)
 
-        // runtimeMetrics.increment(`${METRIC_PREFIX}.errors`, true)
-        // runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true)
+        runtimeMetrics.increment(`${METRIC_PREFIX}.errors`, true)
+        runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true)
       }
       done()
     })

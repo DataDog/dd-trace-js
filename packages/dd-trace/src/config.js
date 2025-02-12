@@ -15,19 +15,23 @@ const { isTrue, isFalse } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
-const telemetryMetrics = require('./telemetry/metrics')
 const { getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 
-const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
+let tracerMetrics
 
 const telemetryCounters = {
   'otel.env.hiding': {},
   'otel.env.invalid': {}
 }
 
-function getCounter (event, ddVar, otelVar) {
+function getCounter (config, event, ddVar, otelVar) {
+  if (!config.telemetry.enabled) return { inc () {} }
+  if (!tracerMetrics) {
+    tracerMetrics = require('./telemetry/metrics').manager.namespace('tracers')
+  }
+
   const counters = telemetryCounters[event]
   const tags = []
   const ddVarPrefix = 'config_datadog:'
@@ -77,7 +81,7 @@ function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
   return OTEL_TRACES_SAMPLER_MAPPING[otelTracesSampler]
 }
 
-function validateOtelPropagators (propagators) {
+function validateOtelPropagators (config, propagators) {
   if (!process.env.PROPAGATION_STYLE_EXTRACT &&
     !process.env.PROPAGATION_STYLE_INJECT &&
     !process.env.DD_TRACE_PROPAGATION_STYLE &&
@@ -85,7 +89,7 @@ function validateOtelPropagators (propagators) {
     for (const style in propagators) {
       if (!VALID_PROPAGATION_STYLES.has(style)) {
         log.warn('unexpected value for OTEL_PROPAGATORS environment variable')
-        getCounter('otel.env.invalid', 'DD_TRACE_PROPAGATION_STYLE', 'OTEL_PROPAGATORS').inc()
+        getCounter(config, 'otel.env.invalid', 'DD_TRACE_PROPAGATION_STYLE', 'OTEL_PROPAGATORS').inc()
       }
     }
   }
@@ -115,16 +119,16 @@ function validateEnvVarType (envVar) {
   }
 }
 
-function checkIfBothOtelAndDdEnvVarSet () {
+function checkIfBothOtelAndDdEnvVarSet (config) {
   for (const [otelEnvVar, ddEnvVar] of Object.entries(otelDdEnvMapping)) {
     if (ddEnvVar && process.env[ddEnvVar] && process.env[otelEnvVar]) {
       log.warn(`both ${ddEnvVar} and ${otelEnvVar} environment variables are set`)
-      getCounter('otel.env.hiding', ddEnvVar, otelEnvVar).inc()
+      getCounter(config, 'otel.env.hiding', ddEnvVar, otelEnvVar).inc()
     }
 
     if (process.env[otelEnvVar] && !validateEnvVarType(otelEnvVar)) {
       log.warn(`unexpected value for ${otelEnvVar} environment variable`)
-      getCounter('otel.env.invalid', ddEnvVar, otelEnvVar).inc()
+      getCounter(config, 'otel.env.invalid', ddEnvVar, otelEnvVar).inc()
     }
   }
 }
@@ -251,8 +255,6 @@ class Config {
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel)
 
-    checkIfBothOtelAndDdEnvVarSet()
-
     const DD_API_KEY = coalesce(
       process.env.DATADOG_API_KEY,
       process.env.DD_API_KEY
@@ -273,8 +275,6 @@ class Config {
       options.tracePropagationStyle,
       this._getDefaultPropagationStyle(options)
     )
-
-    validateOtelPropagators(PROPAGATION_STYLE_INJECT)
 
     if (typeof options.appsec === 'boolean') {
       options.appsec = {
@@ -342,6 +342,9 @@ class Config {
     this._applyCalculated()
     this._applyRemote({})
     this._merge()
+
+    checkIfBothOtelAndDdEnvVarSet(this)
+    validateOtelPropagators(this, PROPAGATION_STYLE_INJECT)
 
     tagger.add(this.tags, {
       service: this.service,
@@ -750,7 +753,10 @@ class Config {
     this._setValue(env, 'baggageMaxItems', DD_TRACE_BAGGAGE_MAX_ITEMS)
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
-    this._setBoolean(env, 'crashtracking.enabled', DD_CRASHTRACKING_ENABLED)
+    this._setBoolean(env, 'crashtracking.enabled', coalesce(
+      DD_CRASHTRACKING_ENABLED,
+      !this._isInServerlessEnvironment()
+    ))
     this._setBoolean(env, 'codeOriginForSpans.enabled', DD_CODE_ORIGIN_FOR_SPANS_ENABLED)
     this._setString(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
     this._setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOST || DD_DOGSTATSD_HOSTNAME)

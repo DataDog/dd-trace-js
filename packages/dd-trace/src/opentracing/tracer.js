@@ -5,14 +5,13 @@ const Span = require('./span')
 const SpanProcessor = require('../span_processor')
 const PrioritySampler = require('../priority_sampler')
 const TextMapPropagator = require('./propagation/text_map')
-// const DSMTextMapPropagator = require('./propagation/text_map_dsm')
 const HttpPropagator = require('./propagation/http')
 const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
 const formats = require('../../../../ext/formats')
 
 const log = require('../log')
-// const runtimeMetrics = require('../runtime_metrics')
+const runtimeMetrics = require('../runtime_metrics')
 const getExporter = require('../exporter')
 const SpanContext = require('./span_context')
 
@@ -40,7 +39,6 @@ class DatadogTracer {
       [formats.HTTP_HEADERS]: new HttpPropagator(config),
       [formats.BINARY]: new BinaryPropagator(config),
       [formats.LOG]: new LogPropagator(config)
-      // [formats.TEXT_MAP_DSM]: new DSMTextMapPropagator(config)
     }
     if (config.reportHostname) {
       this._hostname = os.hostname()
@@ -92,7 +90,7 @@ class DatadogTracer {
       this._propagators[format].inject(context, carrier)
     } catch (e) {
       log.error('Error injecting trace', e)
-      // runtimeMetrics.increment('datadog.tracer.node.inject.errors', true)
+      runtimeMetrics.increment('datadog.tracer.node.inject.errors', true)
     }
   }
 
@@ -101,7 +99,7 @@ class DatadogTracer {
       return this._propagators[format].extract(carrier)
     } catch (e) {
       log.error('Error extracting trace', e)
-      // runtimeMetrics.increment('datadog.tracer.node.extract.errors', true)
+      runtimeMetrics.increment('datadog.tracer.node.extract.errors', true)
       return null
     }
   }

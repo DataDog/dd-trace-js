@@ -243,18 +243,22 @@ class Namespace {
   }
 }
 
-class NamespaceManager extends Map {
+class NamespaceManager {
+  constructor () {
+    this._map = new Map()
+  }
+
   namespace (name) {
-    let ns = this.get(name)
+    let ns = this._map.get(name)
     if (ns) return ns
 
     ns = new Namespace(name)
-    this.set(name, ns)
+    this._map.set(name, ns)
     return ns
   }
 
   toJSON () {
-    return mapToJsonArray(this)
+    return mapToJsonArray(this._map)
   }
 
   send (config, application, host) {
