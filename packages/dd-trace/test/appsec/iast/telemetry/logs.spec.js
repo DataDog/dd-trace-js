@@ -23,7 +23,7 @@ describe('Telemetry logs', () => {
     start = sinon.stub()
     send = sinon.spy()
 
-    telemetry = proxyquire('../../../../src/telemetry', {
+    telemetry = proxyquire('../../../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
