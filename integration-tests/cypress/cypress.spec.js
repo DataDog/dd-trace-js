@@ -38,7 +38,9 @@ const {
   TEST_SESSION_NAME,
   TEST_LEVEL_EVENT_TYPES,
   TEST_RETRY_REASON,
-  DD_TEST_IS_USER_PROVIDED_SERVICE
+  DD_TEST_IS_USER_PROVIDED_SERVICE,
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_ENABLED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -1729,6 +1731,171 @@ moduleTypes.forEach(({
         receiverPromise.then(() => {
           done()
         }).catch(done)
+      })
+    })
+
+    context('quarantine', () => {
+      beforeEach(() => {
+        receiver.setQuarantinedTests({
+          cypress: {
+            suites: {
+              'cypress/e2e/quarantine.js': {
+                tests: {
+                  'quarantine is quarantined': {
+                    properties: {
+                      quarantined: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        })
+      })
+      it('can quarantine tests', (done) => {
+        receiver.setSettings({
+          test_management: {
+            enabled: true
+          }
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const failedTest = events.find(event => event.type === 'test').content
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+            assert.equal(failedTest.resource, 'cypress/e2e/quarantine.js.quarantine is quarantined')
+
+            // TODO: mark it as failed but ignore status
+            assert.propertyVal(failedTest.meta, TEST_STATUS, 'skip')
+            assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+          })
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/quarantine.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', (exitCode) => {
+          receiverPromise.then(() => {
+            assert.equal(exitCode, 0)
+            done()
+          }).catch(done)
+        })
+      })
+
+      it('fails if quarantine is not enabled', (done) => {
+        receiver.setSettings({
+          test_management: {
+            enabled: false
+          }
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const failedTest = events.find(event => event.type === 'test').content
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+            assert.equal(failedTest.resource, 'cypress/e2e/quarantine.js.quarantine is quarantined')
+
+            assert.propertyVal(failedTest.meta, TEST_STATUS, 'fail')
+            assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+          })
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/quarantine.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', (exitCode) => {
+          receiverPromise.then(() => {
+            assert.equal(exitCode, 1)
+            done()
+          }).catch(done)
+        })
+      })
+
+      it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+        receiver.setSettings({
+          test_management: {
+            enabled: true
+          }
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const failedTest = events.find(event => event.type === 'test').content
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+            assert.equal(failedTest.resource, 'cypress/e2e/quarantine.js.quarantine is quarantined')
+
+            assert.propertyVal(failedTest.meta, TEST_STATUS, 'fail')
+            assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+          })
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/quarantine.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun,
+              DD_TEST_MANAGEMENT_ENABLED: 'false'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', (exitCode) => {
+          receiverPromise.then(() => {
+            assert.equal(exitCode, 1)
+            done()
+          }).catch(done)
+        })
       })
     })
   })
