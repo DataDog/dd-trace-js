@@ -71,7 +71,7 @@ export default [
       '@stylistic/js/object-curly-newline': ['error', { multiline: true, consistent: true }],
       '@stylistic/js/object-curly-spacing': ['error', 'always'],
       'import/no-extraneous-dependencies': 'error',
-      'n/no-restricted-require': ['error', ['diagnostics_channel']],
+      'n/no-restricted-require': ['error', ['diagnostics_channel', 'semver']],
       'no-console': 'error',
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommnded)
       'no-unused-expressions': 'off', // Override (turned on by standard)
