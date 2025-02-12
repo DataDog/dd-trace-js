@@ -35,7 +35,7 @@ describe('telemetry (proxy)', () => {
   it('should be noop when disabled', () => {
     proxy.start()
     proxy.updateIntegrations()
-    proxy.updateConfig()
+    proxy.updateConfig([])
     proxy.appClosing()
     proxy.stop()
 
@@ -51,7 +51,7 @@ describe('telemetry (proxy)', () => {
 
     proxy.start(config)
     proxy.updateIntegrations()
-    proxy.updateConfig()
+    proxy.updateConfig([], config)
     proxy.appClosing()
     proxy.stop()
 
@@ -67,9 +67,12 @@ describe('telemetry (proxy)', () => {
 
     proxy.start(config)
     proxy.stop()
-    proxy.start()
+
+    config.telemetry.enabled = false
+
+    proxy.start(config)
     proxy.updateIntegrations()
-    proxy.updateConfig()
+    proxy.updateConfig([], config)
     proxy.appClosing()
     proxy.stop()
 
@@ -78,6 +81,15 @@ describe('telemetry (proxy)', () => {
     expect(telemetry.updateConfig).to.not.have.been.called
     expect(telemetry.appClosing).to.not.have.been.called
     expect(telemetry.stop).to.have.been.calledOnce
+  })
+
+  it('should proxy when config is updated', () => {
+    const config = { telemetry: { enabled: true } }
+    const changes = []
+
+    proxy.updateConfig(changes, config)
+
+    expect(telemetry.updateConfig).to.have.been.calledWith(changes, config)
   })
 })
 
