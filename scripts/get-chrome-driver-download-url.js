@@ -1,3 +1,5 @@
+/* eslint n/no-unsupported-features/node-builtins: ['error', { version: '>=21.0.0', allowExperimental: true }] */
+
 const URL = 'https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json'
 
 // Get chrome driver download URL from a given chrome version, provided via CHROME_VERSION env var
