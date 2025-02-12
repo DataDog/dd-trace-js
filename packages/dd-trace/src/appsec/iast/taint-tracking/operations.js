@@ -84,10 +84,10 @@ function getRanges (iastContext, string) {
   return result
 }
 
-function addSecureMark (iastContext, string, mark) {
+function addSecureMark (iastContext, string, mark, createNewTainted = true) {
   const transactionId = iastContext?.[IAST_TRANSACTION_ID]
   if (transactionId) {
-    return TaintedUtils.addSecureMarksToTaintedString(transactionId, string, mark)
+    return TaintedUtils.addSecureMarksToTaintedString(transactionId, string, mark, createNewTainted)
   }
 
   return string
