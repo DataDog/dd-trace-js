@@ -77,7 +77,7 @@ class Tracer {
       }
     }
 
-    const spanContext = new OtelSpanContext({
+    const spanContext = new SpanContext({
       traceId: id(traceId, 16), spanId: id(), tags: meta, parentId: id(spanId, 16)
     })
 
