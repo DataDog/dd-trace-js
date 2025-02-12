@@ -9,14 +9,8 @@ const DynamicInstrumentation = require('./debugger')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
-const remoteConfig = require('./appsec/remote_config')
-const AppsecSdk = require('./appsec/sdk')
-const dogstatsd = require('./dogstatsd')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const spanleak = require('./spanleak')
-const { SSIHeuristics } = require('./profiling/ssi-heuristics')
-const appsecStandalone = require('./appsec/standalone')
-const LLMObsSDK = require('./llmobs/sdk')
 
 class LazyModule {
   constructor (provider) {
@@ -31,6 +25,20 @@ class LazyModule {
   disable () {
     this.module?.disable()
   }
+}
+
+function lazyProxy (obj, property, getClass, ...args) {
+  const proxy = obj[property] = new Proxy(obj[property], {
+    get: (target, key) => {
+      if (obj[property] === proxy) {
+        const RealClass = getClass()
+        obj[property] = new RealClass(...args)
+      }
+      return obj[property][key]
+    }
+  })
+
+  return proxy
 }
 
 class Tracer extends NoopProxy {
@@ -68,15 +76,19 @@ class Tracer extends NoopProxy {
 
       if (config.dogstatsd) {
         // Custom Metrics
-        this.dogstatsd = new dogstatsd.CustomMetrics(config)
+        lazyProxy(this, 'dogstatsd', () => {
+          const { CustomMetrics } = require('./dogstatsd')
 
-        setInterval(() => {
-          this.dogstatsd.flush()
-        }, 10 * 1000).unref()
+          setInterval(() => {
+            this.dogstatsd.flush()
+          }, 10 * 1000).unref()
 
-        process.once('beforeExit', () => {
-          this.dogstatsd.flush()
-        })
+          process.once('beforeExit', () => {
+            this.dogstatsd.flush()
+          })
+
+          return CustomMetrics
+        }, config)
       }
 
       if (config.spanLeakDebug > 0) {
@@ -89,7 +101,7 @@ class Tracer extends NoopProxy {
       }
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
-        const rc = remoteConfig.enable(config, this._modules.appsec)
+        const rc = require('./appsec/remote_config').enable(config, this._modules.appsec)
 
         rc.setProductHandler('APM_TRACING', (action, conf) => {
           if (action === 'unapply') {
@@ -129,6 +141,7 @@ class Tracer extends NoopProxy {
       }
 
       if (config.profiling.enabled !== 'false') {
+        const { SSIHeuristics } = require('./profiling/ssi-heuristics')
         const ssiHeuristics = new SSIHeuristics(config)
         ssiHeuristics.start()
         let mockProfiler = null
@@ -218,11 +231,11 @@ class Tracer extends NoopProxy {
         this._modules.llmobs.enable(config)
       }
       if (!this._tracingInitialized) {
-        const prioritySampler = appsecStandalone.configure(config)
+        const prioritySampler = config.appsec.standalone?.enabled && require('./appsec/standalone').configure(config)
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
-        this.appsec = new AppsecSdk(this._tracer, config)
-        this.llmobs = new LLMObsSDK(this._tracer, this._modules.llmobs, config)
+        lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
+        lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {
