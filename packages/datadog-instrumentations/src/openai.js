@@ -301,15 +301,17 @@ for (const shim of V4_PACKAGE_SHIMS) {
           if (baseResource === 'chat.completions' && typeof apiProm._thenUnwrap === 'function') {
             // this should only ever be invoked from a client.beta.chat.completions.parse call
             shimmer.wrap(apiProm, '_thenUnwrap', origApiPromThenUnwrap => function () {
-              // this is a new apipromise instance...
+              // TODO(sam.brenner): I wonder if we can patch the APIPromise prototype instead, although
+              // we might not have access to everything we need...
+
+              // this is a new apipromise instance
               const unwrappedPromise = origApiPromThenUnwrap.apply(this, arguments)
 
               shimmer.wrap(unwrappedPromise, 'parse', origApiPromParse => function () {
-                const unwrappedPromise = origApiPromParse.apply(this, arguments)
-                // the original response is wrapped in a promise, so we need to unwrap it
+                const parsedPromise = origApiPromParse.apply(this, arguments)
                   .then(body => Promise.all([this.responsePromise, body]))
 
-                return handleUnwrappedAPIPromise(unwrappedPromise, ctx, stream, n)
+                return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, n)
               })
 
               return unwrappedPromise
@@ -319,11 +321,10 @@ for (const shim of V4_PACKAGE_SHIMS) {
           // wrapping `parse` avoids problematic wrapping of `then` when trying to call
           // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
           shimmer.wrap(apiProm, 'parse', origApiPromParse => function () {
-            const unwrappedPromise = origApiPromParse.apply(this, arguments)
-              // the original response is wrapped in a promise, so we need to unwrap it
+            const parsedPromise = origApiPromParse.apply(this, arguments)
               .then(body => Promise.all([this.responsePromise, body]))
 
-            return handleUnwrappedAPIPromise(unwrappedPromise, ctx, stream, n)
+            return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, n)
           })
 
           ch.end.publish(ctx)
@@ -337,28 +338,29 @@ for (const shim of V4_PACKAGE_SHIMS) {
 }
 
 function handleUnwrappedAPIPromise (apiProm, ctx, stream, n) {
-  return apiProm.then(([{ response, options }, body]) => {
-    if (stream) {
-      if (body.iterator) {
-        shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, n, ctx))
-      } else {
-        shimmer.wrap(
-          body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, n, ctx)
-        )
-      }
-    } else {
-      finish(ctx, {
-        headers: response.headers,
-        data: body,
-        request: {
-          path: response.url,
-          method: options.method
+  return apiProm
+    .then(([{ response, options }, body]) => {
+      if (stream) {
+        if (body.iterator) {
+          shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, n, ctx))
+        } else {
+          shimmer.wrap(
+            body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, n, ctx)
+          )
         }
-      })
-    }
+      } else {
+        finish(ctx, {
+          headers: response.headers,
+          data: body,
+          request: {
+            path: response.url,
+            method: options.method
+          }
+        })
+      }
 
-    return body
-  })
+      return body
+    })
     .catch(error => {
       finish(ctx, undefined, error)
 

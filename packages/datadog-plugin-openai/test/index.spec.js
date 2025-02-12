@@ -2759,7 +2759,10 @@ describe('Plugin', () => {
             }
 
             if (semver.satisfies(realVersion, '>=4.0.0')) {
-              const result = await openai.chat.completions.create(params)
+              const prom = openai.chat.completions.create(params)
+              expect(prom).to.have.property('withResponse')
+
+              const result = await prom
 
               expect(result.id).to.eql('chatcmpl-7GaWqyMTD9BLmkmy8SxyjUGX3KSRN')
               expect(result.model).to.eql('gpt-3.5-turbo-0301')
@@ -3726,7 +3729,7 @@ describe('Plugin', () => {
       }
 
       if (semver.intersects('>=4.59.0', version)) {
-        it.only('makes a successful call with the beta chat completions', async () => {
+        it('makes a successful call with the beta chat completions', async () => {
           nock('https://api.openai.com:443')
             .post('/v1/chat/completions')
             .reply(200, {
@@ -3764,7 +3767,7 @@ describe('Plugin', () => {
             stream: false
           })
 
-          expect(typeof prom.withResponse).to.equal('function')
+          expect(prom).to.have.property('withResponse')
 
           const response = await prom
 
