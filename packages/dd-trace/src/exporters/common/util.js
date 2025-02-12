@@ -1,3 +1,5 @@
+'use strict'
+
 function safeJSONStringify (value) {
   return JSON.stringify(
     value,

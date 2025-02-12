@@ -1,3 +1,5 @@
+'use strict'
+
 const v0 = require('./v0')
 const v1 = require('./v1')
 

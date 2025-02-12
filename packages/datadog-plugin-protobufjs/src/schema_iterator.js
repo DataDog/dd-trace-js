@@ -1,3 +1,5 @@
+'use strict'
+
 const PROTOBUF = 'protobuf'
 const {
   SCHEMA_DEFINITION,

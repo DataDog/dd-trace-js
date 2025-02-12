@@ -1,3 +1,5 @@
+'use strict'
+
 const { addHook } = require('./helpers/instrument')
 
 // No handler because this is only useful for testing.
