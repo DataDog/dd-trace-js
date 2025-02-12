@@ -5,8 +5,8 @@ let telemetry
 const noop = telemetry = {
   start () {},
   stop () {},
-  updateIntegrations () {},
   updateConfig () {},
+  updateIntegrations () {},
   appClosing () {}
 }
 
@@ -26,6 +26,15 @@ module.exports = {
   },
 
   updateIntegrations: (...args) => telemetry.updateIntegrations(...args),
-  updateConfig: (...args) => telemetry.updateConfig(...args),
+
+  updateConfig: (changes, config, ...args) => {
+    if (!config?.telemetry?.enabled) return
+    if (telemetry === noop) {
+      telemetry = require('./telemetry')
+    }
+
+    telemetry.updateConfig(changes, config, ...args)
+  },
+
   appClosing: (...args) => telemetry.appClosing(...args)
 }
