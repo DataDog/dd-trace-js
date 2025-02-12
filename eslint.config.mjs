@@ -12,6 +12,15 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const compat = new FlatCompat({ baseDirectory: __dirname })
 
+const SRC_FILES = [
+  '*.js',
+  '*.mjs',
+  'ext/**/*.js',
+  'ext/**/*.mjs',
+  'packages/*/src/**/*.js',
+  'packages/*/src/**/*.mjs'
+]
+
 const TEST_FILES = [
   'packages/*/test/**/*.js',
   'packages/*/test/**/*.mjs',
@@ -71,7 +80,7 @@ export default [
       '@stylistic/js/object-curly-newline': ['error', { multiline: true, consistent: true }],
       '@stylistic/js/object-curly-spacing': ['error', 'always'],
       'import/no-extraneous-dependencies': 'error',
-      'n/no-restricted-require': ['error', ['diagnostics_channel', 'semver']],
+      'n/no-restricted-require': ['error', ['diagnostics_channel']],
       'no-console': 'error',
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommnded)
       'no-unused-expressions': 'off', // Override (turned on by standard)
@@ -82,6 +91,13 @@ export default [
     name: 'mocha/recommnded',
     ...mocha.configs.flat.recommended,
     files: TEST_FILES
+  },
+  {
+    name: 'dd-trace/src/all',
+    files: SRC_FILES,
+    rules: {
+      'n/no-restricted-require': ['error', ['semver']]
+    }
   },
   {
     name: 'dd-trace/tests/all',
