@@ -27,7 +27,9 @@ const {
   TEST_MODULE_ID,
   TEST_SUITE,
   CUCUMBER_IS_PARALLEL,
-  TEST_RETRY_REASON
+  TEST_RETRY_REASON,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -83,6 +85,7 @@ class CucumberPlugin extends CiPlugin {
       hasForcedToRunSuites,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
+      isQuarantinedTestsEnabled,
       isParallel
     }) => {
       const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
@@ -108,6 +111,9 @@ class CucumberPlugin extends CiPlugin {
       }
       if (isParallel) {
         this.testSessionSpan.setTag(CUCUMBER_IS_PARALLEL, 'true')
+      }
+      if (isQuarantinedTestsEnabled) {
+        this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
 
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -311,7 +317,8 @@ class CucumberPlugin extends CiPlugin {
       errorMessage,
       isNew,
       isEfdRetry,
-      isFlakyRetry
+      isFlakyRetry,
+      isQuarantined
     }) => {
       const span = storage('legacy').getStore().span
       const statusTag = isStep ? 'step.status' : TEST_STATUS
@@ -338,6 +345,10 @@ class CucumberPlugin extends CiPlugin {
 
       if (isFlakyRetry > 0) {
         span.setTag(TEST_IS_RETRY, 'true')
+      }
+
+      if (isQuarantined) {
+        span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
       }
 
       span.finish()

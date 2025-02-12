@@ -50,7 +50,7 @@ module.exports = class CiPlugin extends Plugin {
 
     this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone }) => {
       if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
-        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
         if (err) {
@@ -64,7 +64,7 @@ module.exports = class CiPlugin extends Plugin {
 
     this.addSub(`ci:${this.constructor.id}:test-suite:skippable`, ({ onDone }) => {
       if (!this.tracer._exporter?.getSkippableSuites) {
-        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites, itrCorrelationId) => {
         if (err) {
@@ -153,7 +153,7 @@ module.exports = class CiPlugin extends Plugin {
 
     this.addSub(`ci:${this.constructor.id}:known-tests`, ({ onDone }) => {
       if (!this.tracer._exporter?.getKnownTests) {
-        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getKnownTests(this.testConfiguration, (err, knownTests) => {
         if (err) {
@@ -162,6 +162,19 @@ module.exports = class CiPlugin extends Plugin {
           this.libraryConfig.isKnownTestsEnabled = false
         }
         onDone({ err, knownTests })
+      })
+    })
+
+    this.addSub(`ci:${this.constructor.id}:quarantined-tests`, ({ onDone }) => {
+      if (!this.tracer._exporter?.getQuarantinedTests) {
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
+      }
+      this.tracer._exporter.getQuarantinedTests(this.testConfiguration, (err, quarantinedTests) => {
+        if (err) {
+          log.error('Quarantined tests could not be fetched. %s', err.message)
+          this.libraryConfig.isQuarantinedTestsEnabled = false
+        }
+        onDone({ err, quarantinedTests })
       })
     })
   }

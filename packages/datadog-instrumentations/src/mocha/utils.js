@@ -360,6 +360,10 @@ function getRunTestsWrapper (runTests, config) {
         }
       })
     }
+    if (config.isQuarantinedEnabled) {
+      // we have to ignore the result of the quarantine
+      
+    }
     return runTests.apply(this, arguments)
   }
 }

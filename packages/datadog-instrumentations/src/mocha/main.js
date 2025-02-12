@@ -61,6 +61,7 @@ const testSuiteCodeCoverageCh = channel('ci:mocha:test-suite:code-coverage')
 const libraryConfigurationCh = channel('ci:mocha:library-configuration')
 const knownTestsCh = channel('ci:mocha:known-tests')
 const skippableSuitesCh = channel('ci:mocha:test-suite:skippable')
+const quarantinedTestsCh = channel('ci:mocha:quarantined-tests')
 const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
@@ -135,6 +136,10 @@ function getOnEndHandler (isParallel) {
       }
     }
 
+    if (config.isQuarantinedTestsEnabled) {
+      // we need to do a similar logic here as in EFD: subtract the quarantined tests from the failures
+    }
+
     if (status === 'fail') {
       error = new Error(`Failed tests: ${this.failures}.`)
     }
@@ -173,6 +178,22 @@ function getOnEndHandler (isParallel) {
 function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
   const mochaRunAsyncResource = new AsyncResource('bound-anonymous-fn')
 
+  const onReceivedQuarantinedTests = ({ err, quarantinedTests: receivedQuarantinedTests }) => {
+    if (err) {
+      config.quarantinedTests = {}
+      config.isQuarantinedTestsEnabled = false
+    } else {
+      config.quarantinedTests = receivedQuarantinedTests
+    }
+    if (config.isSuitesSkippingEnabled) {
+      skippableSuitesCh.publish({
+        onDone: mochaRunAsyncResource.bind(onReceivedSkippableSuites)
+      })
+    } else {
+      onFinishRequest()
+    }
+  }
+
   const onReceivedSkippableSuites = ({ err, skippableSuites, itrCorrelationId: responseItrCorrelationId }) => {
     if (err) {
       suitesToSkip = []
@@ -205,8 +226,11 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
     } else {
       config.knownTests = knownTests
     }
-
-    if (config.isSuitesSkippingEnabled) {
+    if (config.isQuarantinedTestsEnabled) {
+      quarantinedTestsCh.publish({
+        onDone: mochaRunAsyncResource.bind(onReceivedQuarantinedTests)
+      })
+    } else if (config.isSuitesSkippingEnabled) {
       skippableSuitesCh.publish({
         onDone: mochaRunAsyncResource.bind(onReceivedSkippableSuites)
       })
@@ -228,6 +252,7 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
     config.isSuitesSkippingEnabled = !isParallel && libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = !isParallel && libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = !isParallel && libraryConfig.flakyTestRetriesCount
+    config.isQuarantinedTestsEnabled = !isParallel && libraryConfig.isQuarantinedTestsEnabled
 
     if (config.isKnownTestsEnabled) {
       knownTestsCh.publish({
@@ -579,6 +604,7 @@ addHook({
 
     const testPath = getTestSuitePath(testSuiteAbsolutePath, process.cwd())
     const testSuiteKnownTests = config.knownTests.mocha?.[testPath] || []
+    const testSuiteQuarantinedTests = config.quarantinedTests?.modules?.mocha?.suites?.[testPath] || []
 
     // We pass the known tests for the test file to the worker
     const testFileResult = await run.apply(
@@ -589,6 +615,8 @@ addHook({
           ...workerArgs,
           _ddEfdNumRetries: config.earlyFlakeDetectionNumRetries,
           _ddIsEfdEnabled: config.isEarlyFlakeDetectionEnabled,
+          _ddIsQuarantinedEnabled: config.isQuarantinedTestsEnabled,
+          _ddQuarantinedTests: testSuiteQuarantinedTests,
           _ddKnownTests: {
             mocha: {
               [testPath]: testSuiteKnownTests

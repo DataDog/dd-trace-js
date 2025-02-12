@@ -9,6 +9,7 @@ const testPassCh = channel('ci:vitest:test:pass')
 const testErrorCh = channel('ci:vitest:test:error')
 const testSkipCh = channel('ci:vitest:test:skip')
 const isNewTestCh = channel('ci:vitest:test:is-new')
+const isQuarantinedCh = channel('ci:vitest:test:is-quarantined')
 
 // test suite hooks
 const testSuiteStartCh = channel('ci:vitest:test-suite:start')
@@ -21,6 +22,7 @@ const testSessionFinishCh = channel('ci:vitest:session:finish')
 const libraryConfigurationCh = channel('ci:vitest:library-configuration')
 const knownTestsCh = channel('ci:vitest:known-tests')
 const isEarlyFlakeDetectionFaultyCh = channel('ci:vitest:is-early-flake-detection-faulty')
+const quarantinedTestsCh = channel('ci:vitest:quarantined-tests')
 
 const taskToAsync = new WeakMap()
 const taskToStatuses = new WeakMap()
@@ -46,7 +48,9 @@ function getProvidedContext () {
       _ddIsDiEnabled,
       _ddKnownTests: knownTests,
       _ddEarlyFlakeDetectionNumRetries: numRepeats,
-      _ddIsKnownTestsEnabled: isKnownTestsEnabled
+      _ddIsKnownTestsEnabled: isKnownTestsEnabled,
+      _ddIsQuarantinedTestsEnabled: isQuarantinedTestsEnabled,
+      _ddQuarantinedTests: quarantinedTests
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -54,7 +58,9 @@ function getProvidedContext () {
       isEarlyFlakeDetectionEnabled: _ddIsEarlyFlakeDetectionEnabled,
       knownTests,
       numRepeats,
-      isKnownTestsEnabled
+      isKnownTestsEnabled,
+      isQuarantinedTestsEnabled,
+      quarantinedTests
     }
   } catch (e) {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -63,7 +69,9 @@ function getProvidedContext () {
       isEarlyFlakeDetectionEnabled: false,
       knownTests: {},
       numRepeats: 0,
-      isKnownTestsEnabled: false
+      isKnownTestsEnabled: false,
+      isQuarantinedTestsEnabled: false,
+      quarantinedTests: {}
     }
   }
 }
@@ -158,8 +166,10 @@ function getSortWrapper (sort) {
     let earlyFlakeDetectionNumRetries = 0
     let isEarlyFlakeDetectionFaulty = false
     let isKnownTestsEnabled = false
+    let isQuarantinedTestsEnabled = false
     let isDiEnabled = false
     let knownTests = {}
+    let quarantinedTests = {}
 
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
@@ -170,6 +180,7 @@ function getSortWrapper (sort) {
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
         isDiEnabled = libraryConfig.isDiEnabled
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
+        isQuarantinedTestsEnabled = libraryConfig.isQuarantinedTestsEnabled
       }
     } catch (e) {
       isFlakyTestRetriesEnabled = false
@@ -229,6 +240,23 @@ function getSortWrapper (sort) {
       }
     }
 
+    if (isQuarantinedTestsEnabled) {
+      const { err, quarantinedTests: receivedQuarantinedTests } = await getChannelPromise(quarantinedTestsCh)
+      if (!err) {
+        quarantinedTests = receivedQuarantinedTests
+        try {
+          const workspaceProject = this.ctx.getCoreWorkspaceProject()
+          workspaceProject._provided._ddIsQuarantinedTestsEnabled = isQuarantinedTestsEnabled
+          workspaceProject._provided._ddQuarantinedTests = quarantinedTests
+        } catch (e) {
+          log.warn('Could not send quarantined tests to workers so Quarantine will not work.')
+        }
+      } else {
+        isQuarantinedTestsEnabled = false
+        log.error('Could not get quarantined tests.')
+      }
+    }
+
     let testCodeCoverageLinesTotal
 
     if (this.ctx.coverageProvider?.generateCoverage) {
@@ -263,6 +291,7 @@ function getSortWrapper (sort) {
           error,
           isEarlyFlakeDetectionEnabled,
           isEarlyFlakeDetectionFaulty,
+          isQuarantinedTestsEnabled,
           onFinish
         })
       })
@@ -332,7 +361,7 @@ addHook({
 
   // `onAfterRunTask` is run after all repetitions or attempts are run
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterRunTask', onAfterRunTask => async function (task) {
-    const { isEarlyFlakeDetectionEnabled } = getProvidedContext()
+    const { isEarlyFlakeDetectionEnabled, isQuarantinedTestsEnabled, quarantinedTests } = getProvidedContext()
 
     if (isEarlyFlakeDetectionEnabled && taskToStatuses.has(task)) {
       const statuses = taskToStatuses.get(task)
@@ -343,6 +372,21 @@ addHook({
         }
         task.result.state = 'pass'
       }
+    }
+
+    if (isQuarantinedTestsEnabled) {
+      const testName = getTestName(task)
+
+      isQuarantinedCh.publish({
+        quarantinedTests,
+        testSuiteAbsolutePath: task.file.filepath,
+        testName,
+        onDone: (isQuarantined) => {
+          if (isQuarantined) {
+            task.result.state = 'pass'
+          }
+        }
+      })
     }
 
     return onAfterRunTask.apply(this, arguments)

@@ -43,7 +43,9 @@ const {
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
   TEST_RETRY_REASON,
-  DD_TEST_IS_USER_PROVIDED_SERVICE
+  DD_TEST_IS_USER_PROVIDED_SERVICE,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
@@ -2027,6 +2029,144 @@ versions.forEach(version => {
         eventsPromise.then(() => {
           done()
         }).catch(done)
+      })
+    })
+
+    context('quarantine', () => {
+      beforeEach(() => {
+        receiver.setQuarantinedTests({
+          cucumber: {
+            suites: {
+              'ci-visibility/features-quarantine/quarantine.feature': {
+                tests: {
+                  'Say quarantine': {
+                    properties: {
+                      quarantined: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        })
+      })
+      it('can quarantine tests', (done) => {
+        receiver.setSettings({
+          test_management: {
+            enabled: true
+          }
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const failedTest = events.find(event => event.type === 'test').content
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+
+            assert.equal(failedTest.resource, 'ci-visibility/features-quarantine/quarantine.feature.Say quarantine')
+
+            // The test fails but the exit code is still 0
+            assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+            assert.equal(failedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/cucumber-js ci-visibility/features-quarantine/*.feature',
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.on('exit', exitCode => {
+          eventsPromise.then(() => {
+            // even though a test fails, the exit code is 1 because the test is quarantined
+            assert.equal(exitCode, 0)
+            done()
+          }).catch(done)
+        })
+      })
+
+      it('fails if quarantine is not enabled', (done) => {
+        receiver.setSettings({
+          test_management: {
+            enabled: false
+          }
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const failedTest = events.find(event => event.type === 'test').content
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+
+            assert.equal(failedTest.resource, 'ci-visibility/features-quarantine/quarantine.feature.Say quarantine')
+
+            assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+            assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/cucumber-js ci-visibility/features-quarantine/*.feature',
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.on('exit', exitCode => {
+          eventsPromise.then(() => {
+            assert.equal(exitCode, 1)
+            done()
+          }).catch(done)
+        })
+      })
+
+      it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+        receiver.setSettings({
+          test_management: {
+            enabled: true
+          }
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const failedTest = events.find(event => event.type === 'test').content
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+
+            assert.equal(failedTest.resource, 'ci-visibility/features-quarantine/quarantine.feature.Say quarantine')
+
+            assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+            assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/cucumber-js ci-visibility/features-quarantine/*.feature',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_TEST_MANAGEMENT_ENABLED: 'false'
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.on('exit', exitCode => {
+          eventsPromise.then(() => {
+            assert.equal(exitCode, 1)
+            done()
+          }).catch(done)
+        })
       })
     })
   })

@@ -31,8 +31,12 @@ if (process.env.COLLECT_COVERAGE_FROM) {
 jest.runCLI(
   options,
   options.projects
-).then(() => {
+).then((results) => {
   if (process.send) {
     process.send('finished')
+  }
+  if (process.env.SHOULD_CHECK_RESULTS) {
+    const exitCode = results.results.success ? 0 : 1
+    process.exit(exitCode)
   }
 })
