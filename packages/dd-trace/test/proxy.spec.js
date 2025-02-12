@@ -126,7 +126,11 @@ describe('TracerProxy', () => {
       logger: 'logger',
       debug: true,
       profiling: {},
-      appsec: {},
+      appsec: {
+        standalone: {
+          enabled: true
+        }
+      },
       iast: {},
       crashtracking: {},
       dynamicInstrumentation: {},
@@ -322,14 +326,12 @@ describe('TracerProxy', () => {
           './tracer': DatadogTracer,
           './appsec': appsec,
           './appsec/iast': iast,
-          './remote_config': remoteConfig,
-          './appsec/sdk': AppsecSdk
+          './remote_config': remoteConfig
         })
 
         const remoteConfigProxy = new RemoteConfigProxy()
         remoteConfigProxy.init()
         expect(DatadogTracer).to.have.been.calledOnce
-        expect(AppsecSdk).to.have.been.calledOnce
         expect(appsec.enable).to.not.have.been.called
         expect(iast.enable).to.not.have.been.called
 
@@ -341,7 +343,6 @@ describe('TracerProxy', () => {
         conf = { tracing_enabled: true }
         handlers.get('APM_TRACING')('apply', { lib_config: conf })
         expect(DatadogTracer).to.have.been.calledOnce
-        expect(AppsecSdk).to.have.been.calledOnce
         expect(appsec.enable).to.not.have.been.called
         expect(iast.enable).to.not.have.been.called
       })
@@ -414,11 +415,11 @@ describe('TracerProxy', () => {
         }
 
         proxy.init()
+        proxy.dogstatsd.increment('foo', 10, { alpha: 'bravo' })
+
+        const incs = dogStatsD._increments()
 
         expect(dogStatsD._config().dogstatsd.hostname).to.equal('localhost')
-
-        proxy.dogstatsd.increment('foo', 10, { alpha: 'bravo' })
-        const incs = dogStatsD._increments()
         expect(incs.length).to.equal(1)
         expect(incs[0][0]).to.equal('foo')
         expect(incs[0][1]).to.equal(10)
@@ -515,7 +516,7 @@ describe('TracerProxy', () => {
           configure: sinon.stub()
         }
 
-        const options = {}
+        const options = { }
         const DatadogProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
           './config': Config,
@@ -529,6 +530,7 @@ describe('TracerProxy', () => {
 
         const proxy = new DatadogProxy()
         proxy.init(options)
+        proxy.appsec.trackCustomEvent('foo')
 
         const config = AppsecSdk.firstCall.args[1]
         expect(standalone.configure).to.have.been.calledOnceWithExactly(config)
