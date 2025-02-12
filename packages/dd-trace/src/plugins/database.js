@@ -63,23 +63,54 @@ class DatabasePlugin extends StoragePlugin {
     return tracerService
   }
 
-  injectDbmQuery (span, query, serviceName, isPreparedStatement = false) {
+  createDbmComment (span, serviceName, isPreparedStatement = false) {
     const mode = this.config.dbmPropagationMode
     const dbmService = this.getDbmServiceName(span, serviceName)
 
     if (mode === 'disabled') {
-      return query
+      return null
     }
 
     const servicePropagation = this.createDBMPropagationCommentService(dbmService, span)
 
     if (isPreparedStatement || mode === 'service') {
-      return `/*${servicePropagation}*/ ${query}`
+      return servicePropagation
     } else if (mode === 'full') {
       span.setTag('_dd.dbm_trace_injected', 'true')
       const traceparent = span._spanContext.toTraceparent()
-      return `/*${servicePropagation},traceparent='${traceparent}'*/ ${query}`
+      return `${servicePropagation},traceparent='${traceparent}'`
     }
+  }
+
+  injectDbmQuery (span, query, serviceName, isPreparedStatement = false) {
+    const dbmTraceComment = this.createDbmComment(span, serviceName, isPreparedStatement)
+
+    if (!dbmTraceComment) {
+      return query
+    }
+
+    return `/*${dbmTraceComment}*/ ${query}`
+  }
+
+  injectDbmCommand (span, command, serviceName) {
+    const dbmTraceComment = this.createDbmComment(span, serviceName)
+
+    if (!dbmTraceComment) {
+      return command
+    }
+
+    if (command.comment) {
+      // if the command already has a comment, append the dbm trace comment
+      if (typeof command.comment === 'string') {
+        command.comment += `,${dbmTraceComment}`
+      } else if (Array.isArray(command.comment)) {
+        command.comment.push(dbmTraceComment)
+      } // do nothing if the comment is not a string or an array
+    } else {
+      command.comment = dbmTraceComment
+    }
+
+    return command
   }
 
   maybeTruncate (query) {
