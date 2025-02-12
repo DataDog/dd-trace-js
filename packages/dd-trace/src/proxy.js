@@ -139,34 +139,34 @@ class Tracer extends NoopProxy {
         require('./serverless').maybeStartServerlessMiniAgent(config)
       }
 
-      // if (config.profiling.enabled !== 'false') {
-      //   const { SSIHeuristics } = require('./profiling/ssi-heuristics')
-      //   const ssiHeuristics = new SSIHeuristics(config)
-      //   ssiHeuristics.start()
-      //   let mockProfiler = null
-      //   if (config.profiling.enabled === 'true') {
-      //     this._profilerStarted = this._startProfiler(config)
-      //   } else if (ssiHeuristics.emitsTelemetry) {
-      //     // Start a mock profiler that emits mock profile-submitted events for the telemetry.
-      //     // It will be stopped if the real profiler is started by the heuristics.
-      //     mockProfiler = require('./profiling/ssi-telemetry-mock-profiler')
-      //     mockProfiler.start(config)
-      //   }
+      if (config.profiling.enabled !== 'false') {
+        const { SSIHeuristics } = require('./profiling/ssi-heuristics')
+        const ssiHeuristics = new SSIHeuristics(config)
+        ssiHeuristics.start()
+        let mockProfiler = null
+        if (config.profiling.enabled === 'true') {
+          this._profilerStarted = this._startProfiler(config)
+        } else if (ssiHeuristics.emitsTelemetry) {
+          // Start a mock profiler that emits mock profile-submitted events for the telemetry.
+          // It will be stopped if the real profiler is started by the heuristics.
+          mockProfiler = require('./profiling/ssi-telemetry-mock-profiler')
+          mockProfiler.start(config)
+        }
 
-      //   if (ssiHeuristics.heuristicsActive) {
-      //     ssiHeuristics.onTriggered(() => {
-      //       if (mockProfiler) {
-      //         mockProfiler.stop()
-      //       }
-      //       this._startProfiler(config)
-      //       ssiHeuristics.onTriggered() // deregister this callback
-      //     })
-      //   }
+        if (ssiHeuristics.heuristicsActive) {
+          ssiHeuristics.onTriggered(() => {
+            if (mockProfiler) {
+              mockProfiler.stop()
+            }
+            this._startProfiler(config)
+            ssiHeuristics.onTriggered() // deregister this callback
+          })
+        }
 
-      //   if (!this._profilerStarted) {
-      //     this._profilerStarted = Promise.resolve(false)
-      //   }
-      // }
+        if (!this._profilerStarted) {
+          this._profilerStarted = Promise.resolve(false)
+        }
+      }
 
       if (config.runtimeMetrics) {
         runtimeMetrics.start(config)
@@ -174,33 +174,33 @@ class Tracer extends NoopProxy {
 
       this._enableOrDisableTracing(config)
 
-      // if (config.tracing) {
-      //   if (config.isManualApiEnabled) {
-      //     const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
-      //     this._testApiManualPlugin = new TestApiManualPlugin(this)
-      //     // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
-      //     // This is the only place where we need to do this because the rest of the plugins
-      //     // are lazily configured when the library is imported.
-      //     this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
-      //   }
-      // }
-      // if (config.ciVisAgentlessLogSubmissionEnabled) {
-      //   if (process.env.DD_API_KEY) {
-      //     const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
-      //     const automaticLogPlugin = new LogSubmissionPlugin(this)
-      //     automaticLogPlugin.configure({ ...config, enabled: true })
-      //   } else {
-      //     log.warn(
-      //       'DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set, ' +
-      //       'but DD_API_KEY is undefined, so no automatic log submission will be performed.'
-      //     )
-      //   }
-      // }
+      if (config.tracing) {
+        if (config.isManualApiEnabled) {
+          const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
+          this._testApiManualPlugin = new TestApiManualPlugin(this)
+          // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
+          // This is the only place where we need to do this because the rest of the plugins
+          // are lazily configured when the library is imported.
+          this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
+        }
+      }
+      if (config.ciVisAgentlessLogSubmissionEnabled) {
+        if (process.env.DD_API_KEY) {
+          const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
+          const automaticLogPlugin = new LogSubmissionPlugin(this)
+          automaticLogPlugin.configure({ ...config, enabled: true })
+        } else {
+          log.warn(
+            'DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set, ' +
+            'but DD_API_KEY is undefined, so no automatic log submission will be performed.'
+          )
+        }
+      }
 
-      // if (config.isTestDynamicInstrumentationEnabled) {
-      //   const testVisibilityDynamicInstrumentation = require('./ci-visibility/dynamic-instrumentation')
-      //   testVisibilityDynamicInstrumentation.start(config)
-      // }
+      if (config.isTestDynamicInstrumentationEnabled) {
+        const testVisibilityDynamicInstrumentation = require('./ci-visibility/dynamic-instrumentation')
+        testVisibilityDynamicInstrumentation.start(config)
+      }
     } catch (e) {
       log.error('Error initialising tracer', e)
     }
@@ -208,14 +208,14 @@ class Tracer extends NoopProxy {
     return this
   }
 
-  // _startProfiler (config) {
-  //   // do not stop tracer initialization if the profiler fails to be imported
-  //   try {
-  //     return require('./profiler').start(config)
-  //   } catch (e) {
-  //     log.error('Error starting profiler', e)
-  //   }
-  // }
+  _startProfiler (config) {
+    // do not stop tracer initialization if the profiler fails to be imported
+    try {
+      return require('./profiler').start(config)
+    } catch (e) {
+      log.error('Error starting profiler', e)
+    }
+  }
 
   _enableOrDisableTracing (config) {
     if (config.tracing !== false) {

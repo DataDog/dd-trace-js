@@ -825,7 +825,11 @@ class Config {
       this._envUnprocessed.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     }
     this._setString(env, 'port', DD_TRACE_AGENT_PORT)
-    const profilingEnabledEnv = coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED)
+    const profilingEnabledEnv = coalesce(
+      DD_EXPERIMENTAL_PROFILING_ENABLED,
+      DD_PROFILING_ENABLED,
+      this._isInServerlessEnvironment() ? 'false' : undefined
+    )
     const profilingEnabled = isTrue(profilingEnabledEnv)
       ? 'true'
       : isFalse(profilingEnabledEnv)
