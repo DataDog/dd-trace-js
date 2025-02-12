@@ -358,7 +358,7 @@ class DatadogSpan {
   }
 
   _addTags (keyValuePairs) {
-    tagger.add(this._spanContext._tags, keyValuePairs)
+    tagger.add(this._spanContext._tags, keyValuePairs, false, false)
 
     this._prioritySampler.sample(this, false)
   }

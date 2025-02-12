@@ -212,8 +212,9 @@ function extractError (trace, error) {
 function addTag (meta, metrics, key, value, nested) {
   switch (typeof value) {
     case 'string':
-      // want to align with the agent by allowing empty value tags
-      // if (!value) break
+      // edge case to align want to align with the agent by allowing DD_TAGS with empty values
+      if (value === 'DD_EMPTY_USER_TAG') value = ''
+      if (!value) break
       meta[key] = value
       break
     case 'number':

@@ -12,7 +12,7 @@ const otelTagMap = {
   'service.version': 'version'
 }
 
-function add (carrier, keyValuePairs, parseOtelTags = false) {
+function add (carrier, keyValuePairs, parseOtelTags = false, emptyUserTags = true) {
   if (!carrier || !keyValuePairs) return
 
   if (Array.isArray(keyValuePairs)) {
@@ -33,7 +33,9 @@ function add (carrier, keyValuePairs, parseOtelTags = false) {
           key = otelTagMap[key]
         }
 
-        carrier[key.trim()] = value.trim()
+        const trimmedValue = value.trim()
+        // add an identifier for user tags with empty values
+        carrier[key.trim()] = emptyUserTags && trimmedValue === '' ? 'DD_EMPTY_USER_TAG' : trimmedValue
       }
     } else {
       // HACK: to ensure otel.recordException does not influence trace.error
