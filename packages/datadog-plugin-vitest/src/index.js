@@ -18,7 +18,8 @@ const {
   TEST_IS_NEW,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
-  TEST_RETRY_REASON
+  TEST_RETRY_REASON,
+  TEST_MANAGEMENT_ENABLED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -46,6 +47,20 @@ class VitestPlugin extends CiPlugin {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const testsForThisTestSuite = knownTests[testSuite] || []
       onDone(!testsForThisTestSuite.includes(testName))
+    })
+
+    this.addSub('ci:vitest:test:is-quarantined', ({ quarantinedTests, testSuiteAbsolutePath, testName, onDone }) => {
+      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const isQuarantined = quarantinedTests
+        ?.vitest
+        ?.suites
+        ?.[testSuite]
+        ?.tests
+        ?.[testName]
+        ?.properties
+        ?.quarantined
+
+      onDone(isQuarantined ?? false)
     })
 
     this.addSub('ci:vitest:is-early-flake-detection-faulty', ({
@@ -257,6 +272,7 @@ class VitestPlugin extends CiPlugin {
       testCodeCoverageLinesTotal,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
+      isQuarantinedTestsEnabled,
       onFinish
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -274,6 +290,9 @@ class VitestPlugin extends CiPlugin {
       }
       if (isEarlyFlakeDetectionFaulty) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+      }
+      if (isQuarantinedTestsEnabled) {
+        this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
