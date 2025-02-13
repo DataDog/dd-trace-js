@@ -97,6 +97,14 @@ const V4_PACKAGE_SHIMS = [
     targetClass: 'Translations',
     baseResource: 'audio.translations',
     methods: ['create']
+  },
+  {
+    file: 'resources/chat/completions/completions.js',
+    targetClass: 'Completions',
+    baseResource: 'chat.completions',
+    methods: ['create'],
+    streamedResponse: true,
+    versions: ['>=4.85.0']
   }
 ]
 
