@@ -122,7 +122,7 @@ function isNewTest (testSuite, testName) {
 
 function isQuarantinedTest (testSuite, testName) {
   return quarantinedTests
-    .cucumber
+    ?.cucumber
     ?.suites
     ?.[testSuite]
     ?.tests
