@@ -71,7 +71,7 @@ let isEarlyFlakeDetectionFaulty = false
 let hasFilteredSkippableSuites = false
 let isKnownTestsEnabled = false
 let isQuarantinedTestsEnabled = false
-let quarantinedTests = {} // TODO: dictionary?
+let quarantinedTests = {}
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -838,6 +838,7 @@ function configureTestEnvironment (readConfigsResult) {
   sessionAsyncResource.runInAsyncScope(() => {
     testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
   })
+  // We can't directly use isCodeCoverageEnabled when reporting coverage in `jestAdapterWrapper`
   // because `jestAdapterWrapper` runs in a different process. We have to go through `testEnvironmentOptions`
   configs.forEach(config => {
     config.testEnvironmentOptions._ddTestCodeCoverageEnabled = isCodeCoverageEnabled
