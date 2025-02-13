@@ -338,7 +338,7 @@ function updateConfig (changes, config) {
   for (const change of changes) {
     const { origin, value } = change
     if (value === undefined) {
-      continue;
+      continue
     }
 
     const name = nameMapping[change.name] || change.name
