@@ -51,11 +51,11 @@ describe('RASP - sql_injection', () => {
 
       pgQueryStart.publish(ctx)
 
-      const persistent = {
+      const ephemeral = {
         [addresses.DB_STATEMENT]: 'SELECT 1',
         [addresses.DB_SYSTEM]: 'postgresql'
       }
-      sinon.assert.calledOnceWithExactly(waf.run, { persistent }, req, { type: 'sql_injection' })
+      sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req, { type: 'sql_injection' })
     })
 
     it('should not analyze sql injection if rasp is disabled', () => {
@@ -122,11 +122,11 @@ describe('RASP - sql_injection', () => {
 
       mysql2OuterQueryStart.publish(ctx)
 
-      const persistent = {
+      const ephemeral = {
         [addresses.DB_STATEMENT]: 'SELECT 1',
         [addresses.DB_SYSTEM]: 'mysql'
       }
-      sinon.assert.calledOnceWithExactly(waf.run, { persistent }, req, { type: 'sql_injection' })
+      sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req, { type: 'sql_injection' })
     })
 
     it('should not analyze sql injection if rasp is disabled', () => {

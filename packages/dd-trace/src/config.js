@@ -497,6 +497,7 @@ class Config {
     this._setValue(defaults, 'iast.redactionNamePattern', null)
     this._setValue(defaults, 'iast.redactionValuePattern', null)
     this._setValue(defaults, 'iast.requestSampling', 30)
+    this._setValue(defaults, 'iast.securityControlsConfiguration', null)
     this._setValue(defaults, 'iast.telemetryVerbosity', 'INFORMATION')
     this._setValue(defaults, 'iast.stackTrace.enabled', true)
     this._setValue(defaults, 'injectionEnabled', [])
@@ -627,6 +628,7 @@ class Config {
       DD_IAST_REDACTION_NAME_PATTERN,
       DD_IAST_REDACTION_VALUE_PATTERN,
       DD_IAST_REQUEST_SAMPLING,
+      DD_IAST_SECURITY_CONTROLS_CONFIGURATION,
       DD_IAST_TELEMETRY_VERBOSITY,
       DD_IAST_STACK_TRACE_ENABLED,
       DD_INJECTION_ENABLED,
@@ -795,6 +797,7 @@ class Config {
       this._setValue(env, 'iast.requestSampling', iastRequestSampling)
     }
     this._envUnprocessed['iast.requestSampling'] = DD_IAST_REQUEST_SAMPLING
+    this._setString(env, 'iast.securityControlsConfiguration', DD_IAST_SECURITY_CONTROLS_CONFIGURATION)
     this._setString(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
     this._setBoolean(env, 'iast.stackTrace.enabled', DD_IAST_STACK_TRACE_ENABLED)
     this._setArray(env, 'injectionEnabled', DD_INJECTION_ENABLED)
@@ -987,14 +990,15 @@ class Config {
       this._setValue(opts, 'iast.requestSampling', iastRequestSampling)
       this._optsUnprocessed['iast.requestSampling'] = options.iast?.requestSampling
     }
-    this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
+    this._setValue(opts, 'iast.securityControlsConfiguration', options.iast?.securityControlsConfiguration)
     this._setBoolean(opts, 'iast.stackTrace.enabled', options.iast?.stackTrace?.enabled)
+    this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
     this._setBoolean(opts, 'legacyBaggageEnabled', options.legacyBaggageEnabled)
     this._setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)
     this._setString(opts, 'llmobs.mlApp', options.llmobs?.mlApp)
     this._setBoolean(opts, 'logInjection', options.logInjection)
-    this._setString(opts, 'lookup', options.lookup)
+    this._setValue(opts, 'lookup', options.lookup)
     this._setBoolean(opts, 'middlewareTracingEnabled', options.middlewareTracingEnabled)
     this._setBoolean(opts, 'openAiLogsEnabled', options.openAiLogsEnabled)
     this._setValue(opts, 'peerServiceMapping', options.peerServiceMapping)

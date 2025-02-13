@@ -113,14 +113,14 @@ describe('findScriptFromPartialPath', function () {
           })
         })
       })
-    })
 
-    function testPath (path) {
-      return function () {
-        const result = state.findScriptFromPartialPath(path)
-        expect(result).to.deep.equal([url, scriptId, undefined])
+      function testPath (path) {
+        return function () {
+          const result = state.findScriptFromPartialPath(path)
+          expect(result).to.deep.equal([url, scriptId, undefined])
+        }
       }
-    }
+    })
   }
 
   describe('multiple partial matches', function () {
