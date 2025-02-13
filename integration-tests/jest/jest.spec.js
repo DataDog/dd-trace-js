@@ -582,73 +582,6 @@ describe('jest CommonJS', () => {
         }).catch(done)
       })
     })
-
-    it('can work with quarantine', (done) => {
-      receiver.setSettings({ test_management: { enabled: true } })
-
-      receiver.setQuarantinedTests({
-        jest: {
-          suites: {
-            'ci-visibility/quarantine/test-quarantine-1.js': {
-              tests: {
-                'quarantine tests can quarantine a test': {
-                  properties: {
-                    quarantined: true
-                  }
-                }
-              }
-            }
-          }
-        }
-      })
-
-      const testAssertionsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const testSession = events.find(event => event.type === 'test_session_end').content
-
-          assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
-
-          const resourceNames = tests.map(span => span.resource)
-
-          assert.includeMembers(resourceNames,
-            [
-              'ci-visibility/quarantine/test-quarantine-1.js.quarantine tests can quarantine a test',
-              'ci-visibility/quarantine/test-quarantine-1.js.quarantine tests can pass normally'
-            ]
-          )
-
-          const failedTest = tests.find(
-            test => test.resource.endsWith('quarantine-1.js.quarantine tests can quarantine a test')
-          )
-          assert.equal(failedTest.meta[TEST_STATUS], 'fail')
-
-          assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
-        })
-
-      childProcess = exec(
-        runTestsWithCoverageCommand,
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            // we need to run more than 1 suite for parallel mode to kick in
-            TESTS_TO_RUN: 'quarantine/test-quarantine',
-            SHOULD_CHECK_RESULTS: '1',
-            RUN_IN_PARALLEL: true
-          },
-          stdio: 'inherit'
-        }
-      )
-
-      childProcess.on('exit', exitCode => {
-        testAssertionsPromise.then(() => {
-          assert.equal(exitCode, 0)
-          done()
-        }).catch(done)
-      })
-    })
   })
 
   it('reports timeout error message', (done) => {
@@ -3107,6 +3040,16 @@ describe('jest CommonJS', () => {
       receiver.setSettings({ test_management: { enabled: true } })
 
       runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+    })
+
+    it('can quarantine in parallel mode', (done) => {
+      receiver.setSettings({ test_management: { enabled: true } })
+
+      runQuarantineTest(done, true, {
+        // we need to run more than 1 suite for parallel mode to kick in
+        TESTS_TO_RUN: 'quarantine/test-quarantine',
+        RUN_IN_PARALLEL: true
+      })
     })
   })
 })
