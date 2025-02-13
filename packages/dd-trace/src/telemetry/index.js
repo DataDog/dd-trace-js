@@ -3,15 +3,15 @@
 let telemetry
 
 const noop = telemetry = {
-  start () {},
-  stop () {},
-  updateConfig () {},
-  updateIntegrations () {},
-  appClosing () {}
+  start: () => {},
+  stop: () => {},
+  updateConfig: () => {},
+  updateIntegrations: () => {},
+  appClosing: () => {}
 }
 
 module.exports = {
-  start (config, ...args) {
+  start: (config, ...args) => {
     if (!config?.telemetry?.enabled) return
 
     telemetry = require('./telemetry')
