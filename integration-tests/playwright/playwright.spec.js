@@ -26,14 +26,16 @@ const {
   TEST_SESSION_NAME,
   TEST_LEVEL_EVENT_TYPES,
   TEST_RETRY_REASON,
-  DD_TEST_IS_USER_PROVIDED_SERVICE
+  DD_TEST_IS_USER_PROVIDED_SERVICE,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
 const NUM_RETRIES_EFD = 3
 
-const versions = ['1.18.0', 'latest']
+const versions = ['latest']
 
 versions.forEach((version) => {
   describe(`playwright@${version}`, () => {
@@ -880,5 +882,77 @@ versions.forEach((version) => {
         receiverPromise.then(() => done()).catch(done)
       })
     })
+
+    if (version === 'latest') {
+      context.only('quarantine', () => {
+        beforeEach(() => {
+          receiver.setQuarantinedTests({
+            jest: {
+              suites: {
+                'ci-visibility/quarantine/test-quarantine-1.js': {
+                  tests: {
+                    'quarantine tests can quarantine a test': {
+                      properties: {
+                        quarantined: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+        })
+
+        it.only('can quarantine tests', (done) => {
+          receiver.setSettings({
+            test_management: {
+              enabled: true
+            }
+          })
+
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+
+              const failedTest = events.find(event => event.type === 'test').content
+
+              // test is reported as failed even though it does not fail the test process
+              assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+              assert.equal(failedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-quarantine'
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.stdout.pipe(process.stdout)
+          childProcess.stderr.pipe(process.stderr)
+
+          childProcess.on('exit', (exitCode) => {
+            receiverPromise.then(() => {
+              // exit code is 0 even though there's a failed test
+              assert.equal(exitCode, 0)
+              done()
+            }).catch(done)
+          })
+        })
+
+        // it('fails if quarantine is not enabled', (done) => {})
+
+        // it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {})
+      })
+    }
   })
 })

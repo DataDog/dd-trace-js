@@ -41,6 +41,8 @@ let earlyFlakeDetectionNumRetries = 0
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let knownTests = {}
+let isQuarantinedTestsEnabled = false
+let quarantinedTests = {}
 let rootDir = ''
 const MINIMUM_SUPPORTED_VERSION_EFD = '1.38.0'
 
@@ -424,10 +426,12 @@ function runnerHook (runnerExport, playwrightVersion) {
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+        isQuarantinedTestsEnabled = libraryConfig.isQuarantinedTestsEnabled
       }
     } catch (e) {
       isEarlyFlakeDetectionEnabled = false
       isKnownTestsEnabled = false
+      isQuarantinedTestsEnabled = false
       log.error('Playwright session start error', e)
     }
 
