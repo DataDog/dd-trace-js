@@ -5,7 +5,7 @@ describe('quarantine tests 2', () => {
     expect(1 + 2).to.equal(3)
   })
 
-  it('can pass normally 2', () => {
+  it('can pass normally', () => {
     expect(1 + 2).to.equal(3)
   })
 })

@@ -2960,7 +2960,7 @@ describe('jest CommonJS', () => {
       })
     })
 
-    const getTestAssertions = (isQuarantining) =>
+    const getTestAssertions = (isQuarantining, isParallel) =>
       receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -2982,6 +2982,15 @@ describe('jest CommonJS', () => {
             ]
           )
 
+          if (isParallel) {
+            // Parallel mode in jest requires more than a single test suite
+            // Here we check that the second test suite is actually running, so we can be sure that parallel mode is on
+            assert.includeMembers(resourceNames, [
+              'ci-visibility/quarantine/test-quarantine-2.js.quarantine tests 2 can quarantine a test',
+              'ci-visibility/quarantine/test-quarantine-2.js.quarantine tests 2 can pass normally'
+            ])
+          }
+
           const failedTest = tests.find(
             test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
           )
@@ -2994,8 +3003,8 @@ describe('jest CommonJS', () => {
           }
         })
 
-    const runQuarantineTest = (done, isQuarantining, extraEnvVars) => {
-      const testAssertionsPromise = getTestAssertions(isQuarantining)
+    const runQuarantineTest = (done, isQuarantining, extraEnvVars = {}, isParallel = false) => {
+      const testAssertionsPromise = getTestAssertions(isQuarantining, isParallel)
 
       childProcess = exec(
         runTestsWithCoverageCommand,
@@ -3003,9 +3012,9 @@ describe('jest CommonJS', () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            ...extraEnvVars,
             TESTS_TO_RUN: 'quarantine/test-quarantine-1',
-            SHOULD_CHECK_RESULTS: '1'
+            SHOULD_CHECK_RESULTS: '1',
+            ...extraEnvVars
           },
           stdio: 'inherit'
         }
@@ -3045,11 +3054,16 @@ describe('jest CommonJS', () => {
     it('can quarantine in parallel mode', (done) => {
       receiver.setSettings({ test_management: { enabled: true } })
 
-      runQuarantineTest(done, true, {
-        // we need to run more than 1 suite for parallel mode to kick in
-        TESTS_TO_RUN: 'quarantine/test-quarantine',
-        RUN_IN_PARALLEL: true
-      })
+      runQuarantineTest(
+        done,
+        true,
+        {
+          // we need to run more than 1 suite for parallel mode to kick in
+          TESTS_TO_RUN: 'quarantine/test-quarantine',
+          RUN_IN_PARALLEL: true
+        },
+        true
+      )
     })
   })
 })
