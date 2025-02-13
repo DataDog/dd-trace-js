@@ -573,6 +573,7 @@ class Config {
     this._setValue(defaults, 'url', undefined)
     this._setValue(defaults, 'version', pkg.version)
     this._setValue(defaults, 'instrumentation_config_id', undefined)
+    this._setValue(defaults, 'trace.aws.addSpanPointers', true)
     this._setValue(defaults, 'aws.dynamoDb.tablePrimaryKeys', undefined)
   }
 
@@ -664,6 +665,7 @@ class Config {
       DD_TRACE_AGENT_HOSTNAME,
       DD_TRACE_AGENT_PORT,
       DD_TRACE_AGENT_PROTOCOL_VERSION,
+      DD_TRACE_AWS_ADD_SPAN_POINTERS,
       DD_TRACE_BAGGAGE_MAX_BYTES,
       DD_TRACE_BAGGAGE_MAX_ITEMS,
       DD_TRACE_CLIENT_IP_ENABLED,
@@ -903,6 +905,7 @@ class Config {
     this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
     this._setString(env, 'version', DD_VERSION || tags.version)
     this._setBoolean(env, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
+    this._setBoolean(env, 'trace.aws.addSpanPointers', DD_TRACE_AWS_ADD_SPAN_POINTERS)
     this._setString(env, 'aws.dynamoDb.tablePrimaryKeys', DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS)
     this._setArray(env, 'graphqlErrorExtensions', DD_TRACE_GRAPHQL_ERROR_EXTENSIONS)
   }
