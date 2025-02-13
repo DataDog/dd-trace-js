@@ -35,7 +35,7 @@ const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
 const NUM_RETRIES_EFD = 3
 
-const versions = ['latest']
+const versions = ['1.18.0', 'latest']
 
 versions.forEach((version) => {
   describe(`playwright@${version}`, () => {
@@ -903,108 +903,32 @@ versions.forEach((version) => {
           })
         })
 
-        it('can quarantine tests', (done) => {
-          receiver.setSettings({
-            test_management: {
-              enabled: true
-            }
-          })
-
-          const receiverPromise = receiver
+        const getTestAssertions = (isQuarantining) =>
+          receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
 
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+              if (isQuarantining) {
+                assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+              } else {
+                assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+              }
 
               const failedTest = events.find(event => event.type === 'test').content
 
-              // TODO: manage to run the test
-              assert.equal(failedTest.meta[TEST_STATUS], 'skip')
-              assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+              if (isQuarantining) {
+                // TODO: manage to run the test
+                assert.equal(failedTest.meta[TEST_STATUS], 'skip')
+                assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+              } else {
+                assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+                assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+              }
             })
 
-          childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-tests-quarantine'
-              },
-              stdio: 'pipe'
-            }
-          )
-
-          childProcess.on('exit', (exitCode) => {
-            receiverPromise.then(() => {
-              assert.equal(exitCode, 0)
-              done()
-            }).catch(done)
-          })
-        })
-
-        it('fails if quarantine is not enabled', (done) => {
-          receiver.setSettings({
-            test_management: {
-              enabled: false
-            }
-          })
-
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-
-              const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
-
-              const failedTest = events.find(event => event.type === 'test').content
-
-              assert.equal(failedTest.meta[TEST_STATUS], 'fail')
-              assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
-            })
-
-          childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-tests-quarantine'
-              },
-              stdio: 'pipe'
-            }
-          )
-
-          childProcess.on('exit', (exitCode) => {
-            receiverPromise.then(() => {
-              assert.equal(exitCode, 1)
-              done()
-            }).catch(done)
-          })
-        })
-
-        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
-          receiver.setSettings({
-            test_management: {
-              enabled: true
-            }
-          })
-
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-
-              const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
-
-              const failedTest = events.find(event => event.type === 'test').content
-
-              assert.equal(failedTest.meta[TEST_STATUS], 'fail')
-              assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
-            })
+        const runQuarantineTest = (done, isQuarantining, extraEnvVars) => {
+          const testAssertionsPromise = getTestAssertions(isQuarantining)
 
           childProcess = exec(
             './node_modules/.bin/playwright test -c playwright.config.js',
@@ -1014,18 +938,40 @@ versions.forEach((version) => {
                 ...getCiVisAgentlessConfig(receiver.port),
                 PW_BASE_URL: `http://localhost:${webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-tests-quarantine',
-                DD_TEST_MANAGEMENT_ENABLED: false
+                ...extraEnvVars
               },
               stdio: 'pipe'
             }
           )
 
           childProcess.on('exit', (exitCode) => {
-            receiverPromise.then(() => {
-              assert.equal(exitCode, 1)
+            testAssertionsPromise.then(() => {
+              if (isQuarantining) {
+                assert.equal(exitCode, 0)
+              } else {
+                assert.equal(exitCode, 1)
+              }
               done()
             }).catch(done)
           })
+        }
+
+        it('can quarantine tests', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runQuarantineTest(done, true)
+        })
+
+        it('fails if quarantine is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false } })
+
+          runQuarantineTest(done, false)
+        })
+
+        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
         })
       })
     }
