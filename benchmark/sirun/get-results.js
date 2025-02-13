@@ -131,7 +131,7 @@ async function getResults (gitCommit) {
   return buildData
 }
 
-async function main () {
+function main () {
   const ref = process.argv.length > 2 ? process.argv[2] : 'HEAD'
   const gitCommit = execSync(`git rev-parse ${ref}`).toString().trim()
   console.log(JSON.stringify(getResults(gitCommit), null, 4))
