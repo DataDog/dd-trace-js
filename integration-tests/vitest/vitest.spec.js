@@ -1356,14 +1356,9 @@ versions.forEach((version) => {
             }
           })
         })
-        it('can quarantine tests', (done) => {
-          receiver.setSettings({
-            test_management: {
-              enabled: true
-            }
-          })
 
-          const eventsPromise = receiver
+        const getTestAssertions = (isQuarantining) =>
+          receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
               const events = payloads.flatMap(({ payload }) => payload.events)
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
@@ -1371,7 +1366,11 @@ versions.forEach((version) => {
 
               const testSession = events.find(event => event.type === 'test_session_end').content
 
-              assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+              if (isQuarantining) {
+                assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+              } else {
+                assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+              }
 
               const resourceNames = tests.map(span => span.resource)
 
@@ -1382,126 +1381,22 @@ versions.forEach((version) => {
                 ]
               )
 
-              const failedTest = tests.find(
+              const quarantinedTest = tests.find(
                 test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
               )
-              // The test fails but the exit code is still 0
-              // TODO: still mark it as fail
-              // TODO: add quarantine tag
-              // assert.equal(failedTest.meta[TEST_STATUS], 'fail')
-              // assert.equal(failedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+              if (isQuarantining) {
+                // TODO: do not flip the status of the test but still ignore failures
+                assert.equal(quarantinedTest.meta[TEST_STATUS], 'pass')
+                assert.propertyVal(quarantinedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+              } else {
+                assert.equal(quarantinedTest.meta[TEST_STATUS], 'fail')
+                assert.notProperty(quarantinedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+              }
             })
 
-          childProcess = exec(
-            './node_modules/.bin/vitest run',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/test-quarantine*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings'
-              },
-              stdio: 'inherit'
-            }
-          )
-
-          childProcess.stdout.pipe(process.stdout)
-          childProcess.stderr.pipe(process.stderr)
-
-          childProcess.on('exit', (exitCode) => {
-            eventsPromise.then(() => {
-              // exit code 0 even though one of the tests failed
-              assert.equal(exitCode, 0)
-              done()
-            })
-          })
-        })
-
-        it('fails if quarantine is not enabled', (done) => {
-          receiver.setSettings({
-            test_management: {
-              enabled: false
-            }
-          })
-
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              assert.equal(tests.length, 2)
-
-              const testSession = events.find(event => event.type === 'test_session_end').content
-
-              assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
-
-              const resourceNames = tests.map(span => span.resource)
-
-              assert.includeMembers(resourceNames,
-                [
-                  'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can quarantine a test',
-                  'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can pass normally'
-                ]
-              )
-
-              const failedTest = tests.find(
-                test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
-              )
-              assert.equal(failedTest.meta[TEST_STATUS], 'fail')
-              assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
-            })
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/test-quarantine*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings'
-              },
-              stdio: 'inherit'
-            }
-          )
-
-          childProcess.on('exit', (exitCode) => {
-            eventsPromise.then(() => {
-              assert.equal(exitCode, 1)
-              done()
-            })
-          })
-        })
-
-        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
-          receiver.setSettings({
-            test_management: {
-              enabled: true
-            }
-          })
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              assert.equal(tests.length, 2)
-
-              const testSession = events.find(event => event.type === 'test_session_end').content
-
-              assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
-
-              const resourceNames = tests.map(span => span.resource)
-
-              assert.includeMembers(resourceNames,
-                [
-                  'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can quarantine a test',
-                  'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can pass normally'
-                ]
-              )
-
-              const failedTest = tests.find(
-                test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
-              )
-              assert.equal(failedTest.meta[TEST_STATUS], 'fail')
-              assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
-            })
+        const runQuarantineTest = (done, isQuarantining, extraEnvVars = {}) => {
+          const testAssertionsPromise = getTestAssertions(isQuarantining)
 
           childProcess = exec(
             './node_modules/.bin/vitest run',
@@ -1511,18 +1406,41 @@ versions.forEach((version) => {
                 ...getCiVisAgentlessConfig(receiver.port),
                 TEST_DIR: 'ci-visibility/vitest-tests/test-quarantine*',
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-                DD_TEST_MANAGEMENT_ENABLED: 'false'
+                ...extraEnvVars
               },
               stdio: 'inherit'
             }
           )
 
           childProcess.on('exit', (exitCode) => {
-            eventsPromise.then(() => {
-              assert.equal(exitCode, 1)
+            testAssertionsPromise.then(() => {
+              if (isQuarantining) {
+                // exit code 0 even though one of the tests failed
+                assert.equal(exitCode, 0)
+              } else {
+                assert.equal(exitCode, 1)
+              }
               done()
             })
           })
+        }
+
+        it('can quarantine tests', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runQuarantineTest(done, true)
+        })
+
+        it('fails if quarantine is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false } })
+
+          runQuarantineTest(done, false)
+        })
+
+        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
         })
       })
     }

@@ -27,6 +27,7 @@ const quarantinedTestsCh = channel('ci:vitest:quarantined-tests')
 const taskToAsync = new WeakMap()
 const taskToStatuses = new WeakMap()
 const newTasks = new WeakSet()
+const quarantinedTasks = new WeakSet()
 let isRetryReasonEfd = false
 const switchedStatuses = new WeakSet()
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
@@ -361,7 +362,7 @@ addHook({
 
   // `onAfterRunTask` is run after all repetitions or attempts are run
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterRunTask', onAfterRunTask => async function (task) {
-    const { isEarlyFlakeDetectionEnabled, isQuarantinedTestsEnabled, quarantinedTests } = getProvidedContext()
+    const { isEarlyFlakeDetectionEnabled, isQuarantinedTestsEnabled } = getProvidedContext()
 
     if (isEarlyFlakeDetectionEnabled && taskToStatuses.has(task)) {
       const statuses = taskToStatuses.get(task)
@@ -375,18 +376,9 @@ addHook({
     }
 
     if (isQuarantinedTestsEnabled) {
-      const testName = getTestName(task)
-
-      isQuarantinedCh.publish({
-        quarantinedTests,
-        testSuiteAbsolutePath: task.file.filepath,
-        testName,
-        onDone: (isQuarantined) => {
-          if (isQuarantined) {
-            task.result.state = 'pass'
-          }
-        }
-      })
+      if (quarantinedTasks.has(task)) {
+        task.result.state = 'pass'
+      }
     }
 
     return onAfterRunTask.apply(this, arguments)
@@ -400,15 +392,32 @@ addHook({
     }
     const testName = getTestName(task)
     let isNew = false
+    let isQuarantined = false
 
     const {
       isKnownTestsEnabled,
       isEarlyFlakeDetectionEnabled,
-      isDiEnabled
+      isDiEnabled,
+      isQuarantinedTestsEnabled,
+      quarantinedTests
     } = getProvidedContext()
 
     if (isKnownTestsEnabled) {
       isNew = newTasks.has(task)
+    }
+
+    if (isQuarantinedTestsEnabled) {
+      isQuarantinedCh.publish({
+        quarantinedTests,
+        testSuiteAbsolutePath: task.file.filepath,
+        testName,
+        onDone: (isTestQuarantined) => {
+          isQuarantined = isTestQuarantined
+          if (isTestQuarantined) {
+            quarantinedTasks.add(task)
+          }
+        }
+      })
     }
 
     const { retry: numAttempt, repeats: numRepetition } = retryInfo
@@ -492,7 +501,8 @@ addHook({
         isRetry: numAttempt > 0 || numRepetition > 0,
         isRetryReasonEfd,
         isNew,
-        mightHitProbe: isDiEnabled && numAttempt > 0
+        mightHitProbe: isDiEnabled && numAttempt > 0,
+        isQuarantined
       })
     })
     return onBeforeTryTask.apply(this, arguments)

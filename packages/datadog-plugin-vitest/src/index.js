@@ -19,7 +19,8 @@ const {
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_RETRY_REASON,
-  TEST_MANAGEMENT_ENABLED
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -81,6 +82,7 @@ class VitestPlugin extends CiPlugin {
       testSuiteAbsolutePath,
       isRetry,
       isNew,
+      isQuarantined,
       mightHitProbe,
       isRetryReasonEfd
     }) => {
@@ -98,6 +100,9 @@ class VitestPlugin extends CiPlugin {
       }
       if (isRetryReasonEfd) {
         extraTags[TEST_RETRY_REASON] = 'efd'
+      }
+      if (isQuarantined) {
+        extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
       }
 
       const span = this.startTestSpan(
