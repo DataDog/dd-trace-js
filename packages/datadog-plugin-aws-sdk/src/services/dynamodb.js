@@ -123,9 +123,9 @@ class DynamoDb extends BaseAwsSdkPlugin {
       return this.dynamoPrimaryKeyConfig
     }
 
-    const configStr = this._tracerConfig?.aws?.dynamoDb?.tablePrimaryKeys
+    const configStr = this._tracerConfig?.trace?.dynamoDb?.tablePrimaryKeys
     if (!configStr) {
-      log.warn('Missing DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS env variable. ' +
+      log.warn('Missing DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS env variable. ' +
         'Please add your table\'s primary keys under this env variable.')
       return
     }
