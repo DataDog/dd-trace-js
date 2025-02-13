@@ -34,13 +34,30 @@ describe('tagger', () => {
 
     expect(carrier).to.have.property('key1', 'value1')
     expect(carrier).to.have.property('key2', 'value2')
-  })
 
-  it('should add tags from comma & space separated strings', () => {
     tagger.add(carrier, 'env:test,aKey:aVal bKey:bVal cKey:')
 
     expect(carrier).to.have.property('env', 'test')
     expect(carrier).to.have.property('aKey', 'aVal bKey:bVal cKey:')
+
+    tagger.add(carrier, 'env:test     bKey :bVal dKey: dVal cKey:')
+
+    expect(carrier).to.have.property('env', 'test')
+    expect(carrier).to.have.property('bKey', constants.DD_EMPTY_USER_TAG)
+    expect(carrier).to.have.property('dKey', constants.DD_EMPTY_USER_TAG)
+    expect(carrier).to.have.property('dVal', constants.DD_EMPTY_USER_TAG)
+    expect(carrier).to.have.property('cKey', constants.DD_EMPTY_USER_TAG)
+
+    tagger.add(carrier, 'a,1')
+
+    expect(carrier).to.have.property('a', constants.DD_EMPTY_USER_TAG)
+    expect(carrier).to.have.property('1', constants.DD_EMPTY_USER_TAG)
+
+    tagger.add(carrier, 'a:b,c,d')
+
+    expect(carrier).to.have.property('a', 'b')
+    expect(carrier).to.have.property('c', constants.DD_EMPTY_USER_TAG)
+    expect(carrier).to.have.property('d', constants.DD_EMPTY_USER_TAG)
   })
 
   it('should add empty tags as DD_EMPTY_USER_TAG', () => {
