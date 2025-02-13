@@ -93,6 +93,14 @@ class CiVisibilityExporter extends AgentInfoExporter {
     )
   }
 
+  shouldRequestQuarantinedTests () {
+    return !!(
+      this._canUseCiVisProtocol &&
+      this._config.isTestManagementEnabled &&
+      this._libraryConfig?.isQuarantinedTestsEnabled
+    )
+  }
+
   shouldRequestLibraryConfiguration () {
     return this._config.isIntelligentTestRunnerEnabled
   }
@@ -140,7 +148,9 @@ class CiVisibilityExporter extends AgentInfoExporter {
   }
 
   getQuarantinedTests (testConfiguration, callback) {
-    // TODO: this.shouldRequestQuarantinedTests()
+    if (!this.shouldRequestQuarantinedTests()) {
+      return callback(null)
+    }
     getQuarantinedTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
   }
 

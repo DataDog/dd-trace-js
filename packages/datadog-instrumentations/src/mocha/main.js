@@ -27,6 +27,7 @@ const {
   getOnPendingHandler,
   testFileToSuiteAr,
   newTests,
+  testsQuarantined,
   getTestFullName,
   getRunTestsWrapper
 } = require('./utils')
@@ -136,8 +137,16 @@ function getOnEndHandler (isParallel) {
       }
     }
 
+    // We subtract the errors from quarantined tests from the total number of failures
     if (config.isQuarantinedTestsEnabled) {
-      // we need to do a similar logic here as in EFD: subtract the quarantined tests from the failures
+      let numFailedQuarantinedTests = 0
+      for (const test of testsQuarantined) {
+        if (isTestFailed(test)) {
+          numFailedQuarantinedTests++
+        }
+      }
+      this.stats.failures -= numFailedQuarantinedTests
+      this.failures -= numFailedQuarantinedTests
     }
 
     if (status === 'fail') {
@@ -170,6 +179,7 @@ function getOnEndHandler (isParallel) {
       error,
       isEarlyFlakeDetectionEnabled: config.isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty: config.isEarlyFlakeDetectionFaulty,
+      isQuarantinedTestsEnabled: config.isQuarantinedTestsEnabled,
       isParallel
     })
   })
@@ -248,7 +258,7 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
     config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
     config.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
     config.isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
-    // ITR and auto test retries are not supported in parallel mode yet
+    // ITR, auto test retries and quarantine are not supported in parallel mode yet
     config.isSuitesSkippingEnabled = !isParallel && libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = !isParallel && libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = !isParallel && libraryConfig.flakyTestRetriesCount
@@ -257,6 +267,10 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
     if (config.isKnownTestsEnabled) {
       knownTestsCh.publish({
         onDone: mochaRunAsyncResource.bind(onReceivedKnownTests)
+      })
+    } else if (config.isQuarantinedTestsEnabled) {
+      quarantinedTestsCh.publish({
+        onDone: mochaRunAsyncResource.bind(onReceivedQuarantinedTests)
       })
     } else if (config.isSuitesSkippingEnabled) {
       skippableSuitesCh.publish({
@@ -382,7 +396,7 @@ addHook({
 
     this.once('end', getOnEndHandler(false))
 
-    this.on('test', getOnTestHandler(true, newTests))
+    this.on('test', getOnTestHandler(true))
 
     this.on('test end', getOnTestEndHandler())
 
