@@ -9,7 +9,7 @@ const id = require('../id')
 const log = require('../log')
 const SpanContext = require('./span_context')
 const TextMapPropagator = require('../opentracing/propagation/text_map')
-const TraceState = require('./tracestate')
+const TraceState = require('../opentracing/propagation/tracestate')
 
 class Tracer {
   constructor (library, config, tracerProvider) {
