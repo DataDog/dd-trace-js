@@ -53,6 +53,8 @@ if (isMainThread) {
   const require = Module.createRequire(import.meta.url)
   require('./init.js')
   if (Module.register) {
-    Module.register('./loader-hook.mjs', import.meta.url)
+    Module.register('./loader-hook.mjs', import.meta.url, {
+      data: { exclude: [/langsmith/, /openai\/_shims/] }
+    })
   }
 }
