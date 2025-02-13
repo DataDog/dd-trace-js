@@ -54,7 +54,7 @@ if (isMainThread) {
   require('./init.js')
   if (Module.register) {
     Module.register('./loader-hook.mjs', import.meta.url, {
-      data: { exclude: [/langsmith/, /openai\/_shims/] }
+      data: { exclude: [/langsmith/, /openai\/_shims/, /openai\/resources\/chat\/completions\/messages/] }
     })
   }
 }
