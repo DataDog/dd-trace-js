@@ -1638,7 +1638,7 @@ describe('Config', () => {
 
   it('should not transform the lookup parameter', () => {
     const lookup = () => 'test'
-    const config = new Config({ lookup: lookup })
+    const config = new Config({ lookup })
 
     expect(config.lookup).to.equal(lookup)
   })
