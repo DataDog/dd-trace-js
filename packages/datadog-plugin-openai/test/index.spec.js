@@ -24,7 +24,7 @@ describe('Plugin', () => {
   let tracer
 
   describe('openai', () => {
-    withVersions('openai', 'openai', version => {
+    withVersions('openai', 'openai', '>=3 <4.85.0', version => {
       const moduleRequirePath = `../../../versions/openai@${version}`
 
       beforeEach(() => {

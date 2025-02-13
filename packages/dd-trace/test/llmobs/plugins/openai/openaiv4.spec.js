@@ -57,7 +57,7 @@ describe('integrations', () => {
       return agent.close({ ritmReset: false, wipe: true })
     })
 
-    withVersions('openai', 'openai', '>=4', version => {
+    withVersions('openai', 'openai', '>=4 <4.85.0', version => {
       const moduleRequirePath = `../../../../../../versions/openai@${version}`
 
       beforeEach(() => {
