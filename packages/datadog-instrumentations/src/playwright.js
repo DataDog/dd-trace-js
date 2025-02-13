@@ -13,6 +13,7 @@ const testSessionFinishCh = channel('ci:playwright:session:finish')
 
 const libraryConfigurationCh = channel('ci:playwright:library-configuration')
 const knownTestsCh = channel('ci:playwright:known-tests')
+const quarantinedTestsCh = channel('ci:playwright:quarantined-tests')
 
 const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
@@ -45,6 +46,20 @@ let isQuarantinedTestsEnabled = false
 let quarantinedTests = {}
 let rootDir = ''
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0'
+
+function isQuarantineTest (test) {
+  const testName = getTestFullname(test)
+  const testSuite = getTestSuitePath(test._requireFile, rootDir)
+
+  return quarantinedTests
+    ?.playwright
+    ?.suites
+    ?.[testSuite]
+    ?.tests
+    ?.[testName]
+    ?.properties
+    ?.quarantined
+}
 
 function isNewTest (test) {
   const testSuite = getTestSuitePath(test._requireFile, rootDir)
@@ -298,6 +313,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
       error,
       extraTags: annotationTags,
       isNew: test._ddIsNew,
+      isQuarantined: test._ddIsQuarantined,
       isEfdRetry: test._ddIsEfdRetry
     })
   })
@@ -451,6 +467,20 @@ function runnerHook (runnerExport, playwrightVersion) {
       }
     }
 
+    if (isQuarantinedTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
+      try {
+        const { err, quarantinedTests: receivedQuarantinedTests } = await getChannelPromise(quarantinedTestsCh)
+        if (!err) {
+          quarantinedTests = receivedQuarantinedTests
+        } else {
+          isQuarantinedTestsEnabled = false
+        }
+      } catch (err) {
+        isQuarantinedTestsEnabled = false
+        log.error('Playwright quarantined tests error', err)
+      }
+    }
+
     const projects = getProjectsFromRunner(this)
 
     if (isFlakyTestRetriesEnabled && flakyTestRetriesCount > 0) {
@@ -483,6 +513,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       testSessionFinishCh.publish({
         status: STATUS_TO_TEST_STATUS[sessionStatus],
         isEarlyFlakeDetectionEnabled,
+        isQuarantinedTestsEnabled,
         onDone
       })
     })
@@ -491,6 +522,8 @@ function runnerHook (runnerExport, playwrightVersion) {
     startedSuites = []
     remainingTestsByFile = {}
 
+    // TODO: we can trick playwright into thinking the session passed by returning
+    // 'passed' here. We might be able to use this for both EFD and Quarantined tests.
     return runAllTestsReturn
   })
 
@@ -561,26 +594,37 @@ addHook({
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 
   async function newCreateRootSuite () {
-    const rootSuite = await oldCreateRootSuite.apply(this, arguments)
-    if (!isKnownTestsEnabled) {
-      return rootSuite
+    if (!isKnownTestsEnabled && !isQuarantinedTestsEnabled) {
+      return oldCreateRootSuite.apply(this, arguments)
     }
-    const newTests = rootSuite
-      .allTests()
-      .filter(isNewTest)
+    const rootSuite = await oldCreateRootSuite.apply(this, arguments)
 
-    newTests.forEach(newTest => {
-      newTest._ddIsNew = true
-      if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped') {
-        const fileSuite = getSuiteType(newTest, 'file')
-        const projectSuite = getSuiteType(newTest, 'project')
-        for (let repeatEachIndex = 0; repeatEachIndex < earlyFlakeDetectionNumRetries; repeatEachIndex++) {
-          const copyFileSuite = deepCloneSuite(fileSuite, isNewTest)
-          applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
-          projectSuite._addSuite(copyFileSuite)
+    const allTests = rootSuite.allTests()
+
+    if (isQuarantinedTestsEnabled) {
+      const testsToBeIgnored = allTests.filter(isQuarantineTest)
+      testsToBeIgnored.forEach(test => {
+        test._ddIsQuarantined = true
+        test.expectedStatus = 'skipped'
+      })
+    }
+
+    if (isKnownTestsEnabled) {
+      const newTests = allTests.filter(isNewTest)
+
+      newTests.forEach(newTest => {
+        newTest._ddIsNew = true
+        if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped') {
+          const fileSuite = getSuiteType(newTest, 'file')
+          const projectSuite = getSuiteType(newTest, 'project')
+          for (let repeatEachIndex = 0; repeatEachIndex < earlyFlakeDetectionNumRetries; repeatEachIndex++) {
+            const copyFileSuite = deepCloneSuite(fileSuite, isNewTest)
+            applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
+            projectSuite._addSuite(copyFileSuite)
+          }
         }
-      }
-    })
+      })
+    }
 
     return rootSuite
   }
