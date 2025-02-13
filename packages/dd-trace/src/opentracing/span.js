@@ -11,12 +11,11 @@ const tagger = require('../tagger')
 const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
-const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const spanleak = require('../spanleak')
 const util = require('util')
 
-const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
+let tracerMetrics
 
 const {
   DD_TRACE_EXPERIMENTAL_STATE_TRACKING,
@@ -37,7 +36,12 @@ const integrationCounters = {
 const startCh = channel('dd-trace:span:start')
 const finishCh = channel('dd-trace:span:finish')
 
-function getIntegrationCounter (event, integration) {
+function getIntegrationCounter (tracer, event, integration) {
+  if (!tracer?._config?.telemetry?.enabled) return { inc () {} }
+  if (!tracerMetrics) {
+    tracerMetrics = require('../telemetry/metrics').manager.namespace('tracers')
+  }
+
   const counters = integrationCounters[event]
 
   if (integration in counters) {
@@ -76,7 +80,7 @@ class DatadogSpan {
     this._name = operationName
     this._integrationName = fields.integrationName || 'opentracing'
 
-    getIntegrationCounter('spans_created', this._integrationName).inc()
+    getIntegrationCounter(tracer, 'spans_created', this._integrationName).inc()
 
     this._spanContext = this._createContext(parent, fields)
     this._spanContext._name = operationName
@@ -228,7 +232,7 @@ class DatadogSpan {
       }
     }
 
-    getIntegrationCounter('spans_finished', this._integrationName).inc()
+    getIntegrationCounter(this._parentTracer, 'spans_finished', this._integrationName).inc()
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.decrement('runtime.node.spans.unfinished')
