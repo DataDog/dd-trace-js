@@ -38,6 +38,7 @@ module.exports = {
   get elasticsearch () { return require('../../../datadog-plugin-elasticsearch/src') },
   get express () { return require('../../../datadog-plugin-express/src') },
   get fastify () { return require('../../../datadog-plugin-fastify/src') },
+  get fetch () { return require('../../../datadog-plugin-fetch/src') },
   get 'find-my-way' () { return require('../../../datadog-plugin-find-my-way/src') },
   get graphql () { return require('../../../datadog-plugin-graphql/src') },
   get grpc () { return require('../../../datadog-plugin-grpc/src') },

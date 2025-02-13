@@ -28,9 +28,6 @@ loadChannel.subscribe(({ name }) => {
   maybeEnable(plugins[name])
 })
 
-// Globals
-maybeEnable(require('../../datadog-plugin-fetch/src'))
-
 // Always enabled
 maybeEnable(require('../../datadog-plugin-dd-trace-api/src'))
 
