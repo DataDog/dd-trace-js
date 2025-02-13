@@ -49,7 +49,6 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
       tags: {
         service: proxyContext.domainName || tracer._config.service,
         component: proxySpanInfo.component,
-        [SPAN_KIND]: 'internal',
         [SPAN_TYPE]: 'web',
         [HTTP_METHOD]: proxyContext.method,
         [HTTP_URL]: proxyContext.domainName + proxyContext.path,
