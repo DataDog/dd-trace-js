@@ -99,7 +99,7 @@ const V4_PACKAGE_SHIMS = [
     methods: ['create']
   },
   {
-    file: 'resources/chat/completions/completions.js',
+    file: 'resources/chat/completions/completions',
     targetClass: 'Completions',
     baseResource: 'chat.completions',
     methods: ['create'],
