@@ -26,20 +26,19 @@ class LazyModule {
   }
 }
 
-function lazyProxy (obj, property, getClass, ...args) {
-  const attributes = { configurable: true, enumerable: true }
+function lazyProxy (obj, property, config, getClass, ...args) {
+  const get = () => {
+    const RealClass = getClass()
+    const value = new RealClass(...args)
 
-  Reflect.defineProperty(obj, property, {
-    get () {
-      const RealClass = getClass()
-      const value = new RealClass(...args)
+    Reflect.defineProperty(obj, property, { value, configurable: true, enumerable: true })
 
-      Reflect.defineProperty(obj, property, { value, ...attributes })
+    return value
+  }
 
-      return value
-    },
-    ...attributes
-  })
+  if (config?._isInServerlessEnvironment?.() === false) return get()
+
+  Reflect.defineProperty(obj, property, { get, configurable: true, enumerable: true })
 }
 
 class Tracer extends NoopProxy {
@@ -77,7 +76,7 @@ class Tracer extends NoopProxy {
 
       if (config.dogstatsd) {
         // Custom Metrics
-        lazyProxy(this, 'dogstatsd', () => require('./dogstatsd').CustomMetrics, config)
+        lazyProxy(this, 'dogstatsd', config, () => require('./dogstatsd').CustomMetrics, config)
       }
 
       if (config.spanLeakDebug > 0) {
@@ -224,8 +223,8 @@ class Tracer extends NoopProxy {
         const prioritySampler = config.appsec.standalone?.enabled && require('./appsec/standalone').configure(config)
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
-        lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
-        lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
+        lazyProxy(this, 'appsec', config, () => require('./appsec/sdk'), this._tracer, config)
+        lazyProxy(this, 'llmobs', config, () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {
