@@ -3,8 +3,7 @@
 require('../setup/tap')
 
 const { expect } = require('chai')
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
+const msgpack = require('@msgpack/msgpack')
 const id = require('../../src/id')
 
 function randString (length) {
@@ -53,7 +52,7 @@ describe('encode', () => {
     encoder.encode(data)
 
     const buffer = encoder.makePayload()
-    const decoded = msgpack.decode(buffer, { codec })
+    const decoded = msgpack.decode(buffer, { useBigInt64: true })
     const trace = decoded[0]
 
     expect(trace).to.be.instanceof(Array)
@@ -61,8 +60,8 @@ describe('encode', () => {
     expect(trace[0].trace_id.toString(16)).to.equal(data[0].trace_id.toString())
     expect(trace[0].span_id.toString(16)).to.equal(data[0].span_id.toString())
     expect(trace[0].parent_id.toString(16)).to.equal(data[0].parent_id.toString())
-    expect(trace[0].start.toNumber()).to.equal(123)
-    expect(trace[0].duration.toNumber()).to.equal(456)
+    expect(trace[0].start).to.equal(123n)
+    expect(trace[0].duration).to.equal(456n)
     expect(trace[0].name).to.equal(data[0].name)
     expect(trace[0].meta).to.deep.equal({ bar: 'baz' })
     expect(trace[0].metrics).to.deep.equal({ example: 1 })
@@ -76,7 +75,7 @@ describe('encode', () => {
     encoder.encode(data)
 
     const buffer = encoder.makePayload()
-    const decoded = msgpack.decode(buffer, { codec })
+    const decoded = msgpack.decode(buffer, { useBigInt64: true })
     const trace = decoded[0]
 
     expect(trace[0].trace_id.toString(16)).to.equal('1234abcd1234abcd')
@@ -161,7 +160,7 @@ describe('encode', () => {
     encoder.encode(dataToEncode)
 
     const buffer = encoder.makePayload()
-    const [decodedPayload] = msgpack.decode(buffer, { codec })
+    const [decodedPayload] = msgpack.decode(buffer, { useBigInt64: true })
     decodedPayload.forEach(decodedData => {
       expect(decodedData).to.include({
         name: 'bigger name than expected',
@@ -170,8 +169,8 @@ describe('encode', () => {
         type: 'foo',
         error: 0
       })
-      expect(decodedData.start.toNumber()).to.equal(123)
-      expect(decodedData.duration.toNumber()).to.equal(456)
+      expect(decodedData.start).to.equal(123n)
+      expect(decodedData.duration).to.equal(456n)
       expect(decodedData.meta).to.eql({
         bar: 'baz'
       })
@@ -195,7 +194,7 @@ describe('encode', () => {
     encoder.encode(data)
 
     const buffer = encoder.makePayload()
-    const decoded = msgpack.decode(buffer, { codec })
+    const decoded = msgpack.decode(buffer, { useBigInt64: true })
     const trace = decoded[0]
     expect(trace[0].meta.events).to.deep.equal(encodedLink)
   })
@@ -215,15 +214,15 @@ describe('encode', () => {
     encoder.encode(data)
 
     const buffer = encoder.makePayload()
-    const decoded = msgpack.decode(buffer, { codec })
+    const decoded = msgpack.decode(buffer, { useBigInt64: true })
     const trace = decoded[0]
     expect(trace).to.be.instanceof(Array)
     expect(trace[0]).to.be.instanceof(Object)
     expect(trace[0].trace_id.toString(16)).to.equal(data[0].trace_id.toString())
     expect(trace[0].span_id.toString(16)).to.equal(data[0].span_id.toString())
     expect(trace[0].parent_id.toString(16)).to.equal(data[0].parent_id.toString())
-    expect(trace[0].start.toNumber()).to.equal(123)
-    expect(trace[0].duration.toNumber()).to.equal(456)
+    expect(trace[0].start).to.equal(123n)
+    expect(trace[0].duration).to.equal(456n)
     expect(trace[0].name).to.equal(data[0].name)
     expect(trace[0].meta).to.deep.equal({ bar: 'baz', '_dd.span_links': encodedLink })
     expect(trace[0].metrics).to.deep.equal({ example: 1 })
@@ -237,15 +236,15 @@ describe('encode', () => {
     encoder.encode(data)
 
     const buffer = encoder.makePayload()
-    const decoded = msgpack.decode(buffer, { codec })
+    const decoded = msgpack.decode(buffer, { useBigInt64: true })
     const trace = decoded[0]
     expect(trace).to.be.instanceof(Array)
     expect(trace[0]).to.be.instanceof(Object)
     expect(trace[0].trace_id.toString(16)).to.equal(data[0].trace_id.toString())
     expect(trace[0].span_id.toString(16)).to.equal(data[0].span_id.toString())
     expect(trace[0].parent_id.toString(16)).to.equal(data[0].parent_id.toString())
-    expect(trace[0].start.toNumber()).to.equal(123)
-    expect(trace[0].duration.toNumber()).to.equal(456)
+    expect(trace[0].start).to.equal(123n)
+    expect(trace[0].duration).to.equal(456n)
     expect(trace[0].name).to.equal(data[0].name)
     expect(trace[0].meta).to.deep.equal({ bar: 'baz', '_dd.span_links': encodedLink })
     expect(trace[0].metrics).to.deep.equal({ example: 1 })
@@ -262,7 +261,7 @@ describe('encode', () => {
 
       const buffer = encoder.makePayload()
 
-      const decoded = msgpack.decode(buffer, { codec })
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
 
       expect(msgpack.decode(trace[0].meta_struct.foo)).to.be.equal(metaStruct.foo)
@@ -276,7 +275,7 @@ describe('encode', () => {
 
       const buffer = encoder.makePayload()
 
-      const decoded = msgpack.decode(buffer, { codec })
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
       expect(trace[0].meta_struct).to.deep.equal({})
     })
@@ -291,7 +290,7 @@ describe('encode', () => {
 
       const buffer = encoder.makePayload()
 
-      const decoded = msgpack.decode(buffer, { codec })
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
       expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(metaStruct.foo)
       expect(msgpack.decode(trace[0].meta_struct.bar)).to.deep.equal(metaStruct.bar)
@@ -346,7 +345,7 @@ describe('encode', () => {
 
       const buffer = encoder.makePayload()
 
-      const decoded = msgpack.decode(buffer, { codec })
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
       expect(msgpack.decode(trace[0].meta_struct['_dd.stack'])).to.deep.equal(metaStruct['_dd.stack'])
     })
@@ -368,7 +367,7 @@ describe('encode', () => {
 
       const buffer = encoder.makePayload()
 
-      const decoded = msgpack.decode(buffer, { codec })
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
 
       const expectedMetaStruct = {
@@ -396,7 +395,7 @@ describe('encode', () => {
 
       const buffer = encoder.makePayload()
 
-      const decoded = msgpack.decode(buffer, { codec })
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
 
       const expectedMetaStruct = {
@@ -418,7 +417,7 @@ describe('encode', () => {
 
       const buffer = encoder.makePayload()
 
-      const decoded = msgpack.decode(buffer, { codec })
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
 
       const expectedMetaStruct = {
@@ -439,7 +438,7 @@ describe('encode', () => {
 
       const buffer = encoder.makePayload()
 
-      const decoded = msgpack.decode(buffer, { codec })
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
 
       const expectedMetaStruct = {
@@ -456,7 +455,7 @@ describe('encode', () => {
 
       const buffer = encoder.makePayload()
 
-      const decoded = msgpack.decode(buffer, { codec })
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
 
       expect(trace[0].meta_struct).to.be.undefined

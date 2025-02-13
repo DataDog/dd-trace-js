@@ -9,7 +9,7 @@ class FetchPlugin extends HttpClientPlugin {
   bindStart (ctx) {
     const req = ctx.req
     const options = new URL(req.url)
-    const headers = options.headers = Object.fromEntries(req.headers.entries())
+    options.headers = Object.fromEntries(req.headers.entries())
 
     options.method = req.method
 
@@ -17,9 +17,9 @@ class FetchPlugin extends HttpClientPlugin {
 
     const store = super.bindStart(ctx)
 
-    for (const name in headers) {
+    for (const name in options.headers) {
       if (!req.headers.has(name)) {
-        req.headers.set(name, headers[name])
+        req.headers.set(name, options.headers[name])
       }
     }
 

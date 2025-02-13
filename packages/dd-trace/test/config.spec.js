@@ -212,6 +212,7 @@ describe('Config', () => {
     expect(config).to.have.property('queryStringObfuscation').with.length(626)
     expect(config).to.have.property('clientIpEnabled', false)
     expect(config).to.have.property('clientIpHeader', null)
+    expect(config).to.have.property('middlewareTracingEnabled', true)
     expect(config).to.have.nested.property('crashtracking.enabled', true)
     expect(config).to.have.property('sampleRate', undefined)
     expect(config).to.have.property('runtimeMetrics', false)
@@ -265,6 +266,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.redactionNamePattern', null)
     expect(config).to.have.nested.property('iast.redactionValuePattern', null)
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'INFORMATION')
+    expect(config).to.have.nested.property('iast.stackTrace.enabled', true)
     expect(config).to.have.nested.property('installSignature.id', null)
     expect(config).to.have.nested.property('installSignature.time', null)
     expect(config).to.have.nested.property('installSignature.type', null)
@@ -329,7 +331,9 @@ describe('Config', () => {
       { name: 'iast.redactionNamePattern', value: null, origin: 'default' },
       { name: 'iast.redactionValuePattern', value: null, origin: 'default' },
       { name: 'iast.requestSampling', value: 30, origin: 'default' },
+      { name: 'iast.securityControlsConfiguration', value: null, origin: 'default' },
       { name: 'iast.telemetryVerbosity', value: 'INFORMATION', origin: 'default' },
+      { name: 'iast.stackTrace.enabled', value: true, origin: 'default' },
       { name: 'injectionEnabled', value: [], origin: 'default' },
       { name: 'isCiVisibility', value: false, origin: 'default' },
       { name: 'isEarlyFlakeDetectionEnabled', value: false, origin: 'default' },
@@ -348,8 +352,9 @@ describe('Config', () => {
       { name: 'isTestDynamicInstrumentationEnabled', value: false, origin: 'default' },
       { name: 'logInjection', value: false, origin: 'default' },
       { name: 'lookup', value: undefined, origin: 'default' },
+      { name: 'middlewareTracingEnabled', value: true, origin: 'default' },
       { name: 'openAiLogsEnabled', value: false, origin: 'default' },
-      { name: 'openaiSpanCharLimit', value: 128, origin: 'default' },
+      { name: 'openai.spanCharLimit', value: 128, origin: 'default' },
       { name: 'peerServiceMapping', value: {}, origin: 'default' },
       { name: 'plugins', value: true, origin: 'default' },
       { name: 'port', value: '8126', origin: 'default' },
@@ -476,6 +481,7 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
+    process.env.DD_TRACE_MIDDLEWARE_TRACING_ENABLED = 'false'
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
     process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
     process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = 'true'
@@ -500,6 +506,7 @@ describe('Config', () => {
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_IAST_ENABLED = 'true'
     process.env.DD_IAST_REQUEST_SAMPLING = '40'
+    process.env.DD_IAST_SECURITY_CONTROLS_CONFIGURATION = 'SANITIZER:CODE_INJECTION:sanitizer.js:method'
     process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
     process.env.DD_IAST_COOKIE_FILTER_PATTERN = '.*'
@@ -509,6 +516,7 @@ describe('Config', () => {
     process.env.DD_IAST_REDACTION_NAME_PATTERN = 'REDACTION_NAME_PATTERN'
     process.env.DD_IAST_REDACTION_VALUE_PATTERN = 'REDACTION_VALUE_PATTERN'
     process.env.DD_IAST_TELEMETRY_VERBOSITY = 'DEBUG'
+    process.env.DD_IAST_STACK_TRACE_ENABLED = 'false'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
     process.env.DD_PROFILING_ENABLED = 'true'
@@ -546,6 +554,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('crashtracking.enabled', false)
     expect(config.grpc.client.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
     expect(config.grpc.server.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
+    expect(config).to.have.property('middlewareTracingEnabled', false)
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.nested.property('codeOriginForSpans.enabled', true)
@@ -622,7 +631,10 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
     expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
+    expect(config).to.have.nested.property('iast.securityControlsConfiguration',
+      'SANITIZER:CODE_INJECTION:sanitizer.js:method')
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
+    expect(config).to.have.nested.property('iast.stackTrace.enabled', false)
     expect(config).to.have.deep.property('installSignature', {
       id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
       type: 'k8s_single_step',
@@ -673,10 +685,17 @@ describe('Config', () => {
       { name: 'iast.redactionNamePattern', value: 'REDACTION_NAME_PATTERN', origin: 'env_var' },
       { name: 'iast.redactionValuePattern', value: 'REDACTION_VALUE_PATTERN', origin: 'env_var' },
       { name: 'iast.requestSampling', value: '40', origin: 'env_var' },
+      {
+        name: 'iast.securityControlsConfiguration',
+        value: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
+        origin: 'env_var'
+      },
       { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'env_var' },
+      { name: 'iast.stackTrace.enabled', value: false, origin: 'env_var' },
       { name: 'instrumentation_config_id', value: 'abcdef123', origin: 'env_var' },
       { name: 'injectionEnabled', value: ['profiler'], origin: 'env_var' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
+      { name: 'middlewareTracingEnabled', value: false, origin: 'env_var' },
       { name: 'peerServiceMapping', value: process.env.DD_TRACE_PEER_SERVICE_MAPPING, origin: 'env_var' },
       { name: 'port', value: '6218', origin: 'env_var' },
       { name: 'profiling.enabled', value: 'true', origin: 'env_var' },
@@ -842,6 +861,7 @@ describe('Config', () => {
       tags,
       flushInterval: 5000,
       flushMinSpans: 500,
+      middlewareTracingEnabled: false,
       runtimeMetrics: true,
       reportHostname: true,
       plugins: false,
@@ -872,7 +892,11 @@ describe('Config', () => {
           redactionEnabled: false,
           redactionNamePattern: 'REDACTION_NAME_PATTERN',
           redactionValuePattern: 'REDACTION_VALUE_PATTERN',
-          telemetryVerbosity: 'DEBUG'
+          securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
+          telemetryVerbosity: 'DEBUG',
+          stackTrace: {
+            enabled: false
+          }
         },
         appsec: {
           standalone: {
@@ -915,6 +939,7 @@ describe('Config', () => {
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
     expect(config).to.have.property('flushInterval', 5000)
     expect(config).to.have.property('flushMinSpans', 500)
+    expect(config).to.have.property('middlewareTracingEnabled', false)
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('plugins', false)
@@ -947,6 +972,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
     expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
+    expect(config).to.have.nested.property('iast.securityControlsConfiguration',
+      'SANITIZER:CODE_INJECTION:sanitizer.js:method')
+    expect(config).to.have.nested.property('iast.stackTrace.enabled', false)
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
     expect(config).to.have.deep.nested.property('sampler', {
       sampleRate: 0.5,
@@ -1001,7 +1029,14 @@ describe('Config', () => {
       { name: 'iast.redactionNamePattern', value: 'REDACTION_NAME_PATTERN', origin: 'code' },
       { name: 'iast.redactionValuePattern', value: 'REDACTION_VALUE_PATTERN', origin: 'code' },
       { name: 'iast.requestSampling', value: 50, origin: 'code' },
+      {
+        name: 'iast.securityControlsConfiguration',
+        value: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
+        origin: 'code'
+      },
       { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'code' },
+      { name: 'iast.stackTrace.enabled', value: false, origin: 'code' },
+      { name: 'middlewareTracingEnabled', value: false, origin: 'code' },
       { name: 'peerServiceMapping', value: { d: 'dd' }, origin: 'code' },
       { name: 'plugins', value: false, origin: 'code' },
       { name: 'port', value: '6218', origin: 'code' },
@@ -1202,6 +1237,7 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
+    process.env.DD_TRACE_MIDDLEWARE_TRACING_ENABLED = 'false'
     process.env.DD_APPSEC_ENABLED = 'false'
     process.env.DD_APPSEC_MAX_STACK_TRACES = '11'
     process.env.DD_APPSEC_MAX_STACK_TRACE_DEPTH = '11'
@@ -1224,6 +1260,8 @@ describe('Config', () => {
     process.env.DD_IAST_COOKIE_FILTER_PATTERN = '.*'
     process.env.DD_IAST_REDACTION_NAME_PATTERN = 'name_pattern_to_be_overriden_by_options'
     process.env.DD_IAST_REDACTION_VALUE_PATTERN = 'value_pattern_to_be_overriden_by_options'
+    process.env.DD_IAST_STACK_TRACE_ENABLED = 'true'
+    process.env.DD_IAST_SECURITY_CONTROLS_CONFIGURATION = 'SANITIZER:CODE_INJECTION:sanitizer.js:method1'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
     process.env.DD_LLMOBS_ML_APP = 'myMlApp'
@@ -1249,6 +1287,7 @@ describe('Config', () => {
       tags: {
         foo: 'foo'
       },
+      middlewareTracingEnabled: true,
       serviceMapping: {
         b: 'bb'
       },
@@ -1304,7 +1343,11 @@ describe('Config', () => {
         cookieFilterPattern: '.{10,}',
         dbRowsToTaint: 3,
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
-        redactionValuePattern: 'REDACTION_VALUE_PATTERN'
+        redactionValuePattern: 'REDACTION_VALUE_PATTERN',
+        securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method2',
+        stackTrace: {
+          enabled: false
+        }
       },
       remoteConfig: {
         pollInterval: 42
@@ -1327,6 +1370,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.hostname', 'server')
     expect(config).to.have.nested.property('dogstatsd.port', '8888')
     expect(config).to.have.property('site', 'datadoghq.com')
+    expect(config).to.have.property('middlewareTracingEnabled', true)
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('flushMinSpans', 500)
@@ -1379,6 +1423,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
     expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
+    expect(config).to.have.nested.property('iast.stackTrace.enabled', false)
+    expect(config).to.have.nested.property('iast.securityControlsConfiguration',
+      'SANITIZER:CODE_INJECTION:sanitizer.js:method2')
     expect(config).to.have.nested.property('llmobs.mlApp', 'myOtherMlApp')
     expect(config).to.have.nested.property('llmobs.agentlessEnabled', false)
   })
@@ -1416,7 +1463,10 @@ describe('Config', () => {
         redactionEnabled: false,
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
         redactionValuePattern: 'REDACTION_VALUE_PATTERN',
-        telemetryVerbosity: 'DEBUG'
+        telemetryVerbosity: 'DEBUG',
+        stackTrace: {
+          enabled: false
+        }
       },
       experimental: {
         appsec: {
@@ -1450,7 +1500,10 @@ describe('Config', () => {
           redactionEnabled: true,
           redactionNamePattern: 'IGNORED_REDACTION_NAME_PATTERN',
           redactionValuePattern: 'IGNORED_REDACTION_VALUE_PATTERN',
-          telemetryVerbosity: 'OFF'
+          telemetryVerbosity: 'OFF',
+          stackTrace: {
+            enabled: true
+          }
         }
       }
     })
@@ -1499,7 +1552,11 @@ describe('Config', () => {
       redactionEnabled: false,
       redactionNamePattern: 'REDACTION_NAME_PATTERN',
       redactionValuePattern: 'REDACTION_VALUE_PATTERN',
-      telemetryVerbosity: 'DEBUG'
+      securityControlsConfiguration: null,
+      telemetryVerbosity: 'DEBUG',
+      stackTrace: {
+        enabled: false
+      }
     })
   })
 
@@ -1577,6 +1634,13 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
+  })
+
+  it('should not transform the lookup parameter', () => {
+    const lookup = () => 'test'
+    const config = new Config({ lookup: lookup })
+
+    expect(config.lookup).to.equal(lookup)
   })
 
   it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {

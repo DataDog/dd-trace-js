@@ -19,19 +19,19 @@ function disable () {
 }
 
 function analyzeSsrf (ctx) {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   const req = store?.req
   const outgoingUrl = (ctx.args.options?.uri && format(ctx.args.options.uri)) ?? ctx.args.uri
 
   if (!req || !outgoingUrl) return
 
-  const persistent = {
+  const ephemeral = {
     [addresses.HTTP_OUTGOING_URL]: outgoingUrl
   }
 
   const raspRule = { type: RULE_TYPES.SSRF }
 
-  const result = waf.run({ persistent }, req, raspRule)
+  const result = waf.run({ ephemeral }, req, raspRule)
 
   const res = store?.res
   handleResult(result, req, res, ctx.abortController, config)

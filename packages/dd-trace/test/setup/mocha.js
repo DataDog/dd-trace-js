@@ -131,7 +131,7 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
       agent
         .use(traces => {
           const span = traces[0][0]
-          expect(span.meta).to.have.property('peer.service', service)
+          expect(span.meta).to.have.property('peer.service', typeof service === 'function' ? service() : service)
           expect(span.meta).to.have.property('_dd.peer.service.source', serviceSource)
         })
         .then(done)
@@ -252,6 +252,6 @@ exports.mochaHooks = {
   afterEach () {
     agent.reset()
     runtimeMetrics.stop()
-    storage.enterWith(undefined)
+    storage('legacy').enterWith(undefined)
   }
 }

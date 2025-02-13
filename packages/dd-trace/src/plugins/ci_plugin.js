@@ -23,7 +23,11 @@ const {
   TEST_LEVEL_EVENT_TYPES,
   TEST_SUITE,
   getFileAndLineNumberFromError,
-  getTestSuitePath
+  DI_ERROR_DEBUG_INFO_CAPTURED,
+  DI_DEBUG_ERROR_PREFIX,
+  DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
+  DI_DEBUG_ERROR_FILE_SUFFIX,
+  DI_DEBUG_ERROR_LINE_SUFFIX
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -41,6 +45,7 @@ module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
+    this.fileLineToProbeId = new Map()
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
 
     this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone }) => {
@@ -154,6 +159,7 @@ module.exports = class CiPlugin extends Plugin {
         if (err) {
           log.error('Known tests could not be fetched. %s', err.message)
           this.libraryConfig.isEarlyFlakeDetectionEnabled = false
+          this.libraryConfig.isKnownTestsEnabled = false
         }
         onDone({ err, knownTests })
       })
@@ -180,12 +186,16 @@ module.exports = class CiPlugin extends Plugin {
     }
   }
 
-  configure (config) {
+  configure (config, shouldGetEnvironmentData = true) {
     super.configure(config)
 
-    if (config.isTestDynamicInstrumentationEnabled) {
+    if (config.isTestDynamicInstrumentationEnabled && !this.di) {
       const testVisibilityDynamicInstrumentation = require('../ci-visibility/dynamic-instrumentation')
       this.di = testVisibilityDynamicInstrumentation
+    }
+
+    if (!shouldGetEnvironmentData) {
+      return
     }
 
     this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.id, this.config)
@@ -292,37 +302,92 @@ module.exports = class CiPlugin extends Plugin {
     return testSpan
   }
 
-  // TODO: If the test finishes and the probe is not hit, we should remove the breakpoint
-  addDiProbe (err, probe) {
-    const [file, line] = getFileAndLineNumberFromError(err)
-
-    const relativePath = getTestSuitePath(file, this.repositoryRoot)
-
-    const [
-      snapshotId,
-      setProbePromise,
-      hitProbePromise
-    ] = this.di.addLineProbe({ file: relativePath, line })
-
-    if (probe) { // not all frameworks may sync with the set probe promise
-      probe.setProbePromise = setProbePromise
+  onDiBreakpointHit ({ snapshot }) {
+    if (!this.activeTestSpan || this.activeTestSpan.context()._isFinished) {
+      // This is unexpected and is caused by a race condition.
+      log.warn('Breakpoint snapshot could not be attached to the active test span')
+      return
     }
 
-    hitProbePromise.then(({ snapshot }) => {
-      // TODO: handle race conditions for this.retriedTestIds
-      const { traceId, spanId } = this.retriedTestIds
-      this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
-        debugger: { snapshot },
-        dd: {
-          trace_id: traceId,
-          span_id: spanId
-        }
-      })
+    const stackIndex = this.testErrorStackIndex
+
+    this.activeTestSpan.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+    this.activeTestSpan.setTag(
+      `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`,
+      snapshot.id
+    )
+    this.activeTestSpan.setTag(
+      `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_FILE_SUFFIX}`,
+      snapshot.probe.location.file
+    )
+    this.activeTestSpan.setTag(
+      `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_LINE_SUFFIX}`,
+      Number(snapshot.probe.location.lines[0])
+    )
+
+    const activeTestSpanContext = this.activeTestSpan.context()
+
+    this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
+      debugger: { snapshot },
+      dd: {
+        trace_id: activeTestSpanContext.toTraceId(),
+        span_id: activeTestSpanContext.toSpanId()
+      }
     })
+  }
+
+  removeAllDiProbes () {
+    if (this.fileLineToProbeId.size === 0) {
+      return Promise.resolve()
+    }
+    log.debug('Removing all Dynamic Instrumentation probes')
+    return Promise.all(Array.from(this.fileLineToProbeId.keys())
+      .map((fileLine) => {
+        const [file, line] = fileLine.split(':')
+        return this.removeDiProbe({ file, line })
+      }))
+  }
+
+  removeDiProbe ({ file, line }) {
+    const probeId = this.fileLineToProbeId.get(`${file}:${line}`)
+    log.warn(`Removing probe from ${file}:${line}, with id: ${probeId}`)
+    this.fileLineToProbeId.delete(probeId)
+    return this.di.removeProbe(probeId)
+  }
+
+  addDiProbe (err) {
+    const [file, line, stackIndex] = getFileAndLineNumberFromError(err, this.repositoryRoot)
+
+    if (!file || !Number.isInteger(line)) {
+      log.warn('Could not add breakpoint for dynamic instrumentation')
+      return
+    }
+    log.debug('Adding breakpoint for Dynamic Instrumentation')
+
+    this.testErrorStackIndex = stackIndex
+    const activeProbeKey = `${file}:${line}`
+
+    if (this.fileLineToProbeId.has(activeProbeKey)) {
+      log.warn('Probe already set for this line')
+      const oldProbeId = this.fileLineToProbeId.get(activeProbeKey)
+      return {
+        probeId: oldProbeId,
+        setProbePromise: Promise.resolve(),
+        stackIndex,
+        file,
+        line
+      }
+    }
+
+    const [probeId, setProbePromise] = this.di.addLineProbe({ file, line }, this.onDiBreakpointHit.bind(this))
+
+    this.fileLineToProbeId.set(activeProbeKey, probeId)
 
     return {
-      snapshotId,
-      file: relativePath,
+      probeId,
+      setProbePromise,
+      stackIndex,
+      file,
       line
     }
   }

@@ -40,6 +40,10 @@ class LLMObsTagger {
     return registry
   }
 
+  static getSpanKind (span) {
+    return registry.get(span)?.[SPAN_KIND]
+  }
+
   registerLLMObsSpan (span, {
     modelName,
     modelProvider,
@@ -60,10 +64,10 @@ class LLMObsTagger {
     if (modelName) this._setTag(span, MODEL_NAME, modelName)
     if (modelProvider) this._setTag(span, MODEL_PROVIDER, modelProvider)
 
-    sessionId = sessionId || parent?.context()._tags[SESSION_ID]
+    sessionId = sessionId || registry.get(parent)?.[SESSION_ID]
     if (sessionId) this._setTag(span, SESSION_ID, sessionId)
 
-    if (!mlApp) mlApp = parent?.context()._tags[ML_APP] || this._config.llmobs.mlApp
+    if (!mlApp) mlApp = registry.get(parent)?.[ML_APP] || this._config.llmobs.mlApp
     this._setTag(span, ML_APP, mlApp)
 
     const parentId =
@@ -96,7 +100,12 @@ class LLMObsTagger {
   }
 
   tagMetadata (span, metadata) {
-    this._setTag(span, METADATA, metadata)
+    const existingMetadata = registry.get(span)?.[METADATA]
+    if (existingMetadata) {
+      Object.assign(existingMetadata, metadata)
+    } else {
+      this._setTag(span, METADATA, metadata)
+    }
   }
 
   tagMetrics (span, metrics) {
@@ -124,7 +133,12 @@ class LLMObsTagger {
       }
     }
 
-    this._setTag(span, METRICS, filterdMetrics)
+    const existingMetrics = registry.get(span)?.[METRICS]
+    if (existingMetrics) {
+      Object.assign(existingMetrics, filterdMetrics)
+    } else {
+      this._setTag(span, METRICS, filterdMetrics)
+    }
   }
 
   tagSpanTags (span, tags) {
@@ -134,6 +148,10 @@ class LLMObsTagger {
       Object.assign(tags, currentTags)
     }
     this._setTag(span, TAGS, tags)
+  }
+
+  changeKind (span, newKind) {
+    this._setTag(span, SPAN_KIND, newKind)
   }
 
   _tagText (span, data, key) {
@@ -310,7 +328,7 @@ class LLMObsTagger {
   _setTag (span, key, value) {
     if (!this._config.llmobs.enabled) return
     if (!registry.has(span)) {
-      this._handleFailure('Span must be an LLMObs generated span.')
+      this._handleFailure(`Span "${span._name}" must be an LLMObs generated span.`)
       return
     }
 

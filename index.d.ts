@@ -85,10 +85,6 @@ interface Tracer extends opentracing.Tracer {
    * span will finish when that callback is called.
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
-   *
-   * If the `orphanable` option is set to false, the function will not be traced
-   * unless there is already an active span or `childOf` option. Note that this
-   * option is deprecated and has been removed in version 4.0.
    */
   trace<T> (name: string, fn: (span: tracer.Span) => T): T;
   trace<T> (name: string, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T;
@@ -659,13 +655,13 @@ declare namespace tracer {
          * *  'anonymous': will hash user IDs and user logins before collecting them
          * *  'anon': alias for 'anonymous'
          * *  'safe': deprecated alias for 'anonymous'
-         * 
+         *
          * *  'identification': will collect user IDs and logins without redaction
          * *  'ident': alias for 'identification'
          * *  'extended': deprecated alias for 'identification'
-         * 
+         *
          * *  'disabled': will not collect user IDs and logins
-         * 
+         *
          * Unknown values will be considered as 'disabled'
          * @default 'identification'
          */
@@ -2231,9 +2227,24 @@ declare namespace tracer {
     redactionValuePattern?: string,
 
     /**
+     * Allows to enable security controls.
+     */
+    securityControlsConfiguration?: string,
+
+    /**
      * Specifies the verbosity of the sent telemetry. Default 'INFORMATION'
      */
-    telemetryVerbosity?: string
+    telemetryVerbosity?: string,
+
+    /**
+     * Configuration for stack trace reporting
+     */
+    stackTrace?: {
+      /** Whether to enable stack trace reporting.
+       * @default true
+       */
+      enabled?: boolean,
+    }
   }
 
   export namespace llmobs {

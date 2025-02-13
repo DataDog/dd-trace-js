@@ -283,6 +283,10 @@
     {
       "name": "@langchain/anthropic",
       "versions": [">=0.1"]
+    },
+    {
+      "name": "@langchain/cohere",
+      "versions": [">=0.1"]
     }
   ],
   "ldapjs": [
@@ -347,6 +351,12 @@
       "versions": ["1.20.1"]
     }
   ],
+  "multer": [
+    {
+      "name": "express",
+      "versions": ["^4"]
+    }
+  ],
   "next": [
     {
       "name": "react",
@@ -355,6 +365,20 @@
     {
       "name": "react-dom",
       "dep": true
+    }
+  ],
+  "passport": [
+    {
+      "name": "express",
+      "versions": [">=4.0.0"]
+    },
+    {
+      "name": "express-session",
+      "versions": [">=1.5.0"]
+    },
+    {
+      "name": "passport-local",
+      "versions": [">=1.0.0"]
     }
   ],
    "passport-http": [

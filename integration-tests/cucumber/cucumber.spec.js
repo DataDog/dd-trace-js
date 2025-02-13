@@ -3,7 +3,6 @@
 const { exec } = require('child_process')
 
 const getPort = require('get-port')
-const semver = require('semver')
 const { assert } = require('chai')
 
 const {
@@ -39,14 +38,16 @@ const {
   TEST_SESSION_NAME,
   TEST_LEVEL_EVENT_TYPES,
   DI_ERROR_DEBUG_INFO_CAPTURED,
-  DI_DEBUG_ERROR_FILE,
-  DI_DEBUG_ERROR_SNAPSHOT_ID,
-  DI_DEBUG_ERROR_LINE
+  DI_DEBUG_ERROR_PREFIX,
+  DI_DEBUG_ERROR_FILE_SUFFIX,
+  DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
+  DI_DEBUG_ERROR_LINE_SUFFIX,
+  TEST_RETRY_REASON,
+  DD_TEST_IS_USER_PROVIDED_SERVICE
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
-const isOldNode = semver.satisfies(process.version, '<=16')
-const versions = ['7.0.0', isOldNode ? '9' : 'latest']
+const versions = ['7.0.0', 'latest']
 
 const runTestsCommand = './node_modules/.bin/cucumber-js ci-visibility/features/*.feature'
 const runTestsWithCoverageCommand = './node_modules/nyc/bin/nyc.js -r=text-summary ' +
@@ -206,6 +207,7 @@ versions.forEach(version => {
                   assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
                   assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
                   assert.equal(meta[TEST_SOURCE_FILE].startsWith('ci-visibility/features'), true)
+                  assert.equal(meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
                   // Can read DD_TAGS
                   assert.propertyVal(meta, 'test.customtag', 'customvalue')
                   assert.propertyVal(meta, 'test.customtag2', 'customvalue2')
@@ -228,7 +230,8 @@ versions.forEach(version => {
                 env: {
                   ...envVars,
                   DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-                  DD_TEST_SESSION_NAME: 'my-test-session'
+                  DD_TEST_SESSION_NAME: 'my-test-session',
+                  DD_SERVICE: undefined
                 },
                 stdio: 'pipe'
               }
@@ -843,15 +846,13 @@ versions.forEach(version => {
           it('retries new tests', (done) => {
             const NUM_RETRIES_EFD = 3
             receiver.setSettings({
-              itr_enabled: false,
-              code_coverage: false,
-              tests_skipping: false,
               early_flake_detection: {
                 enabled: true,
                 slow_test_retries: {
                   '5s': NUM_RETRIES_EFD
                 }
-              }
+              },
+              known_tests_enabled: true
             })
             // cucumber.ci-visibility/features/farewell.feature.Say whatever will be considered new
             receiver.setKnownTests(
@@ -883,6 +884,9 @@ versions.forEach(version => {
                   retriedTests.length
                 )
                 assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+                retriedTests.forEach(test => {
+                  assert.propertyVal(test.meta, TEST_RETRY_REASON, 'efd')
+                })
                 // Test name does not change
                 newTests.forEach(test => {
                   assert.equal(test.meta[TEST_NAME], 'Say whatever')
@@ -906,15 +910,13 @@ versions.forEach(version => {
           it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {
             const NUM_RETRIES_EFD = 3
             receiver.setSettings({
-              itr_enabled: false,
-              code_coverage: false,
-              tests_skipping: false,
               early_flake_detection: {
                 enabled: true,
                 slow_test_retries: {
                   '5s': NUM_RETRIES_EFD
                 }
-              }
+              },
+              known_tests_enabled: true
             })
 
             const eventsPromise = receiver
@@ -927,8 +929,12 @@ versions.forEach(version => {
                 const newTests = tests.filter(test =>
                   test.meta[TEST_IS_NEW] === 'true'
                 )
-                // new tests are not detected
-                assert.equal(newTests.length, 0)
+                // new tests are detected but not retried
+                assert.equal(newTests.length, 1)
+                const retriedTests = tests.filter(test =>
+                  test.meta[TEST_IS_RETRY] === 'true'
+                )
+                assert.equal(retriedTests.length, 0)
               })
             // cucumber.ci-visibility/features/farewell.feature.Say whatever will be considered new
             receiver.setKnownTests({
@@ -956,15 +962,13 @@ versions.forEach(version => {
           it('retries flaky tests and sets exit code to 0 as long as one attempt passes', (done) => {
             const NUM_RETRIES_EFD = 3
             receiver.setSettings({
-              itr_enabled: false,
-              code_coverage: false,
-              tests_skipping: false,
               early_flake_detection: {
                 enabled: true,
                 slow_test_retries: {
                   '5s': NUM_RETRIES_EFD
                 }
-              }
+              },
+              known_tests_enabled: true
             })
             // Tests in "cucumber.ci-visibility/features-flaky/flaky.feature" will be considered new
             receiver.setKnownTests({})
@@ -1013,15 +1017,13 @@ versions.forEach(version => {
           it('does not retry tests that are skipped', (done) => {
             const NUM_RETRIES_EFD = 3
             receiver.setSettings({
-              itr_enabled: false,
-              code_coverage: false,
-              tests_skipping: false,
               early_flake_detection: {
                 enabled: true,
                 slow_test_retries: {
                   '5s': NUM_RETRIES_EFD
                 }
-              }
+              },
+              known_tests_enabled: true
             })
             // "cucumber.ci-visibility/features/farewell.feature.Say whatever" will be considered new
             // "cucumber.ci-visibility/features/greetings.feature.Say skip" will be considered new
@@ -1065,15 +1067,13 @@ versions.forEach(version => {
           it('does not run EFD if the known tests request fails', (done) => {
             const NUM_RETRIES_EFD = 3
             receiver.setSettings({
-              itr_enabled: false,
-              code_coverage: false,
-              tests_skipping: false,
               early_flake_detection: {
                 enabled: true,
                 slow_test_retries: {
                   '5s': NUM_RETRIES_EFD
                 }
-              }
+              },
+              known_tests_enabled: true
             })
             receiver.setKnownTestsResponseCode(500)
             receiver.setKnownTests({})
@@ -1107,16 +1107,14 @@ versions.forEach(version => {
           it('bails out of EFD if the percentage of new tests is too high', (done) => {
             const NUM_RETRIES_EFD = 3
             receiver.setSettings({
-              itr_enabled: false,
-              code_coverage: false,
-              tests_skipping: false,
               early_flake_detection: {
                 enabled: true,
                 slow_test_retries: {
                   '5s': NUM_RETRIES_EFD
                 },
                 faulty_session_threshold: 0
-              }
+              },
+              known_tests_enabled: true
             })
             // tests in cucumber.ci-visibility/features/farewell.feature will be considered new
             receiver.setKnownTests(
@@ -1159,20 +1157,70 @@ versions.forEach(version => {
             })
           })
 
+          it('disables early flake detection if known tests should not be requested', (done) => {
+            const NUM_RETRIES_EFD = 3
+            receiver.setSettings({
+              early_flake_detection: {
+                enabled: true,
+                slow_test_retries: {
+                  '5s': NUM_RETRIES_EFD
+                }
+              },
+              known_tests_enabled: false
+            })
+            // cucumber.ci-visibility/features/farewell.feature.Say whatever will be considered new
+            receiver.setKnownTests(
+              {
+                cucumber: {
+                  'ci-visibility/features/farewell.feature': ['Say farewell'],
+                  'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
+                }
+              }
+            )
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+
+                const testSession = events.find(event => event.type === 'test_session_end').content
+                assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                // no new tests detected
+                const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+                assert.equal(newTests.length, 0)
+                // no retries
+                const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                assert.equal(retriedTests.length, 0)
+              })
+
+            childProcess = exec(
+              runTestsCommand,
+              {
+                cwd,
+                env: envVars,
+                stdio: 'pipe'
+              }
+            )
+
+            childProcess.on('exit', () => {
+              eventsPromise.then(() => {
+                done()
+              }).catch(done)
+            })
+          })
+
           if (version !== '7.0.0') { // EFD in parallel mode only supported from cucumber>=11
             context('parallel mode', () => {
               it('retries new tests', (done) => {
                 const NUM_RETRIES_EFD = 3
                 receiver.setSettings({
-                  itr_enabled: false,
-                  code_coverage: false,
-                  tests_skipping: false,
                   early_flake_detection: {
                     enabled: true,
                     slow_test_retries: {
                       '5s': NUM_RETRIES_EFD
                     }
-                  }
+                  },
+                  known_tests_enabled: true
                 })
                 // cucumber.ci-visibility/features/farewell.feature.Say whatever will be considered new
                 receiver.setKnownTests(
@@ -1230,15 +1278,13 @@ versions.forEach(version => {
               it('retries flaky tests and sets exit code to 0 as long as one attempt passes', (done) => {
                 const NUM_RETRIES_EFD = 3
                 receiver.setSettings({
-                  itr_enabled: false,
-                  code_coverage: false,
-                  tests_skipping: false,
                   early_flake_detection: {
                     enabled: true,
                     slow_test_retries: {
                       '5s': NUM_RETRIES_EFD
                     }
-                  }
+                  },
+                  known_tests_enabled: true
                 })
                 // Tests in "cucumber.ci-visibility/features-flaky/flaky.feature" will be considered new
                 receiver.setKnownTests({})
@@ -1292,16 +1338,14 @@ versions.forEach(version => {
               it('bails out of EFD if the percentage of new tests is too high', (done) => {
                 const NUM_RETRIES_EFD = 3
                 receiver.setSettings({
-                  itr_enabled: false,
-                  code_coverage: false,
-                  tests_skipping: false,
                   early_flake_detection: {
                     enabled: true,
                     slow_test_retries: {
                       '5s': NUM_RETRIES_EFD
                     },
                     faulty_session_threshold: 0
-                  }
+                  },
+                  known_tests_enabled: true
                 })
                 // tests in cucumber.ci-visibility/features/farewell.feature will be considered new
                 receiver.setKnownTests(
@@ -1349,15 +1393,13 @@ versions.forEach(version => {
               it('does not retry tests that are skipped', (done) => {
                 const NUM_RETRIES_EFD = 3
                 receiver.setSettings({
-                  itr_enabled: false,
-                  code_coverage: false,
-                  tests_skipping: false,
                   early_flake_detection: {
                     enabled: true,
                     slow_test_retries: {
                       '5s': NUM_RETRIES_EFD
                     }
-                  }
+                  },
+                  known_tests_enabled: true
                 })
                 // "cucumber.ci-visibility/features/farewell.feature.Say whatever" will be considered new
                 // "cucumber.ci-visibility/features/greetings.feature.Say skip" will be considered new
@@ -1559,10 +1601,12 @@ versions.forEach(version => {
                   assert.equal(retriedTests.length, 1)
                   const [retriedTest] = retriedTests
 
-                  assert.notProperty(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
-                  assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_FILE)
-                  assert.notProperty(retriedTest.metrics, DI_DEBUG_ERROR_LINE)
-                  assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_SNAPSHOT_ID)
+                  const hasDebugTags = Object.keys(retriedTest.meta)
+                    .some(property =>
+                      property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
+                    )
+
+                  assert.isFalse(hasDebugTags)
                 })
               const logsPromise = receiver
                 .gatherPayloadsMaxTimeout(({ url }) => url === logsEndpoint, (payloads) => {
@@ -1602,11 +1646,12 @@ versions.forEach(version => {
 
                   assert.equal(retriedTests.length, 1)
                   const [retriedTest] = retriedTests
+                  const hasDebugTags = Object.keys(retriedTest.meta)
+                    .some(property =>
+                      property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
+                    )
 
-                  assert.notProperty(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
-                  assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_FILE)
-                  assert.notProperty(retriedTest.metrics, DI_DEBUG_ERROR_LINE)
-                  assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_SNAPSHOT_ID)
+                  assert.isFalse(hasDebugTags)
                 })
               const logsPromise = receiver
                 .gatherPayloadsMaxTimeout(({ url }) => url === logsEndpoint, (payloads) => {
@@ -1655,15 +1700,17 @@ versions.forEach(version => {
                   const [retriedTest] = retriedTests
 
                   assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-                  assert.propertyVal(
-                    retriedTest.meta,
-                    DI_DEBUG_ERROR_FILE,
-                    'ci-visibility/features-di/support/sum.js'
-                  )
-                  assert.equal(retriedTest.metrics[DI_DEBUG_ERROR_LINE], 4)
-                  assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
 
-                  snapshotIdByTest = retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID]
+                  assert.isTrue(
+                    retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
+                      .endsWith('ci-visibility/features-di/support/sum.js')
+                  )
+                  assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
+
+                  const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
+                  assert.exists(retriedTest.meta[snapshotIdKey])
+
+                  snapshotIdByTest = retriedTest.meta[snapshotIdKey]
                   spanIdByTest = retriedTest.span_id.toString()
                   traceIdByTest = retriedTest.trace_id.toString()
                 })
@@ -1733,14 +1780,12 @@ versions.forEach(version => {
                   assert.equal(retriedTests.length, 1)
                   const [retriedTest] = retriedTests
 
-                  assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-                  assert.propertyVal(
-                    retriedTest.meta,
-                    DI_DEBUG_ERROR_FILE,
-                    'ci-visibility/features-di/support/sum.js'
-                  )
-                  assert.equal(retriedTest.metrics[DI_DEBUG_ERROR_LINE], 4)
-                  assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
+                  const hasDebugTags = Object.keys(retriedTest.meta)
+                    .some(property =>
+                      property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
+                    )
+
+                  assert.isFalse(hasDebugTags)
                 })
               const logsPromise = receiver
                 .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
@@ -1903,6 +1948,85 @@ versions.forEach(version => {
             done()
           }).catch(done)
         })
+      })
+    })
+
+    context('known tests without early flake detection', () => {
+      it('detects new tests without retrying them', (done) => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: false
+          },
+          known_tests_enabled: true
+        })
+        // cucumber.ci-visibility/features/farewell.feature.Say whatever will be considered new
+        receiver.setKnownTests(
+          {
+            cucumber: {
+              'ci-visibility/features/farewell.feature': ['Say farewell'],
+              'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
+            }
+          }
+        )
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            // new tests detected but not retried
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(newTests.length, 1)
+            const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(retriedTests.length, 0)
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+    })
+
+    it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', (done) => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          tests.forEach(test => {
+            assert.equal(test.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'true')
+          })
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_SERVICE: 'my-service'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
       })
     })
   })

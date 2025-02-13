@@ -1,4 +1,4 @@
-const semver = require('semver')
+const satisfies = require('semifies')
 
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
@@ -35,13 +35,14 @@ const STATUS_TO_TEST_STATUS = {
 }
 
 let remainingTestsByFile = {}
+let isKnownTestsEnabled = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let knownTests = {}
 let rootDir = ''
-const MINIMUM_SUPPORTED_VERSION_EFD = '1.38.0'
+const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0'
 
 function isNewTest (test) {
   const testSuite = getTestSuitePath(test._requireFile, rootDir)
@@ -418,6 +419,7 @@ function runnerHook (runnerExport, playwrightVersion) {
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
       if (!err) {
+        isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
@@ -425,19 +427,22 @@ function runnerHook (runnerExport, playwrightVersion) {
       }
     } catch (e) {
       isEarlyFlakeDetectionEnabled = false
+      isKnownTestsEnabled = false
       log.error('Playwright session start error', e)
     }
 
-    if (isEarlyFlakeDetectionEnabled && semver.gte(playwrightVersion, MINIMUM_SUPPORTED_VERSION_EFD)) {
+    if (isKnownTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
       try {
         const { err, knownTests: receivedKnownTests } = await getChannelPromise(knownTestsCh)
         if (!err) {
           knownTests = receivedKnownTests
         } else {
           isEarlyFlakeDetectionEnabled = false
+          isKnownTestsEnabled = false
         }
       } catch (err) {
         isEarlyFlakeDetectionEnabled = false
+        isKnownTestsEnabled = false
         log.error('Playwright known tests error', err)
       }
     }
@@ -535,7 +540,7 @@ addHook({
 addHook({
   name: 'playwright',
   file: 'lib/common/suiteUtils.js',
-  versions: [`>=${MINIMUM_SUPPORTED_VERSION_EFD}`]
+  versions: [MINIMUM_SUPPORTED_VERSION_RANGE_EFD]
 }, suiteUtilsPackage => {
   // We grab `applyRepeatEachIndex` to use it later
   // `applyRepeatEachIndex` needs to be applied to a cloned suite
@@ -547,13 +552,13 @@ addHook({
 addHook({
   name: 'playwright',
   file: 'lib/runner/loadUtils.js',
-  versions: [`>=${MINIMUM_SUPPORTED_VERSION_EFD}`]
+  versions: [MINIMUM_SUPPORTED_VERSION_RANGE_EFD]
 }, (loadUtilsPackage) => {
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 
   async function newCreateRootSuite () {
     const rootSuite = await oldCreateRootSuite.apply(this, arguments)
-    if (!isEarlyFlakeDetectionEnabled) {
+    if (!isKnownTestsEnabled) {
       return rootSuite
     }
     const newTests = rootSuite
@@ -562,7 +567,7 @@ addHook({
 
     newTests.forEach(newTest => {
       newTest._ddIsNew = true
-      if (newTest.expectedStatus !== 'skipped') {
+      if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped') {
         const fileSuite = getSuiteType(newTest, 'file')
         const projectSuite = getSuiteType(newTest, 'project')
         for (let repeatEachIndex = 0; repeatEachIndex < earlyFlakeDetectionNumRetries; repeatEachIndex++) {

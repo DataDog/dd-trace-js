@@ -7,7 +7,7 @@ class ApolloBasePlugin extends TracingPlugin {
   static get kind () { return 'server' }
 
   bindStart (ctx) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const childOf = store ? store.span : null
 
     const span = this.startSpan(this.getOperationName(), {

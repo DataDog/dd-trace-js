@@ -14,7 +14,7 @@ setTimeout(doSomeWork, 250)
 function doSomeWork (arg1 = 1, arg2 = 2) {
   const data = getSomeData()
   data.n = n
-  if (++n <= 500) {
+  if (++n <= 250) {
     setTimeout(doSomeWork, 1)
   }
 }

@@ -166,7 +166,10 @@ class Tracer extends NoopProxy {
         if (config.isManualApiEnabled) {
           const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
           this._testApiManualPlugin = new TestApiManualPlugin(this)
-          this._testApiManualPlugin.configure({ ...config, enabled: true })
+          // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
+          // This is the only place where we need to do this because the rest of the plugins
+          // are lazily configured when the library is imported.
+          this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
         }
       }
       if (config.ciVisAgentlessLogSubmissionEnabled) {
@@ -198,7 +201,11 @@ class Tracer extends NoopProxy {
     try {
       return require('./profiler').start(config)
     } catch (e) {
-      log.error('Error starting profiler', e)
+      log.error(
+        'Error starting profiler. For troubleshooting tips, see ' +
+        '<https://dtdg.co/nodejs-profiler-troubleshooting>',
+        e
+      )
     }
   }
 

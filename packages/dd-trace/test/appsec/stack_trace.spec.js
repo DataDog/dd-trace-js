@@ -3,11 +3,11 @@
 const { assert } = require('chai')
 const path = require('path')
 
-const { reportStackTrace } = require('../../src/appsec/stack_trace')
+const { reportStackTrace, getCallsiteFrames } = require('../../src/appsec/stack_trace')
 
 describe('Stack trace reporter', () => {
   describe('frame filtering', () => {
-    it('should filer out frames from library', () => {
+    it('should filter out frames from library', () => {
       const callSiteList =
         Array(10).fill().map((_, i) => (
           {
@@ -15,7 +15,8 @@ describe('Stack trace reporter', () => {
             getLineNumber: () => i,
             getColumnNumber: () => i,
             getFunctionName: () => `libraryFunction${i}`,
-            getTypeName: () => `LibraryClass${i}`
+            getTypeName: () => `LibraryClass${i}`,
+            isNative: () => false
           }
         )).concat(
           Array(10).fill().map((_, i) => (
@@ -24,7 +25,8 @@ describe('Stack trace reporter', () => {
               getLineNumber: () => i,
               getColumnNumber: () => i,
               getFunctionName: () => `function${i}`,
-              getTypeName: () => `Class${i}`
+              getTypeName: () => `Class${i}`,
+              isNative: () => false
             }
           ))
         ).concat([
@@ -33,7 +35,8 @@ describe('Stack trace reporter', () => {
             getLineNumber: () => null,
             getColumnNumber: () => null,
             getFunctionName: () => null,
-            getTypeName: () => null
+            getTypeName: () => null,
+            isNative: () => false
           }
         ])
 
@@ -44,7 +47,8 @@ describe('Stack trace reporter', () => {
           line: i,
           column: i,
           function: `function${i}`,
-          class_name: `Class${i}`
+          class_name: `Class${i}`,
+          isNative: false
         }
       ))
         .concat([
@@ -54,15 +58,17 @@ describe('Stack trace reporter', () => {
             line: null,
             column: null,
             function: null,
-            class_name: null
+            class_name: null,
+            isNative: false
           }
         ])
 
       const rootSpan = {}
       const stackId = 'test_stack_id'
       const maxDepth = 32
-      const maxStackTraces = 2
-      reportStackTrace(rootSpan, stackId, maxDepth, maxStackTraces, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, frames)
 
       assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
     })
@@ -75,16 +81,16 @@ describe('Stack trace reporter', () => {
         getLineNumber: () => i,
         getColumnNumber: () => i,
         getFunctionName: () => `function${i}`,
-        getTypeName: () => `type${i}`
+        getTypeName: () => `type${i}`,
+        isNative: () => false
       }
     ))
 
     it('should not fail if no root span is passed', () => {
       const rootSpan = undefined
       const stackId = 'test_stack_id'
-      const maxDepth = 32
       try {
-        reportStackTrace(rootSpan, stackId, maxDepth, 2, () => callSiteList)
+        reportStackTrace(rootSpan, stackId, callSiteList)
       } catch (e) {
         assert.fail()
       }
@@ -101,11 +107,14 @@ describe('Stack trace reporter', () => {
           line: i,
           column: i,
           function: `function${i}`,
-          class_name: `type${i}`
+          class_name: `type${i}`,
+          isNative: false
         }
       ))
 
-      reportStackTrace(rootSpan, stackId, maxDepth, 2, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, frames)
 
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].id, stackId)
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].language, 'nodejs')
@@ -127,11 +136,14 @@ describe('Stack trace reporter', () => {
           line: i,
           column: i,
           function: `function${i}`,
-          class_name: `type${i}`
+          class_name: `type${i}`,
+          isNative: false
         }
       ))
 
-      reportStackTrace(rootSpan, stackId, maxDepth, 2, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, frames)
 
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].id, stackId)
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].language, 'nodejs')
@@ -157,33 +169,18 @@ describe('Stack trace reporter', () => {
           line: i,
           column: i,
           function: `function${i}`,
-          class_name: `type${i}`
+          class_name: `type${i}`,
+          isNative: false
         }
       ))
 
-      reportStackTrace(rootSpan, stackId, maxDepth, 2, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, frames)
 
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[1].id, stackId)
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[1].language, 'nodejs')
       assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[1].frames, expectedFrames)
-      assert.property(rootSpan.meta_struct, 'another_tag')
-    })
-
-    it('should not report stack trace when the maximum has been reached', () => {
-      const rootSpan = {
-        meta_struct: {
-          '_dd.stack': {
-            exploit: [callSiteList, callSiteList]
-          },
-          another_tag: []
-        }
-      }
-      const stackId = 'test_stack_id'
-      const maxDepth = 32
-
-      reportStackTrace(rootSpan, stackId, maxDepth, 2, () => callSiteList)
-
-      assert.equal(rootSpan.meta_struct['_dd.stack'].exploit.length, 2)
       assert.property(rootSpan.meta_struct, 'another_tag')
     })
 
@@ -199,7 +196,9 @@ describe('Stack trace reporter', () => {
       const stackId = 'test_stack_id'
       const maxDepth = 32
 
-      reportStackTrace(rootSpan, stackId, maxDepth, 0, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, frames)
 
       assert.equal(rootSpan.meta_struct['_dd.stack'].exploit.length, 3)
       assert.property(rootSpan.meta_struct, 'another_tag')
@@ -217,7 +216,9 @@ describe('Stack trace reporter', () => {
       const stackId = 'test_stack_id'
       const maxDepth = 32
 
-      reportStackTrace(rootSpan, stackId, maxDepth, -1, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, frames)
 
       assert.equal(rootSpan.meta_struct['_dd.stack'].exploit.length, 3)
       assert.property(rootSpan.meta_struct, 'another_tag')
@@ -230,9 +231,7 @@ describe('Stack trace reporter', () => {
         }
       }
       const stackId = 'test_stack_id'
-      const maxDepth = 32
-      const maxStackTraces = 2
-      reportStackTrace(rootSpan, stackId, maxDepth, maxStackTraces, () => undefined)
+      reportStackTrace(rootSpan, stackId, undefined)
       assert.property(rootSpan.meta_struct, 'another_tag')
       assert.notProperty(rootSpan.meta_struct, '_dd.stack')
     })
@@ -245,7 +244,8 @@ describe('Stack trace reporter', () => {
         getLineNumber: () => i,
         getColumnNumber: () => i,
         getFunctionName: () => `function${i}`,
-        getTypeName: () => `type${i}`
+        getTypeName: () => `type${i}`,
+        isNative: () => false
       }
     ))
 
@@ -260,11 +260,14 @@ describe('Stack trace reporter', () => {
           line: i,
           column: i,
           function: `function${i}`,
-          class_name: `type${i}`
+          class_name: `type${i}`,
+          isNative: false
         }
       ))
 
-      reportStackTrace(rootSpan, stackId, maxDepth, 2, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, frames)
 
       assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
     })
@@ -279,7 +282,8 @@ describe('Stack trace reporter', () => {
           getLineNumber: () => 314,
           getColumnNumber: () => 271,
           getFunctionName: () => 'libraryFunction',
-          getTypeName: () => 'libraryType'
+          getTypeName: () => 'libraryType',
+          isNative: () => false
         }
       ].concat(Array(120).fill().map((_, i) => (
         {
@@ -287,7 +291,8 @@ describe('Stack trace reporter', () => {
           getLineNumber: () => i,
           getColumnNumber: () => i,
           getFunctionName: () => `function${i}`,
-          getTypeName: () => `type${i}`
+          getTypeName: () => `type${i}`,
+          isNative: () => false
         }
       )).concat([
         {
@@ -295,7 +300,8 @@ describe('Stack trace reporter', () => {
           getLineNumber: () => 271,
           getColumnNumber: () => 314,
           getFunctionName: () => 'libraryFunction',
-          getTypeName: () => 'libraryType'
+          getTypeName: () => 'libraryType',
+          isNative: () => false
         }
       ]))
       const expectedFrames = [0, 1, 2, 118, 119].map(i => (
@@ -305,11 +311,14 @@ describe('Stack trace reporter', () => {
           line: i,
           column: i,
           function: `function${i}`,
-          class_name: `type${i}`
+          class_name: `type${i}`,
+          isNative: false
         }
       ))
 
-      reportStackTrace(rootSpan, stackId, maxDepth, 2, () => callSiteListWithLibraryFrames)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteListWithLibraryFrames)
+
+      reportStackTrace(rootSpan, stackId, frames)
 
       assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
     })
@@ -325,11 +334,14 @@ describe('Stack trace reporter', () => {
           line: i,
           column: i,
           function: `function${i}`,
-          class_name: `type${i}`
+          class_name: `type${i}`,
+          isNative: false
         }
       ))
 
-      reportStackTrace(rootSpan, stackId, maxDepth, 2, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, frames)
 
       assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
     })
@@ -345,11 +357,14 @@ describe('Stack trace reporter', () => {
           line: i,
           column: i,
           function: `function${i}`,
-          class_name: `type${i}`
+          class_name: `type${i}`,
+          isNative: false
         }
       ))
 
-      reportStackTrace(rootSpan, stackId, maxDepth, 2, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
+
+      reportStackTrace(rootSpan, stackId, frames)
 
       assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
     })

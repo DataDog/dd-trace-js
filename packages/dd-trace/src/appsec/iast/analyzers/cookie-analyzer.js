@@ -54,15 +54,15 @@ class CookieAnalyzer extends Analyzer {
     return super._checkOCE(context, value)
   }
 
-  _getLocation (value) {
+  _getLocation (value, callSiteFrames) {
     if (!value) {
-      return super._getLocation()
+      return super._getLocation(value, callSiteFrames)
     }
 
     if (value.location) {
       return value.location
     }
-    const location = super._getLocation(value)
+    const location = super._getLocation(value, callSiteFrames)
     value.location = location
     return location
   }
