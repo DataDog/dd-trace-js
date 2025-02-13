@@ -267,7 +267,7 @@ function wrapStreamIterator (response, options, n, ctx) {
   }
 }
 
-const extensions = ['js', 'mjs']
+const extensions = ['.js', '.mjs']
 
 for (const extension of extensions) {
   for (const shim of V4_PACKAGE_SHIMS) {
