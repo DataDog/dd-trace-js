@@ -63,7 +63,7 @@ async function traverseGetPropertiesResult (props, opts, depth) {
   return props
 }
 
-async function getObjectProperties (subtype, objectId, opts, depth) {
+function getObjectProperties (subtype, objectId, opts, depth) {
   if (ITERABLE_SUBTYPES.has(subtype)) {
     return getIterable(objectId, opts, depth)
   } else if (subtype === 'promise') {
