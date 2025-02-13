@@ -1,4 +1,3 @@
-'use strict'
 
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
@@ -80,7 +79,6 @@ const asyncResources = new WeakMap()
 const originalTestFns = new WeakMap()
 const retriedTestsToNumAttempts = new Map()
 const newTestsTestStatuses = new Map()
-let failedTestsToIgnore = 0 // test name to num executions
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 
@@ -172,7 +170,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const hasQuarantinedTests = !!quarantinedTests.jest
           this.quarantinedTestsForThisSuite = hasQuarantinedTests
             ? this.getQuarantinedTestsForSuite(quarantinedTests.jest.suites[this.testSuite].tests)
-            : this.getQuarantinedTestsForSuite(this.testEnvironmentOptions._ddQuarantinedTests.tests)
+            : this.getQuarantinedTestsForSuite(this.testEnvironmentOptions._ddQuarantinedTests)
         } catch (e) {
           log.error('Error parsing quarantined tests', e)
           this.isQuarantinedTestsEnabled = false
@@ -229,7 +227,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     }
 
     // Add the `add_test` event we don't have the test object yet, so
-    // we use its describe block to get the full name
     getTestNameFromAddTestEvent (event, state) {
       const describeSuffix = getJestTestName(state.currentDescribeBlock)
       const fullTestName = describeSuffix ? `${describeSuffix} ${event.testName}` : event.testName
@@ -343,9 +340,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (this.isQuarantinedTestsEnabled) {
           const testName = getJestTestName(event.test)
           isQuarantined = this.quarantinedTestsForThisSuite?.includes(testName)
-          if (isQuarantined && status === 'fail') {
-            failedTestsToIgnore++
-          }
         }
 
         const promises = {}
@@ -700,8 +694,32 @@ function cliWrapper (cli, jestVersion) {
     }
 
     if (isQuarantinedTestsEnabled) {
+      const failedTests = result
+        .results
+        .testResults.flatMap(({ testResults, testFilePath: testSuiteAbsolutePath }) => (
+          testResults.map(({ fullName: testName, status }) => ({ testName, testSuiteAbsolutePath, status }))
+        ))
+        .filter(({ status }) => status === 'failed')
+
+      let numFailedQuarantinedTests = 0
+
+      for (const { testName, testSuiteAbsolutePath } of failedTests) {
+        const testSuite = getTestSuitePath(testSuiteAbsolutePath, result.globalConfig.rootDir)
+        const isQuarantined = quarantinedTests
+          ?.jest
+          ?.suites
+          ?.[testSuite]
+          ?.tests
+          ?.[testName]
+          ?.properties
+          ?.quarantined
+        if (isQuarantined) {
+          numFailedQuarantinedTests++
+        }
+      }
+
       // If every test that failed was quarantined, we'll consider the suite passed
-      if (failedTestsToIgnore !== 0 && result.results.numFailedTests === failedTestsToIgnore) {
+      if (numFailedQuarantinedTests !== 0 && result.results.numFailedTests === numFailedQuarantinedTests) {
         result.results.success = true
       }
     }
@@ -820,7 +838,6 @@ function configureTestEnvironment (readConfigsResult) {
   sessionAsyncResource.runInAsyncScope(() => {
     testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
   })
-  // We can't directly use isCodeCoverageEnabled when reporting coverage in `jestAdapterWrapper`
   // because `jestAdapterWrapper` runs in a different process. We have to go through `testEnvironmentOptions`
   configs.forEach(config => {
     config.testEnvironmentOptions._ddTestCodeCoverageEnabled = isCodeCoverageEnabled
@@ -1022,7 +1039,7 @@ addHook({
 }, (childProcessWorker) => {
   const ChildProcessWorker = childProcessWorker.default
   shimmer.wrap(ChildProcessWorker.prototype, 'send', send => function (request) {
-    if (!isKnownTestsEnabled) {
+    if (!isKnownTestsEnabled && !isQuarantinedTestsEnabled) {
       return send.apply(this, arguments)
     }
     const [type] = request
@@ -1042,7 +1059,9 @@ addHook({
       const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
       const suiteKnownTests = knownTests.jest?.[testSuite] || []
-      const suiteQuarantinedTests = quarantinedTests.jest?.suites?.[testSuite]?.tests || []
+
+      const suiteQuarantinedTests = quarantinedTests.jest?.suites?.[testSuite]?.tests || {}
+
       args[0].config = {
         ...config,
         testEnvironmentOptions: {

@@ -2075,7 +2075,7 @@ versions.forEach(version => {
           })
 
       const runTest = (done, isQuarantining, extraEnvVars) => {
-        const eventsPromise = getTestAssertions(isQuarantining)
+        const testAssertionsPromise = getTestAssertions(isQuarantining)
 
         childProcess = exec(
           './node_modules/.bin/cucumber-js ci-visibility/features-quarantine/*.feature',
@@ -2090,7 +2090,7 @@ versions.forEach(version => {
         )
 
         childProcess.on('exit', exitCode => {
-          eventsPromise.then(() => {
+          testAssertionsPromise.then(() => {
             if (isQuarantining) {
               // even though a test fails, the exit code is 1 because the test is quarantined
               assert.equal(exitCode, 0)
