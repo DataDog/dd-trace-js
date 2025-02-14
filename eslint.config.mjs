@@ -53,7 +53,7 @@ export default [
   { name: '@eslint/js/recommended', ...eslintPluginJs.configs.recommended },
   ...compat.extends('standard').map((config, i) => ({ name: config.name || `standard/${i + 1}`, ...config })),
   {
-    ...n.configs['flat/recommended'],
+    ...eslintPluginN.configs['flat/recommended'],
     ignores: [
       'packages/dd-trace/test/appsec/next/app-dir/**/*.js',
       'packages/dd-trace/test/appsec/next/pages-dir/**/*.js',
