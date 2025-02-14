@@ -168,6 +168,9 @@ class DatadogSpan {
   }
 
   setTag (key, value) {
+    if (key === 'error') {
+      this._spanContext._trace.error = true
+    }
     this._addTags({ [key]: value })
     return this
   }

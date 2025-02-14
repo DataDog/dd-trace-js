@@ -27,7 +27,8 @@ class DatadogSpanContext {
     this._trace = props.trace || {
       started: [],
       finished: [],
-      tags: {}
+      tags: {},
+      error: false
     }
     this._otelSpanContext = undefined
   }
