@@ -68,6 +68,7 @@ dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
 dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola
 dev,tap,ISC,Copyright 2011-2022 Isaac Z. Schlueter and Contributors
 dev,tiktoken,MIT,Copyright (c) 2022 OpenAI, Shantanu Jain
+dev,workerpool,Apache license 2.0,Copyright (C) 2014-2024 Jos de Jong wjosdejong@gmail.com
 dev,yaml,ISC,Copyright Eemeli Aro <eemeli@gmail.com>
 dev,yarn-deduplicate,Apache license 2.0,Copyright [yyyy] [name of copyright owner]
 file,aws-lambda-nodejs-runtime-interface-client,Apache 2.0,Copyright 2019 Amazon.com Inc. or its affiliates. All Rights Reserved.
