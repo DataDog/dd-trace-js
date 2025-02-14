@@ -287,7 +287,7 @@ export default [
     }
   },
   {
-    ...n.configs['flat/recommended'],
+    ...eslintPluginN.configs['flat/recommended'],
     ignores: [
       'integration-tests/debugger/target-app/re-evaluation/index.js',
       'integration-tests/debugger/target-app/re-evaluation/unique-filename.js',
