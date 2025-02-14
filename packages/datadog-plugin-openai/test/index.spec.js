@@ -7,6 +7,7 @@ const semver = require('semver')
 const nock = require('nock')
 const sinon = require('sinon')
 const { spawn } = require('child_process')
+const { useEnv } = require('../../../integration-tests/helpers')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { DogStatsDClient } = require('../../dd-trace/src/dogstatsd')
@@ -31,12 +32,12 @@ describe('Plugin', () => {
         tracer = require(tracerRequirePath)
       })
 
-      before(() => {
+      beforeEach(() => {
         return agent.load('openai')
       })
 
-      after(() => {
-        return agent.close({ ritmReset: false })
+      afterEach(() => {
+        return agent.close({ ritmReset: false, wipe: true })
       })
 
       beforeEach(() => {
@@ -70,6 +71,67 @@ describe('Plugin', () => {
       afterEach(() => {
         clock.restore()
         sinon.restore()
+      })
+
+      describe('with configuration', () => {
+        useEnv({
+          DD_OPENAI_SPAN_CHAR_LIMIT: 0
+        })
+
+        it('should truncate both inputs and outputs', async () => {
+          if (version === '3.0.0') return
+          nock('https://api.openai.com:443')
+            .post('/v1/chat/completions')
+            .reply(200, {
+              model: 'gpt-3.5-turbo-0301',
+              choices: [{
+                message: {
+                  role: 'assistant',
+                  content: "In that case, it's best to avoid peanut"
+                }
+              }]
+            })
+
+          const checkTraces = agent
+            .use(traces => {
+              expect(traces[0][0].meta).to.have.property('openai.request.messages.0.content',
+                '...')
+              expect(traces[0][0].meta).to.have.property('openai.request.messages.1.content',
+                '...')
+              expect(traces[0][0].meta).to.have.property('openai.request.messages.2.content', '...')
+              expect(traces[0][0].meta).to.have.property('openai.response.choices.0.message.content',
+                '...')
+            })
+
+          const params = {
+            model: 'gpt-3.5-turbo',
+            messages: [
+              {
+                role: 'user',
+                content: 'Peanut Butter or Jelly?',
+                name: 'hunter2'
+              },
+              {
+                role: 'assistant',
+                content: 'Are you allergic to peanuts?',
+                name: 'hal'
+              },
+              {
+                role: 'user',
+                content: 'Deathly allergic!',
+                name: 'hunter2'
+              }
+            ]
+          }
+
+          if (semver.satisfies(realVersion, '>=4.0.0')) {
+            await openai.chat.completions.create(params)
+          } else {
+            await openai.createChatCompletion(params)
+          }
+
+          await checkTraces
+        })
       })
 
       describe('without initialization', () => {
