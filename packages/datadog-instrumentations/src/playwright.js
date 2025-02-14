@@ -1,4 +1,4 @@
-const semver = require('semver')
+const satisfies = require('semifies')
 
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
@@ -42,7 +42,7 @@ let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let knownTests = {}
 let rootDir = ''
-const MINIMUM_SUPPORTED_VERSION_EFD = '1.38.0'
+const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0'
 
 function isNewTest (test) {
   const testSuite = getTestSuitePath(test._requireFile, rootDir)
@@ -431,7 +431,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       log.error('Playwright session start error', e)
     }
 
-    if (isKnownTestsEnabled && semver.gte(playwrightVersion, MINIMUM_SUPPORTED_VERSION_EFD)) {
+    if (isKnownTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
       try {
         const { err, knownTests: receivedKnownTests } = await getChannelPromise(knownTestsCh)
         if (!err) {
@@ -540,7 +540,7 @@ addHook({
 addHook({
   name: 'playwright',
   file: 'lib/common/suiteUtils.js',
-  versions: [`>=${MINIMUM_SUPPORTED_VERSION_EFD}`]
+  versions: [MINIMUM_SUPPORTED_VERSION_RANGE_EFD]
 }, suiteUtilsPackage => {
   // We grab `applyRepeatEachIndex` to use it later
   // `applyRepeatEachIndex` needs to be applied to a cloned suite
@@ -552,7 +552,7 @@ addHook({
 addHook({
   name: 'playwright',
   file: 'lib/runner/loadUtils.js',
-  versions: [`>=${MINIMUM_SUPPORTED_VERSION_EFD}`]
+  versions: [MINIMUM_SUPPORTED_VERSION_RANGE_EFD]
 }, (loadUtilsPackage) => {
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 
