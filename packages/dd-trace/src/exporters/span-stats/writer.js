@@ -1,3 +1,5 @@
+'use strict'
+
 const { SpanStatsEncoder } = require('../../encode/span-stats')
 
 const pkg = require('../../../../../package.json')

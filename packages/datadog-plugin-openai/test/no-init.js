@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+'use strict'
 
 /**
  * Due to the complexity of the service initialization required by openai

@@ -103,7 +103,8 @@ export default [
       'no-console': 'error',
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommnded)
       'no-unused-expressions': 'off', // Override (turned on by standard)
-      'no-var': 'error' // Override (set to warn in standard)
+      'no-var': 'error', // Override (set to warn in standard)
+      strict: 'error'
     }
   },
   {

@@ -1,3 +1,5 @@
+'use strict'
+
 const config = {
   validateStatus: code => false,
   hooks: {

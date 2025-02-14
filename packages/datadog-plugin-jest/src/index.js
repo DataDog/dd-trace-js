@@ -1,3 +1,5 @@
+'use strict'
+
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 

@@ -1,3 +1,5 @@
+'use strict'
+
 if (process.env.MOCHA_WORKER_ID) {
   require('./mocha/worker')
 } else {
