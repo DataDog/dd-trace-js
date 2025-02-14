@@ -1,4 +1,4 @@
-const workerpool = require('workerpool') // eslint-disable-line n/no-extraneous-require
+const workerpool = require('workerpool')
 const pool = workerpool.pool({ workerType: 'process' })
 
 function add (a, b) {
