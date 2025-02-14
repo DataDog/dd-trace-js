@@ -51,7 +51,7 @@ class MongodbCorePlugin extends DatabasePlugin {
       // if the command already has a comment, append the dbm trace comment
       if (typeof dbmTracedCommand.comment === 'string') {
         dbmTracedCommand.comment += `,${dbmTraceComment}`
-      } else if (Array.isArray(command.comment)) {
+      } else if (Array.isArray(dbmTracedCommand.comment)) {
         dbmTracedCommand.comment.push(dbmTraceComment)
       } // do nothing if the comment is not a string or an array
     } else {
