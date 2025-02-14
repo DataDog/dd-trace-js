@@ -11,8 +11,9 @@ class MongodbCorePlugin extends DatabasePlugin {
   start ({ ns, ops, options = {}, name }) {
     const query = getQuery(ops)
     const resource = truncate(getResource(this, ns, query, name))
-    this.startSpan(this.operationName(), {
-      service: this.serviceName({ pluginConfig: this.config }),
+    const service = this.serviceName({ pluginConfig: this.config })
+    const span = this.startSpan(this.operationName(), {
+      service,
       resource,
       type: 'mongodb',
       kind: 'client',
@@ -24,6 +25,7 @@ class MongodbCorePlugin extends DatabasePlugin {
         'out.port': options.port
       }
     })
+    ops = this.injectDbmCommand(span, ops, service)
   }
 
   getPeerService (tags) {
@@ -33,6 +35,30 @@ class MongodbCorePlugin extends DatabasePlugin {
       tags['peer.service'] = ns.split('.', 1)[0]
     }
     return super.getPeerService(tags)
+  }
+
+  injectDbmCommand (span, command, serviceName) {
+    const dbmTraceComment = this.createDbmComment(span, serviceName)
+
+    if (!dbmTraceComment) {
+      return command
+    }
+
+    // create a copy of the command to avoid mutating the original
+    const dbmTracedCommand = { ...command }
+
+    if (dbmTracedCommand.comment) {
+      // if the command already has a comment, append the dbm trace comment
+      if (typeof dbmTracedCommand.comment === 'string') {
+        dbmTracedCommand.comment += `,${dbmTraceComment}`
+      } else if (Array.isArray(dbmTracedCommand.comment)) {
+        dbmTracedCommand.comment.push(dbmTraceComment)
+      } // do nothing if the comment is not a string or an array
+    } else {
+      dbmTracedCommand.comment = dbmTraceComment
+    }
+
+    return dbmTracedCommand
   }
 }
 
