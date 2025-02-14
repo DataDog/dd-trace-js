@@ -1,10 +1,15 @@
 'use strict'
 
-exports.createWrapFetch = function createWrapFetch (Request, ch) {
+exports.createWrapFetch = function createWrapFetch (Request, ch, onLoad) {
   return function wrapFetch (fetch) {
     if (typeof fetch !== 'function') return fetch
 
     return function (input, init) {
+      if (onLoad) {
+        onLoad()
+        onLoad = undefined
+      }
+
       if (!ch.start.hasSubscribers) return fetch.apply(this, arguments)
 
       if (input instanceof Request) {

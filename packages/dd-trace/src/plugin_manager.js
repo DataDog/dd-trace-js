@@ -28,9 +28,6 @@ loadChannel.subscribe(({ name }) => {
   maybeEnable(plugins[name])
 })
 
-// Globals
-maybeEnable(require('../../datadog-plugin-fetch/src'))
-
 // Always enabled
 maybeEnable(require('../../datadog-plugin-dd-trace-api/src'))
 
@@ -105,6 +102,10 @@ module.exports = class PluginManager {
   configure (config = {}) {
     this._tracerConfig = config
     this._tracer._nomenclature.configure(config)
+
+    if (!config._isInServerlessEnvironment?.()) {
+      maybeEnable(require('../../datadog-plugin-fetch/src'))
+    }
 
     for (const name in pluginClasses) {
       this.loadPlugin(name)
