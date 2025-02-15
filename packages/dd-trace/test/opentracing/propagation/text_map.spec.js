@@ -451,6 +451,41 @@ describe('TextMapPropagator', () => {
       expect(spanContextD._baggageItems).to.deep.equal({})
     })
 
+    it('should discard malformed tids', () => {
+      // tid with malformed characters
+      let carrier = {
+        'x-datadog-trace-id': '1234567890123456789',
+        'x-datadog-parent-id': '987654321',
+        'x-datadog-tags': '_dd.p.tid=1234567890abcdeX'
+      }
+      let spanContext = propagator.extract(carrier)
+      expect(spanContext.toTraceId()).to.equal(carrier['x-datadog-trace-id'])
+      expect(spanContext.toSpanId()).to.equal(carrier['x-datadog-parent-id'])
+      expect(spanContext._trace.tags).to.not.have.property('_dd.p.tid')
+
+      // tid too long
+      carrier = {
+        'x-datadog-trace-id': '234567890123456789',
+        'x-datadog-parent-id': '987654321',
+        'x-datadog-tags': '_dd.p.tid=1234567890abcdef1'
+      }
+      spanContext = propagator.extract(carrier)
+      expect(spanContext.toTraceId()).to.equal(carrier['x-datadog-trace-id'])
+      expect(spanContext.toSpanId()).to.equal(carrier['x-datadog-parent-id'])
+      expect(spanContext._trace.tags).to.not.have.property('_dd.p.tid')
+
+      // tid too short
+      carrier = {
+        'x-datadog-trace-id': '1234567890123456789',
+        'x-datadog-parent-id': '987654321',
+        'x-datadog-tags': '_dd.p.tid=1234567890abcde'
+      }
+      spanContext = propagator.extract(carrier)
+      expect(spanContext.toTraceId()).to.equal(carrier['x-datadog-trace-id'])
+      expect(spanContext.toSpanId()).to.equal(carrier['x-datadog-parent-id'])
+      expect(spanContext._trace.tags).to.not.have.property('_dd.p.tid')
+    })
+
     // temporary test. On the contrary, it SHOULD extract baggage
     it('should not extract baggage when it is the only propagation style', () => {
       config = new Config({
@@ -628,6 +663,30 @@ describe('TextMapPropagator', () => {
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext._trace.tags).to.have.property('_dd.parent_id', '2244eeee6666aaaa')
+    })
+
+    it('should preserve trace header tid when tracestate contains an inconsistent tid', () => {
+      textMap.traceparent = '00-640cfd8d00000000abcdefab12345678-000000003ade68b1-01'
+      textMap.tracestate = 'dd=t.tid:640cfd8d0000ffff'
+      config.tracePropagationStyle.extract = ['tracecontext']
+
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext._traceId.toString(16)).to.equal('640cfd8d00000000abcdefab12345678')
+      expect(spanContext._trace.tags).to.have.property('_dd.p.tid', '640cfd8d00000000')
+    })
+
+    it('should preserve trace header tid when tracestate contains a malformed tid', () => {
+      textMap.traceparent = '00-640cfd8d00000000abcdefab12345678-000000003ade68b1-01'
+      textMap.tracestate = 'dd=t.tid:XXXX'
+      config.tracePropagationStyle.extract = ['tracecontext']
+
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext._traceId.toString(16)).to.equal('640cfd8d00000000abcdefab12345678')
+      expect(spanContext._trace.tags).to.have.property('_dd.p.tid', '640cfd8d00000000')
     })
 
     it('should set the last datadog parent id to zero when p: is NOT in the tracestate', () => {
