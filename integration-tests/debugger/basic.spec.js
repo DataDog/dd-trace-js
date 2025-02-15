@@ -535,7 +535,7 @@ function assertBasicInputPayload (t, payload) {
     service: 'node',
     message: 'Hello World!',
     logger: {
-      name: t.breakpoint.file,
+      name: t.breakpoint.deployedFile,
       method: 'fooHandler',
       version,
       thread_name: 'MainThread'
@@ -544,7 +544,7 @@ function assertBasicInputPayload (t, payload) {
       probe: {
         id: t.rcConfig.config.id,
         version: 0,
-        location: { file: t.breakpoint.file, lines: [String(t.breakpoint.line)] }
+        location: { file: t.breakpoint.deployedFile, lines: [String(t.breakpoint.line)] }
       },
       language: 'javascript'
     }
