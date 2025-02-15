@@ -6,6 +6,7 @@ const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata'
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
+const { getQuarantinedTests: getQuarantinedTestsRequest } = require('../quarantined-tests/get-quarantined-tests')
 const log = require('../../log')
 const AgentInfoExporter = require('../../exporters/common/agent-info-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
@@ -92,6 +93,14 @@ class CiVisibilityExporter extends AgentInfoExporter {
     )
   }
 
+  shouldRequestQuarantinedTests () {
+    return !!(
+      this._canUseCiVisProtocol &&
+      this._config.isTestManagementEnabled &&
+      this._libraryConfig?.isQuarantinedTestsEnabled
+    )
+  }
+
   shouldRequestLibraryConfiguration () {
     return this._config.isIntelligentTestRunnerEnabled
   }
@@ -136,6 +145,13 @@ class CiVisibilityExporter extends AgentInfoExporter {
       return callback(null)
     }
     getKnownTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
+  }
+
+  getQuarantinedTests (testConfiguration, callback) {
+    if (!this.shouldRequestQuarantinedTests()) {
+      return callback(null)
+    }
+    getQuarantinedTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
   }
 
   /**
@@ -197,7 +213,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       earlyFlakeDetectionFaultyThreshold,
       isFlakyTestRetriesEnabled,
       isDiEnabled,
-      isKnownTestsEnabled
+      isKnownTestsEnabled,
+      isQuarantinedTestsEnabled
     } = remoteConfiguration
     return {
       isCodeCoverageEnabled,
@@ -210,7 +227,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && this._config.isFlakyTestRetriesEnabled,
       flakyTestRetriesCount: this._config.flakyTestRetriesCount,
       isDiEnabled: isDiEnabled && this._config.isTestDynamicInstrumentationEnabled,
-      isKnownTestsEnabled
+      isKnownTestsEnabled,
+      isQuarantinedTestsEnabled: isQuarantinedTestsEnabled && this._config.isTestManagementEnabled
     }
   }
 

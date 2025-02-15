@@ -43,6 +43,7 @@ const testErrCh = channel('ci:jest:test:err')
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
 const knownTestsCh = channel('ci:jest:known-tests')
+const quarantinedTestsCh = channel('ci:jest:quarantined-tests')
 
 const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 
@@ -70,6 +71,8 @@ let earlyFlakeDetectionFaultyThreshold = 30
 let isEarlyFlakeDetectionFaulty = false
 let hasFilteredSkippableSuites = false
 let isKnownTestsEnabled = false
+let isQuarantinedTestsEnabled = false
+let quarantinedTests = {}
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -140,6 +143,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.flakyTestRetriesCount = this.testEnvironmentOptions._ddFlakyTestRetriesCount
       this.isDiEnabled = this.testEnvironmentOptions._ddIsDiEnabled
       this.isKnownTestsEnabled = this.testEnvironmentOptions._ddIsKnownTestsEnabled
+      this.isQuarantinedTestsEnabled = this.testEnvironmentOptions._ddIsQuarantinedTestsEnabled
 
       if (this.isKnownTestsEnabled) {
         try {
@@ -159,6 +163,18 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const currentNumRetries = this.global[RETRY_TIMES]
         if (!currentNumRetries) {
           this.global[RETRY_TIMES] = this.flakyTestRetriesCount
+        }
+      }
+
+      if (this.isQuarantinedTestsEnabled) {
+        try {
+          const hasQuarantinedTests = !!quarantinedTests.jest
+          this.quarantinedTestsForThisSuite = hasQuarantinedTests
+            ? this.getQuarantinedTestsForSuite(quarantinedTests.jest.suites[this.testSuite].tests)
+            : this.getQuarantinedTestsForSuite(this.testEnvironmentOptions._ddQuarantinedTests)
+        } catch (e) {
+          log.error('Error parsing quarantined tests', e)
+          this.isQuarantinedTestsEnabled = false
         }
       }
     }
@@ -193,8 +209,25 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       return knownTestsForSuite
     }
 
+    getQuarantinedTestsForSuite (quaratinedTests) {
+      if (this.quarantinedTestsForThisSuite) {
+        return this.quarantinedTestsForThisSuite
+      }
+      let quarantinedTestsForSuite = quaratinedTests
+      // If jest is using workers, quarantined tests are serialized to json.
+      // If jest runs in band, they are not.
+      if (typeof quarantinedTestsForSuite === 'string') {
+        quarantinedTestsForSuite = JSON.parse(quarantinedTestsForSuite)
+      }
+      return Object.entries(quarantinedTestsForSuite).reduce((acc, [testName, { properties }]) => {
+        if (properties?.quarantined) {
+          acc.push(testName)
+        }
+        return acc
+      }, [])
+    }
+
     // Add the `add_test` event we don't have the test object yet, so
-    // we use its describe block to get the full name
     getTestNameFromAddTestEvent (event, state) {
       const describeSuffix = getJestTestName(state.currentDescribeBlock)
       const fullTestName = describeSuffix ? `${describeSuffix} ${event.testName}` : event.testName
@@ -303,6 +336,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             }
           }
         }
+        let isQuarantined = false
+
+        if (this.isQuarantinedTestsEnabled) {
+          const testName = getJestTestName(event.test)
+          isQuarantined = this.quarantinedTestsForThisSuite?.includes(testName)
+        }
 
         const promises = {}
         const numRetries = this.global[RETRY_TIMES]
@@ -337,7 +376,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           testFinishCh.publish({
             status,
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite),
-            promises
+            isQuarantined
           })
         })
 
@@ -485,6 +524,7 @@ function cliWrapper (cli, jestVersion) {
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
         earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
+        isQuarantinedTestsEnabled = libraryConfig.isQuarantinedTestsEnabled
       }
     } catch (err) {
       log.error('Jest library configuration error', err)
@@ -529,6 +569,25 @@ function cliWrapper (cli, jestVersion) {
         }
       } catch (err) {
         log.error('Jest test-suite skippable error', err)
+      }
+    }
+
+    if (isQuarantinedTestsEnabled) {
+      const quarantinedTestsPromise = new Promise((resolve) => {
+        onDone = resolve
+      })
+
+      sessionAsyncResource.runInAsyncScope(() => {
+        quarantinedTestsCh.publish({ onDone })
+      })
+
+      try {
+        const { err, quarantinedTests: receivedQuarantinedTests } = await quarantinedTestsPromise
+        if (!err) {
+          quarantinedTests = receivedQuarantinedTests
+        }
+      } catch (err) {
+        log.error('Jest quarantined tests error', err)
       }
     }
 
@@ -601,6 +660,7 @@ function cliWrapper (cli, jestVersion) {
         error,
         isEarlyFlakeDetectionEnabled,
         isEarlyFlakeDetectionFaulty,
+        isQuarantinedTestsEnabled,
         onDone
       })
     })
@@ -630,6 +690,37 @@ function cliWrapper (cli, jestVersion) {
       }
       // If every test that failed was an EFD retry, we'll consider the suite passed
       if (numFailedTestsToIgnore !== 0 && result.results.numFailedTests === numFailedTestsToIgnore) {
+        result.results.success = true
+      }
+    }
+
+    if (isQuarantinedTestsEnabled) {
+      const failedTests = result
+        .results
+        .testResults.flatMap(({ testResults, testFilePath: testSuiteAbsolutePath }) => (
+          testResults.map(({ fullName: testName, status }) => ({ testName, testSuiteAbsolutePath, status }))
+        ))
+        .filter(({ status }) => status === 'failed')
+
+      let numFailedQuarantinedTests = 0
+
+      for (const { testName, testSuiteAbsolutePath } of failedTests) {
+        const testSuite = getTestSuitePath(testSuiteAbsolutePath, result.globalConfig.rootDir)
+        const isQuarantined = quarantinedTests
+          ?.jest
+          ?.suites
+          ?.[testSuite]
+          ?.tests
+          ?.[testName]
+          ?.properties
+          ?.quarantined
+        if (isQuarantined) {
+          numFailedQuarantinedTests++
+        }
+      }
+
+      // If every test that failed was quarantined, we'll consider the suite passed
+      if (numFailedQuarantinedTests !== 0 && result.results.numFailedTests === numFailedQuarantinedTests) {
         result.results.success = true
       }
     }
@@ -825,6 +916,8 @@ addHook({
       _ddFlakyTestRetriesCount,
       _ddIsDiEnabled,
       _ddIsKnownTestsEnabled,
+      _ddIsQuarantinedTestsEnabled,
+      _ddQuarantinedTests,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 
@@ -936,8 +1029,9 @@ addHook({
 })
 
 /*
-* This hook does two things:
+* This hook does three things:
 * - Pass known tests to the workers.
+* - Pass quarantined tests to the workers.
 * - Receive trace, coverage and logs payloads from the workers.
 */
 addHook({
@@ -947,7 +1041,7 @@ addHook({
 }, (childProcessWorker) => {
   const ChildProcessWorker = childProcessWorker.default
   shimmer.wrap(ChildProcessWorker.prototype, 'send', send => function (request) {
-    if (!isKnownTestsEnabled) {
+    if (!isKnownTestsEnabled && !isQuarantinedTestsEnabled) {
       return send.apply(this, arguments)
     }
     const [type] = request
@@ -967,11 +1061,15 @@ addHook({
       const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
       const suiteKnownTests = knownTests.jest?.[testSuite] || []
+
+      const suiteQuarantinedTests = quarantinedTests.jest?.suites?.[testSuite]?.tests || {}
+
       args[0].config = {
         ...config,
         testEnvironmentOptions: {
           ...config.testEnvironmentOptions,
-          _ddKnownTests: suiteKnownTests
+          _ddKnownTests: suiteKnownTests,
+          _ddQuarantinedTests: suiteQuarantinedTests
         }
       }
     }

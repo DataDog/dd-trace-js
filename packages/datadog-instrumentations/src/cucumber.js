@@ -22,6 +22,7 @@ const knownTestsCh = channel('ci:cucumber:known-tests')
 const skippableSuitesCh = channel('ci:cucumber:test-suite:skippable')
 const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
+const quarantinedTestsCh = channel('ci:cucumber:quarantined-tests')
 
 const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
 
@@ -71,6 +72,8 @@ let earlyFlakeDetectionFaultyThreshold = 0
 let isEarlyFlakeDetectionFaulty = false
 let isFlakyTestRetriesEnabled = false
 let isKnownTestsEnabled = false
+let isQuarantinedTestsEnabled = false
+let quarantinedTests = {}
 let numTestRetries = 0
 let knownTests = []
 let skippedSuites = []
@@ -115,6 +118,17 @@ function getStatusFromResultLatest (result) {
 function isNewTest (testSuite, testName) {
   const testsForSuite = knownTests.cucumber?.[testSuite] || []
   return !testsForSuite.includes(testName)
+}
+
+function isQuarantinedTest (testSuite, testName) {
+  return quarantinedTests
+    ?.cucumber
+    ?.suites
+    ?.[testSuite]
+    ?.tests
+    ?.[testName]
+    ?.properties
+    ?.quarantined
 }
 
 function getTestStatusFromRetries (testStatuses) {
@@ -293,11 +307,16 @@ function wrapRun (pl, isLatestVersion) {
         }
         let isNew = false
         let isEfdRetry = false
+        let isQuarantined = false
         if (isKnownTestsEnabled && status !== 'skip') {
           const numRetries = numRetriesByPickleId.get(this.pickle.id)
 
           isNew = numRetries !== undefined
           isEfdRetry = numRetries > 0
+        }
+        if (isQuarantinedTestsEnabled) {
+          const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
+          isQuarantined = isQuarantinedTest(testSuitePath, this.pickle.name)
         }
         const attemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
 
@@ -307,7 +326,15 @@ function wrapRun (pl, isLatestVersion) {
           await promises.hitBreakpointPromise
         }
         attemptAsyncResource.runInAsyncScope(() => {
-          testFinishCh.publish({ status, skipReason, error, isNew, isEfdRetry, isFlakyRetry: numAttempt > 0 })
+          testFinishCh.publish({
+            status,
+            skipReason,
+            error,
+            isNew,
+            isEfdRetry,
+            isFlakyRetry: numAttempt > 0,
+            isQuarantined
+          })
         })
       })
       return promise
@@ -396,6 +423,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     isFlakyTestRetriesEnabled = configurationResponse.libraryConfig?.isFlakyTestRetriesEnabled
     numTestRetries = configurationResponse.libraryConfig?.flakyTestRetriesCount
     isKnownTestsEnabled = configurationResponse.libraryConfig?.isKnownTestsEnabled
+    isQuarantinedTestsEnabled = configurationResponse.libraryConfig?.isQuarantinedTestsEnabled
 
     if (isKnownTestsEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
@@ -453,6 +481,15 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       }
     }
 
+    if (isQuarantinedTestsEnabled) {
+      const quarantinedTestsResponse = await getChannelPromise(quarantinedTestsCh)
+      if (!quarantinedTestsResponse.err) {
+        quarantinedTests = quarantinedTestsResponse.quarantinedTests
+      } else {
+        isQuarantinedTestsEnabled = false
+      }
+    }
+
     const processArgv = process.argv.slice(2).join(' ')
     const command = process.env.npm_lifecycle_script || `cucumber-js ${processArgv}`
 
@@ -500,6 +537,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
         hasForcedToRunSuites: isForcedToRun,
         isEarlyFlakeDetectionEnabled,
         isEarlyFlakeDetectionFaulty,
+        isQuarantinedTestsEnabled,
         isParallel
       })
     })
@@ -536,6 +574,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     }
 
     let isNew = false
+    let isQuarantined = false
 
     if (isKnownTestsEnabled) {
       isNew = isNewTest(testSuitePath, pickle.name)
@@ -543,6 +582,10 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
         numRetriesByPickleId.set(pickle.id, 0)
       }
     }
+    if (isQuarantinedTestsEnabled) {
+      isQuarantined = isQuarantinedTest(testSuitePath, pickle.name)
+    }
+
     // TODO: for >=11 we could use `runTestCaseResult` instead of accumulating results in `lastStatusByPickleId`
     let runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
 
@@ -557,6 +600,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     }
     let testStatus = lastTestStatus
     let shouldBePassedByEFD = false
+    let shouldBePassedByQuarantine = false
     if (isNew && isEarlyFlakeDetectionEnabled) {
       /**
        * If Early Flake Detection (EFD) is enabled the logic is as follows:
@@ -571,6 +615,11 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
         shouldBePassedByEFD = true
         this.success = true
       }
+    }
+
+    if (isQuarantinedTestsEnabled && isQuarantined) {
+      this.success = true
+      shouldBePassedByQuarantine = true
     }
 
     if (!pickleResultByFile[testFileAbsolutePath]) {
@@ -602,6 +651,10 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
 
     if (isNewerCucumberVersion && isEarlyFlakeDetectionEnabled && isNew) {
       return shouldBePassedByEFD
+    }
+
+    if (isNewerCucumberVersion && isQuarantinedTestsEnabled && isQuarantined) {
+      return shouldBePassedByQuarantine
     }
 
     return runTestCaseResult

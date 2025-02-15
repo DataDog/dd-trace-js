@@ -27,6 +27,7 @@ const {
   getOnPendingHandler,
   testFileToSuiteAr,
   newTests,
+  testsQuarantined,
   getTestFullName,
   getRunTestsWrapper
 } = require('./utils')
@@ -61,6 +62,7 @@ const testSuiteCodeCoverageCh = channel('ci:mocha:test-suite:code-coverage')
 const libraryConfigurationCh = channel('ci:mocha:library-configuration')
 const knownTestsCh = channel('ci:mocha:known-tests')
 const skippableSuitesCh = channel('ci:mocha:test-suite:skippable')
+const quarantinedTestsCh = channel('ci:mocha:quarantined-tests')
 const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
@@ -135,6 +137,18 @@ function getOnEndHandler (isParallel) {
       }
     }
 
+    // We subtract the errors from quarantined tests from the total number of failures
+    if (config.isQuarantinedTestsEnabled) {
+      let numFailedQuarantinedTests = 0
+      for (const test of testsQuarantined) {
+        if (isTestFailed(test)) {
+          numFailedQuarantinedTests++
+        }
+      }
+      this.stats.failures -= numFailedQuarantinedTests
+      this.failures -= numFailedQuarantinedTests
+    }
+
     if (status === 'fail') {
       error = new Error(`Failed tests: ${this.failures}.`)
     }
@@ -165,6 +179,7 @@ function getOnEndHandler (isParallel) {
       error,
       isEarlyFlakeDetectionEnabled: config.isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty: config.isEarlyFlakeDetectionFaulty,
+      isQuarantinedTestsEnabled: config.isQuarantinedTestsEnabled,
       isParallel
     })
   })
@@ -172,6 +187,22 @@ function getOnEndHandler (isParallel) {
 
 function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
   const mochaRunAsyncResource = new AsyncResource('bound-anonymous-fn')
+
+  const onReceivedQuarantinedTests = ({ err, quarantinedTests: receivedQuarantinedTests }) => {
+    if (err) {
+      config.quarantinedTests = {}
+      config.isQuarantinedTestsEnabled = false
+    } else {
+      config.quarantinedTests = receivedQuarantinedTests
+    }
+    if (config.isSuitesSkippingEnabled) {
+      skippableSuitesCh.publish({
+        onDone: mochaRunAsyncResource.bind(onReceivedSkippableSuites)
+      })
+    } else {
+      onFinishRequest()
+    }
+  }
 
   const onReceivedSkippableSuites = ({ err, skippableSuites, itrCorrelationId: responseItrCorrelationId }) => {
     if (err) {
@@ -205,8 +236,11 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
     } else {
       config.knownTests = knownTests
     }
-
-    if (config.isSuitesSkippingEnabled) {
+    if (config.isQuarantinedTestsEnabled) {
+      quarantinedTestsCh.publish({
+        onDone: mochaRunAsyncResource.bind(onReceivedQuarantinedTests)
+      })
+    } else if (config.isSuitesSkippingEnabled) {
       skippableSuitesCh.publish({
         onDone: mochaRunAsyncResource.bind(onReceivedSkippableSuites)
       })
@@ -224,14 +258,19 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
     config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
     config.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
     config.isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
-    // ITR and auto test retries are not supported in parallel mode yet
+    // ITR, auto test retries and quarantine are not supported in parallel mode yet
     config.isSuitesSkippingEnabled = !isParallel && libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = !isParallel && libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = !isParallel && libraryConfig.flakyTestRetriesCount
+    config.isQuarantinedTestsEnabled = !isParallel && libraryConfig.isQuarantinedTestsEnabled
 
     if (config.isKnownTestsEnabled) {
       knownTestsCh.publish({
         onDone: mochaRunAsyncResource.bind(onReceivedKnownTests)
+      })
+    } else if (config.isQuarantinedTestsEnabled) {
+      quarantinedTestsCh.publish({
+        onDone: mochaRunAsyncResource.bind(onReceivedQuarantinedTests)
       })
     } else if (config.isSuitesSkippingEnabled) {
       skippableSuitesCh.publish({
@@ -357,7 +396,7 @@ addHook({
 
     this.once('end', getOnEndHandler(false))
 
-    this.on('test', getOnTestHandler(true, newTests))
+    this.on('test', getOnTestHandler(true))
 
     this.on('test end', getOnTestEndHandler())
 
@@ -579,6 +618,7 @@ addHook({
 
     const testPath = getTestSuitePath(testSuiteAbsolutePath, process.cwd())
     const testSuiteKnownTests = config.knownTests.mocha?.[testPath] || []
+    const testSuiteQuarantinedTests = config.quarantinedTests?.modules?.mocha?.suites?.[testPath] || []
 
     // We pass the known tests for the test file to the worker
     const testFileResult = await run.apply(
@@ -589,6 +629,8 @@ addHook({
           ...workerArgs,
           _ddEfdNumRetries: config.earlyFlakeDetectionNumRetries,
           _ddIsEfdEnabled: config.isEarlyFlakeDetectionEnabled,
+          _ddIsQuarantinedEnabled: config.isQuarantinedTestsEnabled,
+          _ddQuarantinedTests: testSuiteQuarantinedTests,
           _ddKnownTests: {
             mocha: {
               [testPath]: testSuiteKnownTests

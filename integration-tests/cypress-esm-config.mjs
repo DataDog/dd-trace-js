@@ -1,7 +1,7 @@
 import cypress from 'cypress'
 
 async function runCypress () {
-  await cypress.run({
+  const results = await cypress.run({
     config: {
       defaultCommandTimeout: 1000,
       e2e: {
@@ -39,6 +39,9 @@ async function runCypress () {
       screenshotOnRunFailure: false
     }
   })
+  if (results.totalFailed !== 0) {
+    process.exit(1)
+  }
 }
 
 runCypress()
