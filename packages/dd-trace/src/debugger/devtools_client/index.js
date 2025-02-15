@@ -7,6 +7,7 @@ const { getLocalStateForCallFrame } = require('./snapshot')
 const send = require('./send')
 const { getStackFromCallFrames } = require('./state')
 const { ackEmitting, ackError } = require('./status')
+const { threadPausedMsMetric } = require('./telemetry')
 const { parentThreadId } = require('./config')
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./defaults')
 const log = require('../../log')
@@ -101,12 +102,10 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   await session.post('Debugger.resume')
-  const diff = process.hrtime.bigint() - start // TODO: Recored as telemetry (DEBUG-2858)
 
-  log.debug(
-    '[debugger:devtools_client] Finished processing breakpoints - main thread paused for: %d ms',
-    Number(diff) / 1000000
-  )
+  const diff = Number(process.hrtime.bigint() - start) / 1_000_000
+  log.debug('[debugger:devtools_client] Finished processing breakpoints - instrumented thread paused for: %d ms', diff)
+  threadPausedMsMetric(diff)
 
   // Due to the highly optimized algorithm above, the `probes` array might have gaps
   probes = probes.filter((probe) => !!probe)
