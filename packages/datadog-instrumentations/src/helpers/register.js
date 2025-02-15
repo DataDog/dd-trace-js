@@ -107,7 +107,16 @@ for (const packageName of names) {
           continue
         }
         if (typeof namesAndSuccesses[`${name}@${version}`] === 'undefined') {
-          namesAndSuccesses[`${name}@${version}`] = false
+          // TODO If `file` is present, we might elsewhere instrument the result of the module
+          // for a version range that actually matches, so we can't assume that we're _not_
+          // going to instrument that. However, the way the data model around instrumentation
+          // works, we can't know either way just yet, so to avoid false positives, we'll just
+          // ignore this if there is a `file` in the hook. The thing to do here is rework
+          // everything so that we can be sure that there are _no_ instrumentations that it
+          // could match.
+          if (!file) {
+            namesAndSuccesses[`${name}@${version}`] = false
+          }
         }
 
         if (matchVersion(version, versions)) {
