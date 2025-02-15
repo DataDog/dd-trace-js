@@ -1,33 +1,37 @@
 'use strict'
 
+require('../setup/tap')
+const proxyquire = require('proxyquire')
+
 const { channel } = require('dc-polyfill')
 const { assert } = require('chai')
-const standalone = require('../../src/appsec/standalone')
+const standalone = require('../../src/standalone')
 const DatadogSpan = require('../../src/opentracing/span')
 const {
   APM_TRACING_ENABLED_KEY,
-  APPSEC_PROPAGATION_KEY,
   SAMPLING_MECHANISM_APPSEC,
-  DECISION_MAKER_KEY
+  DECISION_MAKER_KEY,
+  TRACE_SOURCE_PROPAGATION_KEY
 } = require('../../src/constants')
-const { USER_KEEP, AUTO_KEEP, AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
+const { USER_KEEP } = require('../../../../ext/priority')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 const TraceState = require('../../src/opentracing/propagation/tracestate')
+const TraceSourcePrioritySampler = require('../../src/standalone/tracesource_priority_sampler')
 
 const startCh = channel('dd-trace:span:start')
 const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
 
-describe('Appsec Standalone', () => {
+describe('Disabled APM Tracing or Standalone', () => {
   let config
   let tracer, processor, prioritySampler
 
   beforeEach(() => {
     config = {
-      appsec: { standalone: { enabled: true } },
+      apmTracingEnabled: false,
 
       tracePropagationStyle: {
-        inject: ['datadog', 'tracecontext'],
+        inject: ['datadog', 'tracecontext', 'b3'],
         extract: ['datadog']
       }
     }
@@ -56,7 +60,7 @@ describe('Appsec Standalone', () => {
       extractChUnsubscribe = sinon.stub(extractCh, 'unsubscribe')
     })
 
-    it('should subscribe to start span if standalone enabled', () => {
+    it('should subscribe to start span if apmTracing disabled', () => {
       standalone.configure(config)
 
       sinon.assert.calledOnce(startChSubscribe)
@@ -64,8 +68,8 @@ describe('Appsec Standalone', () => {
       sinon.assert.calledOnce(extractChSubscribe)
     })
 
-    it('should not subscribe to start span if standalone disabled', () => {
-      delete config.appsec.standalone
+    it('should not subscribe to start span if apmTracing enabled', () => {
+      config.apmTracingEnabled = true
 
       standalone.configure(config)
 
@@ -77,72 +81,49 @@ describe('Appsec Standalone', () => {
       sinon.assert.notCalled(extractChUnsubscribe)
     })
 
-    it('should subscribe only once', () => {
+    it('should unsubscribe before subscribing', () => {
+      const channels = {}
+      const standalone = proxyquire('../../src/standalone', {
+        'dc-polyfill': {
+          channel: (name) => {
+            channels[name] = {
+              subscribe: sinon.stub(),
+              unsubscribe: sinon.stub(),
+              get hasSubscribers () {
+                return true
+              }
+            }
+            return channels[name]
+          }
+        }
+      })
+
       standalone.configure(config)
       standalone.configure(config)
       standalone.configure(config)
 
-      sinon.assert.calledOnce(startChSubscribe)
+      Object.values(channels).forEach(channel => {
+        sinon.assert.calledThrice(channel.unsubscribe)
+        sinon.assert.calledThrice(channel.subscribe)
+      })
     })
 
     it('should not return a prioritySampler when standalone ASM is disabled', () => {
-      const prioritySampler = standalone.configure({ appsec: { standalone: { enabled: false } } })
+      const prioritySampler = standalone.configure({ apmTracingEnabled: true })
 
       assert.isUndefined(prioritySampler)
     })
 
-    it('should return a StandAloneAsmPrioritySampler when standalone ASM is enabled', () => {
+    it('should return a TraceSourcePrioritySampler when standalone ASM is enabled', () => {
       const prioritySampler = standalone.configure(config)
 
-      assert.instanceOf(prioritySampler, standalone.StandAloneAsmPrioritySampler)
-    })
-  })
-
-  describe('sample', () => {
-    it('should add _dd.p.appsec tag if enabled', () => {
-      standalone.configure(config)
-
-      const span = new DatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'operation'
-      })
-
-      standalone.sample(span)
-
-      assert.propertyVal(span.context()._trace.tags, APPSEC_PROPAGATION_KEY, '1')
-    })
-
-    it('should reset priority', () => {
-      standalone.configure(config)
-
-      const span = new DatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'operation'
-      })
-
-      span.context()._sampling.priority = USER_REJECT
-
-      standalone.sample(span)
-
-      assert.strictEqual(span.context()._sampling.priority, undefined)
-    })
-
-    it('should not add _dd.p.appsec tag if disabled', () => {
-      delete config.appsec.standalone
-
-      standalone.configure(config)
-
-      const span = new DatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'operation'
-      })
-
-      standalone.sample(span)
-
-      assert.notProperty(span.context()._trace.tags, APPSEC_PROPAGATION_KEY)
+      assert.instanceOf(prioritySampler, TraceSourcePrioritySampler)
     })
   })
 
   describe('onStartSpan', () => {
     it('should not add _dd.apm.enabled tag when standalone is disabled', () => {
-      delete config.appsec.standalone
+      config.apmTracingEnabled = true
       standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
@@ -198,7 +179,7 @@ describe('Appsec Standalone', () => {
   })
 
   describe('onSpanExtract', () => {
-    it('should reset priority if _dd.p.appsec not present', () => {
+    it('should reset priority if _dd.p.ts not present', () => {
       standalone.configure(config)
 
       const carrier = {
@@ -213,7 +194,7 @@ describe('Appsec Standalone', () => {
       assert.isUndefined(spanContext._sampling.priority)
     })
 
-    it('should not reset dm if _dd.p.appsec not present', () => {
+    it('should not reset dm if _dd.p.ts not present', () => {
       standalone.configure(config)
 
       const carrier = {
@@ -229,14 +210,14 @@ describe('Appsec Standalone', () => {
       assert.propertyVal(spanContext._trace.tags, DECISION_MAKER_KEY, '-4')
     })
 
-    it('should keep priority if _dd.p.appsec is present', () => {
+    it('should keep priority if _dd.p.ts is present', () => {
       standalone.configure(config)
 
       const carrier = {
         'x-datadog-trace-id': 123123,
         'x-datadog-parent-id': 345345,
         'x-datadog-sampling-priority': 2,
-        'x-datadog-tags': '_dd.p.appsec=1,_dd.p.dm=-5'
+        'x-datadog-tags': '_dd.p.ts=02,_dd.p.dm=-5'
       }
 
       const propagator = new TextMapPropagator(config)
@@ -246,14 +227,14 @@ describe('Appsec Standalone', () => {
       assert.propertyVal(spanContext._trace.tags, DECISION_MAKER_KEY, '-5')
     })
 
-    it('should set USER_KEEP priority if _dd.p.appsec=1 is present', () => {
+    it('should set USER_KEEP priority if _dd.p.ts=02 is present', () => {
       standalone.configure(config)
 
       const carrier = {
         'x-datadog-trace-id': 123123,
         'x-datadog-parent-id': 345345,
         'x-datadog-sampling-priority': 1,
-        'x-datadog-tags': '_dd.p.appsec=1'
+        'x-datadog-tags': '_dd.p.ts=02'
       }
 
       const propagator = new TextMapPropagator(config)
@@ -262,8 +243,8 @@ describe('Appsec Standalone', () => {
       assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
     })
 
-    it('should keep priority if standalone is disabled', () => {
-      delete config.appsec.standalone
+    it('should keep priority if apm tracing is enabled', () => {
+      config.apmTracingEnabled = true
       standalone.configure(config)
 
       const carrier = {
@@ -280,7 +261,7 @@ describe('Appsec Standalone', () => {
   })
 
   describe('onSpanInject', () => {
-    it('should reset priority if standalone enabled and there is no appsec event', () => {
+    it('should reset priority if apm tracing is disabled and there is no appsec event', () => {
       standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
@@ -299,9 +280,12 @@ describe('Appsec Standalone', () => {
       assert.notProperty(carrier, 'x-datadog-trace-id')
       assert.notProperty(carrier, 'x-datadog-parent-id')
       assert.notProperty(carrier, 'x-datadog-sampling-priority')
+
+      assert.notProperty(carrier, 'x-b3-traceid')
+      assert.notProperty(carrier, 'x-b3-spanid')
     })
 
-    it('should keep priority if standalone enabled and there is an appsec event', () => {
+    it('should keep priority if apm tracing is disabled and there is an appsec event', () => {
       standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
@@ -313,7 +297,7 @@ describe('Appsec Standalone', () => {
         mechanism: SAMPLING_MECHANISM_APPSEC
       }
 
-      span._spanContext._trace.tags[APPSEC_PROPAGATION_KEY] = '1'
+      span._spanContext._trace.tags[TRACE_SOURCE_PROPAGATION_KEY] = '02'
 
       const carrier = {}
       const propagator = new TextMapPropagator(config)
@@ -322,11 +306,11 @@ describe('Appsec Standalone', () => {
       assert.property(carrier, 'x-datadog-trace-id')
       assert.property(carrier, 'x-datadog-parent-id')
       assert.property(carrier, 'x-datadog-sampling-priority')
-      assert.propertyVal(carrier, 'x-datadog-tags', '_dd.p.appsec=1')
+      assert.propertyVal(carrier, 'x-datadog-tags', '_dd.p.ts=02')
     })
 
     it('should not reset priority if standalone disabled', () => {
-      delete config.appsec.standalone
+      config.apmTracingEnabled = true
       standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
@@ -345,6 +329,9 @@ describe('Appsec Standalone', () => {
       assert.property(carrier, 'x-datadog-trace-id')
       assert.property(carrier, 'x-datadog-parent-id')
       assert.property(carrier, 'x-datadog-sampling-priority')
+
+      assert.property(carrier, 'x-b3-traceid')
+      assert.property(carrier, 'x-b3-spanid')
     })
 
     it('should clear tracestate datadog info', () => {
@@ -369,87 +356,7 @@ describe('Appsec Standalone', () => {
       propagator.inject(span._spanContext, carrier)
 
       assert.propertyVal(carrier, 'tracestate', 'other=id:0xC0FFEE')
-    })
-  })
-
-  describe('StandaloneASMPriorityManager', () => {
-    let prioritySampler
-    let tags
-    let context
-    let root
-
-    beforeEach(() => {
-      tags = { 'manual.keep': 'true' }
-      prioritySampler = new standalone.StandAloneAsmPrioritySampler('test')
-
-      root = {}
-      context = {
-        _sampling: {},
-        _trace: {
-          tags: {},
-          started: [root]
-        }
-      }
-      sinon.stub(prioritySampler, '_getContext').returns(context)
-    })
-
-    describe('sample', () => {
-      it('should provide the context when invoking _getPriorityFromTags', () => {
-        const span = new DatadogSpan(tracer, processor, prioritySampler, {
-          operationName: 'operation'
-        })
-
-        const _getPriorityFromTags = sinon.stub(prioritySampler, '_getPriorityFromTags')
-
-        prioritySampler.sample(span, false)
-
-        sinon.assert.calledWithExactly(_getPriorityFromTags, context._tags, context)
-      })
-    })
-
-    describe('_getPriorityFromTags', () => {
-      it('should keep the trace if manual.keep and _dd.p.appsec are present', () => {
-        context._trace.tags[APPSEC_PROPAGATION_KEY] = 1
-        assert.strictEqual(prioritySampler._getPriorityFromTags(tags, context), USER_KEEP)
-      })
-
-      it('should return undefined if manual.keep or _dd.p.appsec are not present', () => {
-        assert.isUndefined(prioritySampler._getPriorityFromTags(tags, context))
-      })
-    })
-
-    describe('_getPriorityFromAuto', () => {
-      it('should keep one trace per 1 min', () => {
-        const span = {
-          _trace: {}
-        }
-
-        const clock = sinon.useFakeTimers()
-
-        assert.strictEqual(prioritySampler._getPriorityFromAuto(span), AUTO_KEEP)
-
-        assert.strictEqual(prioritySampler._getPriorityFromAuto(span), AUTO_REJECT)
-
-        clock.tick(30000)
-
-        assert.strictEqual(prioritySampler._getPriorityFromAuto(span), AUTO_REJECT)
-
-        clock.tick(60000)
-
-        assert.strictEqual(prioritySampler._getPriorityFromAuto(span), AUTO_KEEP)
-
-        clock.restore()
-      })
-
-      it('should keep trace if it contains _dd.p.appsec tag', () => {
-        const span = {
-          _trace: {}
-        }
-
-        context._trace.tags[APPSEC_PROPAGATION_KEY] = 1
-
-        assert.strictEqual(prioritySampler._getPriorityFromAuto(span), USER_KEEP)
-      })
+      assert.notProperty(carrier, 'traceparent')
     })
   })
 })

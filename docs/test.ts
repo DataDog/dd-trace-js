@@ -144,6 +144,7 @@ tracer.init({
 });
 
 tracer.init({
+  apmTracingEnabled: false,
   experimental: {
     iast: {
       enabled: true,
@@ -157,11 +158,6 @@ tracer.init({
       redactionNamePattern: 'password',
       redactionValuePattern: 'bearer',
       telemetryVerbosity: 'OFF'
-    },
-    appsec: {
-      standalone: {
-        enabled: true
-      }
     }
   }
 })
