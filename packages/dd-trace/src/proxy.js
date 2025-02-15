@@ -67,16 +67,7 @@ class Tracer extends NoopProxy {
       telemetry.start(config, this._pluginManager)
 
       if (config.dogstatsd) {
-        // Custom Metrics
         this.dogstatsd = new dogstatsd.CustomMetrics(config)
-
-        setInterval(() => {
-          this.dogstatsd.flush()
-        }, 10 * 1000).unref()
-
-        process.once('beforeExit', () => {
-          this.dogstatsd.flush()
-        })
       }
 
       if (config.spanLeakDebug > 0) {
