@@ -26,11 +26,15 @@ function setUser (tracer, user) {
   setUserTags(user, rootSpan)
   rootSpan.setTag('_dd.appsec.user.collection_mode', 'sdk')
 
-  waf.run({
-    persistent: {
-      [addresses.USER_ID]: '' + user.id
-    }
-  })
+  const persistent = {
+    [addresses.USER_ID]: '' + user.id
+  }
+
+  if (user.session_id && typeof user.session_id === 'string') {
+    persistent['usr.session_id'] = user.session_id
+  }
+
+  waf.run({ persistent })
 }
 
 module.exports = {
