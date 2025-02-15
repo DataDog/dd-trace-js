@@ -126,7 +126,7 @@ class Profiler extends EventEmitter {
     this._timeoutInterval = this._config.flushInterval
   }
 
-  async stop () {
+  stop () {
     if (!this._enabled) return
 
     // collect and export current profiles
