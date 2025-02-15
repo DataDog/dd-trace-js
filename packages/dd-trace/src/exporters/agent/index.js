@@ -3,6 +3,7 @@
 const { URL, format } = require('url')
 const log = require('../../log')
 const Writer = require('./writer')
+const { fetchAgentInfo } = require('../common/util')
 
 class AgentExporter {
   constructor (config, prioritySampler) {
@@ -13,6 +14,19 @@ class AgentExporter {
       hostname: hostname || 'localhost',
       port
     }))
+
+    this._agentSupportsTopLevelSpanEvents = false
+    try {
+      fetchAgentInfo(this._url, (err, agentInfo) => {
+        if (err) {
+          this._agentSupportsTopLevelSpanEvents = false
+        } else {
+          this._agentSupportsTopLevelSpanEvents = agentInfo?.span_events === true
+        }
+      })
+    } catch {
+      // pass
+    }
 
     const headers = {}
     if (stats.enabled || appsec?.standalone?.enabled) {
