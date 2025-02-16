@@ -1379,7 +1379,10 @@ function maybeFloat (number) {
 }
 
 function getAgentUrl (url, options) {
-  if (url) return new URL(url)
+  if (url) {
+    if (typeof url === 'string') return url
+    if (url instanceof URL) return url.toString()
+  }
 
   if (os.type() === 'Windows_NT') return
 
@@ -1391,7 +1394,7 @@ function getAgentUrl (url, options) {
     !process.env.DD_TRACE_AGENT_PORT &&
     fs.existsSync('/var/run/datadog/apm.socket')
   ) {
-    return new URL('unix:///var/run/datadog/apm.socket')
+    return 'unix:///var/run/datadog/apm.socket'
   }
 }
 
