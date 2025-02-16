@@ -88,9 +88,13 @@ function getPrepareStackTraceAccessor () {
   }
 }
 
+let rewriterEnabled = false
+let compileShimmed = false
+
 function getCompileMethodFn (compileMethod) {
   const rewriteFn = getRewriteFunction(rewriter)
   return function (content, filename) {
+    if (!rewriterEnabled) return compileMethod.apply(this, arguments)
     try {
       if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
         const rewritten = rewriteFn(content, filename)
@@ -136,7 +140,11 @@ function enableRewriter (telemetryVerbosity) {
       if (!pstDescriptor || pstDescriptor.configurable) {
         Object.defineProperty(global.Error, 'prepareStackTrace', getPrepareStackTraceAccessor())
       }
-      shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
+      if (!compileShimmed) {
+        shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
+        compileShimmed = true
+      }
+      rewriterEnabled = true
     }
 
     enableEsmRewriter(telemetryVerbosity)
@@ -198,7 +206,7 @@ function enableEsmRewriter (telemetryVerbosity) {
 }
 
 function disableRewriter () {
-  shimmer.unwrap(Module.prototype, '_compile')
+  rewriterEnabled = false
 
   if (!Error.prepareStackTrace?.[kSymbolPrepareStackTrace]) return
 
