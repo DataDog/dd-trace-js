@@ -108,8 +108,7 @@ export default [
           name: 'semver',
           message: 'Please use semifies instead.'
         }
-      ]],
-      'unicorn/prefer-reflect-apply': 'error'
+      ]]
     }
   },
   {
