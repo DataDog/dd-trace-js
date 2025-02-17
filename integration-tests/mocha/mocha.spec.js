@@ -2209,7 +2209,7 @@ describe('mocha CommonJS', function () {
   })
 
   context('dynamic instrumentation', () => {
-    it('does not activate dynamic instrumentation if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
+    it('does not activate dynamic instrumentation if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -2247,7 +2247,8 @@ describe('mocha CommonJS', function () {
             TESTS_TO_RUN: JSON.stringify([
               './dynamic-instrumentation/test-hit-breakpoint'
             ]),
-            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false'
           },
           stdio: 'inherit'
         }
@@ -2299,7 +2300,6 @@ describe('mocha CommonJS', function () {
             TESTS_TO_RUN: JSON.stringify([
               './dynamic-instrumentation/test-hit-breakpoint'
             ]),
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
@@ -2389,7 +2389,6 @@ describe('mocha CommonJS', function () {
             TESTS_TO_RUN: JSON.stringify([
               './dynamic-instrumentation/test-hit-breakpoint'
             ]),
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
@@ -2443,7 +2442,6 @@ describe('mocha CommonJS', function () {
             TESTS_TO_RUN: JSON.stringify([
               './dynamic-instrumentation/test-not-hit-breakpoint'
             ]),
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
