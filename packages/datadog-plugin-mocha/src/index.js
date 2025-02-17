@@ -50,6 +50,8 @@ const {
 const id = require('../../dd-trace/src/id')
 const log = require('../../dd-trace/src/log')
 
+const BREAKPOINT_SET_GRACE_PERIOD_MS = 200
+
 function getTestSuiteLevelVisibilityTags (testSuiteSpan) {
   const testSuiteSpanContext = testSuiteSpan.context()
   const suiteTags = {
@@ -281,7 +283,12 @@ class MochaPlugin extends CiPlugin {
             this.runningTestProbe = { file, line }
             this.testErrorStackIndex = stackIndex
             test._ddShouldWaitForHitProbe = true
-            // TODO: we're not waiting for setProbePromise to be resolved, so there might be race conditions
+            const waitUntil = Date.now() + BREAKPOINT_SET_GRACE_PERIOD_MS
+            while (Date.now() < waitUntil) {
+              // TODO: To avoid a race condition, we should wait until `probeInformation.setProbePromise` has resolved.
+              // However, Mocha doesn't have a mechanism for waiting asyncrounously here, so for now, we'll have to
+              // fall back to a fixed syncronous delay.
+            }
           }
         }
 

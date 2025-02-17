@@ -49,6 +49,7 @@ const {
 const id = require('../../dd-trace/src/id')
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
+const BREAKPOINT_SET_GRACE_PERIOD_MS = 200
 const isCucumberWorker = !!process.env.CUCUMBER_WORKER_ID
 
 function getTestSuiteTags (testSuiteSpan) {
@@ -257,7 +258,12 @@ class CucumberPlugin extends CiPlugin {
           const { file, line, stackIndex } = probeInformation
           this.runningTestProbe = { file, line }
           this.testErrorStackIndex = stackIndex
-          // TODO: we're not waiting for setProbePromise to be resolved, so there might be race conditions
+          const waitUntil = Date.now() + BREAKPOINT_SET_GRACE_PERIOD_MS
+          while (Date.now() < waitUntil) {
+            // TODO: To avoid a race condition, we should wait until `probeInformation.setProbePromise` has resolved.
+            // However, Cucumber doesn't have a mechanism for waiting asyncrounously here, so for now, we'll have to
+            // fall back to a fixed syncronous delay.
+          }
         }
       }
       span.setTag(TEST_STATUS, 'fail')

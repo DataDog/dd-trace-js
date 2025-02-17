@@ -17,7 +17,8 @@ const {
   TEST_SOURCE_START,
   TEST_TYPE,
   TEST_SOURCE_FILE,
-  TEST_CONFIGURATION_BROWSER_NAME,
+  TEST_PARAMETERS,
+  TEST_BROWSER_NAME,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
@@ -155,7 +156,12 @@ versions.forEach((version) => {
               assert.propertyVal(testEvent.content.meta, 'test.customtag', 'customvalue')
               assert.propertyVal(testEvent.content.meta, 'test.customtag2', 'customvalue2')
               // Adds the browser used
-              assert.propertyVal(testEvent.content.meta, TEST_CONFIGURATION_BROWSER_NAME, 'chromium')
+              assert.propertyVal(testEvent.content.meta, TEST_BROWSER_NAME, 'chromium')
+              assert.propertyVal(
+                testEvent.content.meta,
+                TEST_PARAMETERS,
+                JSON.stringify({ arguments: { browser: 'chromium' }, metadata: {} })
+              )
               assert.exists(testEvent.content.metrics[DD_HOST_CPU_COUNT])
             })
 
