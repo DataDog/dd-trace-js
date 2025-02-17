@@ -2138,15 +2138,10 @@ describe('Config', () => {
         const config = new Config(options)
         expect(config).to.have.property('ciVisAgentlessLogSubmissionEnabled', true)
       })
-      it('should not set isTestDynamicInstrumentationEnabled by default', () => {
+      it('should set isTestDynamicInstrumentationEnabled by default', () => {
         const config = new Config(options)
-        expect(config).to.have.property('isTestDynamicInstrumentationEnabled', false)
+        expect(config).to.have.property('isTestDynamicInstrumentationEnabled', true)
       })
-      it('should set isTestDynamicInstrumentationEnabled to true if DD_TEST_FAILED_TEST_REPLAY_ENABLED is not passed',
-        () => {
-          const config = new Config(options)
-          expect(config).to.have.property('isTestDynamicInstrumentationEnabled', true)
-        })
       it('should set isTestDynamicInstrumentationEnabled to false if DD_TEST_FAILED_TEST_REPLAY_ENABLED is false',
         () => {
           process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED = 'false'
