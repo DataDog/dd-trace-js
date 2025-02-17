@@ -10,4 +10,4 @@ server.listen(process.env.APP_PORT, function () {
     var _a;
     (_a = process.send) === null || _a === void 0 ? void 0 : _a.call(process, { port: process.env.APP_PORT });
 });
-//# sourceMappingURL=index.js.map
+//# sourceMappingURL=typescript.js.map
