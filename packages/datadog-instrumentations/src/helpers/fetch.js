@@ -5,7 +5,7 @@ exports.createWrapFetch = function createWrapFetch (Request, ch) {
     if (typeof fetch !== 'function') return fetch
 
     return function (input, init) {
-      if (!ch.start.hasSubscribers) return fetch.apply(this, arguments)
+      if (!ch.start.hasSubscribers) return Reflect.apply(fetch, this, arguments)
 
       if (input instanceof Request) {
         const ctx = { req: input }

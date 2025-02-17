@@ -1,6 +1,6 @@
 'use strict'
 
-const crypto = require('crypto')
+const crypto = require('node:crypto')
 const { DEFAULT_IAST_REDACTION_VALUE_PATTERN } = require('./evidence-redaction/sensitive-regex')
 
 const STRINGIFY_RANGE_KEY = 'DD_' + crypto.randomBytes(20).toString('hex')
@@ -14,7 +14,7 @@ const KEYS_REGEX_WITHOUT_SENSITIVE_RANGES = new RegExp(`"(${STRINGIFY_RANGE_KEY}
 const sensitiveValueRegex = new RegExp(DEFAULT_IAST_REDACTION_VALUE_PATTERN, 'gmi')
 
 function iterateObject (target, fn, levelKeys = [], depth = 10, visited = new Set()) {
-  Object.keys(target).forEach((key) => {
+  for (const key of Object.keys(target)) {
     const nextLevelKeys = [...levelKeys, key]
     const val = target[key]
 
@@ -26,7 +26,7 @@ function iterateObject (target, fn, levelKeys = [], depth = 10, visited = new Se
         iterateObject(val, fn, nextLevelKeys, depth - 1, visited)
       }
     }
-  })
+  }
 }
 
 function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
@@ -110,11 +110,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
 
     if (counter > 0) {
       let keysRegex
-      if (loadSensitiveRanges) {
-        keysRegex = KEYS_REGEX_WITH_SENSITIVE_RANGES
-      } else {
-        keysRegex = KEYS_REGEX_WITHOUT_SENSITIVE_RANGES
-      }
+      keysRegex = loadSensitiveRanges ? KEYS_REGEX_WITH_SENSITIVE_RANGES : KEYS_REGEX_WITHOUT_SENSITIVE_RANGES
       keysRegex.lastIndex = 0
 
       let regexRes = keysRegex.exec(value)
@@ -141,7 +137,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
 
           sensitiveRanges.push({
             start: offset,
-            end: offset + parseInt(regexRes[3])
+            end: offset + Number.parseInt(regexRes[3])
           })
 
           value = value.replace(sensitiveId, '')

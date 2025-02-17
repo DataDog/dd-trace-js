@@ -97,7 +97,7 @@ module.exports.checkForPotentialConflicts = function () {
 }
 
 module.exports.flushStartupLogs = function (log) {
-  while (warnings.length) {
+  while (warnings.length > 0) {
     log.warn(warnings.shift())
   }
 }

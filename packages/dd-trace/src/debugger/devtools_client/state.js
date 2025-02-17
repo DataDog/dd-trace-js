@@ -1,6 +1,6 @@
 'use strict'
 
-const { join, dirname } = require('path')
+const { join, dirname } = require('node:path')
 const { loadSourceMapSync } = require('./source-maps')
 const session = require('./session')
 const log = require('../../log')
@@ -93,7 +93,7 @@ module.exports = {
   getStackFromCallFrames (callFrames) {
     return callFrames.map((frame) => {
       let fileName = scriptUrls.get(frame.location.scriptId)
-      if (fileName.startsWith('file://')) fileName = fileName.substr(7) // TODO: This might not be required
+      if (fileName.startsWith('file://')) fileName = fileName.slice(7) // TODO: This might not be required
       return {
         fileName,
         function: frame.functionName,

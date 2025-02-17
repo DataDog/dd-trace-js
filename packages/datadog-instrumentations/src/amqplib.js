@@ -18,16 +18,16 @@ const errorCh = channel('apm:amqplib:command:error')
 let methods = {}
 
 addHook({ name: 'amqplib', file: 'lib/defs.js', versions: [MIN_VERSION] }, defs => {
-  methods = Object.keys(defs)
+  methods = Object.fromEntries(Object.keys(defs)
     .filter(key => Number.isInteger(defs[key]))
     .filter(key => isCamelCase(key))
-    .reduce((acc, key) => Object.assign(acc, { [defs[key]]: kebabCase(key).replace('-', '.') }), {})
+    .map((key) => [defs[key], kebabCase(key).replace('-', '.')]))
   return defs
 })
 
 addHook({ name: 'amqplib', file: 'lib/channel_model.js', versions: [MIN_VERSION] }, x => {
   shimmer.wrap(x.Channel.prototype, 'get', getMessage => function (queue, options) {
-    return getMessage.apply(this, arguments).then(message => {
+    return Reflect.apply(getMessage, this, arguments).then(message => {
       if (message === null) {
         return message
       }
@@ -39,7 +39,7 @@ addHook({ name: 'amqplib', file: 'lib/channel_model.js', versions: [MIN_VERSION]
   })
   shimmer.wrap(x.Channel.prototype, 'consume', consume => function (queue, callback, options) {
     if (!startCh.hasSubscribers) {
-      return consume.apply(this, arguments)
+      return Reflect.apply(consume, this, arguments)
     }
     arguments[1] = (message, ...args) => {
       if (message === null) {
@@ -50,7 +50,7 @@ addHook({ name: 'amqplib', file: 'lib/channel_model.js', versions: [MIN_VERSION]
       finishCh.publish()
       return result
     }
-    return consume.apply(this, arguments)
+    return Reflect.apply(consume, this, arguments)
   })
   return x
 })
@@ -58,7 +58,7 @@ addHook({ name: 'amqplib', file: 'lib/channel_model.js', versions: [MIN_VERSION]
 addHook({ name: 'amqplib', file: 'lib/callback_model.js', versions: [MIN_VERSION] }, channel => {
   shimmer.wrap(channel.Channel.prototype, 'get', getMessage => function (queue, options, callback) {
     if (!startCh.hasSubscribers) {
-      return getMessage.apply(this, arguments)
+      return Reflect.apply(getMessage, this, arguments)
     }
     arguments[2] = (error, message, ...args) => {
       if (error !== null || message === null) {
@@ -69,11 +69,11 @@ addHook({ name: 'amqplib', file: 'lib/callback_model.js', versions: [MIN_VERSION
       finishCh.publish()
       return result
     }
-    return getMessage.apply(this, arguments)
+    return Reflect.apply(getMessage, this, arguments)
   })
   shimmer.wrap(channel.Channel.prototype, 'consume', consume => function (queue, callback) {
     if (!startCh.hasSubscribers) {
-      return consume.apply(this, arguments)
+      return Reflect.apply(consume, this, arguments)
     }
     arguments[1] = (message, ...args) => {
       if (message === null) {
@@ -84,7 +84,7 @@ addHook({ name: 'amqplib', file: 'lib/callback_model.js', versions: [MIN_VERSION
       finishCh.publish()
       return result
     }
-    return consume.apply(this, arguments)
+    return Reflect.apply(consume, this, arguments)
   })
   return channel
 })

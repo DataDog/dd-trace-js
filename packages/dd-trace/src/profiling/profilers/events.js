@@ -1,10 +1,10 @@
-const { performance, constants, PerformanceObserver } = require('perf_hooks')
+const { performance, constants, PerformanceObserver } = require('node:perf_hooks')
 const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL } = require('./shared')
 const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
 const pprof = require('@datadog/pprof/')
 
 // perf_hooks uses millis, with fractional part representing nanos. We emit nanos into the pprof file.
-const MS_TO_NS = 1000000
+const MS_TO_NS = 1_000_000
 
 // While this is an "events profiler", meaning it emits a pprof file based on events observed as
 // perf_hooks events, the emitted pprof file uses the type "timeline".
@@ -50,10 +50,10 @@ class GCDecorator {
     // Create labels for all GC performance flags and kinds of GC
     for (const [key, value] of Object.entries(constants)) {
       if (key.startsWith('NODE_PERFORMANCE_GC_FLAGS_')) {
-        this.flagObj[key.substring(26).toLowerCase()] = value
+        this.flagObj[key.slice(26).toLowerCase()] = value
       } else if (key.startsWith('NODE_PERFORMANCE_GC_')) {
         // It's a constant for a kind of GC
-        const kind = key.substring(20).toLowerCase()
+        const kind = key.slice(20).toLowerCase()
         this.kindLabels[value] = labelFromStr(stringTable, kindLabelKey, kind)
       }
     }
@@ -157,7 +157,7 @@ class FilesystemDecorator {
   decorateSample (sampleInput, item) {
     const labels = sampleInput.label
     const stringTable = this.stringTable
-    Object.entries(item.detail).forEach(([k, v]) => {
+    for (const [k, v] of Object.entries(item.detail)) {
       switch (typeof v) {
         case 'string':
           labels.push(labelFromStrStr(stringTable, k, v))
@@ -165,7 +165,7 @@ class FilesystemDecorator {
         case 'number':
           labels.push(new Label({ key: stringTable.dedup(k), num: v }))
       }
-    })
+    }
   }
 }
 
@@ -302,14 +302,14 @@ class DatadogInstrumentationEventSource {
 
   start () {
     if (!this.started) {
-      this.plugins.forEach(p => p.configure({ enabled: true }))
+      for (const p of this.plugins) p.configure({ enabled: true })
       this.started = true
     }
   }
 
   stop () {
     if (this.started) {
-      this.plugins.forEach(p => p.configure({ enabled: false }))
+      for (const p of this.plugins) p.configure({ enabled: false })
       this.started = false
     }
   }
@@ -321,11 +321,11 @@ class CompositeEventSource {
   }
 
   start () {
-    this.sources.forEach(s => s.start())
+    for (const s of this.sources) s.start()
   }
 
   stop () {
-    this.sources.forEach(s => s.stop())
+    for (const s of this.sources) s.stop()
   }
 }
 

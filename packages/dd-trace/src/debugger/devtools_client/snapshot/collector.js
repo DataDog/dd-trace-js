@@ -66,14 +66,21 @@ async function traverseGetPropertiesResult (props, opts, depth) {
 async function getObjectProperties (subtype, objectId, opts, depth) {
   if (ITERABLE_SUBTYPES.has(subtype)) {
     return getIterable(objectId, opts, depth)
-  } else if (subtype === 'promise') {
-    return getInternalProperties(objectId, opts, depth)
-  } else if (subtype === 'proxy') {
-    return getProxy(objectId, opts, depth)
-  } else if (subtype === 'arraybuffer') {
-    return getArrayBuffer(objectId, opts, depth)
   } else {
-    return getObject(objectId, opts, depth + 1, subtype === 'array' || subtype === 'typedarray')
+    switch (subtype) {
+      case 'promise': {
+        return getInternalProperties(objectId, opts, depth)
+      }
+      case 'proxy': {
+        return getProxy(objectId, opts, depth)
+      }
+      case 'arraybuffer': {
+        return getArrayBuffer(objectId, opts, depth)
+      }
+      default: {
+        return getObject(objectId, opts, depth + 1, subtype === 'array' || subtype === 'typedarray')
+      }
+    }
   }
 }
 

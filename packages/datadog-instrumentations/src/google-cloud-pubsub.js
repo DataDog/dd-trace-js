@@ -63,7 +63,7 @@ function wrapMethod (method) {
   const api = method.name
 
   return function (request) {
-    if (!requestStartCh.hasSubscribers) return method.apply(this, arguments)
+    if (!requestStartCh.hasSubscribers) return Reflect.apply(method, this, arguments)
 
     const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -83,21 +83,21 @@ function wrapMethod (method) {
 
           requestFinishCh.publish()
 
-          return outerAsyncResource.runInAsyncScope(() => cb.apply(this, arguments))
+          return outerAsyncResource.runInAsyncScope(() => Reflect.apply(cb, this, arguments))
         }))
 
-        return method.apply(this, arguments)
+        return Reflect.apply(method, this, arguments)
       } else {
-        return method.apply(this, arguments)
+        return Reflect.apply(method, this, arguments)
           .then(
             response => {
               requestFinishCh.publish()
               return response
             },
-            error => {
-              requestErrorCh.publish(error)
+            err => {
+              requestErrorCh.publish(err)
               requestFinishCh.publish()
-              throw error
+              throw err
             }
           )
       }
@@ -117,13 +117,13 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   const Subscription = obj.Subscription
 
   shimmer.wrap(Subscription.prototype, 'emit', emit => function (eventName, message) {
-    if (eventName !== 'message' || !message) return emit.apply(this, arguments)
+    if (eventName !== 'message' || !message) return Reflect.apply(emit, this, arguments)
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
     return asyncResource.runInAsyncScope(() => {
       try {
-        return emit.apply(this, arguments)
+        return Reflect.apply(emit, this, arguments)
       } catch (err) {
         receiveErrorCh.publish(err)
         throw err
@@ -141,19 +141,19 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
     if (receiveStartCh.hasSubscribers) {
       receiveStartCh.publish({ message })
     }
-    return dispense.apply(this, arguments)
+    return Reflect.apply(dispense, this, arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'remove', remove => function (message) {
     receiveFinishCh.publish({ message })
-    return remove.apply(this, arguments)
+    return Reflect.apply(remove, this, arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'clear', clear => function () {
     for (const message of this._messages) {
       receiveFinishCh.publish({ message })
     }
-    return clear.apply(this, arguments)
+    return Reflect.apply(clear, this, arguments)
   })
 
   return obj

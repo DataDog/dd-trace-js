@@ -96,11 +96,7 @@ function deepCloneSuite (suite, filterTest) {
 
 function getTestsBySuiteFromTestGroups (testGroups) {
   return testGroups.reduce((acc, { requireFile, tests }) => {
-    if (acc[requireFile]) {
-      acc[requireFile] = acc[requireFile].concat(tests)
-    } else {
-      acc[requireFile] = tests
-    }
+    acc[requireFile] = acc[requireFile] ? acc[requireFile].concat(tests) : tests
     return acc
   }, {})
 }
@@ -124,10 +120,10 @@ function getTestsBySuiteFromTestsById (testsById) {
 function getPlaywrightConfig (playwrightRunner) {
   try {
     return playwrightRunner._configLoader.fullConfig()
-  } catch (e) {
+  } catch {
     try {
       return playwrightRunner._loader.fullConfig()
-    } catch (e) {
+    } catch {
       return playwrightRunner._config || {}
     }
   }
@@ -289,7 +285,7 @@ function testBeginHandler (test, browserName) {
 
 function testEndHandler (test, annotations, testStatus, error, isTimeout) {
   let annotationTags
-  if (annotations.length) {
+  if (annotations.length > 0) {
     annotationTags = parseAnnotations(annotations)
   }
   const { _requireFile: testSuiteAbsolutePath, results, _type } = test
@@ -303,7 +299,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
     return
   }
 
-  const testResult = results[results.length - 1]
+  const testResult = results.at(-1)
   const testAsyncResource = testToAr.get(test)
   testAsyncResource.runInAsyncScope(() => {
     testFinishCh.publish({
@@ -334,11 +330,11 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
   }
 
   // Last test, we finish the suite
-  if (!remainingTestsByFile[testSuiteAbsolutePath].length) {
+  if (remainingTestsByFile[testSuiteAbsolutePath].length === 0) {
     const testStatuses = testSuiteToTestStatuses.get(testSuiteAbsolutePath)
 
     let testSuiteStatus = 'pass'
-    if (testStatuses.some(status => status === 'fail')) {
+    if (testStatuses.includes('fail')) {
       testSuiteStatus = 'fail'
     } else if (testStatuses.every(status => status === 'skip')) {
       testSuiteStatus = 'skip'
@@ -355,7 +351,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
 function dispatcherRunWrapper (run) {
   return function () {
     remainingTestsByFile = getTestsBySuiteFromTestsById(this._testById)
-    return run.apply(this, arguments)
+    return Reflect.apply(run, this, arguments)
   }
 }
 
@@ -364,10 +360,10 @@ function dispatcherRunWrapperNew (run) {
     if (!this._allTests) {
       // Removed in https://github.com/microsoft/playwright/commit/1e52c37b254a441cccf332520f60225a5acc14c7
       // Not available from >=1.44.0
-      this._ddAllTests = testGroups.map(g => g.tests).flat()
+      this._ddAllTests = testGroups.flatMap(g => g.tests)
     }
     remainingTestsByFile = getTestsBySuiteFromTestGroups(arguments[0])
-    return run.apply(this, arguments)
+    return Reflect.apply(run, this, arguments)
   }
 }
 
@@ -375,7 +371,7 @@ function dispatcherHook (dispatcherExport) {
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, 'run', dispatcherRunWrapper)
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
     const dispatcher = this
-    const worker = createWorker.apply(this, arguments)
+    const worker = Reflect.apply(createWorker, this, arguments)
     worker.process.on('message', ({ method, params }) => {
       if (method === 'testBegin') {
         const { test } = dispatcher._testById.get(params.testId)
@@ -386,7 +382,7 @@ function dispatcherHook (dispatcherExport) {
         const { test } = dispatcher._testById.get(params.testId)
 
         const { results } = test
-        const testResult = results[results.length - 1]
+        const testResult = results.at(-1)
 
         const isTimeout = testResult.status === 'timedOut'
         testEndHandler(test, params.annotations, STATUS_TO_TEST_STATUS[testResult.status], testResult.error, isTimeout)
@@ -402,7 +398,7 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, 'run', runWrapper)
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
     const dispatcher = this
-    const worker = createWorker.apply(this, arguments)
+    const worker = Reflect.apply(createWorker, this, arguments)
 
     worker.on('testBegin', ({ testId }) => {
       const test = getTestByTestId(dispatcher, testId)
@@ -444,11 +440,11 @@ function runnerHook (runnerExport, playwrightVersion) {
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
         isQuarantinedTestsEnabled = libraryConfig.isQuarantinedTestsEnabled
       }
-    } catch (e) {
+    } catch (err) {
       isEarlyFlakeDetectionEnabled = false
       isKnownTestsEnabled = false
       isQuarantinedTestsEnabled = false
-      log.error('Playwright session start error', e)
+      log.error('Playwright session start error', err)
     }
 
     if (isKnownTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
@@ -484,25 +480,25 @@ function runnerHook (runnerExport, playwrightVersion) {
     const projects = getProjectsFromRunner(this)
 
     if (isFlakyTestRetriesEnabled && flakyTestRetriesCount > 0) {
-      projects.forEach(project => {
+      for (const project of projects) {
         if (project.retries === 0) { // Only if it hasn't been set by the user
           project.retries = flakyTestRetriesCount
         }
-      })
+      }
     }
 
-    const runAllTestsReturn = await runAllTests.apply(this, arguments)
+    const runAllTestsReturn = await Reflect.apply(runAllTests, this, arguments)
 
-    Object.values(remainingTestsByFile).forEach(tests => {
+    for (const tests of Object.values(remainingTestsByFile)) {
       // `tests` should normally be empty, but if it isn't,
       // there were tests that did not go through `testBegin` or `testEnd`,
       // because they were skipped
-      tests.forEach(test => {
+      for (const test of tests) {
         const browser = getBrowserNameFromProjects(projects, test)
         testBeginHandler(test, browser)
         testEndHandler(test, [], 'skip')
-      })
-    })
+      }
+    }
 
     const sessionStatus = runAllTestsReturn.status || runAllTestsReturn
 
@@ -595,24 +591,24 @@ addHook({
 
   async function newCreateRootSuite () {
     if (!isKnownTestsEnabled && !isQuarantinedTestsEnabled) {
-      return oldCreateRootSuite.apply(this, arguments)
+      return Reflect.apply(oldCreateRootSuite, this, arguments)
     }
-    const rootSuite = await oldCreateRootSuite.apply(this, arguments)
+    const rootSuite = await Reflect.apply(oldCreateRootSuite, this, arguments)
 
     const allTests = rootSuite.allTests()
 
     if (isQuarantinedTestsEnabled) {
       const testsToBeIgnored = allTests.filter(isQuarantineTest)
-      testsToBeIgnored.forEach(test => {
+      for (const test of testsToBeIgnored) {
         test._ddIsQuarantined = true
         test.expectedStatus = 'skipped'
-      })
+      }
     }
 
     if (isKnownTestsEnabled) {
       const newTests = allTests.filter(isNewTest)
 
-      newTests.forEach(newTest => {
+      for (const newTest of newTests) {
         newTest._ddIsNew = true
         if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped') {
           const fileSuite = getSuiteType(newTest, 'file')
@@ -623,7 +619,7 @@ addHook({
             projectSuite._addSuite(copyFileSuite)
           }
         }
-      })
+      }
     }
 
     return rootSuite

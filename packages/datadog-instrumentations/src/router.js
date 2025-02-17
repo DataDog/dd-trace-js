@@ -1,6 +1,6 @@
 'use strict'
 
-const METHODS = require('http').METHODS.map(v => v.toLowerCase()).concat('all')
+const METHODS = [...require('node:http').METHODS.map(v => v.toLowerCase()), 'all']
 const pathToRegExp = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
@@ -19,7 +19,7 @@ function createWrapRouterMethod (name) {
     original._name = original._name || layer.name
 
     const handle = shimmer.wrapFunction(original, original => function () {
-      if (!enterChannel.hasSubscribers) return original.apply(this, arguments)
+      if (!enterChannel.hasSubscribers) return Reflect.apply(original, this, arguments)
 
       const matchers = layerMatchers.get(layer)
       const lastIndex = arguments.length - 1
@@ -35,9 +35,9 @@ function createWrapRouterMethod (name) {
 
       if (matchers) {
         // Try to guess which path actually matched
-        for (let i = 0; i < matchers.length; i++) {
-          if (matchers[i].test(layer)) {
-            route = matchers[i].path
+        for (const matcher of matchers) {
+          if (matcher.test(layer)) {
+            route = matcher.path
 
             break
           }
@@ -47,13 +47,13 @@ function createWrapRouterMethod (name) {
       enterChannel.publish({ name, req, route })
 
       try {
-        return original.apply(this, arguments)
-      } catch (error) {
-        errorChannel.publish({ req, error })
+        return Reflect.apply(original, this, arguments)
+      } catch (err) {
+        errorChannel.publish({ req, error: err })
         nextChannel.publish({ req })
         finishChannel.publish({ req })
 
-        throw error
+        throw err
       } finally {
         exitChannel.publish({ req })
       }
@@ -67,7 +67,7 @@ function createWrapRouterMethod (name) {
   }
 
   function wrapStack (stack, offset, matchers) {
-    [].concat(stack).slice(offset).forEach(layer => {
+    for (const layer of [stack].flat().slice(offset)) {
       if (layer.__handle) { // express-async-errors
         layer.__handle = wrapLayerHandle(layer, layer.__handle)
       } else {
@@ -77,15 +77,15 @@ function createWrapRouterMethod (name) {
       layerMatchers.set(layer, matchers)
 
       if (layer.route) {
-        METHODS.forEach(method => {
+        for (const method of METHODS) {
           if (typeof layer.route.stack === 'function') {
             layer.route.stack = [{ handle: layer.route.stack }]
           }
 
           layer.route[method] = wrapMethod(layer.route[method])
-        })
+        }
       }
-    })
+    }
   }
 
   function wrapNext (req, next) {
@@ -97,12 +97,12 @@ function createWrapRouterMethod (name) {
       nextChannel.publish({ req })
       finishChannel.publish({ req })
 
-      next.apply(this, arguments)
+      Reflect.apply(next, this, arguments)
     })
   }
 
   function extractMatchers (fn) {
-    const arg = flatten([].concat(fn))
+    const arg = flatten([fn].flat())
 
     if (typeof arg[0] === 'function') {
       return []
@@ -151,8 +151,8 @@ function createWrapRouterMethod (name) {
 
   function wrapMethod (original) {
     return shimmer.wrapFunction(original, original => function methodWithTrace (fn) {
-      const offset = this.stack ? [].concat(this.stack).length : 0
-      const router = original.apply(this, arguments)
+      const offset = this.stack ? [this.stack].flat().length : 0
+      const router = Reflect.apply(original, this, arguments)
 
       if (typeof this.stack === 'function') {
         this.stack = [{ handle: this.stack }]
@@ -181,7 +181,7 @@ const queryParserReadCh = channel('datadog:query:read:finish')
 addHook({ name: 'router', versions: ['>=2'] }, Router => {
   const WrappedRouter = shimmer.wrapFunction(Router, function (originalRouter) {
     return function wrappedMethod () {
-      const router = originalRouter.apply(this, arguments)
+      const router = Reflect.apply(originalRouter, this, arguments)
 
       shimmer.wrap(router, 'handle', function wrapHandle (originalHandle) {
         return function wrappedHandle (req, res, next) {
@@ -193,7 +193,7 @@ addHook({ name: 'router', versions: ['>=2'] }, Router => {
             if (abortController.signal.aborted) return
           }
 
-          return originalHandle.apply(this, arguments)
+          return Reflect.apply(originalHandle, this, arguments)
         }
       })
 
@@ -212,7 +212,7 @@ const visitedParams = new WeakSet()
 
 function wrapHandleRequest (original) {
   return function wrappedHandleRequest (req, res, next) {
-    if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length && !visitedParams.has(req.params)) {
+    if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length > 0 && !visitedParams.has(req.params)) {
       visitedParams.add(req.params)
 
       const abortController = new AbortController()
@@ -227,7 +227,7 @@ function wrapHandleRequest (original) {
       if (abortController.signal.aborted) return
     }
 
-    return original.apply(this, arguments)
+    return Reflect.apply(original, this, arguments)
   }
 }
 
@@ -242,7 +242,7 @@ function wrapParam (original) {
   return function wrappedProcessParams () {
     arguments[1] = shimmer.wrapFunction(arguments[1], (originalFn) => {
       return function wrappedFn (req, res) {
-        if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length && !visitedParams.has(req.params)) {
+        if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length > 0 && !visitedParams.has(req.params)) {
           visitedParams.add(req.params)
 
           const abortController = new AbortController()
@@ -257,11 +257,11 @@ function wrapParam (original) {
           if (abortController.signal.aborted) return
         }
 
-        return originalFn.apply(this, arguments)
+        return Reflect.apply(originalFn, this, arguments)
       }
     })
 
-    return original.apply(this, arguments)
+    return Reflect.apply(original, this, arguments)
   }
 }
 

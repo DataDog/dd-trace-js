@@ -176,7 +176,7 @@ class PlaywrightPlugin extends CiPlugin {
         span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
       }
 
-      steps.forEach(step => {
+      for (const step of steps) {
         const stepStartTime = step.startTime.getTime()
         const stepSpan = this.tracer.startSpan('playwright.step', {
           childOf: span,
@@ -195,7 +195,7 @@ class PlaywrightPlugin extends CiPlugin {
           stepDuration = 0
         }
         stepSpan.finish(stepStartTime + stepDuration)
-      })
+      }
 
       if (testStatus === 'fail') {
         this.numFailedTests++

@@ -78,11 +78,11 @@ class AgentEncoder {
       bytes.reserve(1)
 
       if (span.type && span.meta_struct) {
-        bytes.buffer[bytes.length - 1] = 0x8d
+        bytes.buffer[bytes.length - 1] = 0x8D
       } else if (span.type || span.meta_struct) {
-        bytes.buffer[bytes.length - 1] = 0x8c
+        bytes.buffer[bytes.length - 1] = 0x8C
       } else {
-        bytes.buffer[bytes.length - 1] = 0x8b
+        bytes.buffer[bytes.length - 1] = 0x8B
       }
 
       if (span.type) {
@@ -157,7 +157,7 @@ class AgentEncoder {
 
     id = id.toArray()
 
-    bytes.buffer[offset] = 0xcf
+    bytes.buffer[offset] = 0xCF
     bytes.buffer[offset + 1] = id[0]
     bytes.buffer[offset + 2] = id[1]
     bytes.buffer[offset + 3] = id[2]
@@ -245,7 +245,7 @@ class AgentEncoder {
 
     // we should do it after encoding the object to know the real length
     const length = bytes.length - offset - prefixLength
-    bytes.buffer[offset] = 0xc6
+    bytes.buffer[offset] = 0xC6
     bytes.buffer[offset + 1] = length >> 24
     bytes.buffer[offset + 2] = length >> 16
     bytes.buffer[offset + 3] = length >> 8
@@ -305,7 +305,7 @@ class AgentEncoder {
   }
 
   _writeArrayPrefix (buffer, offset, count) {
-    buffer[offset++] = 0xdd
+    buffer[offset++] = 0xDD
     buffer.writeUInt32BE(count, offset)
 
     return offset + 4

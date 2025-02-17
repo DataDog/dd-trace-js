@@ -2,10 +2,10 @@
 
 module.exports = (object, props) => {
   const result = {}
-  props.forEach(prop => {
+  for (const prop of props) {
     if (prop in object) {
       result[prop] = object[prop]
     }
-  })
+  }
   return result
 }

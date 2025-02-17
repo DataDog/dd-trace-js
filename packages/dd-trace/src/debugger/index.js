@@ -1,7 +1,7 @@
 'use strict'
 
-const { join } = require('path')
-const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
+const { join } = require('node:path')
+const { Worker, MessageChannel, threadId: parentThreadId } = require('node:worker_threads')
 const log = require('../log')
 
 let worker = null

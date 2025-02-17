@@ -1,6 +1,6 @@
 'use strict'
 
-const { AsyncResource } = require('async_hooks')
+const { AsyncResource } = require('node:async_hooks')
 
 exports.wrapThen = function wrapThen (origThen) {
   return function then (onFulfilled, onRejected, onProgress) {
@@ -14,7 +14,7 @@ exports.wrapThen = function wrapThen (origThen) {
       arguments[2] = wrapCallback(ar, onProgress)
     }
 
-    return origThen.apply(this, arguments)
+    return Reflect.apply(origThen, this, arguments)
   }
 }
 
@@ -23,7 +23,7 @@ function wrapCallback (ar, callback) {
 
   return function () {
     return ar.runInAsyncScope(() => {
-      return callback.apply(this, arguments)
+      return Reflect.apply(callback, this, arguments)
     })
   }
 }

@@ -20,7 +20,7 @@ function now () {
 }
 
 function mapToJsonArray (map) {
-  return Array.from(map.values()).map(v => v.toJSON())
+  return [...map.values()].map(v => v.toJSON())
 }
 
 function hasPoints (metric) {
@@ -85,7 +85,7 @@ class CountMetric extends Metric {
   }
 
   track (value = 1) {
-    if (this.points.length) {
+    if (this.points.length > 0) {
       this.points[0][1] += value
     } else {
       this.points.push([now(), value])
@@ -146,7 +146,7 @@ class RateMetric extends Metric {
 
   track (value = 1) {
     this.rate += value
-    const rate = this.interval ? (this.rate / this.interval) : 0.0
+    const rate = this.interval ? (this.rate / this.interval) : 0
     this.points = [[now(), rate]]
   }
 }
@@ -180,7 +180,7 @@ class MetricsCollection extends Map {
     const series = mapToJsonArray(this)
       .filter(hasPoints)
 
-    if (!series.length) return
+    if (series.length === 0) return
 
     const { namespace } = this
     return {

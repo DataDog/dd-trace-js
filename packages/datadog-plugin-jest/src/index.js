@@ -163,7 +163,7 @@ class JestPlugin extends CiPlugin {
     // This subscriber changes the configuration objects from jest to inject the trace id
     // of the test session to the processes that run the test suites, and other data.
     this.addSub('ci:jest:session:configuration', configs => {
-      configs.forEach(config => {
+      for (const config of configs) {
         config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
         config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
         config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
@@ -176,7 +176,7 @@ class JestPlugin extends CiPlugin {
         config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
         config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
         config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
-      })
+      }
     })
 
     this.addSub('ci:jest:test-suite:start', ({
@@ -258,9 +258,9 @@ class JestPlugin extends CiPlugin {
         }))
       )
 
-      formattedTraces.forEach(trace => {
+      for (const trace of formattedTraces) {
         this.tracer._exporter.export(trace)
-      })
+      }
     })
 
     this.addSub('ci:jest:worker-report:coverage', data => {
@@ -269,15 +269,15 @@ class JestPlugin extends CiPlugin {
         suiteId: id(coverage.suiteId),
         files: coverage.files
       }))
-      formattedCoverages.forEach(formattedCoverage => {
+      for (const formattedCoverage of formattedCoverages) {
         this.tracer._exporter.exportCoverage(formattedCoverage)
-      })
+      }
     })
 
     this.addSub('ci:jest:worker-report:logs', (logsPayloads) => {
-      JSON.parse(logsPayloads).forEach(({ testConfiguration, logMessage }) => {
+      for (const { testConfiguration, logMessage } of JSON.parse(logsPayloads)) {
         this.tracer._exporter.exportDiLogs(testConfiguration, logMessage)
-      })
+      }
     })
 
     this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage, error }) => {
@@ -307,7 +307,7 @@ class JestPlugin extends CiPlugin {
      * fetching the ITR config.
      */
     this.addSub('ci:jest:test-suite:code-coverage', ({ coverageFiles, testSuite }) => {
-      if (!coverageFiles.length) {
+      if (coverageFiles.length === 0) {
         this.telemetry.count(TELEMETRY_CODE_COVERAGE_EMPTY)
       }
       const files = [...coverageFiles, testSuite]

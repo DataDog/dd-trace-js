@@ -49,13 +49,13 @@ class LLMObsSpanProcessor {
     try {
       const formattedEvent = this.format(span)
       this._writer.append(formattedEvent)
-    } catch (e) {
+    } catch (err) {
       // this should be a rare case
       // we protect against unserializable properties in the format function, and in
       // safeguards in the tagger
       logger.warn(`
         Failed to append span to LLM Observability writer, likely due to an unserializable property.
-        Span won't be sent to LLM Observability: ${e.message}
+        Span won't be sent to LLM Observability: ${err.message}
       `)
     }
   }

@@ -107,9 +107,7 @@ function findArgumentsBounds (str) {
   let end = -1
   let closerCount = 0
 
-  for (let i = 0; i < str.length; i++) {
-    const char = str[i]
-
+  for (const [i, char] of str.entries()) {
     if (char === '(') {
       if (closerCount === 0) {
         start = i
@@ -132,7 +130,7 @@ function findArgumentsBounds (str) {
 const memo = new WeakMap()
 function getFunctionArguments (fn, args = []) {
   if (!fn) return
-  if (!args.length) return
+  if (args.length === 0) return
   if (args.length === 1) return args[0]
 
   try {

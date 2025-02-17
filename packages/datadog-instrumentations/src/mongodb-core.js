@@ -69,7 +69,7 @@ addHook({ name: 'mongodb', versions: ['>=3.5.4 <4.11.0'], file: 'lib/utils.js' }
       arguments[callbackIndex] = asyncResource.bind(callback)
     }
 
-    return maybePromise.apply(this, arguments)
+    return Reflect.apply(maybePromise, this, arguments)
   })
   return util
 })
@@ -88,7 +88,7 @@ function wrapWp (wp) {
 function wrapUnifiedCommand (command, operation, name) {
   const wrapped = function (server, ns, ops) {
     if (!startCh.hasSubscribers) {
-      return command.apply(this, arguments)
+      return Reflect.apply(command, this, arguments)
     }
     return instrument(operation, command, this, arguments, server, ns, ops, { name })
   }
@@ -98,7 +98,7 @@ function wrapUnifiedCommand (command, operation, name) {
 function wrapConnectionCommand (command, operation, name, instrumentFn = instrument) {
   const wrapped = function (ns, ops) {
     if (!startCh.hasSubscribers) {
-      return command.apply(this, arguments)
+      return Reflect.apply(command, this, arguments)
     }
     const hostParts = typeof this.address === 'string' ? this.address.split(':') : ''
     const options = hostParts.length === 2
@@ -115,7 +115,7 @@ function wrapConnectionCommand (command, operation, name, instrumentFn = instrum
 function wrapQuery (query, operation, name) {
   const wrapped = function () {
     if (!startCh.hasSubscribers) {
-      return query.apply(this, arguments)
+      return Reflect.apply(query, this, arguments)
     }
     const pool = this.server.s.pool
     const ns = this.ns
@@ -129,7 +129,7 @@ function wrapQuery (query, operation, name) {
 function wrapCursor (cursor, operation, name) {
   const wrapped = function () {
     if (!startCh.hasSubscribers) {
-      return cursor.apply(this, arguments)
+      return Reflect.apply(cursor, this, arguments)
     }
     const pool = this.server.s.pool
     const ns = this.ns
@@ -141,7 +141,7 @@ function wrapCursor (cursor, operation, name) {
 function wrapCommand (command, operation, name) {
   const wrapped = function (ns, ops) {
     if (!startCh.hasSubscribers) {
-      return command.apply(this, arguments)
+      return Reflect.apply(command, this, arguments)
     }
     return instrument(operation, command, this, arguments, this, ns, ops, { name })
   }
@@ -172,7 +172,7 @@ function instrument (operation, command, ctx, args, server, ns, ops, options = {
       finishCh.publish()
 
       if (callback) {
-        return callback.apply(this, arguments)
+        return Reflect.apply(callback, this, arguments)
       }
     }))
 
@@ -204,7 +204,7 @@ function instrumentPromise (operation, command, ctx, args, server, ns, ops, opti
       errorCh.publish(err)
       finishCh.publish()
 
-      return Promise.reject(err)
+      throw err
     })
   })
 }

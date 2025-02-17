@@ -1,6 +1,6 @@
 'use strict'
 
-const fs = require('fs')
+const fs = require('node:fs')
 const waf = require('./waf')
 const { ACKNOWLEDGED, ERROR } = require('./remote_config/apply_states')
 
@@ -39,61 +39,83 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
   for (const item of toUnapply) {
     const { product, id } = item
 
-    if (product === 'ASM_DATA') {
-      newRulesData.delete(id)
-    } else if (product === 'ASM_DD') {
-      if (appliedRulesetId === id) {
-        newRuleset = defaultRules
+    switch (product) {
+      case 'ASM_DATA': {
+        newRulesData.delete(id)
+
+        break
       }
-    } else if (product === 'ASM') {
-      newRulesOverride.delete(id)
-      newExclusions.delete(id)
-      newCustomRules.delete(id)
-      newActions.delete(id)
+      case 'ASM_DD': {
+        if (appliedRulesetId === id) {
+          newRuleset = defaultRules
+        }
+
+        break
+      }
+      case 'ASM': {
+        newRulesOverride.delete(id)
+        newExclusions.delete(id)
+        newCustomRules.delete(id)
+        newActions.delete(id)
+
+        break
+      }
+    // No default
     }
   }
 
   for (const item of [...toApply, ...toModify]) {
     const { product, id, file } = item
 
-    if (product === 'ASM_DATA') {
-      if (file && file.rules_data && file.rules_data.length) {
-        newRulesData.set(id, file.rules_data)
-      }
-
-      batch.add(item)
-    } else if (product === 'ASM_DD') {
-      if (appliedRulesetId && appliedRulesetId !== id && newRuleset !== defaultRules) {
-        item.apply_state = ERROR
-        item.apply_error = 'Multiple ruleset received in ASM_DD'
-      } else {
-        if (file?.rules?.length) {
-          const { version, metadata, rules, processors, scanners } = file
-
-          newRuleset = { version, metadata, rules, processors, scanners }
-          newRulesetId = id
+    switch (product) {
+      case 'ASM_DATA': {
+        if (file && file.rules_data && file.rules_data.length > 0) {
+          newRulesData.set(id, file.rules_data)
         }
 
         batch.add(item)
-      }
-    } else if (product === 'ASM') {
-      if (file?.rules_override?.length) {
-        newRulesOverride.set(id, file.rules_override)
-      }
 
-      if (file?.exclusions?.length) {
-        newExclusions.set(id, file.exclusions)
+        break
       }
+      case 'ASM_DD': {
+        if (appliedRulesetId && appliedRulesetId !== id && newRuleset !== defaultRules) {
+          item.apply_state = ERROR
+          item.apply_error = 'Multiple ruleset received in ASM_DD'
+        } else {
+          if (file?.rules?.length) {
+            const { version, metadata, rules, processors, scanners } = file
 
-      if (file?.custom_rules?.length) {
-        newCustomRules.set(id, file.custom_rules)
+            newRuleset = { version, metadata, rules, processors, scanners }
+            newRulesetId = id
+          }
+
+          batch.add(item)
+        }
+
+        break
       }
+      case 'ASM': {
+        if (file?.rules_override?.length) {
+          newRulesOverride.set(id, file.rules_override)
+        }
 
-      if (file?.actions?.length) {
-        newActions.set(id, file.actions)
+        if (file?.exclusions?.length) {
+          newExclusions.set(id, file.exclusions)
+        }
+
+        if (file?.custom_rules?.length) {
+          newCustomRules.set(id, file.custom_rules)
+        }
+
+        if (file?.actions?.length) {
+          newActions.set(id, file.actions)
+        }
+
+        batch.add(item)
+
+        break
       }
-
-      batch.add(item)
+    // No default
     }
   }
 
@@ -185,7 +207,7 @@ class SpyMap extends Map {
 }
 
 function concatArrays (files) {
-  return Array.from(files.values()).flat()
+  return [...files.values()].flat()
 }
 
 /*
@@ -209,7 +231,7 @@ function mergeRulesData (files) {
       }
     }
   }
-  return Array.from(mergedRulesData.values())
+  return [...mergedRulesData.values()]
 }
 
 function rulesReducer (existingEntries, rulesDataEntry) {
@@ -229,9 +251,9 @@ function copyRulesData (rulesData) {
   const copy = { ...rulesData }
   if (copy.data) {
     const data = []
-    copy.data.forEach(item => {
+    for (const item of copy.data) {
       data.push({ ...item })
-    })
+    }
     copy.data = data
   }
   return copy

@@ -13,11 +13,11 @@ addHook({
       if (JSON.parse(process.env.NYC_CONFIG).all) {
         codeCoverageWrapCh.publish(this)
       }
-    } catch (e) {
+    } catch {
       // ignore errors
     }
 
-    return wrap.apply(this, arguments)
+    return Reflect.apply(wrap, this, arguments)
   })
   return nycPackage
 })

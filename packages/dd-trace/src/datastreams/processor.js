@@ -1,11 +1,11 @@
-const os = require('os')
+const os = require('node:os')
 const pkg = require('../../../../package.json')
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 const { DsmPathwayCodec } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { computePathwayHash } = require('./pathway')
-const { types } = require('util')
+const { types } = require('node:util')
 const { PATHWAY_HASH } = require('../../../../ext/tags')
 const { SchemaBuilder } = require('./schemas/schema_builder')
 const { SchemaSampler } = require('./schemas/schema_sampler')
@@ -105,10 +105,8 @@ class StatsBucket {
   forBacklog (backlogData) {
     const backlog = new Backlog(backlogData)
     const existingBacklog = this._backlogs.get(backlog.hash)
-    if (existingBacklog !== undefined) {
-      if (existingBacklog.offset > backlog.offset) {
-        return existingBacklog
-      }
+    if (existingBacklog !== undefined && existingBacklog.offset > backlog.offset) {
+      return existingBacklog
     }
     this._backlogs.set(backlog.hash, backlog)
     return backlog
@@ -128,9 +126,9 @@ function getSizeOrZero (obj) {
   if (Array.isArray(obj) && obj.length > 0) {
     if (typeof obj[0] === 'number') return Buffer.from(obj).length
     let payloadSize = 0
-    obj.forEach(item => {
+    for (const item of obj) {
       payloadSize += getSizeOrZero(item)
-    })
+    }
     return payloadSize
   }
   if (obj !== null && typeof obj === 'object') {

@@ -5,7 +5,7 @@ const { channel } = require('../../../datadog-instrumentations/src/helpers/instr
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
 const { ImpendingTimeout } = require('./runtime/errors')
 
-const globalTracer = global._ddtrace
+const globalTracer = globalThis._ddtrace
 const tracer = globalTracer._tracer
 const timeoutChannel = channel('apm:aws:lambda:timeout')
 // Always crash the flushes when a message is received
@@ -25,11 +25,11 @@ let __lambdaTimeout
 function checkTimeout (context) {
   const remainingTimeInMillis = context.getRemainingTimeInMillis()
 
-  let apmFlushDeadline = parseInt(process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS) || 100
+  let apmFlushDeadline = Number.parseInt(process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS) || 100
   apmFlushDeadline = apmFlushDeadline < 0 ? 100 : apmFlushDeadline
 
   __lambdaTimeout = setTimeout(() => {
-    timeoutChannel.publish(undefined)
+    timeoutChannel.publish()
   }, remainingTimeInMillis - apmFlushDeadline)
 }
 
@@ -70,7 +70,7 @@ function extractContext (args) {
   if (context === undefined || context.getRemainingTimeInMillis === undefined) {
     context = args.length > 2 ? args[2] : undefined
     if (context === undefined || context.getRemainingTimeInMillis === undefined) {
-      throw Error('Could not extract context')
+      throw new Error('Could not extract context')
     }
   }
   return context

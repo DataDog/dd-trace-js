@@ -1,7 +1,7 @@
 'use strict'
 
-import path from 'path'
-import { URL } from 'url'
+import path from 'node:path'
+import { URL } from 'node:url'
 import { getName } from '../telemetry/verbosity.js'
 import { isNotLibraryFile, isPrivateModule } from './filter.js'
 import constants from './constants.js'
@@ -12,7 +12,7 @@ const ddTraceDir = path.join(currentUrl.pathname, '..', '..', '..', '..', '..', 
 let port, rewriter
 
 export async function initialize (data) {
-  if (rewriter) return Promise.reject(new Error('ALREADY INITIALIZED'))
+  if (rewriter) throw new Error('ALREADY INITIALIZED')
 
   const { csiMethods, telemetryVerbosity, chainSourceMap } = data
   port = data.port
@@ -45,10 +45,10 @@ export async function load (url, context, nextLoad) {
         port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
       }
     }
-  } catch (e) {
+  } catch (err) {
     const newErrObject = {
-      message: e.message,
-      stack: e.stack
+      message: err.message,
+      stack: err.stack
     }
 
     const data = {

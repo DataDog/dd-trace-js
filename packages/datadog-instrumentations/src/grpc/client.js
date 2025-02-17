@@ -4,7 +4,7 @@ const types = require('./types')
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
-const nodeMajor = parseInt(process.versions.node.split('.')[0])
+const nodeMajor = Number.parseInt(process.versions.node.split('.')[0])
 
 const patched = new WeakSet()
 const instances = new WeakMap()
@@ -28,7 +28,7 @@ function createWrapMakeRequest (type, hasPeer = false) {
 function createWrapLoadPackageDefinition (hasPeer = false) {
   return function wrapLoadPackageDefinition (loadPackageDefinition) {
     return function (packageDef) {
-      const result = loadPackageDefinition.apply(this, arguments)
+      const result = Reflect.apply(loadPackageDefinition, this, arguments)
 
       if (!result) return result
 
@@ -42,7 +42,7 @@ function createWrapLoadPackageDefinition (hasPeer = false) {
 function createWrapMakeClientConstructor (hasPeer = false) {
   return function wrapMakeClientConstructor (makeClientConstructor) {
     return function (methods) {
-      const ServiceClient = makeClientConstructor.apply(this, arguments)
+      const ServiceClient = Reflect.apply(makeClientConstructor, this, arguments)
       wrapClientConstructor(ServiceClient, methods, hasPeer)
       return ServiceClient
     }
@@ -65,22 +65,21 @@ function wrapClientConstructor (ServiceClient, methods, hasPeer = false) {
 
   if (typeof methods !== 'object' || 'format' in methods) return
 
-  Object.keys(methods)
-    .forEach(name => {
-      if (!methods[name]) return
+  for (const name of Object.keys(methods)) {
+    if (!methods[name]) continue
 
-      const originalName = methods[name].originalName
-      const path = methods[name].path
-      const type = getType(methods[name])
+    const originalName = methods[name].originalName
+    const path = methods[name].path
+    const type = getType(methods[name])
 
-      if (methods[name]) {
-        proto[name] = wrapMethod(proto[name], path, type, hasPeer)
-      }
+    if (methods[name]) {
+      proto[name] = wrapMethod(proto[name], path, type, hasPeer)
+    }
 
-      if (originalName) {
-        proto[originalName] = wrapMethod(proto[originalName], path, type, hasPeer)
-      }
-    })
+    if (originalName) {
+      proto[originalName] = wrapMethod(proto[originalName], path, type, hasPeer)
+    }
+  }
 }
 
 function wrapMethod (method, path, type, hasPeer) {
@@ -98,7 +97,7 @@ function wrapMethod (method, path, type, hasPeer) {
   return wrapped
 }
 
-function wrapCallback (ctx, callback = () => { }) {
+function wrapCallback (ctx, callback = () => {}) {
   return shimmer.wrapFunction(callback, callback => function (err) {
     if (err) {
       ctx.error = err
@@ -106,7 +105,7 @@ function wrapCallback (ctx, callback = () => { }) {
     }
 
     return asyncStartChannel.runStores(ctx, () => {
-      return callback.apply(this, arguments)
+      return Reflect.apply(callback, this, arguments)
       // No async end channel needed
     })
   })
@@ -139,7 +138,7 @@ function createWrapEmit (ctx, hasPeer = false) {
       }
 
       return emitChannel.runStores(ctx, () => {
-        return emit.apply(this, arguments)
+        return Reflect.apply(emit, this, arguments)
       })
     }
   }
@@ -170,8 +169,8 @@ function callMethod (client, method, args, path, metadata, type, hasPeer = false
       }
 
       return call
-    } catch (e) {
-      ctx.error = e
+    } catch (err) {
+      ctx.error = err
       errorChannel.publish(ctx)
     }
     // No end channel needed

@@ -47,7 +47,7 @@ module.exports.startScrubber = function () {
     const now = Date.now()
     const expired = spans.rangeByScore(0, now)
 
-    if (!expired.length) return
+    if (expired.length === 0) return
 
     const gc = isGarbageCollecting()
 

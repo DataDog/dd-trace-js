@@ -62,10 +62,10 @@ async function addBreakpoint (probe) {
 async function removeBreakpoint ({ id }) {
   if (!sessionStarted) {
     // We should not get in this state, but abort if we do, so the code doesn't fail unexpected
-    throw Error(`Cannot remove probe ${id}: Debugger not started`)
+    throw new Error(`Cannot remove probe ${id}: Debugger not started`)
   }
   if (!probes.has(id)) {
-    throw Error(`Unknown probe id: ${id}`)
+    throw new Error(`Unknown probe id: ${id}`)
   }
 
   const breakpointId = probes.get(id)

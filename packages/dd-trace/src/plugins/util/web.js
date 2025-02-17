@@ -178,10 +178,10 @@ const web = {
   // catch errors and apply to active span
   bindAndWrapMiddlewareErrors (fn, req, tracer, activeSpan) {
     try {
-      return tracer.scope().bind(fn, activeSpan).apply(this, arguments)
-    } catch (e) {
-      web.addError(req, e) // TODO: remove when error formatting is moved to Span
-      throw e
+      return Reflect.apply(tracer.scope().bind(fn, activeSpan), this, arguments)
+    } catch (err) {
+      web.addError(req, err) // TODO: remove when error formatting is moved to Span
+      throw err
     }
   },
 
@@ -250,7 +250,7 @@ const web = {
     if (!context) return null
     if (context.middleware.length === 0) return context.span || null
 
-    return context.middleware.slice(-1)[0]
+    return context.middleware.at(-1)
   },
 
   // Extract the parent span from the headers and start a new span as its child
@@ -370,7 +370,7 @@ const web = {
         addAllowHeaders(req, res, headers)
       }
 
-      return writeHead.apply(this, arguments)
+      return Reflect.apply(writeHead, this, arguments)
     }
   },
   getContext (req) {
@@ -496,7 +496,7 @@ function addResourceTag (context) {
   if (tags['resource.name']) return
 
   const resource = [req.method, tags[HTTP_ROUTE]]
-    .filter(val => val)
+    .filter(Boolean)
     .join(' ')
 
   span.setTag(RESOURCE_NAME, resource)
@@ -505,7 +505,7 @@ function addResourceTag (context) {
 function addHeaders (context) {
   const { req, res, config, span, inferredProxySpan } = context
 
-  config.headers.forEach(([key, tag]) => {
+  for (const [key, tag] of config.headers) {
     const reqHeader = req.headers[key]
     const resHeader = res.getHeader(key)
 
@@ -518,7 +518,7 @@ function addHeaders (context) {
       span.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
       inferredProxySpan?.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
     }
-  })
+  }
 }
 
 function extractURL (req) {

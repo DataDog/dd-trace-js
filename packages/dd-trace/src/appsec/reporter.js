@@ -12,7 +12,7 @@ const {
   incrementWafRequestsMetric,
   getRequestMetrics
 } = require('./telemetry')
-const zlib = require('zlib')
+const zlib = require('node:zlib')
 const standalone = require('./standalone')
 const { SAMPLING_MECHANISM_APPSEC } = require('../constants')
 const { keepTrace } = require('../priority_sampler')
@@ -85,7 +85,7 @@ function formatHeaderName (name) {
   return name
     .trim()
     .slice(0, 200)
-    .replace(/[^a-zA-Z0-9_\-:/]/g, '_')
+    .replaceAll(/[^a-zA-Z0-9_\-:/]/g, '_')
     .toLowerCase()
 }
 
@@ -142,11 +142,7 @@ function reportAttack (attackData) {
   const currentJson = currentTags['_dd.appsec.json']
 
   // merge JSON arrays without parsing them
-  if (currentJson) {
-    newTags['_dd.appsec.json'] = currentJson.slice(0, -2) + ',' + attackData.slice(1) + '}'
-  } else {
-    newTags['_dd.appsec.json'] = '{"triggers":' + attackData + '}'
-  }
+  newTags['_dd.appsec.json'] = currentJson ? currentJson.slice(0, -2) + ',' + attackData.slice(1) + '}' : '{"triggers":' + attackData + '}'
 
   if (req.socket) {
     newTags['network.client.ip'] = req.socket.remoteAddress
@@ -183,7 +179,7 @@ function finishRequest (req, res) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  if (metricsQueue.size) {
+  if (metricsQueue.size > 0) {
     rootSpan.addTags(Object.fromEntries(metricsQueue))
 
     keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)

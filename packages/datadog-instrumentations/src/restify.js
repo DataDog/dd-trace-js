@@ -15,7 +15,7 @@ const nextChannel = channel('apm:restify:middleware:next')
 function wrapSetupRequest (setupRequest) {
   return function (req, res) {
     handleChannel.publish({ req, res })
-    return setupRequest.apply(this, arguments)
+    return Reflect.apply(setupRequest, this, arguments)
   }
 }
 
@@ -50,25 +50,25 @@ function wrapFn (fn) {
     enterChannel.publish({ req, route })
 
     try {
-      const result = fn.apply(this, arguments)
+      const result = Reflect.apply(fn, this, arguments)
       if (result !== null && typeof result === 'object' && typeof result.then === 'function') {
         return result.then(function () {
           nextChannel.publish({ req })
           finishChannel.publish({ req })
           return arguments[0]
-        }).catch(function (error) {
-          errorChannel.publish({ req, error })
+        }).catch(function (err) {
+          errorChannel.publish({ req, error: err })
           nextChannel.publish({ req })
           finishChannel.publish({ req })
-          throw error
+          throw err
         })
       }
       return result
-    } catch (error) {
-      errorChannel.publish({ req, error })
+    } catch (err) {
+      errorChannel.publish({ req, error: err })
       nextChannel.publish({ req })
       finishChannel.publish({ req })
-      throw error
+      throw err
     } finally {
       exitChannel.publish({ req })
     }
@@ -80,7 +80,7 @@ function wrapNext (req, next) {
     nextChannel.publish({ req })
     finishChannel.publish({ req })
 
-    next.apply(this, arguments)
+    Reflect.apply(next, this, arguments)
   })
 }
 

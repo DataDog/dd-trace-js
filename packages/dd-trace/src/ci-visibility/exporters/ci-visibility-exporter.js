@@ -1,6 +1,6 @@
 'use strict'
 
-const URL = require('url').URL
+const URL = require('node:url').URL
 
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
@@ -30,7 +30,7 @@ function getIsTestSessionTrace (trace) {
   )
 }
 
-const GIT_UPLOAD_TIMEOUT = 60000 // 60 seconds
+const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
 const CAN_USE_CI_VIS_PROTOCOL_TIMEOUT = GIT_UPLOAD_TIMEOUT
 
 class CiVisibilityExporter extends AgentInfoExporter {
@@ -332,7 +332,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
       this._writer,
       this._coverageWriter,
       this._logsWriter
-    ].filter(writer => writer)
+    ].filter(Boolean)
 
     let remaining = writers.length
 
@@ -347,13 +347,13 @@ class CiVisibilityExporter extends AgentInfoExporter {
       }
     }
 
-    writers.forEach(writer => writer.flush(onFlushComplete))
+    for (const writer of writers) writer.flush(onFlushComplete)
   }
 
   exportUncodedCoverages () {
-    this._coverageBuffer.forEach(oldCoveragePayload => {
+    for (const oldCoveragePayload of this._coverageBuffer) {
       this.exportCoverage(oldCoveragePayload)
-    })
+    }
     this._coverageBuffer = []
   }
 
@@ -365,8 +365,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       this._coverageUrl = coverageUrl
       this._writer.setUrl(url)
       this._coverageWriter.setUrl(coverageUrl)
-    } catch (e) {
-      log.error('Error setting CI exporter url', e)
+    } catch (err) {
+      log.error('Error setting CI exporter url', err)
     }
   }
 

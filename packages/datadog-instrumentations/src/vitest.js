@@ -63,7 +63,7 @@ function getProvidedContext () {
       isQuarantinedTestsEnabled,
       quarantinedTests
     }
-  } catch (e) {
+  } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
     return {
       isDiEnabled: false,
@@ -156,7 +156,7 @@ function getTestName (task) {
 function getSortWrapper (sort) {
   return async function () {
     if (!testSessionFinishCh.hasSubscribers) {
-      return sort.apply(this, arguments)
+      return Reflect.apply(sort, this, arguments)
     }
     // There isn't any other async function that we seem to be able to hook into
     // So we will use the sort from BaseSequencer. This means that a custom sequencer
@@ -183,7 +183,7 @@ function getSortWrapper (sort) {
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
         isQuarantinedTestsEnabled = libraryConfig.isQuarantinedTestsEnabled
       }
-    } catch (e) {
+    } catch {
       isFlakyTestRetriesEnabled = false
       isEarlyFlakeDetectionEnabled = false
       isDiEnabled = false
@@ -222,7 +222,7 @@ function getSortWrapper (sort) {
             workspaceProject._provided._ddKnownTests = knownTests.vitest || {}
             workspaceProject._provided._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
             workspaceProject._provided._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
-          } catch (e) {
+          } catch {
             log.warn('Could not send known tests to workers so Early Flake Detection will not work.')
           }
         }
@@ -236,7 +236,7 @@ function getSortWrapper (sort) {
       try {
         const workspaceProject = this.ctx.getCoreWorkspaceProject()
         workspaceProject._provided._ddIsDiEnabled = isDiEnabled
-      } catch (e) {
+      } catch {
         log.warn('Could not send Dynamic Instrumentation configuration to workers.')
       }
     }
@@ -249,7 +249,7 @@ function getSortWrapper (sort) {
           const workspaceProject = this.ctx.getCoreWorkspaceProject()
           workspaceProject._provided._ddIsQuarantinedTestsEnabled = isQuarantinedTestsEnabled
           workspaceProject._provided._ddQuarantinedTests = quarantinedTests
-        } catch (e) {
+        } catch {
           log.warn('Could not send quarantined tests to workers so Quarantine will not work.')
         }
       } else {
@@ -262,11 +262,11 @@ function getSortWrapper (sort) {
 
     if (this.ctx.coverageProvider?.generateCoverage) {
       shimmer.wrap(this.ctx.coverageProvider, 'generateCoverage', generateCoverage => async function () {
-        const totalCodeCoverage = await generateCoverage.apply(this, arguments)
+        const totalCodeCoverage = await Reflect.apply(generateCoverage, this, arguments)
 
         try {
           testCodeCoverageLinesTotal = totalCodeCoverage.getCoverageSummary().lines.pct
-        } catch (e) {
+        } catch {
           // ignore errors
         }
         return totalCodeCoverage
@@ -281,7 +281,7 @@ function getSortWrapper (sort) {
       })
       const failedSuites = this.state.getFailedFilepaths()
       let error
-      if (failedSuites.length) {
+      if (failedSuites.length > 0) {
         error = new Error(`Test suites failed: ${failedSuites.length}.`)
       }
 
@@ -299,23 +299,23 @@ function getSortWrapper (sort) {
 
       await flushPromise
 
-      return exit.apply(this, arguments)
+      return Reflect.apply(exit, this, arguments)
     })
 
-    return sort.apply(this, arguments)
+    return Reflect.apply(sort, this, arguments)
   }
 }
 
 function getCreateCliWrapper (vitestPackage, frameworkVersion) {
   shimmer.wrap(vitestPackage, 'c', oldCreateCli => function () {
     if (!testSessionStartCh.hasSubscribers) {
-      return oldCreateCli.apply(this, arguments)
+      return Reflect.apply(oldCreateCli, this, arguments)
     }
     sessionAsyncResource.runInAsyncScope(() => {
       const processArgv = process.argv.slice(2).join(' ')
       testSessionStartCh.publish({ command: `vitest ${processArgv}`, frameworkVersion })
     })
-    return oldCreateCli.apply(this, arguments)
+    return Reflect.apply(oldCreateCli, this, arguments)
   })
 
   return vitestPackage
@@ -357,7 +357,7 @@ addHook({
       })
     }
 
-    return onBeforeRunTask.apply(this, arguments)
+    return Reflect.apply(onBeforeRunTask, this, arguments)
   })
 
   // `onAfterRunTask` is run after all repetitions or attempts are run
@@ -375,20 +375,18 @@ addHook({
       }
     }
 
-    if (isQuarantinedTestsEnabled) {
-      if (quarantinedTasks.has(task)) {
-        task.result.state = 'pass'
-      }
+    if (isQuarantinedTestsEnabled && quarantinedTasks.has(task)) {
+      task.result.state = 'pass'
     }
 
-    return onAfterRunTask.apply(this, arguments)
+    return Reflect.apply(onAfterRunTask, this, arguments)
   })
 
   // test start (only tests that are not marked as skip or todo)
   // `onBeforeTryTask` is run for every repetition and attempt of the test
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeTryTask', onBeforeTryTask => async function (task, retryInfo) {
     if (!testStartCh.hasSubscribers) {
-      return onBeforeTryTask.apply(this, arguments)
+      return Reflect.apply(onBeforeTryTask, this, arguments)
     }
     const testName = getTestName(task)
     let isNew = false
@@ -505,16 +503,16 @@ addHook({
         isQuarantined
       })
     })
-    return onBeforeTryTask.apply(this, arguments)
+    return Reflect.apply(onBeforeTryTask, this, arguments)
   })
 
   // test finish (only passed tests)
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterTryTask', onAfterTryTask =>
     async function (task, { retry: retryCount }) {
       if (!testFinishTimeCh.hasSubscribers) {
-        return onAfterTryTask.apply(this, arguments)
+        return Reflect.apply(onAfterTryTask, this, arguments)
       }
-      const result = await onAfterTryTask.apply(this, arguments)
+      const result = await Reflect.apply(onAfterTryTask, this, arguments)
 
       const status = getVitestTestStatus(task, retryCount)
       const asyncResource = taskToAsync.get(task)
@@ -617,7 +615,7 @@ addHook({
   shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPaths) {
     let testSuiteError = null
     if (!testSuiteStartCh.hasSubscribers) {
-      return startTests.apply(this, arguments)
+      return Reflect.apply(startTests, this, arguments)
     }
     // From >=3.0.1, the first arguments changes from a string to an object containing the filepath
     const testSuiteAbsolutePath = testPaths[0]?.filepath || testPaths[0]
@@ -626,7 +624,7 @@ addHook({
     testSuiteAsyncResource.runInAsyncScope(() => {
       testSuiteStartCh.publish({ testSuiteAbsolutePath, frameworkVersion })
     })
-    const startTestsResponse = await startTests.apply(this, arguments)
+    const startTestsResponse = await Reflect.apply(startTests, this, arguments)
 
     let onFinish = null
     const onFinishPromise = new Promise(resolve => {
@@ -636,7 +634,7 @@ addHook({
     const testTasks = getTypeTasks(startTestsResponse[0].tasks)
 
     // Only one test task per test, even if there are retries
-    testTasks.forEach(task => {
+    for (const task of testTasks) {
       const testAsyncResource = taskToAsync.get(task)
       const { result } = task
       // We have to trick vitest into thinking that the test has passed
@@ -682,7 +680,7 @@ addHook({
           isNew: newTasks.has(task)
         })
       }
-    })
+    }
 
     const testSuiteResult = startTestsResponse[0].result
 
@@ -691,7 +689,7 @@ addHook({
     } else if (testSuiteResult.state === 'fail') { // Errors from `describe` level hooks
       const suiteTasks = getTypeTasks(startTestsResponse[0].tasks, 'suite')
       const failedSuites = suiteTasks.filter(task => task.result?.state === 'fail')
-      if (failedSuites.length && failedSuites[0].result?.errors?.length) {
+      if (failedSuites.length > 0 && failedSuites[0].result?.errors?.length) {
         testSuiteError = failedSuites[0].result.errors[0]
       }
     }

@@ -1,6 +1,6 @@
 'use strict'
 
-const URL = require('url').URL
+const URL = require('node:url').URL
 const Writer = require('./writer')
 const CoverageWriter = require('./coverage-writer')
 const CiVisibilityExporter = require('../ci-visibility-exporter')
@@ -37,8 +37,8 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
     try {
       apiUrl = new URL(apiUrl)
       this._apiUrl = apiUrl
-    } catch (e) {
-      log.error('Error setting CI exporter api url', e)
+    } catch (err) {
+      log.error('Error setting CI exporter api url', err)
     }
   }
 

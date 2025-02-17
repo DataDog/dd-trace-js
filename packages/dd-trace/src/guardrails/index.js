@@ -2,8 +2,8 @@
 
 /* eslint-disable no-var */
 
-var path = require('path')
-var Module = require('module')
+var path = require('node:path')
+var Module = require('node:module')
 var isTrue = require('./util').isTrue
 var log = require('./log')
 var telemetry = require('./telemetry')
@@ -16,7 +16,7 @@ function guard (fn) {
   var clobberBailout = false
   var forced = isTrue(process.env.DD_INJECT_FORCE)
   var engines = require('../../../../package.json').engines
-  var minMajor = parseInt(engines.node.replace(/[^0-9]/g, ''))
+  var minMajor = Number.parseInt(engines.node.replaceAll(/[^0-9]/g, ''))
   var version = process.versions.node
 
   if (process.env.DD_INJECTION_ENABLED) {
@@ -27,7 +27,7 @@ function guard (fn) {
     var entrypoint = process.argv[1]
     try {
       resolvedInApp = Module.createRequire(entrypoint).resolve('dd-trace')
-    } catch (e) {
+    } catch {
       // Ignore. If we can't resolve the module, we assume it's not in the app.
     }
     if (resolvedInApp) {

@@ -1,6 +1,6 @@
 'use strict'
 
-const { URL, format } = require('url')
+const { URL, format } = require('node:url')
 const log = require('../../log')
 const Writer = require('./writer')
 
@@ -36,8 +36,8 @@ class AgentExporter {
       url = new URL(url)
       this._url = url
       this._writer.setUrl(url)
-    } catch (e) {
-      log.warn(e.stack)
+    } catch (err) {
+      log.warn(err.stack)
     }
   }
 

@@ -50,11 +50,11 @@ class Writer extends BaseWriter {
 
       try {
         this._prioritySampler.update(JSON.parse(res).rate_by_service)
-      } catch (e) {
-        log.error('Error updating prioritySampler rates', e)
+      } catch (err_) {
+        log.error('Error updating prioritySampler rates', err_)
 
         runtimeMetrics.increment(`${METRIC_PREFIX}.errors`, true)
-        runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true)
+        runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${err_.name}`, true)
       }
       done()
     })
@@ -68,11 +68,7 @@ function setHeader (headers, key, value) {
 }
 
 function getEncoder (protocolVersion) {
-  if (protocolVersion === '0.5') {
-    return require('../../encode/0.5').AgentEncoder
-  } else {
-    return require('../../encode/0.4').AgentEncoder
-  }
+  return protocolVersion === '0.5' ? require('../../encode/0.5').AgentEncoder : require('../../encode/0.4').AgentEncoder
 }
 
 function makeRequest (version, data, count, url, headers, lookup, needsStartupLog, cb) {

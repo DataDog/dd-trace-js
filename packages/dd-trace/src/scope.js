@@ -23,12 +23,12 @@ class Scope {
 
     try {
       return callback()
-    } catch (e) {
+    } catch (err) {
       if (span && typeof span.setTag === 'function') {
-        span.setTag('error', e)
+        span.setTag('error', err)
       }
 
-      throw e
+      throw err
     } finally {
       storage('legacy').enterWith(oldStore)
     }
@@ -42,7 +42,7 @@ class Scope {
 
     const bound = function () {
       return scope.activate(spanOrActive, () => {
-        return fn.apply(this, arguments)
+        return Reflect.apply(fn, this, arguments)
       })
     }
 

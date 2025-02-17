@@ -8,7 +8,7 @@ addHook({
   name: 'promise-js',
   versions: ['>=0.0.3']
 }, Promise => {
-  if (Promise !== global.Promise) {
+  if (Promise !== globalThis.Promise) {
     shimmer.wrap(Promise.prototype, 'then', wrapThen)
   }
   return Promise

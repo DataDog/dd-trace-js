@@ -37,12 +37,23 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     const operation = getOperation(methodName)
 
-    if (operation === 'completion') {
-      this._tagCompletion(span, inputs, response, error)
-    } else if (operation === 'chat') {
-      this._tagChatCompletion(span, inputs, response, error)
-    } else if (operation === 'embedding') {
-      this._tagEmbedding(span, inputs, response, error)
+    switch (operation) {
+      case 'completion': {
+        this._tagCompletion(span, inputs, response, error)
+
+        break
+      }
+      case 'chat': {
+        this._tagChatCompletion(span, inputs, response, error)
+
+        break
+      }
+      case 'embedding': {
+        this._tagEmbedding(span, inputs, response, error)
+
+        break
+      }
+    // No default
     }
 
     if (!error) {
@@ -83,7 +94,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     const embeddingInput = embeddingInputs.map(input => ({ text: input }))
 
     if (error) {
-      this._tagger.tagEmbeddingIO(span, embeddingInput, undefined)
+      this._tagger.tagEmbeddingIO(span, embeddingInput)
       return
     }
 

@@ -13,9 +13,9 @@ const errorCh = channel('apm:ioredis:command:error')
 
 addHook({ name: 'ioredis', versions: ['>=2'] }, Redis => {
   shimmer.wrap(Redis.prototype, 'sendCommand', sendCommand => function (command, stream) {
-    if (!startCh.hasSubscribers) return sendCommand.apply(this, arguments)
+    if (!startCh.hasSubscribers) return Reflect.apply(sendCommand, this, arguments)
 
-    if (!command || !command.promise) return sendCommand.apply(this, arguments)
+    if (!command || !command.promise) return Reflect.apply(sendCommand, this, arguments)
 
     const options = this.options || {}
     const connectionName = options.connectionName
@@ -32,7 +32,7 @@ addHook({ name: 'ioredis', versions: ['>=2'] }, Redis => {
       command.promise.then(onResolve, onReject)
 
       try {
-        return sendCommand.apply(this, arguments)
+        return Reflect.apply(sendCommand, this, arguments)
       } catch (err) {
         errorCh.publish(err)
 

@@ -3,10 +3,10 @@
 // TODO: Add test with slow or unresponsive agent.
 // TODO: Add telemetry for things like dropped requests, errors, etc.
 
-const { Readable } = require('stream')
-const http = require('http')
-const https = require('https')
-const zlib = require('zlib')
+const { Readable } = require('node:stream')
+const http = require('node:http')
+const https = require('node:https')
+const zlib = require('node:zlib')
 
 const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 const docker = require('./docker')
@@ -57,7 +57,7 @@ function request (data, options, callback) {
   const timeout = options.timeout || 2000
   const isSecure = options.protocol === 'https:'
   const client = isSecure ? https : http
-  const dataArray = [].concat(data)
+  const dataArray = [data].flat()
 
   if (!isReadable) {
     options.headers['Content-Length'] = byteLength(dataArray)
@@ -103,7 +103,7 @@ function request (data, options, callback) {
             options.url || options.hostname || `http://localhost:${options.port}`
           ).href
           errorMessage = `Error from ${fullUrl}: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}.`
-        } catch (e) {
+        } catch {
           // ignore error
         }
         const responseData = buffer.toString()
@@ -142,7 +142,7 @@ function request (data, options, callback) {
     if (isReadable) {
       data.pipe(req) // TODO: Validate whether this is actually retriable.
     } else {
-      dataArray.forEach(buffer => req.write(buffer))
+      for (const buffer of dataArray) req.write(buffer)
       req.end()
     }
 

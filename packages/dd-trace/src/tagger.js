@@ -36,15 +36,13 @@ function add (carrier, keyValuePairs, parseOtelTags = false) {
       }
     } else {
       // HACK: to ensure otel.recordException does not influence trace.error
-      if (ERROR_MESSAGE in keyValuePairs || ERROR_STACK in keyValuePairs || ERROR_TYPE in keyValuePairs) {
-        if (!('doNotSetTraceError' in keyValuePairs)) {
-          carrier.setTraceError = true
-        }
+      if ((ERROR_MESSAGE in keyValuePairs || ERROR_STACK in keyValuePairs || ERROR_TYPE in keyValuePairs) && !('doNotSetTraceError' in keyValuePairs)) {
+        carrier.setTraceError = true
       }
       Object.assign(carrier, keyValuePairs)
     }
-  } catch (e) {
-    log.error('Error adding tags', e)
+  } catch (err) {
+    log.error('Error adding tags', err)
   }
 }
 

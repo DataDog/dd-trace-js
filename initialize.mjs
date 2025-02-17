@@ -10,7 +10,7 @@
   * hook will always be active for ESM support.
   */
 
-import { isMainThread } from 'worker_threads'
+import { isMainThread } from 'node:worker_threads'
 
 import * as Module from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -26,7 +26,7 @@ function insertInit (result) {
   if (!hasInsertedInit) {
     hasInsertedInit = true
     result.source = `
-import '${fileURLToPath(new URL('./init.js', import.meta.url))}';
+import '${fileURLToPath(new URL('init.js', import.meta.url))}';
 ${result.source}`
   }
   return result
@@ -37,7 +37,7 @@ const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(x => +x)
 const brokenLoaders = NODE_MAJOR === 18 && NODE_MINOR === 0
 
 export async function load (...args) {
-  const loadHook = brokenLoaders ? args[args.length - 1] : origLoad
+  const loadHook = brokenLoaders ? args.at(-1) : origLoad
   return insertInit(await loadHook(...args))
 }
 

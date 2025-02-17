@@ -52,7 +52,7 @@ function cleanIastContext (store, context, iastContext) {
     context[IAST_CONTEXT_KEY] = null
   }
   if (iastContext) {
-    Object.keys(iastContext).forEach(key => delete iastContext[key])
+    for (const key of Object.keys(iastContext)) delete iastContext[key]
     return true
   }
   return false

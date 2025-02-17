@@ -12,7 +12,7 @@ const unskipCh = channel('apm:mariadb:pool:unskip')
 
 function wrapCommandStart (start, callbackResource) {
   return shimmer.wrapFunction(start, start => function () {
-    if (!startCh.hasSubscribers) return start.apply(this, arguments)
+    if (!startCh.hasSubscribers) return Reflect.apply(start, this, arguments)
 
     const resolve = callbackResource.bind(this.resolve)
     const reject = callbackResource.bind(this.reject)
@@ -25,7 +25,7 @@ function wrapCommandStart (start, callbackResource) {
           finishCh.publish()
         })
 
-        return resolve.apply(this, arguments)
+        return Reflect.apply(resolve, this, arguments)
       }
     })
 
@@ -36,13 +36,13 @@ function wrapCommandStart (start, callbackResource) {
           finishCh.publish()
         })
 
-        return reject.apply(this, arguments)
+        return Reflect.apply(reject, this, arguments)
       }
     })
 
     return asyncResource.runInAsyncScope(() => {
       startCh.publish({ sql: this.sql, conf: this.opts })
-      return start.apply(this, arguments)
+      return Reflect.apply(start, this, arguments)
     })
   })
 }
@@ -64,21 +64,21 @@ function wrapCommand (Command) {
 function createWrapQuery (options) {
   return function wrapQuery (query) {
     return function (sql) {
-      if (!startCh.hasSubscribers) return query.apply(this, arguments)
+      if (!startCh.hasSubscribers) return Reflect.apply(query, this, arguments)
 
       const asyncResource = new AsyncResource('bound-anonymous-fn')
 
       return asyncResource.runInAsyncScope(() => {
         startCh.publish({ sql, conf: options })
 
-        return query.apply(this, arguments)
+        return Reflect.apply(query, this, arguments)
           .then(result => {
             finishCh.publish()
             return result
-          }, error => {
-            errorCh.publish(error)
+          }, err => {
+            errorCh.publish(err)
             finishCh.publish()
-            throw error
+            throw err
           })
       }, 'bound-anonymous-fn')
     }
@@ -88,7 +88,7 @@ function createWrapQuery (options) {
 function createWrapQueryCallback (options) {
   return function wrapQuery (query) {
     return function (sql) {
-      if (!startCh.hasSubscribers) return query.apply(this, arguments)
+      if (!startCh.hasSubscribers) return Reflect.apply(query, this, arguments)
 
       const cb = arguments[arguments.length - 1]
       const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -106,14 +106,14 @@ function createWrapQueryCallback (options) {
         finishCh.publish()
 
         if (typeof cb === 'function') {
-          return callbackResource.runInAsyncScope(() => cb.apply(this, arguments))
+          return callbackResource.runInAsyncScope(() => Reflect.apply(cb, this, arguments))
         }
       }))
 
       return asyncResource.runInAsyncScope(() => {
         startCh.publish({ sql, conf: options })
 
-        return query.apply(this, arguments)
+        return Reflect.apply(query, this, arguments)
       }, 'bound-anonymous-fn')
     }
   }
@@ -121,7 +121,7 @@ function createWrapQueryCallback (options) {
 
 function wrapConnection (promiseMethod, Connection) {
   return function (options) {
-    Connection.apply(this, arguments)
+    Reflect.apply(Connection, this, arguments)
 
     shimmer.wrap(this, promiseMethod, createWrapQuery(options))
     shimmer.wrap(this, '_queryCallback', createWrapQueryCallback(options))
@@ -133,7 +133,7 @@ function wrapPoolBase (PoolBase) {
     arguments[1] = wrapPoolMethod(processTask)
     arguments[2] = wrapPoolMethod(createConnectionPool)
 
-    PoolBase.apply(this, arguments)
+    Reflect.apply(PoolBase, this, arguments)
 
     shimmer.wrap(this, 'query', createWrapQuery(options.connOptions))
   }
@@ -146,7 +146,7 @@ function wrapPoolMethod (createConnection) {
   return function () {
     skipCh.publish()
     try {
-      return createConnection.apply(this, arguments)
+      return Reflect.apply(createConnection, this, arguments)
     } finally {
       unskipCh.publish()
     }

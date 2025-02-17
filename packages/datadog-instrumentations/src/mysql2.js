@@ -16,7 +16,7 @@ function wrapConnection (Connection, version) {
   const shouldEmitEndAfterQueryAbort = satisfies(version, '>=1.3.3')
 
   shimmer.wrap(Connection.prototype, 'addCommand', addCommand => function (cmd) {
-    if (!startCh.hasSubscribers) return addCommand.apply(this, arguments)
+    if (!startCh.hasSubscribers) return Reflect.apply(addCommand, this, arguments)
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     const name = cmd && cmd.constructor && cmd.constructor.name
@@ -28,15 +28,15 @@ function wrapConnection (Connection, version) {
       ? wrapExecute(cmd, cmd.execute, asyncResource, this.config)
       : bindExecute(cmd, cmd.execute, asyncResource)
 
-    return asyncResource.bind(addCommand, this).apply(this, arguments)
+    return Reflect.apply(asyncResource.bind(addCommand, this), this, arguments)
   })
 
   shimmer.wrap(Connection.prototype, 'query', query => function (sql, values, cb) {
-    if (!startOuterQueryCh.hasSubscribers) return query.apply(this, arguments)
+    if (!startOuterQueryCh.hasSubscribers) return Reflect.apply(query, this, arguments)
 
     if (typeof sql === 'object') sql = sql?.sql
 
-    if (!sql) return query.apply(this, arguments)
+    if (!sql) return Reflect.apply(query, this, arguments)
 
     const abortController = new AbortController()
     startOuterQueryCh.publish({ sql, abortController })
@@ -47,7 +47,7 @@ function wrapConnection (Connection, version) {
 
       let queryCommand
       try {
-        queryCommand = query.apply(this, arguments)
+        queryCommand = Reflect.apply(query, this, arguments)
       } finally {
         this.addCommand = addCommand
       }
@@ -69,15 +69,15 @@ function wrapConnection (Connection, version) {
       return queryCommand
     }
 
-    return query.apply(this, arguments)
+    return Reflect.apply(query, this, arguments)
   })
 
   shimmer.wrap(Connection.prototype, 'execute', execute => function (sql, values, cb) {
-    if (!startOuterQueryCh.hasSubscribers) return execute.apply(this, arguments)
+    if (!startOuterQueryCh.hasSubscribers) return Reflect.apply(execute, this, arguments)
 
     if (typeof sql === 'object') sql = sql?.sql
 
-    if (!sql) return execute.apply(this, arguments)
+    if (!sql) return Reflect.apply(execute, this, arguments)
 
     const abortController = new AbortController()
     startOuterQueryCh.publish({ sql, abortController })
@@ -88,7 +88,7 @@ function wrapConnection (Connection, version) {
 
       let result
       try {
-        result = execute.apply(this, arguments)
+        result = Reflect.apply(execute, this, arguments)
       } finally {
         this.addCommand = addCommand
       }
@@ -98,7 +98,7 @@ function wrapConnection (Connection, version) {
       return result
     }
 
-    return execute.apply(this, arguments)
+    return Reflect.apply(execute, this, arguments)
   })
 
   return Connection
@@ -109,7 +109,7 @@ function wrapConnection (Connection, version) {
         this.onResult = asyncResource.bind(this.onResult)
       }
 
-      return execute.apply(this, arguments)
+      return Reflect.apply(execute, this, arguments)
     }, cmd))
   }
 
@@ -134,18 +134,18 @@ function wrapConnection (Connection, version) {
           if (error) {
             errorCh.publish(error)
           }
-          finishCh.publish(undefined)
-          onResult.apply(this, arguments)
+          finishCh.publish()
+          Reflect.apply(onResult, this, arguments)
         }, 'bound-anonymous-fn', this))
       } else {
         this.on('error', asyncResource.bind(error => errorCh.publish(error)))
-        this.on('end', asyncResource.bind(() => finishCh.publish(undefined)))
+        this.on('end', asyncResource.bind(() => finishCh.publish()))
       }
 
       this.execute = execute
 
       try {
-        return execute.apply(this, arguments)
+        return Reflect.apply(execute, this, arguments)
       } catch (err) {
         errorCh.publish(err)
       }
@@ -157,11 +157,11 @@ function wrapPool (Pool, version) {
   const shouldEmitEndAfterQueryAbort = satisfies(version, '>=1.3.3')
 
   shimmer.wrap(Pool.prototype, 'query', query => function (sql, values, cb) {
-    if (!startOuterQueryCh.hasSubscribers) return query.apply(this, arguments)
+    if (!startOuterQueryCh.hasSubscribers) return Reflect.apply(query, this, arguments)
 
     if (typeof sql === 'object') sql = sql?.sql
 
-    if (!sql) return query.apply(this, arguments)
+    if (!sql) return Reflect.apply(query, this, arguments)
 
     const abortController = new AbortController()
     startOuterQueryCh.publish({ sql, abortController })
@@ -172,7 +172,7 @@ function wrapPool (Pool, version) {
 
       let queryCommand
       try {
-        queryCommand = query.apply(this, arguments)
+        queryCommand = Reflect.apply(query, this, arguments)
       } finally {
         this.getConnection = getConnection
       }
@@ -192,15 +192,15 @@ function wrapPool (Pool, version) {
       return queryCommand
     }
 
-    return query.apply(this, arguments)
+    return Reflect.apply(query, this, arguments)
   })
 
   shimmer.wrap(Pool.prototype, 'execute', execute => function (sql, values, cb) {
-    if (!startOuterQueryCh.hasSubscribers) return execute.apply(this, arguments)
+    if (!startOuterQueryCh.hasSubscribers) return Reflect.apply(execute, this, arguments)
 
     if (typeof sql === 'object') sql = sql?.sql
 
-    if (!sql) return execute.apply(this, arguments)
+    if (!sql) return Reflect.apply(execute, this, arguments)
 
     const abortController = new AbortController()
     startOuterQueryCh.publish({ sql, abortController })
@@ -216,7 +216,7 @@ function wrapPool (Pool, version) {
       return
     }
 
-    return execute.apply(this, arguments)
+    return Reflect.apply(execute, this, arguments)
   })
 
   return Pool
@@ -227,13 +227,13 @@ function wrapPoolCluster (PoolCluster) {
   const wrappedPoolNamespaces = new WeakSet()
 
   shimmer.wrap(PoolCluster.prototype, 'of', of => function () {
-    const poolNamespace = of.apply(this, arguments)
+    const poolNamespace = Reflect.apply(of, this, arguments)
 
     if (startOuterQueryCh.hasSubscribers && !wrappedPoolNamespaces.has(poolNamespace)) {
       shimmer.wrap(poolNamespace, 'query', query => function (sql, values, cb) {
         if (typeof sql === 'object') sql = sql?.sql
 
-        if (!sql) return query.apply(this, arguments)
+        if (!sql) return Reflect.apply(query, this, arguments)
 
         const abortController = new AbortController()
         startOuterQueryCh.publish({ sql, abortController })
@@ -244,7 +244,7 @@ function wrapPoolCluster (PoolCluster) {
 
           let queryCommand
           try {
-            queryCommand = query.apply(this, arguments)
+            queryCommand = Reflect.apply(query, this, arguments)
           } finally {
             this.getConnection = getConnection
           }
@@ -262,13 +262,13 @@ function wrapPoolCluster (PoolCluster) {
           return queryCommand
         }
 
-        return query.apply(this, arguments)
+        return Reflect.apply(query, this, arguments)
       })
 
       shimmer.wrap(poolNamespace, 'execute', execute => function (sql, values, cb) {
         if (typeof sql === 'object') sql = sql?.sql
 
-        if (!sql) return execute.apply(this, arguments)
+        if (!sql) return Reflect.apply(execute, this, arguments)
 
         const abortController = new AbortController()
         startOuterQueryCh.publish({ sql, abortController })
@@ -285,7 +285,7 @@ function wrapPoolCluster (PoolCluster) {
           return
         }
 
-        return execute.apply(this, arguments)
+        return Reflect.apply(execute, this, arguments)
       })
 
       wrappedPoolNamespaces.add(poolNamespace)

@@ -1,6 +1,6 @@
 'use strict'
 
-const { Readable } = require('stream')
+const { Readable } = require('node:stream')
 const id = require('../../id')
 
 class FormData extends Readable {
@@ -38,10 +38,7 @@ class FormData extends Readable {
   }
 
   _appendFile (key, value, { filename, contentType = 'application/octet-stream' }) {
-    this._data.push(`Content-Disposition: form-data; name="${key}"; filename="${filename}"\r\n`)
-    this._data.push(`Content-Type: ${contentType}\r\n\r\n`)
-    this._data.push(value)
-    this._data.push('\r\n')
+    this._data.push(`Content-Disposition: form-data; name="${key}"; filename="${filename}"\r\n`, `Content-Type: ${contentType}\r\n\r\n`, value, '\r\n')
   }
 
   _read () {

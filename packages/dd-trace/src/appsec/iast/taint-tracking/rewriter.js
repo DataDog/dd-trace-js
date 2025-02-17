@@ -1,8 +1,8 @@
 'use strict'
 
-const Module = require('module')
-const { pathToFileURL } = require('url')
-const { MessageChannel } = require('worker_threads')
+const Module = require('node:module')
+const { pathToFileURL } = require('node:url')
+const { MessageChannel } = require('node:worker_threads')
 const shimmer = require('../../../../../datadog-shimmer')
 const { isPrivateModule, isNotLibraryFile } = require('./filter')
 const { csiMethods } = require('./csi-methods')
@@ -10,7 +10,7 @@ const { getName } = require('../telemetry/verbosity')
 const { getRewriteFunction, incrementTelemetryIfNeeded } = require('./rewriter-telemetry')
 const dc = require('dc-polyfill')
 const log = require('../../../log')
-const { isMainThread } = require('worker_threads')
+const { isMainThread } = require('node:worker_threads')
 const { LOG_MESSAGE, REWRITTEN_MESSAGE } = require('./constants')
 
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')
@@ -33,11 +33,7 @@ function getGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, getOrig
     return function (path, line, column) {
       // if --enable-source-maps is present stacktraces of the rewritten files contain the original path, file and
       // column because the sourcemap chaining is done during the rewriting process so we can skip it
-      if (isPrivateModule(path) && isNotLibraryFile(path)) {
-        return { path, line, column }
-      } else {
-        return getOriginalPathAndLineFromSourceMap(path, line, column)
-      }
+      return isPrivateModule(path) && isNotLibraryFile(path) ? { path, line, column } : getOriginalPathAndLineFromSourceMap(path, line, column)
     }
   } else {
     return getOriginalPathAndLineFromSourceMap
@@ -65,8 +61,8 @@ function getRewriter (telemetryVerbosity) {
         telemetryVerbosity: getName(telemetryVerbosity),
         chainSourceMap
       })
-    } catch (e) {
-      log.error('[ASM] Unable to initialize TaintTracking Rewriter', e)
+    } catch (err) {
+      log.error('[ASM] Unable to initialize TaintTracking Rewriter', err)
     }
   }
   return rewriter
@@ -100,13 +96,13 @@ function getCompileMethodFn (compileMethod) {
         }
 
         if (rewritten?.content) {
-          return compileMethod.apply(this, [rewritten.content, filename])
+          return Reflect.apply(compileMethod, this, [rewritten.content, filename])
         }
       }
-    } catch (e) {
-      log.error('[ASM] Error rewriting file %s', filename, e)
+    } catch (err) {
+      log.error('[ASM] Error rewriting file %s', filename, err)
     }
-    return compileMethod.apply(this, [content, filename])
+    return Reflect.apply(compileMethod, this, [content, filename])
   }
 }
 
@@ -115,7 +111,7 @@ function esmRewritePostProcess (rewritten, filename) {
 
   if (metrics?.status === 'modified') {
     if (filename.startsWith('file://')) {
-      filename = filename.substring(7)
+      filename = filename.slice(7)
     }
 
     cacheRewrittenSourceMap(filename, rewritten.content)
@@ -132,16 +128,16 @@ function enableRewriter (telemetryVerbosity) {
   try {
     const rewriter = getRewriter(telemetryVerbosity)
     if (rewriter) {
-      const pstDescriptor = Object.getOwnPropertyDescriptor(global.Error, 'prepareStackTrace')
+      const pstDescriptor = Object.getOwnPropertyDescriptor(globalThis.Error, 'prepareStackTrace')
       if (!pstDescriptor || pstDescriptor.configurable) {
-        Object.defineProperty(global.Error, 'prepareStackTrace', getPrepareStackTraceAccessor())
+        Object.defineProperty(globalThis.Error, 'prepareStackTrace', getPrepareStackTraceAccessor())
       }
       shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
     }
 
     enableEsmRewriter(telemetryVerbosity)
-  } catch (e) {
-    log.error('[ASM] Error enabling TaintTracking Rewriter', e)
+  } catch (err) {
+    log.error('[ASM] Error enabling TaintTracking Rewriter', err)
   }
 }
 
@@ -189,8 +185,8 @@ function enableEsmRewriter (telemetryVerbosity) {
         transferList: [port2],
         data
       })
-    } catch (e) {
-      log.error('[ASM] Error enabling ESM Rewriter', e)
+    } catch (err) {
+      log.error('[ASM] Error enabling ESM Rewriter', err)
       port1.close()
       port2.close()
     }
@@ -206,8 +202,8 @@ function disableRewriter () {
     delete Error.prepareStackTrace
 
     Error.prepareStackTrace = originalPrepareStackTrace
-  } catch (e) {
-    log.warn('[ASM] Error disabling TaintTracking rewriter', e)
+  } catch (err) {
+    log.warn('[ASM] Error disabling TaintTracking rewriter', err)
   }
 }
 

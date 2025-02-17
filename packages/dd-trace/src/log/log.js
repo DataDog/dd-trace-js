@@ -1,6 +1,6 @@
 'use strict'
 
-const { format } = require('util')
+const { format } = require('node:util')
 
 class Log {
   constructor (message, args, cause, delegate) {
@@ -14,7 +14,7 @@ class Log {
     const { message, args } = this
 
     let formatted = message
-    if (message && args && args.length) {
+    if (message && args && args.length > 0) {
       formatted = format(message, ...args)
     }
     return formatted
@@ -23,7 +23,7 @@ class Log {
   static parse (...args) {
     let message, cause, delegate
 
-    const lastArg = args[args.length - 1]
+    const lastArg = args.at(-1)
     if (lastArg && typeof lastArg === 'object' && lastArg.stack) { // lastArg instanceof Error?
       cause = args.pop()
     }

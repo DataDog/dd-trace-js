@@ -8,7 +8,7 @@ const {
   parseModelId
 } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
 
-const ENABLED_OPERATIONS = ['invokeModel']
+const ENABLED_OPERATIONS = new Set(['invokeModel'])
 
 const requestIdsToTokens = {}
 
@@ -20,7 +20,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       const request = response.request
       const operation = request.operation
       // avoids instrumenting other non supported runtime operations
-      if (!ENABLED_OPERATIONS.includes(operation)) {
+      if (!ENABLED_OPERATIONS.has(operation)) {
         return
       }
       const { modelProvider, modelName } = parseModelId(request.params.modelId)
@@ -39,8 +39,8 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       const outputTokenCount = headers['x-amzn-bedrock-output-token-count']
 
       requestIdsToTokens[requestId] = {
-        inputTokensFromHeaders: inputTokenCount && parseInt(inputTokenCount),
-        outputTokensFromHeaders: outputTokenCount && parseInt(outputTokenCount)
+        inputTokensFromHeaders: inputTokenCount && Number.parseInt(inputTokenCount),
+        outputTokensFromHeaders: outputTokenCount && Number.parseInt(outputTokenCount)
       }
     })
   }
@@ -60,8 +60,8 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
 
     // add metadata tags
     this._tagger.tagMetadata(span, {
-      temperature: parseFloat(requestParams.temperature) || 0.0,
-      max_tokens: parseInt(requestParams.maxTokens) || 0
+      temperature: Number.parseFloat(requestParams.temperature) || 0,
+      max_tokens: Number.parseInt(requestParams.maxTokens) || 0
     })
 
     // add I/O tags

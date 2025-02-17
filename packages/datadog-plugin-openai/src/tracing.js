@@ -1,6 +1,6 @@
 'use strict'
 
-const path = require('path')
+const path = require('node:path')
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { storage } = require('../../datadog-core')
@@ -105,8 +105,8 @@ class OpenAiTracingPlugin extends TracingPlugin {
         tags['openai.request.prompt'] = normalizeStringOrTokenArray(prompt, true)
       } else if (Array.isArray(prompt)) {
         // This is multiple prompts, either [String] or [[Number]]
-        for (let i = 0; i < prompt.length; i++) {
-          tags[`openai.request.prompt.${i}`] = normalizeStringOrTokenArray(prompt[i], true)
+        for (const [i, element] of prompt.entries()) {
+          tags[`openai.request.prompt.${i}`] = normalizeStringOrTokenArray(element, true)
         }
       }
     }
@@ -261,9 +261,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
     if (error) {
       this.metrics.increment('openai.request.error', 1, tags)
     } else {
-      tags.push(`org:${headers['openai-organization']}`)
-      tags.push(`endpoint:${endpoint}`) // just "/v1/models", no method
-      tags.push(`model:${headers['openai-model'] || body.model}`)
+      tags.push(`org:${headers['openai-organization']}`, `endpoint:${endpoint}`, `model:${headers['openai-model'] || body.model}`)
     }
 
     this.metrics.distribution('openai.request.duration', duration * 1000, tags)
@@ -328,7 +326,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
   sendLog (methodName, span, tags, openaiStore, error) {
     if (!openaiStore) return
-    if (!Object.keys(openaiStore).length) return
+    if (Object.keys(openaiStore).length === 0) return
     if (!this.sampler.isSampled()) return
 
     const log = {
@@ -725,7 +723,7 @@ function commonCreateResponseExtraction (tags, body, openaiStore, methodName) {
     const choice = body.choices[choiceIdx]
 
     // logprobs can be null and we still want to tag it as 'returned' even when set to 'null'
-    const specifiesLogProb = Object.keys(choice).indexOf('logprobs') !== -1
+    const specifiesLogProb = Object.keys(choice).includes('logprobs')
 
     tags[`openai.response.choices.${choiceIdx}.finish_reason`] = choice.finish_reason
     tags[`openai.response.choices.${choiceIdx}.logprobs`] = specifiesLogProb ? 'returned' : undefined
@@ -739,13 +737,13 @@ function commonCreateResponseExtraction (tags, body, openaiStore, methodName) {
       tags[`openai.response.choices.${choiceIdx}.message.name`] = normalize(message.name)
       if (message.tool_calls) {
         const toolCalls = message.tool_calls
-        for (let toolIdx = 0; toolIdx < toolCalls.length; toolIdx++) {
+        for (const [toolIdx, toolCall] of toolCalls.entries()) {
           tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.function.name`] =
-            toolCalls[toolIdx].function.name
+            toolCall.function.name
           tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.function.arguments`] =
-            toolCalls[toolIdx].function.arguments
+            toolCall.function.arguments
           tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.id`] =
-            toolCalls[toolIdx].id
+            toolCall.id
         }
       }
     }
@@ -790,7 +788,7 @@ function usageExtraction (tags, body, methodName, openaiStore) {
 }
 
 function truncateApiKey (apiKey) {
-  return apiKey && `sk-...${apiKey.substr(apiKey.length - 4)}`
+  return apiKey && `sk-...${apiKey.slice(-4)}`
 }
 
 function tagChatCompletionRequestContent (contents, messageIdx, tags) {
@@ -996,8 +994,6 @@ function defensiveArrayLength (maybeArray) {
       return 1
     }
   }
-
-  return undefined
 }
 
 module.exports = OpenAiTracingPlugin

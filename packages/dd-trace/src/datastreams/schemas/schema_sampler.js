@@ -7,13 +7,11 @@ class SchemaSampler {
   }
 
   trySample (currentTimeMs) {
-    if (currentTimeMs >= this.lastSampleMs + SAMPLE_INTERVAL_MILLIS) {
-      if (currentTimeMs >= this.lastSampleMs + SAMPLE_INTERVAL_MILLIS) {
-        this.lastSampleMs = currentTimeMs
-        const weight = this.weight
-        this.weight = 0
-        return weight
-      }
+    if (currentTimeMs >= this.lastSampleMs + SAMPLE_INTERVAL_MILLIS && currentTimeMs >= this.lastSampleMs + SAMPLE_INTERVAL_MILLIS) {
+      this.lastSampleMs = currentTimeMs
+      const weight = this.weight
+      this.weight = 0
+      return weight
     }
     return 0
   }

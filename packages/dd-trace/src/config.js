@@ -1,9 +1,9 @@
 'use strict'
 
-const fs = require('fs')
-const os = require('os')
+const fs = require('node:fs')
+const os = require('node:os')
 const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
-const { URL } = require('url')
+const { URL } = require('node:url')
 const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
@@ -103,7 +103,7 @@ function validateEnvVarType (envVar) {
     case 'OTEL_TRACES_SAMPLER':
       return getFromOtelSamplerMap(value, process.env.OTEL_TRACES_SAMPLER_ARG) !== undefined
     case 'OTEL_TRACES_SAMPLER_ARG':
-      return !isNaN(parseFloat(value))
+      return !isNaN(Number.parseFloat(value))
     case 'OTEL_SDK_DISABLED':
       return value.toLowerCase() === 'true' || value.toLowerCase() === 'false'
     case 'OTEL_TRACES_EXPORTER':
@@ -130,42 +130,39 @@ function checkIfBothOtelAndDdEnvVarSet () {
 }
 
 const fromEntries = Object.fromEntries || (entries =>
-  entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
+  Object.fromEntries(entries.map(([k, v]) => [k, v])))
 
 // eslint-disable-next-line @stylistic/js/max-len
-const qsRegex = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}'
+const qsRegex = String.raw`(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\s|%20)*(?::|%3A)(?:\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\s|%20)+[a-z0-9\._\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\w=-]|%3D)+\.ey[I-L](?:[\w=-]|%3D)+(?:\.(?:[\w.+\/=-]|%3D|%2F|%2B)+)?|[\-]{5}BEGIN(?:[a-z\s]|%20)+PRIVATE(?:\s|%20)KEY[\-]{5}[^\-]+[\-]{5}END(?:[a-z\s]|%20)+PRIVATE(?:\s|%20)KEY|ssh-rsa(?:\s|%20)*(?:[a-z0-9\/\.+]|%2F|%5C|%2B){100,}`
 // eslint-disable-next-line @stylistic/js/max-len
-const defaultWafObfuscatorKeyRegex = '(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt'
+const defaultWafObfuscatorKeyRegex = String.raw`(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\.net[_-]sessionid|sid|jwt`
 // eslint-disable-next-line @stylistic/js/max-len
-const defaultWafObfuscatorValueRegex = '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\\.net(?:[_-]|-)sessionid|sid|jwt)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}'
+const defaultWafObfuscatorValueRegex = String.raw`(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\.net(?:[_-]|-)sessionid|sid|jwt)(?:\s*=[^;]|"\s*:\s*"[^"]+")|bearer\s+[a-z0-9\._\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\w=-]+\.ey[I-L][\w=-]+(?:\.[\w.+\/=-]+)?|[\-]{5}BEGIN[a-z\s]+PRIVATE\sKEY[\-]{5}[^\-]+[\-]{5}END[a-z\s]+PRIVATE\sKEY|ssh-rsa\s*[a-z0-9\/\.+]{100,}`
 const runtimeId = uuid()
 
 function maybeFile (filepath) {
   if (!filepath) return
   try {
     return fs.readFileSync(filepath, 'utf8')
-  } catch (e) {
-    log.error('Error reading file %s', filepath, e)
-    return undefined
+  } catch (err) {
+    log.error('Error reading file %s', filepath, err)
   }
 }
 
 function safeJsonParse (input) {
   try {
     return JSON.parse(input)
-  } catch (err) {
-    return undefined
-  }
+  } catch {}
 }
 
-const namingVersions = ['v0', 'v1']
+const namingVersions = new Set(['v0', 'v1'])
 const defaultNamingVersion = 'v0'
 
 function validateNamingVersion (versionString) {
   if (!versionString) {
     return defaultNamingVersion
   }
-  if (!namingVersions.includes(versionString)) {
+  if (!namingVersions.has(versionString)) {
     log.warn(
       `Unexpected input for config.spanAttributeSchema, picked default ${defaultNamingVersion}`
     )
@@ -375,10 +372,10 @@ class Config {
         let gitPropertiesString
         try {
           gitPropertiesString = fs.readFileSync(DD_GIT_PROPERTIES_FILE, 'utf8')
-        } catch (e) {
+        } catch (err) {
           // Only log error if the user has set a git.properties path
           if (process.env.DD_GIT_PROPERTIES_FILE) {
-            log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', DD_GIT_PROPERTIES_FILE, e)
+            log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', DD_GIT_PROPERTIES_FILE, err)
           }
         }
         if (gitPropertiesString) {
@@ -412,8 +409,7 @@ class Config {
     )
     const defaultPropagationStyle = ['datadog', 'tracecontext']
     if (isTrue(DD_TRACE_B3_ENABLED)) {
-      defaultPropagationStyle.push('b3')
-      defaultPropagationStyle.push('b3 single header')
+      defaultPropagationStyle.push('b3', 'b3 single header')
     }
     return defaultPropagationStyle
   }
@@ -445,18 +441,18 @@ class Config {
 
     this._setValue(defaults, 'appsec.apiSecurity.enabled', true)
     this._setValue(defaults, 'appsec.apiSecurity.sampleDelay', 30)
-    this._setValue(defaults, 'appsec.blockedTemplateGraphql', undefined)
-    this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
-    this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
-    this._setValue(defaults, 'appsec.enabled', undefined)
+    this._setValue(defaults, 'appsec.blockedTemplateGraphql')
+    this._setValue(defaults, 'appsec.blockedTemplateHtml')
+    this._setValue(defaults, 'appsec.blockedTemplateJson')
+    this._setValue(defaults, 'appsec.enabled')
     this._setValue(defaults, 'appsec.eventTracking.mode', 'identification')
     this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultWafObfuscatorKeyRegex)
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
     this._setValue(defaults, 'appsec.rasp.enabled', true)
     this._setValue(defaults, 'appsec.rateLimit', 100)
-    this._setValue(defaults, 'appsec.rules', undefined)
+    this._setValue(defaults, 'appsec.rules')
     this._setValue(defaults, 'appsec.sca.enabled', null)
-    this._setValue(defaults, 'appsec.standalone.enabled', undefined)
+    this._setValue(defaults, 'appsec.standalone.enabled')
     this._setValue(defaults, 'appsec.stackTrace.enabled', true)
     this._setValue(defaults, 'appsec.stackTrace.maxDepth', 32)
     this._setValue(defaults, 'appsec.stackTrace.maxStackTraces', 2)
@@ -475,9 +471,9 @@ class Config {
     this._setValue(defaults, 'dynamicInstrumentation.enabled', false)
     this._setValue(defaults, 'dynamicInstrumentation.redactedIdentifiers', [])
     this._setValue(defaults, 'dynamicInstrumentation.redactionExcludedIdentifiers', [])
-    this._setValue(defaults, 'env', undefined)
+    this._setValue(defaults, 'env')
     this._setValue(defaults, 'experimental.enableGetRumData', false)
-    this._setValue(defaults, 'experimental.exporter', undefined)
+    this._setValue(defaults, 'experimental.exporter')
     this._setValue(defaults, 'experimental.runtimeId', false)
     this._setValue(defaults, 'flushInterval', 2000)
     this._setValue(defaults, 'flushMinSpans', 1000)
@@ -511,10 +507,10 @@ class Config {
     this._setValue(defaults, 'isIntelligentTestRunnerEnabled', false)
     this._setValue(defaults, 'isManualApiEnabled', false)
     this._setValue(defaults, 'langchain.spanCharLimit', 128)
-    this._setValue(defaults, 'langchain.spanPromptCompletionSampleRate', 1.0)
+    this._setValue(defaults, 'langchain.spanPromptCompletionSampleRate', 1)
     this._setValue(defaults, 'llmobs.agentlessEnabled', false)
     this._setValue(defaults, 'llmobs.enabled', false)
-    this._setValue(defaults, 'llmobs.mlApp', undefined)
+    this._setValue(defaults, 'llmobs.mlApp')
     this._setValue(defaults, 'ciVisibilityTestSessionName', '')
     this._setValue(defaults, 'ciVisAgentlessLogSubmissionEnabled', false)
     this._setValue(defaults, 'legacyBaggageEnabled', true)
@@ -523,7 +519,7 @@ class Config {
     this._setValue(defaults, 'testManagementAttemptToFixRetries', 20)
     this._setValue(defaults, 'isTestManagementEnabled', false)
     this._setValue(defaults, 'logInjection', false)
-    this._setValue(defaults, 'lookup', undefined)
+    this._setValue(defaults, 'lookup')
     this._setValue(defaults, 'inferredProxyServicesEnabled', false)
     this._setValue(defaults, 'memcachedCommandEnabled', false)
     this._setValue(defaults, 'middlewareTracingEnabled', true)
@@ -532,21 +528,21 @@ class Config {
     this._setValue(defaults, 'peerServiceMapping', {})
     this._setValue(defaults, 'plugins', true)
     this._setValue(defaults, 'port', '8126')
-    this._setValue(defaults, 'profiling.enabled', undefined)
+    this._setValue(defaults, 'profiling.enabled')
     this._setValue(defaults, 'profiling.exporters', 'agent')
     this._setValue(defaults, 'profiling.sourceMap', true)
-    this._setValue(defaults, 'profiling.longLivedThreshold', undefined)
+    this._setValue(defaults, 'profiling.longLivedThreshold')
     this._setValue(defaults, 'protocolVersion', '0.4')
     this._setValue(defaults, 'queryStringObfuscation', qsRegex)
     this._setValue(defaults, 'remoteConfig.enabled', true)
     this._setValue(defaults, 'remoteConfig.pollInterval', 5) // seconds
     this._setValue(defaults, 'reportHostname', false)
     this._setValue(defaults, 'runtimeMetrics', false)
-    this._setValue(defaults, 'sampleRate', undefined)
+    this._setValue(defaults, 'sampleRate')
     this._setValue(defaults, 'sampler.rateLimit', 100)
     this._setValue(defaults, 'sampler.rules', [])
     this._setValue(defaults, 'sampler.spanSamplingRules', [])
-    this._setValue(defaults, 'scope', undefined)
+    this._setValue(defaults, 'scope')
     this._setValue(defaults, 'service', service)
     this._setValue(defaults, 'serviceMapping', {})
     this._setValue(defaults, 'site', 'datadoghq.com')
@@ -561,7 +557,7 @@ class Config {
     this._setValue(defaults, 'telemetry.debug', false)
     this._setValue(defaults, 'telemetry.dependencyCollection', true)
     this._setValue(defaults, 'telemetry.enabled', true)
-    this._setValue(defaults, 'telemetry.heartbeatInterval', 60000)
+    this._setValue(defaults, 'telemetry.heartbeatInterval', 60_000)
     this._setValue(defaults, 'telemetry.logCollection', true)
     this._setValue(defaults, 'telemetry.metrics', true)
     this._setValue(defaults, 'traceEnabled', true)
@@ -572,10 +568,10 @@ class Config {
     this._setValue(defaults, 'tracePropagationStyle.extract', ['datadog', 'tracecontext', 'baggage'])
     this._setValue(defaults, 'tracePropagationStyle.otelPropagators', false)
     this._setValue(defaults, 'tracing', true)
-    this._setValue(defaults, 'url', undefined)
+    this._setValue(defaults, 'url')
     this._setValue(defaults, 'version', pkg.version)
-    this._setValue(defaults, 'instrumentation_config_id', undefined)
-    this._setValue(defaults, 'aws.dynamoDb.tablePrimaryKeys', undefined)
+    this._setValue(defaults, 'instrumentation_config_id')
+    this._setValue(defaults, 'aws.dynamoDb.tablePrimaryKeys')
   }
 
   _applyEnvironment () {
@@ -1203,7 +1199,7 @@ class Config {
       : undefined
 
     tagger.add(tags, options.tracing_tags)
-    if (Object.keys(tags).length) tags['runtime-id'] = runtimeId
+    if (Object.keys(tags).length > 0) tags['runtime-id'] = runtimeId
 
     this._setUnit(opts, 'sampleRate', options.tracing_sampling_rate)
     this._setBoolean(opts, 'logInjection', options.log_injection_enabled)
@@ -1242,7 +1238,7 @@ class Config {
       return this._setValue(obj, name, value)
     }
 
-    value = parseFloat(value)
+    value = Number.parseFloat(value)
 
     if (!isNaN(value)) {
       // TODO: Ignore out of range values instead of normalizing them.
@@ -1275,7 +1271,7 @@ class Config {
     value = value.split(',')
     const result = []
 
-    value.forEach(val => {
+    for (const val of value) {
       if (val.includes('-')) {
         const [start, end] = val.split('-').map(Number)
         for (let i = start; i <= end; i++) {
@@ -1284,7 +1280,7 @@ class Config {
       } else {
         result.push(Number(val))
       }
-    })
+    }
     this._setValue(obj, name, result)
   }
 
@@ -1336,8 +1332,7 @@ class Config {
     const changes = []
 
     for (const name in this._defaults) {
-      for (let i = 0; i < containers.length; i++) {
-        const container = containers[i]
+      for (const [i, container] of containers.entries()) {
         const value = container[name]
 
         if ((value !== null && value !== undefined) || container === this._defaults) {
@@ -1378,12 +1373,12 @@ class Config {
 }
 
 function maybeInt (number) {
-  const parsed = parseInt(number)
+  const parsed = Number.parseInt(number)
   return isNaN(parsed) ? undefined : parsed
 }
 
 function maybeFloat (number) {
-  const parsed = parseFloat(number)
+  const parsed = Number.parseFloat(number)
   return isNaN(parsed) ? undefined : parsed
 }
 

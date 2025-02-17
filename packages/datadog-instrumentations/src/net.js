@@ -23,21 +23,21 @@ addHook({ name: names }, (net, version, name) => {
   // explicitly require dns so that net gets an instrumented instance
   // so that we don't miss the dns calls
   if (name === 'net') {
-    require('dns')
+    require('node:dns')
   } else {
     require('node:dns')
   }
 
   shimmer.wrap(net.Socket.prototype, 'connect', connect => function () {
     if (!startICPCh.hasSubscribers || !startTCPCh.hasSubscribers) {
-      return connect.apply(this, arguments)
+      return Reflect.apply(connect, this, arguments)
     }
 
     const options = getOptions(arguments)
     const lastIndex = arguments.length - 1
     const callback = arguments[lastIndex]
 
-    if (!options) return connect.apply(this, arguments)
+    if (!options) return Reflect.apply(connect, this, arguments)
 
     const callbackResource = new AsyncResource('bound-anonymous-fn')
     const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -63,15 +63,15 @@ addHook({ name: names }, (net, version, name) => {
           case 'ready':
           case 'connect':
             return callbackResource.runInAsyncScope(() => {
-              return emit.apply(this, arguments)
+              return Reflect.apply(emit, this, arguments)
             })
           default:
-            return emit.apply(this, arguments)
+            return Reflect.apply(emit, this, arguments)
         }
       })
 
       try {
-        return connect.apply(this, arguments)
+        return Reflect.apply(connect, this, arguments)
       } catch (err) {
         protocol === 'ipc' ? errorICPCh.publish(err) : errorTCPCh.publish(err)
 
@@ -91,7 +91,7 @@ function getOptions (args) {
       if (Array.isArray(args[0])) return getOptions(args[0])
       return args[0]
     case 'string':
-      if (isNaN(parseFloat(args[0]))) {
+      if (isNaN(Number.parseFloat(args[0]))) {
         return {
           path: args[0]
         }
@@ -111,7 +111,7 @@ function setupListeners (socket, protocol, asyncResource) {
     if (error) {
       protocol === 'ipc' ? errorICPCh.publish(error) : errorTCPCh.publish(error)
     }
-    protocol === 'ipc' ? finishICPCh.publish(undefined) : finishTCPCh.publish(undefined)
+    protocol === 'ipc' ? finishICPCh.publish() : finishTCPCh.publish()
   })
 
   const localListener = asyncResource.bind(function () {
@@ -120,18 +120,18 @@ function setupListeners (socket, protocol, asyncResource) {
 
   const cleanupListener = function () {
     socket.removeListener('connect', localListener)
-    events.forEach(event => {
+    for (const event of events) {
       socket.removeListener(event, wrapListener)
       socket.removeListener(event, cleanupListener)
-    })
+    }
   }
 
   if (protocol === 'tcp') {
     socket.once('connect', localListener)
   }
 
-  events.forEach(event => {
+  for (const event of events) {
     socket.once(event, wrapListener)
     socket.once(event, cleanupListener)
-  })
+  }
 }

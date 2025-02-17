@@ -1,4 +1,4 @@
-const { URL, format } = require('url')
+const { URL, format } = require('node:url')
 
 const request = require('./request')
 const { incrementCountMetric, TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION } = require('../../ci-visibility/telemetry')
@@ -14,8 +14,8 @@ function fetchAgentInfo (url, callback) {
     try {
       const response = JSON.parse(res)
       return callback(null, response)
-    } catch (e) {
-      return callback(e)
+    } catch (err_) {
+      return callback(err_)
     }
   })
 }
@@ -72,9 +72,9 @@ class AgentInfoExporter {
   }
 
   exportUncodedTraces () {
-    this.getUncodedTraces().forEach(uncodedTrace => {
+    for (const uncodedTrace of this.getUncodedTraces()) {
       this.export(uncodedTrace)
-    })
+    }
     this.resetUncodedTraces()
   }
 

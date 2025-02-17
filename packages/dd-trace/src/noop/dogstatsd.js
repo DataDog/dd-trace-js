@@ -1,11 +1,11 @@
 module.exports = class NoopDogStatsDClient {
-  increment () { }
+  increment () {}
 
-  gauge () { }
+  gauge () {}
 
-  distribution () { }
+  distribution () {}
 
-  histogram () { }
+  histogram () {}
 
-  flush () { }
+  flush () {}
 }

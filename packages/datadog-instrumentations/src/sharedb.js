@@ -54,15 +54,15 @@ addHook({ name: 'sharedb', versions: ['>=1'], file: 'lib/agent.js' }, Agent => {
         }
         finishCh.publish({ request, res })
 
-        return callback.apply(this, arguments)
+        return Reflect.apply(callback, this, arguments)
       }))
 
       try {
-        return origHandleMessageFn.apply(this, arguments)
-      } catch (error) {
-        errorCh.publish(error)
+        return Reflect.apply(origHandleMessageFn, this, arguments)
+      } catch (err) {
+        errorCh.publish(err)
 
-        throw error
+        throw err
       }
     })
   })

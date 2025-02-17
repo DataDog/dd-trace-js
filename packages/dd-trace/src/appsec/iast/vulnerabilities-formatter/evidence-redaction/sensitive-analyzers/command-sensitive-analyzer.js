@@ -2,7 +2,7 @@
 
 const log = require('../../../../../log')
 
-const COMMAND_PATTERN = '^(?:\\s*(?:sudo|doas)\\s+)?\\b\\S+\\b\\s(.*)'
+const COMMAND_PATTERN = String.raw`^(?:\s*(?:sudo|doas)\s+)?\b\S+\b\s(.*)`
 const pattern = new RegExp(COMMAND_PATTERN, 'gmi')
 
 module.exports = function extractSensitiveRanges (evidence) {
@@ -15,8 +15,8 @@ module.exports = function extractSensitiveRanges (evidence) {
       const end = start + regexResult[1].length
       return [{ start, end }]
     }
-  } catch (e) {
-    log.debug('[ASM] Error extracting sensitive ranges', e)
+  } catch (err) {
+    log.debug('[ASM] Error extracting sensitive ranges', err)
   }
   return []
 }

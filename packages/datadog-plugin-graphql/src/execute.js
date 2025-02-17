@@ -64,18 +64,18 @@ function getSignature (document, operationName, operationType, calculate) {
     try {
       try {
         tools = tools || require('./tools')
-      } catch (e) {
+      } catch (err) {
         tools = false
-        throw e
+        throw err
       }
 
       return tools.defaultEngineReportingSignature(document, operationName)
-    } catch (e) {
+    } catch {
       // safety net
     }
   }
 
-  return [operationType, operationName].filter(val => val).join(' ')
+  return [operationType, operationName].filter(Boolean).join(' ')
 }
 
 module.exports = GraphQLExecutePlugin

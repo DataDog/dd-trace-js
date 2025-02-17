@@ -13,7 +13,7 @@ function wrapRegisterMiddlewares (registerMiddlewares) {
       this.middlewares.add(createMiddleware())
     }
 
-    return registerMiddlewares.apply(this, arguments)
+    return Reflect.apply(registerMiddlewares, this, arguments)
   }
 }
 
@@ -36,14 +36,14 @@ function createMiddleware () {
                 finishChannel.publish()
                 return result
               },
-              error => {
-                errorChannel.publish(error)
+              err => {
+                errorChannel.publish(err)
                 finishChannel.publish()
-                throw error
+                throw err
               }
             )
-          } catch (e) {
-            errorChannel.publish(e)
+          } catch (err) {
+            errorChannel.publish(err)
             finishChannel.publish()
           }
         })

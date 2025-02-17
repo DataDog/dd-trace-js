@@ -20,7 +20,7 @@ class Sns extends BaseAwsSdkPlugin {
     const arnParts = TopicArn.split(':')
 
     // Get the topic name from the last part of the ARN
-    const topicName = arnParts[arnParts.length - 1]
+    const topicName = arnParts.at(-1)
 
     return {
       'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
@@ -104,7 +104,7 @@ class Sns extends BaseAwsSdkPlugin {
       DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
     }
 
-    if (Object.keys(ddInfo).length !== 0) {
+    if (Object.keys(ddInfo).length > 0) {
       // BINARY types are automatically base64 encoded
       params.MessageAttributes._datadog.BinaryValue = Buffer.from(JSON.stringify(ddInfo))
     } else if (params.MessageAttributes._datadog) {

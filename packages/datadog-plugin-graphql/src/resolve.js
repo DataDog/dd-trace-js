@@ -46,13 +46,12 @@ class GraphQLResolvePlugin extends TracingPlugin {
     if (fieldNode && this.config.variables && fieldNode.arguments) {
       const variables = this.config.variables(info.variableValues)
 
-      fieldNode.arguments
+      for (const name of fieldNode.arguments
         .filter(arg => arg.value && arg.value.kind === 'Variable')
         .filter(arg => arg.value.name && variables[arg.value.name.value])
-        .map(arg => arg.value.name.value)
-        .forEach(name => {
-          span.setTag(`graphql.variables.${name}`, variables[name])
-        })
+        .map(arg => arg.value.name.value)) {
+        span.setTag(`graphql.variables.${name}`, variables[name])
+      }
     }
 
     if (this.resolverStartCh.hasSubscribers) {
@@ -113,7 +112,7 @@ function pathToArray (path) {
 
 function withCollapse (responsePathAsArray) {
   return function () {
-    return responsePathAsArray.apply(this, arguments)
+    return Reflect.apply(responsePathAsArray, this, arguments)
       .map(segment => typeof segment === 'number' ? '*' : segment)
   }
 }
@@ -122,7 +121,7 @@ function getResolverInfo (info, args) {
   let resolverInfo = null
   const resolverVars = {}
 
-  if (args && Object.keys(args).length) {
+  if (args && Object.keys(args).length > 0) {
     Object.assign(resolverVars, args)
   }
 
@@ -134,13 +133,13 @@ function getResolverInfo (info, args) {
         argList[argument.name.value] = argument.value.value
       }
 
-      if (Object.keys(argList).length) {
+      if (Object.keys(argList).length > 0) {
         resolverVars[directive.name.value] = argList
       }
     }
   }
 
-  if (Object.keys(resolverVars).length) {
+  if (Object.keys(resolverVars).length > 0) {
     resolverInfo = { [info.fieldName]: resolverVars }
   }
 

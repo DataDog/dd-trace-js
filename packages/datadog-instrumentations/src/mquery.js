@@ -38,8 +38,8 @@ addHook({
   name: 'mquery',
   versions: ['>=5.0.0']
 }, Query => {
-  [...methods, ...methodsOptionalArgs].forEach(methodName => {
-    if (!(methodName in Query.prototype)) return
+  for (const methodName of [...methods, ...methodsOptionalArgs]) {
+    if (!(methodName in Query.prototype)) continue
 
     shimmer.wrap(Query.prototype, methodName, method => {
       return function () {
@@ -50,10 +50,10 @@ addHook({
           }
         }
 
-        return method.apply(this, arguments)
+        return Reflect.apply(method, this, arguments)
       }
     })
-  })
+  }
 
   shimmer.wrap(Query.prototype, 'exec', originalExec => {
     return function wrappedExec () {

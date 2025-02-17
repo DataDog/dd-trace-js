@@ -13,13 +13,13 @@ addHook({ name: 'amqp10', file: 'lib/sender_link.js', versions: ['>=3'] }, Sende
   const errorCh = channel('apm:amqp10:send:error')
   shimmer.wrap(SenderLink.prototype, 'send', send => function (msg, options) {
     if (!startCh.hasSubscribers) {
-      return send.apply(this, arguments)
+      return Reflect.apply(send, this, arguments)
     }
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
       startCh.publish({ link: this })
       try {
-        const promise = send.apply(this, arguments)
+        const promise = Reflect.apply(send, this, arguments)
 
         if (!promise) {
           finish(finishCh, errorCh)
@@ -45,13 +45,13 @@ addHook({ name: 'amqp10', file: 'lib/receiver_link.js', versions: ['>=3'] }, Rec
   const errorCh = channel('apm:amqp10:receive:error')
   shimmer.wrap(ReceiverLink.prototype, '_messageReceived', messageReceived => function (transferFrame) {
     if (!transferFrame || transferFrame.aborted || transferFrame.more) {
-      return messageReceived.apply(this, arguments)
+      return Reflect.apply(messageReceived, this, arguments)
     }
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
       startCh.publish({ link: this })
       try {
-        return messageReceived.apply(this, arguments)
+        return Reflect.apply(messageReceived, this, arguments)
       } catch (err) {
         errorCh.publish(err)
         throw err

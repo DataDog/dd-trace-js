@@ -35,7 +35,7 @@ function wrapEmitter (corkedEmitter) {
       }
       arguments[1] = bindedFn
     }
-    return on.apply(this, arguments)
+    return Reflect.apply(on, this, arguments)
   }
   shimmer.wrap(corkedEmitter, 'on', addListener)
   shimmer.wrap(corkedEmitter, 'addListener', addListener)
@@ -47,7 +47,7 @@ function wrapEmitter (corkedEmitter) {
         arguments[1] = emitterOn
       }
     }
-    return off.apply(this, arguments)
+    return Reflect.apply(off, this, arguments)
   }
   shimmer.wrap(corkedEmitter, 'off', removeListener)
   shimmer.wrap(corkedEmitter, 'removeListener', removeListener)
@@ -61,15 +61,13 @@ addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
       let filter
       if (isString(options)) {
         filter = options
-      } else if (options !== null && typeof options === 'object' && options.filter) {
-        if (isString(options.filter)) {
-          filter = options.filter
-        }
+      } else if (options !== null && typeof options === 'object' && options.filter && isString(options.filter)) {
+        filter = options.filter
       }
       ldapSearchCh.publish({ base, filter })
     }
 
-    return search.apply(this, arguments)
+    return Reflect.apply(search, this, arguments)
   })
 
   shimmer.wrap(ldapjs.Client.prototype, '_send', _send => function () {
@@ -81,11 +79,11 @@ addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
         if (corkedEmitter !== null && typeof corkedEmitter === 'object' && typeof corkedEmitter.on === 'function') {
           wrapEmitter(corkedEmitter)
         }
-        callback.apply(this, arguments)
+        Reflect.apply(callback, this, arguments)
       })
     }
 
-    return _send.apply(this, arguments)
+    return Reflect.apply(_send, this, arguments)
   })
 
   shimmer.wrap(ldapjs.Client.prototype, 'bind', bind => function (dn, password, controls, callback) {
@@ -95,7 +93,7 @@ addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
       arguments[3] = AsyncResource.bind(callback)
     }
 
-    return bind.apply(this, arguments)
+    return Reflect.apply(bind, this, arguments)
   })
 
   return ldapjs

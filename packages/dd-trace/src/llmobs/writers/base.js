@@ -1,7 +1,7 @@
 'use strict'
 
 const request = require('../../exporters/common/request')
-const { URL, format } = require('url')
+const { URL, format } = require('node:url')
 
 const logger = require('../../log')
 
@@ -104,7 +104,7 @@ class BaseLLMObsWriter {
         return encodeUnicode(value) // serialize unicode characters
       }
       return value
-    }).replace(/\\\\u/g, '\\u') // remove double escaping
+    }).replaceAll(String.raw`\\u`, String.raw`\u`) // remove double escaping
   }
 }
 

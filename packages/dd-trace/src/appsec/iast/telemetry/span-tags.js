@@ -4,19 +4,18 @@ function addMetricsToSpan (rootSpan, metrics, tagPrefix) {
   if (!rootSpan?.addTags || !metrics) return
 
   const flattenMap = new Map()
-  metrics
-    .filter(data => data?.metric)
-    .forEach(data => {
-      const name = taggedMetricName(data)
-      let total = flattenMap.get(name)
-      const value = flatten(data)
-      if (!total) {
-        total = value
-      } else {
-        total += value
-      }
-      flattenMap.set(name, total)
-    })
+  for (const data of metrics
+    .filter(data => data?.metric)) {
+    const name = taggedMetricName(data)
+    let total = flattenMap.get(name)
+    const value = flatten(data)
+    if (!total) {
+      total = value
+    } else {
+      total += value
+    }
+    flattenMap.set(name, total)
+  }
 
   for (const [key, value] of flattenMap) {
     const tagName = `${tagPrefix}.${key}`
@@ -45,7 +44,7 @@ function filterTags (tags) {
 
 function processTagValue (tags) {
   return tags.map(tag => tag.includes(':') ? tag.split(':')[1] : tag)
-    .join('_').replace(/\./g, '_')
+    .join('_').replaceAll('.', '_')
 }
 
 module.exports = {

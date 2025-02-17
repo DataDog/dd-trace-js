@@ -58,9 +58,9 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
     const errors = ctx?.result?.errors
     // apollo gateway catches certain errors and returns them in the result object
     // we want to capture these errors as spans
-    if (errors instanceof Array &&
-      errors[errors.length - 1] && errors[errors.length - 1].stack && errors[errors.length - 1].message) {
-      ctx.currentStore.span.setTag('error', errors[errors.length - 1])
+    if (Array.isArray(errors) &&
+      errors.at(-1) && errors.at(-1).stack && errors.at(-1).message) {
+      ctx.currentStore.span.setTag('error', errors.at(-1))
     }
     ctx.currentStore.span.finish()
     return ctx.parentStore
@@ -72,12 +72,12 @@ function buildOperationContext (schema, operationDocument, operationName) {
   let operationCount = 0
   const fragments = Object.create(null)
   try {
-    operationDocument.definitions.forEach(definition => {
+    for (const definition of operationDocument.definitions) {
       switch (definition.kind) {
         case OPERATION_DEFINITION:
           operationCount++
           if (!operationName && operationCount > 1) {
-            return
+            continue
           }
           if (
             !operationName ||
@@ -90,8 +90,8 @@ function buildOperationContext (schema, operationDocument, operationName) {
           fragments[definition.name.value] = definition
           break
       }
-    })
-  } catch (e) {
+    }
+  } catch {
     // safety net
   }
 
@@ -107,18 +107,18 @@ function getSignature (document, operationName, operationType, calculate) {
     try {
       try {
         tools = tools || require('../../../datadog-plugin-graphql/src/tools')
-      } catch (e) {
+      } catch (err) {
         tools = false
-        throw e
+        throw err
       }
 
       return tools.defaultEngineReportingSignature(document, operationName)
-    } catch (e) {
+    } catch {
       // safety net
     }
   }
 
-  return [operationType, operationName].filter(val => val).join(' ')
+  return [operationType, operationName].filter(Boolean).join(' ')
 }
 
 module.exports = ApolloGatewayRequestPlugin

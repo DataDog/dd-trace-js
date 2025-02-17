@@ -3,7 +3,7 @@
 const { storage } = require('../../datadog-core')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 
-const URL = require('url').URL
+const URL = require('node:url').URL
 const log = require('../../dd-trace/src/log')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
@@ -51,7 +51,7 @@ class Http2ClientPlugin extends ClientPlugin {
         'out.host': sessionDetails.host
       },
       metrics: {
-        [CLIENT_PORT_KEY]: parseInt(sessionDetails.port)
+        [CLIENT_PORT_KEY]: Number.parseInt(sessionDetails.port)
       }
     }, false)
 
@@ -136,21 +136,19 @@ function extractSessionDetails (authority, options) {
 
 function hasAmazonSignature (headers, path) {
   if (headers) {
-    headers = Object.keys(headers)
-      .reduce((prev, next) => Object.assign(prev, {
-        [next.toLowerCase()]: headers[next]
-      }), {})
+    headers = Object.fromEntries(Object.keys(headers)
+      .map((next) => [next.toLowerCase(), headers[next]]))
 
     if (headers['x-amz-signature']) {
       return true
     }
 
-    if ([].concat(headers.authorization).some(startsWith('AWS4-HMAC-SHA256'))) {
+    if ([headers.authorization].flat().some(startsWith('AWS4-HMAC-SHA256'))) {
       return true
     }
   }
 
-  return path && path.toLowerCase().indexOf('x-amz-signature=') !== -1
+  return path && path.toLowerCase().includes('x-amz-signature=')
 }
 
 function startsWith (searchString) {
@@ -189,13 +187,13 @@ function getFilter (config) {
 function addHeaderTags (span, headers, prefix, config) {
   if (!headers) return
 
-  config.headers.forEach(key => {
+  for (const key of config.headers) {
     const value = headers[key]
 
     if (value) {
       span.setTag(`${prefix}.${key}`, value)
     }
-  })
+  }
 }
 
 function getHeaders (config) {

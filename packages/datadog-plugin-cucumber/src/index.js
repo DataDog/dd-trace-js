@@ -193,7 +193,7 @@ class CucumberPlugin extends CiPlugin {
       if (!this.libraryConfig?.isCodeCoverageEnabled) {
         return
       }
-      if (!coverageFiles.length) {
+      if (coverageFiles.length === 0) {
         this.telemetry.count(TELEMETRY_CODE_COVERAGE_EMPTY)
       }
       const testSuiteSpan = this.testSuiteSpanByPath[testSuitePath]
@@ -297,8 +297,8 @@ class CucumberPlugin extends CiPlugin {
 
       // We have to update the test session, test module and test suite ids
       // before we export them in the main process
-      formattedTraces.forEach(trace => {
-        trace.forEach(span => {
+      for (const trace of formattedTraces) {
+        for (const span of trace) {
           if (span.name === 'cucumber.test') {
             const testSuite = span.meta[TEST_SUITE]
             const testSuiteSpan = this.testSuiteSpanByPath[testSuite]
@@ -309,10 +309,10 @@ class CucumberPlugin extends CiPlugin {
               ...testSuiteTags
             }
           }
-        })
+        }
 
         this.tracer._exporter.export(trace)
-      })
+      }
     })
 
     this.addSub('ci:cucumber:test:finish', ({

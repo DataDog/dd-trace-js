@@ -11,7 +11,7 @@ const {
 } = require('../ci-visibility/telemetry')
 
 const ENCODING_VERSION = 1
-const ALLOWED_CONTENT_TYPES = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
+const ALLOWED_CONTENT_TYPES = new Set(['test_session_end', 'test_module_end', 'test_suite_end', 'test'])
 
 const TEST_SUITE_KEYS_LENGTH = 12
 const TEST_MODULE_KEYS_LENGTH = 11
@@ -26,7 +26,7 @@ function formatSpan (span) {
     encodingVersion = 2
   }
   return {
-    type: ALLOWED_CONTENT_TYPES.includes(span.type) ? span.type : 'span',
+    type: ALLOWED_CONTENT_TYPES.has(span.type) ? span.type : 'span',
     version: encodingVersion,
     content: normalizeSpan(truncateSpan(span))
   }
@@ -240,14 +240,29 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeNumber(bytes, event.version)
 
     this._encodeString(bytes, 'content')
-    if (event.type === 'span' || event.type === 'test') {
-      this._encodeEventContent(bytes, event.content)
-    } else if (event.type === 'test_suite_end') {
-      this._encodeTestSuite(bytes, event.content)
-    } else if (event.type === 'test_module_end') {
-      this._encodeTestModule(bytes, event.content)
-    } else if (event.type === 'test_session_end') {
-      this._encodeTestSession(bytes, event.content)
+    switch (event.type) {
+      case 'span':
+      case 'test': {
+        this._encodeEventContent(bytes, event.content)
+
+        break
+      }
+      case 'test_suite_end': {
+        this._encodeTestSuite(bytes, event.content)
+
+        break
+      }
+      case 'test_module_end': {
+        this._encodeTestModule(bytes, event.content)
+
+        break
+      }
+      case 'test_session_end': {
+        this._encodeTestSession(bytes, event.content)
+
+        break
+      }
+    // No default
     }
   }
 
@@ -264,7 +279,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       event => event.type === 'test_session_end' || event.type === 'test_suite_end' || event.type === 'test_module_end'
     )
 
-    const isTestSessionTrace = !!testSessionEvents.length
+    const isTestSessionTrace = testSessionEvents.length > 0
     const events = isTestSessionTrace ? testSessionEvents : rawEvents
 
     this._eventCount += events.length
@@ -285,7 +300,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     const eventsOffset = this._eventsOffset
     const eventsCount = this._eventCount
 
-    bytes.buffer[eventsOffset] = 0xdd
+    bytes.buffer[eventsOffset] = 0xDD
     bytes.buffer[eventsOffset + 1] = eventsCount >> 24
     bytes.buffer[eventsOffset + 2] = eventsCount >> 16
     bytes.buffer[eventsOffset + 3] = eventsCount >> 8

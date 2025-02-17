@@ -31,19 +31,19 @@ const b3HeaderKey = 'b3'
 const sqsdHeaderHey = 'x-aws-sqsd-attr-_datadog'
 const b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}(-[01d](-[0-9a-f]{16})?)?|[01d])$/i
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
-const tagKeyExpr = /^_dd\.p\.[\x21-\x2b\x2d-\x7e]+$/ // ASCII minus spaces and commas
-const tagValueExpr = /^[\x20-\x2b\x2d-\x7e]*$/ // ASCII minus commas
+const tagKeyExpr = /^_dd\.p\.[\x21-\x2B\x2D-\x7E]+$/ // ASCII minus spaces and commas
+const tagValueExpr = /^[\x20-\x2B\x2D-\x7E]*$/ // ASCII minus commas
 const ddKeys = [traceKey, spanKey, samplingKey, originKey]
 const b3Keys = [b3TraceKey, b3SpanKey, b3ParentKey, b3SampledKey, b3FlagsKey, b3HeaderKey]
-const logKeys = ddKeys.concat(b3Keys)
+const logKeys = [...ddKeys, ...b3Keys]
 const traceparentExpr = /^([a-f0-9]{2})-([a-f0-9]{32})-([a-f0-9]{16})-([a-f0-9]{2})(-.*)?$/i
 const traceparentKey = 'traceparent'
 // Origin value in tracestate replaces '~', ',' and ';' with '_"
-const tracestateOriginFilter = /[^\x20-\x2b\x2d-\x3a\x3c-\x7d]/g
+const tracestateOriginFilter = /[^\x20-\x2B\x2D-\x3A\x3C-\x7D]/g
 // Tag keys in tracestate replace ' ', ',' and '=' with '_'
-const tracestateTagKeyFilter = /[^\x21-\x2b\x2d-\x3c\x3e-\x7e]/g
+const tracestateTagKeyFilter = /[^\x21-\x2B\x2D-\x3C\x3E-\x7E]/g
 // Tag values in tracestate replace ',', '~' and ';' with '_'
-const tracestateTagValueFilter = /[^\x20-\x2b\x2d-\x3a\x3c-\x7d]/g
+const tracestateTagValueFilter = /[^\x20-\x2B\x2D-\x3A\x3C-\x7D]/g
 const invalidSegment = /^0+$/
 const zeroTraceId = '0000000000000000'
 
@@ -135,7 +135,7 @@ class TextMapPropagator {
         baggage += item
       }
 
-      baggage = baggage.slice(0, baggage.length - 1)
+      baggage = baggage.slice(0, -1)
       if (baggage) carrier.baggage = baggage
     }
   }
@@ -228,8 +228,8 @@ class TextMapPropagator {
 
       if (typeof origin === 'string') {
         const originValue = origin
-          .replace(tracestateOriginFilter, '_')
-          .replace(/[\x3d]/g, '~')
+          .replaceAll(tracestateOriginFilter, '_')
+          .replaceAll(/[\x3D]/g, '~')
 
         state.set('o', originValue)
       }
@@ -238,12 +238,12 @@ class TextMapPropagator {
         if (!tags[key] || !key.startsWith('_dd.p.')) continue
 
         const tagKey = 't.' + key.slice(6)
-          .replace(tracestateTagKeyFilter, '_')
+          .replaceAll(tracestateTagKeyFilter, '_')
 
         const tagValue = tags[key]
           .toString()
-          .replace(tracestateTagValueFilter, '_')
-          .replace(/[\x3d]/g, '~')
+          .replaceAll(tracestateTagValueFilter, '_')
+          .replaceAll(/[\x3D]/g, '~')
 
         state.set(tagKey, tagValue)
       }
@@ -417,7 +417,7 @@ class TextMapPropagator {
     let parsed
     try {
       parsed = JSON.parse(headerValue)
-    } catch (e) {
+    } catch {
       return null
     }
     return this._extractDatadogContext(parsed)
@@ -446,7 +446,7 @@ class TextMapPropagator {
         traceId: id(traceId, 16),
         spanId: id(spanId, 16),
         isRemote: true,
-        sampling: { priority: parseInt(flags, 10) & 1 ? 1 : 0 },
+        sampling: { priority: Number.parseInt(flags, 10) & 1 ? 1 : 0 },
         traceparent,
         tracestate
       })
@@ -461,7 +461,7 @@ class TextMapPropagator {
               break
             }
             case 's': {
-              const priority = parseInt(value, 10)
+              const priority = Number.parseInt(value, 10)
               if (!Number.isInteger(priority)) continue
               if (
                 (spanContext._sampling.priority === 1 && priority > 0) ||
@@ -475,7 +475,7 @@ class TextMapPropagator {
               spanContext._trace.origin = value
               break
             case 't.dm': {
-              const mechanism = Math.abs(parseInt(value, 10))
+              const mechanism = Math.abs(Number.parseInt(value, 10))
               if (Number.isInteger(mechanism)) {
                 spanContext._sampling.mechanism = mechanism
                 spanContext._trace.tags['_dd.p.dm'] = `-${mechanism}`
@@ -485,7 +485,7 @@ class TextMapPropagator {
             default:
               if (!key.startsWith('t.')) continue
               spanContext._trace.tags[`_dd.p.${key.slice(2)}`] = value
-                .replace(/[\x7e]/gm, '=')
+                .replaceAll(/[\x7E]/gm, '=')
           }
         }
       })
@@ -583,13 +583,13 @@ class TextMapPropagator {
 
   _extractLegacyBaggageItems (carrier, spanContext) {
     if (this._config.legacyBaggageEnabled) {
-      Object.keys(carrier).forEach(key => {
+      for (const key of Object.keys(carrier)) {
         const match = key.match(baggageExpr)
 
         if (match) {
           spanContext._baggageItems[match[1]] = carrier[key]
         }
-      })
+      }
     }
   }
 
@@ -617,7 +617,7 @@ class TextMapPropagator {
   }
 
   _extractSamplingPriority (carrier, spanContext) {
-    const priority = parseInt(carrier[samplingKey], 10)
+    const priority = Number.parseInt(carrier[samplingKey], 10)
 
     if (Number.isInteger(priority)) {
       spanContext._sampling.priority = priority
@@ -660,7 +660,7 @@ class TextMapPropagator {
 
     if (buffer.length !== 16) return
 
-    const tid = traceId.substring(0, 16)
+    const tid = traceId.slice(0, 16)
 
     if (tid === zeroTraceId) return
 
@@ -720,7 +720,7 @@ class TextMapPropagator {
 
         // Update meta and samplingPriority based on extracted values
         Object.assign(meta, otherPropagatedTags)
-        samplingPriority = TextMapPropagator._getSamplingPriority(traceFlag, parseInt(samplingPriorityTs, 10), origin)
+        samplingPriority = TextMapPropagator._getSamplingPriority(traceFlag, Number.parseInt(samplingPriorityTs, 10), origin)
       } else {
         log.debug(`no dd list member in tracestate from incoming request: ${ts}`)
       }

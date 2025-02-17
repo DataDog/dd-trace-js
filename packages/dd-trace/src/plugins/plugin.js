@@ -76,9 +76,9 @@ module.exports = class Plugin {
     const plugin = this
     const wrappedHandler = function () {
       try {
-        return handler.apply(this, arguments)
-      } catch (e) {
-        logger.error('Error in plugin handler:', e)
+        return Reflect.apply(handler, this, arguments)
+      } catch (err) {
+        logger.error('Error in plugin handler:', err)
         logger.info('Disabling plugin: %s', plugin.id)
         plugin.configure(false)
       }
@@ -107,12 +107,12 @@ module.exports = class Plugin {
     this.config = config
     if (config.enabled && !this._enabled) {
       this._enabled = true
-      this._subscriptions.forEach(sub => sub.enable())
-      this._bindings.forEach(sub => sub.enable())
+      for (const sub of this._subscriptions) sub.enable()
+      for (const sub of this._bindings) sub.enable()
     } else if (!config.enabled && this._enabled) {
       this._enabled = false
-      this._subscriptions.forEach(sub => sub.disable())
-      this._bindings.forEach(sub => sub.disable())
+      for (const sub of this._subscriptions) sub.disable()
+      for (const sub of this._bindings) sub.disable()
     }
   }
 }

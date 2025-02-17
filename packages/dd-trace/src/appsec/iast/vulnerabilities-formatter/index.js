@@ -30,9 +30,9 @@ class VulnerabilityFormatter {
     const scrubbingResult = sensitiveHandler.scrubEvidence(type, evidence, sourcesIndexes, sources)
     if (scrubbingResult) {
       const { redactedValueParts, redactedSources } = scrubbingResult
-      redactedSources.forEach(i => {
+      for (const i of redactedSources) {
         delete sources[i].value
-      })
+      }
       return { valueParts: redactedValueParts }
     }
 
@@ -55,16 +55,16 @@ class VulnerabilityFormatter {
       return { value: evidence.value }
     }
 
-    evidence.ranges.forEach((range, rangeIndex) => {
+    for (const [rangeIndex, range] of evidence.ranges.entries()) {
       if (fromIndex < range.start) {
         valueParts.push({ value: evidence.value.substring(fromIndex, range.start) })
       }
       valueParts.push({ value: evidence.value.substring(range.start, range.end), source: sourcesIndexes[rangeIndex] })
       fromIndex = range.end
-    })
+    }
 
     if (fromIndex < evidence.value.length) {
-      valueParts.push({ value: evidence.value.substring(fromIndex) })
+      valueParts.push({ value: evidence.value.slice(Math.max(0, fromIndex)) })
     }
 
     return { valueParts }
@@ -72,7 +72,7 @@ class VulnerabilityFormatter {
 
   formatEvidence (type, evidence, sourcesIndexes, sources) {
     if (evidence.value === undefined) {
-      return undefined
+      return
     }
 
     return this._redactVulnearbilities
@@ -100,7 +100,7 @@ class VulnerabilityFormatter {
     const vulnerabilities = vulnerabilitiesToFormat.map(vulnerability => {
       const vulnerabilitySources = this.extractSourcesFromVulnerability(vulnerability)
       const sourcesIndexes = []
-      vulnerabilitySources.forEach((source) => {
+      for (const source of vulnerabilitySources) {
         let sourceIndex = sources.findIndex(
           existingSource =>
             existingSource.origin === source.origin &&
@@ -112,7 +112,7 @@ class VulnerabilityFormatter {
           sources.push(source)
         }
         sourcesIndexes.push(sourceIndex)
-      })
+      }
 
       return this.formatVulnerability(vulnerability, sourcesIndexes, sources)
     })

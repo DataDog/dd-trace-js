@@ -19,7 +19,7 @@ function wrapCall (call) {
     return callResource.runInAsyncScope(() => {
       startChannel.publish({ actionName, params, opts })
 
-      const promise = call.apply(this, arguments)
+      const promise = Reflect.apply(call, this, arguments)
       const broker = this
       const ctx = promise.ctx
 
@@ -29,10 +29,10 @@ function wrapCall (call) {
             finishChannel.publish({ broker, ctx })
             return result
           },
-          error => {
-            errorChannel.publish(error)
+          err => {
+            errorChannel.publish(err)
             finishChannel.publish({ broker, ctx })
-            throw error
+            throw err
           }
         )
     })

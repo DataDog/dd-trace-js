@@ -1,5 +1,5 @@
-const fs = require('fs')
-const path = require('path')
+const fs = require('node:fs')
+const path = require('node:path')
 
 const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
@@ -37,7 +37,7 @@ function validateCommits (commits) {
       throw new Error('Invalid commit type response')
     }
     if (isValidSha1(commitSha) || isValidSha256(commitSha)) {
-      return commitSha.replace(/[^0-9a-f]+/g, '')
+      return commitSha.replaceAll(/[^0-9a-f]+/g, '')
     }
     throw new Error('Invalid commit format')
   })
@@ -49,7 +49,7 @@ function getCommonRequestOptions (url) {
     headers: {
       'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY
     },
-    timeout: 15000,
+    timeout: 15_000,
     url
   }
 }
@@ -99,15 +99,15 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, ev
     let alreadySeenCommits
     try {
       alreadySeenCommits = validateCommits(JSON.parse(response).data)
-    } catch (e) {
+    } catch (err_) {
       incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS, { errorType: 'network' })
-      return callback(new Error(`Can't parse commits to exclude response: ${e.message}`))
+      return callback(new Error(`Can't parse commits to exclude response: ${err_.message}`))
     }
     log.debug(`There are ${alreadySeenCommits.length} commits to exclude.`)
     const commitsToInclude = latestCommits.filter((commit) => !alreadySeenCommits.includes(commit))
     log.debug(`There are ${commitsToInclude.length} commits to include.`)
 
-    if (!commitsToInclude.length) {
+    if (commitsToInclude.length === 0) {
       return callback(null, [])
     }
 
@@ -147,7 +147,7 @@ function uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, re
       filename,
       contentType: 'application/octet-stream'
     })
-  } catch (e) {
+  } catch {
     callback(new Error(`Could not read "${packFileToUpload}"`))
     return
   }
@@ -199,7 +199,7 @@ function generateAndUploadPackFiles ({
 
   log.debug(`Uploading ${packFilesToUpload.length} packfiles.`)
 
-  if (!packFilesToUpload.length) {
+  if (packFilesToUpload.length === 0) {
     return callback(new Error('Failed to generate packfiles'))
   }
 
@@ -265,7 +265,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
       return callback(err)
     }
 
-    if (!commitsToUpload.length) {
+    if (commitsToUpload.length === 0) {
       log.debug('No commits to upload')
       return callback(null)
     }

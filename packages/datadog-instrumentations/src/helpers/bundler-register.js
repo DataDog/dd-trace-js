@@ -46,8 +46,8 @@ dc.subscribe(CHANNEL, (payload) => {
     try {
       loadChannel.publish({ name, version: payload.version, file })
       payload.module = hook(payload.module, payload.version)
-    } catch (e) {
-      log.error('Error executing bundler hook', e)
+    } catch (err) {
+      log.error('Error executing bundler hook', err)
     }
   }
 })

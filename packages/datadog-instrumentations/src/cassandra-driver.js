@@ -15,7 +15,7 @@ const connectCh = channel('apm:cassandra-driver:query:connect')
 addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
   shimmer.wrap(cassandra.Client.prototype, 'batch', batch => function (queries, options, callback) {
     if (!startCh.hasSubscribers) {
-      return batch.apply(this, arguments)
+      return Reflect.apply(batch, this, arguments)
     }
     const callbackResource = new AsyncResource('bound-anonymous-fn')
     const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -31,7 +31,7 @@ addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
       const contactPoints = this.options && this.options.contactPoints
       startCh.publish({ keyspace: this.keyspace, query: queries, contactPoints })
       try {
-        const res = batch.apply(this, arguments)
+        const res = Reflect.apply(batch, this, arguments)
         if (typeof res === 'function' || !res) {
           return wrapCallback(finishCh, errorCh, asyncResource, res)
         } else {
@@ -41,9 +41,9 @@ addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
             promiseAsyncResource.bind(err => finish(finishCh, errorCh, err))
           )
         }
-      } catch (e) {
-        finish(finishCh, errorCh, e)
-        throw e
+      } catch (err) {
+        finish(finishCh, errorCh, err)
+        throw err
       }
     })
   })
@@ -53,13 +53,13 @@ addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
 addHook({ name: 'cassandra-driver', versions: ['>=4.4'] }, cassandra => {
   shimmer.wrap(cassandra.Client.prototype, '_execute', _execute => function (query, params, execOptions, callback) {
     if (!startCh.hasSubscribers) {
-      return _execute.apply(this, arguments)
+      return Reflect.apply(_execute, this, arguments)
     }
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
       const contactPoints = this.options && this.options.contactPoints
       startCh.publish({ keyspace: this.keyspace, query, contactPoints })
-      const promise = _execute.apply(this, arguments)
+      const promise = Reflect.apply(_execute, this, arguments)
 
       const promiseAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -77,7 +77,7 @@ addHook({ name: 'cassandra-driver', versions: ['3 - 4.3'] }, cassandra => {
   shimmer.wrap(cassandra.Client.prototype, '_innerExecute', _innerExecute =>
     function (query, params, execOptions, callback) {
       if (!startCh.hasSubscribers) {
-        return _innerExecute.apply(this, arguments)
+        return Reflect.apply(_innerExecute, this, arguments)
       }
       const callbackResource = new AsyncResource('bound-anonymous-fn')
       const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -86,7 +86,7 @@ addHook({ name: 'cassandra-driver', versions: ['3 - 4.3'] }, cassandra => {
       }
 
       if (!isValid(arguments)) {
-        return _innerExecute.apply(this, arguments)
+        return Reflect.apply(_innerExecute, this, arguments)
       }
 
       return asyncResource.runInAsyncScope(() => {
@@ -102,10 +102,10 @@ addHook({ name: 'cassandra-driver', versions: ['3 - 4.3'] }, cassandra => {
         }
 
         try {
-          return _innerExecute.apply(this, arguments)
-        } catch (e) {
-          finish(finishCh, errorCh, e)
-          throw e
+          return Reflect.apply(_innerExecute, this, arguments)
+        } catch (err) {
+          finish(finishCh, errorCh, err)
+          throw err
         }
       })
     }
@@ -116,10 +116,10 @@ addHook({ name: 'cassandra-driver', versions: ['3 - 4.3'] }, cassandra => {
 addHook({ name: 'cassandra-driver', versions: ['>=3.3'], file: 'lib/request-execution.js' }, RequestExecution => {
   shimmer.wrap(RequestExecution.prototype, '_sendOnConnection', _sendOnConnection => function () {
     if (!startCh.hasSubscribers) {
-      return _sendOnConnection.apply(this, arguments)
+      return Reflect.apply(_sendOnConnection, this, arguments)
     }
     connectCh.publish({ hostname: this._connection.address, port: this._connection.port })
-    return _sendOnConnection.apply(this, arguments)
+    return Reflect.apply(_sendOnConnection, this, arguments)
   })
   return RequestExecution
 })
@@ -127,23 +127,23 @@ addHook({ name: 'cassandra-driver', versions: ['>=3.3'], file: 'lib/request-exec
 addHook({ name: 'cassandra-driver', versions: ['3.3 - 4.3'], file: 'lib/request-execution.js' }, RequestExecution => {
   shimmer.wrap(RequestExecution.prototype, 'start', start => function (getHostCallback) {
     if (!startCh.hasSubscribers) {
-      return getHostCallback.apply(this, arguments)
+      return Reflect.apply(getHostCallback, this, arguments)
     }
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     const execution = this
 
     if (!isRequestValid(this, arguments, 1)) {
-      return start.apply(this, arguments)
+      return Reflect.apply(start, this, arguments)
     }
 
     getHostCallback = asyncResource.bind(getHostCallback)
 
     arguments[0] = AsyncResource.bind(function () {
       connectCh.publish({ hostname: execution._connection.address, port: execution._connection.port })
-      return getHostCallback.apply(this, arguments)
+      return Reflect.apply(getHostCallback, this, arguments)
     })
 
-    return start.apply(this, arguments)
+    return Reflect.apply(start, this, arguments)
   })
   return RequestExecution
 })
@@ -151,12 +151,12 @@ addHook({ name: 'cassandra-driver', versions: ['3.3 - 4.3'], file: 'lib/request-
 addHook({ name: 'cassandra-driver', versions: ['3 - 3.2'], file: 'lib/request-handler.js' }, RequestHandler => {
   shimmer.wrap(RequestHandler.prototype, 'send', send => function (request, options, callback) {
     if (!startCh.hasSubscribers) {
-      return send.apply(this, arguments)
+      return Reflect.apply(send, this, arguments)
     }
     const handler = this
 
     if (!isRequestValid(this, arguments, 3)) {
-      return send.apply(this, arguments)
+      return Reflect.apply(send, this, arguments)
     }
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -164,10 +164,10 @@ addHook({ name: 'cassandra-driver', versions: ['3 - 3.2'], file: 'lib/request-ha
 
     arguments[2] = AsyncResource.bind(function () {
       connectCh.publish({ hostname: handler.connection.address, port: handler.connection.port })
-      return callback.apply(this, arguments)
+      return Reflect.apply(callback, this, arguments)
     })
 
-    return send.apply(this, arguments)
+    return Reflect.apply(send, this, arguments)
   })
   return RequestHandler
 })
@@ -176,14 +176,14 @@ function finish (finishCh, errorCh, error) {
   if (error) {
     errorCh.publish(error)
   }
-  finishCh.publish(undefined)
+  finishCh.publish()
 }
 
 function wrapCallback (finishCh, errorCh, asyncResource, callback) {
   return shimmer.wrapFunction(callback, callback => asyncResource.bind(function (err) {
     finish(finishCh, errorCh, err)
     if (callback) {
-      return callback.apply(this, arguments)
+      return Reflect.apply(callback, this, arguments)
     }
   }))
 }

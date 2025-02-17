@@ -132,7 +132,7 @@ function getTestAsyncResource (test) {
 function runnableWrapper (RunnablePackage, libraryConfig) {
   shimmer.wrap(RunnablePackage.prototype, 'run', run => function () {
     if (!testStartCh.hasSubscribers) {
-      return run.apply(this, arguments)
+      return Reflect.apply(run, this, arguments)
     }
     // Flaky test retries does not work in parallel mode
     if (libraryConfig?.isFlakyTestRetriesEnabled) {
@@ -169,7 +169,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
       }
     }
 
-    return run.apply(this, arguments)
+    return Reflect.apply(run, this, arguments)
   })
   return RunnablePackage
 }
@@ -242,7 +242,7 @@ function getOnTestEndHandler () {
     }
 
     // if there are afterEach to be run, we don't finish the test yet
-    if (asyncResource && !test.parent._afterEach.length) {
+    if (asyncResource && test.parent._afterEach.length === 0) {
       asyncResource.runInAsyncScope(() => {
         testFinishCh.publish({
           status,
@@ -374,25 +374,25 @@ function getRunTestsWrapper (runTests, config) {
   return function (suite, fn) {
     if (config.isKnownTestsEnabled) {
       // by the time we reach `this.on('test')`, it is too late. We need to add retries here
-      suite.tests.forEach(test => {
+      for (const test of suite.tests) {
         if (!test.isPending() && isNewTest(test, config.knownTests)) {
           test._ddIsNew = true
           if (config.isEarlyFlakeDetectionEnabled) {
             retryTest(test, config.earlyFlakeDetectionNumRetries)
           }
         }
-      })
+      }
     }
 
     if (config.isQuarantinedTestsEnabled) {
-      suite.tests.forEach(test => {
+      for (const test of suite.tests) {
         if (isQuarantinedTest(test, config.quarantinedTests)) {
           test._ddIsQuarantined = true
         }
-      })
+      }
     }
 
-    return runTests.apply(this, arguments)
+    return Reflect.apply(runTests, this, arguments)
   }
 }
 

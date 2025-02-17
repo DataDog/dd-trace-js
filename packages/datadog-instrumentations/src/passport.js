@@ -15,13 +15,13 @@ function wrapDone (done) {
       if (abortController.signal.aborted) return
     }
 
-    return done.apply(this, arguments)
+    return Reflect.apply(done, this, arguments)
   }
 }
 
 function wrapDeserializeUser (deserializeUser) {
   return function wrappedDeserializeUser (fn, req, done) {
-    if (typeof fn === 'function') return deserializeUser.apply(this, arguments)
+    if (typeof fn === 'function') return Reflect.apply(deserializeUser, this, arguments)
 
     if (typeof req === 'function') {
       done = req
@@ -30,7 +30,7 @@ function wrapDeserializeUser (deserializeUser) {
       arguments[2] = wrapDone(done)
     }
 
-    return deserializeUser.apply(this, arguments)
+    return Reflect.apply(deserializeUser, this, arguments)
   }
 }
 

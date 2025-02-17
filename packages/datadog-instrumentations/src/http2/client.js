@@ -20,7 +20,7 @@ function createWrapEmit (ctx) {
 
       return asyncStartChannel.runStores(ctx, () => {
         try {
-          return emit.apply(this, arguments)
+          return Reflect.apply(emit, this, arguments)
         } finally {
           asyncEndChannel.publish(ctx)
         }
@@ -32,21 +32,21 @@ function createWrapEmit (ctx) {
 function createWrapRequest (authority, options) {
   return function wrapRequest (request) {
     return function (headers) {
-      if (!startChannel.hasSubscribers) return request.apply(this, arguments)
+      if (!startChannel.hasSubscribers) return Reflect.apply(request, this, arguments)
 
       const ctx = { headers, authority, options }
 
       return startChannel.runStores(ctx, () => {
         try {
-          const req = request.apply(this, arguments)
+          const req = Reflect.apply(request, this, arguments)
 
           shimmer.wrap(req, 'emit', createWrapEmit(ctx))
 
           return req
-        } catch (e) {
-          ctx.error = e
+        } catch (err) {
+          ctx.error = err
           errorChannel.publish(ctx)
-          throw e
+          throw err
         } finally {
           endChannel.publish(ctx)
         }
@@ -60,7 +60,7 @@ function wrapConnect (connect) {
     if (connectChannel.hasSubscribers) {
       connectChannel.publish({ authority })
     }
-    const session = connect.apply(this, arguments)
+    const session = Reflect.apply(connect, this, arguments)
 
     shimmer.wrap(session, 'request', createWrapRequest(authority, options))
 

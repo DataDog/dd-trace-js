@@ -12,7 +12,7 @@ function wrapCompile (compile) {
       handlebarsCompileCh.publish({ source })
     }
 
-    return compile.apply(this, arguments)
+    return Reflect.apply(compile, this, arguments)
   }
 }
 
@@ -22,7 +22,7 @@ function wrapRegisterPartial (registerPartial) {
       handlebarsRegisterPartialCh.publish({ partial })
     }
 
-    return registerPartial.apply(this, arguments)
+    return Reflect.apply(registerPartial, this, arguments)
   }
 }
 

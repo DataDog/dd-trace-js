@@ -21,8 +21,8 @@ function removeAllListeners (emitter, event) {
     }
     cleaned = true
 
-    for (let i = 0; i < listeners.length; ++i) {
-      emitter.on(event, listeners[i])
+    for (const listener of listeners) {
+      emitter.on(event, listener)
     }
   }
 }

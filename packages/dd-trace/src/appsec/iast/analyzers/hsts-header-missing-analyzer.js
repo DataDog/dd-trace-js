@@ -30,13 +30,9 @@ class HstsHeaderMissingAnalyzer extends MissingHeaderAnalyzer {
 
     const semicolonIndex = headerValue.indexOf(';')
     let timestampString
-    if (semicolonIndex > -1) {
-      timestampString = headerValue.substring(HEADER_VALID_PREFIX.length + 1, semicolonIndex)
-    } else {
-      timestampString = headerValue.substring(HEADER_VALID_PREFIX.length + 1)
-    }
+    timestampString = semicolonIndex !== -1 ? headerValue.substring(HEADER_VALID_PREFIX.length + 1, semicolonIndex) : headerValue.slice(Math.max(0, HEADER_VALID_PREFIX.length + 1))
 
-    const timestamp = parseInt(timestampString)
+    const timestamp = Number.parseInt(timestampString)
     // eslint-disable-next-line eqeqeq
     return timestamp == timestampString && timestamp > 0
   }

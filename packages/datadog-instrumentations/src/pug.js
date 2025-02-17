@@ -11,7 +11,7 @@ function wrapCompile (compile) {
       pugCompileCh.publish({ source })
     }
 
-    return compile.apply(this, arguments)
+    return Reflect.apply(compile, this, arguments)
   }
 }
 

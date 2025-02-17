@@ -13,7 +13,7 @@ function wrapAddQueue (addQueue) {
       arguments[0] = AsyncResource.bind((...args) => this[name](...args))
     }
 
-    return addQueue.apply(this, arguments)
+    return Reflect.apply(addQueue, this, arguments)
   }
 }
 
@@ -22,7 +22,7 @@ addHook({
   versions: ['>=4.6.4 <5', '5', '6', '>=7']
 }, mongoose => {
   // As of Mongoose 7, custom promise libraries are no longer supported and mongoose.Promise may be undefined
-  if (mongoose.Promise && mongoose.Promise !== global.Promise) {
+  if (mongoose.Promise && mongoose.Promise !== globalThis.Promise) {
     shimmer.wrap(mongoose.Promise.prototype, 'then', wrapThen)
   }
 
@@ -58,14 +58,14 @@ addHook({
   versions: ['>=4.6.4 <5', '5', '6', '>=7'],
   file: 'lib/model.js'
 }, Model => {
-  [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters].forEach(methodName => {
+  for (const methodName of [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters]) {
     const useTwoArguments = collectionMethodsWithTwoFilters.includes(methodName)
-    if (!(methodName in Model)) return
+    if (!(methodName in Model)) continue
 
     shimmer.wrap(Model, methodName, method => {
       return function wrappedModelMethod () {
         if (!startCh.hasSubscribers) {
-          return method.apply(this, arguments)
+          return Reflect.apply(method, this, arguments)
         }
 
         const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -90,7 +90,7 @@ addHook({
               return function () {
                 finish()
 
-                return originalCb.apply(this, arguments)
+                return Reflect.apply(originalCb, this, arguments)
               }
             })
 
@@ -106,7 +106,7 @@ addHook({
             methodName
           })
 
-          const res = method.apply(this, arguments)
+          const res = Reflect.apply(method, this, arguments)
 
           // if it is not callback, wrap exec method and its then
           if (!callbackWrapped) {
@@ -116,7 +116,7 @@ addHook({
                   wrapCallbackIfExist(arguments)
                 }
 
-                const execResult = originalExec.apply(this, arguments)
+                const execResult = Reflect.apply(originalExec, this, arguments)
 
                 if (callbackWrapped || typeof execResult?.then !== 'function') {
                   return execResult
@@ -132,7 +132,7 @@ addHook({
                       finish()
 
                       if (resolve) {
-                        return resolve.apply(this, arguments)
+                        return Reflect.apply(resolve, this, arguments)
                       }
                     })
 
@@ -140,11 +140,11 @@ addHook({
                       finish()
 
                       if (reject) {
-                        return reject.apply(this, arguments)
+                        return Reflect.apply(reject, this, arguments)
                       }
                     })
 
-                    return originalThen.apply(this, arguments)
+                    return Reflect.apply(originalThen, this, arguments)
                   }
                 })
 
@@ -156,7 +156,7 @@ addHook({
         })
       }
     })
-  })
+  }
 
   return Model
 })
@@ -169,7 +169,7 @@ addHook({
   file: 'lib/helpers/query/sanitizeFilter.js'
 }, sanitizeFilter => {
   return shimmer.wrapFunction(sanitizeFilter, sanitizeFilter => function wrappedSanitizeFilter () {
-    const sanitizedObject = sanitizeFilter.apply(this, arguments)
+    const sanitizedObject = Reflect.apply(sanitizeFilter, this, arguments)
 
     if (sanitizeFilterFinishCh.hasSubscribers) {
       sanitizeFilterFinishCh.publish({

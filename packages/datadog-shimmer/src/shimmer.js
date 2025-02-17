@@ -18,7 +18,7 @@ function copyProperties (original, wrapped) {
   for (const key of keys) {
     try {
       Object.defineProperty(wrapped, key, props[key])
-    } catch (e) {
+    } catch {
       // TODO: figure out how to handle this without a try/catch
     }
   }
@@ -32,7 +32,7 @@ function wrapFunction (original, wrapper) {
   let delegate = target.func
 
   const shim = function shim () {
-    return delegate.apply(this, arguments)
+    return Reflect.apply(delegate, this, arguments)
   }
 
   unwrappers.set(shim, () => {
@@ -169,8 +169,8 @@ function wrapMethod (target, name, wrapper, noAssert) {
       try {
         const retVal = innerWrapped.apply(this, args)
         return isPromise(retVal) ? retVal.catch(errorHandler) : retVal
-      } catch (e) {
-        return errorHandler(e)
+      } catch (err) {
+        return errorHandler(err)
       }
     }
   } else {
@@ -262,7 +262,7 @@ function assertMethod (target, name) {
   }
 
   if (typeof target !== 'object' && typeof target !== 'function') {
-    throw new Error('Invalid target.')
+    throw new TypeError('Invalid target.')
   }
 
   if (!target[name]) {
@@ -270,7 +270,7 @@ function assertMethod (target, name) {
   }
 
   if (typeof target[name] !== 'function') {
-    throw new Error(`Original method ${name} is not a function.`)
+    throw new TypeError(`Original method ${name} is not a function.`)
   }
 }
 
@@ -280,7 +280,7 @@ function assertFunction (target) {
   }
 
   if (typeof target !== 'function') {
-    throw new Error('Target is not a function.')
+    throw new TypeError('Target is not a function.')
   }
 }
 

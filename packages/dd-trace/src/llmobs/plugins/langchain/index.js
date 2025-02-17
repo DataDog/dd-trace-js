@@ -9,8 +9,8 @@ const ANTHROPIC_PROVIDER_NAME = 'anthropic'
 const BEDROCK_PROVIDER_NAME = 'amazon_bedrock'
 const OPENAI_PROVIDER_NAME = 'openai'
 
-const SUPPORTED_INTEGRATIONS = ['openai']
-const LLM_SPAN_TYPES = ['llm', 'chat_model', 'embedding']
+const SUPPORTED_INTEGRATIONS = new Set(['openai'])
+const LLM_SPAN_TYPES = new Set(['llm', 'chat_model', 'embedding'])
 const LLM = 'llm'
 const WORKFLOW = 'workflow'
 const EMBEDDING = 'embedding'
@@ -89,18 +89,18 @@ class LangChainLLMObsPlugin extends LLMObsPlugin {
       span?.context()._tags[`langchain.request.${provider}.parameters.model_kwargs.max_tokens`]
 
     if (temperature) {
-      metadata.temperature = parseFloat(temperature)
+      metadata.temperature = Number.parseFloat(temperature)
     }
 
     if (maxTokens) {
-      metadata.maxTokens = parseInt(maxTokens)
+      metadata.maxTokens = Number.parseInt(maxTokens)
     }
 
     this._tagger.tagMetadata(span, metadata)
   }
 
   getKind (type, provider) {
-    if (LLM_SPAN_TYPES.includes(type)) {
+    if (LLM_SPAN_TYPES.has(type)) {
       const llmobsIntegration = this.getIntegrationName(type, provider)
 
       if (!this.isLLMIntegrationEnabled(llmobsIntegration)) {
@@ -124,7 +124,7 @@ class LangChainLLMObsPlugin extends LLMObsPlugin {
   }
 
   isLLMIntegrationEnabled (integration) {
-    return SUPPORTED_INTEGRATIONS.includes(integration) && pluginManager?._pluginsByName[integration]?.llmobs?._enabled
+    return SUPPORTED_INTEGRATIONS.has(integration) && pluginManager?._pluginsByName[integration]?.llmobs?._enabled
   }
 }
 

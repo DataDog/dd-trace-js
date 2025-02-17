@@ -29,8 +29,8 @@ function finalizeRequestNamespace (context, rootSpan) {
     merge(namespace)
 
     namespace.clear()
-  } catch (e) {
-    log.error('[ASM] Error merging request metrics', e)
+  } catch (err) {
+    log.error('[ASM] Error merging request metrics', err)
   } finally {
     if (context) {
       delete context[DD_IAST_METRICS_NAMESPACE]
@@ -45,7 +45,7 @@ function merge (namespace) {
 
       if (points?.length && type === 'count') {
         const gMetric = globalNamespace.getMetric(metricName, tags)
-        points.forEach(point => gMetric.inc(point[1]))
+        for (const point of points) gMetric.inc(point[1])
       }
     }
   }

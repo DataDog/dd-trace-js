@@ -2,8 +2,8 @@
 
 const { info, warn } = require('./log/writer')
 
-const os = require('os')
-const { inspect } = require('util')
+const os = require('node:os')
+const { inspect } = require('node:util')
 const tracerVersion = require('../../../package.json').version
 
 const errors = {}
@@ -18,7 +18,7 @@ function getIntegrationsAndAnalytics () {
   for (const pluginName in pluginManager._pluginsByName) {
     integrations.add(pluginName)
   }
-  extras.integrations_loaded = Array.from(integrations)
+  extras.integrations_loaded = [...integrations]
   return extras
 }
 

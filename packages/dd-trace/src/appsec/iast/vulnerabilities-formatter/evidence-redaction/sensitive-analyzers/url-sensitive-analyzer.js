@@ -32,8 +32,8 @@ module.exports = function extractSensitiveRanges (evidence) {
     }
 
     return ranges
-  } catch (e) {
-    log.debug('[ASM] Error extracting sensitive ranges', e)
+  } catch (err) {
+    log.debug('[ASM] Error extracting sensitive ranges', err)
   }
 
   return []

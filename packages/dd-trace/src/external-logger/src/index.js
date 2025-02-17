@@ -1,11 +1,11 @@
 const tracerLogger = require('../../log')// path to require tracer logger
 
-const https = require('https')
+const https = require('node:https')
 
 class ExternalLogger {
   // Note: these attribute names match the corresponding entry in the JSON payload.
   constructor ({
-    ddsource, hostname, service, apiKey, site = 'datadoghq.com', interval = 10000, timeout = 2000, limit = 1000
+    ddsource, hostname, service, apiKey, site = 'datadoghq.com', interval = 10_000, timeout = 2000, limit = 1000
   }) {
     this.enabled = !!apiKey
 
@@ -80,7 +80,7 @@ class ExternalLogger {
     let numLogs
     let encodedLogs
 
-    if (!this.queue.length) {
+    if (this.queue.length === 0) {
       setImmediate(() => cb())
       return
     }
@@ -91,9 +91,9 @@ class ExternalLogger {
 
       numLogs = logs.length
       encodedLogs = JSON.stringify(logs)
-    } catch (error) {
+    } catch (err) {
       tracerLogger.error(`failed to encode ${numLogs} logs`)
-      setImmediate(() => cb(error))
+      setImmediate(() => cb(err))
       return
     }
 
@@ -128,10 +128,10 @@ class ExternalLogger {
 }
 
 class NoopExternalLogger {
-  log () { }
-  enqueue () { }
-  shutdown () { }
-  flush () { }
+  log () {}
+  enqueue () {}
+  shutdown () {}
+  flush () {}
 }
 
 module.exports.ExternalLogger = ExternalLogger

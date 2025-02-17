@@ -33,7 +33,7 @@ let channelsActivated = false
 function ensureChannelsActivated () {
   if (channelsActivated) return
 
-  const { AsyncLocalStorage, createHook } = require('async_hooks')
+  const { AsyncLocalStorage, createHook } = require('node:async_hooks')
   const shimmer = require('../../../../datadog-shimmer')
 
   createHook({ before: () => beforeCh.publish() }).enable()
@@ -89,11 +89,9 @@ class NativeWallProfiler {
     this._pprof = undefined
 
     // Bind these to this so they can be used as callbacks
-    if (this._withContexts) {
-      if (this._captureSpanData) {
-        this._enter = this._enter.bind(this)
-        this._spanFinished = this._spanFinished.bind(this)
-      }
+    if (this._withContexts && this._captureSpanData) {
+      this._enter = this._enter.bind(this)
+      this._spanFinished = this._spanFinished.bind(this)
     }
     this._generateLabels = this._generateLabels.bind(this)
 
@@ -178,7 +176,7 @@ class NativeWallProfiler {
       let rootSpanId
       if (this._codeHotspotsEnabled) {
         spanId = context._spanId
-        rootSpanId = startedSpans.length ? startedSpans[0].context()._spanId : context._spanId
+        rootSpanId = startedSpans.length > 0 ? startedSpans[0].context()._spanId : context._spanId
       }
 
       let webTags
@@ -300,7 +298,7 @@ class NativeWallProfiler {
     if (rootSpanId !== undefined) {
       labels[LOCAL_ROOT_SPAN_ID_LABEL] = rootSpanId
     }
-    if (webTags !== undefined && Object.keys(webTags).length !== 0) {
+    if (webTags !== undefined && Object.keys(webTags).length > 0) {
       labels['trace endpoint'] = endpointNameFromTags(webTags)
     } else if (endpoint) {
       // fallback to endpoint computed when sample was taken

@@ -38,14 +38,14 @@ function wrapResponseEmit (emit) {
         finishServerCh.publish({ req: this.req })
       }
 
-      return emit.apply(this, arguments)
+      return Reflect.apply(emit, this, arguments)
     })
   }
 }
 function wrapEmit (emit) {
   return function (eventName, req, res) {
     if (!startServerCh.hasSubscribers) {
-      return emit.apply(this, arguments)
+      return Reflect.apply(emit, this, arguments)
     }
 
     if (eventName === 'request') {
@@ -58,7 +58,7 @@ function wrapEmit (emit) {
         shimmer.wrap(res, 'emit', wrapResponseEmit)
 
         try {
-          return emit.apply(this, arguments)
+          return Reflect.apply(emit, this, arguments)
         } catch (err) {
           errorServerCh.publish(err)
 
@@ -66,6 +66,6 @@ function wrapEmit (emit) {
         }
       })
     }
-    return emit.apply(this, arguments)
+    return Reflect.apply(emit, this, arguments)
   }
 }

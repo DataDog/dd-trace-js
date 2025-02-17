@@ -1,6 +1,6 @@
 'use strict'
 
-const util = require('util')
+const util = require('node:util')
 
 const {
   addHook,
@@ -37,7 +37,7 @@ function returnSpawnSyncError (error, context) {
   return context.result
 }
 
-names.forEach(name => {
+for (const name of names) {
   addHook({ name }, childProcess => {
     if (!patched) {
       patched = true
@@ -49,7 +49,7 @@ names.forEach(name => {
 
     return childProcess
   })
-})
+}
 
 function normalizeArgs (args, shell) {
   const childProcessInfo = {
@@ -93,7 +93,7 @@ function wrapChildProcessSyncMethod (returnError, shell = false) {
   return function wrapMethod (childProcessMethod) {
     return function () {
       if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
-        return childProcessMethod.apply(this, arguments)
+        return Reflect.apply(childProcessMethod, this, arguments)
       }
 
       const childProcessInfo = normalizeArgs(arguments, shell)
@@ -112,7 +112,7 @@ function wrapChildProcessSyncMethod (returnError, shell = false) {
             return returnError(error, context)
           }
 
-          const result = childProcessMethod.apply(this, arguments)
+          const result = Reflect.apply(childProcessMethod, this, arguments)
           context.result = result
 
           return result
@@ -132,7 +132,7 @@ function wrapChildProcessSyncMethod (returnError, shell = false) {
 function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
   return function () {
     if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
-      return customPromisifyMethod.apply(this, arguments)
+      return Reflect.apply(customPromisifyMethod, this, arguments)
     }
 
     const childProcessInfo = normalizeArgs(arguments, shell)
@@ -152,10 +152,10 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
       result = Promise.reject(abortController.signal.reason || new Error('Aborted'))
     } else {
       try {
-        result = customPromisifyMethod.apply(this, arguments)
-      } catch (error) {
-        error.publish({ ...context, error })
-        throw error
+        result = Reflect.apply(customPromisifyMethod, this, arguments)
+      } catch (err) {
+        err.publish({ ...context, error: err })
+        throw err
       } finally {
         end.publish(context)
       }
@@ -186,7 +186,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
   return function wrapMethod (childProcessMethod) {
     function wrappedChildProcessMethod () {
       if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
-        return childProcessMethod.apply(this, arguments)
+        return Reflect.apply(childProcessMethod, this, arguments)
       }
 
       const childProcessInfo = normalizeArgs(arguments, shell)
@@ -221,7 +221,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
             childProcess.emit('close')
           })
         } else {
-          childProcess = childProcessMethod.apply(this, arguments)
+          childProcess = Reflect.apply(childProcessMethod, this, arguments)
         }
 
         if (childProcess) {

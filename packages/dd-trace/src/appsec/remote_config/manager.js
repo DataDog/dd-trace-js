@@ -1,8 +1,8 @@
 'use strict'
 
-const { URL, format } = require('url')
+const { URL, format } = require('node:url')
 const uuid = require('crypto-randomuuid')
-const { EventEmitter } = require('events')
+const { EventEmitter } = require('node:events')
 const tracerVersion = require('../../../../../package.json').version
 const request = require('../../exporters/common/request')
 const log = require('../../log')
@@ -54,7 +54,7 @@ class RemoteConfigManager extends EventEmitter {
           targets_version: 0,
           // Use getter so `apply_*` can be updated async and still affect the content of `config_states`
           get config_states () {
-            return Array.from(appliedConfigs.values()).map((conf) => ({
+            return [...appliedConfigs.values()].map((conf) => ({
               id: conf.id,
               version: conf.version,
               product: conf.product,
@@ -120,7 +120,7 @@ class RemoteConfigManager extends EventEmitter {
   }
 
   updateProducts () {
-    this.state.client.products = Array.from(this._handlers.keys())
+    this.state.client.products = [...this._handlers.keys()]
   }
 
   getPayload () {
@@ -234,14 +234,14 @@ class RemoteConfigManager extends EventEmitter {
       this.state.client.state.backend_client_state = targets.signed.custom.opaque_backend_state
     }
 
-    if (toUnapply.length || toApply.length || toModify.length) {
+    if (toUnapply.length > 0 || toApply.length > 0 || toModify.length > 0) {
       this.emit(RemoteConfigManager.kPreUpdate, { toUnapply, toApply, toModify })
 
       this.dispatch(toUnapply, 'unapply')
       this.dispatch(toApply, 'apply')
       this.dispatch(toModify, 'modify')
 
-      this.state.cached_target_files = Array.from(this.appliedConfigs.values()).map((conf) => ({
+      this.state.cached_target_files = [...this.appliedConfigs.values()].map((conf) => ({
         path: conf.path,
         length: conf.length,
         hashes: Object.entries(conf.hashes).map((entry) => ({ algorithm: entry[0], hash: entry[1] }))

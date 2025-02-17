@@ -1,7 +1,7 @@
 'use strict'
 
-const path = require('path')
-const process = require('process')
+const path = require('node:path')
+const process = require('node:process')
 const { calculateDDBasePath } = require('../../util')
 const pathLine = {
   getNodeModulesPaths,
@@ -32,7 +32,7 @@ function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
 
   for (const callsite of callSiteFrames) {
     const filepath = callsite.file
-    if (!isExcluded(callsite, externallyExcludedPaths) && filepath.indexOf(pathLine.ddBasePath) === -1) {
+    if (!isExcluded(callsite, externallyExcludedPaths) && !filepath.includes(pathLine.ddBasePath)) {
       callsite.path = getRelativePath(filepath)
       callsite.isInternal = !path.isAbsolute(filepath)
 
@@ -58,14 +58,14 @@ function isExcluded (callsite, externallyExcludedPaths) {
     excludedPaths = [...excludedPaths, ...externallyExcludedPaths]
   }
 
-  for (let i = 0; i < excludedPaths.length; i++) {
-    if (filename.indexOf(excludedPaths[i]) > -1) {
+  for (const excludedPath of excludedPaths) {
+    if (filename.includes(excludedPath)) {
       return true
     }
   }
 
-  for (let i = 0; i < EXCLUDED_PATH_PREFIXES.length; i++) {
-    if (filename.indexOf(EXCLUDED_PATH_PREFIXES[i]) === 0) {
+  for (const EXCLUDED_PATH_PREFIX of EXCLUDED_PATH_PREFIXES) {
+    if (filename.indexOf(EXCLUDED_PATH_PREFIX) === 0) {
       return true
     }
   }
@@ -76,10 +76,10 @@ function isExcluded (callsite, externallyExcludedPaths) {
 function getNodeModulesPaths (...paths) {
   const nodeModulesPaths = []
 
-  paths.forEach(p => {
+  for (const p of paths) {
     const pathParts = p.split('/')
     nodeModulesPaths.push(path.join('node_modules', ...pathParts))
-  })
+  }
 
   return nodeModulesPaths
 }

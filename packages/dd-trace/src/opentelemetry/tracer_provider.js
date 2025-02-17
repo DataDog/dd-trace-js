@@ -33,7 +33,7 @@ class TracerProvider {
   }
 
   addSpanProcessor (spanProcessor) {
-    if (!this._processors.length) {
+    if (this._processors.length === 0) {
       this._activeProcessor.shutdown()
     }
     this._processors.push(spanProcessor)

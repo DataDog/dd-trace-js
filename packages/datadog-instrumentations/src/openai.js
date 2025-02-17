@@ -115,7 +115,7 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
   for (const methodName of methodNames) {
     shimmer.wrap(exports.OpenAIApi.prototype, methodName, fn => function () {
       if (!ch.start.hasSubscribers) {
-        return fn.apply(this, arguments)
+        return Reflect.apply(fn, this, arguments)
       }
 
       const ctx = {
@@ -194,7 +194,7 @@ function convertBufferstoObjects (chunks = []) {
     .toString() // stringify
     .split(/(?=data:)/) // split on "data:"
     .map(chunk => chunk.split('\n').join('')) // remove newlines
-    .map(chunk => chunk.substring(6)) // remove 'data: ' from the front
+    .map(chunk => chunk.slice(6)) // remove 'data: ' from the front
     .slice(0, -1) // remove the last [DONE] message
     .map(JSON.parse) // parse all of the returned objects
 }
@@ -209,9 +209,9 @@ function wrapStreamIterator (response, options, n, ctx) {
   let chunks = []
   return function (itr) {
     return function () {
-      const iterator = itr.apply(this, arguments)
+      const iterator = Reflect.apply(itr, this, arguments)
       shimmer.wrap(iterator, 'next', next => function () {
-        return next.apply(this, arguments)
+        return Reflect.apply(next, this, arguments)
           .then(res => {
             const { done, value: chunk } = res
 
@@ -233,13 +233,13 @@ function wrapStreamIterator (response, options, n, ctx) {
                   chunks = convertBufferstoObjects(chunks)
                 }
 
-                if (chunks.length) {
+                if (chunks.length > 0) {
                   // define the initial body having all the content outside of choices from the first chunk
                   // this will include import data like created, id, model, etc.
                   body = { ...chunks[0], choices: Array.from({ length: n }) }
                   // start from the first chunk, and add its choices into the body
-                  for (let i = 0; i < chunks.length; i++) {
-                    addStreamedChunk(body, chunks[i])
+                  for (const chunk_ of chunks) {
+                    addStreamedChunk(body, chunk_)
                   }
                 }
               }
@@ -275,7 +275,7 @@ for (const shim of V4_PACKAGE_SHIMS) {
     for (const methodName of methods) {
       shimmer.wrap(targetPrototype, methodName, methodFn => function () {
         if (!ch.start.hasSubscribers) {
-          return methodFn.apply(this, arguments)
+          return Reflect.apply(methodFn, this, arguments)
         }
 
         // The OpenAI library lets you set `stream: true` on the options arg to any method
@@ -304,12 +304,12 @@ for (const shim of V4_PACKAGE_SHIMS) {
         }
 
         return ch.start.runStores(ctx, () => {
-          const apiProm = methodFn.apply(this, arguments)
+          const apiProm = Reflect.apply(methodFn, this, arguments)
 
           // wrapping `parse` avoids problematic wrapping of `then` when trying to call
           // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
           shimmer.wrap(apiProm, 'parse', origApiPromParse => function () {
-            return origApiPromParse.apply(this, arguments)
+            return Reflect.apply(origApiPromParse, this, arguments)
             // the original response is wrapped in a promise, so we need to unwrap it
               .then(body => Promise.all([this.responsePromise, body]))
               .then(([{ response, options }, body]) => {
@@ -334,10 +334,10 @@ for (const shim of V4_PACKAGE_SHIMS) {
 
                 return body
               })
-              .catch(error => {
-                finish(ctx, undefined, error)
+              .catch(err => {
+                finish(ctx, undefined, err)
 
-                throw error
+                throw err
               })
               .finally(() => {
               // maybe we don't want to unwrap here in case the promise is re-used?
@@ -367,5 +367,5 @@ function finish (ctx, response, error) {
 }
 
 function getOption (args, option, defaultValue) {
-  return args[args.length - 1]?.[option] || defaultValue
+  return args.at(-1)?.[option] || defaultValue
 }

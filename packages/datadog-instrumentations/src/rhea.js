@@ -27,7 +27,7 @@ const contexts = new WeakMap() // key: delivery Fn, val: context
 addHook({ name: 'rhea', versions: ['>=1'] }, rhea => {
   shimmer.wrap(rhea.message, 'encode', encode => function (msg) {
     encodeSendCh.publish(msg)
-    return encode.apply(this, arguments)
+    return Reflect.apply(encode, this, arguments)
   })
 
   return rhea
@@ -39,7 +39,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
   shimmer.wrap(Sender.prototype, 'send', send => function (msg, tag, format) {
     if (!canTrace(this)) {
       // we can't handle disconnects or ending spans, so we can't safely instrument
-      return send.apply(this, arguments)
+      return Reflect.apply(send, this, arguments)
     }
 
     const { host, port } = getHostAndPort(this.connection)
@@ -52,7 +52,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
       startSendCh.publish({ targetAddress, host, port, msg })
-      const delivery = send.apply(this, arguments)
+      const delivery = Reflect.apply(send, this, arguments)
       const context = {
         asyncResource,
         connection: this.connection
@@ -73,7 +73,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
   shimmer.wrap(Receiver.prototype, 'dispatch', dispatch => function (eventName, msgObj) {
     if (!canTrace(this)) {
       // we can't handle disconnects or ending spans, so we can't safely instrument
-      return dispatch.apply(this, arguments)
+      return Reflect.apply(dispatch, this, arguments)
     }
 
     if (eventName === 'message' && msgObj) {
@@ -91,7 +91,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
           addToInFlightDeliveries(this.connection, msgObj.delivery)
         }
         try {
-          return dispatch.apply(this, arguments)
+          return Reflect.apply(dispatch, this, arguments)
         } catch (err) {
           errorReceiveCh.publish(err)
 
@@ -100,7 +100,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
       })
     }
 
-    return dispatch.apply(this, arguments)
+    return Reflect.apply(dispatch, this, arguments)
   })
   return obj
 })
@@ -110,21 +110,21 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/connection.js' }, Connecti
     if (eventName === 'disconnected') {
       const error = obj.error || this.saved_error
       if (this[inFlightDeliveries]) {
-        this[inFlightDeliveries].forEach(delivery => {
+        for (const delivery of this[inFlightDeliveries]) {
           const context = contexts.get(delivery)
           const asyncResource = context && context.asyncResource
 
-          if (!asyncResource) return
+          if (!asyncResource) continue
 
           asyncResource.runInAsyncScope(() => {
             errorReceiveCh.publish(error)
             exports.beforeFinish(delivery, null)
             finishReceiveCh.publish()
           })
-        })
+        }
       }
     }
-    return dispatch.apply(this, arguments)
+    return Reflect.apply(dispatch, this, arguments)
   })
   return Connection
 })
@@ -156,18 +156,18 @@ function wrapDeliveryUpdate (obj, update) {
     return shimmer.wrapFunction(cb, cb => AsyncResource.bind(function wrappedUpdate (settled, stateData) {
       const state = getStateFromData(stateData)
       dispatchReceiveCh.publish({ state })
-      return cb.apply(this, arguments)
+      return Reflect.apply(cb, this, arguments)
     }))
   }
   return function wrappedUpdate (settled, stateData) {
-    return update.apply(this, arguments)
+    return Reflect.apply(update, this, arguments)
   }
 }
 
 function patchCircularBuffer (proto, Session) {
   Object.defineProperty(proto, 'outgoing', {
     configurable: true,
-    get () { return undefined },
+    get () {},
     set (outgoing) {
       delete proto.outgoing // removes the setter on the prototype
       this.outgoing = outgoing // assigns on the instance, like normal
@@ -199,7 +199,7 @@ function patchCircularBuffer (proto, Session) {
 
               return shouldPop
             }))
-            return popIf.apply(this, arguments)
+            return Reflect.apply(popIf, this, arguments)
           })
           patched.add(CircularBuffer.prototype)
           const Session = proto.constructor

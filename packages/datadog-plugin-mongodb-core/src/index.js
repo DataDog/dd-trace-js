@@ -83,7 +83,7 @@ function getResource (plugin, ns, query, operationName) {
 }
 
 function truncate (input) {
-  return input.slice(0, Math.min(input.length, 10000))
+  return input.slice(0, Math.min(input.length, 10_000))
 }
 
 function shouldSimplify (input) {
@@ -109,7 +109,7 @@ function limitDepth (input) {
     depth: 0
   }]
 
-  while (queue.length) {
+  while (queue.length > 0) {
     const {
       input, output, depth
     } = queue.pop()

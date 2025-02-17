@@ -2,7 +2,7 @@
 
 const log = require('../../../../../log')
 
-const LDAP_PATTERN = '\\(.*?(?:~=|=|<=|>=)(?<LITERAL>[^)]+)\\)'
+const LDAP_PATTERN = String.raw`\(.*?(?:~=|=|<=|>=)(?<LITERAL>[^)]+)\)`
 const pattern = new RegExp(LDAP_PATTERN, 'gmi')
 
 module.exports = function extractSensitiveRanges (evidence) {
@@ -21,8 +21,8 @@ module.exports = function extractSensitiveRanges (evidence) {
       regexResult = pattern.exec(evidence.value)
     }
     return tokens
-  } catch (e) {
-    log.debug('[ASM] Error extracting sensitive ranges', e)
+  } catch (err) {
+    log.debug('[ASM] Error extracting sensitive ranges', err)
   }
   return []
 }

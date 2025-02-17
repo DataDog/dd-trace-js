@@ -20,7 +20,7 @@ class OracledbPlugin extends DatabasePlugin {
       kind: 'client',
       meta: {
         'db.user': this.config.user,
-        'db.instance': url.pathname && url.pathname.substring(1),
+        'db.instance': url.pathname && url.pathname.slice(1),
         'db.hostname': url.hostname,
         [CLIENT_PORT_KEY]: url.port
       }
@@ -32,8 +32,8 @@ class OracledbPlugin extends DatabasePlugin {
 function getUrl (connectString) {
   try {
     return new URL(`http://${connectString}`)
-  } catch (e) {
-    log.error('Invalid oracle connection string', e)
+  } catch (err) {
+    log.error('Invalid oracle connection string', err)
     return {}
   }
 }

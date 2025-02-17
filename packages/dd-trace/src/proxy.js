@@ -162,15 +162,13 @@ class Tracer extends NoopProxy {
 
       this._enableOrDisableTracing(config)
 
-      if (config.tracing) {
-        if (config.isManualApiEnabled) {
-          const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
-          this._testApiManualPlugin = new TestApiManualPlugin(this)
-          // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
-          // This is the only place where we need to do this because the rest of the plugins
-          // are lazily configured when the library is imported.
-          this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
-        }
+      if (config.tracing && config.isManualApiEnabled) {
+        const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
+        this._testApiManualPlugin = new TestApiManualPlugin(this)
+        // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
+        // This is the only place where we need to do this because the rest of the plugins
+        // are lazily configured when the library is imported.
+        this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
       }
       if (config.ciVisAgentlessLogSubmissionEnabled) {
         if (process.env.DD_API_KEY) {
@@ -189,8 +187,8 @@ class Tracer extends NoopProxy {
         const testVisibilityDynamicInstrumentation = require('./ci-visibility/dynamic-instrumentation')
         testVisibilityDynamicInstrumentation.start(config)
       }
-    } catch (e) {
-      log.error('Error initialising tracer', e)
+    } catch (err) {
+      log.error('Error initialising tracer', err)
     }
 
     return this
@@ -200,11 +198,11 @@ class Tracer extends NoopProxy {
     // do not stop tracer initialization if the profiler fails to be imported
     try {
       return require('./profiler').start(config)
-    } catch (e) {
+    } catch (err) {
       log.error(
         'Error starting profiler. For troubleshooting tips, see ' +
         '<https://dtdg.co/nodejs-profiler-troubleshooting>',
-        e
+        err
       )
     }
   }

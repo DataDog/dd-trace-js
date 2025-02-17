@@ -135,7 +135,7 @@ class Sqs extends BaseAwsSdkPlugin {
         if (body.Type === 'Notification') {
           message = body
         }
-      } catch (e) {
+      } catch {
         // SQS to SQS
       }
     }
@@ -162,8 +162,8 @@ class Sqs extends BaseAwsSdkPlugin {
         const buffer = Buffer.from(attributes.Value ?? attributes.BinaryValue, 'base64')
         return JSON.parse(buffer)
       }
-    } catch (e) {
-      log.error('Sqs error parsing DD attributes', e)
+    } catch (err) {
+      log.error('Sqs error parsing DD attributes', err)
     }
   }
 
@@ -176,7 +176,7 @@ class Sqs extends BaseAwsSdkPlugin {
     // we only want to set the payloadSize on the span if we have one message
     span = response.Messages.length > 1 ? null : span
 
-    response.Messages.forEach(message => {
+    for (let message of response.Messages) {
       // we may have already parsed the message attributes when extracting trace context
       if (!parsedAttributes) {
         if (message.Body) {
@@ -187,7 +187,7 @@ class Sqs extends BaseAwsSdkPlugin {
             if (body.Type === 'Notification') {
               message = body
             }
-          } catch (e) {
+          } catch {
             // SQS to SQS
           }
         }
@@ -205,7 +205,7 @@ class Sqs extends BaseAwsSdkPlugin {
       }
       this.tracer
         .setCheckpoint(['direction:in', `topic:${queue}`, 'type:sqs'], span, payloadSize)
-    })
+    }
   }
 
   requestInject (span, request) {

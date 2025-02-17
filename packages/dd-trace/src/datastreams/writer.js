@@ -1,9 +1,9 @@
 const pkg = require('../../../../package.json')
 const log = require('../log')
 const request = require('../exporters/common/request')
-const { URL, format } = require('url')
+const { URL, format } = require('node:url')
 const { MsgpackEncoder } = require('../msgpack')
-const zlib = require('zlib')
+const zlib = require('node:zlib')
 
 const msgpack = new MsgpackEncoder()
 
@@ -62,8 +62,8 @@ class DataStreamsWriter {
     try {
       url = new URL(url)
       this._url = url
-    } catch (e) {
-      log.warn(e.stack)
+    } catch (err) {
+      log.warn(err.stack)
     }
   }
 }

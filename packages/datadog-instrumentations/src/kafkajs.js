@@ -48,7 +48,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
   }
 
   shimmer.wrap(Kafka.prototype, 'producer', createProducer => function () {
-    const producer = createProducer.apply(this, arguments)
+    const producer = Reflect.apply(createProducer, this, arguments)
     const send = producer.send
     const bootstrapServers = this._brokers
 
@@ -60,7 +60,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
         return innerAsyncResource.runInAsyncScope(() => {
           if (!producerStartCh.hasSubscribers) {
-            return send.apply(this, arguments)
+            return Reflect.apply(send, this, arguments)
           }
 
           try {
@@ -72,26 +72,26 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
             }
             producerStartCh.publish({ topic, messages, bootstrapServers, clusterId })
 
-            const result = send.apply(this, arguments)
+            const result = Reflect.apply(send, this, arguments)
 
             result.then(
               innerAsyncResource.bind(res => {
-                producerFinishCh.publish(undefined)
+                producerFinishCh.publish()
                 producerCommitCh.publish(res)
               }),
               innerAsyncResource.bind(err => {
                 if (err) {
                   producerErrorCh.publish(err)
                 }
-                producerFinishCh.publish(undefined)
+                producerFinishCh.publish()
               })
             )
 
             return result
-          } catch (e) {
-            producerErrorCh.publish(e)
-            producerFinishCh.publish(undefined)
-            throw e
+          } catch (err) {
+            producerErrorCh.publish(err)
+            producerFinishCh.publish()
+            throw err
           }
         })
       }
@@ -111,7 +111,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
   shimmer.wrap(Kafka.prototype, 'consumer', createConsumer => function () {
     if (!consumerStartCh.hasSubscribers) {
-      return createConsumer.apply(this, arguments)
+      return Reflect.apply(createConsumer, this, arguments)
     }
 
     const kafkaClusterIdPromise = getKafkaClusterId(this)
@@ -127,7 +127,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
       return { topic, partition, messages, groupId, clusterId }
     }
 
-    const consumer = createConsumer.apply(this, arguments)
+    const consumer = Reflect.apply(createConsumer, this, arguments)
 
     consumer.on(consumer.events.COMMIT_OFFSETS, commitsFromEvent)
 
@@ -184,22 +184,22 @@ const wrappedCallback = (fn, startCh, finishCh, errorCh, extractArgs, clusterId)
           const result = fn.apply(this, args)
           if (result && typeof result.then === 'function') {
             result.then(
-              innerAsyncResource.bind(() => finishCh.publish(undefined)),
+              innerAsyncResource.bind(() => finishCh.publish()),
               innerAsyncResource.bind(err => {
                 if (err) {
                   errorCh.publish(err)
                 }
-                finishCh.publish(undefined)
+                finishCh.publish()
               })
             )
           } else {
-            finishCh.publish(undefined)
+            finishCh.publish()
           }
           return result
-        } catch (e) {
-          errorCh.publish(e)
-          finishCh.publish(undefined)
-          throw e
+        } catch (err) {
+          errorCh.publish(err)
+          finishCh.publish()
+          throw err
         }
       })
     }
@@ -231,8 +231,8 @@ const getKafkaClusterId = (kafka) => {
       admin.disconnect()
       return clusterId
     })
-    .catch((error) => {
-      throw error
+    .catch((err) => {
+      throw err
     })
 }
 

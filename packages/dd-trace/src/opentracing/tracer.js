@@ -1,6 +1,6 @@
 'use strict'
 
-const os = require('os')
+const os = require('node:os')
 const Span = require('./span')
 const SpanProcessor = require('../span_processor')
 const PrioritySampler = require('../priority_sampler')
@@ -90,8 +90,8 @@ class DatadogTracer {
         this._prioritySampler.sample(context)
       }
       this._propagators[format].inject(context, carrier)
-    } catch (e) {
-      log.error('Error injecting trace', e)
+    } catch (err) {
+      log.error('Error injecting trace', err)
       runtimeMetrics.increment('datadog.tracer.node.inject.errors', true)
     }
   }
@@ -99,8 +99,8 @@ class DatadogTracer {
   extract (format, carrier) {
     try {
       return this._propagators[format].extract(carrier)
-    } catch (e) {
-      log.error('Error extracting trace', e)
+    } catch (err) {
+      log.error('Error extracting trace', err)
       runtimeMetrics.increment('datadog.tracer.node.extract.errors', true)
       return null
     }
@@ -122,17 +122,14 @@ function getContext (spanContext) {
 function getParent (references = []) {
   let parent = null
 
-  for (let i = 0; i < references.length; i++) {
-    const ref = references[i]
+  for (const ref of references) {
     const type = ref.type()
 
     if (type === REFERENCE_CHILD_OF) {
       parent = ref.referencedContext()
       break
-    } else if (type === REFERENCE_FOLLOWS_FROM) {
-      if (!parent) {
-        parent = ref.referencedContext()
-      }
+    } else if (type === REFERENCE_FOLLOWS_FROM && !parent) {
+      parent = ref.referencedContext()
     }
   }
 

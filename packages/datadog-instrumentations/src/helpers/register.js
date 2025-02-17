@@ -1,7 +1,7 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
-const path = require('path')
+const path = require('node:path')
 const satisfies = require('semifies')
 const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
@@ -102,11 +102,11 @@ for (const packageName of names) {
         let version = moduleVersion
         try {
           version = version || getVersion(moduleBaseDir)
-        } catch (e) {
-          log.error('Error getting version for "%s": %s', name, e.message, e)
+        } catch (err) {
+          log.error('Error getting version for "%s": %s', name, err.message, err)
           continue
         }
-        if (typeof namesAndSuccesses[`${name}@${version}`] === 'undefined') {
+        if (namesAndSuccesses[`${name}@${version}`] === undefined) {
           namesAndSuccesses[`${name}@${version}`] = false
         }
 
@@ -124,11 +124,11 @@ for (const packageName of names) {
             moduleExports = hook(moduleExports, version, name)
             // Set the moduleExports in the hooks weakmap
             hook[HOOK_SYMBOL].set(moduleExports, name)
-          } catch (e) {
+          } catch (err) {
             log.info('Error during ddtrace instrumentation of application, aborting.')
-            log.info(e)
+            log.info(err)
             telemetry('error', [
-              `error_type:${e.constructor.name}`,
+              `error_type:${err.constructor.name}`,
               `integration:${name}`,
               `integration_version:${version}`
             ])
@@ -165,7 +165,7 @@ function getVersion (moduleBaseDir) {
 }
 
 function filename (name, file) {
-  return [name, file].filter(val => val).join('/')
+  return [name, file].filter(Boolean).join('/')
 }
 
 module.exports = {

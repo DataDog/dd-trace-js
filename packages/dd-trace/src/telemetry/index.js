@@ -1,7 +1,7 @@
 'use strict'
 const tracerVersion = require('../../../../package.json').version
 const dc = require('dc-polyfill')
-const os = require('os')
+const os = require('node:os')
 const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
 const { errors } = require('../startup-log')
@@ -230,7 +230,7 @@ function extendedHeartbeat (config) {
       ...extendedHeartbeatPayload
     }
     sendData(config, application, host, 'app-extended-heartbeat', payload)
-    Object.keys(extendedHeartbeatPayload).forEach(key => delete extendedHeartbeatPayload[key])
+    for (const key of Object.keys(extendedHeartbeatPayload)) delete extendedHeartbeatPayload[key]
   }, 1000 * 60 * 60 * 24).unref()
   return extendedInterval
 }
@@ -360,12 +360,12 @@ function updateConfig (changes, config) {
     return !names.includes(entry.name)
   }
 
-  if (!configWithOrigin.length) {
+  if (configWithOrigin.length === 0) {
     configWithOrigin = configuration
   } else {
     // update configWithOrigin to contain up-to-date full list of config values for app-extended-heartbeat
     configWithOrigin = configWithOrigin.filter(isNotModified)
-    configWithOrigin = configWithOrigin.concat(configuration)
+    configWithOrigin = [...configWithOrigin, ...configuration]
     const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
     sendData(config, application, host, reqType, payload, updateRetryData)
   }
@@ -381,7 +381,6 @@ function profilingEnabledToBoolean (profilingEnabled) {
   if (profilingEnabled === 'false') {
     return false
   }
-  return undefined
 }
 
 module.exports = {

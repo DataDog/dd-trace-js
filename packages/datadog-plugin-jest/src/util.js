@@ -1,4 +1,4 @@
-const { readFileSync } = require('fs')
+const { readFileSync } = require('node:fs')
 const { parse, extract } = require('jest-docblock')
 
 const { getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')
@@ -15,7 +15,7 @@ const log = require('../../dd-trace/src/log')
  * [{ a: 1, b: 2, expected: 3 }, { a: 2, b: 3, expected: 5}]
  */
 function getFormattedJestTestParameters (testParameters) {
-  if (!testParameters || !testParameters.length) {
+  if (!testParameters || testParameters.length === 0) {
     return
   }
   const [parameterArray, ...parameterValues] = testParameters
@@ -25,14 +25,13 @@ function getFormattedJestTestParameters (testParameters) {
   // Way 2.
   const parameterKeys = parameterArray[0].split('|').map(key => key.trim())
   const formattedParameters = []
-  for (let index = 0; index < parameterValues.length; index++) {
-    const parameterValue = parameterValues[index]
+  for (const [index, parameterValue] of parameterValues.entries()) {
     const parameterIndex = index % parameterKeys.length
     if (!parameterIndex) {
       formattedParameters.push({})
     }
     const parameterKey = parameterKeys[parameterIndex]
-    const lastFormattedParameter = formattedParameters[formattedParameters.length - 1]
+    const lastFormattedParameter = formattedParameters.at(-1)
     lastFormattedParameter[parameterKey] = parameterValue
   }
 
@@ -57,7 +56,7 @@ function isMarkedAsUnskippable (test) {
   try {
     const testSource = readFileSync(test.path, 'utf8')
     docblocks = parse(extract(testSource))
-  } catch (e) {
+  } catch {
     // If we have issues parsing the file, we'll assume no unskippable was passed
     return false
   }
@@ -69,7 +68,7 @@ function isMarkedAsUnskippable (test) {
 
   try {
     return JSON.parse(docblocks.datadog).unskippable
-  } catch (e) {
+  } catch {
     // If the @datadog block comment is present but malformed, we'll run the suite
     log.warn('@datadog block comment is malformed.')
     return true
@@ -104,7 +103,7 @@ function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
   const hasUnskippableSuites = Object.keys(unskippableSuites).length > 0
   const hasForcedToRunSuites = Object.keys(forcedToRunSuites).length > 0
 
-  if (originalTests.length) {
+  if (originalTests.length > 0) {
     // The config object is shared by all tests, so we can just take the first one
     const [test] = originalTests
     if (test?.context?.config?.testEnvironmentOptions) {

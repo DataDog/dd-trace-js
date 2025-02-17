@@ -2,12 +2,12 @@
 
 // TODO: capture every second and flush every 10 seconds
 
-const v8 = require('v8')
-const os = require('os')
+const v8 = require('node:v8')
+const os = require('node:os')
 const { DogStatsDClient } = require('./dogstatsd')
 const log = require('./log')
 const Histogram = require('./histogram')
-const { performance, PerformanceObserver } = require('perf_hooks')
+const { performance, PerformanceObserver } = require('node:perf_hooks')
 
 const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
 const INTERVAL = 10 * 1000
@@ -44,8 +44,8 @@ const runtimeMetrics = module.exports = {
       } else {
         nativeMetrics.start()
       }
-    } catch (e) {
-      log.error('Error starting native metrics', e)
+    } catch (err) {
+      log.error('Error starting native metrics', err)
       nativeMetrics = null
     }
 
@@ -169,7 +169,7 @@ function captureCpuUsage () {
   time = process.hrtime()
   cpuUsage = process.cpuUsage()
 
-  const elapsedMs = elapsedTime[0] * 1000 + elapsedTime[1] / 1000000
+  const elapsedMs = elapsedTime[0] * 1000 + elapsedTime[1] / 1_000_000
   const userPercent = 100 * elapsedUsage.user / 1000 / elapsedMs
   const systemPercent = 100 * elapsedUsage.system / 1000 / elapsedMs
   const totalPercent = userPercent + systemPercent
@@ -230,7 +230,7 @@ function captureGCMetrics () {
   const pause = {}
 
   for (const stat of profile.statistics) {
-    const type = stat.gcType.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase()
+    const type = stat.gcType.replaceAll(/([a-z])([A-Z])/g, '$1_$2').toLowerCase()
 
     pause[type] = pause[type] || new Histogram()
     pause[type].record(stat.cost)
@@ -247,30 +247,30 @@ function captureGCMetrics () {
 }
 
 function captureGauges () {
-  Object.keys(gauges).forEach(name => {
-    gauges[name].forEach((value, tag) => {
+  for (const name of Object.keys(gauges)) {
+    for (const [tag, value] of gauges[name].entries()) {
       client.gauge(name, value, tag && [tag])
-    })
-  })
+    }
+  }
 }
 
 function captureCounters () {
-  Object.keys(counters).forEach(name => {
-    counters[name].forEach((value, tag) => {
+  for (const name of Object.keys(counters)) {
+    for (const [tag, value] of counters[name].entries()) {
       client.increment(name, value, tag && [tag])
-    })
-  })
+    }
+  }
 
   counters = {}
 }
 
 function captureHistograms () {
-  Object.keys(histograms).forEach(name => {
-    histograms[name].forEach((stats, tag) => {
+  for (const name of Object.keys(histograms)) {
+    for (const [tag, stats] of histograms[name].entries()) {
       histogram(name, stats, tag && [tag])
       stats.reset()
-    })
-  })
+    }
+  }
 }
 
 /**
@@ -320,13 +320,13 @@ function captureNativeMetrics () {
 
   histogram('runtime.node.event_loop.delay', stats.eventLoop)
 
-  Object.keys(stats.gc).forEach(type => {
+  for (const type of Object.keys(stats.gc)) {
     if (type === 'all') {
       histogram('runtime.node.gc.pause', stats.gc[type])
     } else {
       histogram('runtime.node.gc.pause.by.type', stats.gc[type], [`gc_type:${type}`])
     }
-  })
+  }
 
   for (let i = 0, l = spaces.length; i < l; i++) {
     const tags = [`heap_space:${spaces[i].space_name}`]
@@ -339,7 +339,7 @@ function captureNativeMetrics () {
 }
 
 function histogram (name, stats, tags) {
-  tags = [].concat(tags)
+  tags = [tags].flat()
 
   // Stats can contain garbage data when a value was never recorded.
   if (stats.count === 0) {

@@ -38,12 +38,12 @@ class IastPluginSubscription {
     if (!this.moduleInstrumented) {
       this.moduleInstrumented = true
 
-      this.tags.forEach(tag => this.instrumentedMetric.inc(undefined, tag))
+      for (const tag of this.tags) this.instrumentedMetric.inc(undefined, tag)
     }
   }
 
   increaseExecuted (iastContext) {
-    this.tags.forEach(tag => this.executedMetric.inc(iastContext, tag))
+    for (const tag of this.tags) this.executedMetric.inc(iastContext, tag)
   }
 
   matchesModuleInstrumented (name) {
@@ -72,14 +72,14 @@ class IastPlugin extends Plugin {
       const result = handler()
       if (iastTelemetry.isEnabled()) {
         if (Array.isArray(tags)) {
-          tags.forEach(tag => metric.inc(iastContext, tag))
+          for (const tag of tags) metric.inc(iastContext, tag)
         } else {
           metric.inc(iastContext, tags)
         }
       }
       return result
-    } catch (e) {
-      log.error('[ASM] Error executing handler or increasing metrics', e)
+    } catch (err) {
+      log.error('[ASM] Error executing handler or increasing metrics', err)
     }
   }
 
@@ -174,9 +174,8 @@ class IastPlugin extends Plugin {
   }
 
   _onInstrumentationLoaded (name) {
-    this.pluginSubs
-      .filter(sub => sub.matchesModuleInstrumented(name))
-      .forEach(sub => sub.increaseInstrumented())
+    for (const sub of this.pluginSubs
+      .filter(sub => sub.matchesModuleInstrumented(name))) sub.increaseInstrumented()
   }
 }
 

@@ -49,16 +49,14 @@ function getOperation (document, operationName) {
     return
   }
 
-  const definitions = document.definitions.filter(def => def)
-  const types = ['query', 'mutation', 'subscription']
+  const definitions = document.definitions.filter(Boolean)
+  const types = new Set(['query', 'mutation', 'subscription'])
 
-  if (operationName) {
-    return definitions
-      .filter(def => types.indexOf(def.operation) !== -1)
+  return operationName
+    ? definitions
+      .filter(def => types.has(def.operation))
       .find(def => operationName === (def.name && def.name.value))
-  } else {
-    return definitions.find(def => types.indexOf(def.operation) !== -1)
-  }
+    : definitions.find(def => types.has(def.operation))
 }
 
 function normalizeArgs (args, defaultFieldResolver) {
@@ -89,7 +87,7 @@ function normalizePositional (args, defaultFieldResolver) {
 function wrapParse (parse) {
   return function (source) {
     if (!parseStartCh.hasSubscribers) {
-      return parse.apply(this, arguments)
+      return Reflect.apply(parse, this, arguments)
     }
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -98,7 +96,7 @@ function wrapParse (parse) {
       parseStartCh.publish()
       let document
       try {
-        document = parse.apply(this, arguments)
+        document = Reflect.apply(parse, this, arguments)
         const operation = getOperation(document)
 
         if (!operation) return document
@@ -123,7 +121,7 @@ function wrapParse (parse) {
 function wrapValidate (validate) {
   return function (_schema, document, _rules, _typeInfo) {
     if (!validateStartCh.hasSubscribers) {
-      return validate.apply(this, arguments)
+      return Reflect.apply(validate, this, arguments)
     }
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -133,7 +131,7 @@ function wrapValidate (validate) {
 
       let errors
       try {
-        errors = validate.apply(this, arguments)
+        errors = Reflect.apply(validate, this, arguments)
         if (errors && errors[0]) {
           validateErrorCh.publish(errors && errors[0])
         }
@@ -155,7 +153,7 @@ function wrapExecute (execute) {
     const defaultFieldResolver = execute.defaultFieldResolver
     return function () {
       if (!startExecuteCh.hasSubscribers) {
-        return exe.apply(this, arguments)
+        return Reflect.apply(exe, this, arguments)
       }
 
       const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -168,7 +166,7 @@ function wrapExecute (execute) {
         const operation = getOperation(document, args.operationName)
 
         if (contexts.has(contextValue)) {
-          return exe.apply(this, arguments)
+          return Reflect.apply(exe, this, arguments)
         }
 
         if (schema) {
@@ -206,11 +204,11 @@ function wrapResolve (resolve) {
   if (typeof resolve !== 'function' || patchedResolvers.has(resolve)) return resolve
 
   function resolveAsync (source, args, contextValue, info) {
-    if (!startResolveCh.hasSubscribers) return resolve.apply(this, arguments)
+    if (!startResolveCh.hasSubscribers) return Reflect.apply(resolve, this, arguments)
 
     const context = contexts.get(contextValue)
 
-    if (!context) return resolve.apply(this, arguments)
+    if (!context) return Reflect.apply(resolve, this, arguments)
 
     const field = assertField(context, info, args)
 
@@ -324,12 +322,12 @@ function wrapFields (type) {
 
   patchedTypes.add(type)
 
-  Object.keys(type._fields).forEach(key => {
+  for (const key of Object.keys(type._fields)) {
     const field = type._fields[key]
 
     wrapFieldResolve(field)
     wrapFieldType(field)
-  })
+  }
 }
 
 function wrapFieldResolve (field) {
@@ -350,7 +348,7 @@ function wrapFieldType (field) {
 }
 
 function finishResolvers ({ fields }) {
-  Object.keys(fields).reverse().forEach(key => {
+  for (const key of Object.keys(fields).reverse()) {
     const field = fields[key]
     const asyncResource = field.asyncResource
     asyncResource.runInAsyncScope(() => {
@@ -359,7 +357,7 @@ function finishResolvers ({ fields }) {
       }
       finishResolveCh.publish(field.finishTime)
     })
-  })
+  }
 }
 
 addHook({ name: '@graphql-tools/executor', file: 'cjs/execution/execute.js', versions: ['>=0.0.14'] }, execute => {

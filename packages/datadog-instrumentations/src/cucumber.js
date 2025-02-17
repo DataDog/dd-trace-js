@@ -80,7 +80,7 @@ let skippedSuites = []
 let isSuitesSkipped = false
 
 function getSuiteStatusFromTestStatuses (testStatuses) {
-  if (testStatuses.some(status => status === 'fail')) {
+  if (testStatuses.includes('fail')) {
     return 'fail'
   }
   if (testStatuses.every(status => status === 'skip')) {
@@ -135,7 +135,7 @@ function getTestStatusFromRetries (testStatuses) {
   if (testStatuses.every(status => status === 'fail')) {
     return 'fail'
   }
-  if (testStatuses.some(status => status === 'pass')) {
+  if (testStatuses.includes('pass')) {
     return 'pass'
   }
   return 'pass'
@@ -231,7 +231,7 @@ function wrapRun (pl, isLatestVersion) {
 
   shimmer.wrap(pl.prototype, 'run', run => function () {
     if (!testStartCh.hasSubscribers) {
-      return run.apply(this, arguments)
+      return Reflect.apply(run, this, arguments)
     }
 
     let numAttempt = 0
@@ -264,7 +264,7 @@ function wrapRun (pl, isLatestVersion) {
             try {
               const cucumberResult = this.getWorstStepResult()
               error = getErrorFromCucumberResult(cucumberResult)
-            } catch (e) {
+            } catch {
               // ignore error
             }
 
@@ -292,7 +292,7 @@ function wrapRun (pl, isLatestVersion) {
       let promise
 
       asyncResource.runInAsyncScope(() => {
-        promise = run.apply(this, arguments)
+        promise = Reflect.apply(run, this, arguments)
       })
       promise.finally(async () => {
         const result = this.getWorstStepResult()
@@ -345,7 +345,7 @@ function wrapRun (pl, isLatestVersion) {
   })
   shimmer.wrap(pl.prototype, 'runStep', runStep => function () {
     if (!testStepStartCh.hasSubscribers) {
-      return runStep.apply(this, arguments)
+      return Reflect.apply(runStep, this, arguments)
     }
     const testStep = arguments[0]
     let resource
@@ -360,7 +360,7 @@ function wrapRun (pl, isLatestVersion) {
     return asyncResource.runInAsyncScope(() => {
       testStepStartCh.publish({ resource })
       try {
-        const promise = runStep.apply(this, arguments)
+        const promise = Reflect.apply(runStep, this, arguments)
 
         promise.then((result) => {
           const { status, skipReason, errorMessage } = isLatestVersion
@@ -405,7 +405,7 @@ function getCucumberOptions (adapterOrCoordinator) {
 function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordinator = false) {
   return async function () {
     if (!libraryConfigurationCh.hasSubscribers) {
-      return start.apply(this, arguments)
+      return Reflect.apply(start, this, arguments)
     }
     const options = getCucumberOptions(this)
 
@@ -461,7 +461,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
           this.pickleIds = picklesToRun
         }
 
-        skippedSuites = Array.from(filteredPickles.skippedSuites)
+        skippedSuites = [...filteredPickles.skippedSuites]
         itrCorrelationId = skippableResponse.itrCorrelationId
       }
     }
@@ -501,11 +501,11 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       sessionStartCh.publish({ command, frameworkVersion })
     })
 
-    if (!errorSkippableRequest && skippedSuites.length) {
+    if (!errorSkippableRequest && skippedSuites.length > 0) {
       itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
     }
 
-    const success = await start.apply(this, arguments)
+    const success = await Reflect.apply(start, this, arguments)
 
     let untestedCoverage
     if (getCodeCoverageCh.hasSubscribers) {
@@ -514,17 +514,17 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
     let testCodeCoverageLinesTotal
 
-    if (global.__coverage__) {
+    if (globalThis.__coverage__) {
       try {
         if (untestedCoverage) {
           originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
         }
         testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
-      } catch (e) {
+      } catch {
         // ignore errors
       }
       // restore the original coverage
-      global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
+      globalThis.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     }
 
     sessionAsyncResource.runInAsyncScope(() => {
@@ -551,11 +551,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = false, isWorker = false) {
   return async function () {
     let pickle
-    if (isNewerCucumberVersion) {
-      pickle = arguments[0].pickle
-    } else {
-      pickle = this.eventDataCollector.getPickle(arguments[0])
-    }
+    pickle = isNewerCucumberVersion ? arguments[0].pickle : this.eventDataCollector.getPickle(arguments[0])
 
     const testFileAbsolutePath = pickle.uri
     const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
@@ -587,15 +583,15 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     }
 
     // TODO: for >=11 we could use `runTestCaseResult` instead of accumulating results in `lastStatusByPickleId`
-    let runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
+    let runTestCaseResult = await Reflect.apply(runTestCaseFunction, this, arguments)
 
     const testStatuses = lastStatusByPickleId.get(pickle.id)
-    const lastTestStatus = testStatuses[testStatuses.length - 1]
+    const lastTestStatus = testStatuses.at(-1)
     // If it's a new test and it hasn't been skipped, we run it again
     if (isEarlyFlakeDetectionEnabled && lastTestStatus !== 'skip' && isNew) {
       for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
         numRetriesByPickleId.set(pickle.id, retryIndex + 1)
-        runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
+        runTestCaseResult = await Reflect.apply(runTestCaseFunction, this, arguments)
       }
     }
     let testStatus = lastTestStatus
@@ -632,8 +628,8 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     if (!isWorker && pickleResultByFile[testFileAbsolutePath].length === pickleByFile[testFileAbsolutePath].length) {
       // last test in suite
       const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testFileAbsolutePath])
-      if (global.__coverage__) {
-        const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+      if (globalThis.__coverage__) {
+        const coverageFiles = getCoveredFilenamesFromCoverage(globalThis.__coverage__)
 
         testSuiteCodeCoverageCh.publish({
           coverageFiles,
@@ -642,8 +638,8 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
         })
         // We need to reset coverage to get a code coverage per suite
         // Before that, we preserve the original coverage
-        mergeCoverage(global.__coverage__, originalCoverageMap)
-        resetCoverage(global.__coverage__)
+        mergeCoverage(globalThis.__coverage__, originalCoverageMap)
+        resetCoverage(globalThis.__coverage__)
       }
 
       testSuiteFinishCh.publish({ status: testSuiteStatus, testSuitePath })
@@ -678,23 +674,19 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
 
     let envelope
 
-    if (isNewVersion) {
-      envelope = message.envelope
-    } else {
-      envelope = message.jsonEnvelope
-    }
+    envelope = isNewVersion ? message.envelope : message.jsonEnvelope
 
     if (!envelope) {
-      return parseWorkerMessageFunction.apply(this, arguments)
+      return Reflect.apply(parseWorkerMessageFunction, this, arguments)
     }
     let parsed = envelope
 
     if (typeof parsed === 'string') {
       try {
         parsed = JSON.parse(envelope)
-      } catch (e) {
+      } catch {
         // ignore errors and continue
-        return parseWorkerMessageFunction.apply(this, arguments)
+        return Reflect.apply(parseWorkerMessageFunction, this, arguments)
       }
     }
     let pickle
@@ -717,7 +709,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
       }
     }
 
-    const parseWorkerResponse = parseWorkerMessageFunction.apply(this, arguments)
+    const parseWorkerResponse = Reflect.apply(parseWorkerMessageFunction, this, arguments)
 
     // after calling `parseWorkerMessageFunction`, the test status can already be read
     if (parsed.testCaseFinished) {
@@ -876,7 +868,7 @@ addHook({
 }, (eventDataCollectorPackage) => {
   shimmer.wrap(eventDataCollectorPackage.default.prototype, 'parseEnvelope', parseEnvelope => function () {
     eventDataCollector = this
-    return parseEnvelope.apply(this, arguments)
+    return Reflect.apply(parseEnvelope, this, arguments)
   })
   return eventDataCollectorPackage
 })
@@ -902,7 +894,7 @@ addHook({
       this.options.worldParameters._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
     }
 
-    return startWorker.apply(this, arguments)
+    return Reflect.apply(startWorker, this, arguments)
   })
   return adapterPackage
 })
@@ -919,7 +911,7 @@ addHook({
     workerPackage.ChildProcessWorker.prototype,
     'initialize',
     initialize => async function () {
-      await initialize.apply(this, arguments)
+      await Reflect.apply(initialize, this, arguments)
       isKnownTestsEnabled = !!this.options.worldParameters._ddKnownTests
       if (isKnownTestsEnabled) {
         knownTests = this.options.worldParameters._ddKnownTests

@@ -5,7 +5,7 @@ const libdatadog = require('@datadog/libdatadog')
 const binding = libdatadog.load('crashtracker')
 
 const log = require('../log')
-const { URL } = require('url')
+const { URL } = require('node:url')
 const pkg = require('../../../../package.json')
 
 class Crashtracker {
@@ -19,8 +19,8 @@ class Crashtracker {
     try {
       binding.updateConfig(this._getConfig(config))
       binding.updateMetadata(this._getMetadata(config))
-    } catch (e) {
-      log.error('Error configuring crashtracker', e)
+    } catch (err) {
+      log.error('Error configuring crashtracker', err)
     }
   }
 
@@ -35,8 +35,8 @@ class Crashtracker {
         this._getReceiverConfig(config),
         this._getMetadata(config)
       )
-    } catch (e) {
-      log.error('Error initialising crashtracker', e)
+    } catch (err) {
+      log.error('Error initialising crashtracker', err)
     }
   }
 

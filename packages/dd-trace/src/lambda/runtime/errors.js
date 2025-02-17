@@ -12,7 +12,12 @@ class ExtendedError extends Error {
   }
 }
 
-class ImpendingTimeout extends ExtendedError {}
+class ImpendingTimeout extends ExtendedError {
+  constructor () {
+    super()
+    this.name = 'ImpendingTimeout'
+  }
+}
 ImpendingTimeout.prototype.name = 'Impending Timeout'
 
 module.exports = {

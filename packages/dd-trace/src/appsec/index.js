@@ -176,7 +176,7 @@ function incomingHttpEndTranslator ({ req, res }) {
     persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
 
-  if (Object.keys(persistent).length) {
+  if (Object.keys(persistent).length > 0) {
     waf.run({ persistent }, req)
   }
 
@@ -237,7 +237,7 @@ function onRequestProcessParams ({ req, res, abortController, params }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  if (!params || typeof params !== 'object' || !Object.keys(params).length) return
+  if (!params || typeof params !== 'object' || Object.keys(params).length === 0) return
 
   const results = waf.run({
     persistent: {

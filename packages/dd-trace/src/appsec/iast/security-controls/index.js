@@ -1,6 +1,6 @@
 'use strict'
 
-const path = require('path')
+const path = require('node:path')
 const dc = require('dc-polyfill')
 const { storage } = require('../../../../../datadog-core')
 const shimmer = require('../../../../../datadog-shimmer')
@@ -32,8 +32,8 @@ function configure (iastConfig) {
       moduleLoadStartChannel.subscribe(onModuleLoaded)
       moduleLoadEndChannel.subscribe(onModuleLoaded)
     }
-  } catch (e) {
-    log.error('[ASM] Error configuring IAST Security Controls', e)
+  } catch (err) {
+    log.error('[ASM] Error configuring IAST Security Controls', err)
   }
 }
 
@@ -52,7 +52,7 @@ function onModuleLoaded (payload) {
 
 function getControls (filename) {
   if (filename.startsWith('file://')) {
-    filename = filename.substring(7)
+    filename = filename.slice(7)
   }
 
   let key = path.isAbsolute(filename) ? path.relative(process.cwd(), filename) : filename
@@ -67,28 +67,24 @@ function getControls (filename) {
 
 function hookModule (filename, module, controlsByFile) {
   try {
-    controlsByFile.forEach(({ type, method, parameters, secureMarks }) => {
+    for (const { type, method, parameters, secureMarks } of controlsByFile) {
       const { target, parent, methodName } = resolve(method, module)
       if (!target) {
         log.error('[ASM] Unable to resolve IAST security control %s:%s', filename, method)
-        return
+        continue
       }
 
       let wrapper
-      if (type === SANITIZER_TYPE) {
-        wrapper = wrapSanitizer(target, secureMarks)
-      } else {
-        wrapper = wrapInputValidator(target, parameters, secureMarks)
-      }
+      wrapper = type === SANITIZER_TYPE ? wrapSanitizer(target, secureMarks) : wrapInputValidator(target, parameters, secureMarks)
 
       if (methodName) {
         parent[methodName] = wrapper
       } else {
         module = wrapper
       }
-    })
-  } catch (e) {
-    log.error('[ASM] Error initializing IAST security control for %', filename, e)
+    }
+  } catch (err) {
+    log.error('[ASM] Error initializing IAST security control for %', filename, err)
   }
 
   return module
@@ -97,11 +93,7 @@ function hookModule (filename, module, controlsByFile) {
 function resolve (path, obj, separator = '.') {
   if (!path) {
     // esm module with default export
-    if (obj?.default) {
-      return { target: obj.default, parent: obj, methodName: 'default' }
-    } else {
-      return { target: obj, parent: obj }
-    }
+    return obj?.default ? { target: obj.default, parent: obj, methodName: 'default' } : { target: obj, parent: obj }
   }
 
   const properties = path.split(separator)
@@ -119,12 +111,12 @@ function resolve (path, obj, separator = '.') {
 
 function wrapSanitizer (target, secureMarks) {
   return shimmer.wrapFunction(target, orig => function () {
-    const result = orig.apply(this, arguments)
+    const result = Reflect.apply(orig, this, arguments)
 
     try {
       return addSecureMarks(result, secureMarks)
-    } catch (e) {
-      log.error('[ASM] Error adding Secure mark for sanitizer', e)
+    } catch (err) {
+      log.error('[ASM] Error adding Secure mark for sanitizer', err)
     }
 
     return result
@@ -136,16 +128,16 @@ function wrapInputValidator (target, parameters, secureMarks) {
 
   return shimmer.wrapFunction(target, orig => function () {
     try {
-      [...arguments].forEach((arg, index) => {
+      for (const [index, arg] of [...arguments].entries()) {
         if (allParameters || parameters.includes(index)) {
           addSecureMarks(arg, secureMarks, false)
         }
-      })
-    } catch (e) {
-      log.error('[ASM] Error adding Secure mark for input validator', e)
+      }
+    } catch (err) {
+      log.error('[ASM] Error adding Secure mark for input validator', err)
     }
 
-    return orig.apply(this, arguments)
+    return Reflect.apply(orig, this, arguments)
   })
 }
 
@@ -164,7 +156,7 @@ function addSecureMarks (value, secureMarks, createNewTainted = true) {
         if (createNewTainted) {
           parent[lastKey] = securedTainted
         }
-      } catch (e) {
+      } catch {
         // if it is a readonly property, do nothing
       }
     })

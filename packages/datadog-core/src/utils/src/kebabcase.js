@@ -7,10 +7,10 @@ module.exports = str => {
 
   return str
     .trim()
-    .replace(/([a-z])([A-Z])/g, '$1-$2')
-    .replace(/\s+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .replace(/_/g, '-')
-    .replace(/-{2,}/g, '-')
+    .replaceAll(/([a-z])([A-Z])/g, '$1-$2')
+    .replaceAll(/\s+/g, '-')
+    .replaceAll(/^-+|-+$/g, '')
+    .replaceAll('_', '-')
+    .replaceAll(/-{2,}/g, '-')
     .toLowerCase()
 }

@@ -18,22 +18,22 @@ function finish (err) {
   if (err) {
     errorChannel.publish(err)
   }
-  finishChannel.publish(undefined)
+  finishChannel.publish()
 }
 
 addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
   shimmer.wrap(oracledb.Connection.prototype, 'execute', execute => {
     return function wrappedExecute (dbQuery, ...args) {
       if (!startChannel.hasSubscribers) {
-        return execute.apply(this, arguments)
+        return Reflect.apply(execute, this, arguments)
       }
 
-      if (arguments.length && typeof arguments[arguments.length - 1] === 'function') {
+      if (arguments.length > 0 && typeof arguments[arguments.length - 1] === 'function') {
         const cb = arguments[arguments.length - 1]
         const outerAr = new AsyncResource('apm:oracledb:outer-scope')
         arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function wrappedCb (err, result) {
           finish(err)
-          return outerAr.runInAsyncScope(() => cb.apply(this, arguments))
+          return outerAr.runInAsyncScope(() => Reflect.apply(cb, this, arguments))
         })
       }
 
@@ -41,7 +41,7 @@ addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
         const connAttrs = connectionAttributes.get(this)
         startChannel.publish({ query: dbQuery, connAttrs })
         try {
-          let result = execute.apply(this, arguments)
+          let result = Reflect.apply(execute, this, arguments)
 
           if (result && typeof result.then === 'function') {
             result = result.then(
@@ -49,9 +49,9 @@ addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
                 finish()
                 return x
               },
-              e => {
-                finish(e)
-                throw e
+              err => {
+                finish(err)
+                throw err
               }
             )
           }
@@ -74,9 +74,9 @@ addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
           callback(err, connection)
         })
 
-        getConnection.apply(this, arguments)
+        Reflect.apply(getConnection, this, arguments)
       } else {
-        return getConnection.apply(this, arguments).then((connection) => {
+        return Reflect.apply(getConnection, this, arguments).then((connection) => {
           connectionAttributes.set(connection, connAttrs)
           return connection
         })
@@ -93,9 +93,9 @@ addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
           callback(err, pool)
         })
 
-        createPool.apply(this, arguments)
+        Reflect.apply(createPool, this, arguments)
       } else {
-        return createPool.apply(this, arguments).then((pool) => {
+        return Reflect.apply(createPool, this, arguments).then((pool) => {
           poolAttributes.set(pool, poolAttrs)
           return pool
         })
@@ -115,9 +115,9 @@ addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
           }
           callback(err, connection)
         })
-        getConnection.apply(this, arguments)
+        Reflect.apply(getConnection, this, arguments)
       } else {
-        return getConnection.apply(this, arguments).then((connection) => {
+        return Reflect.apply(getConnection, this, arguments).then((connection) => {
           connectionAttributes.set(connection, poolAttributes.get(this))
           return connection
         })

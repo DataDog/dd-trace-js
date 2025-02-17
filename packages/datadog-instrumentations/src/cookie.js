@@ -7,7 +7,7 @@ const cookieParseCh = channel('datadog:cookie:parse:finish')
 
 function wrapParse (originalParse) {
   return function () {
-    const cookies = originalParse.apply(this, arguments)
+    const cookies = Reflect.apply(originalParse, this, arguments)
     if (cookieParseCh.hasSubscribers && cookies) {
       cookieParseCh.publish({ cookies })
     }

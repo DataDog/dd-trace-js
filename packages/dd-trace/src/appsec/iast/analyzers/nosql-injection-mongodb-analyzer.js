@@ -24,9 +24,9 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     const onStart = ({ filters }) => {
       const store = storage('legacy').getStore()
       if (store && !store.nosqlAnalyzed && filters?.length) {
-        filters.forEach(filter => {
+        for (const filter of filters) {
           this.analyze({ filter }, store)
-        })
+        }
       }
 
       return store
@@ -62,7 +62,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       const iastContext = getIastContext(store)
 
       if (iastContext) { // do nothing if we are not in an iast request
-        sanitizedProperties.forEach(key => {
+        for (const key of sanitizedProperties) {
           iterateObjectStrings(req[key], function (value, levelKeys) {
             if (typeof value === 'string') {
               let parentObj = req[key]
@@ -79,7 +79,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
               }
             }
           })
-        })
+        }
       }
     })
 
@@ -125,7 +125,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
           const filteredRanges = []
 
           ranges = this._filterSecureRanges(ranges)
-          if (!ranges.length) {
+          if (ranges.length === 0) {
             this._incrementSuppressedMetric(iastContext)
           }
 

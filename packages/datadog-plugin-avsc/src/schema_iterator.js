@@ -49,39 +49,69 @@ class SchemaExtractor {
     if (Array.isArray(fieldType)) {
       // Union Type
       type = 'union[' + fieldType.map(t => SchemaExtractor.getType(t.type || t)).join(',') + ']'
-    } else if (fieldType === 'array') {
-      // Array Type
-      array = true
-      const nestedType = field.type.itemsType.typeName
-      type = SchemaExtractor.getType(nestedType)
-    } else if (fieldType === 'record') {
-      // Nested Record Type
-      type = 'object'
-      ref = `#/components/schemas/${field.type.name}`
-      if (!SchemaExtractor.extractSchema(field.type, builder, depth + 1, this)) {
-        return false
-      }
-    } else if (fieldType === 'enum') {
-      enumValues = []
-      let i = 0
-      type = 'string'
-      while (field.type.symbols[i]) {
-        enumValues.push(field.type.symbols[i])
-        i += 1
-      }
     } else {
-      // Primitive type
-      type = SchemaExtractor.getType(fieldType.type || fieldType)
-      if (fieldType === 'bytes') {
-        format = 'byte'
-      } else if (fieldType === 'int') {
-        format = 'int32'
-      } else if (fieldType === 'long') {
-        format = 'int64'
-      } else if (fieldType === 'float') {
-        format = 'float'
-      } else if (fieldType === 'double') {
-        format = 'double'
+      switch (fieldType) {
+        case 'array': {
+          // Array Type
+          array = true
+          const nestedType = field.type.itemsType.typeName
+          type = SchemaExtractor.getType(nestedType)
+
+          break
+        }
+        case 'record': {
+          // Nested Record Type
+          type = 'object'
+          ref = `#/components/schemas/${field.type.name}`
+          if (!SchemaExtractor.extractSchema(field.type, builder, depth + 1, this)) {
+            return false
+          }
+
+          break
+        }
+        case 'enum': {
+          enumValues = []
+          let i = 0
+          type = 'string'
+          while (field.type.symbols[i]) {
+            enumValues.push(field.type.symbols[i])
+            i += 1
+          }
+
+          break
+        }
+        default: {
+          // Primitive type
+          type = SchemaExtractor.getType(fieldType.type || fieldType)
+          switch (fieldType) {
+            case 'bytes': {
+              format = 'byte'
+
+              break
+            }
+            case 'int': {
+              format = 'int32'
+
+              break
+            }
+            case 'long': {
+              format = 'int64'
+
+              break
+            }
+            case 'float': {
+              format = 'float'
+
+              break
+            }
+            case 'double': {
+              format = 'double'
+
+              break
+            }
+        // No default
+          }
+        }
       }
     }
 

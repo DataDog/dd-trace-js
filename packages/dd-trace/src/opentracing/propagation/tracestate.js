@@ -4,7 +4,7 @@ const traceStateRegex = /[ \t]*([^=]+)=([ \t]*[^, \t]+)[ \t]*(,|$)/gim
 const traceStateDataRegex = /([^:]+):([^;]+)(;|$)/gim
 
 function fromString (Type, regex, value) {
-  if (typeof value !== 'string' || !value.length) {
+  if (typeof value !== 'string' || value.length === 0) {
     return new Type()
   }
 
@@ -17,7 +17,7 @@ function fromString (Type, regex, value) {
 }
 
 function toString (map, pairSeparator, fieldSeparator) {
-  return Array.from(map.entries())
+  return [...map.entries()]
     .reverse()
     .map((pair) => pair.join(pairSeparator))
     .join(fieldSeparator)

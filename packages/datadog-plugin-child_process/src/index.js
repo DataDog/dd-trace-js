@@ -17,7 +17,7 @@ function truncateCommand (cmdFields) {
 
     const argLen = cmdFields[i].length
     if (size < MAX_ARG_SIZE && size + argLen > MAX_ARG_SIZE) {
-      cmdFields[i] = cmdFields[i].substring(0, 2)
+      cmdFields[i] = cmdFields[i].slice(0, 2)
       truncated = true
     }
 

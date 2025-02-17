@@ -75,8 +75,8 @@ module.exports = class DdTraceApiPlugin extends Plugin {
             objectMap.set(proxyVal, ret.value)
             ret.value = proxyVal
           }
-        } catch (e) {
-          ret.error = e
+        } catch (err) {
+          ret.error = err
         }
       })
     }

@@ -17,11 +17,11 @@ addHook({
 
   return shimmer.wrapFunction(mochaEach, mochaEach => function () {
     const [params] = arguments
-    const { it, ...rest } = mochaEach.apply(this, arguments)
+    const { it, ...rest } = Reflect.apply(mochaEach, this, arguments)
     return {
       it: function (title) {
         parameterizedTestCh.publish({ title, params })
-        it.apply(this, arguments)
+        Reflect.apply(it, this, arguments)
       },
       ...rest
     }
@@ -42,7 +42,7 @@ addHook({
       startLine = testCallSite.getLineNumber()
       testToStartLine.set(test, startLine)
     }
-    return addTest.apply(this, arguments)
+    return Reflect.apply(addTest, this, arguments)
   })
   return Suite
 })

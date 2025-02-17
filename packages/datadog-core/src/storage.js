@@ -1,6 +1,6 @@
 'use strict'
 
-const { AsyncLocalStorage } = require('async_hooks')
+const { AsyncLocalStorage } = require('node:async_hooks')
 
 /**
  * This is exactly the same as AsyncLocalStorage, with the exception that it

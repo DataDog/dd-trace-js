@@ -19,7 +19,7 @@ if (process.setUncaughtExceptionCaptureCallback) {
           }
         }
 
-        const result = originalSetUncaughtExceptionCaptureCallback.apply(this, arguments)
+        const result = Reflect.apply(originalSetUncaughtExceptionCaptureCallback, this, arguments)
 
         currentCallback = newCallback
 

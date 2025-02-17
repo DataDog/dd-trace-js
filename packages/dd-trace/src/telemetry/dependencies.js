@@ -1,11 +1,11 @@
 'use strict'
 
-const path = require('path')
+const path = require('node:path')
 const parse = require('module-details-from-path')
 const requirePackageJson = require('../require-package-json')
 const { sendData } = require('./send-data')
 const dc = require('dc-polyfill')
-const { fileURLToPath } = require('url')
+const { fileURLToPath } = require('node:url')
 const { isTrue } = require('../../src/util')
 
 const savedDependenciesToSend = new Set()
@@ -35,7 +35,7 @@ function waitAndSend (config, application, host) {
     immediate = setImmediate(() => {
       immediate = null
       if (savedDependenciesToSend.size > 0) {
-        const dependencies = Array.from(savedDependenciesToSend.values())
+        const dependencies = [...savedDependenciesToSend.values()]
           // if a depencdency is from the initial load, *always* send the event
           // Otherwise, only send if dependencyCollection is enabled
           .filter(dep => {
@@ -56,7 +56,7 @@ function waitAndSend (config, application, host) {
         if (retryData) {
           currPayload = { reqType: 'app-dependencies-loaded', payload: { dependencies } }
         } else {
-          if (!dependencies.length) return // no retry data and no dependencies, nothing to send
+          if (dependencies.length === 0) return // no retry data and no dependencies, nothing to send
           currPayload = { dependencies }
         }
 
@@ -77,9 +77,9 @@ function waitAndSend (config, application, host) {
 function loadAllTheLoadedModules () {
   if (require.cache) {
     const filenames = Object.keys(require.cache)
-    filenames.forEach(filename => {
+    for (const filename of filenames) {
       onModuleLoad({ filename })
-    })
+    }
   }
 }
 
@@ -94,7 +94,7 @@ function onModuleLoad (data) {
     if (filename && filename.startsWith(FILE_URI_START)) {
       try {
         filename = fileURLToPath(filename)
-      } catch (e) {
+      } catch {
         // cannot transform url to path
       }
     }
@@ -118,7 +118,7 @@ function onModuleLoad (data) {
 
               waitAndSend(config, application, host)
             }
-          } catch (e) {
+          } catch {
             // can not read the package.json, do nothing
           }
         }

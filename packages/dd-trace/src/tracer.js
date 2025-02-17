@@ -89,10 +89,10 @@ class DatadogTracer extends Tracer {
       }
 
       return result
-    } catch (e) {
-      addError(span, e)
+    } catch (err) {
+      addError(span, err)
       span.finish()
-      throw e
+      throw err
     }
   }
 
@@ -102,7 +102,7 @@ class DatadogTracer extends Tracer {
     return function () {
       let optionsObj = options
       if (typeof optionsObj === 'function' && typeof fn === 'function') {
-        optionsObj = optionsObj.apply(this, arguments)
+        optionsObj = Reflect.apply(optionsObj, this, arguments)
       }
 
       const lastArgId = arguments.length - 1
@@ -113,13 +113,13 @@ class DatadogTracer extends Tracer {
         return tracer.trace(name, optionsObj, (span, done) => {
           arguments[lastArgId] = function (err) {
             done(err)
-            return scopeBoundCb.apply(this, arguments)
+            return Reflect.apply(scopeBoundCb, this, arguments)
           }
 
-          return fn.apply(this, arguments)
+          return Reflect.apply(fn, this, arguments)
         })
       } else {
-        return tracer.trace(name, optionsObj, () => fn.apply(this, arguments))
+        return tracer.trace(name, optionsObj, () => Reflect.apply(fn, this, arguments))
       }
     }
   }

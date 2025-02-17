@@ -54,7 +54,7 @@ class WAFContextWrapper {
         }
       }
 
-      if (Object.keys(persistentInputs).length) {
+      if (Object.keys(persistentInputs).length > 0) {
         payload.persistent = persistentInputs
         payloadHasData = true
       }
@@ -69,7 +69,7 @@ class WAFContextWrapper {
         }
       }
 
-      if (Object.keys(ephemeralInputs).length) {
+      if (Object.keys(ephemeralInputs).length > 0) {
         payload.ephemeral = ephemeralInputs
         payloadHasData = true
       }
@@ -98,7 +98,7 @@ class WAFContextWrapper {
 
       Reporter.reportMetrics({
         duration: result.totalRuntime / 1e3,
-        durationExt: parseInt(end - start) / 1e3,
+        durationExt: Number.parseInt(end - start) / 1e3,
         rulesVersion: this.rulesVersion,
         ruleTriggered,
         blockTriggered,

@@ -131,19 +131,15 @@ class TaintTrackingPlugin extends SourceIastPlugin {
         const iastContext = getIastContext(storage('legacy').getStore())
         let ranges
 
-        if (base) {
-          ranges = getRanges(iastContext, base)
-        } else {
-          ranges = getRanges(iastContext, input)
-        }
+        ranges = base ? getRanges(iastContext, base) : getRanges(iastContext, input)
 
         if (ranges?.length) {
           if (isURL) {
             this._taintedURLs.set(parsed, ranges[0])
           } else {
-            urlResultTaintedProperties.forEach(param => {
+            for (const param of urlResultTaintedProperties) {
               this._taintTrackingHandler(ranges[0].iinfo.type, parsed, param, iastContext)
-            })
+            }
           }
         }
       }

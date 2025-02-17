@@ -55,7 +55,7 @@ class SpanProcessor {
         }
       }
 
-      if (formatted.length !== 0 && trace.isRecording !== false) {
+      if (formatted.length > 0 && trace.isRecording !== false) {
         this._exporter.export(formatted)
       }
 

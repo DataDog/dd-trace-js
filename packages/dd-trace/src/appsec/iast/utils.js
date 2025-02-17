@@ -6,7 +6,7 @@ function iterateObjectStrings (target, fn, levelKeys = [], depth = 20, visited =
 
     visited.add(target)
 
-    Object.keys(target).forEach((key) => {
+    for (const key of Object.keys(target)) {
       const nextLevelKeys = [...levelKeys, key]
       const val = target[key]
 
@@ -15,7 +15,7 @@ function iterateObjectStrings (target, fn, levelKeys = [], depth = 20, visited =
       } else if (depth > 0) {
         iterateObjectStrings(val, fn, nextLevelKeys, depth - 1, visited)
       }
-    })
+    }
   }
 }
 

@@ -156,7 +156,7 @@ class LLMObs extends NoopLLMObs {
             isError(maybeError) || maybeError == null ? maybeResult : maybeError
           )
 
-          return scopeBoundCb.apply(this, arguments)
+          return Reflect.apply(scopeBoundCb, this, arguments)
         }
       }
 
@@ -187,9 +187,9 @@ class LLMObs extends NoopLLMObs {
         }
 
         return result
-      } catch (e) {
+      } catch (err) {
         llmobs._autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs))
-        throw e
+        throw err
       }
     }
 
@@ -230,14 +230,25 @@ class LLMObs extends NoopLLMObs {
     const { inputData, outputData, metadata, metrics, tags } = options
 
     if (inputData || outputData) {
-      if (spanKind === 'llm') {
-        this._tagger.tagLLMIO(span, inputData, outputData)
-      } else if (spanKind === 'embedding') {
-        this._tagger.tagEmbeddingIO(span, inputData, outputData)
-      } else if (spanKind === 'retrieval') {
-        this._tagger.tagRetrievalIO(span, inputData, outputData)
-      } else {
-        this._tagger.tagTextIO(span, inputData, outputData)
+      switch (spanKind) {
+        case 'llm': {
+          this._tagger.tagLLMIO(span, inputData, outputData)
+
+          break
+        }
+        case 'embedding': {
+          this._tagger.tagEmbeddingIO(span, inputData, outputData)
+
+          break
+        }
+        case 'retrieval': {
+          this._tagger.tagRetrievalIO(span, inputData, outputData)
+
+          break
+        }
+        default: {
+          this._tagger.tagTextIO(span, inputData, outputData)
+        }
       }
     }
 
@@ -262,7 +273,7 @@ class LLMObs extends NoopLLMObs {
     }
 
     if (!(span instanceof Span)) {
-      throw new Error('Span must be a valid Span object.')
+      throw new TypeError('Span must be a valid Span object.')
     }
 
     if (!LLMObsTagger.tagMap.has(span)) {
@@ -412,7 +423,7 @@ class LLMObs extends NoopLLMObs {
 
     const bound = function () {
       return llmobs._activate(activeSpan, null, () => {
-        return fn.apply(this, arguments)
+        return Reflect.apply(fn, this, arguments)
       })
     }
 

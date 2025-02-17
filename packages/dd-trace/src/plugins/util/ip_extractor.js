@@ -1,7 +1,7 @@
 'use strict'
 
-const { BlockList } = require('net')
-const net = require('net')
+const { BlockList } = require('node:net')
+const net = require('node:net')
 
 const ipHeaderList = [
   'x-forwarded-for',
@@ -33,7 +33,7 @@ const privateIPMatcher = new BlockList()
 for (const cidr of privateCIDRs) {
   const [address, prefix] = cidr.split('/')
 
-  privateIPMatcher.addSubnet(address, parseInt(prefix), net.isIPv6(address) ? 'ipv6' : 'ipv4')
+  privateIPMatcher.addSubnet(address, Number.parseInt(prefix), net.isIPv6(address) ? 'ipv6' : 'ipv4')
 }
 
 function extractIp (config, req) {

@@ -11,7 +11,7 @@ const instrumentedGetters = ['host', 'origin', 'hostname']
 addHook({ name: names }, function (url) {
   shimmer.wrap(url, 'parse', (parse) => {
     return function wrappedParse (input) {
-      const parsedValue = parse.apply(this, arguments)
+      const parsedValue = Reflect.apply(parse, this, arguments)
       if (!parseFinishedChannel.hasSubscribers) return parsedValue
 
       parseFinishedChannel.publish({
@@ -25,13 +25,13 @@ addHook({ name: names }, function (url) {
   })
 
   const URLPrototype = url.URL.prototype.constructor.prototype
-  instrumentedGetters.forEach(property => {
+  for (const property of instrumentedGetters) {
     const originalDescriptor = Object.getOwnPropertyDescriptor(URLPrototype, property)
 
     if (originalDescriptor?.get) {
       const newDescriptor = shimmer.wrap(originalDescriptor, 'get', function (originalGet) {
         return function get () {
-          const result = originalGet.apply(this, arguments)
+          const result = Reflect.apply(originalGet, this, arguments)
           if (!urlGetterChannel.hasSubscribers) return result
 
           const context = { urlObject: this, result, property }
@@ -43,7 +43,7 @@ addHook({ name: names }, function (url) {
 
       Object.defineProperty(URLPrototype, property, newDescriptor)
     }
-  })
+  }
 
   shimmer.wrap(url, 'URL', (URL) => {
     return class extends URL {
@@ -69,7 +69,7 @@ addHook({ name: names }, function (url) {
   if (url.URL.parse) {
     shimmer.wrap(url.URL, 'parse', (parse) => {
       return function wrappedParse (input, base) {
-        const parsedValue = parse.apply(this, arguments)
+        const parsedValue = Reflect.apply(parse, this, arguments)
         if (!parseFinishedChannel.hasSubscribers) return parsedValue
 
         parseFinishedChannel.publish({

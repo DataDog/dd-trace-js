@@ -1,7 +1,7 @@
-const cp = require('child_process')
-const os = require('os')
-const path = require('path')
-const fs = require('fs')
+const cp = require('node:child_process')
+const os = require('node:os')
+const path = require('node:path')
+const fs = require('node:fs')
 
 const log = require('../../log')
 const {
@@ -48,7 +48,7 @@ function sanitizedExec (
     startTime = Date.now()
   }
   try {
-    const result = cp.execFileSync(cmd, flags, { stdio: 'pipe' }).toString().replace(/(\r\n|\n|\r)/gm, '')
+    const result = cp.execFileSync(cmd, flags, { stdio: 'pipe' }).toString().replaceAll(/(\r\n|\n|\r)/gm, '')
     if (durationMetric) {
       distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)
     }
@@ -72,7 +72,7 @@ function isDirectory (path) {
   try {
     const stats = fs.statSync(path)
     return stats.isDirectory()
-  } catch (e) {
+  } catch {
     return false
   }
 }
@@ -83,7 +83,7 @@ function isGitAvailable () {
   try {
     cp.execFileSync(command, ['git'], { stdio: 'pipe' })
     return true
-  } catch (e) {
+  } catch {
     incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'check_git', exitCode: 'missing' })
     return false
   }
@@ -104,11 +104,11 @@ function getGitVersion () {
   const gitVersionMatches = gitVersionString.match(/git version (\d+)\.(\d+)\.(\d+)/)
   try {
     return {
-      major: parseInt(gitVersionMatches[1]),
-      minor: parseInt(gitVersionMatches[2]),
-      patch: parseInt(gitVersionMatches[3])
+      major: Number.parseInt(gitVersionMatches[1]),
+      minor: Number.parseInt(gitVersionMatches[2]),
+      patch: Number.parseInt(gitVersionMatches[3])
     }
-  } catch (e) {
+  } catch {
     return null
   }
 }
@@ -192,7 +192,7 @@ function getLatestCommits () {
     const result = cp.execFileSync('git', ['log', '--format=%H', '-n 1000', '--since="1 month ago"'], { stdio: 'pipe' })
       .toString()
       .split('\n')
-      .filter(commit => commit)
+      .filter(Boolean)
     distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_local_commits' }, Date.now() - startTime)
     return result
   } catch (err) {
@@ -227,7 +227,7 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
       { stdio: 'pipe', maxBuffer: GIT_REV_LIST_MAX_BUFFER })
       .toString()
       .split('\n')
-      .filter(commit => commit)
+      .filter(Boolean)
   } catch (err) {
     log.error('Get commits to upload failed: %s', err.message)
     incrementCountMetric(
@@ -248,7 +248,7 @@ function generatePackFilesForCommits (commitsToUpload) {
     return []
   }
 
-  const randomPrefix = String(Math.floor(Math.random() * 10000))
+  const randomPrefix = String(Math.floor(Math.random() * 10_000))
   const temporaryPath = path.join(tmpFolder, randomPrefix)
   const cwdPath = path.join(process.cwd(), randomPrefix)
 
@@ -266,7 +266,7 @@ function generatePackFilesForCommits (commitsToUpload) {
         targetPath
       ],
       { stdio: 'pipe', input: commitsToUpload.join('\n') }
-    ).toString().split('\n').filter(commit => commit).map(commit => `${targetPath}-${commit}.pack`)
+    ).toString().split('\n').filter(Boolean).map(commit => `${targetPath}-${commit}.pack`)
   }
 
   try {

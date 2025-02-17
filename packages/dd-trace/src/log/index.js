@@ -1,7 +1,7 @@
 'use strict'
 
 const coalesce = require('koalas')
-const { inspect } = require('util')
+const { inspect } = require('node:util')
 const { isTrue } = require('../util')
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
@@ -11,7 +11,7 @@ const memoize = func => {
   const cache = {}
   const memoized = function (key) {
     if (!cache[key]) {
-      cache[key] = func.apply(this, arguments)
+      cache[key] = Reflect.apply(func, this, arguments)
     }
 
     return cache[key]

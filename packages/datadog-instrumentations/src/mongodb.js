@@ -30,15 +30,15 @@ const collectionMethodsWithTwoFilters = [
 const startCh = channel('datadog:mongodb:collection:filter:start')
 
 addHook({ name: 'mongodb', versions: ['>=3.3 <5', '5', '>=6'] }, mongodb => {
-  [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters].forEach(methodName => {
-    if (!(methodName in mongodb.Collection.prototype)) return
+  for (const methodName of [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters]) {
+    if (!(methodName in mongodb.Collection.prototype)) continue
 
     const useTwoArguments = collectionMethodsWithTwoFilters.includes(methodName)
 
     shimmer.wrap(mongodb.Collection.prototype, methodName, method => {
       return function () {
         if (!startCh.hasSubscribers) {
-          return method.apply(this, arguments)
+          return Reflect.apply(method, this, arguments)
         }
 
         const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -54,10 +54,10 @@ addHook({ name: 'mongodb', versions: ['>=3.3 <5', '5', '>=6'] }, mongodb => {
             methodName
           })
 
-          return method.apply(this, arguments)
+          return Reflect.apply(method, this, arguments)
         })
       }
     })
-  })
+  }
   return mongodb
 })

@@ -6,7 +6,7 @@ const { calculateDDBasePath } = require('../../util')
 const logs = new Map() // hash -> log
 
 // NOTE: Is this a reasonable number?
-let maxEntries = 10000
+let maxEntries = 10_000
 let overflowedCount = 0
 
 function hashCode (hashSource) {
@@ -42,12 +42,12 @@ function sanitize (logEntry) {
 
   const firstIndex = stackLines.findIndex(l => l.match(STACK_FRAME_LINE_REGEX))
 
-  const isDDCode = firstIndex > -1 && stackLines[firstIndex].includes(ddBasePath)
+  const isDDCode = firstIndex !== -1 && stackLines[firstIndex].includes(ddBasePath)
   stackLines = stackLines
     .filter((line, index) => (isDDCode && index < firstIndex) || line.includes(ddBasePath))
     .map(line => line.replace(ddBasePath, ''))
 
-  if (!isDDCode && logEntry.errorType && stackLines.length) {
+  if (!isDDCode && logEntry.errorType && stackLines.length > 0) {
     stackLines = [`${logEntry.errorType}: redacted`, ...stackLines]
   }
 
@@ -84,8 +84,8 @@ const logCollector = {
       } else {
         logs.get(hash).count++
       }
-    } catch (e) {
-      log.error('Unable to add log to logCollector: %s', e.message)
+    } catch (err) {
+      log.error('Unable to add log to logCollector: %s', err.message)
     }
     return false
   },

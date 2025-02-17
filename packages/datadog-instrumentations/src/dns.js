@@ -39,12 +39,11 @@ addHook({ name: names }, dns => {
 })
 
 function patchResolveShorthands (prototype) {
-  Object.keys(rrtypes)
-    .filter(method => !!prototype[method])
-    .forEach(method => {
-      rrtypeMap.set(prototype[method], rrtypes[method])
-      shimmer.wrap(prototype, method, fn => wrap('apm:dns:resolve', fn, 2, rrtypes[method]))
-    })
+  for (const method of Object.keys(rrtypes)
+    .filter(method => !!prototype[method])) {
+    rrtypeMap.set(prototype[method], rrtypes[method])
+    shimmer.wrap(prototype, method, fn => wrap('apm:dns:resolve', fn, 2, rrtypes[method]))
+  }
 }
 
 function wrap (prefix, fn, expectedArgs, rrtype) {
@@ -59,10 +58,10 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
       arguments.length < expectedArgs ||
       typeof cb !== 'function'
     ) {
-      return fn.apply(this, arguments)
+      return Reflect.apply(fn, this, arguments)
     }
 
-    const startArgs = Array.from(arguments)
+    const startArgs = [...arguments]
     startArgs.pop() // gets rid of the callback
     if (rrtype) {
       startArgs.push(rrtype)
@@ -77,17 +76,17 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
           errorCh.publish(error)
         }
         finishCh.publish(result)
-        cb.apply(this, arguments)
+        Reflect.apply(cb, this, arguments)
       }))
 
       try {
-        return fn.apply(this, arguments)
+        return Reflect.apply(fn, this, arguments)
       // TODO deal with promise versions when we support `dns/promises`
-      } catch (error) {
-        error.stack // trigger getting the stack at the original throwing point
-        errorCh.publish(error)
+      } catch (err) {
+        err.stack // trigger getting the stack at the original throwing point
+        errorCh.publish(err)
 
-        throw error
+        throw err
       }
     })
   }

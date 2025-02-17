@@ -2,7 +2,7 @@
 
 /* eslint-disable no-fallthrough */
 
-const url = require('url')
+const url = require('node:url')
 const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
@@ -31,16 +31,16 @@ function patch (http, methodName) {
   function instrumentRequest (request) {
     return function () {
       if (!startChannel.hasSubscribers) {
-        return request.apply(this, arguments)
+        return Reflect.apply(request, this, arguments)
       }
 
       let args
 
       try {
-        args = normalizeArgs.apply(null, arguments)
-      } catch (e) {
-        log.error('Error normalising http req arguments', e)
-        return request.apply(this, arguments)
+        args = Reflect.apply(normalizeArgs, null, arguments)
+      } catch (err) {
+        log.error('Error normalising http req arguments', err)
+        return Reflect.apply(request, this, arguments)
       }
 
       const abortController = new AbortController()
@@ -54,7 +54,7 @@ function patch (http, methodName) {
         if (callback) {
           callback = shimmer.wrapFunction(args.callback, cb => function () {
             return asyncStartChannel.runStores(ctx, () => {
-              return cb.apply(this, arguments)
+              return Reflect.apply(cb, this, arguments)
             })
           })
         }
@@ -79,7 +79,7 @@ function patch (http, methodName) {
           let customRequestTimeout = false
           req.setTimeout = function () {
             customRequestTimeout = true
-            return setTimeout.apply(this, arguments)
+            return Reflect.apply(setTimeout, this, arguments)
           }
 
           req.emit = function (eventName, arg) {
@@ -106,7 +106,7 @@ function patch (http, methodName) {
                 finish()
             }
 
-            return emit.apply(this, arguments)
+            return Reflect.apply(emit, this, arguments)
           }
 
           if (abortController.signal.aborted) {
@@ -114,10 +114,10 @@ function patch (http, methodName) {
           }
 
           return req
-        } catch (e) {
-          ctx.error = e
+        } catch (err) {
+          ctx.error = err
           errorChannel.publish(ctx)
-          throw e
+          throw err
         } finally {
           endChannel.publish(ctx)
         }
@@ -138,29 +138,21 @@ function patch (http, methodName) {
   }
 
   function combineOptions (inputURL, inputOptions) {
-    if (inputOptions !== null && typeof inputOptions === 'object') {
-      return Object.assign(inputURL || {}, inputOptions)
-    } else {
-      return inputURL
-    }
+    return inputOptions !== null && typeof inputOptions === 'object' ? Object.assign(inputURL || {}, inputOptions) : inputURL
   }
   function normalizeHeaders (options) {
     options.headers = options.headers || {}
   }
 
   function normalizeCallback (inputOptions, callback, inputURL) {
-    if (typeof inputOptions === 'function') {
-      return [inputOptions, inputURL || {}]
-    } else {
-      return [callback, inputOptions]
-    }
+    return typeof inputOptions === 'function' ? [inputOptions, inputURL || {}] : [callback, inputOptions]
   }
 
   function normalizeOptions (inputURL) {
     if (typeof inputURL === 'string') {
       try {
         return urlToOptions(new url.URL(inputURL))
-      } catch (e) {
+      } catch {
         // eslint-disable-next-line n/no-deprecated-api
         return url.parse(inputURL)
       }

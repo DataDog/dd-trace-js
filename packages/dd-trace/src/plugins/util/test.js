@@ -1,6 +1,6 @@
-const path = require('path')
-const fs = require('fs')
-const { URL } = require('url')
+const path = require('node:path')
+const fs = require('node:fs')
+const { URL } = require('node:url')
 const log = require('../../log')
 
 const istanbul = require('istanbul-lib-coverage')
@@ -97,7 +97,7 @@ const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
 
 // Early flake detection util strings
 const EFD_STRING = "Retried by Datadog's Early Flake Detection"
-const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
+const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + String.raw` \(#\d+\): `, 'g')
 
 const TEST_LEVEL_EVENT_TYPES = [
   'test',
@@ -211,7 +211,7 @@ module.exports = {
 function getPkgManager () {
   try {
     return process.env.npm_config_user_agent.split(' ')[0].replace('/', '-')
-  } catch (e) {
+  } catch {
     return ''
   }
 }
@@ -220,29 +220,23 @@ function validateUrl (url) {
   try {
     const urlObject = new URL(url)
     return (urlObject.protocol === 'https:' || urlObject.protocol === 'http:')
-  } catch (e) {
+  } catch {
     return false
   }
 }
 
 function removeInvalidMetadata (metadata) {
   return Object.keys(metadata).reduce((filteredTags, tag) => {
-    if (tag === GIT_REPOSITORY_URL) {
-      if (!validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
-        log.error('Repository URL is not a valid repository URL: %s.', metadata[GIT_REPOSITORY_URL])
-        return filteredTags
-      }
+    if (tag === GIT_REPOSITORY_URL && !validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
+      log.error('Repository URL is not a valid repository URL: %s.', metadata[GIT_REPOSITORY_URL])
+      return filteredTags
     }
-    if (tag === GIT_COMMIT_SHA) {
-      if (!validateGitCommitSha(metadata[GIT_COMMIT_SHA])) {
-        log.error('Git commit SHA must be a full-length git SHA: %s.', metadata[GIT_COMMIT_SHA])
-        return filteredTags
-      }
+    if (tag === GIT_COMMIT_SHA && !validateGitCommitSha(metadata[GIT_COMMIT_SHA])) {
+      log.error('Git commit SHA must be a full-length git SHA: %s.', metadata[GIT_COMMIT_SHA])
+      return filteredTags
     }
-    if (tag === CI_PIPELINE_URL) {
-      if (!validateUrl(metadata[CI_PIPELINE_URL])) {
-        return filteredTags
-      }
+    if (tag === CI_PIPELINE_URL && !validateUrl(metadata[CI_PIPELINE_URL])) {
+      return filteredTags
     }
     filteredTags[tag] = metadata[tag]
     return filteredTags
@@ -300,7 +294,7 @@ function getTestParametersString (parametersByTestName, testName) {
     // test is invoked with each parameter set sequencially
     const testParameters = parametersByTestName[testName].shift()
     return JSON.stringify({ arguments: testParameters, metadata: {} })
-  } catch (e) {
+  } catch {
     // We can't afford to interrupt the test if `testParameters` is not serializable to JSON,
     // so we ignore the test parameters and move on
     return ''
@@ -315,11 +309,11 @@ function getTestTypeFromFramework (testFramework) {
 }
 
 function finishAllTraceSpans (span) {
-  span.context()._trace.started.forEach(traceSpan => {
+  for (const traceSpan of span.context()._trace.started) {
     if (traceSpan !== span) {
       traceSpan.finish()
     }
-  })
+  }
 }
 
 function getTestParentSpan (tracer) {
@@ -369,7 +363,7 @@ function readCodeOwners (rootDir) {
   for (const location of POSSIBLE_CODEOWNERS_LOCATIONS) {
     try {
       return fs.readFileSync(path.join(rootDir, location)).toString()
-    } catch (e) {
+    } catch {
       // retry with next path
     }
   }
@@ -423,7 +417,7 @@ function getCodeOwnersForFilename (filename, entries) {
       if (isResponsible) {
         return JSON.stringify(entry.owners)
       }
-    } catch (e) {
+    } catch {
       return null
     }
   }
@@ -553,9 +547,9 @@ function mergeCoverage (coverage, targetCoverage) {
       const targetFileCoverage = targetCoverage.fileCoverageFor(filename)
 
       // branches (.b) are copied by reference, so `resetHits` affects the copy, so we need to copy it manually
-      Object.entries(targetFileCoverage.data.b).forEach(([key, value]) => {
+      for (const [key, value] of Object.entries(targetFileCoverage.data.b)) {
         targetFileCoverage.data.b[key] = [...value]
-      })
+      }
     })
 }
 
@@ -575,8 +569,8 @@ function getTestLineStart (err, testSuitePath) {
   const testFileLine = err.stack.split('\n').find(line => line.includes(testSuitePath))
   try {
     const testFileLineMatch = testFileLine.match(/at (?:(.+?)\s+\()?(?:(.+?):(\d+)(?::(\d+))?|([^)]+))\)?/)
-    return parseInt(testFileLineMatch[3], 10) || null
-  } catch (e) {
+    return Number.parseInt(testFileLineMatch[3], 10) || null
+  } catch {
     return null
   }
 }
@@ -613,7 +607,7 @@ function addEfdStringToTestName (testName, numAttempt) {
 }
 
 function removeEfdStringFromTestName (testName) {
-  return testName.replace(EFD_TEST_NAME_REGEX, '')
+  return testName.replaceAll(EFD_TEST_NAME_REGEX, '')
 }
 
 function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {

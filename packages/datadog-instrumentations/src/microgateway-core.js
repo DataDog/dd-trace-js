@@ -15,7 +15,7 @@ const requestResources = new WeakMap()
 
 function wrapConfigProxyFactory (configProxyFactory) {
   return function () {
-    const configProxy = configProxyFactory.apply(this, arguments)
+    const configProxy = Reflect.apply(configProxyFactory, this, arguments)
 
     return function (req, res, next) {
       const requestResource = new AsyncResource('bound-anonymous-fn')
@@ -24,19 +24,19 @@ function wrapConfigProxyFactory (configProxyFactory) {
 
       handleChannel.publish({ req, res })
 
-      return configProxy.apply(this, arguments)
+      return Reflect.apply(configProxy, this, arguments)
     }
   }
 }
 
 function wrapPluginsFactory (pluginsFactory) {
   return function (plugins) {
-    const pluginsMiddleware = pluginsFactory.apply(this, arguments)
+    const pluginsMiddleware = Reflect.apply(pluginsFactory, this, arguments)
 
     return function pluginsMiddlewareWithTrace (req, res, next) {
       arguments[2] = wrapNext(req, res, next)
 
-      return pluginsMiddleware.apply(this, arguments)
+      return Reflect.apply(pluginsMiddleware, this, arguments)
     }
   }
 }
@@ -55,7 +55,7 @@ function wrapNext (req, res, next) {
       }
     })
 
-    return next.apply(this, arguments)
+    return Reflect.apply(next, this, arguments)
   })
 }
 
