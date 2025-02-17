@@ -11,12 +11,13 @@ const {
   TEST_SOURCE_START,
   TEST_CODE_OWNERS,
   TEST_SOURCE_FILE,
-  TEST_CONFIGURATION_BROWSER_NAME,
+  TEST_PARAMETERS,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TELEMETRY_TEST_SESSION,
-  TEST_RETRY_REASON
+  TEST_RETRY_REASON,
+  TEST_BROWSER_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -202,7 +203,9 @@ class PlaywrightPlugin extends CiPlugin {
       extraTags[TEST_SOURCE_FILE] = testSourceFile || testSuite
     }
     if (browserName) {
-      extraTags[TEST_CONFIGURATION_BROWSER_NAME] = browserName
+      // Added as parameter too because it should affect the test fingerprint
+      extraTags[TEST_PARAMETERS] = JSON.stringify({ arguments: { browser: browserName }, metadata: {} })
+      extraTags[TEST_BROWSER_NAME] = browserName
     }
 
     return super.startTestSpan(testName, testSuite, testSuiteSpan, extraTags)
