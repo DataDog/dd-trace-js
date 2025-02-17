@@ -16,7 +16,7 @@ function publishRequestBodyAndNext (req, res, next) {
       if (abortController.signal.aborted) return
     }
 
-    return next.apply(this, arguments)
+    return Reflect.apply(next, this, arguments)
   })
 }
 
@@ -28,7 +28,7 @@ addHook({
   return shimmer.wrapFunction(read, read => function (req, res, next) {
     const nextResource = new AsyncResource('bound-anonymous-fn')
     arguments[2] = nextResource.bind(publishRequestBodyAndNext(req, res, next))
-    return read.apply(this, arguments)
+    return Reflect.apply(read, this, arguments)
   })
 })
 
@@ -39,6 +39,6 @@ addHook({
 }, read => {
   return shimmer.wrapFunction(read, read => function (req, res, next) {
     arguments[2] = publishRequestBodyAndNext(req, res, next)
-    return read.apply(this, arguments)
+    return Reflect.apply(read, this, arguments)
   })
 })

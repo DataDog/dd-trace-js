@@ -48,7 +48,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
   }
 
   shimmer.wrap(Kafka.prototype, 'producer', createProducer => function () {
-    const producer = createProducer.apply(this, arguments)
+    const producer = Reflect.apply(createProducer, this, arguments)
     const send = producer.send
     const bootstrapServers = this._brokers
 
@@ -60,7 +60,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
         return innerAsyncResource.runInAsyncScope(() => {
           if (!producerStartCh.hasSubscribers) {
-            return send.apply(this, arguments)
+            return Reflect.apply(send, this, arguments)
           }
 
           try {
@@ -72,7 +72,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
             }
             producerStartCh.publish({ topic, messages, bootstrapServers, clusterId })
 
-            const result = send.apply(this, arguments)
+            const result = Reflect.apply(send, this, arguments)
 
             result.then(
               innerAsyncResource.bind(res => {
@@ -111,7 +111,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
   shimmer.wrap(Kafka.prototype, 'consumer', createConsumer => function () {
     if (!consumerStartCh.hasSubscribers) {
-      return createConsumer.apply(this, arguments)
+      return Reflect.apply(createConsumer, this, arguments)
     }
 
     const kafkaClusterIdPromise = getKafkaClusterId(this)
@@ -127,7 +127,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
       return { topic, partition, messages, groupId, clusterId }
     }
 
-    const consumer = createConsumer.apply(this, arguments)
+    const consumer = Reflect.apply(createConsumer, this, arguments)
 
     consumer.on(consumer.events.COMMIT_OFFSETS, commitsFromEvent)
 

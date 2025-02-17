@@ -15,7 +15,7 @@ addHook({ name: 'bunyan', versions: ['>=1'] }, Logger => {
         logCh.publish(payload)
         arguments[0] = payload.message
       }
-      return emit.apply(this, arguments)
+      return Reflect.apply(emit, this, arguments)
     }
   })
   return Logger

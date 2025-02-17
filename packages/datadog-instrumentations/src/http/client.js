@@ -31,16 +31,16 @@ function patch (http, methodName) {
   function instrumentRequest (request) {
     return function () {
       if (!startChannel.hasSubscribers) {
-        return request.apply(this, arguments)
+        return Reflect.apply(request, this, arguments)
       }
 
       let args
 
       try {
-        args = normalizeArgs.apply(null, arguments)
+        args = Reflect.apply(normalizeArgs, null, arguments)
       } catch (e) {
         log.error('Error normalising http req arguments', e)
-        return request.apply(this, arguments)
+        return Reflect.apply(request, this, arguments)
       }
 
       const abortController = new AbortController()
@@ -54,7 +54,7 @@ function patch (http, methodName) {
         if (callback) {
           callback = shimmer.wrapFunction(args.callback, cb => function () {
             return asyncStartChannel.runStores(ctx, () => {
-              return cb.apply(this, arguments)
+              return Reflect.apply(cb, this, arguments)
             })
           })
         }
@@ -79,7 +79,7 @@ function patch (http, methodName) {
           let customRequestTimeout = false
           req.setTimeout = function () {
             customRequestTimeout = true
-            return setTimeout.apply(this, arguments)
+            return Reflect.apply(setTimeout, this, arguments)
           }
 
           req.emit = function (eventName, arg) {
@@ -106,7 +106,7 @@ function patch (http, methodName) {
                 finish()
             }
 
-            return emit.apply(this, arguments)
+            return Reflect.apply(emit, this, arguments)
           }
 
           if (abortController.signal.aborted) {

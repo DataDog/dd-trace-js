@@ -30,14 +30,14 @@ addHook({ name: names }, (net, version, name) => {
 
   shimmer.wrap(net.Socket.prototype, 'connect', connect => function () {
     if (!startICPCh.hasSubscribers || !startTCPCh.hasSubscribers) {
-      return connect.apply(this, arguments)
+      return Reflect.apply(connect, this, arguments)
     }
 
     const options = getOptions(arguments)
     const lastIndex = arguments.length - 1
     const callback = arguments[lastIndex]
 
-    if (!options) return connect.apply(this, arguments)
+    if (!options) return Reflect.apply(connect, this, arguments)
 
     const callbackResource = new AsyncResource('bound-anonymous-fn')
     const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -63,15 +63,15 @@ addHook({ name: names }, (net, version, name) => {
           case 'ready':
           case 'connect':
             return callbackResource.runInAsyncScope(() => {
-              return emit.apply(this, arguments)
+              return Reflect.apply(emit, this, arguments)
             })
           default:
-            return emit.apply(this, arguments)
+            return Reflect.apply(emit, this, arguments)
         }
       })
 
       try {
-        return connect.apply(this, arguments)
+        return Reflect.apply(connect, this, arguments)
       } catch (err) {
         protocol === 'ipc' ? errorICPCh.publish(err) : errorTCPCh.publish(err)
 

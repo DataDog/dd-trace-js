@@ -132,7 +132,7 @@ function getTestAsyncResource (test) {
 function runnableWrapper (RunnablePackage, libraryConfig) {
   shimmer.wrap(RunnablePackage.prototype, 'run', run => function () {
     if (!testStartCh.hasSubscribers) {
-      return run.apply(this, arguments)
+      return Reflect.apply(run, this, arguments)
     }
     // Flaky test retries does not work in parallel mode
     if (libraryConfig?.isFlakyTestRetriesEnabled) {
@@ -169,7 +169,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
       }
     }
 
-    return run.apply(this, arguments)
+    return Reflect.apply(run, this, arguments)
   })
   return RunnablePackage
 }
@@ -392,7 +392,7 @@ function getRunTestsWrapper (runTests, config) {
       })
     }
 
-    return runTests.apply(this, arguments)
+    return Reflect.apply(runTests, this, arguments)
   }
 }
 

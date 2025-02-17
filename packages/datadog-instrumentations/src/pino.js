@@ -8,7 +8,7 @@ const shimmer = require('../../datadog-shimmer')
 
 function wrapPino (symbol, wrapper, pino) {
   return function pinoWithTrace () {
-    const instance = pino.apply(this, arguments)
+    const instance = Reflect.apply(pino, this, arguments)
 
     Object.defineProperty(instance, symbol, {
       configurable: true,
@@ -30,7 +30,7 @@ function wrapAsJson (asJson) {
     ch.publish(payload)
     arguments[0] = payload.message
 
-    return asJson.apply(this, arguments)
+    return Reflect.apply(asJson, this, arguments)
   }
 }
 
@@ -40,7 +40,7 @@ function wrapMixin (mixin) {
     let obj = {}
 
     if (mixin) {
-      obj = mixin.apply(this, arguments)
+      obj = Reflect.apply(mixin, this, arguments)
     }
 
     const payload = { message: obj }
@@ -56,19 +56,19 @@ function wrapPrettifyObject (prettifyObject) {
     const payload = { message: input.input }
     ch.publish(payload)
     input.input = payload.message
-    return prettifyObject.apply(this, arguments)
+    return Reflect.apply(prettifyObject, this, arguments)
   }
 }
 
 function wrapPrettyFactory (prettyFactory) {
   const ch = channel('apm:pino:log')
   return function prettyFactoryWithTrace () {
-    const pretty = prettyFactory.apply(this, arguments)
+    const pretty = Reflect.apply(prettyFactory, this, arguments)
     return function prettyWithTrace (obj) {
       const payload = { message: obj }
       ch.publish(payload)
       arguments[0] = payload.message
-      return pretty.apply(this, arguments)
+      return Reflect.apply(pretty, this, arguments)
     }
   }
 }

@@ -29,12 +29,12 @@ addHook({ name: 'winston', file: 'lib/winston/logger.js', versions: ['>=3'] }, L
         logCh.publish(payload)
         arguments[0] = payload.message
       }
-      return write.apply(this, arguments)
+      return Reflect.apply(write, this, arguments)
     }
   })
 
   shimmer.wrap(Logger.prototype, 'configure', configure => function () {
-    const configureResponse = configure.apply(this, arguments)
+    const configureResponse = Reflect.apply(configure, this, arguments)
     // After the original `configure`, because it resets transports
     if (addTransport.hasSubscribers) {
       addTransport.publish(this)
@@ -56,7 +56,7 @@ addHook({ name: 'winston', file: 'lib/winston/logger.js', versions: ['1', '2'] }
 
 function wrapMethod (method, logCh) {
   return function methodWithTrace () {
-    const result = method.apply(this, arguments)
+    const result = Reflect.apply(method, this, arguments)
 
     if (logCh.hasSubscribers) {
       for (const name in this.transports) {
@@ -68,7 +68,7 @@ function wrapMethod (method, logCh) {
           const payload = { message: meta || {} }
           logCh.publish(payload)
           arguments[2] = payload.message
-          log.apply(this, arguments)
+          Reflect.apply(log, this, arguments)
         })
         patched.add(transport)
       }

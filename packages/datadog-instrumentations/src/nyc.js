@@ -17,7 +17,7 @@ addHook({
       // ignore errors
     }
 
-    return wrap.apply(this, arguments)
+    return Reflect.apply(wrap, this, arguments)
   })
   return nycPackage
 })

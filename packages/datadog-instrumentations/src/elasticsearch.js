@@ -33,7 +33,7 @@ function createWrapGetConnection (name) {
   const connectCh = channel(`apm:${name}:query:connect`)
   return function wrapRequest (request) {
     return function () {
-      const connection = request.apply(this, arguments)
+      const connection = Reflect.apply(request, this, arguments)
       if (connectCh.hasSubscribers && connection && connection.url) {
         connectCh.publish(connection.url)
       }
@@ -55,7 +55,7 @@ function createWrapSelect () {
           cb(err, connection)
         })
       }
-      return request.apply(this, arguments)
+      return Reflect.apply(request, this, arguments)
     }
   }
 }
@@ -68,10 +68,10 @@ function createWrapRequest (name) {
   return function wrapRequest (request) {
     return function (params, options, cb) {
       if (!startCh.hasSubscribers) {
-        return request.apply(this, arguments)
+        return Reflect.apply(request, this, arguments)
       }
 
-      if (!params) return request.apply(this, arguments)
+      if (!params) return Reflect.apply(request, this, arguments)
 
       const parentResource = new AsyncResource('bound-anonymous-fn')
       const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -88,11 +88,11 @@ function createWrapRequest (name) {
 
             arguments[lastIndex] = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (error) {
               finish(params, error)
-              return cb.apply(null, arguments)
+              return Reflect.apply(cb, null, arguments)
             }))
-            return request.apply(this, arguments)
+            return Reflect.apply(request, this, arguments)
           } else {
-            const promise = request.apply(this, arguments)
+            const promise = Reflect.apply(request, this, arguments)
             if (promise && typeof promise.then === 'function') {
               const onResolve = asyncResource.bind(() => finish(params))
               const onReject = asyncResource.bind(e => finish(params, e))

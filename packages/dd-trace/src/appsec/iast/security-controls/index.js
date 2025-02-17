@@ -119,7 +119,7 @@ function resolve (path, obj, separator = '.') {
 
 function wrapSanitizer (target, secureMarks) {
   return shimmer.wrapFunction(target, orig => function () {
-    const result = orig.apply(this, arguments)
+    const result = Reflect.apply(orig, this, arguments)
 
     try {
       return addSecureMarks(result, secureMarks)
@@ -145,7 +145,7 @@ function wrapInputValidator (target, parameters, secureMarks) {
       log.error('[ASM] Error adding Secure mark for input validator', e)
     }
 
-    return orig.apply(this, arguments)
+    return Reflect.apply(orig, this, arguments)
   })
 }
 

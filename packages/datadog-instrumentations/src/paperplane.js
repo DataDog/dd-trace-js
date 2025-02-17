@@ -35,7 +35,7 @@ const wrapMount = mount => opts => {
   return function (req, res) {
     handleChannel.publish(req)
 
-    return handler.apply(this, arguments)
+    return Reflect.apply(handler, this, arguments)
   }
 }
 

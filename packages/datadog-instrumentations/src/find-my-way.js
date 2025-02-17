@@ -12,14 +12,14 @@ function wrapOn (on) {
     const wrapper = shimmer.wrapFunction(handler, handler => function (req) {
       routeChannel.publish({ req, route: path })
 
-      return handler.apply(this, arguments)
+      return Reflect.apply(handler, this, arguments)
     })
 
     if (typeof handler === 'function') {
       arguments[index] = wrapper
     }
 
-    return on.apply(this, arguments)
+    return Reflect.apply(on, this, arguments)
   }
 }
 

@@ -355,7 +355,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
 function dispatcherRunWrapper (run) {
   return function () {
     remainingTestsByFile = getTestsBySuiteFromTestsById(this._testById)
-    return run.apply(this, arguments)
+    return Reflect.apply(run, this, arguments)
   }
 }
 
@@ -367,7 +367,7 @@ function dispatcherRunWrapperNew (run) {
       this._ddAllTests = testGroups.map(g => g.tests).flat()
     }
     remainingTestsByFile = getTestsBySuiteFromTestGroups(arguments[0])
-    return run.apply(this, arguments)
+    return Reflect.apply(run, this, arguments)
   }
 }
 
@@ -375,7 +375,7 @@ function dispatcherHook (dispatcherExport) {
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, 'run', dispatcherRunWrapper)
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
     const dispatcher = this
-    const worker = createWorker.apply(this, arguments)
+    const worker = Reflect.apply(createWorker, this, arguments)
     worker.process.on('message', ({ method, params }) => {
       if (method === 'testBegin') {
         const { test } = dispatcher._testById.get(params.testId)
@@ -402,7 +402,7 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, 'run', runWrapper)
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
     const dispatcher = this
-    const worker = createWorker.apply(this, arguments)
+    const worker = Reflect.apply(createWorker, this, arguments)
 
     worker.on('testBegin', ({ testId }) => {
       const test = getTestByTestId(dispatcher, testId)
@@ -491,7 +491,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       })
     }
 
-    const runAllTestsReturn = await runAllTests.apply(this, arguments)
+    const runAllTestsReturn = await Reflect.apply(runAllTests, this, arguments)
 
     Object.values(remainingTestsByFile).forEach(tests => {
       // `tests` should normally be empty, but if it isn't,
@@ -595,9 +595,9 @@ addHook({
 
   async function newCreateRootSuite () {
     if (!isKnownTestsEnabled && !isQuarantinedTestsEnabled) {
-      return oldCreateRootSuite.apply(this, arguments)
+      return Reflect.apply(oldCreateRootSuite, this, arguments)
     }
-    const rootSuite = await oldCreateRootSuite.apply(this, arguments)
+    const rootSuite = await Reflect.apply(oldCreateRootSuite, this, arguments)
 
     const allTests = rootSuite.allTests()
 

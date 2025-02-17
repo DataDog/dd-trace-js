@@ -178,7 +178,7 @@ const web = {
   // catch errors and apply to active span
   bindAndWrapMiddlewareErrors (fn, req, tracer, activeSpan) {
     try {
-      return tracer.scope().bind(fn, activeSpan).apply(this, arguments)
+      return Reflect.apply(tracer.scope().bind(fn, activeSpan), this, arguments)
     } catch (e) {
       web.addError(req, e) // TODO: remove when error formatting is moved to Span
       throw e
@@ -370,7 +370,7 @@ const web = {
         addAllowHeaders(req, res, headers)
       }
 
-      return writeHead.apply(this, arguments)
+      return Reflect.apply(writeHead, this, arguments)
     }
   },
   getContext (req) {

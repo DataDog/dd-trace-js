@@ -156,7 +156,7 @@ class LLMObs extends NoopLLMObs {
             isError(maybeError) || maybeError == null ? maybeResult : maybeError
           )
 
-          return scopeBoundCb.apply(this, arguments)
+          return Reflect.apply(scopeBoundCb, this, arguments)
         }
       }
 
@@ -412,7 +412,7 @@ class LLMObs extends NoopLLMObs {
 
     const bound = function () {
       return llmobs._activate(activeSpan, null, () => {
-        return fn.apply(this, arguments)
+        return Reflect.apply(fn, this, arguments)
       })
     }
 

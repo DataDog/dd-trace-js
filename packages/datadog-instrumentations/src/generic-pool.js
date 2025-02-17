@@ -10,7 +10,7 @@ function createWrapAcquire () {
         arguments[0] = AsyncResource.bind(callback)
       }
 
-      return acquire.apply(this, arguments)
+      return Reflect.apply(acquire, this, arguments)
     }
   }
 }
@@ -20,7 +20,7 @@ function createWrapPool () {
     if (typeof Pool !== 'function') return Pool
 
     return function PoolWithTrace (factory) {
-      const pool = Pool.apply(this, arguments)
+      const pool = Reflect.apply(Pool, this, arguments)
 
       if (pool && typeof pool.acquire === 'function') {
         shimmer.wrap(pool, 'acquire', createWrapAcquire())

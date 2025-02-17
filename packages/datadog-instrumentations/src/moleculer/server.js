@@ -13,7 +13,7 @@ function wrapRegisterMiddlewares (registerMiddlewares) {
       this.middlewares.add(createMiddleware())
     }
 
-    return registerMiddlewares.apply(this, arguments)
+    return Reflect.apply(registerMiddlewares, this, arguments)
   }
 }
 

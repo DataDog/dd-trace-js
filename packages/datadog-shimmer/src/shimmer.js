@@ -32,7 +32,7 @@ function wrapFunction (original, wrapper) {
   let delegate = target.func
 
   const shim = function shim () {
-    return delegate.apply(this, arguments)
+    return Reflect.apply(delegate, this, arguments)
   }
 
   unwrappers.set(shim, () => {

@@ -115,7 +115,7 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
   for (const methodName of methodNames) {
     shimmer.wrap(exports.OpenAIApi.prototype, methodName, fn => function () {
       if (!ch.start.hasSubscribers) {
-        return fn.apply(this, arguments)
+        return Reflect.apply(fn, this, arguments)
       }
 
       const ctx = {
@@ -209,9 +209,9 @@ function wrapStreamIterator (response, options, n, ctx) {
   let chunks = []
   return function (itr) {
     return function () {
-      const iterator = itr.apply(this, arguments)
+      const iterator = Reflect.apply(itr, this, arguments)
       shimmer.wrap(iterator, 'next', next => function () {
-        return next.apply(this, arguments)
+        return Reflect.apply(next, this, arguments)
           .then(res => {
             const { done, value: chunk } = res
 
@@ -275,7 +275,7 @@ for (const shim of V4_PACKAGE_SHIMS) {
     for (const methodName of methods) {
       shimmer.wrap(targetPrototype, methodName, methodFn => function () {
         if (!ch.start.hasSubscribers) {
-          return methodFn.apply(this, arguments)
+          return Reflect.apply(methodFn, this, arguments)
         }
 
         // The OpenAI library lets you set `stream: true` on the options arg to any method
@@ -304,12 +304,12 @@ for (const shim of V4_PACKAGE_SHIMS) {
         }
 
         return ch.start.runStores(ctx, () => {
-          const apiProm = methodFn.apply(this, arguments)
+          const apiProm = Reflect.apply(methodFn, this, arguments)
 
           // wrapping `parse` avoids problematic wrapping of `then` when trying to call
           // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
           shimmer.wrap(apiProm, 'parse', origApiPromParse => function () {
-            return origApiPromParse.apply(this, arguments)
+            return Reflect.apply(origApiPromParse, this, arguments)
             // the original response is wrapped in a promise, so we need to unwrap it
               .then(body => Promise.all([this.responsePromise, body]))
               .then(([{ response, options }, body]) => {

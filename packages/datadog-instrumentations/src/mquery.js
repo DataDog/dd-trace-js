@@ -50,7 +50,7 @@ addHook({
           }
         }
 
-        return method.apply(this, arguments)
+        return Reflect.apply(method, this, arguments)
       }
     })
   })

@@ -44,6 +44,6 @@ function wrapVMMethod (original) {
       runScriptStartChannel.publish({ code })
     }
 
-    return original.apply(this, arguments)
+    return Reflect.apply(original, this, arguments)
   }
 }

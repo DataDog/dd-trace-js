@@ -14,7 +14,7 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
 
   shimmer.wrap(Connection.prototype, 'query', query => function () {
     if (!startCh.hasSubscribers) {
-      return query.apply(this, arguments)
+      return Reflect.apply(query, this, arguments)
     }
 
     const sql = arguments[0].sql || arguments[0]
@@ -33,7 +33,7 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
         arguments[0] = payload.sql
       }
       try {
-        const res = query.apply(this, arguments)
+        const res = Reflect.apply(query, this, arguments)
 
         if (res._callback) {
           const cb = callbackResource.bind(res._callback)
@@ -43,7 +43,7 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
             }
             finishCh.publish(result)
 
-            return cb.apply(this, arguments)
+            return Reflect.apply(cb, this, arguments)
           }))
         } else {
           const cb = asyncResource.bind(function () {
@@ -71,12 +71,12 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
 
   shimmer.wrap(Pool.prototype, 'getConnection', getConnection => function (cb) {
     arguments[0] = AsyncResource.bind(cb)
-    return getConnection.apply(this, arguments)
+    return Reflect.apply(getConnection, this, arguments)
   })
 
   shimmer.wrap(Pool.prototype, 'query', query => function () {
     if (!startPoolQueryCh.hasSubscribers) {
-      return query.apply(this, arguments)
+      return Reflect.apply(query, this, arguments)
     }
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -94,11 +94,11 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
       if (typeof cb === 'function') {
         arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function () {
           finish()
-          return cb.apply(this, arguments)
+          return Reflect.apply(cb, this, arguments)
         })
       }
 
-      const retval = query.apply(this, arguments)
+      const retval = Reflect.apply(query, this, arguments)
 
       if (retval && retval.then) {
         retval.then(finish).catch(finish)

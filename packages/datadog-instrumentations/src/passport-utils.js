@@ -17,7 +17,7 @@ function wrapVerifiedAndPublish (framework, username, verified) {
         if (abortController.signal.aborted) return
       }
 
-      return verified.apply(this, arguments)
+      return Reflect.apply(verified, this, arguments)
     }
   })
 }
@@ -35,7 +35,7 @@ function wrapVerify (verify) {
       }
     }
 
-    return verify.apply(this, arguments)
+    return Reflect.apply(verify, this, arguments)
   }
 }
 
@@ -48,7 +48,7 @@ function wrapStrategy (Strategy) {
       arguments[1] = wrapVerify(arguments[1])
     }
 
-    return Strategy.apply(this, arguments)
+    return Reflect.apply(Strategy, this, arguments)
   }
 }
 

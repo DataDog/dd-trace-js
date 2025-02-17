@@ -16,7 +16,7 @@ let createClientUrl
 function wrapAddCommand (addCommand) {
   return function (command) {
     if (!startCh.hasSubscribers) {
-      return addCommand.apply(this, arguments)
+      return Reflect.apply(addCommand, this, arguments)
     }
 
     const name = command[0]
@@ -26,7 +26,7 @@ function wrapAddCommand (addCommand) {
     return asyncResource.runInAsyncScope(() => {
       start(this, name, args, this._url)
 
-      const res = addCommand.apply(this, arguments)
+      const res = Reflect.apply(addCommand, this, arguments)
       const onResolve = asyncResource.bind(() => finish(finishCh, errorCh))
       const onReject = asyncResource.bind(err => finish(finishCh, errorCh, err))
 
@@ -60,7 +60,7 @@ function wrapCommandQueueClass (cls) {
 function wrapCreateClient (request) {
   return function (opts) {
     createClientUrl = opts && opts.url
-    const ret = request.apply(this, arguments)
+    const ret = Reflect.apply(request, this, arguments)
     createClientUrl = undefined
     return ret
   }
@@ -90,9 +90,9 @@ addHook({ name: '@redis/client', file: 'dist/lib/client/commands-queue.js', vers
 
 addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
   shimmer.wrap(redis.RedisClient.prototype, 'internal_send_command', internalSendCommand => function (options) {
-    if (!startCh.hasSubscribers) return internalSendCommand.apply(this, arguments)
+    if (!startCh.hasSubscribers) return Reflect.apply(internalSendCommand, this, arguments)
 
-    if (!options.callback) return internalSendCommand.apply(this, arguments)
+    if (!options.callback) return Reflect.apply(internalSendCommand, this, arguments)
 
     const callbackResource = new AsyncResource('bound-anonymous-fn')
     const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -104,7 +104,7 @@ addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
       options.callback = asyncResource.bind(wrapCallback(finishCh, errorCh, cb))
 
       try {
-        return internalSendCommand.apply(this, arguments)
+        return Reflect.apply(internalSendCommand, this, arguments)
       } catch (err) {
         errorCh.publish(err)
 
@@ -118,7 +118,7 @@ addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
 addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
   shimmer.wrap(redis.RedisClient.prototype, 'send_command', sendCommand => function (command, args, callback) {
     if (!startCh.hasSubscribers) {
-      return sendCommand.apply(this, arguments)
+      return Reflect.apply(sendCommand, this, arguments)
     }
 
     const callbackResource = new AsyncResource('bound-anonymous-fn')
@@ -138,7 +138,7 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
       }
 
       try {
-        return sendCommand.apply(this, arguments)
+        return Reflect.apply(sendCommand, this, arguments)
       } catch (err) {
         errorCh.publish(err)
 
@@ -159,7 +159,7 @@ function wrapCallback (finishCh, errorCh, callback) {
   return shimmer.wrapFunction(callback, callback => function (err) {
     finish(finishCh, errorCh, err)
     if (callback) {
-      return callback.apply(this, arguments)
+      return Reflect.apply(callback, this, arguments)
     }
   })
 }

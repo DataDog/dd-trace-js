@@ -100,13 +100,13 @@ function getCompileMethodFn (compileMethod) {
         }
 
         if (rewritten?.content) {
-          return compileMethod.apply(this, [rewritten.content, filename])
+          return Reflect.apply(compileMethod, this, [rewritten.content, filename])
         }
       }
     } catch (e) {
       log.error('[ASM] Error rewriting file %s', filename, e)
     }
-    return compileMethod.apply(this, [content, filename])
+    return Reflect.apply(compileMethod, this, [content, filename])
   }
 }
 

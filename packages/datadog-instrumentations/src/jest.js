@@ -245,11 +245,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (this.global.test) {
           shimmer.wrap(this.global.test, 'each', each => function () {
             const testParameters = getFormattedJestTestParameters(arguments)
-            const eachBind = each.apply(this, arguments)
+            const eachBind = Reflect.apply(each, this, arguments)
             return function () {
               const [testName] = arguments
               setNameToParams(testName, testParameters)
-              return eachBind.apply(this, arguments)
+              return Reflect.apply(eachBind, this, arguments)
             }
           })
         }
@@ -441,14 +441,14 @@ addHook({
 function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
   return async function (tests) {
     if (!isSuitesSkippingEnabled || hasFilteredSkippableSuites) {
-      return scheduleTests.apply(this, arguments)
+      return Reflect.apply(scheduleTests, this, arguments)
     }
     const [test] = tests
     const rootDir = test?.context?.config?.rootDir
 
     arguments[0] = applySuiteSkipping(tests, rootDir, frameworkVersion)
 
-    return scheduleTests.apply(this, arguments)
+    return Reflect.apply(scheduleTests, this, arguments)
   }
 }
 
@@ -460,10 +460,10 @@ addHook({
   const oldCreateTestScheduler = testSchedulerPackage.createTestScheduler
   const newCreateTestScheduler = async function () {
     if (!isSuitesSkippingEnabled || hasFilteredSkippableSuites) {
-      return oldCreateTestScheduler.apply(this, arguments)
+      return Reflect.apply(oldCreateTestScheduler, this, arguments)
     }
     // If suite skipping is enabled and has not filtered skippable suites yet, we'll attempt to do it
-    const scheduler = await oldCreateTestScheduler.apply(this, arguments)
+    const scheduler = await Reflect.apply(oldCreateTestScheduler, this, arguments)
     shimmer.wrap(scheduler, 'scheduleTests', scheduleTests => getWrappedScheduleTests(scheduleTests, frameworkVersion))
     return scheduler
   }
@@ -488,7 +488,7 @@ addHook({
   versions: ['>=28']
 }, (sequencerPackage, frameworkVersion) => {
   shimmer.wrap(sequencerPackage.default.prototype, 'shard', shard => function () {
-    const shardedTests = shard.apply(this, arguments)
+    const shardedTests = Reflect.apply(shard, this, arguments)
 
     if (!shardedTests.length || !isSuitesSkippingEnabled || !skippableSuites.length) {
       return shardedTests
@@ -508,7 +508,7 @@ function cliWrapper (cli, jestVersion) {
       onDone = resolve
     })
     if (!libraryConfigurationCh.hasSubscribers) {
-      return runCLI.apply(this, arguments)
+      return Reflect.apply(runCLI, this, arguments)
     }
 
     sessionAsyncResource.runInAsyncScope(() => {
@@ -596,7 +596,7 @@ function cliWrapper (cli, jestVersion) {
       testSessionStartCh.publish({ command: `jest ${processArgv}`, frameworkVersion: jestVersion })
     })
 
-    const result = await runCLI.apply(this, arguments)
+    const result = await Reflect.apply(runCLI, this, arguments)
 
     const {
       results: {
@@ -747,7 +747,7 @@ function coverageReporterWrapper (coverageReporter) {
     if (isSuitesSkippingEnabled && !isUserCodeCoverageEnabled) {
       return Promise.resolve()
     }
-    return addUntestedFiles.apply(this, arguments)
+    return Reflect.apply(addUntestedFiles, this, arguments)
   })
 
   return coverageReporter
@@ -776,7 +776,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
   const newAdapter = shimmer.wrapFunction(adapter, adapter => function () {
     const environment = arguments[2]
     if (!environment) {
-      return adapter.apply(this, arguments)
+      return Reflect.apply(adapter, this, arguments)
     }
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
@@ -787,7 +787,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
         displayName: environment.displayName,
         frameworkVersion: jestVersion
       })
-      return adapter.apply(this, arguments).then(suiteResults => {
+      return Reflect.apply(adapter, this, arguments).then(suiteResults => {
         const { numFailingTests, skipped, failureMessage: errorMessage } = suiteResults
         let status = 'pass'
         if (skipped) {
@@ -875,7 +875,7 @@ function configureTestEnvironment (readConfigsResult) {
 
 function jestConfigAsyncWrapper (jestConfig) {
   shimmer.wrap(jestConfig, 'readConfigs', readConfigs => async function () {
-    const readConfigsResult = await readConfigs.apply(this, arguments)
+    const readConfigsResult = await Reflect.apply(readConfigs, this, arguments)
     configureTestEnvironment(readConfigsResult)
     return readConfigsResult
   })
@@ -884,7 +884,7 @@ function jestConfigAsyncWrapper (jestConfig) {
 
 function jestConfigSyncWrapper (jestConfig) {
   shimmer.wrap(jestConfig, 'readConfigs', readConfigs => function () {
-    const readConfigsResult = readConfigs.apply(this, arguments)
+    const readConfigsResult = Reflect.apply(readConfigs, this, arguments)
     configureTestEnvironment(readConfigsResult)
     return readConfigsResult
   })
@@ -925,7 +925,7 @@ addHook({
 
     arguments[0] = restOfConfig
 
-    return originalCreateScriptTransformer.apply(this, arguments)
+    return Reflect.apply(originalCreateScriptTransformer, this, arguments)
   }
 
   return transformPackage
@@ -942,7 +942,7 @@ addHook({
   const SearchSource = searchSourcePackage.default ? searchSourcePackage.default : searchSourcePackage
 
   shimmer.wrap(SearchSource.prototype, 'getTestPaths', getTestPaths => async function () {
-    const testPaths = await getTestPaths.apply(this, arguments)
+    const testPaths = await Reflect.apply(getTestPaths, this, arguments)
     const [{ rootDir, shard }] = arguments
 
     if (isKnownTestsEnabled) {
@@ -1022,7 +1022,7 @@ addHook({
       // To bypass jest's own require engine
       return this._requireCoreModule(moduleName)
     }
-    return requireModuleOrMock.apply(this, arguments)
+    return Reflect.apply(requireModuleOrMock, this, arguments)
   })
 
   return runtimePackage
@@ -1042,7 +1042,7 @@ addHook({
   const ChildProcessWorker = childProcessWorker.default
   shimmer.wrap(ChildProcessWorker.prototype, 'send', send => function (request) {
     if (!isKnownTestsEnabled && !isQuarantinedTestsEnabled) {
-      return send.apply(this, arguments)
+      return Reflect.apply(send, this, arguments)
     }
     const [type] = request
     // eslint-disable-next-line
@@ -1053,10 +1053,10 @@ addHook({
       // This way the suite only knows about the tests that are part of it.
       const args = request[request.length - 1]
       if (args.length > 1) {
-        return send.apply(this, arguments)
+        return Reflect.apply(send, this, arguments)
       }
       if (!args[0]?.config) {
-        return send.apply(this, arguments)
+        return Reflect.apply(send, this, arguments)
       }
       const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
@@ -1074,7 +1074,7 @@ addHook({
       }
     }
 
-    return send.apply(this, arguments)
+    return Reflect.apply(send, this, arguments)
   })
   shimmer.wrap(ChildProcessWorker.prototype, '_onMessage', _onMessage => function () {
     const [code, data] = arguments[0]
@@ -1096,7 +1096,7 @@ addHook({
       })
       return
     }
-    return _onMessage.apply(this, arguments)
+    return Reflect.apply(_onMessage, this, arguments)
   })
   return childProcessWorker
 })

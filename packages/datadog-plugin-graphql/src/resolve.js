@@ -113,7 +113,7 @@ function pathToArray (path) {
 
 function withCollapse (responsePathAsArray) {
   return function () {
-    return responsePathAsArray.apply(this, arguments)
+    return Reflect.apply(responsePathAsArray, this, arguments)
       .map(segment => typeof segment === 'number' ? '*' : segment)
   }
 }

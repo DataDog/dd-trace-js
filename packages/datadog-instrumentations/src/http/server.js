@@ -43,7 +43,7 @@ addHook({ name: httpsNames }, http => {
 function wrapResponseEmit (emit) {
   return function (eventName, event) {
     if (!finishServerCh.hasSubscribers) {
-      return emit.apply(this, arguments)
+      return Reflect.apply(emit, this, arguments)
     }
 
     if (['finish', 'close'].includes(eventName) && !requestFinishedSet.has(this)) {
@@ -51,13 +51,13 @@ function wrapResponseEmit (emit) {
       requestFinishedSet.add(this)
     }
 
-    return emit.apply(this, arguments)
+    return Reflect.apply(emit, this, arguments)
   }
 }
 function wrapEmit (emit) {
   return function (eventName, req, res) {
     if (!startServerCh.hasSubscribers) {
-      return emit.apply(this, arguments)
+      return Reflect.apply(emit, this, arguments)
     }
 
     if (eventName === 'request') {
@@ -73,7 +73,7 @@ function wrapEmit (emit) {
           return this.listenerCount(eventName) > 0
         }
 
-        return emit.apply(this, arguments)
+        return Reflect.apply(emit, this, arguments)
       } catch (err) {
         errorServerCh.publish(err)
 
@@ -82,14 +82,14 @@ function wrapEmit (emit) {
         exitServerCh.publish({ req })
       }
     }
-    return emit.apply(this, arguments)
+    return Reflect.apply(emit, this, arguments)
   }
 }
 
 function wrapWriteHead (writeHead) {
   return function wrappedWriteHead (statusCode, reason, obj) {
     if (!startWriteHeadCh.hasSubscribers) {
-      return writeHead.apply(this, arguments)
+      return Reflect.apply(writeHead, this, arguments)
     }
 
     const abortController = new AbortController()
@@ -124,14 +124,14 @@ function wrapWriteHead (writeHead) {
       return this
     }
 
-    return writeHead.apply(this, arguments)
+    return Reflect.apply(writeHead, this, arguments)
   }
 }
 
 function wrapWrite (write) {
   return function wrappedWrite () {
     if (!startWriteHeadCh.hasSubscribers) {
-      return write.apply(this, arguments)
+      return Reflect.apply(write, this, arguments)
     }
 
     const abortController = new AbortController()
@@ -150,14 +150,14 @@ function wrapWrite (write) {
       return true
     }
 
-    return write.apply(this, arguments)
+    return Reflect.apply(write, this, arguments)
   }
 }
 
 function wrapSetHeader (setHeader) {
   return function wrappedSetHeader (name, value) {
     if (!startSetHeaderCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers) {
-      return setHeader.apply(this, arguments)
+      return Reflect.apply(setHeader, this, arguments)
     }
 
     if (startSetHeaderCh.hasSubscribers) {
@@ -169,7 +169,7 @@ function wrapSetHeader (setHeader) {
       }
     }
 
-    const setHeaderResult = setHeader.apply(this, arguments)
+    const setHeaderResult = Reflect.apply(setHeader, this, arguments)
 
     if (finishSetHeaderCh.hasSubscribers) {
       finishSetHeaderCh.publish({ name, value, res: this })
@@ -182,7 +182,7 @@ function wrapSetHeader (setHeader) {
 function wrapAppendOrRemoveHeader (originalMethod) {
   return function wrappedAppendOrRemoveHeader () {
     if (!startSetHeaderCh.hasSubscribers) {
-      return originalMethod.apply(this, arguments)
+      return Reflect.apply(originalMethod, this, arguments)
     }
 
     const abortController = new AbortController()
@@ -192,14 +192,14 @@ function wrapAppendOrRemoveHeader (originalMethod) {
       return this
     }
 
-    return originalMethod.apply(this, arguments)
+    return Reflect.apply(originalMethod, this, arguments)
   }
 }
 
 function wrapEnd (end) {
   return function wrappedEnd () {
     if (!startWriteHeadCh.hasSubscribers) {
-      return end.apply(this, arguments)
+      return Reflect.apply(end, this, arguments)
     }
 
     const abortController = new AbortController()
@@ -218,6 +218,6 @@ function wrapEnd (end) {
       return this
     }
 
-    return end.apply(this, arguments)
+    return Reflect.apply(end, this, arguments)
   }
 }

@@ -297,14 +297,14 @@ addHook({
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     // Workers do not need to request any data, just run the tests
     if (!testStartCh.hasSubscribers || process.env.MOCHA_WORKER_ID || this.options.parallel) {
-      return run.apply(this, arguments)
+      return Reflect.apply(run, this, arguments)
     }
 
     // `options.delay` does not work in parallel mode, so we can't delay the execution this way
     // This needs to be both here and in `runMocha` hook. Read the comment in `runMocha` hook for more info.
     this.options.delay = true
 
-    const runner = run.apply(this, arguments)
+    const runner = Reflect.apply(run, this, arguments)
 
     this.files.forEach(path => {
       const isUnskippable = isMarkedAsUnskippable({ path })
@@ -351,7 +351,7 @@ addHook({
 }, (run) => {
   shimmer.wrap(run, 'runMocha', runMocha => async function () {
     if (!testStartCh.hasSubscribers) {
-      return runMocha.apply(this, arguments)
+      return Reflect.apply(runMocha, this, arguments)
     }
     const mocha = arguments[0]
 
@@ -367,7 +367,7 @@ addHook({
       mocha.options.delay = true
     }
 
-    return runMocha.apply(this, arguments)
+    return Reflect.apply(runMocha, this, arguments)
   })
   return run
 })
@@ -387,7 +387,7 @@ addHook({
 
   shimmer.wrap(Runner.prototype, 'run', run => function () {
     if (!testStartCh.hasSubscribers) {
-      return run.apply(this, arguments)
+      return Reflect.apply(run, this, arguments)
     }
 
     const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
@@ -478,7 +478,7 @@ addHook({
       }
     })
 
-    return run.apply(this, arguments)
+    return Reflect.apply(run, this, arguments)
   })
 
   return Runner
@@ -504,10 +504,10 @@ addHook({
 }, (workerHandlerPackage) => {
   shimmer.wrap(workerHandlerPackage.prototype, 'exec', exec => function (_, path) {
     if (!testStartCh.hasSubscribers) {
-      return exec.apply(this, arguments)
+      return Reflect.apply(exec, this, arguments)
     }
     if (!path?.length) {
-      return exec.apply(this, arguments)
+      return Reflect.apply(exec, this, arguments)
     }
     const [testSuiteAbsolutePath] = path
     const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
@@ -532,7 +532,7 @@ addHook({
     })
 
     try {
-      const promise = exec.apply(this, arguments)
+      const promise = Reflect.apply(exec, this, arguments)
       promise.then(
         (result) => {
           const status = result.failureCount === 0 ? 'pass' : 'fail'
@@ -572,7 +572,7 @@ addHook({
 }, (ParallelBufferedRunner, frameworkVersion) => {
   shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files }) {
     if (!testStartCh.hasSubscribers) {
-      return run.apply(this, arguments)
+      return Reflect.apply(run, this, arguments)
     }
 
     this.once('start', getOnStartHandler(true, frameworkVersion))
@@ -592,7 +592,7 @@ addHook({
           config.isEarlyFlakeDetectionFaulty = true
         }
       }
-      run.apply(this, arguments)
+      Reflect.apply(run, this, arguments)
     })
 
     return this
@@ -613,7 +613,7 @@ addHook({
 
   shimmer.wrap(BufferedWorkerPool.prototype, 'run', run => async function (testSuiteAbsolutePath, workerArgs) {
     if (!testStartCh.hasSubscribers || !config.isKnownTestsEnabled) {
-      return run.apply(this, arguments)
+      return Reflect.apply(run, this, arguments)
     }
 
     const testPath = getTestSuitePath(testSuiteAbsolutePath, process.cwd())
@@ -621,24 +621,21 @@ addHook({
     const testSuiteQuarantinedTests = config.quarantinedTests?.modules?.mocha?.suites?.[testPath] || []
 
     // We pass the known tests for the test file to the worker
-    const testFileResult = await run.apply(
-      this,
-      [
-        testSuiteAbsolutePath,
-        {
-          ...workerArgs,
-          _ddEfdNumRetries: config.earlyFlakeDetectionNumRetries,
-          _ddIsEfdEnabled: config.isEarlyFlakeDetectionEnabled,
-          _ddIsQuarantinedEnabled: config.isQuarantinedTestsEnabled,
-          _ddQuarantinedTests: testSuiteQuarantinedTests,
-          _ddKnownTests: {
-            mocha: {
-              [testPath]: testSuiteKnownTests
-            }
+    const testFileResult = await Reflect.apply(run, this, [
+      testSuiteAbsolutePath,
+      {
+        ...workerArgs,
+        _ddEfdNumRetries: config.earlyFlakeDetectionNumRetries,
+        _ddIsEfdEnabled: config.isEarlyFlakeDetectionEnabled,
+        _ddIsQuarantinedEnabled: config.isQuarantinedTestsEnabled,
+        _ddQuarantinedTests: testSuiteQuarantinedTests,
+        _ddKnownTests: {
+          mocha: {
+            [testPath]: testSuiteKnownTests
           }
         }
-      ]
-    )
+      }
+    ])
     const tests = testFileResult
       .events
       .filter(event => event.eventName === 'test end')

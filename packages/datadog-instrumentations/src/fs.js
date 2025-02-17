@@ -176,7 +176,7 @@ function createWrapDirAsyncIterator () {
       }
       wrap(this, kDirReadPromisified, createWrapFunction('dir.', 'read'))
       wrap(this, kDirClosePromisified, createWrapFunction('dir.', 'close'))
-      return asyncIterator.apply(this, arguments)
+      return Reflect.apply(asyncIterator, this, arguments)
     }
   }
 }
@@ -189,7 +189,7 @@ function wrapCreateStream (original) {
   const name = classes[original.name]
 
   return function (path, options) {
-    if (!startChannel.hasSubscribers) return original.apply(this, arguments)
+    if (!startChannel.hasSubscribers) return Reflect.apply(original, this, arguments)
 
     const innerResource = new AsyncResource('bound-anonymous-fn')
     const message = getMessage(name, ['path', 'options'], arguments)
@@ -198,7 +198,7 @@ function wrapCreateStream (original) {
       startChannel.publish(message)
 
       try {
-        const stream = original.apply(this, arguments)
+        const stream = Reflect.apply(original, this, arguments)
         const onError = innerResource.bind(error => {
           errorChannel.publish(error)
           onFinish()
@@ -238,13 +238,13 @@ function createWatchWrapFunction (override = '') {
     const method = name
     const operation = name
     return function () {
-      if (!startChannel.hasSubscribers) return original.apply(this, arguments)
+      if (!startChannel.hasSubscribers) return Reflect.apply(original, this, arguments)
       const message = getMessage(method, watchMethods[operation], arguments, this)
       const innerResource = new AsyncResource('bound-anonymous-fn')
       return innerResource.runInAsyncScope(() => {
         startChannel.publish(message)
         try {
-          const result = original.apply(this, arguments)
+          const result = Reflect.apply(original, this, arguments)
           finishChannel.publish()
           return result
         } catch (error) {
@@ -264,7 +264,7 @@ function createWrapFunction (prefix = '', override = '') {
     const operation = name.match(/^(.+?)(Sync)?(\.native)?$/)[1]
 
     return function () {
-      if (!startChannel.hasSubscribers) return original.apply(this, arguments)
+      if (!startChannel.hasSubscribers) return Reflect.apply(original, this, arguments)
 
       const lastIndex = arguments.length - 1
       const cb = typeof arguments[lastIndex] === 'function' && arguments[lastIndex]
@@ -285,7 +285,7 @@ function createWrapFunction (prefix = '', override = '') {
 
         arguments[lastIndex] = shimmer.wrapFunction(cb, cb => innerResource.bind(function (e) {
           finish(e)
-          return outerResource.runInAsyncScope(() => cb.apply(this, arguments))
+          return outerResource.runInAsyncScope(() => Reflect.apply(cb, this, arguments))
         }))
       }
 
@@ -308,7 +308,7 @@ function createWrapFunction (prefix = '', override = '') {
         }
 
         try {
-          const result = original.apply(this, arguments)
+          const result = Reflect.apply(original, this, arguments)
           if (cb) return result
           if (result && typeof result.then === 'function') {
             // TODO method open returning promise and filehandle prototype not initialized, initialize it

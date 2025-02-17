@@ -41,7 +41,7 @@ addHook({
       delete this.options._ddIsQuarantinedEnabled
       delete this.options._ddQuarantinedTests
     }
-    return run.apply(this, arguments)
+    return Reflect.apply(run, this, arguments)
   })
 
   return Mocha
@@ -57,7 +57,7 @@ addHook({
 
   shimmer.wrap(Runner.prototype, 'run', run => function () {
     if (!workerFinishCh.hasSubscribers) {
-      return run.apply(this, arguments)
+      return Reflect.apply(run, this, arguments)
     }
     // We flush when the worker ends with its test file (a mocha instance in a worker runs a single test file)
     this.on('end', () => {
@@ -74,7 +74,7 @@ addHook({
 
     this.on('pending', getOnPendingHandler())
 
-    return run.apply(this, arguments)
+    return Reflect.apply(run, this, arguments)
   })
   return Runner
 })
