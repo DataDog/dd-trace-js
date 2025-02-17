@@ -16,7 +16,7 @@ class KafkaConsumerIastPlugin extends SourceIastPlugin {
 
   getToStringWrap (toString, iastContext, type) {
     return function () {
-      const res = Reflect.apply(toString, this, arguments)
+      const res = toString.apply(this, arguments)
       return newTaintedString(iastContext, res, undefined, type)
     }
   }

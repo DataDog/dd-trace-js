@@ -15,10 +15,10 @@ addHook({ name: 'lodash', versions: ['>=4'] }, lodash => {
     lodashFn => {
       return function () {
         if (!lodashOperationCh.hasSubscribers) {
-          return Reflect.apply(lodashFn, this, arguments)
+          return lodashFn.apply(this, arguments)
         }
 
-        const result = Reflect.apply(lodashFn, this, arguments)
+        const result = lodashFn.apply(this, arguments)
         const message = { operation: lodashFn.name, arguments, result }
         lodashOperationCh.publish(message)
 

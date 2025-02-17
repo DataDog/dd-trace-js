@@ -8,19 +8,19 @@ const deserializeChannel = dc.channel('apm:avsc:deserialize-end')
 function wrapSerialization (Type) {
   shimmer.wrap(Type.prototype, 'toBuffer', original => function () {
     if (!serializeChannel.hasSubscribers) {
-      return Reflect.apply(original, this, arguments)
+      return original.apply(this, arguments)
     }
     serializeChannel.publish({ messageClass: this })
-    return Reflect.apply(original, this, arguments)
+    return original.apply(this, arguments)
   })
 }
 
 function wrapDeserialization (Type) {
   shimmer.wrap(Type.prototype, 'fromBuffer', original => function () {
     if (!deserializeChannel.hasSubscribers) {
-      return Reflect.apply(original, this, arguments)
+      return original.apply(this, arguments)
     }
-    const result = Reflect.apply(original, this, arguments)
+    const result = original.apply(this, arguments)
     deserializeChannel.publish({ messageClass: result })
     return result
   })

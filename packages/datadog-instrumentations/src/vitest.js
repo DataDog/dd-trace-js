@@ -156,7 +156,7 @@ function getTestName (task) {
 function getSortWrapper (sort) {
   return async function () {
     if (!testSessionFinishCh.hasSubscribers) {
-      return Reflect.apply(sort, this, arguments)
+      return sort.apply(this, arguments)
     }
     // There isn't any other async function that we seem to be able to hook into
     // So we will use the sort from BaseSequencer. This means that a custom sequencer
@@ -262,7 +262,7 @@ function getSortWrapper (sort) {
 
     if (this.ctx.coverageProvider?.generateCoverage) {
       shimmer.wrap(this.ctx.coverageProvider, 'generateCoverage', generateCoverage => async function () {
-        const totalCodeCoverage = await Reflect.apply(generateCoverage, this, arguments)
+        const totalCodeCoverage = await generateCoverage.apply(this, arguments)
 
         try {
           testCodeCoverageLinesTotal = totalCodeCoverage.getCoverageSummary().lines.pct
@@ -299,23 +299,23 @@ function getSortWrapper (sort) {
 
       await flushPromise
 
-      return Reflect.apply(exit, this, arguments)
+      return exit.apply(this, arguments)
     })
 
-    return Reflect.apply(sort, this, arguments)
+    return sort.apply(this, arguments)
   }
 }
 
 function getCreateCliWrapper (vitestPackage, frameworkVersion) {
   shimmer.wrap(vitestPackage, 'c', oldCreateCli => function () {
     if (!testSessionStartCh.hasSubscribers) {
-      return Reflect.apply(oldCreateCli, this, arguments)
+      return oldCreateCli.apply(this, arguments)
     }
     sessionAsyncResource.runInAsyncScope(() => {
       const processArgv = process.argv.slice(2).join(' ')
       testSessionStartCh.publish({ command: `vitest ${processArgv}`, frameworkVersion })
     })
-    return Reflect.apply(oldCreateCli, this, arguments)
+    return oldCreateCli.apply(this, arguments)
   })
 
   return vitestPackage
@@ -357,7 +357,7 @@ addHook({
       })
     }
 
-    return Reflect.apply(onBeforeRunTask, this, arguments)
+    return onBeforeRunTask.apply(this, arguments)
   })
 
   // `onAfterRunTask` is run after all repetitions or attempts are run
@@ -381,14 +381,14 @@ addHook({
       }
     }
 
-    return Reflect.apply(onAfterRunTask, this, arguments)
+    return onAfterRunTask.apply(this, arguments)
   })
 
   // test start (only tests that are not marked as skip or todo)
   // `onBeforeTryTask` is run for every repetition and attempt of the test
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeTryTask', onBeforeTryTask => async function (task, retryInfo) {
     if (!testStartCh.hasSubscribers) {
-      return Reflect.apply(onBeforeTryTask, this, arguments)
+      return onBeforeTryTask.apply(this, arguments)
     }
     const testName = getTestName(task)
     let isNew = false
@@ -505,16 +505,16 @@ addHook({
         isQuarantined
       })
     })
-    return Reflect.apply(onBeforeTryTask, this, arguments)
+    return onBeforeTryTask.apply(this, arguments)
   })
 
   // test finish (only passed tests)
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterTryTask', onAfterTryTask =>
     async function (task, { retry: retryCount }) {
       if (!testFinishTimeCh.hasSubscribers) {
-        return Reflect.apply(onAfterTryTask, this, arguments)
+        return onAfterTryTask.apply(this, arguments)
       }
-      const result = await Reflect.apply(onAfterTryTask, this, arguments)
+      const result = await onAfterTryTask.apply(this, arguments)
 
       const status = getVitestTestStatus(task, retryCount)
       const asyncResource = taskToAsync.get(task)
@@ -617,7 +617,7 @@ addHook({
   shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPaths) {
     let testSuiteError = null
     if (!testSuiteStartCh.hasSubscribers) {
-      return Reflect.apply(startTests, this, arguments)
+      return startTests.apply(this, arguments)
     }
     // From >=3.0.1, the first arguments changes from a string to an object containing the filepath
     const testSuiteAbsolutePath = testPaths[0]?.filepath || testPaths[0]
@@ -626,7 +626,7 @@ addHook({
     testSuiteAsyncResource.runInAsyncScope(() => {
       testSuiteStartCh.publish({ testSuiteAbsolutePath, frameworkVersion })
     })
-    const startTestsResponse = await Reflect.apply(startTests, this, arguments)
+    const startTestsResponse = await startTests.apply(this, arguments)
 
     let onFinish = null
     const onFinishPromise = new Promise(resolve => {

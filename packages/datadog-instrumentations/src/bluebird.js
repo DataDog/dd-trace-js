@@ -7,7 +7,7 @@ const shimmer = require('../../datadog-shimmer')
 function createGetNewLibraryCopyWrap (originalLib) {
   return function wrapGetNewLibraryCopy (getNewLibraryCopy) {
     return function getNewLibraryCopyWithTrace () {
-      const libraryCopy = Reflect.apply(getNewLibraryCopy, this, arguments)
+      const libraryCopy = getNewLibraryCopy.apply(this, arguments)
       shimmer.wrap(libraryCopy.prototype, '_then', wrapThen)
       shimmer.wrap(libraryCopy, 'getNewLibraryCopy', createGetNewLibraryCopyWrap(originalLib))
       return libraryCopy

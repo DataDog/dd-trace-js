@@ -13,7 +13,7 @@ function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
 
   return function fastifyWithTrace () {
-    const app = Reflect.apply(fastify, this, arguments)
+    const app = fastify.apply(this, arguments)
 
     if (!app || typeof app.addHook !== 'function') return app
 
@@ -39,7 +39,7 @@ function wrapAddHook (addHook) {
   return shimmer.wrapFunction(addHook, addHook => function addHookWithTrace (name, fn) {
     fn = arguments[arguments.length - 1]
 
-    if (typeof fn !== 'function') return Reflect.apply(addHook, this, arguments)
+    if (typeof fn !== 'function') return addHook.apply(this, arguments)
 
     arguments[arguments.length - 1] = shimmer.wrapFunction(fn, fn => function (request, reply, done) {
       const req = getReq(request)
@@ -57,16 +57,16 @@ function wrapAddHook (addHook) {
               parsingResources.set(req, parsingResource)
 
               return parsingResource.runInAsyncScope(() => {
-                return Reflect.apply(done, this, arguments)
+                return done.apply(this, arguments)
               })
             } else {
-              return Reflect.apply(done, this, arguments)
+              return done.apply(this, arguments)
             }
           }
 
-          return Reflect.apply(fn, this, arguments)
+          return fn.apply(this, arguments)
         } else {
-          const promise = Reflect.apply(fn, this, arguments)
+          const promise = fn.apply(this, arguments)
 
           if (promise && typeof promise.catch === 'function') {
             return promise.catch(err => publishError(err, req))
@@ -79,7 +79,7 @@ function wrapAddHook (addHook) {
       }
     })
 
-    return Reflect.apply(addHook, this, arguments)
+    return addHook.apply(this, arguments)
   })
 }
 
@@ -133,7 +133,7 @@ function wrapSend (send, req) {
       errorChannel.publish({ req, error })
     }
 
-    return Reflect.apply(send, this, arguments)
+    return send.apply(this, arguments)
   }
 }
 

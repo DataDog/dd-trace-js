@@ -19,7 +19,7 @@ function createWrapRouterMethod (name) {
     original._name = original._name || layer.name
 
     const handle = shimmer.wrapFunction(original, original => function () {
-      if (!enterChannel.hasSubscribers) return Reflect.apply(original, this, arguments)
+      if (!enterChannel.hasSubscribers) return original.apply(this, arguments)
 
       const matchers = layerMatchers.get(layer)
       const lastIndex = arguments.length - 1
@@ -47,7 +47,7 @@ function createWrapRouterMethod (name) {
       enterChannel.publish({ name, req, route })
 
       try {
-        return Reflect.apply(original, this, arguments)
+        return original.apply(this, arguments)
       } catch (error) {
         errorChannel.publish({ req, error })
         nextChannel.publish({ req })
@@ -97,7 +97,7 @@ function createWrapRouterMethod (name) {
       nextChannel.publish({ req })
       finishChannel.publish({ req })
 
-      Reflect.apply(next, this, arguments)
+      next.apply(this, arguments)
     })
   }
 
@@ -152,7 +152,7 @@ function createWrapRouterMethod (name) {
   function wrapMethod (original) {
     return shimmer.wrapFunction(original, original => function methodWithTrace (fn) {
       const offset = this.stack ? [].concat(this.stack).length : 0
-      const router = Reflect.apply(original, this, arguments)
+      const router = original.apply(this, arguments)
 
       if (typeof this.stack === 'function') {
         this.stack = [{ handle: this.stack }]
@@ -181,7 +181,7 @@ const queryParserReadCh = channel('datadog:query:read:finish')
 addHook({ name: 'router', versions: ['>=2'] }, Router => {
   const WrappedRouter = shimmer.wrapFunction(Router, function (originalRouter) {
     return function wrappedMethod () {
-      const router = Reflect.apply(originalRouter, this, arguments)
+      const router = originalRouter.apply(this, arguments)
 
       shimmer.wrap(router, 'handle', function wrapHandle (originalHandle) {
         return function wrappedHandle (req, res, next) {
@@ -193,7 +193,7 @@ addHook({ name: 'router', versions: ['>=2'] }, Router => {
             if (abortController.signal.aborted) return
           }
 
-          return Reflect.apply(originalHandle, this, arguments)
+          return originalHandle.apply(this, arguments)
         }
       })
 
@@ -227,7 +227,7 @@ function wrapHandleRequest (original) {
       if (abortController.signal.aborted) return
     }
 
-    return Reflect.apply(original, this, arguments)
+    return original.apply(this, arguments)
   }
 }
 
@@ -257,11 +257,11 @@ function wrapParam (original) {
           if (abortController.signal.aborted) return
         }
 
-        return Reflect.apply(originalFn, this, arguments)
+        return originalFn.apply(this, arguments)
       }
     })
 
-    return Reflect.apply(original, this, arguments)
+    return original.apply(this, arguments)
   }
 }
 

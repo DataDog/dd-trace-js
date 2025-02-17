@@ -12,7 +12,7 @@ function wrapCreateCommand (createCommand) {
   if (typeof createCommand !== 'function') return createCommand
 
   return function commandWithTrace () {
-    const CommandClass = Reflect.apply(createCommand, this, arguments)
+    const CommandClass = createCommand.apply(this, arguments)
 
     if (!CommandClass) return CommandClass
 

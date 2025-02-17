@@ -59,7 +59,7 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
       arguments.length < expectedArgs ||
       typeof cb !== 'function'
     ) {
-      return Reflect.apply(fn, this, arguments)
+      return fn.apply(this, arguments)
     }
 
     const startArgs = Array.from(arguments)
@@ -77,11 +77,11 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
           errorCh.publish(error)
         }
         finishCh.publish(result)
-        Reflect.apply(cb, this, arguments)
+        cb.apply(this, arguments)
       }))
 
       try {
-        return Reflect.apply(fn, this, arguments)
+        return fn.apply(this, arguments)
       // TODO deal with promise versions when we support `dns/promises`
       } catch (error) {
         error.stack // trigger getting the stack at the original throwing point

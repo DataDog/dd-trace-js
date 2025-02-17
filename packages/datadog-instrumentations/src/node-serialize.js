@@ -11,7 +11,7 @@ function wrapUnserialize (serialize) {
       nodeUnserializeCh.publish({ obj })
     }
 
-    return Reflect.apply(serialize, this, arguments)
+    return serialize.apply(this, arguments)
   }
 }
 

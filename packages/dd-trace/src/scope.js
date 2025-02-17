@@ -42,7 +42,7 @@ class Scope {
 
     const bound = function () {
       return scope.activate(spanOrActive, () => {
-        return Reflect.apply(fn, this, arguments)
+        return fn.apply(this, arguments)
       })
     }
 

@@ -29,7 +29,7 @@ function wrapHandler (func, name) {
   }
 
   return function (call, callback) {
-    if (!isValid(this, arguments)) return Reflect.apply(func, this, arguments)
+    if (!isValid(this, arguments)) return func.apply(this, arguments)
 
     const metadata = call.metadata
     const type = types[this.type]
@@ -56,12 +56,12 @@ function wrapHandler (func, name) {
         shimmer.wrap(call, 'emit', emit => {
           return function () {
             return emitChannel.runStores(ctx, () => {
-              return Reflect.apply(emit, this, arguments)
+              return emit.apply(this, arguments)
             })
           }
         })
 
-        return Reflect.apply(func, this, arguments)
+        return func.apply(this, arguments)
       } catch (e) {
         ctx.error = e
         errorChannel.publish(ctx)
@@ -77,7 +77,7 @@ function wrapRegister (register) {
       arguments[1] = wrapHandler(handler, name)
     }
 
-    return Reflect.apply(register, this, arguments)
+    return register.apply(this, arguments)
   }
 }
 
@@ -105,7 +105,7 @@ function createWrapEmit (call, ctx, onCancel) {
           break
       }
 
-      return Reflect.apply(emit, this, arguments)
+      return emit.apply(this, arguments)
     }
   }
 }
@@ -133,7 +133,7 @@ function wrapCallback (callback = () => {}, call, ctx, onCancel) {
     call.removeListener('cancelled', onCancel)
 
     return asyncStartChannel.runStores(ctx, () => {
-      return Reflect.apply(callback, this, arguments)
+      return callback.apply(this, arguments)
       // No async end channel needed
     })
   })
@@ -144,7 +144,7 @@ function wrapSendStatus (sendStatus, ctx) {
     ctx.status = status
     updateChannel.publish(ctx)
 
-    return Reflect.apply(sendStatus, this, arguments)
+    return sendStatus.apply(this, arguments)
   }
 }
 

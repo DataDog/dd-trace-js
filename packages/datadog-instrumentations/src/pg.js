@@ -28,7 +28,7 @@ addHook({ name: 'pg', file: 'lib/native/index.js', versions: ['>=8.0.3'] }, Clie
 function wrapQuery (query) {
   return function () {
     if (!startCh.hasSubscribers) {
-      return Reflect.apply(query, this, arguments)
+      return query.apply(this, arguments)
     }
 
     const callbackResource = new AsyncResource('bound-anonymous-fn')
@@ -106,7 +106,7 @@ function wrapQuery (query) {
 
       arguments[0] = pgQuery
 
-      const retval = Reflect.apply(query, this, arguments)
+      const retval = query.apply(this, arguments)
       const queryQueue = this.queryQueue || this._queryQueue
       const activeQuery = this.activeQuery || this._activeQuery
 
@@ -120,7 +120,7 @@ function wrapQuery (query) {
         const originalCallback = callbackResource.bind(newQuery.callback)
         newQuery.callback = function (err, res) {
           finish(err, res)
-          return Reflect.apply(originalCallback, this, arguments)
+          return originalCallback.apply(this, arguments)
         }
       } else if (newQuery.once) {
         newQuery
@@ -142,7 +142,7 @@ function wrapQuery (query) {
 function wrapPoolQuery (query) {
   return function () {
     if (!startPoolQueryCh.hasSubscribers) {
-      return Reflect.apply(query, this, arguments)
+      return query.apply(this, arguments)
     }
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -179,11 +179,11 @@ function wrapPoolQuery (query) {
       if (typeof cb === 'function') {
         arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function () {
           finish()
-          return Reflect.apply(cb, this, arguments)
+          return cb.apply(this, arguments)
         })
       }
 
-      const retval = Reflect.apply(query, this, arguments)
+      const retval = query.apply(this, arguments)
 
       if (retval && retval.then) {
         retval.then(() => {

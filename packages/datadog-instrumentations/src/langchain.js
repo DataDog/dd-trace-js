@@ -10,7 +10,7 @@ const invokeTracingChannel = tracingChannel('apm:langchain:invoke')
 function wrapLangChainPromise (fn, type, namespace = []) {
   return function () {
     if (!invokeTracingChannel.start.hasSubscribers) {
-      return Reflect.apply(fn, this, arguments)
+      return fn.apply(this, arguments)
     }
 
     // Runnable interfaces have an `lc_namespace` property

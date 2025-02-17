@@ -93,7 +93,7 @@ function wrapChildProcessSyncMethod (returnError, shell = false) {
   return function wrapMethod (childProcessMethod) {
     return function () {
       if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
-        return Reflect.apply(childProcessMethod, this, arguments)
+        return childProcessMethod.apply(this, arguments)
       }
 
       const childProcessInfo = normalizeArgs(arguments, shell)
@@ -112,7 +112,7 @@ function wrapChildProcessSyncMethod (returnError, shell = false) {
             return returnError(error, context)
           }
 
-          const result = Reflect.apply(childProcessMethod, this, arguments)
+          const result = childProcessMethod.apply(this, arguments)
           context.result = result
 
           return result
@@ -132,7 +132,7 @@ function wrapChildProcessSyncMethod (returnError, shell = false) {
 function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
   return function () {
     if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
-      return Reflect.apply(customPromisifyMethod, this, arguments)
+      return customPromisifyMethod.apply(this, arguments)
     }
 
     const childProcessInfo = normalizeArgs(arguments, shell)
@@ -152,7 +152,7 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
       result = Promise.reject(abortController.signal.reason || new Error('Aborted'))
     } else {
       try {
-        result = Reflect.apply(customPromisifyMethod, this, arguments)
+        result = customPromisifyMethod.apply(this, arguments)
       } catch (error) {
         error.publish({ ...context, error })
         throw error
@@ -186,7 +186,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
   return function wrapMethod (childProcessMethod) {
     function wrappedChildProcessMethod () {
       if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
-        return Reflect.apply(childProcessMethod, this, arguments)
+        return childProcessMethod.apply(this, arguments)
       }
 
       const childProcessInfo = normalizeArgs(arguments, shell)
@@ -221,7 +221,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
             childProcess.emit('close')
           })
         } else {
-          childProcess = Reflect.apply(childProcessMethod, this, arguments)
+          childProcess = childProcessMethod.apply(this, arguments)
         }
 
         if (childProcess) {

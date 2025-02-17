@@ -28,7 +28,7 @@ function createWrapMakeRequest (type, hasPeer = false) {
 function createWrapLoadPackageDefinition (hasPeer = false) {
   return function wrapLoadPackageDefinition (loadPackageDefinition) {
     return function (packageDef) {
-      const result = Reflect.apply(loadPackageDefinition, this, arguments)
+      const result = loadPackageDefinition.apply(this, arguments)
 
       if (!result) return result
 
@@ -42,7 +42,7 @@ function createWrapLoadPackageDefinition (hasPeer = false) {
 function createWrapMakeClientConstructor (hasPeer = false) {
   return function wrapMakeClientConstructor (makeClientConstructor) {
     return function (methods) {
-      const ServiceClient = Reflect.apply(makeClientConstructor, this, arguments)
+      const ServiceClient = makeClientConstructor.apply(this, arguments)
       wrapClientConstructor(ServiceClient, methods, hasPeer)
       return ServiceClient
     }
@@ -106,7 +106,7 @@ function wrapCallback (ctx, callback = () => { }) {
     }
 
     return asyncStartChannel.runStores(ctx, () => {
-      return Reflect.apply(callback, this, arguments)
+      return callback.apply(this, arguments)
       // No async end channel needed
     })
   })
@@ -139,7 +139,7 @@ function createWrapEmit (ctx, hasPeer = false) {
       }
 
       return emitChannel.runStores(ctx, () => {
-        return Reflect.apply(emit, this, arguments)
+        return emit.apply(this, arguments)
       })
     }
   }

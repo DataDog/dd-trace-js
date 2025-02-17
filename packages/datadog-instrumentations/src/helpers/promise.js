@@ -14,7 +14,7 @@ exports.wrapThen = function wrapThen (origThen) {
       arguments[2] = wrapCallback(ar, onProgress)
     }
 
-    return Reflect.apply(origThen, this, arguments)
+    return origThen.apply(this, arguments)
   }
 }
 
@@ -23,7 +23,7 @@ function wrapCallback (ar, callback) {
 
   return function () {
     return ar.runInAsyncScope(() => {
-      return Reflect.apply(callback, this, arguments)
+      return callback.apply(this, arguments)
     })
   }
 }

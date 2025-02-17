@@ -12,7 +12,7 @@ const unskipCh = channel('apm:mariadb:pool:unskip')
 
 function wrapCommandStart (start, callbackResource) {
   return shimmer.wrapFunction(start, start => function () {
-    if (!startCh.hasSubscribers) return Reflect.apply(start, this, arguments)
+    if (!startCh.hasSubscribers) return start.apply(this, arguments)
 
     const resolve = callbackResource.bind(this.resolve)
     const reject = callbackResource.bind(this.reject)
@@ -25,7 +25,7 @@ function wrapCommandStart (start, callbackResource) {
           finishCh.publish()
         })
 
-        return Reflect.apply(resolve, this, arguments)
+        return resolve.apply(this, arguments)
       }
     })
 
@@ -36,13 +36,13 @@ function wrapCommandStart (start, callbackResource) {
           finishCh.publish()
         })
 
-        return Reflect.apply(reject, this, arguments)
+        return reject.apply(this, arguments)
       }
     })
 
     return asyncResource.runInAsyncScope(() => {
       startCh.publish({ sql: this.sql, conf: this.opts })
-      return Reflect.apply(start, this, arguments)
+      return start.apply(this, arguments)
     })
   })
 }
@@ -64,14 +64,14 @@ function wrapCommand (Command) {
 function createWrapQuery (options) {
   return function wrapQuery (query) {
     return function (sql) {
-      if (!startCh.hasSubscribers) return Reflect.apply(query, this, arguments)
+      if (!startCh.hasSubscribers) return query.apply(this, arguments)
 
       const asyncResource = new AsyncResource('bound-anonymous-fn')
 
       return asyncResource.runInAsyncScope(() => {
         startCh.publish({ sql, conf: options })
 
-        return Reflect.apply(query, this, arguments)
+        return query.apply(this, arguments)
           .then(result => {
             finishCh.publish()
             return result
@@ -88,7 +88,7 @@ function createWrapQuery (options) {
 function createWrapQueryCallback (options) {
   return function wrapQuery (query) {
     return function (sql) {
-      if (!startCh.hasSubscribers) return Reflect.apply(query, this, arguments)
+      if (!startCh.hasSubscribers) return query.apply(this, arguments)
 
       const cb = arguments[arguments.length - 1]
       const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -106,14 +106,14 @@ function createWrapQueryCallback (options) {
         finishCh.publish()
 
         if (typeof cb === 'function') {
-          return callbackResource.runInAsyncScope(() => Reflect.apply(cb, this, arguments))
+          return callbackResource.runInAsyncScope(() => cb.apply(this, arguments))
         }
       }))
 
       return asyncResource.runInAsyncScope(() => {
         startCh.publish({ sql, conf: options })
 
-        return Reflect.apply(query, this, arguments)
+        return query.apply(this, arguments)
       }, 'bound-anonymous-fn')
     }
   }
@@ -121,7 +121,7 @@ function createWrapQueryCallback (options) {
 
 function wrapConnection (promiseMethod, Connection) {
   return function (options) {
-    Reflect.apply(Connection, this, arguments)
+    Connection.apply(this, arguments)
 
     shimmer.wrap(this, promiseMethod, createWrapQuery(options))
     shimmer.wrap(this, '_queryCallback', createWrapQueryCallback(options))
@@ -133,7 +133,7 @@ function wrapPoolBase (PoolBase) {
     arguments[1] = wrapPoolMethod(processTask)
     arguments[2] = wrapPoolMethod(createConnectionPool)
 
-    Reflect.apply(PoolBase, this, arguments)
+    PoolBase.apply(this, arguments)
 
     shimmer.wrap(this, 'query', createWrapQuery(options.connOptions))
   }
@@ -146,7 +146,7 @@ function wrapPoolMethod (createConnection) {
   return function () {
     skipCh.publish()
     try {
-      return Reflect.apply(createConnection, this, arguments)
+      return createConnection.apply(this, arguments)
     } finally {
       unskipCh.publish()
     }

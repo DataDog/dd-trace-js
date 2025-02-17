@@ -89,7 +89,7 @@ function normalizePositional (args, defaultFieldResolver) {
 function wrapParse (parse) {
   return function (source) {
     if (!parseStartCh.hasSubscribers) {
-      return Reflect.apply(parse, this, arguments)
+      return parse.apply(this, arguments)
     }
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -98,7 +98,7 @@ function wrapParse (parse) {
       parseStartCh.publish()
       let document
       try {
-        document = Reflect.apply(parse, this, arguments)
+        document = parse.apply(this, arguments)
         const operation = getOperation(document)
 
         if (!operation) return document
@@ -123,7 +123,7 @@ function wrapParse (parse) {
 function wrapValidate (validate) {
   return function (_schema, document, _rules, _typeInfo) {
     if (!validateStartCh.hasSubscribers) {
-      return Reflect.apply(validate, this, arguments)
+      return validate.apply(this, arguments)
     }
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -133,7 +133,7 @@ function wrapValidate (validate) {
 
       let errors
       try {
-        errors = Reflect.apply(validate, this, arguments)
+        errors = validate.apply(this, arguments)
         if (errors && errors[0]) {
           validateErrorCh.publish(errors && errors[0])
         }
@@ -155,7 +155,7 @@ function wrapExecute (execute) {
     const defaultFieldResolver = execute.defaultFieldResolver
     return function () {
       if (!startExecuteCh.hasSubscribers) {
-        return Reflect.apply(exe, this, arguments)
+        return exe.apply(this, arguments)
       }
 
       const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -168,7 +168,7 @@ function wrapExecute (execute) {
         const operation = getOperation(document, args.operationName)
 
         if (contexts.has(contextValue)) {
-          return Reflect.apply(exe, this, arguments)
+          return exe.apply(this, arguments)
         }
 
         if (schema) {
@@ -206,11 +206,11 @@ function wrapResolve (resolve) {
   if (typeof resolve !== 'function' || patchedResolvers.has(resolve)) return resolve
 
   function resolveAsync (source, args, contextValue, info) {
-    if (!startResolveCh.hasSubscribers) return Reflect.apply(resolve, this, arguments)
+    if (!startResolveCh.hasSubscribers) return resolve.apply(this, arguments)
 
     const context = contexts.get(contextValue)
 
-    if (!context) return Reflect.apply(resolve, this, arguments)
+    if (!context) return resolve.apply(this, arguments)
 
     const field = assertField(context, info, args)
 

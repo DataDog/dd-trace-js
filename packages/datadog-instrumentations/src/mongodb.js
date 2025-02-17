@@ -38,7 +38,7 @@ addHook({ name: 'mongodb', versions: ['>=3.3 <5', '5', '>=6'] }, mongodb => {
     shimmer.wrap(mongodb.Collection.prototype, methodName, method => {
       return function () {
         if (!startCh.hasSubscribers) {
-          return Reflect.apply(method, this, arguments)
+          return method.apply(this, arguments)
         }
 
         const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -54,7 +54,7 @@ addHook({ name: 'mongodb', versions: ['>=3.3 <5', '5', '>=6'] }, mongodb => {
             methodName
           })
 
-          return Reflect.apply(method, this, arguments)
+          return method.apply(this, arguments)
         })
       }
     })

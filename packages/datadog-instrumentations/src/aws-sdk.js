@@ -9,12 +9,12 @@ const shimmer = require('../../datadog-shimmer')
 
 function wrapRequest (send) {
   return function wrappedRequest (cb) {
-    if (!this.service) return Reflect.apply(send, this, arguments)
+    if (!this.service) return send.apply(this, arguments)
 
     const serviceIdentifier = this.service.serviceIdentifier
     const channelSuffix = getChannelSuffix(serviceIdentifier)
     const startCh = channel(`apm:aws:request:start:${channelSuffix}`)
-    if (!startCh.hasSubscribers) return Reflect.apply(send, this, arguments)
+    if (!startCh.hasSubscribers) return send.apply(this, arguments)
     const innerAr = new AsyncResource('apm:aws:request:inner')
     const outerAr = new AsyncResource('apm:aws:request:outer')
 
@@ -35,7 +35,7 @@ function wrapRequest (send) {
       if (typeof cb === 'function') {
         arguments[0] = wrapCb(cb, channelSuffix, this, outerAr)
       }
-      return Reflect.apply(send, this, arguments)
+      return send.apply(this, arguments)
     })
   }
 }
@@ -48,7 +48,7 @@ function wrapDeserialize (deserialize, channelSuffix) {
       headersCh.publish({ headers: response.headers })
     }
 
-    return Reflect.apply(deserialize, this, arguments)
+    return deserialize.apply(this, arguments)
   }
 }
 
@@ -99,7 +99,7 @@ function wrapSmithySend (send) {
           outerAr.runInAsyncScope(() => {
             responseStartChannel.publish(message)
 
-            Reflect.apply(cb, this, arguments)
+            cb.apply(this, arguments)
 
             if (message.needsFinish) {
               responseFinishChannel.publish(message.response.error)
@@ -135,11 +135,11 @@ function wrapCb (cb, serviceName, request, ar) {
       channel(`apm:aws:response:start:${serviceName}`).publish(obj)
       // TODO(bengl) make this work without needing a needsFinish property added to the object
       if (!obj.needsFinish) {
-        return Reflect.apply(cb, this, arguments)
+        return cb.apply(this, arguments)
       }
       const finishChannel = channel(`apm:aws:response:finish:${serviceName}`)
       try {
-        let result = Reflect.apply(cb, this, arguments)
+        let result = cb.apply(this, arguments)
         if (result && result.then) {
           result = result.then(x => {
             finishChannel.publish()
@@ -205,7 +205,7 @@ addHook({ name: '@aws-sdk/smithy-client', versions: ['>=3'] }, smithy => {
 addHook({ name: 'aws-sdk', versions: ['>=2.3.0'] }, AWS => {
   shimmer.wrap(AWS.config, 'setPromisesDependency', setPromisesDependency => {
     return function wrappedSetPromisesDependency (dep) {
-      const result = Reflect.apply(setPromisesDependency, this, arguments)
+      const result = setPromisesDependency.apply(this, arguments)
       shimmer.wrap(AWS.Request.prototype, 'promise', wrapRequest)
       return result
     }

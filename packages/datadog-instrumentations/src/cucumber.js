@@ -231,7 +231,7 @@ function wrapRun (pl, isLatestVersion) {
 
   shimmer.wrap(pl.prototype, 'run', run => function () {
     if (!testStartCh.hasSubscribers) {
-      return Reflect.apply(run, this, arguments)
+      return run.apply(this, arguments)
     }
 
     let numAttempt = 0
@@ -292,7 +292,7 @@ function wrapRun (pl, isLatestVersion) {
       let promise
 
       asyncResource.runInAsyncScope(() => {
-        promise = Reflect.apply(run, this, arguments)
+        promise = run.apply(this, arguments)
       })
       promise.finally(async () => {
         const result = this.getWorstStepResult()
@@ -345,7 +345,7 @@ function wrapRun (pl, isLatestVersion) {
   })
   shimmer.wrap(pl.prototype, 'runStep', runStep => function () {
     if (!testStepStartCh.hasSubscribers) {
-      return Reflect.apply(runStep, this, arguments)
+      return runStep.apply(this, arguments)
     }
     const testStep = arguments[0]
     let resource
@@ -360,7 +360,7 @@ function wrapRun (pl, isLatestVersion) {
     return asyncResource.runInAsyncScope(() => {
       testStepStartCh.publish({ resource })
       try {
-        const promise = Reflect.apply(runStep, this, arguments)
+        const promise = runStep.apply(this, arguments)
 
         promise.then((result) => {
           const { status, skipReason, errorMessage } = isLatestVersion
@@ -405,7 +405,7 @@ function getCucumberOptions (adapterOrCoordinator) {
 function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordinator = false) {
   return async function () {
     if (!libraryConfigurationCh.hasSubscribers) {
-      return Reflect.apply(start, this, arguments)
+      return start.apply(this, arguments)
     }
     const options = getCucumberOptions(this)
 
@@ -505,7 +505,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
     }
 
-    const success = await Reflect.apply(start, this, arguments)
+    const success = await start.apply(this, arguments)
 
     let untestedCoverage
     if (getCodeCoverageCh.hasSubscribers) {
@@ -587,7 +587,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     }
 
     // TODO: for >=11 we could use `runTestCaseResult` instead of accumulating results in `lastStatusByPickleId`
-    let runTestCaseResult = await Reflect.apply(runTestCaseFunction, this, arguments)
+    let runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
 
     const testStatuses = lastStatusByPickleId.get(pickle.id)
     const lastTestStatus = testStatuses[testStatuses.length - 1]
@@ -595,7 +595,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     if (isEarlyFlakeDetectionEnabled && lastTestStatus !== 'skip' && isNew) {
       for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
         numRetriesByPickleId.set(pickle.id, retryIndex + 1)
-        runTestCaseResult = await Reflect.apply(runTestCaseFunction, this, arguments)
+        runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
       }
     }
     let testStatus = lastTestStatus
@@ -685,7 +685,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
     }
 
     if (!envelope) {
-      return Reflect.apply(parseWorkerMessageFunction, this, arguments)
+      return parseWorkerMessageFunction.apply(this, arguments)
     }
     let parsed = envelope
 
@@ -694,7 +694,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
         parsed = JSON.parse(envelope)
       } catch (e) {
         // ignore errors and continue
-        return Reflect.apply(parseWorkerMessageFunction, this, arguments)
+        return parseWorkerMessageFunction.apply(this, arguments)
       }
     }
     let pickle
@@ -717,7 +717,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
       }
     }
 
-    const parseWorkerResponse = Reflect.apply(parseWorkerMessageFunction, this, arguments)
+    const parseWorkerResponse = parseWorkerMessageFunction.apply(this, arguments)
 
     // after calling `parseWorkerMessageFunction`, the test status can already be read
     if (parsed.testCaseFinished) {
@@ -876,7 +876,7 @@ addHook({
 }, (eventDataCollectorPackage) => {
   shimmer.wrap(eventDataCollectorPackage.default.prototype, 'parseEnvelope', parseEnvelope => function () {
     eventDataCollector = this
-    return Reflect.apply(parseEnvelope, this, arguments)
+    return parseEnvelope.apply(this, arguments)
   })
   return eventDataCollectorPackage
 })
@@ -902,7 +902,7 @@ addHook({
       this.options.worldParameters._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
     }
 
-    return Reflect.apply(startWorker, this, arguments)
+    return startWorker.apply(this, arguments)
   })
   return adapterPackage
 })
@@ -919,7 +919,7 @@ addHook({
     workerPackage.ChildProcessWorker.prototype,
     'initialize',
     initialize => async function () {
-      await Reflect.apply(initialize, this, arguments)
+      await initialize.apply(this, arguments)
       isKnownTestsEnabled = !!this.options.worldParameters._ddKnownTests
       if (isKnownTestsEnabled) {
         knownTests = this.options.worldParameters._ddKnownTests

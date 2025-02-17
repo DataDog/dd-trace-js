@@ -26,7 +26,7 @@ function wrapCryptoMethod (channel) {
         const algorithm = arguments[0]
         channel.publish({ algorithm })
       }
-      return Reflect.apply(cryptoMethod, this, arguments)
+      return cryptoMethod.apply(this, arguments)
     }
   }
   return wrapMethod

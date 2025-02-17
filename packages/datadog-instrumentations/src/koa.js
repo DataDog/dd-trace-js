@@ -15,21 +15,21 @@ const originals = new WeakMap()
 
 function wrapCallback (callback) {
   return function callbackWithTrace () {
-    const handleRequest = Reflect.apply(callback, this, arguments)
+    const handleRequest = callback.apply(this, arguments)
 
     if (typeof handleRequest !== 'function') return handleRequest
 
     return function handleRequestWithTrace (req, res) {
       handleChannel.publish({ req, res })
 
-      return Reflect.apply(handleRequest, this, arguments)
+      return handleRequest.apply(this, arguments)
     }
   }
 }
 
 function wrapUse (use) {
   return function useWithTrace () {
-    const result = Reflect.apply(use, this, arguments)
+    const result = use.apply(this, arguments)
 
     if (!Array.isArray(this.middleware)) return result
 
@@ -43,7 +43,7 @@ function wrapUse (use) {
 
 function wrapRegister (register) {
   return function registerWithTrace (path, methods, middleware, opts) {
-    const route = Reflect.apply(register, this, arguments)
+    const route = register.apply(this, arguments)
 
     if (!Array.isArray(path) && route && Array.isArray(route.stack)) {
       wrapStack(route)
@@ -55,7 +55,7 @@ function wrapRegister (register) {
 
 function wrapRouterUse (use) {
   return function useWithTrace () {
-    const router = Reflect.apply(use, this, arguments)
+    const router = use.apply(this, arguments)
 
     router.stack.forEach(wrapStack)
 
@@ -85,7 +85,7 @@ function wrapMiddleware (fn, layer) {
   const name = fn.name
 
   return shimmer.wrapFunction(fn, fn => function (ctx, next) {
-    if (!ctx || !enterChannel.hasSubscribers) return Reflect.apply(fn, this, arguments)
+    if (!ctx || !enterChannel.hasSubscribers) return fn.apply(this, arguments)
 
     const req = ctx.req
 
@@ -99,7 +99,7 @@ function wrapMiddleware (fn, layer) {
     }
 
     try {
-      const result = Reflect.apply(fn, this, arguments)
+      const result = fn.apply(this, arguments)
 
       if (result && typeof result.then === 'function') {
         return result.then(
@@ -145,7 +145,7 @@ function wrapNext (req, next) {
   return shimmer.wrapFunction(next, next => function () {
     nextChannel.publish({ req })
 
-    return Reflect.apply(next, this, arguments)
+    return next.apply(this, arguments)
   })
 }
 

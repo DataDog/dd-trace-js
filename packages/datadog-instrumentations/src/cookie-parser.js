@@ -17,7 +17,7 @@ function publishRequestCookieAndNext (req, res, next) {
       if (abortController.signal.aborted) return
     }
 
-    return Reflect.apply(next, this, arguments)
+    return next.apply(this, arguments)
   })
 }
 
@@ -26,11 +26,11 @@ addHook({
   versions: ['>=1.0.0']
 }, cookieParser => {
   return shimmer.wrapFunction(cookieParser, cookieParser => function () {
-    const cookieMiddleware = Reflect.apply(cookieParser, this, arguments)
+    const cookieMiddleware = cookieParser.apply(this, arguments)
 
     return shimmer.wrapFunction(cookieMiddleware, cookieMiddleware => function (req, res, next) {
       arguments[2] = publishRequestCookieAndNext(req, res, next)
-      return Reflect.apply(cookieMiddleware, this, arguments)
+      return cookieMiddleware.apply(this, arguments)
     })
   })
 })

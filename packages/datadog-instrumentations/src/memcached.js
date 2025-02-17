@@ -14,7 +14,7 @@ addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
 
   shimmer.wrap(Memcached.prototype, 'command', command => function (queryCompiler, server) {
     if (!startCh.hasSubscribers) {
-      return Reflect.apply(command, this, arguments)
+      return command.apply(this, arguments)
     }
 
     const callbackResource = new AsyncResource('bound-anonymous-fn')
@@ -23,7 +23,7 @@ addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
     const client = this
 
     const wrappedQueryCompiler = asyncResource.bind(function () {
-      const query = Reflect.apply(queryCompiler, this, arguments)
+      const query = queryCompiler.apply(this, arguments)
       const callback = callbackResource.bind(query.callback)
 
       query.callback = shimmer.wrapFunction(callback, callback => asyncResource.bind(function (err) {
@@ -32,7 +32,7 @@ addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
         }
         finishCh.publish()
 
-        return Reflect.apply(callback, this, arguments)
+        return callback.apply(this, arguments)
       }))
       startCh.publish({ client, server, query })
 
@@ -42,7 +42,7 @@ addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
     return asyncResource.runInAsyncScope(() => {
       arguments[0] = wrappedQueryCompiler
 
-      const result = Reflect.apply(command, this, arguments)
+      const result = command.apply(this, arguments)
 
       return result
     })

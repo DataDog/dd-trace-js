@@ -16,7 +16,7 @@ function publishRequestBodyAndNext (req, res, next) {
       if (abortController.signal.aborted) return
     }
 
-    return Reflect.apply(next, this, arguments)
+    return next.apply(this, arguments)
   })
 }
 
@@ -26,12 +26,12 @@ addHook({
   versions: ['^1.4.4-lts.1']
 }, makeMiddleware => {
   return shimmer.wrapFunction(makeMiddleware, makeMiddleware => function () {
-    const middleware = Reflect.apply(makeMiddleware, this, arguments)
+    const middleware = makeMiddleware.apply(this, arguments)
 
     return shimmer.wrapFunction(middleware, middleware => function wrapMulterMiddleware (req, res, next) {
       const nextResource = new AsyncResource('bound-anonymous-fn')
       arguments[2] = nextResource.bind(publishRequestBodyAndNext(req, res, next))
-      return Reflect.apply(middleware, this, arguments)
+      return middleware.apply(this, arguments)
     })
   })
 })

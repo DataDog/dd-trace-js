@@ -29,14 +29,14 @@ addHook({
 }, Knex => {
   shimmer.wrap(Knex.Client.prototype, 'raw', raw => function () {
     if (!startRawQueryCh.hasSubscribers) {
-      return Reflect.apply(raw, this, arguments)
+      return raw.apply(this, arguments)
     }
 
     const sql = arguments[0]
 
     // Skip query done by Knex to get the value used for undefined
     if (sql === 'DEFAULT') {
-      return Reflect.apply(raw, this, arguments)
+      return raw.apply(this, arguments)
     }
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -48,17 +48,17 @@ addHook({
     return asyncResource.runInAsyncScope(() => {
       startRawQueryCh.publish({ sql, dialect: this.dialect })
 
-      const rawResult = Reflect.apply(raw, this, arguments)
+      const rawResult = raw.apply(this, arguments)
       shimmer.wrap(rawResult, 'then', originalThen => function () {
         return asyncResource.runInAsyncScope(() => {
           arguments[0] = wrapCallbackWithFinish(arguments[0], finish)
           if (arguments[1]) arguments[1] = wrapCallbackWithFinish(arguments[1], finish)
 
-          const originalThenResult = Reflect.apply(originalThen, this, arguments)
+          const originalThenResult = originalThen.apply(this, arguments)
 
           shimmer.wrap(originalThenResult, 'catch', originalCatch => function () {
             arguments[0] = wrapCallbackWithFinish(arguments[0], finish)
-            return Reflect.apply(originalCatch, this, arguments)
+            return originalCatch.apply(this, arguments)
           })
 
           return originalThenResult
@@ -68,7 +68,7 @@ addHook({
       shimmer.wrap(rawResult, 'asCallback', originalAsCallback => function () {
         return asyncResource.runInAsyncScope(() => {
           arguments[0] = wrapCallbackWithFinish(arguments[0], finish)
-          return Reflect.apply(originalAsCallback, this, arguments)
+          return originalAsCallback.apply(this, arguments)
         })
       })
 
@@ -83,6 +83,6 @@ function wrapCallbackWithFinish (callback, finish) {
 
   return shimmer.wrapFunction(callback, callback => function () {
     finish()
-    Reflect.apply(callback, this, arguments)
+    callback.apply(this, arguments)
   })
 }

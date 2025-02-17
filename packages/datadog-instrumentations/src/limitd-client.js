@@ -7,7 +7,7 @@ function wrapRequest (original) {
   return function () {
     const id = arguments.length - 1
     arguments[id] = AsyncResource.bind(arguments[id])
-    return Reflect.apply(original, this, arguments)
+    return original.apply(this, arguments)
   }
 }
 

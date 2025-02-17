@@ -14,7 +14,7 @@ let HeaderMap
 function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
   return async function executeHTTPGraphQLRequest () {
     if (!HeaderMap || !requestChannel.start.hasSubscribers) {
-      return Reflect.apply(originalExecuteHTTPGraphQLRequest, this, arguments)
+      return originalExecuteHTTPGraphQLRequest.apply(this, arguments)
     }
 
     const abortController = new AbortController()
@@ -53,11 +53,11 @@ function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
 function apolloExpress4Hook (express4) {
   shimmer.wrap(express4, 'expressMiddleware', function wrapExpressMiddleware (originalExpressMiddleware) {
     return function expressMiddleware (server, options) {
-      const originalMiddleware = Reflect.apply(originalExpressMiddleware, this, arguments)
+      const originalMiddleware = originalExpressMiddleware.apply(this, arguments)
 
       return shimmer.wrapFunction(originalMiddleware, originalMiddleware => function (req, res, next) {
         if (!graphqlMiddlewareChannel.start.hasSubscribers) {
-          return Reflect.apply(originalMiddleware, this, arguments)
+          return originalMiddleware.apply(this, arguments)
         }
 
         return graphqlMiddlewareChannel.traceSync(originalMiddleware, { req }, this, ...arguments)

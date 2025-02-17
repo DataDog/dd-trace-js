@@ -32,7 +32,7 @@ function wrapHandler (method) {
       const handler = arg
       arguments[1] = shimmer.wrapFunction(handler, handler => traceHandler(handler, name, method.name))
     }
-    return Reflect.apply(method, this, arguments)
+    return method.apply(this, arguments)
   }
 }
 

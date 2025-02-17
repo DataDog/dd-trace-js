@@ -9,10 +9,10 @@ function wrapSerialization (messageClass) {
   if (messageClass?.encode) {
     shimmer.wrap(messageClass, 'encode', original => function () {
       if (!serializeChannel.hasSubscribers) {
-        return Reflect.apply(original, this, arguments)
+        return original.apply(this, arguments)
       }
       serializeChannel.publish({ messageClass: this })
-      return Reflect.apply(original, this, arguments)
+      return original.apply(this, arguments)
     })
   }
 }
@@ -21,9 +21,9 @@ function wrapDeserialization (messageClass) {
   if (messageClass?.decode) {
     shimmer.wrap(messageClass, 'decode', original => function () {
       if (!deserializeChannel.hasSubscribers) {
-        return Reflect.apply(original, this, arguments)
+        return original.apply(this, arguments)
       }
-      const result = Reflect.apply(original, this, arguments)
+      const result = original.apply(this, arguments)
       deserializeChannel.publish({ messageClass: result })
       return result
     })
@@ -33,7 +33,7 @@ function wrapDeserialization (messageClass) {
 function wrapSetup (messageClass) {
   if (messageClass?.setup) {
     shimmer.wrap(messageClass, 'setup', original => function () {
-      const result = Reflect.apply(original, this, arguments)
+      const result = original.apply(this, arguments)
 
       wrapSerialization(messageClass)
       wrapDeserialization(messageClass)
@@ -73,7 +73,7 @@ function wrapReflection (protobuf) {
 
   reflectionMethods.forEach(method => {
     shimmer.wrap(method.target, method.name, original => function () {
-      const result = Reflect.apply(original, this, arguments)
+      const result = original.apply(this, arguments)
       if (result.nested) {
         for (const type in result.nested) {
           wrapSetup(result.nested[type])
@@ -96,7 +96,7 @@ addHook({
   versions: ['>=6.8.0']
 }, protobuf => {
   shimmer.wrap(protobuf.Root.prototype, 'load', original => function () {
-    const result = Reflect.apply(original, this, arguments)
+    const result = original.apply(this, arguments)
     if (isPromise(result)) {
       return result.then(root => {
         wrapProtobufClasses(root)
@@ -110,7 +110,7 @@ addHook({
   })
 
   shimmer.wrap(protobuf.Root.prototype, 'loadSync', original => function () {
-    const root = Reflect.apply(original, this, arguments)
+    const root = original.apply(this, arguments)
     wrapProtobufClasses(root)
     return root
   })

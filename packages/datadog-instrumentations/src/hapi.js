@@ -11,7 +11,7 @@ const hapiTracingChannel = tracingChannel('apm:hapi:extension')
 
 function wrapServer (server) {
   return function (options) {
-    const app = Reflect.apply(server, this, arguments)
+    const app = server.apply(this, arguments)
 
     if (!app) return app
 
@@ -33,7 +33,7 @@ function wrapStart (start) {
       this.ext('onPreResponse', onPreResponse)
     }
 
-    return Reflect.apply(start, this, arguments)
+    return start.apply(this, arguments)
   })
 }
 
@@ -45,27 +45,27 @@ function wrapExt (ext) {
       arguments[1] = wrapExtension(method)
     }
 
-    return Reflect.apply(ext, this, arguments)
+    return ext.apply(this, arguments)
   })
 }
 
 function wrapDispatch (dispatch) {
   return function (options) {
-    const handler = Reflect.apply(dispatch, this, arguments)
+    const handler = dispatch.apply(this, arguments)
 
     if (typeof handler !== 'function') return handler
 
     return function (req, res) {
       handleChannel.publish({ req, res })
 
-      return Reflect.apply(handler, this, arguments)
+      return handler.apply(this, arguments)
     }
   }
 }
 
 function wrapRebuild (rebuild) {
   return function (event) {
-    const result = Reflect.apply(rebuild, this, arguments)
+    const result = rebuild.apply(this, arguments)
 
     if (this && Array.isArray(this._cycle)) {
       this._cycle = this._cycle.map(wrapHandler)
@@ -95,10 +95,10 @@ function wrapHandler (handler) {
   return shimmer.wrapFunction(handler, handler => function (request, h) {
     const req = request && request.raw && request.raw.req
 
-    if (!req) return Reflect.apply(handler, this, arguments)
+    if (!req) return handler.apply(this, arguments)
 
     return hapiTracingChannel.traceSync(() => {
-      return Reflect.apply(handler, this, arguments)
+      return handler.apply(this, arguments)
     })
   })
 }

@@ -26,7 +26,7 @@ function wrapAllNames (names, action) {
 // semver >=2 <3
 function wrapMaybeInvoke (_maybeInvoke) {
   const wrapped = function (fn, args) {
-    if (!Array.isArray(args)) return Reflect.apply(_maybeInvoke, this, arguments)
+    if (!Array.isArray(args)) return _maybeInvoke.apply(this, arguments)
 
     const callbackIndex = args.length - 1
     const callback = args[callbackIndex]
@@ -35,7 +35,7 @@ function wrapMaybeInvoke (_maybeInvoke) {
       args[callbackIndex] = AsyncResource.bind(callback)
     }
 
-    return Reflect.apply(_maybeInvoke, this, arguments)
+    return _maybeInvoke.apply(this, arguments)
   }
   return wrapped
 }
@@ -48,7 +48,7 @@ function wrapQuery (query) {
       arguments[arguments.length - 1] = callback
     }
 
-    const res = Reflect.apply(query, this, arguments)
+    const res = query.apply(this, arguments)
     return res
   }
   return wrapped
@@ -61,12 +61,12 @@ function wrap (prefix, fn) {
 
   const wrapped = function () {
     if (!startCh.hasSubscribers) {
-      return Reflect.apply(fn, this, arguments)
+      return fn.apply(this, arguments)
     }
 
     const callbackIndex = findCallbackIndex(arguments)
 
-    if (callbackIndex < 0) return Reflect.apply(fn, this, arguments)
+    if (callbackIndex < 0) return fn.apply(this, arguments)
 
     const callbackResource = new AsyncResource('bound-anonymous-fn')
     const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -81,11 +81,11 @@ function wrap (prefix, fn) {
           errorCh.publish(error)
         }
         finishCh.publish(result)
-        return Reflect.apply(cb, this, arguments)
+        return cb.apply(this, arguments)
       }))
 
       try {
-        return Reflect.apply(fn, this, arguments)
+        return fn.apply(this, arguments)
       } catch (error) {
         error.stack // trigger getting the stack at the original throwing point
         errorCh.publish(error)
@@ -171,10 +171,10 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
 
   shimmer.wrap(Bucket.prototype, '_n1qlReq', _n1qlReq => function (host, q, adhoc, emitter) {
     if (!startCh.hasSubscribers) {
-      return Reflect.apply(_n1qlReq, this, arguments)
+      return _n1qlReq.apply(this, arguments)
     }
 
-    if (!emitter || !emitter.once) return Reflect.apply(_n1qlReq, this, arguments)
+    if (!emitter || !emitter.once) return _n1qlReq.apply(this, arguments)
 
     const n1qlQuery = getQueryResource(q)
 
@@ -192,7 +192,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
       }))
 
       try {
-        return Reflect.apply(_n1qlReq, this, arguments)
+        return _n1qlReq.apply(this, arguments)
       } catch (err) {
         err.stack // trigger getting the stack at the original throwing point
         errorCh.publish(err)
@@ -215,7 +215,7 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.12'] }, Cl
 
   shimmer.wrap(Cluster.prototype, 'openBucket', openBucket => {
     return function () {
-      const bucket = Reflect.apply(openBucket, this, arguments)
+      const bucket = openBucket.apply(this, arguments)
       const hosts = this.dsnObj.hosts
       bucket._dd_hosts = hosts.map(hostAndPort => hostAndPort.join(':')).join(',')
       return bucket
@@ -229,7 +229,7 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.12'] }, Cl
 addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^3.0.7', '^3.1.3'] }, Bucket => {
   shimmer.wrap(Bucket.prototype, 'collection', getCollection => {
     return function () {
-      const collection = Reflect.apply(getCollection, this, arguments)
+      const collection = getCollection.apply(this, arguments)
       const connStr = this._cluster._connStr
       collection._dd_connStr = connStr
       return collection
@@ -269,7 +269,7 @@ addHook({ name: 'couchbase', file: 'dist/bucket.js', versions: ['>=3.2.2'] }, bu
   const Bucket = bucket.Bucket
   shimmer.wrap(Bucket.prototype, 'collection', getCollection => {
     return function () {
-      const collection = Reflect.apply(getCollection, this, arguments)
+      const collection = getCollection.apply(this, arguments)
       const connStr = this._cluster._connStr
       collection._dd_connStr = connStr
       return collection

@@ -35,7 +35,7 @@ function wrapEmitter (corkedEmitter) {
       }
       arguments[1] = bindedFn
     }
-    return Reflect.apply(on, this, arguments)
+    return on.apply(this, arguments)
   }
   shimmer.wrap(corkedEmitter, 'on', addListener)
   shimmer.wrap(corkedEmitter, 'addListener', addListener)
@@ -47,7 +47,7 @@ function wrapEmitter (corkedEmitter) {
         arguments[1] = emitterOn
       }
     }
-    return Reflect.apply(off, this, arguments)
+    return off.apply(this, arguments)
   }
   shimmer.wrap(corkedEmitter, 'off', removeListener)
   shimmer.wrap(corkedEmitter, 'removeListener', removeListener)
@@ -69,7 +69,7 @@ addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
       ldapSearchCh.publish({ base, filter })
     }
 
-    return Reflect.apply(search, this, arguments)
+    return search.apply(this, arguments)
   })
 
   shimmer.wrap(ldapjs.Client.prototype, '_send', _send => function () {
@@ -81,11 +81,11 @@ addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
         if (corkedEmitter !== null && typeof corkedEmitter === 'object' && typeof corkedEmitter.on === 'function') {
           wrapEmitter(corkedEmitter)
         }
-        Reflect.apply(callback, this, arguments)
+        callback.apply(this, arguments)
       })
     }
 
-    return Reflect.apply(_send, this, arguments)
+    return _send.apply(this, arguments)
   })
 
   shimmer.wrap(ldapjs.Client.prototype, 'bind', bind => function (dn, password, controls, callback) {
@@ -95,7 +95,7 @@ addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
       arguments[3] = AsyncResource.bind(callback)
     }
 
-    return Reflect.apply(bind, this, arguments)
+    return bind.apply(this, arguments)
   })
 
   return ldapjs

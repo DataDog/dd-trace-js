@@ -13,7 +13,7 @@ function wrapAddQueue (addQueue) {
       arguments[0] = AsyncResource.bind((...args) => this[name](...args))
     }
 
-    return Reflect.apply(addQueue, this, arguments)
+    return addQueue.apply(this, arguments)
   }
 }
 
@@ -65,7 +65,7 @@ addHook({
     shimmer.wrap(Model, methodName, method => {
       return function wrappedModelMethod () {
         if (!startCh.hasSubscribers) {
-          return Reflect.apply(method, this, arguments)
+          return method.apply(this, arguments)
         }
 
         const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -90,7 +90,7 @@ addHook({
               return function () {
                 finish()
 
-                return Reflect.apply(originalCb, this, arguments)
+                return originalCb.apply(this, arguments)
               }
             })
 
@@ -106,7 +106,7 @@ addHook({
             methodName
           })
 
-          const res = Reflect.apply(method, this, arguments)
+          const res = method.apply(this, arguments)
 
           // if it is not callback, wrap exec method and its then
           if (!callbackWrapped) {
@@ -116,7 +116,7 @@ addHook({
                   wrapCallbackIfExist(arguments)
                 }
 
-                const execResult = Reflect.apply(originalExec, this, arguments)
+                const execResult = originalExec.apply(this, arguments)
 
                 if (callbackWrapped || typeof execResult?.then !== 'function') {
                   return execResult
@@ -132,7 +132,7 @@ addHook({
                       finish()
 
                       if (resolve) {
-                        return Reflect.apply(resolve, this, arguments)
+                        return resolve.apply(this, arguments)
                       }
                     })
 
@@ -140,11 +140,11 @@ addHook({
                       finish()
 
                       if (reject) {
-                        return Reflect.apply(reject, this, arguments)
+                        return reject.apply(this, arguments)
                       }
                     })
 
-                    return Reflect.apply(originalThen, this, arguments)
+                    return originalThen.apply(this, arguments)
                   }
                 })
 
@@ -169,7 +169,7 @@ addHook({
   file: 'lib/helpers/query/sanitizeFilter.js'
 }, sanitizeFilter => {
   return shimmer.wrapFunction(sanitizeFilter, sanitizeFilter => function wrappedSanitizeFilter () {
-    const sanitizedObject = Reflect.apply(sanitizeFilter, this, arguments)
+    const sanitizedObject = sanitizeFilter.apply(this, arguments)
 
     if (sanitizeFilterFinishCh.hasSubscribers) {
       sanitizeFilterFinishCh.publish({

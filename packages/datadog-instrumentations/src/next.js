@@ -23,14 +23,14 @@ const encounteredMiddleware = new WeakSet()
 
 function wrapHandleRequest (handleRequest) {
   return function (req, res, pathname, query) {
-    return instrument(req, res, () => Reflect.apply(handleRequest, this, arguments))
+    return instrument(req, res, () => handleRequest.apply(this, arguments))
   }
 }
 
 function wrapHandleApiRequest (handleApiRequest) {
   return function (req, res, pathname, query) {
     return instrument(req, res, () => {
-      const promise = Reflect.apply(handleApiRequest, this, arguments)
+      const promise = handleApiRequest.apply(this, arguments)
 
       return promise.then(handled => {
         if (!handled) return handled
@@ -57,38 +57,38 @@ function wrapHandleApiRequestWithMatch (handleApiRequest) {
 
       pageLoadChannel.publish({ page })
 
-      return Reflect.apply(handleApiRequest, this, arguments)
+      return handleApiRequest.apply(this, arguments)
     })
   }
 }
 
 function wrapRenderToHTML (renderToHTML) {
   return function (req, res, pathname, query, parsedUrl) {
-    return instrument(req, res, () => Reflect.apply(renderToHTML, this, arguments))
+    return instrument(req, res, () => renderToHTML.apply(this, arguments))
   }
 }
 
 function wrapRenderErrorToHTML (renderErrorToHTML) {
   return function (err, req, res, pathname, query) {
-    return instrument(req, res, err, () => Reflect.apply(renderErrorToHTML, this, arguments))
+    return instrument(req, res, err, () => renderErrorToHTML.apply(this, arguments))
   }
 }
 
 function wrapRenderToResponse (renderToResponse) {
   return function (ctx) {
-    return instrument(ctx.req, ctx.res, () => Reflect.apply(renderToResponse, this, arguments))
+    return instrument(ctx.req, ctx.res, () => renderToResponse.apply(this, arguments))
   }
 }
 
 function wrapRenderErrorToResponse (renderErrorToResponse) {
   return function (ctx, err) {
-    return instrument(ctx.req, ctx.res, err, () => Reflect.apply(renderErrorToResponse, this, arguments))
+    return instrument(ctx.req, ctx.res, err, () => renderErrorToResponse.apply(this, arguments))
   }
 }
 
 function wrapFindPageComponents (findPageComponents) {
   return function (pathname, query) {
-    const result = Reflect.apply(findPageComponents, this, arguments)
+    const result = findPageComponents.apply(this, arguments)
 
     if (result) {
       pageLoadChannel.publish(getPagePath(pathname))
@@ -169,7 +169,7 @@ function wrapServeStatic (serveStatic) {
         pageLoadChannel.publish({ page: path, isStatic: true })
       }
 
-      return Reflect.apply(serveStatic, this, arguments)
+      return serveStatic.apply(this, arguments)
     })
   }
 }
@@ -204,7 +204,7 @@ addHook({
 }, NextRequestAdapter => {
   shimmer.wrap(NextRequestAdapter.NextRequestAdapter, 'fromNodeNextRequest', fromNodeNextRequest => {
     return function (nodeNextRequest) {
-      const nextRequest = Reflect.apply(fromNodeNextRequest, this, arguments)
+      const nextRequest = fromNodeNextRequest.apply(this, arguments)
       nodeNextRequestsToNextRequests.set(nodeNextRequest.originalRequest, nextRequest)
       return nextRequest
     }
@@ -285,7 +285,7 @@ addHook({
   const nextUrlDescriptor = Object.getOwnPropertyDescriptor(request.NextRequest.prototype, 'nextUrl')
   shimmer.wrap(nextUrlDescriptor, 'get', function (originalGet) {
     return function wrappedGet () {
-      const nextUrl = Reflect.apply(originalGet, this, arguments)
+      const nextUrl = originalGet.apply(this, arguments)
       if (queryParsedChannel.hasSubscribers) {
         const query = {}
         for (const key of nextUrl.searchParams.keys()) {
@@ -304,7 +304,7 @@ addHook({
 
   shimmer.massWrap(request.NextRequest.prototype, ['text', 'json'], function (originalMethod) {
     return async function wrappedJson () {
-      const body = await Reflect.apply(originalMethod, this, arguments)
+      const body = await originalMethod.apply(this, arguments)
 
       bodyParsedChannel.publish({ body })
 
@@ -314,7 +314,7 @@ addHook({
 
   shimmer.wrap(request.NextRequest.prototype, 'formData', function (originalFormData) {
     return async function wrappedFormData () {
-      const body = await Reflect.apply(originalFormData, this, arguments)
+      const body = await originalFormData.apply(this, arguments)
 
       let normalizedBody = body
       if (typeof body.entries === 'function') {

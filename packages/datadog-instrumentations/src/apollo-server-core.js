@@ -12,7 +12,7 @@ addHook({ name: 'apollo-server-core', file: 'dist/runHttpQuery.js', versions: ['
   shimmer.wrap(runHttpQueryModule, 'runHttpQuery', function wrapRunHttpQuery (originalRunHttpQuery) {
     return async function runHttpQuery () {
       if (!requestChannel.start.hasSubscribers) {
-        return Reflect.apply(originalRunHttpQuery, this, arguments)
+        return originalRunHttpQuery.apply(this, arguments)
       }
 
       const abortController = new AbortController()

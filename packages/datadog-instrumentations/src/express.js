@@ -13,7 +13,7 @@ function wrapHandle (handle) {
       handleChannel.publish({ req })
     }
 
-    return Reflect.apply(handle, this, arguments)
+    return handle.apply(this, arguments)
   }
 }
 
@@ -32,7 +32,7 @@ function wrapResponseJson (json) {
       responseJsonChannel.publish({ req: this.req, res: this, body: obj })
     }
 
-    return Reflect.apply(json, this, arguments)
+    return json.apply(this, arguments)
   }
 }
 
@@ -41,7 +41,7 @@ const responseRenderChannel = tracingChannel('datadog:express:response:render')
 function wrapResponseRender (render) {
   return function wrappedRender (view, options, callback) {
     if (!responseRenderChannel.start.hasSubscribers) {
-      return Reflect.apply(render, this, arguments)
+      return render.apply(this, arguments)
     }
 
     return responseRenderChannel.traceSync(
@@ -94,7 +94,7 @@ function publishQueryParsedAndNext (req, res, next) {
       if (abortController.signal.aborted) return
     }
 
-    return Reflect.apply(next, this, arguments)
+    return next.apply(this, arguments)
   })
 }
 
@@ -104,11 +104,11 @@ addHook({
   file: 'lib/middleware/query.js'
 }, query => {
   return shimmer.wrapFunction(query, query => function () {
-    const queryMiddleware = Reflect.apply(query, this, arguments)
+    const queryMiddleware = query.apply(this, arguments)
 
     return shimmer.wrapFunction(queryMiddleware, queryMiddleware => function (req, res, next) {
       arguments[2] = publishQueryParsedAndNext(req, res, next)
-      return Reflect.apply(queryMiddleware, this, arguments)
+      return queryMiddleware.apply(this, arguments)
     })
   })
 })
@@ -131,7 +131,7 @@ function wrapProcessParamsMethod (requestPositionInArguments) {
         if (abortController.signal.aborted) return
       }
 
-      return Reflect.apply(original, this, arguments)
+      return original.apply(this, arguments)
     }
   }
 }
@@ -153,7 +153,7 @@ addHook({ name: 'express', file: ['lib/request.js'], versions: ['>=5.0.0'] }, re
 
   shimmer.wrap(requestDescriptor, 'get', function (originalGet) {
     return function wrappedGet () {
-      const query = Reflect.apply(originalGet, this, arguments)
+      const query = originalGet.apply(this, arguments)
 
       if (queryReadCh.hasSubscribers && query) {
         queryReadCh.publish({ query })

@@ -13,13 +13,13 @@ addHook({ name: 'tedious', versions: ['>=1.0.0'] }, tedious => {
   const errorCh = channel('apm:tedious:request:error')
   shimmer.wrap(tedious.Connection.prototype, 'makeRequest', makeRequest => function (request) {
     if (!startCh.hasSubscribers) {
-      return Reflect.apply(makeRequest, this, arguments)
+      return makeRequest.apply(this, arguments)
     }
 
     const queryOrProcedure = getQueryOrProcedure(request)
 
     if (!queryOrProcedure) {
-      return Reflect.apply(makeRequest, this, arguments)
+      return makeRequest.apply(this, arguments)
     }
 
     const callbackResource = new AsyncResource('bound-anonymous-fn')
@@ -37,11 +37,11 @@ addHook({ name: 'tedious', versions: ['>=1.0.0'] }, tedious => {
         }
         finishCh.publish(undefined)
 
-        return Reflect.apply(cb, this, arguments)
+        return cb.apply(this, arguments)
       }, null, request)
 
       try {
-        return Reflect.apply(makeRequest, this, arguments)
+        return makeRequest.apply(this, arguments)
       } catch (error) {
         errorCh.publish(error)
 

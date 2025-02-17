@@ -61,7 +61,7 @@ function Hook (modules, options, onrequire) {
     try {
       filename = Module._resolveFilename(request, this)
     } catch (resolveErr) {
-      return Reflect.apply(_origRequire, this, arguments)
+      return _origRequire.apply(this, arguments)
     }
 
     const core = filename.indexOf(path.sep) === -1
@@ -81,7 +81,7 @@ function Hook (modules, options, onrequire) {
     const patched = patching[filename]
     if (patched) {
       // If it's already patched, just return it as-is.
-      return Reflect.apply(origRequire, this, arguments)
+      return origRequire.apply(this, arguments)
     } else {
       patching[filename] = true
     }
@@ -94,7 +94,7 @@ function Hook (modules, options, onrequire) {
     if (moduleLoadStartChannel.hasSubscribers) {
       moduleLoadStartChannel.publish(payload)
     }
-    let exports = Reflect.apply(origRequire, this, arguments)
+    let exports = origRequire.apply(this, arguments)
     payload.module = exports
     if (moduleLoadEndChannel.hasSubscribers) {
       moduleLoadEndChannel.publish(payload)

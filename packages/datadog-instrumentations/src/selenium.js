@@ -24,13 +24,13 @@ addHook({
   // TODO: do not turn this into async. Use promises
   shimmer.wrap(seleniumPackage.WebDriver.prototype, 'get', get => async function () {
     if (!ciSeleniumDriverGetStartCh.hasSubscribers) {
-      return Reflect.apply(get, this, arguments)
+      return get.apply(this, arguments)
     }
     let traceId
     const setTraceId = (inputTraceId) => {
       traceId = inputTraceId
     }
-    const getResult = await Reflect.apply(get, this, arguments)
+    const getResult = await get.apply(this, arguments)
 
     const isRumActive = await this.executeScript(IS_RUM_ACTIVE_SCRIPT)
     const capabilities = await this.getCapabilities()
@@ -55,7 +55,7 @@ addHook({
 
   shimmer.wrap(seleniumPackage.WebDriver.prototype, 'quit', quit => async function () {
     if (!ciSeleniumDriverGetStartCh.hasSubscribers) {
-      return Reflect.apply(quit, this, arguments)
+      return quit.apply(this, arguments)
     }
     const isRumActive = await this.executeScript(RUM_STOP_SESSION_SCRIPT)
 
@@ -69,7 +69,7 @@ addHook({
       await this.manage().deleteCookie(DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME)
     }
 
-    return Reflect.apply(quit, this, arguments)
+    return quit.apply(this, arguments)
   })
 
   return seleniumPackage

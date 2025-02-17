@@ -13,7 +13,7 @@ const propertiesToSanitize = ['body', 'params', 'headers', 'query']
 
 addHook({ name: 'express-mongo-sanitize', versions: ['>=1.0.0'] }, expressMongoSanitize => {
   shimmer.wrap(expressMongoSanitize, 'sanitize', sanitize => function () {
-    const sanitizedObject = Reflect.apply(sanitize, this, arguments)
+    const sanitizedObject = sanitize.apply(this, arguments)
 
     if (sanitizeMethodFinished.hasSubscribers) {
       sanitizeMethodFinished.publish({ sanitizedObject })
@@ -23,11 +23,11 @@ addHook({ name: 'express-mongo-sanitize', versions: ['>=1.0.0'] }, expressMongoS
   })
 
   return shimmer.wrapFunction(expressMongoSanitize, expressMongoSanitize => function () {
-    const middleware = Reflect.apply(expressMongoSanitize, this, arguments)
+    const middleware = expressMongoSanitize.apply(this, arguments)
 
     return shimmer.wrapFunction(middleware, middleware => function (req, res, next) {
       if (!sanitizeMiddlewareFinished.hasSubscribers) {
-        return Reflect.apply(middleware, this, arguments)
+        return middleware.apply(this, arguments)
       }
 
       const wrappedNext = shimmer.wrapFunction(next, next => function () {
@@ -36,7 +36,7 @@ addHook({ name: 'express-mongo-sanitize', versions: ['>=1.0.0'] }, expressMongoS
           req
         })
 
-        return Reflect.apply(next, this, arguments)
+        return next.apply(this, arguments)
       })
 
       return middleware.call(this, req, res, wrappedNext)

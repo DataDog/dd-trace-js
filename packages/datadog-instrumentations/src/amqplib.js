@@ -27,7 +27,7 @@ addHook({ name: 'amqplib', file: 'lib/defs.js', versions: [MIN_VERSION] }, defs 
 
 addHook({ name: 'amqplib', file: 'lib/channel_model.js', versions: [MIN_VERSION] }, x => {
   shimmer.wrap(x.Channel.prototype, 'get', getMessage => function (queue, options) {
-    return Reflect.apply(getMessage, this, arguments).then(message => {
+    return getMessage.apply(this, arguments).then(message => {
       if (message === null) {
         return message
       }
@@ -39,7 +39,7 @@ addHook({ name: 'amqplib', file: 'lib/channel_model.js', versions: [MIN_VERSION]
   })
   shimmer.wrap(x.Channel.prototype, 'consume', consume => function (queue, callback, options) {
     if (!startCh.hasSubscribers) {
-      return Reflect.apply(consume, this, arguments)
+      return consume.apply(this, arguments)
     }
     arguments[1] = (message, ...args) => {
       if (message === null) {
@@ -50,7 +50,7 @@ addHook({ name: 'amqplib', file: 'lib/channel_model.js', versions: [MIN_VERSION]
       finishCh.publish()
       return result
     }
-    return Reflect.apply(consume, this, arguments)
+    return consume.apply(this, arguments)
   })
   return x
 })
@@ -58,7 +58,7 @@ addHook({ name: 'amqplib', file: 'lib/channel_model.js', versions: [MIN_VERSION]
 addHook({ name: 'amqplib', file: 'lib/callback_model.js', versions: [MIN_VERSION] }, channel => {
   shimmer.wrap(channel.Channel.prototype, 'get', getMessage => function (queue, options, callback) {
     if (!startCh.hasSubscribers) {
-      return Reflect.apply(getMessage, this, arguments)
+      return getMessage.apply(this, arguments)
     }
     arguments[2] = (error, message, ...args) => {
       if (error !== null || message === null) {
@@ -69,11 +69,11 @@ addHook({ name: 'amqplib', file: 'lib/callback_model.js', versions: [MIN_VERSION
       finishCh.publish()
       return result
     }
-    return Reflect.apply(getMessage, this, arguments)
+    return getMessage.apply(this, arguments)
   })
   shimmer.wrap(channel.Channel.prototype, 'consume', consume => function (queue, callback) {
     if (!startCh.hasSubscribers) {
-      return Reflect.apply(consume, this, arguments)
+      return consume.apply(this, arguments)
     }
     arguments[1] = (message, ...args) => {
       if (message === null) {
@@ -84,7 +84,7 @@ addHook({ name: 'amqplib', file: 'lib/callback_model.js', versions: [MIN_VERSION
       finishCh.publish()
       return result
     }
-    return Reflect.apply(consume, this, arguments)
+    return consume.apply(this, arguments)
   })
   return channel
 })

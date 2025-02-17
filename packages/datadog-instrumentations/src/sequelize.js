@@ -15,7 +15,7 @@ addHook({ name: 'sequelize', versions: ['>=4'] }, Sequelize => {
   shimmer.wrap(Sequelize.prototype, 'query', query => {
     return function (sql, options) {
       if (!startCh.hasSubscribers) {
-        return Reflect.apply(query, this, arguments)
+        return query.apply(this, arguments)
       }
 
       const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -38,17 +38,17 @@ addHook({ name: 'sequelize', versions: ['>=4'] }, Sequelize => {
         }, this).apply(this)
       }
 
-      return Reflect.apply(asyncResource.bind(function () {
+      return asyncResource.bind(function () {
         startCh.publish({
           sql,
           dialect
         })
 
-        const promise = Reflect.apply(query, this, arguments)
+        const promise = query.apply(this, arguments)
         promise.then(onFinish, () => { onFinish() })
 
         return promise
-      }, this), this, arguments)
+      }, this).apply(this, arguments)
     }
   })
 

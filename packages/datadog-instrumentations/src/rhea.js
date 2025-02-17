@@ -27,7 +27,7 @@ const contexts = new WeakMap() // key: delivery Fn, val: context
 addHook({ name: 'rhea', versions: ['>=1'] }, rhea => {
   shimmer.wrap(rhea.message, 'encode', encode => function (msg) {
     encodeSendCh.publish(msg)
-    return Reflect.apply(encode, this, arguments)
+    return encode.apply(this, arguments)
   })
 
   return rhea
@@ -39,7 +39,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
   shimmer.wrap(Sender.prototype, 'send', send => function (msg, tag, format) {
     if (!canTrace(this)) {
       // we can't handle disconnects or ending spans, so we can't safely instrument
-      return Reflect.apply(send, this, arguments)
+      return send.apply(this, arguments)
     }
 
     const { host, port } = getHostAndPort(this.connection)
@@ -52,7 +52,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
       startSendCh.publish({ targetAddress, host, port, msg })
-      const delivery = Reflect.apply(send, this, arguments)
+      const delivery = send.apply(this, arguments)
       const context = {
         asyncResource,
         connection: this.connection
@@ -73,7 +73,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
   shimmer.wrap(Receiver.prototype, 'dispatch', dispatch => function (eventName, msgObj) {
     if (!canTrace(this)) {
       // we can't handle disconnects or ending spans, so we can't safely instrument
-      return Reflect.apply(dispatch, this, arguments)
+      return dispatch.apply(this, arguments)
     }
 
     if (eventName === 'message' && msgObj) {
@@ -91,7 +91,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
           addToInFlightDeliveries(this.connection, msgObj.delivery)
         }
         try {
-          return Reflect.apply(dispatch, this, arguments)
+          return dispatch.apply(this, arguments)
         } catch (err) {
           errorReceiveCh.publish(err)
 
@@ -100,7 +100,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
       })
     }
 
-    return Reflect.apply(dispatch, this, arguments)
+    return dispatch.apply(this, arguments)
   })
   return obj
 })
@@ -124,7 +124,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/connection.js' }, Connecti
         })
       }
     }
-    return Reflect.apply(dispatch, this, arguments)
+    return dispatch.apply(this, arguments)
   })
   return Connection
 })
@@ -156,11 +156,11 @@ function wrapDeliveryUpdate (obj, update) {
     return shimmer.wrapFunction(cb, cb => AsyncResource.bind(function wrappedUpdate (settled, stateData) {
       const state = getStateFromData(stateData)
       dispatchReceiveCh.publish({ state })
-      return Reflect.apply(cb, this, arguments)
+      return cb.apply(this, arguments)
     }))
   }
   return function wrappedUpdate (settled, stateData) {
-    return Reflect.apply(update, this, arguments)
+    return update.apply(this, arguments)
   }
 }
 
@@ -199,7 +199,7 @@ function patchCircularBuffer (proto, Session) {
 
               return shouldPop
             }))
-            return Reflect.apply(popIf, this, arguments)
+            return popIf.apply(this, arguments)
           })
           patched.add(CircularBuffer.prototype)
           const Session = proto.constructor

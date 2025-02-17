@@ -11,7 +11,7 @@ const memoize = func => {
   const cache = {}
   const memoized = function (key) {
     if (!cache[key]) {
-      cache[key] = Reflect.apply(func, this, arguments)
+      cache[key] = func.apply(this, arguments)
     }
 
     return cache[key]

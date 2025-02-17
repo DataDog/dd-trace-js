@@ -29,7 +29,7 @@ function wrapUse (use) {
   if (typeof use !== 'function') return use
 
   return function useWithTrace (route, fn) {
-    const result = Reflect.apply(use, this, arguments)
+    const result = use.apply(this, arguments)
 
     if (!this || !Array.isArray(this.stack)) return result
 
@@ -50,7 +50,7 @@ function wrapHandle (handle) {
       handleChannel.publish({ req, res })
     }
 
-    return Reflect.apply(handle, this, arguments)
+    return handle.apply(this, arguments)
   }
 }
 
@@ -60,7 +60,7 @@ function wrapLayerHandle (layer) {
   const original = layer.handle
 
   return shimmer.wrapFunction(original, original => function () {
-    if (!enterChannel.hasSubscribers) return Reflect.apply(original, this, arguments)
+    if (!enterChannel.hasSubscribers) return original.apply(this, arguments)
 
     const lastIndex = arguments.length - 1
     const name = original._name || original.name
@@ -76,7 +76,7 @@ function wrapLayerHandle (layer) {
     enterChannel.publish({ name, req, route })
 
     try {
-      return Reflect.apply(original, this, arguments)
+      return original.apply(this, arguments)
     } catch (error) {
       errorChannel.publish({ req, error })
       nextChannel.publish({ req })
@@ -98,7 +98,7 @@ function wrapNext (req, next) {
     nextChannel.publish({ req })
     finishChannel.publish({ req })
 
-    Reflect.apply(next, this, arguments)
+    next.apply(this, arguments)
   })
 }
 
