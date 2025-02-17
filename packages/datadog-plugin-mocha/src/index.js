@@ -31,7 +31,9 @@ const {
   MOCHA_IS_PARALLEL,
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_DRIVER,
-  TEST_RETRY_REASON
+  TEST_RETRY_REASON,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -309,6 +311,7 @@ class MochaPlugin extends CiPlugin {
       error,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
+      isQuarantinedTestsEnabled,
       isParallel
     }) => {
       if (this.testSessionSpan) {
@@ -323,6 +326,10 @@ class MochaPlugin extends CiPlugin {
 
         if (isParallel) {
           this.testSessionSpan.setTag(MOCHA_IS_PARALLEL, 'true')
+        }
+
+        if (isQuarantinedTestsEnabled) {
+          this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
         }
 
         addIntelligentTestRunnerSpanTags(
@@ -397,7 +404,8 @@ class MochaPlugin extends CiPlugin {
       isNew,
       isEfdRetry,
       testStartLine,
-      isParallel
+      isParallel,
+      isQuarantined
     } = testInfo
 
     const testName = removeEfdStringFromTestName(testInfo.testName)
@@ -414,6 +422,10 @@ class MochaPlugin extends CiPlugin {
 
     if (isParallel) {
       extraTags[MOCHA_IS_PARALLEL] = 'true'
+    }
+
+    if (isQuarantined) {
+      extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
     }
 
     const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)

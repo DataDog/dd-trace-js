@@ -115,6 +115,9 @@ const DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX = 'snapshot_id'
 const DI_DEBUG_ERROR_FILE_SUFFIX = 'file'
 const DI_DEBUG_ERROR_LINE_SUFFIX = 'line'
 
+const TEST_MANAGEMENT_IS_QUARANTINED = 'test.test_management.is_quarantined'
+const TEST_MANAGEMENT_ENABLED = 'test.test_management.enabled'
+
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
@@ -199,7 +202,9 @@ module.exports = {
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
   getFormattedError,
-  DD_TEST_IS_USER_PROVIDED_SERVICE
+  DD_TEST_IS_USER_PROVIDED_SERVICE,
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_ENABLED
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
