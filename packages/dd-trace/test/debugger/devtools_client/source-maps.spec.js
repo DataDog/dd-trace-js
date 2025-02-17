@@ -16,7 +16,7 @@ const rawSourceMap = JSON.stringify(parsedSourceMap)
 const inlineSourceMap = `data:application/json;base64,${Buffer.from(rawSourceMap).toString('base64')}`
 
 describe('source map utils', function () {
-  let loadSourceMap, loadSourceMapSync, getSourceMappedLine, readFileSync, readFile
+  let loadSourceMap, loadSourceMapSync, getGeneratedPosition, readFileSync, readFile
 
   describe('basic', function () {
     beforeEach(function () {
@@ -30,7 +30,7 @@ describe('source map utils', function () {
 
       loadSourceMap = sourceMaps.loadSourceMap
       loadSourceMapSync = sourceMaps.loadSourceMapSync
-      getSourceMappedLine = sourceMaps.getSourceMappedLine
+      getGeneratedPosition = sourceMaps.getGeneratedPosition
     })
 
     describe('loadSourceMap', function () {
@@ -77,19 +77,19 @@ describe('source map utils', function () {
       })
     })
 
-    describe('getSourceMappedLine', function () {
+    describe('getGeneratedPosition', function () {
       const url = `file://${dir}/${parsedSourceMap.file}`
       const source = parsedSourceMap.sources[0]
       const line = 1
 
       it('should return expected line for inline source map', async function () {
-        const result = await getSourceMappedLine(url, source, line, sourceMapURL)
-        expect(result).to.equal(2)
+        const pos = await getGeneratedPosition(url, source, line, sourceMapURL)
+        expect(pos).to.deep.equal({ line: 2, column: 0, lastColumn: 5 })
       })
 
       it('should return expected line for non-inline source map', async function () {
-        const result = await getSourceMappedLine(url, source, line, inlineSourceMap)
-        expect(result).to.equal(2)
+        const pos = await getGeneratedPosition(url, source, line, inlineSourceMap)
+        expect(pos).to.deep.equal({ line: 2, column: 0, lastColumn: 5 })
       })
     })
   })
