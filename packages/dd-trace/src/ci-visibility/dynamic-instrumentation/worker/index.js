@@ -12,7 +12,7 @@ const { randomUUID } = require('crypto')
 // TODO: move debugger/devtools_client/session to common place
 const session = require('../../../debugger/devtools_client/session')
 // TODO: move debugger/devtools_client/source-maps to common place
-const { getSourceMappedLine } = require('../../../debugger/devtools_client/source-maps')
+const { getGeneratedPosition } = require('../../../debugger/devtools_client/source-maps')
 // TODO: move debugger/devtools_client/snapshot to common place
 const { getLocalStateForCallFrame } = require('../../../debugger/devtools_client/snapshot')
 // TODO: move debugger/devtools_client/state to common place
@@ -104,16 +104,18 @@ async function addBreakpoint (probe) {
   log.warn(`Adding breakpoint at ${url}:${line}`)
 
   let lineNumber = line
+  let columnNumber = 0
 
   if (sourceMapURL) {
     try {
-      lineNumber = await getSourceMappedLine(url, source, line, sourceMapURL)
+      ({ line: lineNumber, column: columnNumber } = await getGeneratedPosition(url, source, line, sourceMapURL))
     } catch (err) {
       log.error('Error processing script with source map', err)
     }
     if (lineNumber === null) {
       log.error('Could not find generated position for %s:%s', url, line)
       lineNumber = line
+      columnNumber = 0
     }
   }
 
@@ -121,7 +123,8 @@ async function addBreakpoint (probe) {
     const { breakpointId } = await session.post('Debugger.setBreakpoint', {
       location: {
         scriptId,
-        lineNumber: lineNumber - 1
+        lineNumber: lineNumber - 1,
+        columnNumber
       }
     })
 
