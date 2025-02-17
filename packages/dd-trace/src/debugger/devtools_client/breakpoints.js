@@ -1,6 +1,6 @@
 'use strict'
 
-const { getSourceMappedLine } = require('./source-maps')
+const { getGeneratedPosition } = require('./source-maps')
 const session = require('./session')
 const { MAX_SNAPSHOTS_PER_SECOND_PER_PROBE, MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE } = require('./defaults')
 const { findScriptFromPartialPath, probes, breakpoints } = require('./state')
@@ -17,10 +17,11 @@ async function addBreakpoint (probe) {
   if (!sessionStarted) await start()
 
   const file = probe.where.sourceFile
-  let line = Number(probe.where.lines[0]) // Tracer doesn't support multiple-line breakpoints
+  let lineNumber = Number(probe.where.lines[0]) // Tracer doesn't support multiple-line breakpoints
+  let columnNumber = 0 // Probes do not contain/support column information
 
   // Optimize for sending data to /debugger/v1/input endpoint
-  probe.location = { file, lines: [String(line)] }
+  probe.location = { file, lines: [String(lineNumber)] }
   delete probe.where
 
   // Optimize for fast calculations when probe is hit
@@ -38,18 +39,19 @@ async function addBreakpoint (probe) {
   const { url, scriptId, sourceMapURL, source } = script
 
   if (sourceMapURL) {
-    line = await getSourceMappedLine(url, source, line, sourceMapURL)
+    ({ line: lineNumber, column: columnNumber } = await getGeneratedPosition(url, source, lineNumber, sourceMapURL))
   }
 
   log.debug(
-    '[debugger:devtools_client] Adding breakpoint at %s:%d (probe: %s, version: %d)',
-    url, line, probe.id, probe.version
+    '[debugger:devtools_client] Adding breakpoint at %s:%d:%d (probe: %s, version: %d)',
+    url, lineNumber, columnNumber, probe.id, probe.version
   )
 
   const { breakpointId } = await session.post('Debugger.setBreakpoint', {
     location: {
       scriptId,
-      lineNumber: line - 1 // Beware! lineNumber is zero-indexed
+      lineNumber: lineNumber - 1, // Beware! lineNumber is zero-indexed
+      columnNumber
     }
   })
 

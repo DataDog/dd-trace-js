@@ -23,12 +23,12 @@ const self = module.exports = {
     return cacheIt(path, JSON.parse(readFileSync(path, 'utf8')))
   },
 
-  async getSourceMappedLine (url, source, line, sourceMapURL) {
+  async getGeneratedPosition (url, source, line, sourceMapURL) {
     const dir = dirname(new URL(url).pathname)
     return await SourceMapConsumer.with(
       await self.loadSourceMap(dir, sourceMapURL),
       null,
-      (consumer) => consumer.generatedPositionFor({ source, line, column: 0 }).line
+      (consumer) => consumer.generatedPositionFor({ source, line, column: 0 })
     )
   }
 }
