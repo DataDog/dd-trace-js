@@ -4,6 +4,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { assert } = require('chai')
+const msgpack = require('@msgpack/msgpack')
 
 const agent = require('../../plugins/agent')
 const axios = require('axios')
@@ -152,7 +153,15 @@ function checkNoVulnerabilityInRequest (vulnerability, config, done, makeRequest
   }
 }
 
-function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb, makeRequest, config, done) {
+function checkVulnerabilityInRequest (
+  vulnerability,
+  occurrencesAndLocation,
+  cb,
+  makeRequest,
+  config,
+  done,
+  matchLocation
+) {
   let location
   let occurrences = occurrencesAndLocation
   if (occurrencesAndLocation !== null && typeof occurrencesAndLocation === 'object') {
@@ -197,6 +206,12 @@ function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb,
         if (!found) {
           throw new Error(`Expected ${vulnerability} on ${location.path}:${location.line}`)
         }
+      }
+
+      if (matchLocation) {
+        const matchFound = locationHasMatchingFrame(span, vulnerability, vulnerabilitiesTrace.vulnerabilities)
+
+        assert.isTrue(matchFound)
       }
 
       if (cb) {
@@ -254,11 +269,19 @@ function prepareTestServerForIast (description, tests, iastConfig) {
       return agent.close({ ritmReset: false })
     })
 
-    function testThatRequestHasVulnerability (fn, vulnerability, occurrences, cb, makeRequest, description) {
+    function testThatRequestHasVulnerability (
+      fn,
+      vulnerability,
+      occurrences,
+      cb,
+      makeRequest,
+      description,
+      matchLocation = true
+    ) {
       it(description || `should have ${vulnerability} vulnerability`, function (done) {
         this.timeout(5000)
         app = fn
-        checkVulnerabilityInRequest(vulnerability, occurrences, cb, makeRequest, config, done)
+        checkVulnerabilityInRequest(vulnerability, occurrences, cb, makeRequest, config, done, matchLocation)
       })
     }
 
@@ -371,6 +394,29 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
 
     tests(testThatRequestHasVulnerability, testThatRequestHasNoVulnerability, config)
   })
+}
+
+function locationHasMatchingFrame (span, vulnerabilityType, vulnerabilities) {
+  const stack = msgpack.decode(span.meta_struct['_dd.stack'])
+  const matchingVulns = vulnerabilities.filter(vulnerability => vulnerability.type === vulnerabilityType)
+
+  for (const vulnerability of stack.vulnerability) {
+    for (const frame of vulnerability.frames) {
+      for (const { location } of matchingVulns) {
+        if (
+          frame.line === location.line &&
+          frame.class_name === location.class &&
+          frame.function === location.method &&
+          frame.path === location.path &&
+          !location.hasOwnProperty('column')
+        ) {
+          return true
+        }
+      }
+    }
+  }
+
+  return false
 }
 
 module.exports = {

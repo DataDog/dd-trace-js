@@ -1,9 +1,13 @@
 'use strict'
 
+const sinon = require('sinon')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+
+const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
+const ddpv = require('mocha/package.json').version
 
 const withTopologies = fn => {
   withVersions('mongodb-core', ['mongodb-core', 'mongodb'], '<4', (version, moduleName) => {
@@ -29,6 +33,7 @@ describe('Plugin', () => {
   let id
   let tracer
   let collection
+  let injectDbmCommandSpy
 
   describe('mongodb-core (core)', () => {
     withTopologies(getServer => {
@@ -396,6 +401,181 @@ describe('Plugin', () => {
             }
           }
         )
+      })
+
+      describe('with dbmPropagationMode service', () => {
+        before(() => {
+          return agent.load('mongodb-core', { dbmPropagationMode: 'service' })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(done => {
+          const Server = getServer()
+
+          server = new Server({
+            host: '127.0.0.1',
+            port: 27017,
+            reconnect: false
+          })
+
+          server.on('connect', () => done())
+          server.on('error', done)
+
+          server.connect()
+
+          injectDbmCommandSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmCommand')
+        })
+
+        afterEach(() => {
+          injectDbmCommandSpy?.restore()
+        })
+
+        it('DBM propagation should inject service mode as comment', done => {
+          agent
+            .use(traces => {
+              const span = traces[0][0]
+
+              expect(injectDbmCommandSpy.called).to.be.true
+              const instrumentedCommand = injectDbmCommandSpy.getCall(0).returnValue
+              expect(instrumentedCommand).to.have.property('comment')
+              expect(instrumentedCommand.comment).to.equal(
+                `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
+                'dddbs=\'test-mongodb\',' +
+                'dde=\'tester\',' +
+                `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
+                `ddps='${encodeURIComponent(span.meta.service)}',` +
+                `ddpv='${ddpv}',` +
+                `ddprs='${encodeURIComponent(span.meta['peer.service'])}'`
+              )
+            })
+            .then(done)
+            .catch(done)
+
+          server.insert(`test.${collection}`, [{ a: 1 }], () => {})
+        })
+
+        it('DBM propagation should inject service mode after eixsting str comment', done => {
+          agent
+            .use(traces => {
+              const span = traces[0][0]
+
+              expect(injectDbmCommandSpy.called).to.be.true
+              const instrumentedCommand = injectDbmCommandSpy.getCall(0).returnValue
+              expect(instrumentedCommand).to.have.property('comment')
+              expect(instrumentedCommand.comment).to.equal(
+                'test comment,' +
+                `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
+                'dddbs=\'test-mongodb\',' +
+                'dde=\'tester\',' +
+                `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
+                `ddps='${encodeURIComponent(span.meta.service)}',` +
+                `ddpv='${ddpv}',` +
+                `ddprs='${encodeURIComponent(span.meta['peer.service'])}'`
+              )
+            })
+            .then(done)
+            .catch(done)
+
+          server.command(`test.${collection}`, {
+            find: `test.${collection}`,
+            query: {
+              _id: Buffer.from('1234')
+            },
+            comment: 'test comment'
+          }, () => {})
+        })
+
+        it('DBM propagation should inject service mode after eixsting array comment', done => {
+          agent
+            .use(traces => {
+              const span = traces[0][0]
+
+              expect(injectDbmCommandSpy.called).to.be.true
+              const instrumentedCommand = injectDbmCommandSpy.getCall(0).returnValue
+              expect(instrumentedCommand).to.have.property('comment')
+              expect(instrumentedCommand.comment).to.deep.equal([
+                'test comment',
+                `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
+                'dddbs=\'test-mongodb\',' +
+                'dde=\'tester\',' +
+                `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
+                `ddps='${encodeURIComponent(span.meta.service)}',` +
+                `ddpv='${ddpv}',` +
+                `ddprs='${encodeURIComponent(span.meta['peer.service'])}'`
+              ])
+            })
+            .then(done)
+            .catch(done)
+
+          server.command(`test.${collection}`, {
+            find: `test.${collection}`,
+            query: {
+              _id: Buffer.from('1234')
+            },
+            comment: ['test comment']
+          }, () => {})
+        })
+      })
+
+      describe('with dbmPropagationMode full', () => {
+        before(() => {
+          return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(done => {
+          const Server = getServer()
+
+          server = new Server({
+            host: '127.0.0.1',
+            port: 27017,
+            reconnect: false
+          })
+
+          server.on('connect', () => done())
+          server.on('error', done)
+
+          server.connect()
+
+          injectDbmCommandSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmCommand')
+        })
+
+        afterEach(() => {
+          injectDbmCommandSpy?.restore()
+        })
+
+        it('DBM propagation should inject full mode with traceparent as comment', done => {
+          agent
+            .use(traces => {
+              const span = traces[0][0]
+              const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
+              const spanId = span.span_id.toString(16).padStart(16, '0')
+
+              expect(injectDbmCommandSpy.called).to.be.true
+              const instrumentedCommand = injectDbmCommandSpy.getCall(0).returnValue
+              expect(instrumentedCommand).to.have.property('comment')
+              expect(instrumentedCommand.comment).to.equal(
+                `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
+                'dddbs=\'test-mongodb\',' +
+                'dde=\'tester\',' +
+                `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
+                `ddps='${encodeURIComponent(span.meta.service)}',` +
+                `ddpv='${ddpv}',` +
+                `ddprs='${encodeURIComponent(span.meta['peer.service'])}',` +
+                `traceparent='00-${traceId}-${spanId}-00'`
+              )
+            })
+            .then(done)
+            .catch(done)
+
+          server.insert(`test.${collection}`, [{ a: 1 }], () => {})
+        })
       })
     })
   })

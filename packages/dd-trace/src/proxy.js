@@ -201,7 +201,11 @@ class Tracer extends NoopProxy {
     try {
       return require('./profiler').start(config)
     } catch (e) {
-      log.error('Error starting profiler', e)
+      log.error(
+        'Error starting profiler. For troubleshooting tips, see ' +
+        '<https://dtdg.co/nodejs-profiler-troubleshooting>',
+        e
+      )
     }
   }
 

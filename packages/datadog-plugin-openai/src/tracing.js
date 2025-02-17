@@ -15,7 +15,6 @@ let normalize
 
 function safeRequire (path) {
   try {
-    // eslint-disable-next-line import/no-extraneous-dependencies
     return require(path)
   } catch {
     return null
@@ -796,7 +795,7 @@ function truncateApiKey (apiKey) {
 
 function tagChatCompletionRequestContent (contents, messageIdx, tags) {
   if (typeof contents === 'string') {
-    tags[`openai.request.messages.${messageIdx}.content`] = contents
+    tags[`openai.request.messages.${messageIdx}.content`] = normalize(contents)
   } else if (Array.isArray(contents)) {
     // content can also be an array of objects
     // which represent text input or image url
