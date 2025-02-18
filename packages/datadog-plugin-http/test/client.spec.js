@@ -944,9 +944,13 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          http.request('https://httpbin.org/get', { headers: { BadHeader: 'a\nb' } }, res => {
-            res.on('data', () => { })
-          })
+          try {
+            http.request('http://httpbin.org/get', { headers: { BadHeader: 'a\nb' } }, res => {
+              res.on('data', () => { })
+            })
+          } catch {
+            // expected to throw error
+          }
         })
       })
 
