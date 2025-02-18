@@ -28,6 +28,8 @@ describe('git_metadata', () => {
   let isShallowRepositoryStub
   let unshallowRepositoryStub
 
+  let isUnshallowEnabled
+
   before(() => {
     process.env.DD_API_KEY = 'api-key'
     fs.writeFileSync(temporaryPackFile, '')
@@ -46,6 +48,8 @@ describe('git_metadata', () => {
     getRepositoryUrlStub = sinon.stub().returns('git@github.com:DataDog/dd-trace-js.git')
     isShallowRepositoryStub = sinon.stub().returns(false)
     unshallowRepositoryStub = sinon.stub()
+
+    isUnshallowEnabled = true
 
     generatePackFilesForCommitsStub = sinon.stub().returns([temporaryPackFile])
 
@@ -76,7 +80,8 @@ describe('git_metadata', () => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
       done()
-    })
+    },
+    isUnshallowEnabled)
   })
 
   it('should unshallow if the repo is shallow and not every commit is in the backend', (done) => {
@@ -94,7 +99,28 @@ describe('git_metadata', () => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
       done()
-    })
+    },
+    isUnshallowEnabled)
+  })
+
+  it('should not unshallow if the parameter to enable unshallow is false', (done) => {
+    isUnshallowEnabled = false
+    const scope = nock('https://api.test.com')
+      .post('/api/v2/git/repository/search_commits')
+      .reply(200, JSON.stringify({ data: [] }))
+      .post('/api/v2/git/repository/search_commits') // calls a second time after unshallowing
+      .reply(200, JSON.stringify({ data: [] }))
+      .post('/api/v2/git/repository/packfile')
+      .reply(204)
+
+    isShallowRepositoryStub.returns(true)
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
+      expect(unshallowRepositoryStub).not.to.have.been.called
+      expect(err).to.be.null
+      expect(scope.isDone()).to.be.true
+      done()
+    },
+    isUnshallowEnabled)
   })
 
   it('should request to /api/v2/git/repository/search_commits and /api/v2/git/repository/packfile', (done) => {
@@ -108,7 +134,8 @@ describe('git_metadata', () => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
       done()
-    })
+    },
+    isUnshallowEnabled)
   })
 
   it('should not request to /api/v2/git/repository/packfile if the backend has the commit info', (done) => {
@@ -126,7 +153,8 @@ describe('git_metadata', () => {
       expect(scope.isDone()).to.be.false
       expect(scope.pendingMocks()).to.contain('POST https://api.test.com:443/api/v2/git/repository/packfile')
       done()
-    })
+    },
+    isUnshallowEnabled)
   })
 
   it('should fail and not continue if first query results in anything other than 200', (done) => {
@@ -143,7 +171,8 @@ describe('git_metadata', () => {
       expect(scope.isDone()).to.be.false
       expect(scope.pendingMocks()).to.contain('POST https://api.test.com:443/api/v2/git/repository/packfile')
       done()
-    })
+    },
+    isUnshallowEnabled)
   })
 
   it('should fail and not continue if the response are not correct commits', (done) => {
@@ -159,7 +188,8 @@ describe('git_metadata', () => {
       expect(scope.isDone()).to.be.false
       expect(scope.pendingMocks()).to.contain('POST https://api.test.com:443/api/v2/git/repository/packfile')
       done()
-    })
+    },
+    isUnshallowEnabled)
   })
 
   it('should fail and not continue if the response are badly formatted commits', (done) => {
@@ -175,7 +205,8 @@ describe('git_metadata', () => {
       expect(scope.isDone()).to.be.false
       expect(scope.pendingMocks()).to.contain('POST https://api.test.com:443/api/v2/git/repository/packfile')
       done()
-    })
+    },
+    isUnshallowEnabled)
   })
 
   it('should fail if the packfile request returns anything other than 204', (done) => {
@@ -189,7 +220,8 @@ describe('git_metadata', () => {
       expect(err.message).to.contain('Could not upload packfiles: status code 502')
       expect(scope.isDone()).to.be.true
       done()
-    })
+    },
+    isUnshallowEnabled)
   })
 
   it('should fail if the getCommitsRevList fails because the repository is too big', (done) => {
@@ -203,7 +235,8 @@ describe('git_metadata', () => {
       expect(err.message).to.contain('git rev-list failed')
       expect(scope.isDone()).to.be.true
       done()
-    })
+    },
+    isUnshallowEnabled)
   })
 
   it('should fire a request per packfile', (done) => {
@@ -230,7 +263,8 @@ describe('git_metadata', () => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
       done()
-    })
+    },
+    isUnshallowEnabled)
   })
 
   describe('validateGitRepositoryUrl', () => {
@@ -305,7 +339,8 @@ describe('git_metadata', () => {
       expect(err.message).to.contain('Could not read "not-there"')
       expect(scope.isDone()).to.be.false
       done()
-    })
+    },
+    isUnshallowEnabled)
   })
 
   it('should not crash if generatePackFiles returns an empty array', (done) => {
@@ -321,7 +356,8 @@ describe('git_metadata', () => {
       expect(err.message).to.contain('Failed to generate packfiles')
       expect(scope.isDone()).to.be.false
       done()
-    })
+    },
+    isUnshallowEnabled)
   })
 
   it('should not crash if git is missing', (done) => {
@@ -340,7 +376,8 @@ describe('git_metadata', () => {
       expect(scope.isDone()).to.be.false
       process.env.PATH = oldPath
       done()
-    })
+    },
+    isUnshallowEnabled)
   })
 
   it('should retry if backend temporarily fails', (done) => {
@@ -358,7 +395,8 @@ describe('git_metadata', () => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
       done()
-    })
+    },
+    isUnshallowEnabled)
   })
 
   it('should append evp proxy prefix if configured', (done) => {
@@ -378,7 +416,8 @@ describe('git_metadata', () => {
       (err) => {
         expect(err).to.be.null
         expect(scope.isDone()).to.be.true
-      })
+      },
+      isUnshallowEnabled)
   })
 
   it('should use the input repository url and not call getRepositoryUrl', (done) => {
@@ -408,6 +447,7 @@ describe('git_metadata', () => {
           expect(repositoryUrl).to.equal('https://custom-git@datadog.com')
           done()
         })
-      })
+      },
+      isUnshallowEnabled)
   })
 })
