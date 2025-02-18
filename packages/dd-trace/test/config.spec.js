@@ -1638,7 +1638,7 @@ describe('Config', () => {
 
   it('should not transform the lookup parameter', () => {
     const lookup = () => 'test'
-    const config = new Config({ lookup: lookup })
+    const config = new Config({ lookup })
 
     expect(config.lookup).to.equal(lookup)
   })
@@ -2039,7 +2039,7 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
       delete process.env.DD_TEST_SESSION_NAME
       delete process.env.JEST_WORKER_ID
-      delete process.env.DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED
+      delete process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED
       delete process.env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED
       options = {}
     })
@@ -2138,15 +2138,16 @@ describe('Config', () => {
         const config = new Config(options)
         expect(config).to.have.property('ciVisAgentlessLogSubmissionEnabled', true)
       })
-      it('should not set isTestDynamicInstrumentationEnabled by default', () => {
-        const config = new Config(options)
-        expect(config).to.have.property('isTestDynamicInstrumentationEnabled', false)
-      })
-      it('should set isTestDynamicInstrumentationEnabled if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is passed', () => {
-        process.env.DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+      it('should set isTestDynamicInstrumentationEnabled by default', () => {
         const config = new Config(options)
         expect(config).to.have.property('isTestDynamicInstrumentationEnabled', true)
       })
+      it('should set isTestDynamicInstrumentationEnabled to false if DD_TEST_FAILED_TEST_REPLAY_ENABLED is false',
+        () => {
+          process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED = 'false'
+          const config = new Config(options)
+          expect(config).to.have.property('isTestDynamicInstrumentationEnabled', false)
+        })
     })
     context('ci visibility mode is not enabled', () => {
       it('should not activate intelligent test runner or git metadata upload', () => {

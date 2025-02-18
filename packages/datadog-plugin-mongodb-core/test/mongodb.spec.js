@@ -1,8 +1,12 @@
 'use strict'
 
+const sinon = require('sinon')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+
+const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
+const ddpv = require('mocha/package.json').version
 
 const withTopologies = fn => {
   const isOldNode = semver.satisfies(process.version, '<=14')
@@ -44,6 +48,7 @@ describe('Plugin', () => {
   let collection
   let db
   let BSON
+  let injectDbmCommandSpy
 
   describe('mongodb-core', () => {
     withTopologies(createClient => {
@@ -333,6 +338,109 @@ describe('Plugin', () => {
             }
           }
         )
+      })
+
+      describe('with dbmPropagationMode service', () => {
+        before(() => {
+          return agent.load('mongodb-core', {
+            dbmPropagationMode: 'service'
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          client = await createClient()
+          db = client.db('test')
+          collection = db.collection(collectionName)
+
+          injectDbmCommandSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmCommand')
+        })
+
+        afterEach(() => {
+          injectDbmCommandSpy?.restore()
+        })
+
+        it('DBM propagation should inject service mode as comment', done => {
+          agent
+            .use(traces => {
+              const span = traces[0][0]
+
+              expect(injectDbmCommandSpy.called).to.be.true
+              const instrumentedCommand = injectDbmCommandSpy.getCall(0).returnValue
+              expect(instrumentedCommand).to.have.property('comment')
+              expect(instrumentedCommand.comment).to.equal(
+                `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
+                'dddbs=\'test-mongodb\',' +
+                'dde=\'tester\',' +
+                `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
+                `ddps='${encodeURIComponent(span.meta.service)}',` +
+                `ddpv='${ddpv}',` +
+                `ddprs='${encodeURIComponent(span.meta['peer.service'])}'`
+              )
+            })
+            .then(done)
+            .catch(done)
+
+          collection.find({
+            _id: Buffer.from('1234')
+          }).toArray()
+        })
+      })
+
+      describe('with dbmPropagationMode full', () => {
+        before(() => {
+          return agent.load('mongodb-core', {
+            dbmPropagationMode: 'full'
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          client = await createClient()
+          db = client.db('test')
+          collection = db.collection(collectionName)
+
+          injectDbmCommandSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmCommand')
+        })
+
+        afterEach(() => {
+          injectDbmCommandSpy?.restore()
+        })
+
+        it('DBM propagation should inject full mode with traceparent as comment', done => {
+          agent
+            .use(traces => {
+              const span = traces[0][0]
+              const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
+              const spanId = span.span_id.toString(16).padStart(16, '0')
+
+              expect(injectDbmCommandSpy.called).to.be.true
+              const instrumentedCommand = injectDbmCommandSpy.getCall(0).returnValue
+              expect(instrumentedCommand).to.have.property('comment')
+              expect(instrumentedCommand.comment).to.equal(
+                `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
+                'dddbs=\'test-mongodb\',' +
+                'dde=\'tester\',' +
+                `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
+                `ddps='${encodeURIComponent(span.meta.service)}',` +
+                `ddpv='${ddpv}',` +
+                `ddprs='${encodeURIComponent(span.meta['peer.service'])}',` +
+                `traceparent='00-${traceId}-${spanId}-00'`
+              )
+            })
+            .then(done)
+            .catch(done)
+
+          collection.find({
+            _id: Buffer.from('1234')
+          }).toArray()
+        })
       })
     })
   })
