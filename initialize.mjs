@@ -35,9 +35,11 @@ ${result.source}`
 const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(x => +x)
 
 const brokenLoaders = NODE_MAJOR === 18 && NODE_MINOR === 0
+const iitmExclusions = [/langsmith/, /openai\/_shims/, /openai\/resources\/chat\/completions\/messages/]
 
 export async function load (...args) {
-  const loadHook = brokenLoaders ? args[args.length - 1] : origLoad
+  const iitmExclusionsMatch = iitmExclusions.some((exclusion) => exclusion.test(args[0]))
+  const loadHook = (brokenLoaders || iitmExclusionsMatch) ? args[args.length - 1] : origLoad
   return insertInit(await loadHook(...args))
 }
 
@@ -54,7 +56,7 @@ if (isMainThread) {
   require('./init.js')
   if (Module.register) {
     Module.register('./loader-hook.mjs', import.meta.url, {
-      data: { exclude: [/langsmith/, /openai\/_shims/, /openai\/resources\/chat\/completions\/messages/] }
+      data: { exclude: iitmExclusions }
     })
   }
 }
