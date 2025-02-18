@@ -8,11 +8,14 @@ const DD_TELEMETRY_WAF_RESULT_TAGS = Symbol('_dd.appsec.telemetry.waf.result.tag
 const DD_TELEMETRY_REQUEST_METRICS = Symbol('_dd.appsec.telemetry.request.metrics')
 
 const tags = {
+  BLOCK_FAILURE: 'block_failure',
+  EVENT_RULES_VERSION: 'event_rules_version',
+  INPUT_TRUNCATED: 'input_truncated',
   REQUEST_BLOCKED: 'request_blocked',
   RULE_TRIGGERED: 'rule_triggered',
+  WAF_ERROR: 'waf_error',
   WAF_TIMEOUT: 'waf_timeout',
-  WAF_VERSION: 'waf_version',
-  EVENT_RULES_VERSION: 'event_rules_version'
+  WAF_VERSION: 'waf_version'
 }
 
 const metricsStoreMap = new WeakMap()
@@ -34,7 +37,11 @@ function newStore () {
       durationExt: 0,
       raspDuration: 0,
       raspDurationExt: 0,
-      raspEvalCount: 0
+      raspEvalCount: 0,
+      raspErrorCode: null,
+      raspTimeouts: 0,
+      wafErrorCode: null,
+      wafTimeouts: 0
     }
   }
 }
@@ -59,8 +66,33 @@ function trackWafDurations (metrics, versionsTags) {
   if (metrics.duration) {
     appsecMetrics.distribution('waf.duration', versionsTags).track(metrics.duration)
   }
+
   if (metrics.durationExt) {
     appsecMetrics.distribution('waf.duration_ext', versionsTags).track(metrics.durationExt)
+  }
+
+  if (metrics.wafTimeouts) {
+    appsecMetrics.distribution('waf.timeouts', versionsTags).track(metrics.wafTimeouts)
+  }
+}
+
+function trackRaspDurations (metrics, tags) {
+  const versionsTags = {
+    waf_version: tags.waf_version,
+    event_rules_version: tags.event_rules_version
+  }
+
+  if (metrics.raspDuration) {
+    // Incorrect
+    appsecMetrics.distribution('rasp.rule.duration', tags).track(metrics.raspDuration)
+  }
+
+  if (metrics.raspDuration) {
+    appsecMetrics.distribution('rasp.duration', versionsTags).track(metrics.raspDuration)
+  }
+
+  if (metrics.raspDurationExt) {
+    appsecMetrics.distribution('rasp.duration_ext', versionsTags).track(metrics.raspDurationExt)
   }
 }
 
@@ -68,9 +100,12 @@ function getOrCreateMetricTags (store, versionsTags) {
   let metricTags = store[DD_TELEMETRY_WAF_RESULT_TAGS]
   if (!metricTags) {
     metricTags = {
+      [tags.BLOCK_FAILURE]: false,
       [tags.REQUEST_BLOCKED]: false,
+      [tags.INPUT_TRUNCATED]: false,
       [tags.RULE_TRIGGERED]: false,
       [tags.WAF_TIMEOUT]: false,
+      [tags.WAF_ERROR]: false,
 
       ...versionsTags
     }
@@ -89,11 +124,15 @@ function updateRaspRequestsMetricTags (metrics, req, raspRule) {
 
   if (!enabled) return
 
-  const tags = { rule_type: raspRule.type, waf_version: metrics.wafVersion }
+  const versionsTags = getVersionsTags(metrics.wafVersion, metrics.rulesVersion)
+
+  const tags = { ...versionsTags, rule_type: raspRule.type }
 
   if (raspRule.variant) {
     tags.rule_variant = raspRule.variant
   }
+
+  trackRaspDurations(metrics, tags)
 
   appsecMetrics.count('rasp.rule.eval', tags).inc(1)
 
@@ -103,6 +142,12 @@ function updateRaspRequestsMetricTags (metrics, req, raspRule) {
 
   if (metrics.ruleTriggered) {
     appsecMetrics.count('rasp.rule.match', tags).inc(1)
+  }
+
+  if (metrics.errorCode) {
+    const errorTags = { ...versionsTags, ...tags, waf_error: metrics.errorCode }
+
+    appsecMetrics.count('rasp.error', errorTags).inc(1)
   }
 }
 
@@ -127,30 +172,41 @@ function updateWafRequestsMetricTags (metrics, req) {
   if (blockTriggered) {
     metricTags[tags.REQUEST_BLOCKED] = blockTriggered
   }
+
   if (ruleTriggered) {
     metricTags[tags.RULE_TRIGGERED] = ruleTriggered
   }
+
   if (wafTimeout) {
     metricTags[tags.WAF_TIMEOUT] = wafTimeout
   }
 
-  return metricTags
+  if (metrics.errorCode) {
+    const errorTags = { ...versionsTags, waf_error: metrics.errorCode }
+
+    appsecMetrics.count('waf.error', errorTags).inc(1)
+    metricTags[tags.WAF_ERROR] = true
+  }
+
+  incrementTruncatedMetrics(metrics)
 }
 
-function incrementWafInitMetric (wafVersion, rulesVersion) {
+function incrementWafInitMetric (wafVersion, rulesVersion, success) {
   if (!enabled) return
 
   const versionsTags = getVersionsTags(wafVersion, rulesVersion)
+  const initTags = { ...versionsTags, success }
 
-  appsecMetrics.count('waf.init', versionsTags).inc()
+  appsecMetrics.count('waf.init', initTags).inc()
 }
 
-function incrementWafUpdatesMetric (wafVersion, rulesVersion) {
+function incrementWafUpdatesMetric (wafVersion, rulesVersion, success) {
   if (!enabled) return
 
   const versionsTags = getVersionsTags(wafVersion, rulesVersion)
+  const updateTags = { ...versionsTags, success }
 
-  appsecMetrics.count('waf.updates', versionsTags).inc()
+  appsecMetrics.count('waf.updates', updateTags).inc()
 }
 
 function incrementWafRequestsMetric (req) {
@@ -159,6 +215,7 @@ function incrementWafRequestsMetric (req) {
   const store = getStore(req)
 
   const metricTags = store[DD_TELEMETRY_WAF_RESULT_TAGS]
+
   if (metricTags) {
     appsecMetrics.count('waf.requests', metricTags).inc()
   }
@@ -166,15 +223,67 @@ function incrementWafRequestsMetric (req) {
   metricsStoreMap.delete(req)
 }
 
-function addRequestMetrics (store, { duration, durationExt }) {
-  store[DD_TELEMETRY_REQUEST_METRICS].duration += duration || 0
-  store[DD_TELEMETRY_REQUEST_METRICS].durationExt += durationExt || 0
+function incrementTruncatedMetrics (metrics) {
+  const truncationReason = getTruncationReason(metrics)
+
+  if (truncationReason > 0) {
+    const truncationTags = { truncation_reason: 1 }
+    appsecMetrics.count('appsec.waf.input_truncated', truncationTags).inc(1)
+  }
+
+  if (metrics?.maxTruncatedString) {
+    appsecMetrics.distribution('appsec.waf.truncated_value_size', { truncation_reason: 1 })
+      .track(metrics.maxTruncatedString)
+  }
+
+  if (metrics?.maxTruncatedContainerSize) {
+    appsecMetrics.distribution('appsec.waf.truncated_value_size', { truncation_reason: 2 })
+      .track(metrics.maxTruncatedContainerSize)
+  }
+
+  if (metrics?.maxTruncatedContainerDepth) {
+    appsecMetrics.distribution('appsec.waf.truncated_value_size', { truncation_reason: 4 })
+      .track(metrics.maxTruncatedContainerDepth)
+  }
 }
 
-function addRaspRequestMetrics (store, { duration, durationExt }) {
+function addRequestMetrics (store, metrics) {
+  const { duration, durationExt, wafTimeout, errorCode } = metrics
+
+  store[DD_TELEMETRY_REQUEST_METRICS].duration += duration || 0
+  store[DD_TELEMETRY_REQUEST_METRICS].durationExt += durationExt || 0
+
+  if (wafTimeout) {
+    store[DD_TELEMETRY_REQUEST_METRICS].wafTimeout++
+  }
+
+  if (errorCode != null) {
+    store[DD_TELEMETRY_REQUEST_METRICS].wafErrorCode = Math.max(
+      errorCode,
+      store[DD_TELEMETRY_REQUEST_METRICS].wafErrorCode ?? errorCode
+    )
+  }
+
+  if (getTruncationReason(metrics) > 0) {
+    store[DD_TELEMETRY_REQUEST_METRICS].input_truncated = true
+  }
+}
+
+function addRaspRequestMetrics (store, { duration, durationExt, wafTimeout, errorCode }) {
   store[DD_TELEMETRY_REQUEST_METRICS].raspDuration += duration || 0
   store[DD_TELEMETRY_REQUEST_METRICS].raspDurationExt += durationExt || 0
   store[DD_TELEMETRY_REQUEST_METRICS].raspEvalCount++
+
+  if (wafTimeout) {
+    store[DD_TELEMETRY_REQUEST_METRICS].raspTimeouts++
+  }
+
+  if (errorCode != null) {
+    store[DD_TELEMETRY_REQUEST_METRICS].raspErrorCode = Math.max(
+      errorCode,
+      store[DD_TELEMETRY_REQUEST_METRICS].raspErrorCode ?? errorCode
+    )
+  }
 }
 
 function incrementMissingUserLoginMetric (framework, eventType) {
@@ -200,6 +309,16 @@ function getRequestMetrics (req) {
     const store = getStore(req)
     return store?.[DD_TELEMETRY_REQUEST_METRICS]
   }
+}
+
+function getTruncationReason ({ maxTruncatedString, maxTruncatedContainerSize, maxTruncatedContainerDepth }) {
+  let reason = 0
+
+  if (maxTruncatedString) reason |= 1 // string too long
+  if (maxTruncatedContainerSize) reason |= 2 // list/map too large
+  if (maxTruncatedContainerDepth) reason |= 4 // object too deep
+
+  return reason
 }
 
 module.exports = {

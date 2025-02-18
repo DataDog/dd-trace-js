@@ -166,7 +166,7 @@ describe('Appsec Telemetry metrics', () => {
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 42,
           durationExt: 52
-        }, req, 'rule-type')
+        }, req, { type: 'rule-type' })
 
         expect(count).to.have.been.calledWith('rasp.rule.eval')
         expect(count).to.not.have.been.calledWith('rasp.timeout')
@@ -179,7 +179,7 @@ describe('Appsec Telemetry metrics', () => {
           duration: 42,
           durationExt: 52,
           wafTimeout: true
-        }, req, 'rule-type')
+        }, req, { type: 'rule-type' })
 
         expect(count).to.have.been.calledWith('rasp.rule.eval')
         expect(count).to.have.been.calledWith('rasp.timeout')
@@ -192,7 +192,7 @@ describe('Appsec Telemetry metrics', () => {
           duration: 42,
           durationExt: 52,
           ruleTriggered: true
-        }, req, 'rule-type')
+        }, req, { type: 'rule-type' })
 
         expect(count).to.have.been.calledWith('rasp.rule.match')
         expect(count).to.have.been.calledWith('rasp.rule.eval')
@@ -204,12 +204,12 @@ describe('Appsec Telemetry metrics', () => {
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 42,
           durationExt: 52
-        }, req, 'rule-type')
+        }, req, { type: 'rule-type' })
 
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 24,
           durationExt: 25
-        }, req, 'rule-type')
+        }, req, { type: 'rule-type' })
 
         const {
           duration,

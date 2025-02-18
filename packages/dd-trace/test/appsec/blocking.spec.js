@@ -266,6 +266,42 @@ describe('blocking', () => {
       expect(res.constructor.prototype.end).to.have.been.calledOnce
     })
   })
+
+  describe('block error handling', () => {
+    beforeEach(() => {
+      setTemplates(config)
+    })
+
+    it('should add appropriate error tags when blocking fails', () => {
+      res.writeHead.throws(new TypeError('Failed to write headers'))
+
+      block(req, res, rootSpan)
+
+      expect(rootSpan.addTags.getCall(1)).to.have.been.calledWithExactly({
+        'appsec.blocked': 'false',
+        '_dd.appsec.block.failed': 1
+      })
+
+      expect(rootSpan.addTags.getCall(2)).to.have.been.calledWithExactly({
+        '_dd.appsec.error.type': 'TypeError'
+      })
+
+      expect(rootSpan.addTags.getCall(3)).to.have.been.calledWithExactly({
+        '_dd.appsec.error.message': 'Failed to write headers'
+      })
+    })
+
+    it('should truncate long error messages to 512 bytes', () => {
+      const longMessage = 'a'.repeat(1000)
+      res.writeHead.throws(new Error(longMessage))
+
+      block(req, res, rootSpan)
+
+      const tags = rootSpan.addTags.getCall(3).args[0]
+      expect(tags['_dd.appsec.error.message'].length).to.be.at.most(512)
+      expect(Buffer.from(tags['_dd.appsec.error.message'], 'utf8').length).to.be.at.most(512)
+    })
+  })
 })
 
 describe('waf actions', () => {

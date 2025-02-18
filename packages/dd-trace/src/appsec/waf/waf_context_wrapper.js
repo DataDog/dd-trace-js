@@ -17,8 +17,8 @@ class WAFContextWrapper {
     this.wafTimeout = wafTimeout
     this.wafVersion = wafVersion
     this.rulesVersion = rulesVersion
-    this.addressesToSkip = new Set()
     this.knownAddresses = knownAddresses
+    this.addressesToSkip = new Set()
     this.cachedUserIdActions = new Map()
   }
 
@@ -77,48 +77,80 @@ class WAFContextWrapper {
 
     if (!payloadHasData) return
 
-    try {
-      const start = process.hrtime.bigint()
+    const start = process.hrtime.bigint()
 
+    const metrics = {
+      rulesVersion: this.rulesVersion,
+      wafVersion: this.wafVersion
+    }
+
+    const result = this.runWaf(payload)
+
+    if (!result) {
+      // Binding or other waf unexpected errors
+      metrics.errorCode = -127
+    } else {
+      if (typeof result.errorCode === 'number' && result.errorCode < 0) {
+        metrics.errorCode = result.errorCode
+      }
+
+      if (result.metrics?.maxTruncatedString) {
+        metrics.maxTruncatedString = result.metrics.maxTruncatedString
+      }
+
+      if (result.metrics?.maxTruncatedContainerSize) {
+        metrics.maxTruncatedContainerSize = result.metrics.maxTruncatedContainerSize
+      }
+
+      if (result.metrics?.maxTruncatedContainerDepth) {
+        metrics.maxTruncatedContainerDepth = result.metrics.maxTruncatedContainerDepth
+      }
+    }
+
+    const end = process.hrtime.bigint()
+    this.addressesToSkip = newAddressesToSkip
+
+    const ruleTriggered = !!result.events?.length
+
+    const blockTriggered = !!getBlockingAction(result.actions)
+
+    // SPECIAL CASE FOR USER_ID
+    // TODO: make this universal
+    if (userId && ruleTriggered && blockTriggered) {
+      this.setUserIdCache(userId, result)
+    }
+
+    Reporter.reportMetrics({
+      ...metrics,
+      duration: result.totalRuntime / 1e3,
+      durationExt: parseInt(end - start) / 1e3,
+      ruleTriggered,
+      blockTriggered,
+      wafTimeout: result.timeout
+    }, raspRule)
+
+    if (ruleTriggered) {
+      Reporter.reportAttack(JSON.stringify(result.events))
+    }
+
+    Reporter.reportDerivatives(result.derivatives)
+
+    if (wafRunFinished.hasSubscribers) {
+      wafRunFinished.publish({ payload })
+    }
+
+    return result.actions
+  }
+
+  runWaf (payload) {
+    try {
       const result = this.ddwafContext.run(payload, this.wafTimeout)
 
-      const end = process.hrtime.bigint()
-
-      this.addressesToSkip = newAddressesToSkip
-
-      const ruleTriggered = !!result.events?.length
-
-      const blockTriggered = !!getBlockingAction(result.actions)
-
-      // SPECIAL CASE FOR USER_ID
-      // TODO: make this universal
-      if (userId && ruleTriggered && blockTriggered) {
-        this.setUserIdCache(userId, result)
-      }
-
-      Reporter.reportMetrics({
-        duration: result.totalRuntime / 1e3,
-        durationExt: parseInt(end - start) / 1e3,
-        rulesVersion: this.rulesVersion,
-        ruleTriggered,
-        blockTriggered,
-        wafVersion: this.wafVersion,
-        wafTimeout: result.timeout
-      }, raspRule)
-
-      if (ruleTriggered) {
-        Reporter.reportAttack(JSON.stringify(result.events))
-      }
-
-      Reporter.reportDerivatives(result.derivatives)
-
-      if (wafRunFinished.hasSubscribers) {
-        wafRunFinished.publish({ payload })
-      }
-
-      return result.actions
+      return result
     } catch (err) {
       log.error('[ASM] Error while running the AppSec WAF', err)
+
+      return null
     }
   }
 

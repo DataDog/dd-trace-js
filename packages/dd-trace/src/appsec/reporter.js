@@ -89,16 +89,17 @@ function formatHeaderName (name) {
     .toLowerCase()
 }
 
-function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
+function reportWafInit (wafVersion, rulesVersion, diagnosticsRules, success) {
   metricsQueue.set('_dd.appsec.waf.version', wafVersion)
 
+  // TODO: these should be removed after per-configuration error reporting through remote configuration initiative
   metricsQueue.set('_dd.appsec.event_rules.loaded', diagnosticsRules.loaded?.length || 0)
   metricsQueue.set('_dd.appsec.event_rules.error_count', diagnosticsRules.failed?.length || 0)
   if (diagnosticsRules.failed?.length) {
     metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(diagnosticsRules.errors))
   }
 
-  incrementWafInitMetric(wafVersion, rulesVersion)
+  incrementWafInitMetric(wafVersion, rulesVersion, success)
 }
 
 function reportMetrics (metrics, raspRule) {
@@ -109,10 +110,27 @@ function reportMetrics (metrics, raspRule) {
   if (metrics.rulesVersion) {
     rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
   }
+
   if (raspRule) {
     updateRaspRequestsMetricTags(metrics, store.req, raspRule)
   } else {
     updateWafRequestsMetricTags(metrics, store.req)
+  }
+
+  reportTruncationMetrics(rootSpan, metrics)
+}
+
+function reportTruncationMetrics (rootSpan, metrics) {
+  if (metrics.maxTruncatedString) {
+    rootSpan.setTag('_dd.appsec.truncated.string_length', metrics.maxTruncatedString)
+  }
+
+  if (metrics.maxTruncatedContainerSize) {
+    rootSpan.setTag('_dd.appsec.truncated.container_size', metrics.maxTruncatedContainerSize)
+  }
+
+  if (metrics.maxTruncatedContainerDepth) {
+    rootSpan.setTag('_dd.appsec.truncated.container_depth', metrics.maxTruncatedContainerDepth)
   }
 }
 
@@ -194,6 +212,8 @@ function finishRequest (req, res) {
   }
 
   const metrics = getRequestMetrics(req)
+
+  // WAF metrics
   if (metrics?.duration) {
     rootSpan.setTag('_dd.appsec.waf.duration', metrics.duration)
   }
@@ -202,6 +222,15 @@ function finishRequest (req, res) {
     rootSpan.setTag('_dd.appsec.waf.duration_ext', metrics.durationExt)
   }
 
+  if (metrics?.wafTimeouts) {
+    rootSpan.setTag('_dd.appsec.waf.timeouts', metrics.wafTimeouts)
+  }
+
+  if (metrics?.wafErrorCode) {
+    rootSpan.setTag('_dd.appsec.waf.error', metrics.wafErrorCode)
+  }
+
+  // RASP metrics
   if (metrics?.raspDuration) {
     rootSpan.setTag('_dd.appsec.rasp.duration', metrics.raspDuration)
   }
@@ -210,8 +239,16 @@ function finishRequest (req, res) {
     rootSpan.setTag('_dd.appsec.rasp.duration_ext', metrics.raspDurationExt)
   }
 
+  if (metrics?.raspTimeouts) {
+    rootSpan.setTag('_dd.appsec.rasp.timeout', metrics.raspTimeouts)
+  }
+
   if (metrics?.raspEvalCount) {
     rootSpan.setTag('_dd.appsec.rasp.rule.eval', metrics.raspEvalCount)
+  }
+
+  if (metrics?.raspErrorCode) {
+    rootSpan.setTag('_dd.appsec.rasp.error', metrics.raspErrorCode)
   }
 
   incrementWafRequestsMetric(req)
