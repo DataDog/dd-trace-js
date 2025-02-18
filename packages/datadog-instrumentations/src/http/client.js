@@ -118,7 +118,7 @@ function patch (http, methodName) {
           ctx.error = e
           errorChannel.publish(ctx)
           // if the initial request failed, ctx.req will be unset, we must close the span here
-          // fix for: https://github.com/ndresselhaus/dd-trace-http-bug/tree/main
+          // fix for: https://github.com/DataDog/dd-trace-js/issues/5016
           if (!ctx.req) {
             finish()
           }
