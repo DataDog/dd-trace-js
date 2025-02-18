@@ -31,7 +31,9 @@ const {
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
   TEST_RETRY_REASON,
-  DD_TEST_IS_USER_PROVIDED_SERVICE
+  DD_TEST_IS_USER_PROVIDED_SERVICE,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
@@ -985,7 +987,7 @@ versions.forEach((version) => {
     // dynamic instrumentation only supported from >=2.0.0
     if (version === 'latest') {
       context('dynamic instrumentation', () => {
-        it('does not activate it if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
+        it('does not activate it if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
             di_enabled: true
@@ -1023,7 +1025,8 @@ versions.forEach((version) => {
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
                 TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false'
               },
               stdio: 'pipe'
             }
@@ -1073,8 +1076,7 @@ versions.forEach((version) => {
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
                 TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-                DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: '1'
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
               },
               stdio: 'pipe'
             }
@@ -1160,8 +1162,7 @@ versions.forEach((version) => {
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
                 TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-                DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: '1'
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
               },
               stdio: 'pipe'
             }
@@ -1215,8 +1216,7 @@ versions.forEach((version) => {
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
                 TEST_DIR: 'ci-visibility/vitest-tests/breakpoint-not-hit*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-                DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: '1'
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
               },
               stdio: 'pipe'
             }
@@ -1334,5 +1334,113 @@ versions.forEach((version) => {
         }).catch(done)
       })
     })
+
+    if (version === 'latest') {
+      context('quarantine', () => {
+        beforeEach(() => {
+          receiver.setQuarantinedTests({
+            vitest: {
+              suites: {
+                'ci-visibility/vitest-tests/test-quarantine.mjs': {
+                  tests: {
+                    'quarantine tests can quarantine a test': {
+                      properties: {
+                        quarantined: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+        })
+
+        const getTestAssertions = (isQuarantining) =>
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.equal(tests.length, 2)
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              if (isQuarantining) {
+                assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+              } else {
+                assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+              }
+
+              const resourceNames = tests.map(span => span.resource)
+
+              assert.includeMembers(resourceNames,
+                [
+                  'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can quarantine a test',
+                  'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can pass normally'
+                ]
+              )
+
+              const quarantinedTest = tests.find(
+                test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
+              )
+
+              if (isQuarantining) {
+                // TODO: do not flip the status of the test but still ignore failures
+                assert.equal(quarantinedTest.meta[TEST_STATUS], 'pass')
+                assert.propertyVal(quarantinedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+              } else {
+                assert.equal(quarantinedTest.meta[TEST_STATUS], 'fail')
+                assert.notProperty(quarantinedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+              }
+            })
+
+        const runQuarantineTest = (done, isQuarantining, extraEnvVars = {}) => {
+          const testAssertionsPromise = getTestAssertions(isQuarantining)
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/test-quarantine*',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                ...extraEnvVars
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          childProcess.on('exit', (exitCode) => {
+            testAssertionsPromise.then(() => {
+              if (isQuarantining) {
+                // exit code 0 even though one of the tests failed
+                assert.equal(exitCode, 0)
+              } else {
+                assert.equal(exitCode, 1)
+              }
+              done()
+            })
+          })
+        }
+
+        it('can quarantine tests', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runQuarantineTest(done, true)
+        })
+
+        it('fails if quarantine is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false } })
+
+          runQuarantineTest(done, false)
+        })
+
+        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+        })
+      })
+    }
   })
 })
