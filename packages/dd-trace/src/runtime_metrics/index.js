@@ -19,21 +19,17 @@ module.exports = {
     if (!config?.runtimeMetrics) return
 
     runtimeMetrics = require('./runtime_metrics')
+
+    Object.setPrototypeOf(module.exports, runtimeMetrics)
+
     runtimeMetrics.start(config)
   },
 
   stop: () => {
-    if (runtimeMetrics === noop) return
-
     runtimeMetrics.stop()
-    runtimeMetrics = noop
-  },
 
-  track: (...args) => runtimeMetrics.track(...args),
-  boolean: (...args) => runtimeMetrics.boolean(...args),
-  histogram: (...args) => runtimeMetrics.histogram(...args),
-  count: (...args) => runtimeMetrics.count(...args),
-  gauge: (...args) => runtimeMetrics.gauge(...args),
-  increment: (...args) => runtimeMetrics.increment(...args),
-  decrement: (...args) => runtimeMetrics.decrement(...args)
+    Object.setPrototypeOf(module.exports, runtimeMetrics = noop)
+  }
 }
+
+Object.setPrototypeOf(module.exports, noop)
