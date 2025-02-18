@@ -38,8 +38,11 @@ const brokenLoaders = NODE_MAJOR === 18 && NODE_MINOR === 0
 const iitmExclusions = [/langsmith/, /openai\/_shims/, /openai\/resources\/chat\/completions\/messages/]
 
 export async function load (...args) {
-  const iitmExclusionsMatch = iitmExclusions.some((exclusion) => exclusion.test(args[0]))
-  const loadHook = (brokenLoaders || iitmExclusionsMatch) ? args[args.length - 1] : origLoad
+  const url = args[0]
+  const nextLoad = args[args.length - 1]
+
+  const iitmExclusionsMatch = iitmExclusions.some((exclusion) => exclusion.test(url))
+  const loadHook = (brokenLoaders || iitmExclusionsMatch) ? nextLoad : origLoad
   return insertInit(await loadHook(...args))
 }
 
