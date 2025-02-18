@@ -81,9 +81,8 @@ describe('Inferred Proxy Spans', function () {
             expect(spans[0].meta).to.have.property('http.url', 'example.com/test')
             expect(spans[0].meta).to.have.property('http.method', 'GET')
             expect(spans[0].meta).to.have.property('http.status_code', '200')
-            expect(spans[0].meta).to.have.property('span.kind', 'internal')
             expect(spans[0].meta).to.have.property('component', 'aws-apigateway')
-            expect(spans[0].meta).to.have.property('_dd.inferred_span', '1')
+            expect(spans[0].metrics).to.have.property('_dd.inferred_span', 1)
             expect(spans[0].start.toString()).to.be.equal('1729780025472999936')
 
             expect(spans[0].span_id.toString()).to.be.equal(spans[1].parent_id.toString())
@@ -129,7 +128,6 @@ describe('Inferred Proxy Spans', function () {
             expect(spans[0].meta).to.have.property('http.url', 'example.com/test')
             expect(spans[0].meta).to.have.property('http.method', 'GET')
             expect(spans[0].meta).to.have.property('http.status_code', '500')
-            expect(spans[0].meta).to.have.property('span.kind', 'internal')
             expect(spans[0].meta).to.have.property('component', 'aws-apigateway')
             expect(spans[0].error).to.be.equal(1)
             expect(spans[0].start.toString()).to.be.equal('1729780025472999936')

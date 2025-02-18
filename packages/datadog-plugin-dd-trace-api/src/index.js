@@ -28,7 +28,7 @@ module.exports = class DdTraceApiPlugin extends Plugin {
     })
 
     const handleEvent = (name) => {
-      const counter = apiMetrics.count('dd_trace_api.called', [
+      const counter = apiMetrics.count('public_api.called', [
         `name:${name.replaceAll(':', '.')}`,
         'api_version:v1',
         injectionEnabledTag
@@ -74,8 +74,6 @@ module.exports = class DdTraceApiPlugin extends Plugin {
             const proxyVal = proxy()
             objectMap.set(proxyVal, ret.value)
             ret.value = proxyVal
-          } else if (ret.value && typeof ret.value === 'object') {
-            throw new TypeError(`Objects need proxies when returned via API (${name})`)
           }
         } catch (e) {
           ret.error = e
