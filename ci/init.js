@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 const tracer = require('../packages/dd-trace')
-const { isTrue } = require('../packages/dd-trace/src/util')
+const { isTrue, isFalse } = require('../packages/dd-trace/src/util')
 const log = require('../packages/dd-trace/src/log')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
@@ -23,7 +23,7 @@ const options = {
   flushInterval: isJestWorker ? 0 : 5000
 }
 
-let shouldInit = true
+let shouldInit = !isFalse(process.env.DD_CIVISIBILITY_ENABLED)
 
 if (isPackageManager()) {
   log.debug('dd-trace is not initialized in a package manager.')
