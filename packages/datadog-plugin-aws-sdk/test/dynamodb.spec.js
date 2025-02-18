@@ -128,7 +128,7 @@ describe('Plugin', () => {
         describe('span pointers', () => {
           beforeEach(() => {
             DynamoDb.dynamoPrimaryKeyConfig = null
-            delete process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS
+            delete process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS
           })
 
           function testSpanPointers ({ expectedHashes, operation }) {
@@ -178,7 +178,7 @@ describe('Plugin', () => {
               testSpanPointers({
                 expectedHashes: '27f424c8202ab35efbf8b0b444b1928f',
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS =
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS =
                     '{"OneKeyTable": ["name"]}'
                   dynamo.putItem({
                     TableName: oneKeyTableName,
@@ -194,7 +194,7 @@ describe('Plugin', () => {
             it('should not add links or error for putItem when config is invalid', () => {
               testSpanPointers({
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = '{"DifferentTable": ["test"]}'
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = '{"DifferentTable": ["test"]}'
                   dynamo.putItem({
                     TableName: oneKeyTableName,
                     Item: {
@@ -209,7 +209,7 @@ describe('Plugin', () => {
             it('should not add links or error for putItem when config is missing', () => {
               testSpanPointers({
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = null
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = null
                   dynamo.putItem({
                     TableName: oneKeyTableName,
                     Item: {
@@ -263,7 +263,7 @@ describe('Plugin', () => {
                   '9682c132f1900106a792f166d0619e0b'
                 ],
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = '{"OneKeyTable": ["name"]}'
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = '{"OneKeyTable": ["name"]}'
                   dynamo.transactWriteItems({
                     TransactItems: [
                       {
@@ -308,7 +308,7 @@ describe('Plugin', () => {
                   '9682c132f1900106a792f166d0619e0b'
                 ],
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = '{"OneKeyTable": ["name"]}'
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = '{"OneKeyTable": ["name"]}'
                   dynamo.batchWriteItem({
                     RequestItems: {
                       [oneKeyTableName]: [
@@ -340,7 +340,7 @@ describe('Plugin', () => {
               testSpanPointers({
                 expectedHashes: 'cc32f0e49ee05d3f2820ccc999bfe306',
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = '{"TwoKeyTable": ["id", "binary"]}'
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = '{"TwoKeyTable": ["id", "binary"]}'
                   dynamo.putItem({
                     TableName: twoKeyTableName,
                     Item: {
@@ -355,7 +355,7 @@ describe('Plugin', () => {
             it('should not add links or error for putItem when config is invalid', () => {
               testSpanPointers({
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = '{"DifferentTable": ["test"]}'
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = '{"DifferentTable": ["test"]}'
                   dynamo.putItem({
                     TableName: twoKeyTableName,
                     Item: {
@@ -370,7 +370,7 @@ describe('Plugin', () => {
             it('should not add links or error for putItem when config is missing', () => {
               testSpanPointers({
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = null
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = null
                   dynamo.putItem({
                     TableName: twoKeyTableName,
                     Item: {
@@ -452,7 +452,7 @@ describe('Plugin', () => {
                   '8a6f801cc4e7d1d5e0dd37e0904e6316'
                 ],
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = '{"TwoKeyTable": ["id", "binary"]}'
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = '{"TwoKeyTable": ["id", "binary"]}'
                   dynamo.transactWriteItems({
                     TransactItems: [
                       {
@@ -505,7 +505,7 @@ describe('Plugin', () => {
                   '8a6f801cc4e7d1d5e0dd37e0904e6316'
                 ],
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = '{"TwoKeyTable": ["id", "binary"]}'
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = '{"TwoKeyTable": ["id", "binary"]}'
                   dynamo.batchWriteItem({
                     RequestItems: {
                       [twoKeyTableName]: [
