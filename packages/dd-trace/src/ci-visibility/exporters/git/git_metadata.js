@@ -242,7 +242,7 @@ function generateAndUploadPackFiles ({
 /**
  * This function uploads git metadata to CI Visibility's backend.
 */
-function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback) {
+function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback, isUnshallowEnabled) {
   if (!isGitAvailable()) {
     return callback(new Error('Git is not available'))
   }
@@ -284,7 +284,9 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     }
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
-    unshallowRepository()
+    if (isUnshallowEnabled) {
+      unshallowRepository()
+    }
 
     // The latest commits change after unshallowing
     latestCommits = getLatestCommits()

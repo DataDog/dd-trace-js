@@ -251,7 +251,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
             log.debug('Successfully uploaded git metadata')
           }
           this._resolveGit(err)
-        }
+        },
+        this._config.isTestUnshallowEnabled
       )
     })
   }
