@@ -41,7 +41,10 @@ const {
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
-  TEST_RETRY_REASON
+  TEST_RETRY_REASON,
+  DD_TEST_IS_USER_PROVIDED_SERVICE,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -174,6 +177,7 @@ describe('mocha CommonJS', function () {
         tests.forEach(testEvent => {
           assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
           assert.exists(testEvent.metrics[TEST_SOURCE_START])
+          assert.equal(testEvent.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
           // Can read DD_TAGS
           assert.propertyVal(testEvent.meta, 'test.customtag', 'customvalue')
           assert.propertyVal(testEvent.meta, 'test.customtag2', 'customvalue2')
@@ -194,7 +198,8 @@ describe('mocha CommonJS', function () {
         env: {
           ...envVars,
           DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-          DD_TEST_SESSION_NAME: 'my-test-session'
+          DD_TEST_SESSION_NAME: 'my-test-session',
+          DD_SERVICE: undefined
         },
         stdio: 'pipe'
       })
@@ -2518,6 +2523,144 @@ describe('mocha CommonJS', function () {
           done()
         }).catch(done)
       })
+    })
+  })
+
+  it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', (done) => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        tests.forEach(test => {
+          assert.equal(test.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'true')
+        })
+      })
+
+    childProcess = exec(
+      runTestsWithCoverageCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: JSON.stringify([
+            './test/ci-visibility-test.js',
+            './test/ci-visibility-test-2.js'
+          ]),
+          DD_SERVICE: 'my-service'
+        },
+        stdio: 'inherit'
+      }
+    )
+
+    childProcess.on('exit', () => {
+      eventsPromise.then(() => {
+        done()
+      }).catch(done)
+    })
+  })
+
+  context('quarantine', () => {
+    beforeEach(() => {
+      receiver.setQuarantinedTests({
+        mocha: {
+          suites: {
+            'ci-visibility/quarantine/test-quarantine-1.js': {
+              tests: {
+                'quarantine tests can quarantine a test': {
+                  properties: {
+                    quarantined: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      })
+    })
+
+    const getTestAssertions = (isQuarantining) =>
+      receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          if (isQuarantining) {
+            assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+          } else {
+            assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+          }
+
+          const resourceNames = tests.map(span => span.resource)
+
+          assert.includeMembers(resourceNames,
+            [
+              'ci-visibility/quarantine/test-quarantine-1.js.quarantine tests can quarantine a test',
+              'ci-visibility/quarantine/test-quarantine-1.js.quarantine tests can pass normally'
+            ]
+          )
+
+          const failedTest = tests.find(
+            test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
+          )
+          // The test fails but the exit code is 0 if it's quarantined
+          assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+
+          if (isQuarantining) {
+            assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+          } else {
+            assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+          }
+        })
+
+    const runQuarantineTest = (done, isQuarantining, extraEnvVars = {}) => {
+      const testAssertionsPromise = getTestAssertions(isQuarantining)
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './quarantine/test-quarantine-1.js'
+            ]),
+            SHOULD_CHECK_RESULTS: '1',
+            ...extraEnvVars
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', (exitCode) => {
+        testAssertionsPromise.then(() => {
+          if (isQuarantining) {
+            assert.equal(exitCode, 0)
+          } else {
+            assert.equal(exitCode, 1)
+          }
+          done()
+        }).catch(done)
+      })
+    }
+
+    it('can quarantine tests', (done) => {
+      receiver.setSettings({ test_management: { enabled: true } })
+
+      runQuarantineTest(done, true)
+    })
+
+    it('fails if quarantine is not enabled', (done) => {
+      receiver.setSettings({ test_management: { enabled: false } })
+
+      runQuarantineTest(done, false)
+    })
+
+    it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+      receiver.setSettings({ test_management: { enabled: true } })
+
+      runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
     })
   })
 })

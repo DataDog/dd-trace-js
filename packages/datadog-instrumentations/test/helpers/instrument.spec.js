@@ -10,12 +10,12 @@ const { AsyncResource } = require('../../src/helpers/instrument')
 describe('helpers/instrument', () => {
   describe('AsyncResource', () => {
     it('should bind statically', () => {
-      storage.run('test1', () => {
+      storage('legacy').run('test1', () => {
         const tested = AsyncResource.bind(() => {
-          expect(storage.getStore()).to.equal('test1')
+          expect(storage('legacy').getStore()).to.equal('test1')
         })
 
-        storage.run('test2', () => {
+        storage('legacy').run('test2', () => {
           tested()
         })
       })
@@ -34,12 +34,12 @@ describe('helpers/instrument', () => {
     })
 
     it('should bind a specific instance', () => {
-      storage.run('test1', () => {
+      storage('legacy').run('test1', () => {
         const asyncResource = new AsyncResource('test')
 
-        storage.run('test2', () => {
+        storage('legacy').run('test2', () => {
           const tested = asyncResource.bind((a, b, c) => {
-            expect(storage.getStore()).to.equal('test1')
+            expect(storage('legacy').getStore()).to.equal('test1')
             expect(test.asyncResource).to.equal(asyncResource)
             expect(test).to.have.length(3)
           })

@@ -93,7 +93,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
   if (body === undefined || body === null) return
 
   if (!req) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     req = store?.req
   }
 
@@ -188,7 +188,7 @@ function incomingHttpEndTranslator ({ req, res }) {
 }
 
 function onPassportVerify ({ framework, login, user, success, abortController }) {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   const rootSpan = store?.req && web.root(store.req)
 
   if (!rootSpan) {
@@ -202,7 +202,7 @@ function onPassportVerify ({ framework, login, user, success, abortController })
 }
 
 function onPassportDeserializeUser ({ user, abortController }) {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   const rootSpan = store?.req && web.root(store.req)
 
   if (!rootSpan) {
@@ -236,7 +236,7 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
   if (!query || typeof query !== 'object') return
 
   if (!req) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     req = store?.req
   }
 

@@ -33,6 +33,13 @@ addHook({
       delete this.options._ddIsEfdEnabled
       delete this.options._ddKnownTests
       delete this.options._ddEfdNumRetries
+      delete this.options._ddQuarantinedTests
+    }
+    if (this.options._ddIsQuarantinedEnabled) {
+      config.isQuarantinedEnabled = true
+      config.quarantinedTests = this.options._ddQuarantinedTests
+      delete this.options._ddIsQuarantinedEnabled
+      delete this.options._ddQuarantinedTests
     }
     return run.apply(this, arguments)
   })

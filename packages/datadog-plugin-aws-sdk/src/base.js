@@ -67,13 +67,13 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         span.addTags(requestTags)
       }
 
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
 
       this.enter(span, store)
     })
 
     this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, region => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       if (!store) return
       const { span } = store
       if (!span) return
@@ -82,7 +82,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     })
 
     this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ({ response, cbExists = false }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       if (!store) return
       const { span } = store
       if (!span) return

@@ -39,7 +39,7 @@ function getTransactionId (iastContext) {
 }
 
 function getContextDefault () {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   return iastContextFunctions.getIastContext(store)
 }
 

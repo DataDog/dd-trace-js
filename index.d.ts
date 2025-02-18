@@ -2227,6 +2227,11 @@ declare namespace tracer {
     redactionValuePattern?: string,
 
     /**
+     * Allows to enable security controls.
+     */
+    securityControlsConfiguration?: string,
+
+    /**
      * Specifies the verbosity of the sent telemetry. Default 'INFORMATION'
      */
     telemetryVerbosity?: string,

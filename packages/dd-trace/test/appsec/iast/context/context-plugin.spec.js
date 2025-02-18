@@ -120,7 +120,7 @@ describe('IastContextPlugin', () => {
     let getStore
 
     beforeEach(() => {
-      getStore = sinon.stub(storage, 'getStore')
+      getStore = sinon.stub(storage('legacy'), 'getStore')
       getStore.returns(store)
     })
 
@@ -203,7 +203,7 @@ describe('IastContextPlugin', () => {
     const store = {}
 
     beforeEach(() => {
-      sinon.stub(storage, 'getStore').returns(store)
+      sinon.stub(storage('legacy'), 'getStore').returns(store)
     })
 
     it('should send the vulnerabilities if any', () => {
