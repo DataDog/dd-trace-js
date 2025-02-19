@@ -41,10 +41,9 @@ function matcher (pattern, locator) {
     return new RegExpMatcher(pattern, locator)
   }
 
-  if (typeof pattern === 'string' && pattern !== '*') {
+  if (typeof pattern === 'string' && pattern !== '*' && pattern !== '**' && pattern !== '***') {
     return new GlobMatcher(pattern, locator)
   }
-
   return new AlwaysMatcher()
 }
 
@@ -63,6 +62,12 @@ function serviceLocator (span) {
     span.tracer()._service
 }
 
+function resourceLocator (span) {
+  const { _tags: tags } = span.context()
+  return tags.resource ||
+    tags['resource.name']
+}
+
 class SamplingRule {
   constructor ({ name, service, resource, tags, sampleRate = 1.0, provenance = undefined, maxPerSecond } = {}) {
     this.matchers = []
@@ -74,7 +79,7 @@ class SamplingRule {
       this.matchers.push(matcher(service, serviceLocator))
     }
     if (resource) {
-      this.matchers.push(matcher(resource, makeTagLocator('resource.name')))
+      this.matchers.push(matcher(resource, resourceLocator))
     }
     for (const [key, value] of Object.entries(tags || {})) {
       this.matchers.push(matcher(value, makeTagLocator(key)))
