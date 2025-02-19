@@ -140,7 +140,7 @@ class SpanStatsProcessor {
     this.bucketSizeNs = interval * 1e9
     this.buckets = new TimeBuckets()
     this.hostname = os.hostname()
-    this.enabled = enabled && apmTracingEnabled
+    this.enabled = enabled && apmTracingEnabled !== false
     this.env = env
     this.tags = tags || {}
     this.sequence = 0
