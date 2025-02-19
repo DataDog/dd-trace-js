@@ -169,11 +169,16 @@ const IGNORED_WORKFLOWS = {
     'release-latest.yml',
     'release-proposal.yml',
     'codeql-analysis.yml',
-    'pr-labels.yml',
+    'pr-labels.yml'
   ],
-  trigger_pull_request: [],
-  trigger_push: ['package-size.yml'],
-  trigger_schedule: [],
+  trigger_pull_request: [
+    'stale.yml'
+  ],
+  trigger_push: [
+    'package-size.yml',
+    'stale.yml'
+  ],
+  trigger_schedule: []
 }
 
 const workflows = fs.readdirSync(path.join(__dirname, '..', '.github', 'workflows'))
@@ -190,16 +195,16 @@ for (const workflow of workflows) {
   const yamlPath = path.join(__dirname, '..', '.github', 'workflows', workflow)
   const yamlContent = yaml.parse(fs.readFileSync(yamlPath, 'utf8'))
   const triggers = yamlContent.on
-  if (!IGNORED_WORKFLOWS.trigger_pull_request.includes(workflow)
-      && triggers?.pull_request !== null) {
+  if (!IGNORED_WORKFLOWS.trigger_pull_request.includes(workflow) &&
+      triggers?.pull_request !== null) {
     triggersError(workflow, 'The `pull_request` trigger should be blank')
   }
-  if (!IGNORED_WORKFLOWS.trigger_push.includes(workflow)
-      && triggers?.push?.branches?.[0] !== 'master') {
+  if (!IGNORED_WORKFLOWS.trigger_push.includes(workflow) &&
+      triggers?.push?.branches?.[0] !== 'master') {
     triggersError(workflow, 'The `push` trigger should run on master')
   }
-  if (!IGNORED_WORKFLOWS.trigger_schedule.includes(workflow)
-      && triggers?.schedule?.[0]?.cron !== '0 4 * * *') {
+  if (!IGNORED_WORKFLOWS.trigger_schedule.includes(workflow) &&
+      triggers?.schedule?.[0]?.cron !== '0 4 * * *') {
     triggersError(workflow, 'The `cron` trigger should be \'0 4 * * *\'')
   }
 }
