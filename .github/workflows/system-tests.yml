@@ -31,7 +31,7 @@ jobs:
     uses: DataDog/system-tests/.github/workflows/compute-workflow-parameters.yml@main
     with:
       library: nodejs
-      scenarios_groups: essentials,appsec_rasp
+      scenarios_groups: essentials,appsec_rasp,debugger
 
   system-tests:
     runs-on: ${{ contains(fromJSON('["CROSSED_TRACING_LIBRARIES", "INTEGRATIONS"]'), matrix.scenario) && 'ubuntu-latest-16-cores' || 'ubuntu-latest' }}

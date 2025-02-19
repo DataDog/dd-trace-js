@@ -98,7 +98,9 @@ describe('source map utils', function () {
     let clock
 
     function setup () {
-      clock = sinon.useFakeTimers()
+      clock = sinon.useFakeTimers({
+        toFake: ['setTimeout']
+      })
       readFileSync = sinon.stub().returns(rawSourceMap)
       readFile = sinon.stub().resolves(rawSourceMap)
 
