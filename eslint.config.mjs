@@ -2,10 +2,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { FlatCompat } from '@eslint/eslintrc'
-import js from '@eslint/js'
-import stylistic from '@stylistic/eslint-plugin-js'
-import mocha from 'eslint-plugin-mocha'
-import n from 'eslint-plugin-n'
+import eslintPluginJs from '@eslint/js'
+import eslintPluginStylistic from '@stylistic/eslint-plugin-js'
+import eslintPluginMocha from 'eslint-plugin-mocha'
+import eslintPluginN from 'eslint-plugin-n'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
 import globals from 'globals'
 
@@ -49,14 +49,14 @@ export default [
       'packages/dd-trace/src/payload-tagging/jsonpath-plus.js' // Vendored
     ]
   },
-  { name: '@eslint/js/recommnded', ...js.configs.recommended },
+  { name: '@eslint/js/recommnded', ...eslintPluginJs.configs.recommended },
   ...compat.extends('standard').map((config, i) => ({ name: config.name || `standard/${i + 1}`, ...config })),
   {
     name: 'dd-trace/defaults',
 
     plugins: {
-      n,
-      '@stylistic/js': stylistic
+      '@stylistic/js': eslintPluginStylistic,
+      n: eslintPluginN,
       unicorn: eslintPluginUnicorn
     },
 
@@ -91,11 +91,6 @@ export default [
     }
   },
   {
-    name: 'mocha/recommnded',
-    ...mocha.configs.flat.recommended,
-    files: TEST_FILES
-  },
-  {
     name: 'dd-trace/src/all',
     files: SRC_FILES,
     rules: {
@@ -110,6 +105,11 @@ export default [
         }
       ]]
     }
+  },
+  {
+    name: 'mocha/recommended',
+    ...eslintPluginMocha.configs.flat.recommended,
+    files: TEST_FILES
   },
   {
     name: 'dd-trace/tests/all',
