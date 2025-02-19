@@ -1,5 +1,7 @@
 'use strinct'
 
+const DD_TELEMETRY_REQUEST_METRICS = Symbol('_dd.appsec.telemetry.request.metrics')
+
 const tags = {
   BLOCK_FAILURE: 'block_failure',
   EVENT_RULES_VERSION: 'event_rules_version',
@@ -20,5 +22,6 @@ function getVersionsTags (wafVersion, rulesVersion) {
 
 module.exports = {
   tags,
-  getVersionsTags
+  getVersionsTags,
+  DD_TELEMETRY_REQUEST_METRICS
 }

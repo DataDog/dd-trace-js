@@ -1,12 +1,11 @@
 'use strict'
 
 const telemetryMetrics = require('../../telemetry/metrics')
-const { tags, getVersionsTags } = require('./common')
+const { tags, getVersionsTags, DD_TELEMETRY_REQUEST_METRICS } = require('./common')
 
 const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
 const DD_TELEMETRY_WAF_RESULT_TAGS = Symbol('_dd.appsec.telemetry.waf.result.tags')
-const DD_TELEMETRY_REQUEST_METRICS = Symbol('_dd.appsec.telemetry.request.metrics')
 
 const TRUNCATION_FLAGS = {
   LONG_STRING: 1,

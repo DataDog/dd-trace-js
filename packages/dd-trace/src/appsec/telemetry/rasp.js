@@ -1,11 +1,9 @@
 'use strict'
 
 const telemetryMetrics = require('../../telemetry/metrics')
-const { getVersionsTags } = require('./common')
+const { DD_TELEMETRY_REQUEST_METRICS, getVersionsTags } = require('./common')
 
 const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
-
-const DD_TELEMETRY_REQUEST_METRICS = Symbol('_dd.appsec.telemetry.request.metrics')
 
 function addRaspRequestMetrics (store, { duration, durationExt, wafTimeout, errorCode }) {
   store[DD_TELEMETRY_REQUEST_METRICS].raspDuration += duration || 0

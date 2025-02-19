@@ -1,5 +1,6 @@
 'use strict'
 
+const { DD_TELEMETRY_REQUEST_METRICS } = require('./common')
 const { addRaspRequestMetrics, trackRaspMetrics } = require('./rasp')
 const { incrementMissingUserId, incrementMissingUserLogin } = require('./user')
 const {
@@ -9,8 +10,6 @@ const {
   incrementWafUpdates,
   incrementWafRequests
 } = require('./waf')
-
-const DD_TELEMETRY_REQUEST_METRICS = Symbol('_dd.appsec.telemetry.request.metrics')
 
 const metricsStoreMap = new WeakMap()
 
