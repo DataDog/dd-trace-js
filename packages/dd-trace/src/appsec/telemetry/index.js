@@ -16,17 +16,6 @@ const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
 const DD_TELEMETRY_REQUEST_METRICS = Symbol('_dd.appsec.telemetry.request.metrics')
 
-const tags = {
-  BLOCK_FAILURE: 'block_failure',
-  EVENT_RULES_VERSION: 'event_rules_version',
-  INPUT_TRUNCATED: 'input_truncated',
-  REQUEST_BLOCKED: 'request_blocked',
-  RULE_TRIGGERED: 'rule_triggered',
-  WAF_ERROR: 'waf_error',
-  WAF_TIMEOUT: 'waf_timeout',
-  WAF_VERSION: 'waf_version'
-}
-
 const metricsStoreMap = new WeakMap()
 
 let enabled = false
@@ -64,13 +53,6 @@ function getStore (req) {
   return store
 }
 
-function getVersionsTags (wafVersion, rulesVersion) {
-  return {
-    [tags.WAF_VERSION]: wafVersion,
-    [tags.EVENT_RULES_VERSION]: rulesVersion
-  }
-}
-
 function updateRaspRequestsMetricTags (metrics, req, raspRule) {
   if (!req) return
 
@@ -81,15 +63,13 @@ function updateRaspRequestsMetricTags (metrics, req, raspRule) {
 
   if (!enabled) return
 
-  const versionsTags = getVersionsTags(metrics.wafVersion, metrics.rulesVersion)
-
-  const tags = { ...versionsTags, rule_type: raspRule.type }
+  const ruleTags = { rule_type: raspRule.type }
 
   if (raspRule.variant) {
-    tags.rule_variant = raspRule.variant
+    ruleTags.rule_variant = raspRule.variant
   }
 
-  trackRaspMetrics(store, metrics, tags)
+  trackRaspMetrics(store, metrics, ruleTags)
 
   incrementTruncatedMetrics(metrics)
 }
@@ -104,9 +84,7 @@ function updateWafRequestsMetricTags (metrics, req) {
 
   if (!enabled) return
 
-  const versionsTags = getVersionsTags(metrics.wafVersion, metrics.rulesVersion)
-
-  trackWafMetrics(store, metrics, versionsTags)
+  trackWafMetrics(store, metrics)
 
   incrementTruncatedMetrics(metrics)
 }
@@ -114,15 +92,13 @@ function updateWafRequestsMetricTags (metrics, req) {
 function incrementWafInitMetric (wafVersion, rulesVersion, success) {
   if (!enabled) return
 
-  const versionsTags = getVersionsTags(wafVersion, rulesVersion)
-  incrementWafInit(versionsTags, success)
+  incrementWafInit(wafVersion, rulesVersion, success)
 }
 
 function incrementWafUpdatesMetric (wafVersion, rulesVersion, success) {
   if (!enabled) return
 
-  const versionsTags = getVersionsTags(wafVersion, rulesVersion)
-  incrementWafUpdates(versionsTags, success)
+  incrementWafUpdates(wafVersion, rulesVersion, success)
 }
 
 function incrementWafRequestsMetric (req) {

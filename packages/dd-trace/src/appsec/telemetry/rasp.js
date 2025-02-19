@@ -1,6 +1,7 @@
 'use strict'
 
 const telemetryMetrics = require('../../telemetry/metrics')
+const { getVersionsTags } = require('./common')
 
 const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
@@ -15,7 +16,7 @@ function addRaspRequestMetrics (store, { duration, durationExt, wafTimeout, erro
     store[DD_TELEMETRY_REQUEST_METRICS].raspTimeouts++
   }
 
-  if (errorCode != null) {
+  if (errorCode) {
     store[DD_TELEMETRY_REQUEST_METRICS].raspErrorCode = Math.max(
       errorCode,
       store[DD_TELEMETRY_REQUEST_METRICS].raspErrorCode ?? errorCode
@@ -40,7 +41,14 @@ function trackRaspCumulativeDurations (store, metrics, tags) {
   }
 }
 
-function trackRaspMetrics (store, metrics, tags) {
+function trackRaspMetrics (store, metrics, ruleTags) {
+  const versionsTags = getVersionsTags(metrics.wafVersion, metrics.rulesVersion)
+
+  const tags = {
+    ...versionsTags,
+    ...ruleTags
+  }
+
   trackRaspCumulativeDurations(store, metrics, tags)
 
   appsecMetrics.count('rasp.rule.eval', tags).inc(1)

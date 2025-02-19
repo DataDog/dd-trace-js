@@ -1,22 +1,12 @@
 'use strict'
 
 const telemetryMetrics = require('../../telemetry/metrics')
+const { tags, getVersionsTags } = require('./common')
 
 const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
 const DD_TELEMETRY_WAF_RESULT_TAGS = Symbol('_dd.appsec.telemetry.waf.result.tags')
 const DD_TELEMETRY_REQUEST_METRICS = Symbol('_dd.appsec.telemetry.request.metrics')
-
-const tags = {
-  BLOCK_FAILURE: 'block_failure',
-  EVENT_RULES_VERSION: 'event_rules_version',
-  INPUT_TRUNCATED: 'input_truncated',
-  REQUEST_BLOCKED: 'request_blocked',
-  RULE_TRIGGERED: 'rule_triggered',
-  WAF_ERROR: 'waf_error',
-  WAF_TIMEOUT: 'waf_timeout',
-  WAF_VERSION: 'waf_version'
-}
 
 function addWafRequestMetrics (store, metrics) {
   const { duration, durationExt, wafTimeout, errorCode } = metrics
@@ -28,7 +18,7 @@ function addWafRequestMetrics (store, metrics) {
     store[DD_TELEMETRY_REQUEST_METRICS].wafTimeout++
   }
 
-  if (errorCode != null) {
+  if (errorCode) {
     store[DD_TELEMETRY_REQUEST_METRICS].wafErrorCode = Math.max(
       errorCode,
       store[DD_TELEMETRY_REQUEST_METRICS].wafErrorCode ?? errorCode
@@ -64,7 +54,9 @@ function trackWafDurations (metrics, versionsTags) {
   }
 }
 
-function trackWafMetrics (store, metrics, versionsTags) {
+function trackWafMetrics (store, metrics) {
+  const versionsTags = getVersionsTags(metrics.wafVersion, metrics.rulesVersion)
+
   trackWafDurations(metrics, versionsTags)
 
   const metricTags = getOrCreateMetricTags(store, versionsTags)
@@ -109,13 +101,15 @@ function getOrCreateMetricTags (store, versionsTags) {
   return metricTags
 }
 
-function incrementWafInit (versionsTags, success) {
+function incrementWafInit (wafVersion, rulesVersion, success) {
+  const versionsTags = getVersionsTags(wafVersion, rulesVersion)
   const initTags = { ...versionsTags, success }
 
   appsecMetrics.count('waf.init', initTags).inc()
 }
 
-function incrementWafUpdates (versionsTags, success) {
+function incrementWafUpdates (wafVersion, rulesVersion, success) {
+  const versionsTags = getVersionsTags(wafVersion, rulesVersion)
   const updateTags = { ...versionsTags, success }
 
   appsecMetrics.count('waf.updates', updateTags).inc()
