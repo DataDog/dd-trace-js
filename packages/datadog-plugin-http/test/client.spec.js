@@ -934,6 +934,24 @@ describe('Plugin', () => {
             })
           })
         }
+
+        it('should record unfinished http requests as error spans', done => {
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('error', 1)
+              expect(traces[0][0].meta).to.not.have.property('http.status_code')
+            })
+            .then(done)
+            .catch(done)
+
+          try {
+            http.request('http://httpbin.org/get', { headers: { BadHeader: 'a\nb' } }, res => {
+              res.on('data', () => { })
+            })
+          } catch {
+            // expected to throw error
+          }
+        })
       })
 
       describe('with late plugin initialization and an external subscriber', () => {
