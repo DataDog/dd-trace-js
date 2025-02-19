@@ -687,7 +687,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           return agent.load('http2', { server: false })
             .then(() => {
-              ch = require('../../diagnostics_channel').channel('apm:http2:client:request:start')
+              ch = require('dc-polyfill').channel('apm:http2:client:request:start')
               sub = () => {}
               tracer = require('../../dd-trace')
               http2 = require('http2')
@@ -706,24 +706,22 @@ describe('Plugin', () => {
             stream.end()
           }
 
-          getPort().then(port => {
-            appListener = server(app, port, () => {
-              ch.subscribe(sub)
+          appListener = server(app, port => {
+            ch.subscribe(sub)
 
-              const client = http2
-                .connect(`${protocol}://localhost:${port}`)
-                .on('error', done)
+            const client = http2
+              .connect(`${protocol}://localhost:${port}`)
+              .on('error', done)
 
-              tracer.use('http2', false)
+            tracer.use('http2', false)
 
-              const req = client.request({ ':path': '/user', ':method': 'GET' })
-              req.on('error', done)
-              req.on('response', () => done())
+            const req = client.request({ ':path': '/user', ':method': 'GET' })
+            req.on('error', done)
+            req.on('response', () => done())
 
-              tracer.use('http2', true)
+            tracer.use('http2', true)
 
-              req.end()
-            })
+            req.end()
           })
         })
       })

@@ -74,7 +74,7 @@ class Http2ClientPlugin extends ClientPlugin {
 
   bindAsyncStart ({ eventName, eventData, currentStore, parentStore }) {
     // Plugin wasn't enabled when the request started.
-    if (!currentStore) return storage.getStore()
+    if (!currentStore) return storage('legacy').getStore()
 
     switch (eventName) {
       case 'response':
