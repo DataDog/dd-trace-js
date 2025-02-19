@@ -20,7 +20,7 @@ jobs:
           exempt-pr-labels: "keep-open"
           exempt-draft-pr: true
           stale-pr-message: |
-            This pull request has been marked as stale due to 60 days of inactivity.
+            This pull request has been marked as stale due to 90 days of inactivity.
             If this is still relevant, please update or comment to keep it open.
             If this should be kept open indefinitely, please apply the label `keep-open`.
             Otherwise, it will be automatically closed after 14 days.
