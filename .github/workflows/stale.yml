@@ -1,0 +1,27 @@
+name: 'Stale PR Bot'
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch: # allow manual trigger
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # v9.1.0
+        with:
+          debug-only: true #
+          days-before-issue-stale: -1 # disabled for issues
+
+          days-before-pr-stale: 90 # 3 months
+          days-before-pr-close: 14 # 2 weeks
+          stale-pr-label: "stale"
+          exempt-pr-labels: "keep-open"
+          stale-pr-message: |
+            This pull request has been marked as stale due to inactivity. 
+            If this is still relevant, please update or comment to keep it open. 
+            Otherwise, it will be automatically closed after additional time.
+
+            If you need assistance or have any questions, feel free to reach out.
+
+            Thank you for your contribution! 🚀
