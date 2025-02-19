@@ -209,14 +209,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       return knownTestsForSuite
     }
 
-    getQuarantinedTestsForSuite (quaratinedTests) {
+    getQuarantinedTestsForSuite (quarantined) {
       if (this.quarantinedTestsForThisSuite) {
         return this.quarantinedTestsForThisSuite
       }
-      if (!quaratinedTests) {
+      if (!quarantined) {
         return []
       }
-      let quarantinedTestsForSuite = quaratinedTests
+      let quarantinedTestsForSuite = quarantined
       // If jest is using workers, quarantined tests are serialized to json.
       // If jest runs in band, they are not.
       if (typeof quarantinedTestsForSuite === 'string') {
