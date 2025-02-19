@@ -44,14 +44,15 @@ const self = module.exports = {
 //
 // Source: https://github.com/nodejs/node/blob/v18.20.6/lib/async_hooks.js#L312
 function cacheIt (key, value) {
-  if (Date.now() > cacheTimerLastSet + 1_000) {
+  const now = Date.now()
+  if (now > cacheTimerLastSet + 1_000) {
     clearTimeout(cacheTimer)
     cacheTimer = setTimeout(function () {
       // Optimize for app boot, where a lot of reads might happen
       // Clear cache a few seconds after it was last used
       cache.clear()
     }, 10_000).unref()
-    cacheTimerLastSet = Date.now()
+    cacheTimerLastSet = now
   }
   cache.set(key, value)
   return value
