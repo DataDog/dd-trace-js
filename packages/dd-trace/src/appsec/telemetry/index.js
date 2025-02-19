@@ -1,7 +1,5 @@
 'use strict'
 
-const telemetryMetrics = require('../../telemetry/metrics')
-
 const { addRaspRequestMetrics, trackRaspMetrics } = require('./rasp')
 const { incrementMissingUserId, incrementMissingUserLogin } = require('./user')
 const {
@@ -11,8 +9,6 @@ const {
   incrementWafUpdates,
   incrementWafRequests
 } = require('./waf')
-
-const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
 const DD_TELEMETRY_REQUEST_METRICS = Symbol('_dd.appsec.telemetry.request.metrics')
 
@@ -70,8 +66,6 @@ function updateRaspRequestsMetricTags (metrics, req, raspRule) {
   }
 
   trackRaspMetrics(store, metrics, ruleTags)
-
-  incrementTruncatedMetrics(metrics)
 }
 
 function updateWafRequestsMetricTags (metrics, req) {
@@ -85,8 +79,6 @@ function updateWafRequestsMetricTags (metrics, req) {
   if (!enabled) return
 
   trackWafMetrics(store, metrics)
-
-  incrementTruncatedMetrics(metrics)
 }
 
 function incrementWafInitMetric (wafVersion, rulesVersion, success) {
@@ -110,30 +102,6 @@ function incrementWafRequestsMetric (req) {
   metricsStoreMap.delete(req)
 }
 
-function incrementTruncatedMetrics (metrics) {
-  const truncationReason = getTruncationReason(metrics)
-
-  if (truncationReason > 0) {
-    const truncationTags = { truncation_reason: 1 }
-    appsecMetrics.count('appsec.waf.input_truncated', truncationTags).inc(1)
-  }
-
-  if (metrics?.maxTruncatedString) {
-    appsecMetrics.distribution('appsec.waf.truncated_value_size', { truncation_reason: 1 })
-      .track(metrics.maxTruncatedString)
-  }
-
-  if (metrics?.maxTruncatedContainerSize) {
-    appsecMetrics.distribution('appsec.waf.truncated_value_size', { truncation_reason: 2 })
-      .track(metrics.maxTruncatedContainerSize)
-  }
-
-  if (metrics?.maxTruncatedContainerDepth) {
-    appsecMetrics.distribution('appsec.waf.truncated_value_size', { truncation_reason: 4 })
-      .track(metrics.maxTruncatedContainerDepth)
-  }
-}
-
 function incrementMissingUserLoginMetric (framework, eventType) {
   if (!enabled) return
 
@@ -151,16 +119,6 @@ function getRequestMetrics (req) {
     const store = getStore(req)
     return store?.[DD_TELEMETRY_REQUEST_METRICS]
   }
-}
-
-function getTruncationReason ({ maxTruncatedString, maxTruncatedContainerSize, maxTruncatedContainerDepth }) {
-  let reason = 0
-
-  if (maxTruncatedString) reason |= 1 // string too long
-  if (maxTruncatedContainerSize) reason |= 2 // list/map too large
-  if (maxTruncatedContainerDepth) reason |= 4 // object too deep
-
-  return reason
 }
 
 module.exports = {

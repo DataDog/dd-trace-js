@@ -8,6 +8,12 @@ const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 const DD_TELEMETRY_WAF_RESULT_TAGS = Symbol('_dd.appsec.telemetry.waf.result.tags')
 const DD_TELEMETRY_REQUEST_METRICS = Symbol('_dd.appsec.telemetry.request.metrics')
 
+const TRUNCATION_FLAGS = {
+  LONG_STRING: 1,
+  LARGE_CONTAINER: 2,
+  DEEP_CONTAINER: 4
+}
+
 function addWafRequestMetrics (store, metrics) {
   const { duration, durationExt, wafTimeout, errorCode } = metrics
 
@@ -15,7 +21,7 @@ function addWafRequestMetrics (store, metrics) {
   store[DD_TELEMETRY_REQUEST_METRICS].durationExt += durationExt || 0
 
   if (wafTimeout) {
-    store[DD_TELEMETRY_REQUEST_METRICS].wafTimeout++
+    store[DD_TELEMETRY_REQUEST_METRICS].wafTimeouts++
   }
 
   if (errorCode) {
@@ -30,16 +36,6 @@ function addWafRequestMetrics (store, metrics) {
   }
 }
 
-function getTruncationReason ({ maxTruncatedString, maxTruncatedContainerSize, maxTruncatedContainerDepth }) {
-  let reason = 0
-
-  if (maxTruncatedString) reason |= 1 // string too long
-  if (maxTruncatedContainerSize) reason |= 2 // list/map too large
-  if (maxTruncatedContainerDepth) reason |= 4 // object too deep
-
-  return reason
-}
-
 function trackWafDurations (metrics, versionsTags) {
   if (metrics.duration) {
     appsecMetrics.distribution('waf.duration', versionsTags).track(metrics.duration)
@@ -47,10 +43,6 @@ function trackWafDurations (metrics, versionsTags) {
 
   if (metrics.durationExt) {
     appsecMetrics.distribution('waf.duration_ext', versionsTags).track(metrics.durationExt)
-  }
-
-  if (metrics.wafTimeouts) {
-    appsecMetrics.distribution('waf.timeouts', versionsTags).track(metrics.wafTimeouts)
   }
 }
 
@@ -64,15 +56,15 @@ function trackWafMetrics (store, metrics) {
   const { blockTriggered, ruleTriggered, wafTimeout } = metrics
 
   if (blockTriggered) {
-    metricTags[tags.REQUEST_BLOCKED] = blockTriggered
+    metricTags[tags.REQUEST_BLOCKED] = true
   }
 
   if (ruleTriggered) {
-    metricTags[tags.RULE_TRIGGERED] = ruleTriggered
+    metricTags[tags.RULE_TRIGGERED] = true
   }
 
   if (wafTimeout) {
-    metricTags[tags.WAF_TIMEOUT] = wafTimeout
+    metricTags[tags.WAF_TIMEOUT] = true
   }
 
   if (metrics.errorCode) {
@@ -81,6 +73,45 @@ function trackWafMetrics (store, metrics) {
     appsecMetrics.count('waf.error', errorTags).inc(1)
     metricTags[tags.WAF_ERROR] = true
   }
+
+  incrementTruncatedMetrics(metrics)
+}
+
+function incrementTruncatedMetrics (metrics) {
+  const truncationReason = getTruncationReason(metrics)
+
+  if (truncationReason > 0) {
+    const truncationTags = { truncation_reason: truncationReason }
+    appsecMetrics.count('appsec.waf.input_truncated', truncationTags).inc(1)
+  }
+
+  if (metrics?.maxTruncatedString) {
+    appsecMetrics.distribution('appsec.waf.truncated_value_size',
+      { truncation_reason: TRUNCATION_FLAGS.LONG_STRING })
+      .track(metrics.maxTruncatedString)
+  }
+
+  if (metrics?.maxTruncatedContainerSize) {
+    appsecMetrics.distribution('appsec.waf.truncated_value_size',
+      { truncation_reason: TRUNCATION_FLAGS.LARGE_CONTAINER })
+      .track(metrics.maxTruncatedContainerSize)
+  }
+
+  if (metrics?.maxTruncatedContainerDepth) {
+    appsecMetrics.distribution('appsec.waf.truncated_value_size',
+      { truncation_reason: TRUNCATION_FLAGS.DEEP_CONTAINER })
+      .track(metrics.maxTruncatedContainerDepth)
+  }
+}
+
+function getTruncationReason ({ maxTruncatedString, maxTruncatedContainerSize, maxTruncatedContainerDepth }) {
+  let reason = 0
+
+  if (maxTruncatedString) reason |= TRUNCATION_FLAGS.LONG_STRING
+  if (maxTruncatedContainerSize) reason |= TRUNCATION_FLAGS.LARGE_CONTAINER
+  if (maxTruncatedContainerDepth) reason |= TRUNCATION_FLAGS.DEEP_CONTAINER
+
+  return reason
 }
 
 function getOrCreateMetricTags (store, versionsTags) {
