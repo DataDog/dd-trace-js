@@ -81,12 +81,11 @@ class VulnerabilityFormatter {
   }
 
   formatVulnerability (vulnerability, sourcesIndexes, sources) {
-    const { type, hash, stackId, evidence, location } = vulnerability
+    const { type, hash, evidence, location } = vulnerability
 
     const formattedVulnerability = {
       type,
       hash,
-      stackId,
       evidence: this.formatEvidence(type, evidence, sourcesIndexes, sources),
       location
     }
