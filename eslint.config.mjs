@@ -6,6 +6,7 @@ import js from '@eslint/js'
 import stylistic from '@stylistic/eslint-plugin-js'
 import mocha from 'eslint-plugin-mocha'
 import n from 'eslint-plugin-n'
+import eslintPluginUnicorn from 'eslint-plugin-unicorn'
 import globals from 'globals'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -56,6 +57,7 @@ export default [
     plugins: {
       n,
       '@stylistic/js': stylistic
+      unicorn: eslintPluginUnicorn
     },
 
     languageOptions: {
