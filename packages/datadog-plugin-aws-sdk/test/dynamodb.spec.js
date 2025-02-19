@@ -40,10 +40,25 @@ describe('Plugin', () => {
         })
 
         before(async () => {
+          await agent.load('aws-sdk')
+          await agent.close({ ritmReset: false, wipe: true })
+          await agent.load(
+            'aws-sdk',
+            {},
+            {
+              cloudPayloadTagging: {
+                requestsEnabled: true,
+                responsesEnabled: true,
+                request: '$.Item.name',
+                response: '$.Attributes,$.Item.data',
+                maxDepth: 5
+              }
+            }
+          )
           AWS = require(`../../../versions/${dynamoClientName}@${version}`).get()
           dynamo = new AWS.DynamoDB({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
 
-          const deleteTable = async (tableName) => {
+          const deleteTable = async tableName => {
             if (dynamoClientName === '@aws-sdk/client-dynamodb') {
               try {
                 await dynamo.deleteTable({ TableName: tableName })
@@ -123,6 +138,142 @@ describe('Plugin', () => {
         after(async () => {
           await resetLocalStackDynamo()
           return agent.close({ ritmReset: false })
+        })
+
+        describe('with payload tagging', () => {
+          it('adds request and response payloads as flattened tags for putItem', done => {
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+
+                expect(span.resource).to.equal(`putItem ${oneKeyTableName}`)
+                expect(span.meta).to.include({
+                  'aws.dynamodb.table_name': oneKeyTableName,
+                  aws_service: 'DynamoDB',
+                  region: 'us-east-1',
+                  'aws.request.body.TableName': oneKeyTableName,
+                  'aws.request.body.Item.name': 'redacted',
+                  'aws.request.body.Item.data.S': 'test-data',
+                  'aws.response.body.Attributes': 'redacted'
+                })
+              })
+              .then(done, done)
+
+            dynamo.putItem(
+              {
+                TableName: oneKeyTableName,
+                Item: {
+                  name: { S: 'test-name' },
+                  data: { S: 'test-data' }
+                }
+              },
+              e => e && done(e)
+            )
+          })
+
+          it('adds request and response payloads as flattened tags for updateItem', (done) => {
+            agent
+              .use((traces) => {
+                const span = traces[0][0]
+
+                expect(span.resource).to.equal(`updateItem ${oneKeyTableName}`)
+                expect(span.meta).to.include({
+                  'aws.dynamodb.table_name': oneKeyTableName,
+                  aws_service: 'DynamoDB',
+                  region: 'us-east-1',
+                  'aws.request.body.TableName': oneKeyTableName,
+                  'aws.request.body.Key.name.S': 'test-name',
+                  'aws.request.body.AttributeUpdates.data.Value.S': 'updated-data',
+                  'aws.response.body.Attributes': 'redacted'
+                })
+              })
+              .then(done, done)
+
+            dynamo.updateItem(
+              {
+                TableName: oneKeyTableName,
+                Key: {
+                  name: { S: 'test-name' }
+                },
+                AttributeUpdates: {
+                  data: {
+                    Action: 'PUT',
+                    Value: { S: 'updated-data' }
+                  }
+                }
+              },
+              (e) => e && done(e)
+            )
+          })
+
+          it('adds request and response payloads as flattened tags for deleteItem', (done) => {
+            agent
+              .use((traces) => {
+                const span = traces[0][0]
+
+                expect(span.resource).to.equal(`deleteItem ${oneKeyTableName}`)
+                expect(span.meta).to.include({
+                  'aws.dynamodb.table_name': oneKeyTableName,
+                  aws_service: 'DynamoDB',
+                  region: 'us-east-1',
+                  'aws.request.body.TableName': oneKeyTableName,
+                  'aws.request.body.Key.name.S': 'test-name',
+                  'aws.response.body.Attributes': 'redacted'
+                })
+              })
+              .then(done, done)
+
+            dynamo.deleteItem(
+              {
+                TableName: oneKeyTableName,
+                Key: {
+                  name: { S: 'test-name' }
+                }
+              },
+              (e) => e && done(e)
+            )
+          })
+
+          it('adds request and response payloads as flattened tags for getItem', (done) => {
+            dynamo.putItem({
+              TableName: oneKeyTableName,
+              Item: {
+                name: { S: 'test-get-name' },
+                data: { S: 'test-get-data' }
+              }
+            }, (putErr) => {
+              if (putErr) return done(putErr)
+
+              setTimeout(() => {
+                agent
+                  .use((traces) => {
+                    const span = traces[0][0]
+
+                    expect(span.resource).to.equal(`getItem ${oneKeyTableName}`)
+                    expect(span.meta).to.include({
+                      'aws.dynamodb.table_name': oneKeyTableName,
+                      aws_service: 'DynamoDB',
+                      region: 'us-east-1',
+                      'aws.request.body.TableName': oneKeyTableName,
+                      'aws.request.body.Key.name.S': 'test-get-name',
+                      'aws.response.body.Item.name.S': 'test-get-name',
+                      'aws.response.body.Item.data': 'redacted'
+                    })
+                  })
+                  .then(done, done)
+
+                dynamo.getItem(
+                  {
+                    TableName: oneKeyTableName,
+                    Key: {
+                      name: { S: 'test-get-name' }
+                    }
+                  },
+                  (e) => e && done(e)
+                )
+              }, 100) // Small delay to ensure put completes
+            })
+})
         })
 
         describe('span pointers', () => {
