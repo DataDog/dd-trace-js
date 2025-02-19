@@ -76,23 +76,20 @@ function trackWafDurations (metrics, versionsTags) {
   }
 }
 
-function trackRaspDurations (metrics, tags) {
+function trackRaspCumulativeDurations (store, metrics, tags) {
   const versionsTags = {
     waf_version: tags.waf_version,
     event_rules_version: tags.event_rules_version
   }
 
-  if (metrics.raspDuration) {
-    // Incorrect
-    appsecMetrics.distribution('rasp.rule.duration', tags).track(metrics.raspDuration)
+  if (metrics.duration) {
+    const raspDuration = store[DD_TELEMETRY_REQUEST_METRICS].raspDuration
+    appsecMetrics.distribution('rasp.duration', versionsTags).track(raspDuration)
   }
 
-  if (metrics.raspDuration) {
-    appsecMetrics.distribution('rasp.duration', versionsTags).track(metrics.raspDuration)
-  }
-
-  if (metrics.raspDurationExt) {
-    appsecMetrics.distribution('rasp.duration_ext', versionsTags).track(metrics.raspDurationExt)
+  if (metrics.durationExt) {
+    const raspDurationExt = store[DD_TELEMETRY_REQUEST_METRICS].raspDurationExt
+    appsecMetrics.distribution('rasp.duration_ext', versionsTags).track(raspDurationExt)
   }
 }
 
@@ -132,7 +129,7 @@ function updateRaspRequestsMetricTags (metrics, req, raspRule) {
     tags.rule_variant = raspRule.variant
   }
 
-  trackRaspDurations(metrics, tags)
+  trackRaspCumulativeDurations(store, metrics, tags)
 
   appsecMetrics.count('rasp.rule.eval', tags).inc(1)
 
@@ -142,6 +139,10 @@ function updateRaspRequestsMetricTags (metrics, req, raspRule) {
 
   if (metrics.ruleTriggered) {
     appsecMetrics.count('rasp.rule.match', tags).inc(1)
+  }
+
+  if (metrics.duration) {
+    appsecMetrics.distribution('rasp.rule.duration', tags).track(metrics.duration)
   }
 
   if (metrics.errorCode) {
