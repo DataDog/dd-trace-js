@@ -12,6 +12,15 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const compat = new FlatCompat({ baseDirectory: __dirname })
 
+const SRC_FILES = [
+  '*.js',
+  '*.mjs',
+  'ext/**/*.js',
+  'ext/**/*.mjs',
+  'packages/*/src/**/*.js',
+  'packages/*/src/**/*.mjs'
+]
+
 const TEST_FILES = [
   'packages/*/test/**/*.js',
   'packages/*/test/**/*.mjs',
@@ -32,9 +41,10 @@ export default [
       '**/versions', // This is effectively a node_modules tree.
       '**/acmeair-nodejs', // We don't own this.
       '**/vendor', // Generally, we didn't author this code.
+      'integration-tests/debugger/target-app/source-map-support/minify.min.js', // Generated
+      'integration-tests/debugger/target-app/source-map-support/typescript.js', // Generated
       'integration-tests/esbuild/out.js', // Generated
       'integration-tests/esbuild/aws-sdk-out.js', // Generated
-      'packages/dd-trace/src/appsec/blocked_templates.js', // TODO Why is this ignored?
       'packages/dd-trace/src/payload-tagging/jsonpath-plus.js' // Vendored
     ]
   },
@@ -82,6 +92,22 @@ export default [
     name: 'mocha/recommnded',
     ...mocha.configs.flat.recommended,
     files: TEST_FILES
+  },
+  {
+    name: 'dd-trace/src/all',
+    files: SRC_FILES,
+    rules: {
+      'n/no-restricted-require': ['error', [
+        {
+          name: 'diagnostics_channel',
+          message: 'Please use dc-polyfill instead.'
+        },
+        {
+          name: 'semver',
+          message: 'Please use semifies instead.'
+        }
+      ]]
+    }
   },
   {
     name: 'dd-trace/tests/all',
