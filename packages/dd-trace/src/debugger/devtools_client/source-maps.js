@@ -7,6 +7,7 @@ const { SourceMapConsumer } = require('source-map')
 
 const cache = new Map()
 let cacheTimer = null
+let cacheTimerLastSet = 0
 
 const self = module.exports = {
   async loadSourceMap (dir, url) {
@@ -33,13 +34,26 @@ const self = module.exports = {
   }
 }
 
+// TODO: Remove if-statement around `setTimeout` below once it's safe to do so.
+//
+// This is a workaround for, what seems like a bug in Node.js core, that seems to trigger when, among other things, a
+// lot of timers are being created very rapidly. This makes the call to `setTimeout` throw an error from within
+// `AsyncLocalStorage._propagate` with the following error message:
+//
+//     TypeError: Cannot read properties of undefined (reading 'Symbol(kResourceStore)')
+//
+// Source: https://github.com/nodejs/node/blob/v18.20.6/lib/async_hooks.js#L312
 function cacheIt (key, value) {
-  clearTimeout(cacheTimer)
-  cacheTimer = setTimeout(function () {
-    // Optimize for app boot, where a lot of reads might happen
-    // Clear cache a few seconds after it was last used
-    cache.clear()
-  }, 10_000).unref()
+  const now = Date.now()
+  if (now > cacheTimerLastSet + 1_000) {
+    clearTimeout(cacheTimer)
+    cacheTimer = setTimeout(function () {
+      // Optimize for app boot, where a lot of reads might happen
+      // Clear cache a few seconds after it was last used
+      cache.clear()
+    }, 10_000).unref()
+    cacheTimerLastSet = now
+  }
   cache.set(key, value)
   return value
 }
