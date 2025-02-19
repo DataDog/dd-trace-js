@@ -1173,7 +1173,7 @@ class Config {
         'testManagementAttemptToFixRetries',
         coalesce(maybeInt(DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES), 20)
       )
-      this._setBoolean(calc, 'isTestUnshallowEnabled', isTrue(DD_TEST_UNSHALLOW_ENABLED))
+      this._setBoolean(calc, 'isTestUnshallowEnabled', !isFalse(DD_TEST_UNSHALLOW_ENABLED))
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())
     this._setBoolean(calc, 'isGitUploadEnabled',
