@@ -560,7 +560,7 @@ describe('Plugin', () => {
 
       it('should parse valid config with single table', () => {
         const configStr = '{"Table1": ["key1", "key2"]}'
-        dynamoDbInstance._tracerConfig = { aws: { dynamoDb: { tablePrimaryKeys: configStr } } }
+        dynamoDbInstance._tracerConfig = { trace: { dynamoDb: { tablePrimaryKeys: configStr } } }
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
         expect(result).to.deep.equal({
@@ -570,7 +570,7 @@ describe('Plugin', () => {
 
       it('should parse valid config with multiple tables', () => {
         const configStr = '{"Table1": ["key1"], "Table2": ["key2", "key3"]}'
-        dynamoDbInstance._tracerConfig = { aws: { dynamoDb: { tablePrimaryKeys: configStr } } }
+        dynamoDbInstance._tracerConfig = { trace: { dynamoDb: { tablePrimaryKeys: configStr } } }
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
         expect(result).to.deep.equal({
