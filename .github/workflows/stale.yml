@@ -12,7 +12,6 @@ jobs:
     steps:
       - uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # v9.1.0
         with:
-          debug-only: true #
           days-before-issue-stale: -1 # disabled for issues
 
           days-before-pr-stale: 90 # 3 months
