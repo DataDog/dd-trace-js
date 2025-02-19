@@ -1145,7 +1145,7 @@ class Config {
       DD_CIVISIBILITY_FLAKY_RETRY_COUNT,
       DD_TEST_SESSION_NAME,
       DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
-      DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED,
+      DD_TEST_FAILED_TEST_REPLAY_ENABLED,
       DD_TEST_MANAGEMENT_ENABLED,
       DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES,
       DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED
@@ -1166,7 +1166,7 @@ class Config {
       this._setBoolean(calc, 'isManualApiEnabled', !isFalse(this._isCiVisibilityManualApiEnabled()))
       this._setString(calc, 'ciVisibilityTestSessionName', DD_TEST_SESSION_NAME)
       this._setBoolean(calc, 'ciVisAgentlessLogSubmissionEnabled', isTrue(DD_AGENTLESS_LOG_SUBMISSION_ENABLED))
-      this._setBoolean(calc, 'isTestDynamicInstrumentationEnabled', isTrue(DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED))
+      this._setBoolean(calc, 'isTestDynamicInstrumentationEnabled', !isFalse(DD_TEST_FAILED_TEST_REPLAY_ENABLED))
       this._setBoolean(calc, 'isServiceUserProvided', !!this._env.service)
       this._setBoolean(calc, 'isTestManagementEnabled', !isFalse(DD_TEST_MANAGEMENT_ENABLED))
       this._setValue(calc,

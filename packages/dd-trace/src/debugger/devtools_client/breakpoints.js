@@ -31,9 +31,9 @@ async function addBreakpoint (probe) {
   probe.nsBetweenSampling = BigInt(1 / snapshotsPerSecond * 1e9)
   probe.lastCaptureNs = 0n
 
-  // TODO: Inbetween `await session.post('Debugger.enable')` and here, the scripts are parsed and cached.
-  // Maybe there's a race condition here or maybe we're guraenteed that `await session.post('Debugger.enable')` will
-  // not continue untill all scripts have been parsed?
+  // Warning: The code below relies on undocumented behavior of the inspector!
+  // It expects that `await session.post('Debugger.enable')` will wait for all loaded scripts to be emitted as
+  // `Debugger.scriptParsed` events. If this ever changes, we will have a race condition!
   const script = findScriptFromPartialPath(file)
   if (!script) throw new Error(`No loaded script found for ${file} (probe: ${probe.id}, version: ${probe.version})`)
   const { url, scriptId, sourceMapURL, source } = script
