@@ -202,13 +202,13 @@ module.exports = class CiPlugin extends Plugin {
   configure (config, shouldGetEnvironmentData = true) {
     super.configure(config)
 
+    if (!shouldGetEnvironmentData) {
+      return
+    }
+
     if (config.isTestDynamicInstrumentationEnabled && !this.di) {
       const testVisibilityDynamicInstrumentation = require('../ci-visibility/dynamic-instrumentation')
       this.di = testVisibilityDynamicInstrumentation
-    }
-
-    if (!shouldGetEnvironmentData) {
-      return
     }
 
     this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.id, this.config)

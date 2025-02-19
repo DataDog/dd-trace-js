@@ -987,7 +987,7 @@ versions.forEach((version) => {
     // dynamic instrumentation only supported from >=2.0.0
     if (version === 'latest') {
       context('dynamic instrumentation', () => {
-        it('does not activate it if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
+        it('does not activate it if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
             di_enabled: true
@@ -1025,7 +1025,8 @@ versions.forEach((version) => {
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
                 TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false'
               },
               stdio: 'pipe'
             }
@@ -1075,8 +1076,7 @@ versions.forEach((version) => {
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
                 TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-                DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: '1'
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
               },
               stdio: 'pipe'
             }
@@ -1162,8 +1162,7 @@ versions.forEach((version) => {
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
                 TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-                DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: '1'
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
               },
               stdio: 'pipe'
             }
@@ -1217,8 +1216,7 @@ versions.forEach((version) => {
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
                 TEST_DIR: 'ci-visibility/vitest-tests/breakpoint-not-hit*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-                DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: '1'
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
               },
               stdio: 'pipe'
             }
