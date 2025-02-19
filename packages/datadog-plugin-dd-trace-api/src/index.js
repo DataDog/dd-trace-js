@@ -28,7 +28,7 @@ module.exports = class DdTraceApiPlugin extends Plugin {
     })
 
     const handleEvent = (name) => {
-      const counter = apiMetrics.count('dd_trace_api.called', [
+      const counter = apiMetrics.count('public_api.called', [
         `name:${name.replaceAll(':', '.')}`,
         'api_version:v1',
         injectionEnabledTag
@@ -48,14 +48,6 @@ module.exports = class DdTraceApiPlugin extends Plugin {
           self = objectMap.get(self)
         }
 
-        // `trace` returns the value that's returned from the original callback
-        // passed to it, so we need to detect that happening and bypass the check
-        // for a proxy, since a proxy isn't needed, since the object originates
-        // from the caller. In callbacks, we'll assign return values to this
-        // value, and bypass the proxy check if `ret.value` is exactly this
-        // value.
-        let passthroughRetVal
-
         for (let i = 0; i < args.length; i++) {
           if (objectMap.has(args[i])) {
             args[i] = objectMap.get(args[i])
@@ -71,8 +63,7 @@ module.exports = class DdTraceApiPlugin extends Plugin {
                 }
               }
               // TODO do we need to apply(this, ...) here?
-              passthroughRetVal = orig(...fnArgs)
-              return passthroughRetVal
+              return orig(...fnArgs)
             }
           }
         }
@@ -83,8 +74,6 @@ module.exports = class DdTraceApiPlugin extends Plugin {
             const proxyVal = proxy()
             objectMap.set(proxyVal, ret.value)
             ret.value = proxyVal
-          } else if (ret.value && typeof ret.value === 'object' && passthroughRetVal !== ret.value) {
-            throw new TypeError(`Objects need proxies when returned via API (${name})`)
           }
         } catch (e) {
           ret.error = e

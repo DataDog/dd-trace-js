@@ -6,14 +6,14 @@ const {
   AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const semver = require('semver')
+const satisfies = require('semifies')
 
 function wrapConnection (Connection, version) {
   const startCh = channel('apm:mysql2:query:start')
   const finishCh = channel('apm:mysql2:query:finish')
   const errorCh = channel('apm:mysql2:query:error')
   const startOuterQueryCh = channel('datadog:mysql2:outerquery:start')
-  const shouldEmitEndAfterQueryAbort = semver.intersects(version, '>=1.3.3')
+  const shouldEmitEndAfterQueryAbort = satisfies(version, '>=1.3.3')
 
   shimmer.wrap(Connection.prototype, 'addCommand', addCommand => function (cmd) {
     if (!startCh.hasSubscribers) return addCommand.apply(this, arguments)
@@ -154,7 +154,7 @@ function wrapConnection (Connection, version) {
 }
 function wrapPool (Pool, version) {
   const startOuterQueryCh = channel('datadog:mysql2:outerquery:start')
-  const shouldEmitEndAfterQueryAbort = semver.intersects(version, '>=1.3.3')
+  const shouldEmitEndAfterQueryAbort = satisfies(version, '>=1.3.3')
 
   shimmer.wrap(Pool.prototype, 'query', query => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return query.apply(this, arguments)
