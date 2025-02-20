@@ -153,7 +153,7 @@ describe('Plugin', () => {
                   region: 'us-east-1',
                   'aws.request.body.TableName': oneKeyTableName,
                   'aws.request.body.Item.name': 'redacted',
-                  'aws.request.body.Item.data.S': 'test-data',
+                  'aws.request.body.Item.data.S': 'test-data'
                 })
               })
               .then(done, done)
@@ -182,7 +182,7 @@ describe('Plugin', () => {
                   region: 'us-east-1',
                   'aws.request.body.TableName': oneKeyTableName,
                   'aws.request.body.Key.name.S': 'test-name',
-                  'aws.request.body.AttributeUpdates.data.Value.S': 'updated-data',
+                  'aws.request.body.AttributeUpdates.data.Value.S': 'updated-data'
                 })
               })
               .then(done, done)
@@ -215,7 +215,7 @@ describe('Plugin', () => {
                   aws_service: 'DynamoDB',
                   region: 'us-east-1',
                   'aws.request.body.TableName': oneKeyTableName,
-                  'aws.request.body.Key.name.S': 'test-name',
+                  'aws.request.body.Key.name.S': 'test-name'
                 })
               })
               .then(done, done)
