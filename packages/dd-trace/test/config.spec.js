@@ -2347,11 +2347,13 @@ describe('Config', () => {
     const os = require('os')
     const fs = require('fs')
     const path = require('path')
+    // os.tmpdir returns undefined on Windows somehow
+    const baseTempDir = os.platform() !== 'win32' ? os.tmpdir() : 'C:\\Windows\\Temp'
     let env
     let tempDir
     beforeEach(() => {
       env = process.env
-      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'config-test-'))
+      tempDir = fs.mkdtempSync(path.join(baseTempDir, 'config-test-'))
       process.env.DD_TEST_LOCAL_CONFIG_PATH = path.join(tempDir, 'local.yaml')
       process.env.DD_TEST_FLEET_CONFIG_PATH = path.join(tempDir, 'fleet.yaml')
     })
