@@ -6,7 +6,6 @@ const { expect } = require('chai')
 const { readFileSync } = require('fs')
 const sinon = require('sinon')
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
-const path = require('path')
 
 describe('Config', () => {
   let Config
@@ -2345,6 +2344,9 @@ describe('Config', () => {
   })
 
   context('library config', () => {
+    const os = require('os')
+    const fs = require('fs')
+    const path = require('path')
     let env
     let tempDir
     beforeEach(() => {

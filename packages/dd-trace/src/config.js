@@ -237,7 +237,7 @@ function reformatSpanSamplingRules (rules) {
 
 class Config {
   constructor (options = {}) {
-    const { localFileConfigEntries, fleetFileConfigEntries } = this.getStableConfig()
+    const { localFileConfigEntries, fleetFileConfigEntries, fileConfigWarnings } = this.getStableConfig()
 
     options = {
       ...options,
@@ -266,6 +266,11 @@ class Config {
 
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel)
+
+    // Process file config warnings, if any
+    for (const warning of fileConfigWarnings) {
+      log.warn(warning)
+    }
 
     checkIfBothOtelAndDdEnvVarSet()
 
@@ -412,9 +417,10 @@ class Config {
     // Note: we use maybeLoad because there may be cases where the library is not available and we
     // want to avoid breaking the application. In those cases, we will not have the file-based configuration.
     const libconfig = libdatadog.maybeLoad('library_config')
+    const fileConfigWarnings = [] // Logger hasn't been initialized yet, so we can't use log.warn
     const localFileConfigEntries = {}
     const fleetFileConfigEntries = {}
-    if (libconfig != null) {
+    if (libconfig !== undefined) {
       const configurator = new libconfig.JsConfigurator()
 
       const localConfigPath = process.env.DD_TEST_LOCAL_CONFIG_PATH ??
@@ -425,11 +431,19 @@ class Config {
       let localConfig = ''
       try {
         localConfig = fs.readFileSync(localConfigPath, 'utf8')
-      } catch (err) {}
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          fileConfigWarnings.push(`Error reading local config file: ${localConfigPath}`)
+        }
+      }
       let fleetConfig = ''
       try {
         fleetConfig = fs.readFileSync(fleetConfigPath, 'utf8')
-      } catch (err) {}
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          fileConfigWarnings.push(`Error reading fleet config file: ${fleetConfigPath}`)
+        }
+      }
 
       if (localConfig || fleetConfig) {
         configurator.set_envp(Object.entries(process.env).map(([key, value]) => `${key}=${value}`))
@@ -443,7 +457,7 @@ class Config {
         })
       }
     }
-    return { localFileConfigEntries, fleetFileConfigEntries }
+    return { localFileConfigEntries, fleetFileConfigEntries, fileConfigWarnings }
   }
 
   // Supports only a subset of options for now.
@@ -664,11 +678,7 @@ class Config {
     this._setBoolean(obj, 'iast.enabled', DD_IAST_ENABLED)
     this._setBoolean(obj, 'logInjection', DD_LOGS_INJECTION)
     const profilingEnabledEnv = DD_PROFILING_ENABLED
-    const profilingEnabled = isTrue(profilingEnabledEnv)
-      ? 'true'
-      : isFalse(profilingEnabledEnv)
-        ? 'false'
-        : profilingEnabledEnv === 'auto' ? 'auto' : undefined
+    const profilingEnabled = this._normalizeProfilingEnabledValue(profilingEnabledEnv)
     this._setString(obj, 'profiling.enabled', profilingEnabled)
     this._setBoolean(obj, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED)
     this._setString(obj, 'service', DD_SERVICE)
@@ -921,11 +931,7 @@ class Config {
     }
     this._setString(env, 'port', DD_TRACE_AGENT_PORT)
     const profilingEnabledEnv = coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED)
-    const profilingEnabled = isTrue(profilingEnabledEnv)
-      ? 'true'
-      : isFalse(profilingEnabledEnv)
-        ? 'false'
-        : profilingEnabledEnv === 'auto' ? 'auto' : undefined
+    const profilingEnabled = this._normalizeProfilingEnabledValue(profilingEnabledEnv)
     this._setString(env, 'profiling.enabled', profilingEnabled)
     this._setString(env, 'profiling.exporters', DD_PROFILING_EXPORTERS)
     this._setBoolean(env, 'profiling.sourceMap', DD_PROFILING_SOURCE_MAP && !isFalse(DD_PROFILING_SOURCE_MAP))
@@ -1194,6 +1200,14 @@ class Config {
     )
 
     return spanComputePeerService
+  }
+
+  _normalizeProfilingEnabledValue (configValue) {
+    return isTrue(configValue)
+      ? 'true'
+      : isFalse(configValue)
+        ? 'false'
+        : configValue === 'auto' ? 'auto' : undefined
   }
 
   _isCiVisibilityGitUploadEnabled () {
