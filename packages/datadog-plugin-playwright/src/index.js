@@ -11,12 +11,15 @@ const {
   TEST_SOURCE_START,
   TEST_CODE_OWNERS,
   TEST_SOURCE_FILE,
-  TEST_CONFIGURATION_BROWSER_NAME,
+  TEST_PARAMETERS,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TELEMETRY_TEST_SESSION,
-  TEST_RETRY_REASON
+  TEST_RETRY_REASON,
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_BROWSER_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -38,7 +41,12 @@ class PlaywrightPlugin extends CiPlugin {
     this.numFailedTests = 0
     this.numFailedSuites = 0
 
-    this.addSub('ci:playwright:session:finish', ({ status, isEarlyFlakeDetectionEnabled, onDone }) => {
+    this.addSub('ci:playwright:session:finish', ({
+      status,
+      isEarlyFlakeDetectionEnabled,
+      isQuarantinedTestsEnabled,
+      onDone
+    }) => {
       this.testModuleSpan.setTag(TEST_STATUS, status)
       this.testSessionSpan.setTag(TEST_STATUS, status)
 
@@ -54,6 +62,10 @@ class PlaywrightPlugin extends CiPlugin {
         const error = new Error(errorMessage)
         this.testModuleSpan.setTag('error', error)
         this.testSessionSpan.setTag('error', error)
+      }
+
+      if (isQuarantinedTestsEnabled) {
+        this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
 
       this.testModuleSpan.finish()
@@ -128,7 +140,16 @@ class PlaywrightPlugin extends CiPlugin {
 
       this.enter(span, store)
     })
-    this.addSub('ci:playwright:test:finish', ({ testStatus, steps, error, extraTags, isNew, isEfdRetry, isRetry }) => {
+    this.addSub('ci:playwright:test:finish', ({
+      testStatus,
+      steps,
+      error,
+      extraTags,
+      isNew,
+      isEfdRetry,
+      isRetry,
+      isQuarantined
+    }) => {
       const store = storage('legacy').getStore()
       const span = store && store.span
       if (!span) return
@@ -150,6 +171,9 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (isRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
+      }
+      if (isQuarantined) {
+        span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
       }
 
       steps.forEach(step => {
@@ -202,7 +226,9 @@ class PlaywrightPlugin extends CiPlugin {
       extraTags[TEST_SOURCE_FILE] = testSourceFile || testSuite
     }
     if (browserName) {
-      extraTags[TEST_CONFIGURATION_BROWSER_NAME] = browserName
+      // Added as parameter too because it should affect the test fingerprint
+      extraTags[TEST_PARAMETERS] = JSON.stringify({ arguments: { browser: browserName }, metadata: {} })
+      extraTags[TEST_BROWSER_NAME] = browserName
     }
 
     return super.startTestSpan(testName, testSuite, testSuiteSpan, extraTags)

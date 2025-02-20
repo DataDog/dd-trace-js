@@ -102,7 +102,9 @@ class HttpClientPlugin extends ClientPlugin {
       addResponseHeaders(res, span, this.config)
     }
 
-    addRequestHeaders(req, span, this.config)
+    if (req) {
+      addRequestHeaders(req, span, this.config)
+    }
 
     this.config.hooks.request(span, req, res)
 
