@@ -654,7 +654,7 @@ module.exports = {
         [CI_JOB_NAME]: DRONE_STEP_NAME,
         [CI_STAGE_NAME]: DRONE_STAGE_NAME,
         [CI_WORKSPACE_PATH]: DRONE_WORKSPACE,
-        [CI_ENV_VARS]: 'XXX', // MISSING
+        [CI_ENV_VARS]: JSON.stringify({ }), // MISSING
         [GIT_REPOSITORY_URL]: DRONE_GIT_HTTP_URL,
         [GIT_COMMIT_SHA]: DRONE_COMMIT_SHA,
         [GIT_BRANCH]: DRONE_BRANCH,
