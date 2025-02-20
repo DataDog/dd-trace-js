@@ -222,7 +222,9 @@ function onExpressSession ({ req, res, sessionId, abortController }) {
     return
   }
 
-  // do not call this if the SDK already called it
+  const isSdkCalled = rootSpan.context()._tags['usr.session_id']
+  if (isSdkCalled) return
+
   const results = waf.run({
     persistent: {
       [addresses.USER_SESSION_ID]: sessionId
