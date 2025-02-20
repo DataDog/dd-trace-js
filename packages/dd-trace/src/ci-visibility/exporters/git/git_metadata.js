@@ -5,6 +5,7 @@ const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
 
 const log = require('../../../log')
+const { isFalse } = require('../../../util')
 const {
   getLatestCommits,
   getRepositoryUrl,
@@ -284,7 +285,9 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     }
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
-    unshallowRepository()
+    if (!isFalse(process.env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED)) {
+      unshallowRepository()
+    }
 
     // The latest commits change after unshallowing
     latestCommits = getLatestCommits()
