@@ -47,6 +47,7 @@ module.exports = {
   elasticsearch: () => require('../elasticsearch'),
   express: () => require('../express'),
   'express-mongo-sanitize': () => require('../express-mongo-sanitize'),
+  'express-session': () => require('../express-session'),
   fastify: () => require('../fastify'),
   'find-my-way': () => require('../find-my-way'),
   fs: () => require('../fs'),

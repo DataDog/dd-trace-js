@@ -67,19 +67,22 @@ describe('set_user', () => {
         const user = {
           id: '123',
           email: 'a@b.c',
-          custom: 'hello'
+          custom: 'hello',
+          session_id: '133769'
         }
 
         setUser(tracer, user)
         expect(log.warn).to.not.have.been.called
-        expect(rootSpan.setTag.callCount).to.equal(4)
+        expect(rootSpan.setTag.callCount).to.equal(5)
         expect(rootSpan.setTag.getCall(0)).to.have.been.calledWithExactly('usr.id', '123')
         expect(rootSpan.setTag.getCall(1)).to.have.been.calledWithExactly('usr.email', 'a@b.c')
         expect(rootSpan.setTag.getCall(2)).to.have.been.calledWithExactly('usr.custom', 'hello')
-        expect(rootSpan.setTag.getCall(3)).to.have.been.calledWithExactly('_dd.appsec.user.collection_mode', 'sdk')
+        expect(rootSpan.setTag.getCall(3)).to.have.been.calledWithExactly('usr.session_id', '133769')
+        expect(rootSpan.setTag.getCall(4)).to.have.been.calledWithExactly('_dd.appsec.user.collection_mode', 'sdk')
         expect(waf.run).to.have.been.calledOnceWithExactly({
           persistent: {
-            'usr.id': '123'
+            'usr.id': '123',
+            'usr.session_id': '133769'
           }
         })
       })
@@ -134,7 +137,8 @@ describe('set_user', () => {
           tracer.appsec.setUser({
             id: 'blockedUser',
             email: 'a@b.c',
-            custom: 'hello'
+            custom: 'hello',
+            session_id: '133769'
           })
           res.end()
         }
@@ -142,6 +146,7 @@ describe('set_user', () => {
           expect(traces[0][0].meta).to.have.property('usr.id', 'blockedUser')
           expect(traces[0][0].meta).to.have.property('usr.email', 'a@b.c')
           expect(traces[0][0].meta).to.have.property('usr.custom', 'hello')
+          expect(traces[0][0].meta).to.have.property('usr.session_id', '133769')
           expect(traces[0][0].meta).to.have.property('_dd.appsec.user.collection_mode', 'sdk')
           expect(traces[0][0].meta).to.have.property('appsec.event', 'true')
           expect(traces[0][0].meta).to.not.have.property('appsec.blocked')
