@@ -43,10 +43,8 @@ function wrapGenerateStream (generateStream) {
         return stream.response
       }).then(response => {
         // vertexai aggregates the streamed response on the stream.response promise
-        vertexaiTracingChannel.asyncEnd.publish({
-          ...ctx,
-          result: { response }
-        })
+        ctx.result = { response }
+        vertexaiTracingChannel.asyncEnd.publish(ctx)
         return streamingResult
       })
     })
