@@ -12,7 +12,8 @@ const requestChannel = dc.tracingChannel('datadog:apollo:request')
 let HeaderMap
 
 function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
-  return async function executeHTTPGraphQLRequest () {
+  // The original function is async, but no need to mark it as such as long as it returns a promise
+  return function executeHTTPGraphQLRequest () {
     if (!HeaderMap || !requestChannel.start.hasSubscribers) {
       return originalExecuteHTTPGraphQLRequest.apply(this, arguments)
     }

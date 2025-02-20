@@ -76,12 +76,12 @@ async function removeBreakpoint ({ id }) {
   if (breakpoints.size === 0) return stop() // return instead of await to reduce number of promises created
 }
 
-async function start () {
+function start () {
   sessionStarted = true
   return session.post('Debugger.enable') // return instead of await to reduce number of promises created
 }
 
-async function stop () {
+function stop () {
   sessionStarted = false
   return session.post('Debugger.disable') // return instead of await to reduce number of promises created
 }
