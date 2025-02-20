@@ -136,6 +136,16 @@ describe('blocking', () => {
       })
       expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('jsonBody')
     })
+
+    it('should set block failed tag when express res end throws an error', () => {
+      res.constructor.prototype.end.throws(new Error('End failed'))
+
+      block(req, res, rootSpan)
+
+      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({ '_dd.appsec.block.failed': 1 })
+      expect(res.writeHead).to.have.been.calledOnce
+      expect(res.constructor.prototype.end).to.have.been.calledOnce
+    })
   })
 
   describe('block with default templates', () => {
