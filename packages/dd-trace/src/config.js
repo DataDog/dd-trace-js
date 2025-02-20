@@ -423,7 +423,7 @@ class Config {
         break
       case 'darwin':
         localConfigPath = '/opt/datadog-agent/etc/application_monitoring.yaml'
-        fleetConfigPath = '/opt/datadog-agent/etc/stable/application_monitoring.yaml'
+        fleetConfigPath = '/opt/datadog-agent/etc/managed/datadog-agent/stable/application_monitoring.yaml'
         break
       case 'win32':
         localConfigPath = 'C:\\ProgramData\\Datadog\\application_monitoring.yaml'
