@@ -200,16 +200,30 @@ describe('reporter', () => {
       expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
     })
 
-    it('should set blockTriggered when provided', () => {
-      const metrics = { blockTriggered: true }
+    it('should set max truncation string length metric if set', () => {
+      Reporter.reportMetrics({ maxTruncatedString: 300 })
 
-      Reporter.reportMetrics(metrics, null)
-
-      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
+      expect(web.root).to.have.been.calledOnceWithExactly(req)
+      expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.truncated.string_length', 300)
     })
 
-    it('should set wafTimeout when result has timeout', () => {
-      const metrics = { timeout: true }
+    it('should set max truncation container size metric if set', () => {
+      Reporter.reportMetrics({ maxTruncatedContainerSize: 200 })
+
+      expect(web.root).to.have.been.calledOnceWithExactly(req)
+      expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.truncated.container_size', 200)
+    })
+
+    it('should set max truncation container depth metric if set', () => {
+      Reporter.reportMetrics({ maxTruncatedContainerDepth: 100 })
+
+      expect(web.root).to.have.been.calledOnceWithExactly(req)
+      expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.truncated.container_depth', 100)
+    })
+
+    it('should call updateWafRequestsMetricTags', () => {
+      const metrics = { rulesVersion: '1.2.3' }
+      const store = storage('legacy').getStore()
 
       Reporter.reportMetrics(metrics)
 

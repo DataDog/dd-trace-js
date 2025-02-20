@@ -94,7 +94,26 @@ class WAFContextWrapper {
     try {
       const start = process.hrtime.bigint()
 
+      const metrics = {
+        rulesVersion: this.rulesVersion,
+        wafVersion: this.wafVersion
+      }
+
       const result = this.ddwafContext.run(payload, this.wafTimeout)
+
+      if (result) {
+        if (result.metrics?.maxTruncatedString) {
+          metrics.maxTruncatedString = result.metrics.maxTruncatedString
+        }
+
+        if (result.metrics?.maxTruncatedContainerSize) {
+          metrics.maxTruncatedContainerSize = result.metrics.maxTruncatedContainerSize
+        }
+
+        if (result.metrics?.maxTruncatedContainerDepth) {
+          metrics.maxTruncatedContainerDepth = result.metrics.maxTruncatedContainerDepth
+        }
+      }
 
       const end = process.hrtime.bigint()
 
