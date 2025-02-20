@@ -413,21 +413,54 @@ class Config {
     }
   }
 
+  _getStableConfigPaths () {
+    let localConfigPath = ''
+    let fleetConfigPath = ''
+
+    switch (os.type()) {
+      case 'linux':
+        localConfigPath = '/etc/datadog-agent/application_monitoring.yaml'
+        fleetConfigPath = '/etc/datadog-agent/managed/datadog-agent/stable/application_monitoring.yaml'
+        break
+      case 'darwin':
+        localConfigPath = '/opt/datadog-agent/etc/application_monitoring.yaml'
+        fleetConfigPath = '/opt/datadog-agent/etc/stable/application_monitoring.yaml'
+        break
+      case 'win32':
+        localConfigPath = 'C:\\ProgramData\\Datadog\\application_monitoring.yaml'
+        fleetConfigPath = 'C:\\ProgramData\\Datadog\\managed\\datadog-agent\\stable\\application_monitoring.yaml'
+        break
+      default:
+        break
+    }
+
+    // Allow overriding the paths for testing
+    if (process.env.DD_TEST_LOCAL_CONFIG_PATH) {
+      localConfigPath = process.env.DD_TEST_LOCAL_CONFIG_PATH
+    }
+    if (process.env.DD_TEST_FLEET_CONFIG_PATH) {
+      fleetConfigPath = process.env.DD_TEST_FLEET_CONFIG_PATH
+    }
+
+    return { localConfigPath, fleetConfigPath }
+  }
+
   getStableConfig () {
     // Note: we use maybeLoad because there may be cases where the library is not available and we
     // want to avoid breaking the application. In those cases, we will not have the file-based configuration.
-    const libconfig = libdatadog.maybeLoad('library_config')
     const fileConfigWarnings = [] // Logger hasn't been initialized yet, so we can't use log.warn
     const localFileConfigEntries = {}
     const fleetFileConfigEntries = {}
+
+    const { localConfigPath, fleetConfigPath } = this._getStableConfigPaths()
+    if (!fs.existsSync(localConfigPath) && !fs.existsSync(fleetConfigPath)) {
+      // Check if files exist, if not bail out early to avoid unnecessary library loading
+      return { localFileConfigEntries, fleetFileConfigEntries, fileConfigWarnings }
+    }
+
+    const libconfig = libdatadog.maybeLoad('library_config')
     if (libconfig !== undefined) {
       const configurator = new libconfig.JsConfigurator()
-
-      const localConfigPath = process.env.DD_TEST_LOCAL_CONFIG_PATH ??
-        configurator.get_config_local_path(process.platform)
-      const fleetConfigPath = process.env.DD_TEST_FLEET_CONFIG_PATH ??
-        configurator.get_config_managed_path(process.platform)
-
       let localConfig = ''
       try {
         localConfig = fs.readFileSync(localConfigPath, 'utf8')
