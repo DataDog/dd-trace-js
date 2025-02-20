@@ -416,8 +416,7 @@ class Config {
   _getStableConfigPaths () {
     let localConfigPath = ''
     let fleetConfigPath = ''
-
-    switch (os.type()) {
+    switch (os.type().toLowerCase()) {
       case 'linux':
         localConfigPath = '/etc/datadog-agent/application_monitoring.yaml'
         fleetConfigPath = '/etc/datadog-agent/managed/datadog-agent/stable/application_monitoring.yaml'
@@ -435,10 +434,10 @@ class Config {
     }
 
     // Allow overriding the paths for testing
-    if (process.env.DD_TEST_LOCAL_CONFIG_PATH) {
+    if (process.env.DD_TEST_LOCAL_CONFIG_PATH !== undefined) {
       localConfigPath = process.env.DD_TEST_LOCAL_CONFIG_PATH
     }
-    if (process.env.DD_TEST_FLEET_CONFIG_PATH) {
+    if (process.env.DD_TEST_FLEET_CONFIG_PATH !== undefined) {
       fleetConfigPath = process.env.DD_TEST_FLEET_CONFIG_PATH
     }
 
