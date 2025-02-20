@@ -4,6 +4,7 @@ const log = require('../log')
 const blockedTemplates = require('./blocked_templates')
 
 const detectedSpecificEndpoints = {}
+const MAX_ERROR_MESSAGE_LENGTH = 512
 
 let templateHtml = blockedTemplates.html
 let templateJson = blockedTemplates.json
@@ -105,24 +106,51 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
     return
   }
 
-  const { body, headers, statusCode } = getBlockingData(req, null, actionParameters)
+  try {
+    const { body, headers, statusCode } = getBlockingData(req, null, actionParameters)
 
-  rootSpan.addTags({
-    'appsec.blocked': 'true'
-  })
+    for (const headerName of res.getHeaderNames()) {
+      res.removeHeader(headerName)
+    }
 
-  for (const headerName of res.getHeaderNames()) {
-    res.removeHeader(headerName)
+    res.writeHead(statusCode, headers)
+
+    // this is needed to call the original end method, since express-session replaces it
+    res.constructor.prototype.end.call(res, body)
+
+    responseBlockedSet.add(res)
+
+    abortController?.abort()
+
+    rootSpan.addTags({
+      'appsec.blocked': true
+    })
+  } catch (error) {
+    rootSpan.addTags({
+      '_dd.appsec.block.failed': 1
+    })
+
+    if (error.name) {
+      rootSpan.addTags({
+        '_dd.appsec.error.type': error.name // check telemetry logs section
+      })
+    }
+
+    if (error.message) {
+      rootSpan.addTags({
+        '_dd.appsec.error.message': truncateMessage(error.message)
+      })
+    }
+  }
+}
+
+function truncateMessage (msg) {
+  const buf = Buffer.from(msg, 'utf8')
+  if (buf.length <= MAX_ERROR_MESSAGE_LENGTH) {
+    return msg
   }
 
-  res.writeHead(statusCode, headers)
-
-  // this is needed to call the original end method, since express-session replaces it
-  res.constructor.prototype.end.call(res, body)
-
-  responseBlockedSet.add(res)
-
-  abortController?.abort()
+  return buf.subarray(0, MAX_ERROR_MESSAGE_LENGTH).toString('utf8')
 }
 
 function getBlockingAction (actions) {
