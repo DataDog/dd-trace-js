@@ -509,7 +509,7 @@ describe('jest CommonJS', () => {
         }).catch(done)
     })
 
-    it('can work with Dynamic Instrumentation', (done) => {
+    it('can work with Failed Test Replay', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -565,7 +565,6 @@ describe('jest CommonJS', () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'dynamic-instrumentation/test-',
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             RUN_IN_PARALLEL: true
           },
@@ -2537,7 +2536,7 @@ describe('jest CommonJS', () => {
   })
 
   context('dynamic instrumentation', () => {
-    it('does not activate dynamic instrumentation if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
+    it('does not activate dynamic instrumentation if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -2571,7 +2570,8 @@ describe('jest CommonJS', () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
-            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false'
           },
           stdio: 'inherit'
         }
@@ -2618,7 +2618,6 @@ describe('jest CommonJS', () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
@@ -2703,7 +2702,6 @@ describe('jest CommonJS', () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
@@ -2753,7 +2751,6 @@ describe('jest CommonJS', () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'dynamic-instrumentation/test-not-hit-breakpoint',
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
@@ -2793,7 +2790,6 @@ describe('jest CommonJS', () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             TEST_SHOULD_PASS_AFTER_RETRY: '1'
           },

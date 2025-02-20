@@ -2821,7 +2821,10 @@ describe('Plugin', () => {
             }
 
             if (semver.satisfies(realVersion, '>=4.0.0')) {
-              const result = await openai.chat.completions.create(params)
+              const prom = openai.chat.completions.create(params)
+              expect(prom).to.have.property('withResponse')
+
+              const result = await prom
 
               expect(result.id).to.eql('chatcmpl-7GaWqyMTD9BLmkmy8SxyjUGX3KSRN')
               expect(result.model).to.eql('gpt-3.5-turbo-0301')
@@ -3784,6 +3787,55 @@ describe('Plugin', () => {
               await checkTraces
             })
           }
+        })
+      }
+
+      if (semver.intersects('>=4.59.0', version)) {
+        it('makes a successful call with the beta chat completions', async () => {
+          nock('https://api.openai.com:443')
+            .post('/v1/chat/completions')
+            .reply(200, {
+              id: 'chatcmpl-7GaWqyMTD9BLmkmy8SxyjUGX3KSRN',
+              object: 'chat.completion',
+              created: 1684188020,
+              model: 'gpt-4o',
+              usage: {
+                prompt_tokens: 37,
+                completion_tokens: 10,
+                total_tokens: 47
+              },
+              choices: [
+                {
+                  message: {
+                    role: 'assistant',
+                    content: 'I am doing well, how about you?'
+                  },
+                  finish_reason: 'stop',
+                  index: 0
+                }
+              ]
+            })
+
+          const checkTraces = agent
+            .use(traces => {
+              const span = traces[0][0]
+              expect(span).to.have.property('name', 'openai.request')
+            })
+
+          const prom = openai.beta.chat.completions.parse({
+            model: 'gpt-4o',
+            messages: [{ role: 'user', content: 'Hello, OpenAI!', name: 'hunter2' }],
+            temperature: 0.5,
+            stream: false
+          })
+
+          expect(prom).to.have.property('withResponse')
+
+          const response = await prom
+
+          expect(response.choices[0].message.content).to.eql('I am doing well, how about you?')
+
+          await checkTraces
         })
       }
     })

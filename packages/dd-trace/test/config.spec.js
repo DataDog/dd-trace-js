@@ -228,7 +228,7 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', [])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', [])
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
-    expect(config).to.have.property('traceId128BitLoggingEnabled', false)
+    expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
     expect(config.grpc.client.error.statuses).to.deep.equal(GRPC_CLIENT_ERROR_STATUSES)
     expect(config.grpc.server.error.statuses).to.deep.equal(GRPC_SERVER_ERROR_STATUSES)
@@ -393,7 +393,7 @@ describe('Config', () => {
       { name: 'telemetry.logCollection', value: true, origin: 'default' },
       { name: 'telemetry.metrics', value: true, origin: 'default' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'default' },
-      { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' },
+      { name: 'traceId128BitLoggingEnabled', value: true, origin: 'default' },
       { name: 'tracing', value: true, origin: 'default' },
       { name: 'url', value: undefined, origin: 'default' },
       { name: 'version', value: '', origin: 'default' }
@@ -2039,7 +2039,7 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
       delete process.env.DD_TEST_SESSION_NAME
       delete process.env.JEST_WORKER_ID
-      delete process.env.DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED
+      delete process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED
       delete process.env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED
       options = {}
     })
@@ -2138,15 +2138,16 @@ describe('Config', () => {
         const config = new Config(options)
         expect(config).to.have.property('ciVisAgentlessLogSubmissionEnabled', true)
       })
-      it('should not set isTestDynamicInstrumentationEnabled by default', () => {
-        const config = new Config(options)
-        expect(config).to.have.property('isTestDynamicInstrumentationEnabled', false)
-      })
-      it('should set isTestDynamicInstrumentationEnabled if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is passed', () => {
-        process.env.DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+      it('should set isTestDynamicInstrumentationEnabled by default', () => {
         const config = new Config(options)
         expect(config).to.have.property('isTestDynamicInstrumentationEnabled', true)
       })
+      it('should set isTestDynamicInstrumentationEnabled to false if DD_TEST_FAILED_TEST_REPLAY_ENABLED is false',
+        () => {
+          process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED = 'false'
+          const config = new Config(options)
+          expect(config).to.have.property('isTestDynamicInstrumentationEnabled', false)
+        })
     })
     context('ci visibility mode is not enabled', () => {
       it('should not activate intelligent test runner or git metadata upload', () => {
