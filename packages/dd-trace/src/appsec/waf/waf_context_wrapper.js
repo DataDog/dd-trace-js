@@ -17,8 +17,8 @@ class WAFContextWrapper {
     this.wafTimeout = wafTimeout
     this.wafVersion = wafVersion
     this.rulesVersion = rulesVersion
-    this.addressesToSkip = new Set()
     this.knownAddresses = knownAddresses
+    this.addressesToSkip = new Set()
     this.cachedUserIdActions = new Map()
   }
 
@@ -80,7 +80,26 @@ class WAFContextWrapper {
     try {
       const start = process.hrtime.bigint()
 
+      const metrics = {
+        rulesVersion: this.rulesVersion,
+        wafVersion: this.wafVersion
+      }
+
       const result = this.ddwafContext.run(payload, this.wafTimeout)
+
+      if (result) {
+        if (result.metrics?.maxTruncatedString) {
+          metrics.maxTruncatedString = result.metrics.maxTruncatedString
+        }
+
+        if (result.metrics?.maxTruncatedContainerSize) {
+          metrics.maxTruncatedContainerSize = result.metrics.maxTruncatedContainerSize
+        }
+
+        if (result.metrics?.maxTruncatedContainerDepth) {
+          metrics.maxTruncatedContainerDepth = result.metrics.maxTruncatedContainerDepth
+        }
+      }
 
       const end = process.hrtime.bigint()
 
@@ -97,12 +116,11 @@ class WAFContextWrapper {
       }
 
       Reporter.reportMetrics({
+        ...metrics,
         duration: result.totalRuntime / 1e3,
         durationExt: parseInt(end - start) / 1e3,
-        rulesVersion: this.rulesVersion,
         ruleTriggered,
         blockTriggered,
-        wafVersion: this.wafVersion,
         wafTimeout: result.timeout
       }, raspRule)
 

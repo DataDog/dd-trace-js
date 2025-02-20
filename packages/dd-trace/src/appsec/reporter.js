@@ -114,6 +114,22 @@ function reportMetrics (metrics, raspRule) {
   } else {
     updateWafRequestsMetricTags(metrics, store.req)
   }
+
+  reportTruncationMetrics(rootSpan, metrics)
+}
+
+function reportTruncationMetrics (rootSpan, metrics) {
+  if (metrics.maxTruncatedString) {
+    rootSpan.setTag('_dd.appsec.truncated.string_length', metrics.maxTruncatedString)
+  }
+
+  if (metrics.maxTruncatedContainerSize) {
+    rootSpan.setTag('_dd.appsec.truncated.container_size', metrics.maxTruncatedContainerSize)
+  }
+
+  if (metrics.maxTruncatedContainerDepth) {
+    rootSpan.setTag('_dd.appsec.truncated.container_depth', metrics.maxTruncatedContainerDepth)
+  }
 }
 
 function reportAttack (attackData) {

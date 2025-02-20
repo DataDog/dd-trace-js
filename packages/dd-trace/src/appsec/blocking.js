@@ -120,11 +120,11 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
 
     responseBlockedSet.add(res)
 
+    abortController.abort()
+
     rootSpan.addTags({
       'appsec.blocked': 'true'
     })
-
-    abortController?.abort()
   } catch (err) {
     rootSpan.addTags({
       '_dd.appsec.block.failed': 1

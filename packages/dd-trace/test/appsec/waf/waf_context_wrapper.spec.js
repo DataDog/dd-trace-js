@@ -154,4 +154,59 @@ describe('WAFContextWrapper', () => {
       sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Calling run on a disposed context')
     })
   })
+
+  describe('Truncation handling', () => {
+    let ddwafContext, wafContextWrapper, Reporter, WAFContextWrapper
+
+    beforeEach(() => {
+      ddwafContext = {
+        run: sinon.stub(),
+        disposed: false
+      }
+
+      Reporter = {
+        reportMetrics: sinon.stub(),
+        reportAttack: sinon.stub(),
+        reportDerivatives: sinon.stub()
+      }
+
+      WAFContextWrapper = proxyquire('../../../src/appsec/waf/waf_context_wrapper', {
+        '../reporter': Reporter
+      })
+
+      wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
+    })
+
+    it('Should report truncations', () => {
+      const payload = {
+        persistent: {
+          [addresses.HTTP_INCOMING_QUERY]: {
+            value: 'test'
+          }
+        }
+      }
+
+      const wafResult = {
+        metrics: {
+          maxTruncatedString: 6000,
+          maxTruncatedContainerSize: 400,
+          maxTruncatedContainerDepth: 20
+        },
+        totalRuntime: 100,
+        events: [],
+        actions: [],
+        timeout: false,
+        derivatives: {}
+      }
+      ddwafContext.run.returns(wafResult)
+
+      wafContextWrapper.run(payload)
+      const reportedMetricsCall = Reporter.reportMetrics.firstCall
+      expect(reportedMetricsCall.args[0]).to.include({
+        maxTruncatedString: 6000,
+        maxTruncatedContainerSize: 400,
+        maxTruncatedContainerDepth: 20
+      })
+    })
+  })
 })
