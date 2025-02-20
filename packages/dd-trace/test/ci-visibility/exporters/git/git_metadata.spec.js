@@ -48,8 +48,6 @@ describe('git_metadata', () => {
     isShallowRepositoryStub = sinon.stub().returns(false)
     unshallowRepositoryStub = sinon.stub()
 
-    process.env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = true
-
     generatePackFilesForCommitsStub = sinon.stub().returns([temporaryPackFile])
 
     gitMetadata = proxyquire('../../../../src/ci-visibility/exporters/git/git_metadata', {
