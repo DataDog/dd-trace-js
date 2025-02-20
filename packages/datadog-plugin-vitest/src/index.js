@@ -18,7 +18,9 @@ const {
   TEST_IS_NEW,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
-  TEST_RETRY_REASON
+  TEST_RETRY_REASON,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -48,6 +50,20 @@ class VitestPlugin extends CiPlugin {
       onDone(!testsForThisTestSuite.includes(testName))
     })
 
+    this.addSub('ci:vitest:test:is-quarantined', ({ quarantinedTests, testSuiteAbsolutePath, testName, onDone }) => {
+      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const isQuarantined = quarantinedTests
+        ?.vitest
+        ?.suites
+        ?.[testSuite]
+        ?.tests
+        ?.[testName]
+        ?.properties
+        ?.quarantined
+
+      onDone(isQuarantined ?? false)
+    })
+
     this.addSub('ci:vitest:is-early-flake-detection-faulty', ({
       knownTests,
       testFilepaths,
@@ -66,6 +82,7 @@ class VitestPlugin extends CiPlugin {
       testSuiteAbsolutePath,
       isRetry,
       isNew,
+      isQuarantined,
       mightHitProbe,
       isRetryReasonEfd
     }) => {
@@ -83,6 +100,9 @@ class VitestPlugin extends CiPlugin {
       }
       if (isRetryReasonEfd) {
         extraTags[TEST_RETRY_REASON] = 'efd'
+      }
+      if (isQuarantined) {
+        extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
       }
 
       const span = this.startTestSpan(
@@ -257,6 +277,7 @@ class VitestPlugin extends CiPlugin {
       testCodeCoverageLinesTotal,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
+      isQuarantinedTestsEnabled,
       onFinish
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -274,6 +295,9 @@ class VitestPlugin extends CiPlugin {
       }
       if (isEarlyFlakeDetectionFaulty) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+      }
+      if (isQuarantinedTestsEnabled) {
+        this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')

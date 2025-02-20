@@ -54,13 +54,13 @@ function analyzeLfi (ctx) {
   if (!req || !fs) return
 
   getPaths(ctx, fs).forEach(path => {
-    const persistent = {
+    const ephemeral = {
       [FS_OPERATION_PATH]: path
     }
 
     const raspRule = { type: RULE_TYPES.LFI }
 
-    const result = waf.run({ persistent }, req, raspRule)
+    const result = waf.run({ ephemeral }, req, raspRule)
     handleResult(result, req, res, ctx.abortController, config)
   })
 }
