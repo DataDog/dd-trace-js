@@ -31,7 +31,7 @@ function setUser (tracer, user) {
   }
 
   if (user.session_id && typeof user.session_id === 'string') {
-    persistent['usr.session_id'] = user.session_id
+    persistent[addresses.USER_SESSION_ID] = user.session_id
   }
 
   waf.run({ persistent })
