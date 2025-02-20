@@ -13,7 +13,6 @@ const remoteConfig = require('./appsec/remote_config')
 const AppsecSdk = require('./appsec/sdk')
 const dogstatsd = require('./dogstatsd')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
-const spanleak = require('./spanleak')
 const { SSIHeuristics } = require('./profiling/ssi-heuristics')
 const appsecStandalone = require('./appsec/standalone')
 const LLMObsSDK = require('./llmobs/sdk')
@@ -80,6 +79,7 @@ class Tracer extends NoopProxy {
       }
 
       if (config.spanLeakDebug > 0) {
+        const spanleak = require('./spanleak')
         if (config.spanLeakDebug === spanleak.MODES.LOG) {
           spanleak.enableLogging()
         } else if (config.spanLeakDebug === spanleak.MODES.GC_AND_LOG) {
