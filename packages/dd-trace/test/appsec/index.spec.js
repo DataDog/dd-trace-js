@@ -12,6 +12,7 @@ const {
   incomingHttpRequestEnd,
   passportVerify,
   passportUser,
+  expressSession,
   queryParser,
   nextBodyParsed,
   nextQueryParsed,
@@ -179,6 +180,7 @@ describe('AppSec Index', function () {
       expect(cookieParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
       expect(passportUser.hasSubscribers).to.be.false
+      expect(expressSession.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(nextBodyParsed.hasSubscribers).to.be.false
       expect(nextQueryParsed.hasSubscribers).to.be.false
@@ -193,6 +195,7 @@ describe('AppSec Index', function () {
       expect(cookieParser.hasSubscribers).to.be.true
       expect(passportVerify.hasSubscribers).to.be.true
       expect(passportUser.hasSubscribers).to.be.true
+      expect(expressSession.hasSubscribers).to.be.true
       expect(queryParser.hasSubscribers).to.be.true
       expect(nextBodyParsed.hasSubscribers).to.be.true
       expect(nextQueryParsed.hasSubscribers).to.be.true
@@ -276,6 +279,7 @@ describe('AppSec Index', function () {
       expect(cookieParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
       expect(passportUser.hasSubscribers).to.be.false
+      expect(expressSession.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(nextBodyParsed.hasSubscribers).to.be.false
       expect(nextQueryParsed.hasSubscribers).to.be.false
@@ -651,7 +655,9 @@ describe('AppSec Index', function () {
       sinon.stub(waf, 'run')
 
       rootSpan = {
-        addTags: sinon.stub()
+        addTags: sinon.stub(),
+        _tags: {},
+        context: () => ({ _tags: rootSpan._tags })
       }
       web.root.returns(rootSpan)
 
@@ -953,6 +959,62 @@ describe('AppSec Index', function () {
         expect(UserTracking.trackUser).to.not.have.been.called
         expect(abortController.signal.aborted).to.be.false
         expect(res.constructor.prototype.end).to.not.have.been.called
+      })
+    })
+
+    describe('onExpressSession', () => {
+      it('should not call waf and call log if no rootSpan is found', () => {
+        web.root.returns(null)
+
+        expressSession.publish({ req, res, sessionId: '1234', abortController })
+
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] No rootSpan found in onExpressSession')
+        expect(waf.run).to.not.have.been.called
+        expect(abortController.abort).to.not.have.been.called
+        expect(res.constructor.prototype.end).to.not.have.been.called
+      })
+
+      it('should not call waf when sessionID was set by SDK', () => {
+        rootSpan._tags['usr.session_id'] = 'sdk_sessid'
+
+        expressSession.publish({ req, res, sessionId: '1234', abortController })
+
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(log.warn).to.not.have.been.called
+        expect(waf.run).to.not.have.been.called
+        expect(abortController.abort).to.not.have.been.called
+        expect(res.constructor.prototype.end).to.not.have.been.called
+      })
+
+      it('should call waf and not block with no attack', () => {
+        expressSession.publish({ req, res, sessionId: '1234', abortController })
+
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(log.warn).to.not.have.been.called
+        expect(waf.run).to.have.been.calledOnceWithExactly({
+          persistent: {
+            'usr.session_id': '1234'
+          }
+        }, req)
+        expect(abortController.abort).to.not.have.been.called
+        expect(res.constructor.prototype.end).to.not.have.been.called
+      })
+
+      it('should call waf and block with attack', () => {
+        waf.run.returns(resultActions)
+
+        expressSession.publish({ req, res, sessionId: '1234', abortController })
+
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(log.warn).to.not.have.been.called
+        expect(waf.run).to.have.been.calledOnceWithExactly({
+          persistent: {
+            'usr.session_id': '1234'
+          }
+        }, req)
+        expect(abortController.abort).to.have.been.called
+        expect(res.constructor.prototype.end).to.have.been.called
       })
     })
 
