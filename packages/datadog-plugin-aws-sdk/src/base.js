@@ -93,7 +93,11 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         this.responseExtractDSMContext(operation, params, response.data ?? response, span)
       }
       this.addResponseTags(span, response)
-      this.addSpanPointers(span, response)
+
+      if (this._tracerConfig?.trace?.aws?.addSpanPointers) {
+        this.addSpanPointers(span, response)
+      }
+
       this.finish(span, response, response.error)
     })
   }
