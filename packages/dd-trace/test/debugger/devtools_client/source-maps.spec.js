@@ -93,4 +93,78 @@ describe('source map utils', function () {
       })
     })
   })
+
+  describe('cache', function () {
+    let clock
+
+    function setup () {
+      clock = sinon.useFakeTimers({
+        toFake: ['setTimeout']
+      })
+      readFileSync = sinon.stub().returns(rawSourceMap)
+      readFile = sinon.stub().resolves(rawSourceMap)
+
+      const sourceMaps = proxyquire('../src/debugger/devtools_client/source-maps', {
+        fs: { readFileSync },
+        'fs/promises': { readFile }
+      })
+
+      loadSourceMap = sourceMaps.loadSourceMap
+      loadSourceMapSync = sourceMaps.loadSourceMapSync
+    }
+
+    function teardown () {
+      clock.restore()
+    }
+
+    describe('loadSourceMap', function () {
+      before(setup)
+
+      after(teardown)
+
+      it('should read from disk on the fist call', async function () {
+        const sourceMap = await loadSourceMap(dir, sourceMapURL)
+        expect(sourceMap).to.deep.equal(parsedSourceMap)
+        expect(readFile.callCount).to.equal(1)
+      })
+
+      it('should not read from disk on the second call', async function () {
+        const sourceMap = await loadSourceMap(dir, sourceMapURL)
+        expect(sourceMap).to.deep.equal(parsedSourceMap)
+        expect(readFile.callCount).to.equal(1)
+      })
+
+      it('should clear cache after 10 seconds', async function () {
+        clock.tick(10_000)
+        const sourceMap = await loadSourceMap(dir, sourceMapURL)
+        expect(sourceMap).to.deep.equal(parsedSourceMap)
+        expect(readFile.callCount).to.equal(2)
+      })
+    })
+
+    describe('loadSourceMapSync', function () {
+      before(setup)
+
+      after(teardown)
+
+      it('should read from disk on the fist call', function () {
+        const sourceMap = loadSourceMapSync(dir, sourceMapURL)
+        expect(sourceMap).to.deep.equal(parsedSourceMap)
+        expect(readFileSync.callCount).to.equal(1)
+      })
+
+      it('should not read from disk on the second call', function () {
+        const sourceMap = loadSourceMapSync(dir, sourceMapURL)
+        expect(sourceMap).to.deep.equal(parsedSourceMap)
+        expect(readFileSync.callCount).to.equal(1)
+      })
+
+      it('should clear cache after 10 seconds', function () {
+        clock.tick(10_000)
+        const sourceMap = loadSourceMapSync(dir, sourceMapURL)
+        expect(sourceMap).to.deep.equal(parsedSourceMap)
+        expect(readFileSync.callCount).to.equal(2)
+      })
+    })
+  })
 })
