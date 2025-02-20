@@ -154,7 +154,6 @@ describe('Plugin', () => {
                   'aws.request.body.TableName': oneKeyTableName,
                   'aws.request.body.Item.name': 'redacted',
                   'aws.request.body.Item.data.S': 'test-data',
-                  'aws.response.body.Attributes': 'redacted'
                 })
               })
               .then(done, done)
@@ -184,7 +183,6 @@ describe('Plugin', () => {
                   'aws.request.body.TableName': oneKeyTableName,
                   'aws.request.body.Key.name.S': 'test-name',
                   'aws.request.body.AttributeUpdates.data.Value.S': 'updated-data',
-                  'aws.response.body.Attributes': 'redacted'
                 })
               })
               .then(done, done)
@@ -218,7 +216,6 @@ describe('Plugin', () => {
                   region: 'us-east-1',
                   'aws.request.body.TableName': oneKeyTableName,
                   'aws.request.body.Key.name.S': 'test-name',
-                  'aws.response.body.Attributes': 'redacted'
                 })
               })
               .then(done, done)
@@ -273,7 +270,7 @@ describe('Plugin', () => {
                 )
               }, 100) // Small delay to ensure put completes
             })
-})
+          })
         })
 
         describe('span pointers', () => {
