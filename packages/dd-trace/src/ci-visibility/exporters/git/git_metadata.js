@@ -5,6 +5,7 @@ const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
 
 const log = require('../../../log')
+const { isFalse } = require('../../../util')
 const {
   getLatestCommits,
   getRepositoryUrl,
@@ -242,7 +243,7 @@ function generateAndUploadPackFiles ({
 /**
  * This function uploads git metadata to CI Visibility's backend.
 */
-function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback, isUnshallowEnabled) {
+function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback) {
   if (!isGitAvailable()) {
     return callback(new Error('Git is not available'))
   }
@@ -284,7 +285,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     }
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
-    if (isUnshallowEnabled) {
+    if (!isFalse(process.env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED)) {
       unshallowRepository()
     }
 

@@ -521,7 +521,6 @@ class Config {
     this._setValue(defaults, 'isTestDynamicInstrumentationEnabled', false)
     this._setValue(defaults, 'isServiceUserProvided', false)
     this._setValue(defaults, 'testManagementAttemptToFixRetries', 20)
-    this._setValue(defaults, 'isTestUnshallowEnabled', true)
     this._setValue(defaults, 'isTestManagementEnabled', false)
     this._setValue(defaults, 'logInjection', false)
     this._setValue(defaults, 'lookup', undefined)
@@ -1147,8 +1146,7 @@ class Config {
       DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
       DD_TEST_FAILED_TEST_REPLAY_ENABLED,
       DD_TEST_MANAGEMENT_ENABLED,
-      DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES,
-      DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED
+      DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES
     } = process.env
 
     if (DD_CIVISIBILITY_AGENTLESS_URL) {
@@ -1173,7 +1171,6 @@ class Config {
         'testManagementAttemptToFixRetries',
         coalesce(maybeInt(DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES), 20)
       )
-      this._setBoolean(calc, 'isTestUnshallowEnabled', !isFalse(DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED))
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())
     this._setBoolean(calc, 'isGitUploadEnabled',
