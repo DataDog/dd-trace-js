@@ -648,6 +648,8 @@ describe('AppSec Index', function () {
     let abortController, req, res, rootSpan
 
     beforeEach(() => {
+      sinon.stub(waf, 'run')
+
       rootSpan = {
         addTags: sinon.stub()
       }
@@ -684,13 +686,10 @@ describe('AppSec Index', function () {
       }
 
       AppSec.enable(config)
-      AppSec.incomingHttpStartTranslator({ req, res })
     })
 
     describe('onRequestBodyParsed', () => {
       it('Should not block without body', () => {
-        sinon.stub(waf, 'run')
-
         bodyParser.publish({ req, res, abortController })
 
         expect(waf.run).not.to.have.been.called
@@ -701,7 +700,6 @@ describe('AppSec Index', function () {
       it('Should not block with body by default', () => {
         const body = { key: 'value' }
         req.body = body
-        sinon.stub(waf, 'run')
 
         bodyParser.publish({ req, res, body, abortController })
 
@@ -717,7 +715,7 @@ describe('AppSec Index', function () {
       it('Should block when it is detected as attack', () => {
         const body = { key: 'value' }
         req.body = body
-        sinon.stub(waf, 'run').returns(resultActions)
+        waf.run.returns(resultActions)
 
         bodyParser.publish({ req, res, body, abortController })
 
@@ -733,8 +731,6 @@ describe('AppSec Index', function () {
 
     describe('onRequestCookieParsed', () => {
       it('Should not block without cookie', () => {
-        sinon.stub(waf, 'run')
-
         cookieParser.publish({ req, res, abortController })
 
         expect(waf.run).not.to.have.been.called
@@ -744,7 +740,6 @@ describe('AppSec Index', function () {
 
       it('Should not block with cookie by default', () => {
         const cookies = { key: 'value' }
-        sinon.stub(waf, 'run')
 
         cookieParser.publish({ req, res, abortController, cookies })
 
@@ -759,7 +754,7 @@ describe('AppSec Index', function () {
 
       it('Should block when it is detected as attack', () => {
         const cookies = { key: 'value' }
-        sinon.stub(waf, 'run').returns(resultActions)
+        waf.run.returns(resultActions)
 
         cookieParser.publish({ req, res, abortController, cookies })
 
@@ -775,8 +770,6 @@ describe('AppSec Index', function () {
 
     describe('onRequestQueryParsed', () => {
       it('Should not block without query', () => {
-        sinon.stub(waf, 'run')
-
         queryParser.publish({ req, res, abortController })
 
         expect(waf.run).not.to.have.been.called
@@ -787,7 +780,6 @@ describe('AppSec Index', function () {
       it('Should not block with query by default', () => {
         const query = { key: 'value' }
         req.query = query
-        sinon.stub(waf, 'run')
 
         queryParser.publish({ req, res, query, abortController })
 
@@ -803,7 +795,7 @@ describe('AppSec Index', function () {
       it('Should block when it is detected as attack', () => {
         const query = { key: 'value' }
         req.query = query
-        sinon.stub(waf, 'run').returns(resultActions)
+        waf.run.returns(resultActions)
 
         queryParser.publish({ req, res, query, abortController })
 
@@ -819,7 +811,6 @@ describe('AppSec Index', function () {
 
     describe('onPassportVerify', () => {
       beforeEach(() => {
-        web.root.resetHistory()
         sinon.stub(storage('legacy'), 'getStore').returns({ req })
       })
 
@@ -901,7 +892,6 @@ describe('AppSec Index', function () {
 
     describe('onPassportDeserializeUser', () => {
       beforeEach(() => {
-        web.root.resetHistory()
         sinon.stub(storage('legacy'), 'getStore').returns({ req })
       })
 
@@ -968,7 +958,7 @@ describe('AppSec Index', function () {
 
     describe('onResponseWriteHead', () => {
       it('should call abortController if response was already blocked', () => {
-        sinon.stub(waf, 'run').returns(resultActions)
+        waf.run.returns(resultActions)
 
         const responseHeaders = {
           'content-type': 'application/json',
@@ -1000,7 +990,7 @@ describe('AppSec Index', function () {
       })
 
       it('should not call the WAF if response was already analyzed', () => {
-        sinon.stub(waf, 'run').returns(null)
+        waf.run.returns(null)
 
         const responseHeaders = {
           'content-type': 'application/json',
@@ -1031,7 +1021,7 @@ describe('AppSec Index', function () {
 
       it('should not do anything without a root span', () => {
         web.root.returns(null)
-        sinon.stub(waf, 'run').returns(null)
+        waf.run.returns(null)
 
         const responseHeaders = {
           'content-type': 'application/json',
@@ -1047,7 +1037,7 @@ describe('AppSec Index', function () {
       })
 
       it('should call the WAF with responde code and headers', () => {
-        sinon.stub(waf, 'run').returns(resultActions)
+        waf.run.returns(resultActions)
 
         const responseHeaders = {
           'content-type': 'application/json',
@@ -1074,7 +1064,7 @@ describe('AppSec Index', function () {
     describe('onResponseSetHeader', () => {
       it('should call abortController if response was already blocked', () => {
         // First block the request
-        sinon.stub(waf, 'run').returns(resultActions)
+        waf.run.returns(resultActions)
 
         const responseHeaders = {
           'content-type': 'application/json',
