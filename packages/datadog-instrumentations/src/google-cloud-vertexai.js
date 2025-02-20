@@ -54,7 +54,7 @@ function wrapGenerateStream (generateStream) {
 addHook({
   name: '@google-cloud/vertexai',
   file: 'build/src/models/generative_models.js',
-  versions: ['>=1.9.3']
+  versions: ['>=1.0.0']
 }, exports => {
   const GenerativeModel = exports.GenerativeModel
 
@@ -67,7 +67,7 @@ addHook({
 addHook({
   name: '@google-cloud/vertexai',
   file: 'build/src/models/chat_session.js',
-  versions: ['>=1.9.3']
+  versions: ['>=1.0.0']
 }, exports => {
   const ChatSession = exports.ChatSession
 
