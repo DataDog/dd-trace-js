@@ -5,19 +5,51 @@ const shimmer = require('../../datadog-shimmer')
 
 const vertexaiTracingChannel = require('dc-polyfill').tracingChannel('apm:vertexai:request')
 
-// TODO: this might need to be take in a `isChat` argument for history or something
-function wrapGenerateContent (generateContent) {
+function wrapGenerate (generate) {
   return function (request) {
     if (!vertexaiTracingChannel.start.hasSubscribers) {
-      return generateContent.apply(this, arguments)
+      return generate.apply(this, arguments)
     }
 
     const ctx = {
       request,
-      func: 'generateContent'
+      instance: this,
+      resource: [this.constructor.name, generate.name].join('.')
     }
 
-    return vertexaiTracingChannel.tracePromise(generateContent, ctx, this, ...arguments)
+    return vertexaiTracingChannel.tracePromise(generate, ctx, this, ...arguments)
+  }
+}
+
+function wrapGenerateStream (generateStream) {
+  return function (request) {
+    if (!vertexaiTracingChannel.start.hasSubscribers) {
+      return generateStream.apply(this, arguments)
+    }
+
+    const ctx = {
+      request,
+      instance: this,
+      resource: [this.constructor.name, generateStream.name].join('.'),
+      stream: true
+    }
+
+    return vertexaiTracingChannel.start.runStores(ctx, () => {
+      const streamingResult = generateStream.apply(this, arguments)
+
+      vertexaiTracingChannel.end.publish(ctx)
+
+      return streamingResult.then(stream => {
+        return stream.response
+      }).then(response => {
+        // vertexai aggregates the streamed response on the stream.response promise
+        vertexaiTracingChannel.asyncEnd.publish({
+          ...ctx,
+          result: { response }
+        })
+        return streamingResult
+      })
+    })
   }
 }
 
@@ -28,8 +60,8 @@ addHook({
 }, exports => {
   const GenerativeModel = exports.GenerativeModel
 
-  shimmer.wrap(GenerativeModel.prototype, 'generateContent', wrapGenerateContent)
-  // TODO: wrap `generateContentStream`
+  shimmer.wrap(GenerativeModel.prototype, 'generateContent', wrapGenerate)
+  shimmer.wrap(GenerativeModel.prototype, 'generateContentStream', wrapGenerateStream)
 
   return exports
 })
@@ -39,7 +71,10 @@ addHook({
   file: 'build/src/models/chat_session.js',
   versions: ['>=1.9.3']
 }, exports => {
-  // TODO: wrap `sendMessage` and `sendMessageStream`
+  const ChatSession = exports.ChatSession
+
+  shimmer.wrap(ChatSession.prototype, 'sendMessage', wrapGenerate)
+  shimmer.wrap(ChatSession.prototype, 'sendMessageStream', wrapGenerateStream)
 
   return exports
 })
