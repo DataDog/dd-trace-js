@@ -337,10 +337,14 @@ function updateConfig (changes, config) {
   const names = [] // list of config names whose values have been changed
 
   for (const change of changes) {
+    const { origin, value } = change
+    if (value === undefined) {
+      continue
+    }
+
     const name = nameMapping[change.name] || change.name
 
     names.push(name)
-    const { origin, value } = change
     const entry = { name, value, origin }
 
     if (namesNeedFormatting.has(entry.name)) {
@@ -354,6 +358,7 @@ function updateConfig (changes, config) {
     } else if (Array.isArray(entry.value)) {
       entry.value = value.join(',')
     }
+
     configuration.push(entry)
   }
 
