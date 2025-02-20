@@ -230,6 +230,7 @@ describe('SpanStatsProcessor', () => {
       enabled: true,
       interval: 10
     },
+    apmTracingEnabled: true,
     hostname: '127.0.0.1',
     port: 8126,
     url: new URL('http://127.0.0.1:8126'),
@@ -257,9 +258,9 @@ describe('SpanStatsProcessor', () => {
     expect(processor.version).to.equal(config.version)
   })
 
-  it('should construct a disabled instance if appsec standalone is enabled', () => {
-    const standaloneConfig = { appsec: { standalone: { enabled: true } }, ...config }
-    const processor = new SpanStatsProcessor(standaloneConfig)
+  it('should construct a disabled instance if APM tracing is disabled', () => {
+    const apmTracingDisabledConfig = { ...config, apmTracingEnabled: false }
+    const processor = new SpanStatsProcessor(apmTracingDisabledConfig)
 
     expect(processor.enabled).to.be.false
     expect(processor.timer).to.be.undefined

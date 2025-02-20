@@ -3,11 +3,10 @@
 const log = require('../../log')
 const { getRootSpan } = require('./utils')
 const { setUserTags } = require('./set_user')
-const standalone = require('../standalone')
 const waf = require('../waf')
-const { SAMPLING_MECHANISM_APPSEC } = require('../../constants')
 const { keepTrace } = require('../../priority_sampler')
 const addresses = require('../addresses')
+const { ASM } = require('../../standalone/product')
 
 function trackUserLoginSuccessEvent (tracer, user, metadata) {
   // TODO: better user check here and in _setUser() ?
@@ -79,8 +78,7 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan) {
 
   rootSpan.addTags(tags)
 
-  keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
-  standalone.sample(rootSpan)
+  keepTrace(rootSpan, ASM)
 }
 
 function runWaf (eventName, user) {

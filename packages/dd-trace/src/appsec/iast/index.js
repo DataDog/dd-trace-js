@@ -22,7 +22,6 @@ const securityControls = require('./security-controls')
 const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
 const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
 const iastResponseEnd = dc.channel('datadog:iast:response-end')
-
 let isEnabled = false
 
 function enable (config, _tracer) {
