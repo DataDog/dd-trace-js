@@ -54,17 +54,18 @@ class GoogleCloudVertexAIPlugin extends TracingPlugin {
   }
 
   tagRequest (request, instance, stream) {
+    // request is either a string or an object with a `contents` property
     const model = extractModel(instance)
     const tags = {
       'vertexai.request.model': model
     }
 
     const history = instance.historyInternal
-    let { contents } = request
+    let contents = typeof request === 'string' ? request : request.contents
     if (history) {
       if (Array.isArray(contents)) {
         contents = [history, ...contents]
-      } else {
+      } else if (typeof request === 'object') {
         contents = [history, contents]
       }
     }
