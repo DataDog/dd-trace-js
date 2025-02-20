@@ -628,6 +628,46 @@ module.exports = {
       }
     }
 
+    if (env.DRONE && env.CI) {
+      const {
+        DRONE_BUILD_NUMBER,
+        DRONE_REPO_NAME,
+        DRONE_BUILD_LINK,
+        DRONE_STEP_NAME,
+        DRONE_STAGE_NAME,
+        DRONE_WORKSPACE,
+        DRONE_GIT_HTTP_URL,
+        DRONE_COMMIT_SHA,
+        DRONE_BRANCH,
+        DRONE_TAG,
+        DRONE_COMMIT_AUTHOR_NAME,
+        DRONE_COMMIT_AUTHOR_EMAIL,
+        DRONE_COMMIT_MESSAGE
+      } = env
+      tags = {
+        [CI_PROVIDER_NAME]: 'drone',
+        [CI_PIPELINE_ID]: DRONE_BUILD_NUMBER,
+        [CI_PIPELINE_NAME]: DRONE_REPO_NAME,
+        [CI_PIPELINE_NUMBER]: DRONE_BUILD_NUMBER,
+        [CI_PIPELINE_URL]: DRONE_BUILD_LINK,
+        [CI_JOB_URL]: 'XXX', // MISSING
+        [CI_JOB_NAME]: DRONE_STEP_NAME,
+        [CI_STAGE_NAME]: DRONE_STAGE_NAME,
+        [CI_WORKSPACE_PATH]: DRONE_WORKSPACE,
+        [CI_ENV_VARS]: 'XXX', // MISSING
+        [GIT_REPOSITORY_URL]: DRONE_GIT_HTTP_URL,
+        [GIT_COMMIT_SHA]: DRONE_COMMIT_SHA,
+        [GIT_BRANCH]: DRONE_BRANCH,
+        [GIT_TAG]: DRONE_TAG,
+        [GIT_COMMIT_AUTHOR_NAME]: DRONE_COMMIT_AUTHOR_NAME,
+        [GIT_COMMIT_AUTHOR_EMAIL]: DRONE_COMMIT_AUTHOR_EMAIL,
+        [GIT_COMMIT_AUTHOR_DATE]: 'XXX', // MISSING
+        [GIT_COMMIT_COMMITTER_NAME]: 'XXX', // MISSING
+        [GIT_COMMIT_COMMITTER_EMAIL]: 'XXX', // MISSING
+        [GIT_COMMIT_MESSAGE]: DRONE_COMMIT_MESSAGE
+      }
+    }
+
     normalizeTag(tags, CI_WORKSPACE_PATH, resolveTilde)
     normalizeTag(tags, GIT_REPOSITORY_URL, filterSensitiveInfoFromRepository)
     normalizeTag(tags, GIT_BRANCH, normalizeRef)
