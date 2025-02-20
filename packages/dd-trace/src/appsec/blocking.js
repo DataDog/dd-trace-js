@@ -100,29 +100,36 @@ function getBlockingData (req, specificType, actionParameters) {
 }
 
 function block (req, res, rootSpan, abortController, actionParameters = defaultBlockingActionParameters) {
-  if (res.headersSent) {
-    log.warn('[ASM] Cannot send blocking response when headers have already been sent')
-    return
+  try {
+    if (res.headersSent) {
+      log.warn('[ASM] Cannot send blocking response when headers have already been sent')
+
+      throw new Error('Headers have already been sent')
+    }
+
+    const { body, headers, statusCode } = getBlockingData(req, null, actionParameters)
+
+    for (const headerName of res.getHeaderNames()) {
+      res.removeHeader(headerName)
+    }
+
+    res.writeHead(statusCode, headers)
+
+    // this is needed to call the original end method, since express-session replaces it
+    res.constructor.prototype.end.call(res, body)
+
+    responseBlockedSet.add(res)
+
+    rootSpan.addTags({
+      'appsec.blocked': 'true'
+    })
+
+    abortController?.abort()
+  } catch (err) {
+    rootSpan.addTags({
+      '_dd.appsec.block.failed': 1
+    })
   }
-
-  const { body, headers, statusCode } = getBlockingData(req, null, actionParameters)
-
-  rootSpan.addTags({
-    'appsec.blocked': 'true'
-  })
-
-  for (const headerName of res.getHeaderNames()) {
-    res.removeHeader(headerName)
-  }
-
-  res.writeHead(statusCode, headers)
-
-  // this is needed to call the original end method, since express-session replaces it
-  res.constructor.prototype.end.call(res, body)
-
-  responseBlockedSet.add(res)
-
-  abortController?.abort()
 }
 
 function getBlockingAction (actions) {
