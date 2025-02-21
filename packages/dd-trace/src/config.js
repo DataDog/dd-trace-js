@@ -11,7 +11,7 @@ const tagger = require('./tagger')
 const get = require('../../datadog-core/src/utils/src/get')
 const has = require('../../datadog-core/src/utils/src/has')
 const set = require('../../datadog-core/src/utils/src/set')
-const { isTrue, isFalse } = require('./util')
+const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
@@ -19,6 +19,7 @@ const telemetryMetrics = require('./telemetry/metrics')
 const { getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
+const StableConfig = require('./config_stable')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -236,7 +237,7 @@ function reformatSpanSamplingRules (rules) {
 
 class Config {
   constructor (options = {}) {
-    const { localFileConfigEntries, fleetFileConfigEntries, fileConfigWarnings } = this.getStableConfig()
+    this.stableConfig = new StableConfig()
 
     options = {
       ...options,
@@ -246,19 +247,21 @@ class Config {
 
     // Configure the logger first so it can be used to warn about other configs
     const logConfig = log.getConfig()
-    this.logger = coalesce(options.logger, logConfig.logger)
-    log.use(this.logger)
-    log.toggle(
-      log.isEnabled(fleetFileConfigEntries.DD_TRACE_DEBUG, localFileConfigEntries.DD_TRACE_DEBUG),
-      log.getLogLevel(
-        options.logLevel,
-        fleetFileConfigEntries.DD_TRACE_LOG_LEVEL,
-        localFileConfigEntries.DD_TRACE_LOG_LEVEL
-      )
+    this.debug = log.isEnabled(
+      this.stableConfig.fleetEntries?.DD_TRACE_DEBUG,
+      this.stableConfig.localEntries?.DD_TRACE_DEBUG
     )
+    this.logger = coalesce(options.logger, logConfig.logger)
+    this.logLevel = log.getLogLevel(
+      options.logLevel,
+      this.fleetEntries?.DD_TRACE_LOG_LEVEL,
+      this.localEntries?.DD_TRACE_LOG_LEVEL
+    )
+    log.use(this.logger)
+    log.toggle(this.debug, this.logLevel)
 
-    // Process file config warnings, if any
-    for (const warning of fileConfigWarnings) {
+    // Process stable config warnings, if any
+    for (const warning of this.stableConfig.warnings) {
       log.warn(warning)
     }
 
@@ -348,9 +351,9 @@ class Config {
     }
 
     this._applyDefaults()
-    this._applyLocalStableConfig(localFileConfigEntries)
+    this._applyLocalStableConfig()
     this._applyEnvironment()
-    this._applyFleetStableConfig(fleetFileConfigEntries)
+    this._applyFleetStableConfig()
     this._applyOptions(options)
     this._applyCalculated()
     this._applyRemote({})
@@ -401,94 +404,6 @@ class Config {
         }
       }
     }
-  }
-
-  _getStableConfigPaths () {
-    let localConfigPath = ''
-    let fleetConfigPath = ''
-    switch (os.type().toLowerCase()) {
-      case 'linux':
-        localConfigPath = '/etc/datadog-agent/application_monitoring.yaml'
-        fleetConfigPath = '/etc/datadog-agent/managed/datadog-agent/stable/application_monitoring.yaml'
-        break
-      case 'darwin':
-        localConfigPath = '/opt/datadog-agent/etc/application_monitoring.yaml'
-        fleetConfigPath = '/opt/datadog-agent/etc/managed/datadog-agent/stable/application_monitoring.yaml'
-        break
-      case 'win32':
-        localConfigPath = 'C:\\ProgramData\\Datadog\\application_monitoring.yaml'
-        fleetConfigPath = 'C:\\ProgramData\\Datadog\\managed\\datadog-agent\\stable\\application_monitoring.yaml'
-        break
-      default:
-        break
-    }
-
-    // Allow overriding the paths for testing
-    if (process.env.DD_TEST_LOCAL_CONFIG_PATH !== undefined) {
-      localConfigPath = process.env.DD_TEST_LOCAL_CONFIG_PATH
-    }
-    if (process.env.DD_TEST_FLEET_CONFIG_PATH !== undefined) {
-      fleetConfigPath = process.env.DD_TEST_FLEET_CONFIG_PATH
-    }
-
-    return { localConfigPath, fleetConfigPath }
-  }
-
-  getStableConfig () {
-    // Note: we use maybeLoad because there may be cases where the library is not available and we
-    // want to avoid breaking the application. In those cases, we will not have the file-based configuration.
-    const fileConfigWarnings = [] // Logger hasn't been initialized yet, so we can't use log.warn
-    const localFileConfigEntries = {}
-    const fleetFileConfigEntries = {}
-
-    const { localConfigPath, fleetConfigPath } = this._getStableConfigPaths()
-    if (!fs.existsSync(localConfigPath) && !fs.existsSync(fleetConfigPath)) {
-      // Check if files exist, if not bail out early to avoid unnecessary library loading
-      return { localFileConfigEntries, fleetFileConfigEntries, fileConfigWarnings }
-    }
-
-    // libdatadog isn't always available (e.g serverless) so we need to handle that case gracefully
-    let libdatadog
-    try {
-      libdatadog = require('@datadog/libdatadog')
-    } catch (e) {
-      fileConfigWarnings.push('Can\'t load libdatadog library')
-      return { localFileConfigEntries, fleetFileConfigEntries, fileConfigWarnings }
-    }
-
-    const libconfig = libdatadog.maybeLoad('library_config')
-    if (libconfig !== undefined) {
-      const configurator = new libconfig.JsConfigurator()
-      let localConfig = ''
-      try {
-        localConfig = fs.readFileSync(localConfigPath, 'utf8')
-      } catch (err) {
-        if (err.code !== 'ENOENT') {
-          fileConfigWarnings.push(`Error reading local config file: ${localConfigPath}`)
-        }
-      }
-      let fleetConfig = ''
-      try {
-        fleetConfig = fs.readFileSync(fleetConfigPath, 'utf8')
-      } catch (err) {
-        if (err.code !== 'ENOENT') {
-          fileConfigWarnings.push(`Error reading fleet config file: ${fleetConfigPath}`)
-        }
-      }
-
-      if (localConfig || fleetConfig) {
-        configurator.set_envp(Object.entries(process.env).map(([key, value]) => `${key}=${value}`))
-        configurator.set_args(process.argv)
-        configurator.get_configuration(localConfig.toString(), fleetConfig.toString()).forEach((entry) => {
-          if (entry.source === 'local_stable_config') {
-            localFileConfigEntries[entry.name] = entry.value
-          } else if (entry.source === 'fleet_stable_config') {
-            fleetFileConfigEntries[entry.name] = entry.value
-          }
-        })
-      }
-    }
-    return { localFileConfigEntries, fleetFileConfigEntries, fileConfigWarnings }
   }
 
   // Supports only a subset of options for now.
@@ -679,44 +594,14 @@ class Config {
     this._setValue(defaults, 'aws.dynamoDb.tablePrimaryKeys', undefined)
   }
 
-  _applyLocalStableConfig (localFileConfigEntries) {
+  _applyLocalStableConfig () {
     const obj = setHiddenProperty(this, '_localStableConfig', {})
-    this._applyStableConfig(localFileConfigEntries, obj)
+    this.stableConfig.applyLocalConfig(obj)
   }
 
-  _applyFleetStableConfig (fleetFileConfigEntries) {
+  _applyFleetStableConfig () {
     const obj = setHiddenProperty(this, '_fleetStableConfig', {})
-    this._applyStableConfig(fleetFileConfigEntries, obj)
-  }
-
-  _applyStableConfig (config, obj) {
-    const {
-      DD_APPSEC_ENABLED,
-      DD_APPSEC_SCA_ENABLED,
-      DD_DATA_STREAMS_ENABLED,
-      DD_DYNAMIC_INSTRUMENTATION_ENABLED,
-      DD_ENV,
-      DD_IAST_ENABLED,
-      DD_LOGS_INJECTION,
-      DD_PROFILING_ENABLED,
-      DD_RUNTIME_METRICS_ENABLED,
-      DD_SERVICE,
-      DD_VERSION
-    } = config
-
-    this._setBoolean(obj, 'appsec.enabled', DD_APPSEC_ENABLED)
-    this._setBoolean(obj, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
-    this._setBoolean(obj, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
-    this._setBoolean(obj, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
-    this._setString(obj, 'env', DD_ENV)
-    this._setBoolean(obj, 'iast.enabled', DD_IAST_ENABLED)
-    this._setBoolean(obj, 'logInjection', DD_LOGS_INJECTION)
-    const profilingEnabledEnv = DD_PROFILING_ENABLED
-    const profilingEnabled = this._normalizeProfilingEnabledValue(profilingEnabledEnv)
-    this._setString(obj, 'profiling.enabled', profilingEnabled)
-    this._setBoolean(obj, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED)
-    this._setString(obj, 'service', DD_SERVICE)
-    this._setString(obj, 'version', DD_VERSION)
+    this.stableConfig.applyFleetConfig(obj)
   }
 
   _applyEnvironment () {
@@ -967,7 +852,7 @@ class Config {
     }
     this._setString(env, 'port', DD_TRACE_AGENT_PORT)
     const profilingEnabledEnv = coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED)
-    const profilingEnabled = this._normalizeProfilingEnabledValue(profilingEnabledEnv)
+    const profilingEnabled = normalizeProfilingEnabledValue(profilingEnabledEnv)
     this._setString(env, 'profiling.enabled', profilingEnabled)
     this._setString(env, 'profiling.exporters', DD_PROFILING_EXPORTERS)
     this._setBoolean(env, 'profiling.sourceMap', DD_PROFILING_SOURCE_MAP && !isFalse(DD_PROFILING_SOURCE_MAP))
@@ -1239,14 +1124,6 @@ class Config {
     return spanComputePeerService
   }
 
-  _normalizeProfilingEnabledValue (configValue) {
-    return isTrue(configValue)
-      ? 'true'
-      : isFalse(configValue)
-        ? 'false'
-        : configValue === 'auto' ? 'auto' : undefined
-  }
-
   _isCiVisibilityGitUploadEnabled () {
     return coalesce(
       process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
@@ -1487,9 +1364,9 @@ class Config {
     const origins = [
       'remote_config',
       'code',
-      'fleet_stable_config',
+      this.stableConfig.FLEET_STABLE_CONFIG_ORIGIN,
       'env_var',
-      'local_stable_config',
+      this.stableConfig.LOCAL_STABLE_CONFIG_ORIGIN,
       'calculated',
       'default'
     ]

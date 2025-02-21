@@ -105,34 +105,36 @@ const log = {
 
   deprecate (code, message) {
     return this._deprecate(code, message)
+  },
+
+  isEnabled (fleetStableConfigValue = undefined, localStableConfigValue = undefined) {
+    return isTrue(coalesce(
+      fleetStableConfigValue,
+      process.env?.DD_TRACE_DEBUG,
+      process.env?.OTEL_LOG_LEVEL === 'debug' || undefined,
+      localStableConfigValue,
+      config.enabled
+    ))
+  },
+
+  getLogLevel (
+    optionsValue = undefined,
+    fleetStableConfigValue = undefined,
+    localStableConfigValue = undefined
+  ) {
+    return coalesce(
+      optionsValue,
+      fleetStableConfigValue,
+      process.env?.DD_TRACE_LOG_LEVEL,
+      process.env?.OTEL_LOG_LEVEL,
+      localStableConfigValue,
+      config.logLevel
+    )
   }
 }
 
 log.reset()
 
-const isEnabled = (fleetStableConfigValue = undefined, localStableConfigValue = undefined) => (
-  isTrue(coalesce(
-    fleetStableConfigValue,
-    process.env.DD_TRACE_DEBUG,
-    process.env.OTEL_LOG_LEVEL === 'debug' || undefined,
-    localStableConfigValue,
-    config.enabled
-  ))
-)
-
-const getLogLevel = (
-  optionsValue = undefined,
-  fleetStableConfigValue = undefined,
-  localStableConfigValue = undefined
-) => coalesce(
-  optionsValue,
-  fleetStableConfigValue,
-  process.env.DD_TRACE_LOG_LEVEL,
-  process.env.OTEL_LOG_LEVEL,
-  localStableConfigValue,
-  config.logLevel
-)
-
-log.toggle(isEnabled(), getLogLevel())
+log.toggle(log.isEnabled(), log.getLogLevel())
 
 module.exports = log
