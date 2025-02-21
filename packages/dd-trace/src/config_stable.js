@@ -4,7 +4,65 @@ const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 
 class StableConfig {
   constructor () {
-    Object.assign(this, this.getStableConfig())
+    this.warnings = [] // Logger hasn't been initialized yet, so we can't use log.warn
+    this.localEntries = {}
+    this.fleetEntries = {}
+    this.wasm_loaded = false
+
+    const { localConfigPath, fleetConfigPath } = this._getStableConfigPaths()
+    if (!fs.existsSync(localConfigPath) && !fs.existsSync(fleetConfigPath)) {
+      // Check if files exist, if not bail out early to avoid unnecessary library loading
+      return
+    }
+
+    // libdatadog isn't always available (e.g serverless) so we need to handle that case gracefully
+    let libdatadog
+    try {
+      libdatadog = require('@datadog/libdatadog')
+      this.wasm_loaded = true
+    } catch (e) {
+      this.warnings.push('Can\'t load libdatadog library')
+      return
+    }
+
+    // Note: we use maybeLoad because there may be cases where the library is not available and we
+    // want to avoid breaking the application. In those cases, we will not have the file-based configuration.
+    const libconfig = libdatadog.maybeLoad('library_config')
+    if (libconfig !== undefined) {
+      let localConfig = ''
+      try {
+        localConfig = fs.readFileSync(localConfigPath, 'utf8')
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          this.warnings.push(`Error reading local config file: ${localConfigPath}`)
+        }
+      }
+      let fleetConfig = ''
+      try {
+        fleetConfig = fs.readFileSync(fleetConfigPath, 'utf8')
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          this.warnings.push(`Error reading fleet config file: ${fleetConfigPath}`)
+        }
+      }
+
+      if (localConfig || fleetConfig) {
+        try {
+          const configurator = new libconfig.JsConfigurator()
+          configurator.set_envp(Object.entries(process.env).map(([key, value]) => `${key}=${value}`))
+          configurator.set_args(process.argv)
+          configurator.get_configuration(localConfig.toString(), fleetConfig.toString()).forEach((entry) => {
+            if (entry.source === 'local_stable_config') {
+              this.localEntries[entry.name] = entry.value
+            } else if (entry.source === 'fleet_stable_config') {
+              this.fleetEntries[entry.name] = entry.value
+            }
+          })
+        } catch (e) {
+          this.warnings.push(`Error parsing configuration from file: ${e.message}`)
+        }
+      }
+    }
   }
 
   FLEET_STABLE_CONFIG_ORIGIN = 'fleet_stable_config'
@@ -39,63 +97,6 @@ class StableConfig {
     }
 
     return { localConfigPath, fleetConfigPath }
-  }
-
-  getStableConfig () {
-    // Note: we use maybeLoad because there may be cases where the library is not available and we
-    // want to avoid breaking the application. In those cases, we will not have the file-based configuration.
-    const warnings = [] // Logger hasn't been initialized yet, so we can't use log.warn
-    const localEntries = {}
-    const fleetEntries = {}
-
-    const { localConfigPath, fleetConfigPath } = this._getStableConfigPaths()
-    if (!fs.existsSync(localConfigPath) && !fs.existsSync(fleetConfigPath)) {
-      // Check if files exist, if not bail out early to avoid unnecessary library loading
-      return { localEntries, fleetEntries, warnings }
-    }
-
-    // libdatadog isn't always available (e.g serverless) so we need to handle that case gracefully
-    let libdatadog
-    try {
-      libdatadog = require('@datadog/libdatadog')
-    } catch (e) {
-      warnings.push('Can\'t load libdatadog library')
-      return { localEntries, fleetEntries, warnings }
-    }
-
-    const libconfig = libdatadog.maybeLoad('library_config')
-    if (libconfig !== undefined) {
-      const configurator = new libconfig.JsConfigurator()
-      let localConfig = ''
-      try {
-        localConfig = fs.readFileSync(localConfigPath, 'utf8')
-      } catch (err) {
-        if (err.code !== 'ENOENT') {
-          warnings.push(`Error reading local config file: ${localConfigPath}`)
-        }
-      }
-      let fleetConfig = ''
-      try {
-        fleetConfig = fs.readFileSync(fleetConfigPath, 'utf8')
-      } catch (err) {
-        if (err.code !== 'ENOENT') {
-          warnings.push(`Error reading fleet config file: ${fleetConfigPath}`)
-        }
-      }
-
-      if (localConfig || fleetConfig) {
-        configurator.set_envp(Object.entries(process.env).map(([key, value]) => `${key}=${value}`))
-        configurator.set_args(process.argv)
-        configurator.get_configuration(localConfig.toString(), fleetConfig.toString()).forEach((entry) => {
-          if (entry.source === 'local_stable_config') {
-            localEntries[entry.name] = entry.value
-          } else if (entry.source === 'fleet_stable_config') {
-            fleetEntries[entry.name] = entry.value
-          }
-        })
-      }
-    }
-    return { localEntries, fleetEntries, warnings }
   }
 
   applyLocalConfig (obj) {

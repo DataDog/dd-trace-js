@@ -2374,8 +2374,7 @@ describe('Config', () => {
   })
 
   context('library config', () => {
-    const os = require('os')
-    const fs = require('fs')
+    const StableConfig = require('../src/config_stable')
     const path = require('path')
     // os.tmpdir returns undefined on Windows somehow
     const baseTempDir = os.platform() !== 'win32' ? os.tmpdir() : 'C:\\Windows\\Temp'
@@ -2421,7 +2420,12 @@ rules:
       expect(config).to.have.property('service', 'my-service')
     })
 
-    it('should respect the priority orders', () => {
+    it('should respect the priority sources', () => {
+      // 1. Default
+      const config1 = new Config()
+      expect(config1).to.have.property('service', 'node')
+
+      // 2. Local stable > Default
       fs.writeFileSync(
         process.env.DD_TEST_LOCAL_CONFIG_PATH,
         `
@@ -2432,15 +2436,25 @@ rules:
         - nodejs
       operator: equals
     configuration:
-      DD_SERVICE: a
+      DD_SERVICE: service_local_stable
 `)
-      const configA = new Config()
-      expect(configA).to.have.property('service', 'a')
+      const config2 = new Config()
+      expect(config2).to.have.property(
+        'service',
+        'service_local_stable',
+        'default < local stable config'
+      )
 
-      process.env.DD_SERVICE = 'b'
-      const configB = new Config()
-      expect(configB).to.have.property('service', 'b', 'local stable config < env var')
+      // 3. Env > Local stable > Default
+      process.env.DD_SERVICE = 'service_env'
+      const config3 = new Config()
+      expect(config3).to.have.property(
+        'service',
+        'service_env',
+        'default < local stable config < env var'
+      )
 
+      // 4. Fleet Stable > Env > Local stable > Default
       fs.writeFileSync(
         process.env.DD_TEST_FLEET_CONFIG_PATH,
         `
@@ -2451,10 +2465,62 @@ rules:
         - nodejs
       operator: equals
     configuration:
-      DD_SERVICE: c
-  `)
-      const configC = new Config()
-      expect(configC).to.have.property('service', 'c', 'local stable config < fleet config < env var')
+      DD_SERVICE: service_fleet_stable
+`)
+      const config4 = new Config()
+      expect(config4).to.have.property(
+        'service',
+        'service_fleet_stable',
+        'default < local stable config < env var < fleet stable config'
+      )
+
+      // 5. Code > Fleet Stable > Env > Local stable > Default
+      const config5 = new Config({ service: 'service_code' })
+      expect(config5).to.have.property(
+        'service',
+        'service_code',
+        'default < local stable config < env var < fleet config < code'
+      )
+    })
+
+    it('should ignore unknown keys', () => {
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+apm_configuration_default:
+  DD_RUNTIME_METRICS_ENABLED: true
+  DD_FOOBAR_ENABLED: baz
+`)
+      const stableConfig = new StableConfig()
+      expect(stableConfig.warnings).to.have.lengthOf(0)
+
+      const config = new Config()
+      expect(config).to.have.property('runtimeMetrics', true)
+    })
+
+    it('should log a warning if the YAML files are malformed', () => {
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+    apm_configuration_default:
+DD_RUNTIME_METRICS_ENABLED true
+`)
+      const stableConfig = new StableConfig()
+      expect(stableConfig.warnings).to.have.lengthOf(1)
+    })
+
+    it('should only load the WASM module if the stable config files exist', () => {
+      const stableConfig1 = new StableConfig()
+      expect(stableConfig1).to.have.property('wasm_loaded', false)
+
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+apm_configuration_default:
+  DD_RUNTIME_METRICS_ENABLED: true
+`)
+      const stableConfig2 = new StableConfig()
+      expect(stableConfig2).to.have.property('wasm_loaded', true)
     })
   })
 })
