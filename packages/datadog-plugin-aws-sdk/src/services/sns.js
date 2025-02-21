@@ -1,6 +1,5 @@
 'use strict'
-const { getHeadersSize } = require('../../../dd-trace/src/datastreams')
-const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams')
+const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 

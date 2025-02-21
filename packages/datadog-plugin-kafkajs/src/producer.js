@@ -1,8 +1,7 @@
 'use strict'
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
-const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams')
-const { getMessageSize } = require('../../dd-trace/src/datastreams')
+const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
 
 const BOOTSTRAP_SERVERS_KEY = 'messaging.kafka.bootstrap.servers'
 
