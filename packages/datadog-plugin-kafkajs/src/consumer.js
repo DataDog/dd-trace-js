@@ -7,6 +7,8 @@ const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const afterStartCh = dc.channel('dd-trace:kafkajs:consumer:afterStart')
 const beforeFinishCh = dc.channel('dd-trace:kafkajs:consumer:beforeFinish')
 
+const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
+
 class KafkajsConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'kafkajs' }
   static get operation () { return 'consume' }
@@ -72,7 +74,8 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
         component: 'kafkajs',
         'kafka.topic': topic,
         'kafka.message.offset': message.offset,
-        'kafka.cluster_id': clusterId
+        'kafka.cluster_id': clusterId,
+        [MESSAGING_DESTINATION_KEY]: topic
       },
       metrics: {
         'kafka.partition': partition
