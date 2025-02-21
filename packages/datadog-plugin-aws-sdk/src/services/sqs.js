@@ -3,8 +3,8 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { storage } = require('../../../datadog-core')
-const { getHeadersSize } = require('../../../dd-trace/src/datastreams/processor')
-const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
+const { getHeadersSize } = require('../../../dd-trace/src/datastreams')
+const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams')
 
 class Sqs extends BaseAwsSdkPlugin {
   static get id () { return 'sqs' }

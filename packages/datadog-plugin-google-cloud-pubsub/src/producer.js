@@ -1,8 +1,8 @@
 'use strict'
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
-const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
-const { getHeadersSize } = require('../../dd-trace/src/datastreams/processor')
+const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams')
+const { getHeadersSize } = require('../../dd-trace/src/datastreams')
 
 class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
   static get id () { return 'google-cloud-pubsub' }
