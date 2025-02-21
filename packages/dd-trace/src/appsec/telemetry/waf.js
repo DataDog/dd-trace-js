@@ -7,20 +7,18 @@ const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
 const DD_TELEMETRY_WAF_RESULT_TAGS = Symbol('_dd.appsec.telemetry.waf.result.tags')
 
-function addWafRequestMetrics (store, metrics) {
-  const { duration, durationExt } = metrics
-
+function addWafRequestMetrics (store, { duration, durationExt }) {
   store[DD_TELEMETRY_REQUEST_METRICS].duration += duration || 0
   store[DD_TELEMETRY_REQUEST_METRICS].durationExt += durationExt || 0
 }
 
-function trackWafDurations (metrics, versionsTags) {
-  if (metrics.duration) {
-    appsecMetrics.distribution('waf.duration', versionsTags).track(metrics.duration)
+function trackWafDurations ({ duration, durationExt }, versionsTags) {
+  if (duration) {
+    appsecMetrics.distribution('waf.duration', versionsTags).track(duration)
   }
 
-  if (metrics.durationExt) {
-    appsecMetrics.distribution('waf.duration_ext', versionsTags).track(metrics.durationExt)
+  if (durationExt) {
+    appsecMetrics.distribution('waf.duration_ext', versionsTags).track(durationExt)
   }
 }
 

@@ -1,11 +1,11 @@
 'use strict'
 
-const telemetryMetrics = require('../../src/telemetry/metrics')
+const telemetryMetrics = require('../../../src/telemetry/metrics')
 const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
 
-const appsecTelemetry = require('../../src/appsec/telemetry')
+const appsecTelemetry = require('../../../src/appsec/telemetry')
 
-describe('Appsec Telemetry metrics', () => {
+describe('Appsec Waf Telemetry metrics', () => {
   const wafVersion = '0.0.1'
   const rulesVersion = '0.0.2'
 
@@ -161,72 +161,6 @@ describe('Appsec Telemetry metrics', () => {
       })
     })
 
-    describe('updateRaspRequestsMetricTags', () => {
-      it('should increment rasp.rule.eval metric', () => {
-        appsecTelemetry.updateRaspRequestsMetricTags({
-          duration: 42,
-          durationExt: 52
-        }, req, 'rule-type')
-
-        expect(count).to.have.been.calledWith('rasp.rule.eval')
-        expect(count).to.not.have.been.calledWith('rasp.timeout')
-        expect(count).to.not.have.been.calledWith('rasp.rule.match')
-        expect(inc).to.have.been.calledOnceWith(1)
-      })
-
-      it('should increment rasp.timeout metric if timeout', () => {
-        appsecTelemetry.updateRaspRequestsMetricTags({
-          duration: 42,
-          durationExt: 52,
-          wafTimeout: true
-        }, req, 'rule-type')
-
-        expect(count).to.have.been.calledWith('rasp.rule.eval')
-        expect(count).to.have.been.calledWith('rasp.timeout')
-        expect(count).to.not.have.been.calledWith('rasp.rule.match')
-        expect(inc).to.have.been.calledTwice
-      })
-
-      it('should increment rasp.rule.match metric if ruleTriggered', () => {
-        appsecTelemetry.updateRaspRequestsMetricTags({
-          duration: 42,
-          durationExt: 52,
-          ruleTriggered: true
-        }, req, 'rule-type')
-
-        expect(count).to.have.been.calledWith('rasp.rule.match')
-        expect(count).to.have.been.calledWith('rasp.rule.eval')
-        expect(count).to.not.have.been.calledWith('rasp.timeout')
-        expect(inc).to.have.been.calledTwice
-      })
-
-      it('should sum rasp.duration and eval metrics', () => {
-        appsecTelemetry.updateRaspRequestsMetricTags({
-          duration: 42,
-          durationExt: 52
-        }, req, 'rule-type')
-
-        appsecTelemetry.updateRaspRequestsMetricTags({
-          duration: 24,
-          durationExt: 25
-        }, req, 'rule-type')
-
-        const {
-          duration,
-          durationExt,
-          raspDuration,
-          raspDurationExt,
-          raspEvalCount
-        } = appsecTelemetry.getRequestMetrics(req)
-
-        expect(duration).to.be.eq(0)
-        expect(durationExt).to.be.eq(0)
-        expect(raspDuration).to.be.eq(66)
-        expect(raspDurationExt).to.be.eq(77)
-        expect(raspEvalCount).to.be.eq(2)
-      })
-    })
-
     describe('incWafInitMetric', () => {
       it('should increment waf.init metric', () => {
         appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion)
@@ -304,61 +238,10 @@ describe('Appsec Telemetry metrics', () => {
         })
       })
 
-      it('should not modify waf.requests metric tags when rasp rule type is provided', () => {
-        appsecTelemetry.updateWafRequestsMetricTags({
-          blockTriggered: false,
-          ruleTriggered: false,
-          wafTimeout: false,
-          wafVersion,
-          rulesVersion
-        }, req)
-
-        appsecTelemetry.updateRaspRequestsMetricTags({
-          blockTriggered: true,
-          ruleTriggered: true,
-          wafTimeout: true,
-          wafVersion,
-          rulesVersion
-        }, req, 'rule_type')
-
-        expect(count).to.have.not.been.calledWith('waf.requests')
-        appsecTelemetry.incrementWafRequestsMetric(req)
-
-        expect(count).to.have.been.calledWithExactly('waf.requests', {
-          request_blocked: false,
-          rule_triggered: false,
-          waf_timeout: false,
-          waf_version: wafVersion,
-          event_rules_version: rulesVersion
-        })
-      })
-
       it('should not fail if req has no previous tag', () => {
         appsecTelemetry.incrementWafRequestsMetric(req)
 
         expect(count).to.not.have.been.called
-      })
-    })
-
-    describe('incrementMissingUserLoginMetric', () => {
-      it('should increment instrum.user_auth.missing_user_login metric', () => {
-        appsecTelemetry.incrementMissingUserLoginMetric('passport-local', 'login_success')
-
-        expect(count).to.have.been.calledOnceWithExactly('instrum.user_auth.missing_user_login', {
-          framework: 'passport-local',
-          event_type: 'login_success'
-        })
-      })
-    })
-
-    describe('incrementMissingUserIdMetric', () => {
-      it('should increment instrum.user_auth.missing_user_id metric', () => {
-        appsecTelemetry.incrementMissingUserIdMetric('passport', 'authenticated_request')
-
-        expect(count).to.have.been.calledOnceWithExactly('instrum.user_auth.missing_user_id', {
-          framework: 'passport',
-          event_type: 'authenticated_request'
-        })
       })
     })
   })
@@ -431,69 +314,6 @@ describe('Appsec Telemetry metrics', () => {
 
         expect(duration).to.be.eq(66)
         expect(durationExt).to.be.eq(77)
-      })
-    })
-
-    describe('updateRaspRequestsMetricTags', () => {
-      it('should sum rasp.duration and rasp.durationExt request metrics', () => {
-        appsecTelemetry.enable({
-          enabled: false,
-          metrics: true
-        })
-
-        appsecTelemetry.updateRaspRequestsMetricTags({
-          duration: 42,
-          durationExt: 52
-        }, req, 'rasp_rule')
-
-        appsecTelemetry.updateRaspRequestsMetricTags({
-          duration: 24,
-          durationExt: 25
-        }, req, 'rasp_rule')
-
-        const { raspDuration, raspDurationExt, raspEvalCount } = appsecTelemetry.getRequestMetrics(req)
-
-        expect(raspDuration).to.be.eq(66)
-        expect(raspDurationExt).to.be.eq(77)
-        expect(raspEvalCount).to.be.eq(2)
-      })
-
-      it('should sum rasp.duration and rasp.durationExt with telemetry enabled and metrics disabled', () => {
-        appsecTelemetry.enable({
-          enabled: true,
-          metrics: false
-        })
-
-        appsecTelemetry.updateRaspRequestsMetricTags({
-          duration: 42,
-          durationExt: 52
-        }, req, 'rule_type')
-
-        appsecTelemetry.updateRaspRequestsMetricTags({
-          duration: 24,
-          durationExt: 25
-        }, req, 'rule_type')
-
-        const { raspDuration, raspDurationExt, raspEvalCount } = appsecTelemetry.getRequestMetrics(req)
-
-        expect(raspDuration).to.be.eq(66)
-        expect(raspDurationExt).to.be.eq(77)
-        expect(raspEvalCount).to.be.eq(2)
-      })
-
-      it('should not increment any metric if telemetry metrics are disabled', () => {
-        appsecTelemetry.enable({
-          enabled: true,
-          metrics: false
-        })
-
-        appsecTelemetry.updateRaspRequestsMetricTags({
-          duration: 24,
-          durationExt: 25
-        }, req, 'rule_type')
-
-        expect(count).to.not.have.been.called
-        expect(inc).to.not.have.been.called
       })
     })
   })
