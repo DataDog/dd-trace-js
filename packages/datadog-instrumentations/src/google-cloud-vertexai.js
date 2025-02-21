@@ -35,17 +35,30 @@ function wrapGenerateStream (generateStream) {
     }
 
     return vertexaiTracingChannel.start.runStores(ctx, () => {
-      const streamingResult = generateStream.apply(this, arguments)
+      let streamingResult
+      try {
+        streamingResult = generateStream.apply(this, arguments)
+      } catch (e) {
+        ctx.error = e
+        vertexaiTracingChannel.error.publish(e)
+        vertexaiTracingChannel.end.publish(ctx)
+        vertexaiTracingChannel.asyncEnd.publish(ctx)
+        throw e
+      }
 
       vertexaiTracingChannel.end.publish(ctx)
 
       return streamingResult.then(stream => {
-        return stream.response
-      }).then(response => {
-        // vertexai aggregates the streamed response on the stream.response promise
-        ctx.result = { response }
+        stream.response.then(response => {
+          ctx.result = { response }
+          vertexaiTracingChannel.asyncEnd.publish(ctx)
+        })
+        return stream
+      }).catch(e => {
+        ctx.error = e
+        vertexaiTracingChannel.error.publish(e)
         vertexaiTracingChannel.asyncEnd.publish(ctx)
-        return streamingResult
+        throw e
       })
     })
   }
