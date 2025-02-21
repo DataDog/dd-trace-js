@@ -19,7 +19,6 @@ const telemetryMetrics = require('./telemetry/metrics')
 const { getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
-const libdatadog = require('@datadog/libdatadog')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -247,25 +246,16 @@ class Config {
 
     // Configure the logger first so it can be used to warn about other configs
     const logConfig = log.getConfig()
-    this.debug = isTrue(coalesce(
-      fleetFileConfigEntries.DD_TRACE_DEBUG,
-      process.env.DD_TRACE_DEBUG,
-      process.env.OTEL_LOG_LEVEL === 'debug' || undefined,
-      localFileConfigEntries.DD_TRACE_DEBUG,
-      logConfig.enabled
-    ))
     this.logger = coalesce(options.logger, logConfig.logger)
-    this.logLevel = coalesce(
-      options.logLevel,
-      fleetFileConfigEntries.DD_TRACE_LOG_LEVEL,
-      process.env.DD_TRACE_LOG_LEVEL,
-      process.env.OTEL_LOG_LEVEL,
-      localFileConfigEntries.DD_TRACE_LOG_LEVEL,
-      logConfig.logLevel
-    )
-
     log.use(this.logger)
-    log.toggle(this.debug, this.logLevel)
+    log.toggle(
+      log.isEnabled(fleetFileConfigEntries.DD_TRACE_DEBUG, localFileConfigEntries.DD_TRACE_DEBUG),
+      log.getLogLevel(
+        options.logLevel,
+        fleetFileConfigEntries.DD_TRACE_LOG_LEVEL,
+        localFileConfigEntries.DD_TRACE_LOG_LEVEL
+      )
+    )
 
     // Process file config warnings, if any
     for (const warning of fileConfigWarnings) {
@@ -454,6 +444,15 @@ class Config {
     const { localConfigPath, fleetConfigPath } = this._getStableConfigPaths()
     if (!fs.existsSync(localConfigPath) && !fs.existsSync(fleetConfigPath)) {
       // Check if files exist, if not bail out early to avoid unnecessary library loading
+      return { localFileConfigEntries, fleetFileConfigEntries, fileConfigWarnings }
+    }
+
+    // libdatadog isn't always available (e.g serverless) so we need to handle that case gracefully
+    let libdatadog
+    try {
+      libdatadog = require('@datadog/libdatadog')
+    } catch (e) {
+      fileConfigWarnings.push('Can\'t load libdatadog library')
       return { localFileConfigEntries, fleetFileConfigEntries, fileConfigWarnings }
     }
 

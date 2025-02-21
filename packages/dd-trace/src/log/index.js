@@ -110,18 +110,29 @@ const log = {
 
 log.reset()
 
-const enabled = isTrue(coalesce(
-  process.env.DD_TRACE_DEBUG,
-  process.env.OTEL_LOG_LEVEL === 'debug',
-  config.enabled
-))
+const isEnabled = (fleetStableConfigValue = undefined, localStableConfigValue = undefined) => (
+  isTrue(coalesce(
+    fleetStableConfigValue,
+    process.env.DD_TRACE_DEBUG,
+    process.env.OTEL_LOG_LEVEL === 'debug' || undefined,
+    localStableConfigValue,
+    config.enabled
+  ))
+)
 
-const logLevel = coalesce(
+const getLogLevel = (
+  optionsValue = undefined,
+  fleetStableConfigValue = undefined,
+  localStableConfigValue = undefined
+) => coalesce(
+  optionsValue,
+  fleetStableConfigValue,
   process.env.DD_TRACE_LOG_LEVEL,
   process.env.OTEL_LOG_LEVEL,
+  localStableConfigValue,
   config.logLevel
 )
 
-log.toggle(enabled, logLevel)
+log.toggle(isEnabled(), getLogLevel())
 
 module.exports = log
