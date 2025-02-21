@@ -388,9 +388,8 @@ describe('Plugin', () => {
               const span = traces[0][0]
 
               expect(injectDbmCommandSpy.called).to.be.true
-              const instrumentedCommand = injectDbmCommandSpy.getCall(0).returnValue
-              expect(instrumentedCommand).to.have.property('comment')
-              expect(instrumentedCommand.comment).to.equal(
+              const comment = injectDbmCommandSpy.getCall(0).returnValue
+              expect(comment).to.equal(
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
                 'dde=\'tester\',' +
@@ -440,9 +439,8 @@ describe('Plugin', () => {
               const spanId = span.span_id.toString(16).padStart(16, '0')
 
               expect(injectDbmCommandSpy.called).to.be.true
-              const instrumentedCommand = injectDbmCommandSpy.getCall(0).returnValue
-              expect(instrumentedCommand).to.have.property('comment')
-              expect(instrumentedCommand.comment).to.equal(
+              const comment = injectDbmCommandSpy.getCall(0).returnValue
+              expect(comment).to.equal(
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
                 'dde=\'tester\',' +
