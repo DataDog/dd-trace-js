@@ -401,10 +401,10 @@
   resolved "https://registry.npmjs.org/@colors/colors/-/colors-1.5.0.tgz"
   integrity "sha1-u1BFecHK6SPmV2pPXaQ9Jfl729k= sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ=="
 
-"@datadog/libdatadog@^0.4.0":
-  version "0.4.0"
-  resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.4.0.tgz#aeeea02973f663b555ad9ac30c4015a31d561598"
-  integrity sha512-kGZfFVmQInzt6J4FFGrqMbrDvOxqwk3WqhAreS6n9b/De+iMVy/NMu3V7uKsY5zAvz+uQw0liDJm3ZDVH/MVVw==
+"@datadog/libdatadog@^0.5.0":
+  version "0.5.0"
+  resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.5.0.tgz#0ef2a2a76bb9505a0e7e5bc9be1415b467dbf368"
+  integrity sha512-YvLUVOhYVjJssm0f22/RnDQMc7ZZt/w1bA0nty1vvjyaDz5EWaHfWaaV4GYpCt5MRvnGjCBxIwwbRivmGseKeQ==
 
 "@datadog/native-appsec@8.4.0":
   version "8.4.0"

@@ -79,11 +79,20 @@ function hasOwn (object, prop) {
   return Object.prototype.hasOwnProperty.call(object, prop)
 }
 
+function normalizeProfilingEnabledValue (configValue) {
+  return isTrue(configValue)
+    ? 'true'
+    : isFalse(configValue)
+      ? 'false'
+      : configValue === 'auto' ? 'auto' : undefined
+}
+
 module.exports = {
   isTrue,
   isFalse,
   isError,
   globMatch,
   calculateDDBasePath,
-  hasOwn
+  hasOwn,
+  normalizeProfilingEnabledValue
 }

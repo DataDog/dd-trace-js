@@ -11,7 +11,7 @@ const tagger = require('./tagger')
 const get = require('../../datadog-core/src/utils/src/get')
 const has = require('../../datadog-core/src/utils/src/has')
 const set = require('../../datadog-core/src/utils/src/set')
-const { isTrue, isFalse } = require('./util')
+const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
@@ -19,6 +19,7 @@ const telemetryMetrics = require('./telemetry/metrics')
 const { getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
+const StableConfig = require('./config_stable')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -236,6 +237,8 @@ function reformatSpanSamplingRules (rules) {
 
 class Config {
   constructor (options = {}) {
+    this.stableConfig = new StableConfig()
+
     options = {
       ...options,
       appsec: options.appsec != null ? options.appsec : options.experimental?.appsec,
@@ -244,12 +247,23 @@ class Config {
 
     // Configure the logger first so it can be used to warn about other configs
     const logConfig = log.getConfig()
-    this.debug = logConfig.enabled
+    this.debug = log.isEnabled(
+      this.stableConfig.fleetEntries?.DD_TRACE_DEBUG,
+      this.stableConfig.localEntries?.DD_TRACE_DEBUG
+    )
     this.logger = coalesce(options.logger, logConfig.logger)
-    this.logLevel = coalesce(options.logLevel, logConfig.logLevel)
-
+    this.logLevel = log.getLogLevel(
+      options.logLevel,
+      this.stableConfig.fleetEntries?.DD_TRACE_LOG_LEVEL,
+      this.stableConfig.localEntries?.DD_TRACE_LOG_LEVEL
+    )
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel)
+
+    // Process stable config warnings, if any
+    for (const warning of this.stableConfig.warnings) {
+      log.warn(warning)
+    }
 
     checkIfBothOtelAndDdEnvVarSet()
 
@@ -337,7 +351,9 @@ class Config {
     }
 
     this._applyDefaults()
+    this._applyLocalStableConfig()
     this._applyEnvironment()
+    this._applyFleetStableConfig()
     this._applyOptions(options)
     this._applyCalculated()
     this._applyRemote({})
@@ -576,6 +592,16 @@ class Config {
     this._setValue(defaults, 'version', pkg.version)
     this._setValue(defaults, 'instrumentation_config_id', undefined)
     this._setValue(defaults, 'aws.dynamoDb.tablePrimaryKeys', undefined)
+  }
+
+  _applyLocalStableConfig () {
+    const obj = setHiddenProperty(this, '_localStableConfig', {})
+    this.stableConfig.applyLocalConfig(obj)
+  }
+
+  _applyFleetStableConfig () {
+    const obj = setHiddenProperty(this, '_fleetStableConfig', {})
+    this.stableConfig.applyFleetConfig(obj)
   }
 
   _applyEnvironment () {
@@ -826,11 +852,7 @@ class Config {
     }
     this._setString(env, 'port', DD_TRACE_AGENT_PORT)
     const profilingEnabledEnv = coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED)
-    const profilingEnabled = isTrue(profilingEnabledEnv)
-      ? 'true'
-      : isFalse(profilingEnabledEnv)
-        ? 'false'
-        : profilingEnabledEnv === 'auto' ? 'auto' : undefined
+    const profilingEnabled = normalizeProfilingEnabledValue(profilingEnabledEnv)
     this._setString(env, 'profiling.enabled', profilingEnabled)
     this._setString(env, 'profiling.exporters', DD_PROFILING_EXPORTERS)
     this._setBoolean(env, 'profiling.sourceMap', DD_PROFILING_SOURCE_MAP && !isFalse(DD_PROFILING_SOURCE_MAP))
@@ -1330,9 +1352,33 @@ class Config {
   // eslint-disable-next-line @stylistic/js/max-len
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
   _merge () {
-    const containers = [this._remote, this._options, this._env, this._calculated, this._defaults]
-    const origins = ['remote_config', 'code', 'env_var', 'calculated', 'default']
-    const unprocessedValues = [this._remoteUnprocessed, this._optsUnprocessed, this._envUnprocessed, {}, {}]
+    const containers = [
+      this._remote,
+      this._options,
+      this._fleetStableConfig,
+      this._env,
+      this._localStableConfig,
+      this._calculated,
+      this._defaults
+    ]
+    const origins = [
+      'remote_config',
+      'code',
+      this.stableConfig.FLEET_STABLE_CONFIG_ORIGIN,
+      'env_var',
+      this.stableConfig.LOCAL_STABLE_CONFIG_ORIGIN,
+      'calculated',
+      'default'
+    ]
+    const unprocessedValues = [
+      this._remoteUnprocessed,
+      this._optsUnprocessed,
+      {},
+      this._envUnprocessed,
+      {},
+      {},
+      {}
+    ]
     const changes = []
 
     for (const name in this._defaults) {
