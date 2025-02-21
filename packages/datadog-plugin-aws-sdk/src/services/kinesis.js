@@ -1,8 +1,5 @@
 'use strict'
-const {
-  getSizeOrZero
-} = require('../../../dd-trace/src/datastreams/processor')
-const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
+const { DsmPathwayCodec, getSizeOrZero } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { storage } = require('../../../datadog-core')

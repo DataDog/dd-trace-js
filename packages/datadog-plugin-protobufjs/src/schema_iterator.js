@@ -10,7 +10,7 @@ const {
 const log = require('../../dd-trace/src/log')
 const {
   SchemaBuilder
-} = require('../../dd-trace/src/datastreams/schemas/schema_builder')
+} = require('../../dd-trace/src/datastreams')
 
 class SchemaExtractor {
   constructor (schema) {

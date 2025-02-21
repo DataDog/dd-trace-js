@@ -1,5 +1,5 @@
-const { storage } = require('../../datadog-core')
-const log = require('./log')
+const { storage } = require('../../../datadog-core')
+const log = require('../log')
 
 function getDataStreamsContext () {
   const store = storage('legacy').getStore()

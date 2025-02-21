@@ -1,6 +1,6 @@
 'use strict'
 
-const { getMessageSize } = require('../../dd-trace/src/datastreams/processor')
+const { getMessageSize } = require('../../dd-trace/src/datastreams')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 
 class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {

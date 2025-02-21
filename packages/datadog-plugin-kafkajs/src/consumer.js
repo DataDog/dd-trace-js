@@ -1,7 +1,7 @@
 'use strict'
 
 const dc = require('dc-polyfill')
-const { getMessageSize } = require('../../dd-trace/src/datastreams/processor')
+const { getMessageSize } = require('../../dd-trace/src/datastreams')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 
 const afterStartCh = dc.channel('dd-trace:kafkajs:consumer:afterStart')
