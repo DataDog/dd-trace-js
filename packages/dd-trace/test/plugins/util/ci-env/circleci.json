@@ -550,7 +550,7 @@
       "CIRCLE_BUILD_URL": "https://circleci-build-url.com/",
       "CIRCLE_JOB": "circleci-job-name",
       "CIRCLE_PROJECT_REPONAME": "circleci-pipeline-name",
-      "CIRCLE_REPOSITORY_URL": "ssh://host.xz:port/path/to/repo/",
+      "CIRCLE_REPOSITORY_URL": "ssh://host.xz:54321/path/to/repo/",
       "CIRCLE_SHA1": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
       "DD_TEST_CASE_NAME": "ssh-repository-url-no-git-suffix"
@@ -564,7 +564,7 @@
       "ci.pipeline.url": "https://app.circleci.com/pipelines/workflows/circleci-pipeline-id",
       "ci.provider.name": "circleci",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "git.repository_url": "ssh://host.xz:port/path/to/repo/"
+      "git.repository_url": "ssh://host.xz:54321/path/to/repo/"
     }
   ],
   [
@@ -712,7 +712,7 @@
       "CIRCLE_BUILD_URL": "https://circleci-build-url.com/",
       "CIRCLE_JOB": "circleci-job-name",
       "CIRCLE_PROJECT_REPONAME": "circleci-pipeline-name",
-      "CIRCLE_REPOSITORY_URL": "ssh://user@host.xz:port/path/to/repo.git/",
+      "CIRCLE_REPOSITORY_URL": "ssh://user@host.xz:54321/path/to/repo.git/",
       "CIRCLE_SHA1": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CIRCLE_WORKFLOW_ID": "circleci-pipeline-id"
     },
@@ -725,7 +725,7 @@
       "ci.pipeline.url": "https://app.circleci.com/pipelines/workflows/circleci-pipeline-id",
       "ci.provider.name": "circleci",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "git.repository_url": "ssh://host.xz:port/path/to/repo.git/"
+      "git.repository_url": "ssh://host.xz:54321/path/to/repo.git/"
     }
   ],
   [
@@ -735,7 +735,7 @@
       "CIRCLE_BUILD_URL": "https://circleci-build-url.com/",
       "CIRCLE_JOB": "circleci-job-name",
       "CIRCLE_PROJECT_REPONAME": "circleci-pipeline-name",
-      "CIRCLE_REPOSITORY_URL": "ssh://user:password@host.xz:port/path/to/repo.git/",
+      "CIRCLE_REPOSITORY_URL": "ssh://user:password@host.xz:54321/path/to/repo.git/",
       "CIRCLE_SHA1": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CIRCLE_WORKFLOW_ID": "circleci-pipeline-id"
     },
@@ -748,7 +748,7 @@
       "ci.pipeline.url": "https://app.circleci.com/pipelines/workflows/circleci-pipeline-id",
       "ci.provider.name": "circleci",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "git.repository_url": "ssh://host.xz:port/path/to/repo.git/"
+      "git.repository_url": "ssh://host.xz:54321/path/to/repo.git/"
     }
   ]
 ]
