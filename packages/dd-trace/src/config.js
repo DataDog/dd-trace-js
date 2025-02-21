@@ -254,8 +254,8 @@ class Config {
     this.logger = coalesce(options.logger, logConfig.logger)
     this.logLevel = log.getLogLevel(
       options.logLevel,
-      this.fleetEntries?.DD_TRACE_LOG_LEVEL,
-      this.localEntries?.DD_TRACE_LOG_LEVEL
+      this.stableConfig.fleetEntries?.DD_TRACE_LOG_LEVEL,
+      this.stableConfig.localEntries?.DD_TRACE_LOG_LEVEL
     )
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel)
