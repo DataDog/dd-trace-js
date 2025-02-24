@@ -3,6 +3,7 @@
 const web = require('../../plugins/util/web')
 const { getCallsiteFrames, reportStackTrace, canReportStackTrace } = require('../stack_trace')
 const { getBlockingAction } = require('../blocking')
+const { reportMetrics } = require('../reporter')
 const log = require('../../log')
 
 const abortOnUncaughtException = process.execArgv?.includes('--abort-on-uncaught-exception')
@@ -28,8 +29,9 @@ class DatadogRaspAbortError extends Error {
   }
 }
 
-function handleResult (actions, req, res, abortController, config) {
-  const generateStackTraceAction = actions?.generate_stack
+function handleResult (wafResults, req, res, abortController, config, raspRule) {
+  const { result, metrics, durationExt } = wafResults
+  const generateStackTraceAction = result.actions?.generate_stack
 
   const { enabled, maxDepth, maxStackTraces } = config.appsec.stackTrace
 
@@ -45,11 +47,21 @@ function handleResult (actions, req, res, abortController, config) {
     )
   }
 
+  const ruleTriggered = !!result?.events?.length
+  const blockingAction = getBlockingAction(result?.actions)
+
+  reportMetrics({
+    ...metrics,
+    durationExt,
+    duration: result.totalRuntime / 1e3,
+    ruleTriggered,
+    blockingAction,
+    wafTimeout: result.timeout
+  }, raspRule)
+
   if (!abortController || abortOnUncaughtException) return
 
-  const blockingAction = getBlockingAction(actions)
   if (blockingAction) {
-    const rootSpan = web.root(req)
     // Should block only in express
     if (rootSpan?.context()._name === 'express.request') {
       const abortError = new DatadogRaspAbortError(req, res, blockingAction)

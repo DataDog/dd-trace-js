@@ -1,7 +1,6 @@
 'use strict'
 
 const log = require('../../log')
-const Reporter = require('../reporter')
 const addresses = require('../addresses')
 const { getBlockingAction } = require('../blocking')
 const { wafRunFinished } = require('../channels')
@@ -113,26 +112,15 @@ class WAFContextWrapper {
         this.setUserIdCache(userId, result)
       }
 
-      Reporter.reportMetrics({
-        ...metrics,
-        duration: result.totalRuntime / 1e3,
-        durationExt: parseInt(end - start) / 1e3,
-        ruleTriggered,
-        blockTriggered,
-        wafTimeout: result.timeout
-      }, raspRule)
-
-      if (ruleTriggered) {
-        Reporter.reportAttack(JSON.stringify(result.events))
-      }
-
-      Reporter.reportDerivatives(result.derivatives)
-
       if (wafRunFinished.hasSubscribers) {
         wafRunFinished.publish({ payload })
       }
 
-      return result.actions
+      return {
+        result,
+        metrics,
+        durationExt: parseInt(end - start) / 1e3
+      }
     } catch (err) {
       log.error('[ASM] Error while running the AppSec WAF', err)
     }
