@@ -61,6 +61,20 @@ describe('telemetry (proxy)', () => {
     expect(telemetry.appClosing).to.have.been.called
     expect(telemetry.stop).to.have.been.called
   })
+
+  it('should proxy when enabled from updateConfig', () => {
+    const config = { telemetry: { enabled: true } }
+
+    proxy.updateConfig([], config)
+    proxy.updateIntegrations()
+    proxy.appClosing()
+    proxy.stop()
+
+    expect(telemetry.updateIntegrations).to.have.been.called
+    expect(telemetry.updateConfig).to.have.been.calledWith([], config)
+    expect(telemetry.appClosing).to.have.been.called
+    expect(telemetry.stop).to.have.been.called
+  })
 })
 
 describe('telemetry', () => {
