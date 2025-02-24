@@ -33,7 +33,8 @@ function newStore () {
       raspEvalCount: 0,
       wafTimeouts: 0,
       raspTimeouts: 0,
-      wafErrorCode: null
+      wafErrorCode: null,
+      raspErrorCode: null
     }
   }
 }

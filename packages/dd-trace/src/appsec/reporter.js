@@ -243,6 +243,10 @@ function finishRequest (req, res) {
     rootSpan.setTag('_dd.appsec.rasp.timeout', metrics.raspTimeouts)
   }
 
+  if (metrics?.raspErrorCode) {
+    rootSpan.setTag('_dd.appsec.rasp.error', metrics.raspErrorCode)
+  }
+
   incrementWafRequestsMetric(req)
 
   // collect some headers even when no attack is detected
