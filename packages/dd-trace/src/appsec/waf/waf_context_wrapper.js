@@ -4,6 +4,7 @@ const log = require('../../log')
 const addresses = require('../addresses')
 const { getBlockingAction } = require('../blocking')
 const { wafRunFinished } = require('../channels')
+const Reporter = require('../reporter')
 
 // TODO: remove once ephemeral addresses are implemented
 const preventDuplicateAddresses = new Set([
