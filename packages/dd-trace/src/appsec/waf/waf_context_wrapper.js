@@ -21,7 +21,7 @@ class WAFContextWrapper {
     this.cachedUserIdActions = new Map()
   }
 
-  run ({ persistent, ephemeral }, raspRule) {
+  run ({ persistent, ephemeral }) {
     if (this.ddwafContext.disposed) {
       log.warn('[ASM] Calling run on a disposed context')
       return

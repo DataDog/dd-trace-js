@@ -60,7 +60,7 @@ function analyzeLfi (ctx) {
 
     const raspRule = { type: RULE_TYPES.LFI }
 
-    const result = waf.run({ ephemeral }, req, raspRule)
+    const result = waf.run({ ephemeral }, req)
     handleResult(result, req, res, ctx.abortController, config, raspRule)
   })
 }
