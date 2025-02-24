@@ -934,6 +934,7 @@ class Config {
     this._setValue(opts, 'baggageMaxItems', options.baggageMaxItems)
     this._setBoolean(opts, 'codeOriginForSpans.enabled', options.codeOriginForSpans?.enabled)
     this._setString(opts, 'dbmPropagationMode', options.dbmPropagationMode)
+    this._setBoolean(opts, 'appendComment', options.appendComment)
     if (options.dogstatsd) {
       this._setString(opts, 'dogstatsd.hostname', options.dogstatsd.hostname)
       this._setString(opts, 'dogstatsd.port', options.dogstatsd.port)
