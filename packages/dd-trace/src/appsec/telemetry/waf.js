@@ -7,12 +7,19 @@ const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
 const DD_TELEMETRY_WAF_RESULT_TAGS = Symbol('_dd.appsec.telemetry.waf.result.tags')
 
-function addWafRequestMetrics (store, { duration, durationExt, wafTimeout }) {
+function addWafRequestMetrics (store, { duration, durationExt, wafTimeout, errorCode }) {
   store[DD_TELEMETRY_REQUEST_METRICS].duration += duration || 0
   store[DD_TELEMETRY_REQUEST_METRICS].durationExt += durationExt || 0
 
   if (wafTimeout) {
     store[DD_TELEMETRY_REQUEST_METRICS].wafTimeouts++
+  }
+
+  if (errorCode) {
+    store[DD_TELEMETRY_REQUEST_METRICS].wafErrorCode = Math.max(
+      errorCode,
+      store[DD_TELEMETRY_REQUEST_METRICS].wafErrorCode ?? errorCode
+    )
   }
 }
 

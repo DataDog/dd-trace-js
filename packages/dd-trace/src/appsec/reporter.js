@@ -219,6 +219,10 @@ function finishRequest (req, res) {
     rootSpan.setTag('_dd.appsec.waf.duration_ext', metrics.durationExt)
   }
 
+  if (metrics?.wafErrorCode) {
+    rootSpan.setTag('_dd.appsec.waf.error', metrics.wafErrorCode)
+  }
+
   if (metrics?.wafTimeouts) {
     rootSpan.setTag('_dd.appsec.waf.timeouts', metrics.wafTimeouts)
   }
