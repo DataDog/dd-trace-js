@@ -31,7 +31,7 @@ function analyzeSsrf (ctx) {
 
   const raspRule = { type: RULE_TYPES.SSRF }
 
-  const result = waf.run({ ephemeral }, req, raspRule)
+  const result = waf.run({ ephemeral }, req)
 
   const res = store?.res
   handleResult(result, req, res, ctx.abortController, config, raspRule)
