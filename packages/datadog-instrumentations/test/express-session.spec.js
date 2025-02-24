@@ -4,7 +4,6 @@ const { assert } = require('chai')
 const dc = require('dc-polyfill')
 const axios = require('axios')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { storage } = require('../../datadog-core')
 
 withVersions('express-session', 'express-session', version => {
   describe('express-session instrumentation', () => {
