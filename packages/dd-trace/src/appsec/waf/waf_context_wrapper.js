@@ -100,16 +100,25 @@ class WAFContextWrapper {
 
       const result = this.ddwafContext.run(payload, this.wafTimeout)
 
-      if (result?.metrics?.maxTruncatedString) {
-        metrics.maxTruncatedString = result.metrics.maxTruncatedString
-      }
+      if (!result) {
+        // Binding or other waf unexpected errors
+        metrics.errorCode = -127
+      } else {
+        if (typeof result.errorCode === 'number' && result.errorCode < 0) {
+          metrics.errorCode = result.errorCode
+        }
 
-      if (result?.metrics?.maxTruncatedContainerSize) {
-        metrics.maxTruncatedContainerSize = result.metrics.maxTruncatedContainerSize
-      }
+        if (result.metrics?.maxTruncatedString) {
+          metrics.maxTruncatedString = result.metrics.maxTruncatedString
+        }
 
-      if (result?.metrics?.maxTruncatedContainerDepth) {
-        metrics.maxTruncatedContainerDepth = result.metrics.maxTruncatedContainerDepth
+        if (result.metrics?.maxTruncatedContainerSize) {
+          metrics.maxTruncatedContainerSize = result.metrics.maxTruncatedContainerSize
+        }
+
+        if (result.metrics?.maxTruncatedContainerDepth) {
+          metrics.maxTruncatedContainerDepth = result.metrics.maxTruncatedContainerDepth
+        }
       }
 
       const end = process.hrtime.bigint()
@@ -133,9 +142,9 @@ class WAFContextWrapper {
 
       this.addressesToSkip = newAddressesToSkip
 
-      const ruleTriggered = !!result.events?.length
+      const ruleTriggered = !!result?.events?.length
 
-      const blockTriggered = !!getBlockingAction(result.actions)
+      const blockTriggered = !!getBlockingAction(result?.actions)
 
       // SPECIAL CASE FOR USER_ID
       // TODO: make this universal
