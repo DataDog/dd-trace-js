@@ -25,7 +25,7 @@ class MongodbCorePlugin extends DatabasePlugin {
         'out.port': options.port
       }
     })
-    ops.comment = this.injectDbmCommand(span, ops.comment, service)
+    ops.comment = this.injectDbmComment(span, ops.comment, service)
   }
 
   getPeerService (tags) {
@@ -37,7 +37,7 @@ class MongodbCorePlugin extends DatabasePlugin {
     return super.getPeerService(tags)
   }
 
-  injectDbmCommand (span, comment, serviceName) {
+  injectDbmComment (span, comment, serviceName) {
     const dbmTraceComment = this.createDbmComment(span, serviceName)
 
     if (!dbmTraceComment) {
