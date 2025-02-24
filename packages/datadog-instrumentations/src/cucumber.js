@@ -292,7 +292,7 @@ function wrapRun (pl, isLatestVersion) {
       let promise
 
       asyncResource.runInAsyncScope(() => {
-        promise = run.apply(this, arguments)
+        promise = runTest.apply(this, arguments)
       })
       promise.finally(async () => {
         const result = this.getWorstStepResult()
@@ -590,7 +590,10 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     let runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
 
     const testStatuses = lastStatusByPickleId.get(pickle.id)
-    const lastTestStatus = testStatuses[testStatuses.length - 1]
+    let lastTestStatus = 'fail'
+    if (testStatuses) {
+      lastTestStatus = testStatuses[testStatuses.length - 1]
+    }
     // If it's a new test and it hasn't been skipped, we run it again
     if (isEarlyFlakeDetectionEnabled && lastTestStatus !== 'skip' && isNew) {
       for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
