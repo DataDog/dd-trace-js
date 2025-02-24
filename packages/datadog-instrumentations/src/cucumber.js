@@ -229,9 +229,9 @@ function wrapRun (pl, isLatestVersion) {
 
   patched.add(pl)
 
-  shimmer.wrap(pl.prototype, 'run', run => function () {
+  shimmer.wrap(pl.prototype, 'runTest', runTest => function () {
     if (!testStartCh.hasSubscribers) {
-      return run.apply(this, arguments)
+      return runTest.apply(this, arguments)
     }
 
     let numAttempt = 0

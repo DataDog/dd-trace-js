@@ -7,6 +7,8 @@ const isJestWorker = !!process.env.JEST_WORKER_ID
 const isCucumberWorker = !!process.env.CUCUMBER_WORKER_ID
 const isMochaWorker = !!process.env.MOCHA_WORKER_ID
 
+console.log('test-optimization-kt: faulty version')
+
 const packageManagers = [
   'npm',
   'yarn',
