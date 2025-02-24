@@ -3,19 +3,18 @@
 let runtimeMetrics
 
 const noop = runtimeMetrics = {
-  start: () => {},
-  stop: () => {},
-  track: () => {},
-  boolean: () => {},
-  histogram: () => {},
-  count: () => {},
-  gauge: () => {},
-  increment: () => {},
-  decrement: () => {}
+  stop () {},
+  track () {},
+  boolean () {},
+  histogram () {},
+  count () {},
+  gauge () {},
+  increment () {},
+  decrement () {}
 }
 
 module.exports = {
-  start: (config) => {
+  start (config) {
     if (!config?.runtimeMetrics) return
 
     runtimeMetrics = require('./runtime_metrics')
@@ -25,7 +24,7 @@ module.exports = {
     runtimeMetrics.start(config)
   },
 
-  stop: () => {
+  stop () {
     runtimeMetrics.stop()
 
     Object.setPrototypeOf(module.exports, runtimeMetrics = noop)
