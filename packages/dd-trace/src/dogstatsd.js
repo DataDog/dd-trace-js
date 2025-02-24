@@ -191,13 +191,12 @@ class CustomMetrics {
     const clientConfig = DogStatsDClient.generateClientConfig(config)
     this.dogstatsd = new DogStatsDClient(clientConfig)
 
-    this._boundFlush = this.flush.bind(this)
+    const flush = this.flush.bind(this)
 
     // TODO(bengl) this magic number should be configurable
-    this._flushInterval = setInterval(this._boundFlush, 10 * 1000)
-    this._flushInterval.unref()
+    setInterval(flush, 10 * 1000).unref()
 
-    process.once('beforeExit', this._boundFlush)
+    process.once('beforeExit', flush)
   }
 
   increment (stat, value = 1, tags) {
