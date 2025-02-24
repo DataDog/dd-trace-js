@@ -107,19 +107,7 @@ describe('WAF Manager', () => {
   })
 
   describe('run', () => {
-    it('should call wafManager.run with raspRuleType', () => {
-      const run = sinon.stub()
-      WAFManager.prototype.getWAFContext = sinon.stub().returns({ run })
-      waf.init(rules, config.appsec)
-
-      const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
-      const req = {}
-      waf.run(payload, req, 'ssrf')
-
-      expect(run).to.be.calledOnceWithExactly(payload, 'ssrf')
-    })
-
-    it('should call wafManager.run without raspRuleType', () => {
+    it('should call wafManager.run', () => {
       const run = sinon.stub()
       WAFManager.prototype.getWAFContext = sinon.stub().returns({ run })
       waf.init(rules, config.appsec)
@@ -128,7 +116,7 @@ describe('WAF Manager', () => {
       const req = {}
       waf.run(payload, req)
 
-      expect(run).to.be.calledOnceWithExactly(payload, undefined)
+      expect(run).to.be.calledOnceWithExactly(payload)
     })
   })
 
@@ -290,66 +278,6 @@ describe('WAF Manager', () => {
         expect(Reporter.reportAttack).to.be.calledOnceWithExactly('["ATTACK DATA"]')
       })
 
-      it('should report if rule is triggered', () => {
-        const result = {
-          totalRuntime: 1,
-          durationExt: 1,
-          events: ['ruleTriggered']
-        }
-
-        ddwafContext.run.returns(result)
-        const params = {
-          persistent: {
-            'server.request.headers.no_cookies': { header: 'value' }
-          }
-        }
-
-        wafContextWrapper.run(params)
-
-        expect(Reporter.reportMetrics).to.be.calledOnce
-
-        const reportMetricsArg = Reporter.reportMetrics.firstCall.args[0]
-        expect(reportMetricsArg.ruleTriggered).to.be.true
-      })
-
-      it('should report raspRuleType', () => {
-        const result = {
-          totalRuntime: 1,
-          durationExt: 1
-        }
-
-        ddwafContext.run.returns(result)
-        const params = {
-          persistent: {
-            'server.request.headers.no_cookies': { header: 'value' }
-          }
-        }
-
-        wafContextWrapper.run(params, 'rule_type')
-
-        expect(Reporter.reportMetrics).to.be.calledOnce
-        expect(Reporter.reportMetrics.firstCall.args[1]).to.be.equal('rule_type')
-      })
-
-      it('should not report raspRuleType when it is not provided', () => {
-        const result = {
-          totalRuntime: 1,
-          durationExt: 1
-        }
-
-        ddwafContext.run.returns(result)
-        const params = {
-          persistent: {
-            'server.request.headers.no_cookies': { header: 'value' }
-          }
-        }
-
-        wafContextWrapper.run(params)
-
-        expect(Reporter.reportMetrics).to.be.calledOnce
-        expect(Reporter.reportMetrics.firstCall.args[1]).to.be.equal(undefined)
-      })
-
       it('should not report attack when ddwafContext does not return events', () => {
         ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1 })
         const params = {
@@ -376,7 +304,7 @@ describe('WAF Manager', () => {
         expect(Reporter.reportAttack).not.to.be.called
       })
 
-      it('should return the actions', () => {
+      it('should return the results with metrics and durationExt', () => {
         const actions = ['block']
         ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1, events: [], actions })
 
@@ -388,7 +316,19 @@ describe('WAF Manager', () => {
 
         const result = wafContextWrapper.run(params)
 
-        expect(result).to.be.equals(actions)
+        expect(result.result).to.deep.equal({
+          totalRuntime: 1,
+          durationExt: 1,
+          events: [],
+          actions: ['block']
+        })
+
+        expect(result.metrics).to.deep.equal({
+          rulesVersion: '1.0.0',
+          wafVersion: undefined
+        })
+
+        expect(result.durationExt).to.be.greaterThan(0)
       })
 
       it('should report schemas when ddwafContext returns schemas in the derivatives', () => {
