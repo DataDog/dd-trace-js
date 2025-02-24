@@ -7,6 +7,7 @@ const {
   getBlockingData,
   getBlockingAction
 } = require('./blocking')
+const log = require('../log')
 const waf = require('./waf')
 const addresses = require('./addresses')
 const web = require('../plugins/util/web')
@@ -94,14 +95,22 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
     const rootSpan = web.root(req)
     if (!rootSpan) return
 
-    const blockingData = getBlockingData(req, specificBlockingTypes.GRAPHQL, requestData.wafAction)
-    abortData.statusCode = blockingData.statusCode
-    abortData.headers = blockingData.headers
-    abortData.message = blockingData.body
+    try {
+      const blockingData = getBlockingData(req, specificBlockingTypes.GRAPHQL, requestData.wafAction)
+      abortData.statusCode = blockingData.statusCode
+      abortData.headers = blockingData.headers
+      abortData.message = blockingData.body
 
-    rootSpan.setTag('appsec.blocked', 'true')
+      abortController.abort()
 
-    abortController?.abort()
+      rootSpan.setTag('appsec.blocked', 'true')
+    } catch (err) {
+      rootSpan.addTags({
+        '_dd.appsec.block.failed': 1
+      })
+
+      log.error('[ASM] Blocking error', err)
+    }
   }
 
   graphqlRequestData.delete(req)
