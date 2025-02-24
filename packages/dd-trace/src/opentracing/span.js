@@ -99,6 +99,14 @@ class DatadogSpan {
       unfinishedRegistry.register(this, operationName, this)
     }
 
+    // Nullish operator is used here because both `tracer` and `tracer._config`
+    // can be null and there are tests passing invalid values to the `Span`
+    // constructor which still succeed today. Part of the problem is that `Span`
+    // stores only the tracer and not the config, so anything that needs the
+    // config has to read it from the tracer stored on the span, including
+    // even `Span` itself in this case.
+    //
+    // TODO: Refactor Tracer/Span + tests to avoid having to do nullish checks.
     if (tracer?._config?.spanLeakDebug > 0) {
       require('../spanleak').addSpan(this, operationName)
     }
