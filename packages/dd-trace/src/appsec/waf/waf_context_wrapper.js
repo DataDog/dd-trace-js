@@ -1,7 +1,6 @@
 'use strict'
 
 const log = require('../../log')
-const Reporter = require('../reporter')
 const addresses = require('../addresses')
 const { getBlockingAction } = require('../blocking')
 const { wafRunFinished } = require('../channels')

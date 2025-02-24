@@ -34,6 +34,7 @@ const UserTracking = require('./user_tracking')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
 const rasp = require('./rasp')
+const { reportMetrics } = require('./reporter')
 
 const responseAnalyzedSet = new WeakSet()
 
@@ -317,13 +318,38 @@ function onResponseSetHeader ({ res, abortController }) {
   }
 }
 
-function handleResults (actions, req, res, rootSpan, abortController) {
-  if (!actions || !req || !res || !rootSpan || !abortController) return
+function handleResults (wafResults, req, res, rootSpan, abortController) {
+  const { metrics, durationExt, result } = wafResults
 
-  const blockingAction = getBlockingAction(actions)
-  if (blockingAction) {
-    block(req, res, rootSpan, abortController, blockingAction)
+  const ruleTriggered = !!result.events?.length
+  const blockTriggered = getBlockingAction(wafResults?.actions)
+
+  const canBlock = wafResults?.actions && req && res && rootSpan && abortController
+
+  if (canBlock && blockTriggered) {
+    try {
+      block(req, res, rootSpan, abortController, blockTriggered)
+
+      rootSpan.addTags({
+        'appsec.blocked': 'true'
+      })
+    } catch (err) {
+      rootSpan.addTags({
+        '_dd.appsec.block.failed': 1
+      })
+
+      log.error('[ASM] Blocking error', err)
+    }
   }
+
+  reportMetrics({
+    ...metrics,
+    durationExt,
+    duration: result.totalRuntime / 1e3,
+    ruleTriggered,
+    blockTriggered,
+    wafTimeout: result.timeout
+  }, null)
 }
 
 function disable () {
