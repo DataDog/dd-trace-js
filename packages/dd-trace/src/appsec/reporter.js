@@ -210,12 +210,17 @@ function finishRequest (req, res) {
   }
 
   const metrics = getRequestMetrics(req)
+
   if (metrics?.duration) {
     rootSpan.setTag('_dd.appsec.waf.duration', metrics.duration)
   }
 
   if (metrics?.durationExt) {
     rootSpan.setTag('_dd.appsec.waf.duration_ext', metrics.durationExt)
+  }
+
+  if (metrics?.wafTimeouts) {
+    rootSpan.setTag('_dd.appsec.waf.timeouts', metrics.wafTimeouts)
   }
 
   if (metrics?.raspDuration) {

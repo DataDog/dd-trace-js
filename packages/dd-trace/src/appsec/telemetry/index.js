@@ -30,7 +30,8 @@ function newStore () {
       durationExt: 0,
       raspDuration: 0,
       raspDurationExt: 0,
-      raspEvalCount: 0
+      raspEvalCount: 0,
+      wafTimeouts: 0
     }
   }
 }
