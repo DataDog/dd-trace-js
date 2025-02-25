@@ -23,7 +23,10 @@ const {
   JEST_DISPLAY_NAME,
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_DRIVER,
-  getFormattedError
+  getFormattedError,
+  TEST_RETRY_REASON,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -105,6 +108,7 @@ class JestPlugin extends CiPlugin {
       error,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
+      isQuarantinedTestsEnabled,
       onDone
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -136,6 +140,9 @@ class JestPlugin extends CiPlugin {
       if (isEarlyFlakeDetectionFaulty) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
       }
+      if (isQuarantinedTestsEnabled) {
+        this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
+      }
 
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
@@ -165,8 +172,10 @@ class JestPlugin extends CiPlugin {
         config._ddEarlyFlakeDetectionNumRetries = this.libraryConfig?.earlyFlakeDetectionNumRetries ?? 0
         config._ddRepositoryRoot = this.repositoryRoot
         config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
+        config._ddIsQuarantinedTestsEnabled = this.libraryConfig?.isQuarantinedTestsEnabled ?? false
         config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
         config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
+        config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
       })
     })
 
@@ -289,6 +298,7 @@ class JestPlugin extends CiPlugin {
       if (isJestWorker) {
         this.tracer._exporter.flush()
       }
+      this.removeAllDiProbes()
     })
 
     /**
@@ -315,18 +325,21 @@ class JestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:jest:test:start', (test) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = this.startTestSpan(test)
 
       this.enter(span, store)
       this.activeTestSpan = span
     })
 
-    this.addSub('ci:jest:test:finish', ({ status, testStartLine, promises, shouldRemoveProbe }) => {
-      const span = storage.getStore().span
+    this.addSub('ci:jest:test:finish', ({ status, testStartLine, isQuarantined }) => {
+      const span = storage('legacy').getStore().span
       span.setTag(TEST_STATUS, status)
       if (testStartLine) {
         span.setTag(TEST_SOURCE_START, testStartLine)
+      }
+      if (isQuarantined) {
+        span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
       }
 
       const spanTags = span.context()._tags
@@ -344,15 +357,11 @@ class JestPlugin extends CiPlugin {
       span.finish()
       finishAllTraceSpans(span)
       this.activeTestSpan = null
-      if (shouldRemoveProbe && this.runningTestProbeId) {
-        promises.isProbeRemoved = withTimeout(this.removeDiProbe(this.runningTestProbeId), 2000)
-        this.runningTestProbeId = null
-      }
     })
 
     this.addSub('ci:jest:test:err', ({ error, shouldSetProbe, promises }) => {
       if (error) {
-        const store = storage.getStore()
+        const store = storage('legacy').getStore()
         if (store && store.span) {
           const span = store.span
           span.setTag(TEST_STATUS, 'fail')
@@ -360,9 +369,7 @@ class JestPlugin extends CiPlugin {
           if (shouldSetProbe) {
             const probeInformation = this.addDiProbe(error)
             if (probeInformation) {
-              const { probeId, setProbePromise, stackIndex } = probeInformation
-              this.runningTestProbeId = probeId
-              this.testErrorStackIndex = stackIndex
+              const { setProbePromise } = probeInformation
               promises.isProbeReady = withTimeout(setProbePromise, 2000)
             }
           }
@@ -410,6 +417,7 @@ class JestPlugin extends CiPlugin {
       extraTags[TEST_IS_NEW] = 'true'
       if (isEfdRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
+        extraTags[TEST_RETRY_REASON] = 'efd'
       }
     }
 

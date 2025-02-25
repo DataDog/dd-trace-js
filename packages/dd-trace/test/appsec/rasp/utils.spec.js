@@ -44,7 +44,42 @@ describe('RASP - utils.js', () => {
       web.root.returns(rootSpan)
 
       utils.handleResult(result, req, undefined, undefined, config)
-      sinon.assert.calledOnceWithExactly(stackTrace.reportStackTrace, rootSpan, stackId, 42, 2)
+      sinon.assert.calledOnceWithExactly(stackTrace.reportStackTrace, rootSpan, stackId, sinon.match.array)
+    })
+
+    it('should not report stack trace when max stack traces limit is reached', () => {
+      const req = {}
+      const rootSpan = {
+        meta_struct: {
+          '_dd.stack': {
+            exploit: ['stack1', 'stack2']
+          }
+        }
+      }
+      const result = {
+        generate_stack: {
+          stack_id: 'stackId'
+        }
+      }
+
+      web.root.returns(rootSpan)
+
+      utils.handleResult(result, req, undefined, undefined, config)
+      sinon.assert.notCalled(stackTrace.reportStackTrace)
+    })
+
+    it('should not report stack trace when rootSpan is null', () => {
+      const req = {}
+      const result = {
+        generate_stack: {
+          stack_id: 'stackId'
+        }
+      }
+
+      web.root.returns(null)
+
+      utils.handleResult(result, req, undefined, undefined, config)
+      sinon.assert.notCalled(stackTrace.reportStackTrace)
     })
 
     it('should not report stack trace when no action is present in waf result', () => {

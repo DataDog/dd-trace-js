@@ -26,6 +26,27 @@ const testToStartLine = new WeakMap()
 const testFileToSuiteAr = new Map()
 const wrappedFunctions = new WeakSet()
 const newTests = {}
+const testsQuarantined = new Set()
+
+function isQuarantinedTest (test, testsToQuarantine) {
+  const testSuite = getTestSuitePath(test.file, process.cwd())
+  const testName = test.fullTitle()
+
+  const isQuarantined = (testsToQuarantine
+    .mocha
+    ?.suites
+    ?.[testSuite]
+    ?.tests
+    ?.[testName]
+    ?.properties
+    ?.quarantined) ?? false
+
+  if (isQuarantined) {
+    testsQuarantined.add(test)
+  }
+
+  return isQuarantined
+}
 
 function isNewTest (test, knownTests) {
   const testSuite = getTestSuitePath(test.file, process.cwd())
@@ -171,7 +192,8 @@ function getOnTestHandler (isMain) {
       file: testSuiteAbsolutePath,
       title,
       _ddIsNew: isNew,
-      _ddIsEfdRetry: isEfdRetry
+      _ddIsEfdRetry: isEfdRetry,
+      _ddIsQuarantined: isQuarantined
     } = test
 
     const testInfo = {
@@ -187,6 +209,7 @@ function getOnTestHandler (isMain) {
 
     testInfo.isNew = isNew
     testInfo.isEfdRetry = isEfdRetry
+    testInfo.isQuarantined = isQuarantined
     // We want to store the result of the new tests
     if (isNew) {
       const testFullName = getTestFullName(test)
@@ -349,15 +372,26 @@ function getOnPendingHandler () {
 // Hook to add retries to tests if EFD is enabled
 function getRunTestsWrapper (runTests, config) {
   return function (suite, fn) {
-    if (config.isEarlyFlakeDetectionEnabled) {
+    if (config.isKnownTestsEnabled) {
       // by the time we reach `this.on('test')`, it is too late. We need to add retries here
       suite.tests.forEach(test => {
         if (!test.isPending() && isNewTest(test, config.knownTests)) {
           test._ddIsNew = true
-          retryTest(test, config.earlyFlakeDetectionNumRetries)
+          if (config.isEarlyFlakeDetectionEnabled) {
+            retryTest(test, config.earlyFlakeDetectionNumRetries)
+          }
         }
       })
     }
+
+    if (config.isQuarantinedTestsEnabled) {
+      suite.tests.forEach(test => {
+        if (isQuarantinedTest(test, config.quarantinedTests)) {
+          test._ddIsQuarantined = true
+        }
+      })
+    }
+
     return runTests.apply(this, arguments)
   }
 }
@@ -382,5 +416,6 @@ module.exports = {
   getOnPendingHandler,
   testFileToSuiteAr,
   getRunTestsWrapper,
-  newTests
+  newTests,
+  testsQuarantined
 }

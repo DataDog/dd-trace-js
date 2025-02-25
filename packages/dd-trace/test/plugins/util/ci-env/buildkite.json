@@ -718,7 +718,7 @@
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
-      "BUILDKITE_REPO": "ssh://host.xz:port/path/to/repo/",
+      "BUILDKITE_REPO": "ssh://host.xz:54321/path/to/repo/",
       "BUILDKITE_TAG": "",
       "DD_TEST_CASE_NAME": "ssh-repository-url-no-git-suffix"
     },
@@ -734,7 +734,7 @@
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "git.repository_url": "ssh://host.xz:port/path/to/repo/"
+      "git.repository_url": "ssh://host.xz:54321/path/to/repo/"
     }
   ],
   [
@@ -936,7 +936,7 @@
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
-      "BUILDKITE_REPO": "ssh://user@host.xz:port/path/to/repo.git/",
+      "BUILDKITE_REPO": "ssh://user@host.xz:54321/path/to/repo.git/",
       "BUILDKITE_TAG": ""
     },
     {
@@ -951,7 +951,7 @@
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "git.repository_url": "ssh://host.xz:port/path/to/repo.git/"
+      "git.repository_url": "ssh://host.xz:54321/path/to/repo.git/"
     }
   ],
   [
@@ -967,7 +967,7 @@
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
-      "BUILDKITE_REPO": "ssh://user:password@host.xz:port/path/to/repo.git/",
+      "BUILDKITE_REPO": "ssh://user:password@host.xz:54321/path/to/repo.git/",
       "BUILDKITE_TAG": ""
     },
     {
@@ -982,7 +982,7 @@
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "git.repository_url": "ssh://host.xz:port/path/to/repo.git/"
+      "git.repository_url": "ssh://host.xz:54321/path/to/repo.git/"
     }
   ],
   [

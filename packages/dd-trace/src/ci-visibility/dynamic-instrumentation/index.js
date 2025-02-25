@@ -69,8 +69,12 @@ class TestVisDynamicInstrumentation {
         // To avoid infinite initialization loops, we're disabling DI and tracing in the worker.
         env: {
           ...process.env,
+          DD_CIVISIBILITY_ENABLED: 0,
           DD_TRACE_ENABLED: 0,
-          DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 0
+          DD_TEST_FAILED_TEST_REPLAY_ENABLED: 0,
+          DD_CIVISIBILITY_MANUAL_API_ENABLED: 0,
+          DD_TRACING_ENABLED: 0,
+          DD_TRACE_TELEMETRY_ENABLED: 0
         },
         workerData: {
           config: config.serialize(),
@@ -119,6 +123,8 @@ class TestVisDynamicInstrumentation {
       const onHit = this.onHitBreakpointByProbeId.get(probeId)
       if (onHit) {
         onHit({ snapshot })
+      } else {
+        log.warn('Received a breakpoint hit for an unknown probe')
       }
     }).unref()
 

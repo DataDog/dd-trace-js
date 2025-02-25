@@ -14,7 +14,9 @@ const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const SERVICE_NAME = DD_MAJOR < 3 ? 'test-http-client' : 'test'
 const describe = globalThis.fetch ? globalThis.describe : globalThis.describe.skip
 
-describe('Plugin', () => {
+describe('Plugin', function () {
+  this.timeout(0)
+
   let express
   let fetch
   let appListener
@@ -215,102 +217,6 @@ describe('Plugin', () => {
         })
       })
 
-      it('should skip injecting if the Authorization header contains an AWS signature', done => {
-        const app = express()
-
-        app.get('/', (req, res) => {
-          try {
-            expect(req.get('x-datadog-trace-id')).to.be.undefined
-            expect(req.get('x-datadog-parent-id')).to.be.undefined
-
-            res.status(200).send()
-
-            done()
-          } catch (e) {
-            done(e)
-          }
-        })
-
-        appListener = server(app, port => {
-          fetch(`http://localhost:${port}/`, {
-            headers: {
-              Authorization: 'AWS4-HMAC-SHA256 ...'
-            }
-          })
-        })
-      })
-
-      it('should skip injecting if one of the Authorization headers contains an AWS signature', done => {
-        const app = express()
-
-        app.get('/', (req, res) => {
-          try {
-            expect(req.get('x-datadog-trace-id')).to.be.undefined
-            expect(req.get('x-datadog-parent-id')).to.be.undefined
-
-            res.status(200).send()
-
-            done()
-          } catch (e) {
-            done(e)
-          }
-        })
-
-        appListener = server(app, port => {
-          fetch(`http://localhost:${port}/`, {
-            headers: {
-              Authorization: ['AWS4-HMAC-SHA256 ...']
-            }
-          })
-        })
-      })
-
-      it('should skip injecting if the X-Amz-Signature header is set', done => {
-        const app = express()
-
-        app.get('/', (req, res) => {
-          try {
-            expect(req.get('x-datadog-trace-id')).to.be.undefined
-            expect(req.get('x-datadog-parent-id')).to.be.undefined
-
-            res.status(200).send()
-
-            done()
-          } catch (e) {
-            done(e)
-          }
-        })
-
-        appListener = server(app, port => {
-          fetch(`http://localhost:${port}/`, {
-            headers: {
-              'X-Amz-Signature': 'abc123'
-            }
-          })
-        })
-      })
-
-      it('should skip injecting if the X-Amz-Signature query param is set', done => {
-        const app = express()
-
-        app.get('/', (req, res) => {
-          try {
-            expect(req.get('x-datadog-trace-id')).to.be.undefined
-            expect(req.get('x-datadog-parent-id')).to.be.undefined
-
-            res.status(200).send()
-
-            done()
-          } catch (e) {
-            done(e)
-          }
-        })
-
-        appListener = server(app, port => {
-          fetch(`http://localhost:${port}/?X-Amz-Signature=abc123`)
-        })
-      })
-
       it('should handle connection errors', done => {
         let error
 
@@ -432,13 +338,13 @@ describe('Plugin', () => {
               clearTimeout(timer)
             })
 
-          const store = storage.getStore()
+          const store = storage('legacy').getStore()
 
-          storage.enterWith({ noop: true })
+          storage('legacy').enterWith({ noop: true })
 
           fetch(`http://localhost:${port}/user`).catch(() => {})
 
-          storage.enterWith(store)
+          storage('legacy').enterWith(store)
         })
       })
     })

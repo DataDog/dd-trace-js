@@ -1,11 +1,11 @@
 'use strict'
 
-const semver = require('semver')
+const satisfies = require('semifies')
 const logger = require('./log')
 const { addHook } = require('import-in-the-middle')
 const dc = require('dc-polyfill')
 
-if (semver.satisfies(process.versions.node, '>=14.13.1')) {
+if (satisfies(process.versions.node, '>=14.13.1')) {
   const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
   addHook((name, namespace) => {
     if (moduleLoadStartChannel.hasSubscribers) {

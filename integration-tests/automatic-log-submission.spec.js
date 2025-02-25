@@ -12,9 +12,6 @@ const {
 } = require('./helpers')
 const { FakeCiVisIntake } = require('./ci-visibility-intake')
 const webAppServer = require('./ci-visibility/web-app-server')
-const { NODE_MAJOR } = require('../version')
-
-const cucumberVersion = NODE_MAJOR <= 16 ? '9' : 'latest'
 
 describe('test visibility automatic log submission', () => {
   let sandbox, cwd, receiver, childProcess, webAppPort
@@ -23,7 +20,7 @@ describe('test visibility automatic log submission', () => {
   before(async () => {
     sandbox = await createSandbox([
       'mocha',
-      `@cucumber/cucumber@${cucumberVersion}`,
+      '@cucumber/cucumber',
       'jest',
       'winston',
       'chai@4'

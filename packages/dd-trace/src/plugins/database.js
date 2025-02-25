@@ -69,23 +69,33 @@ class DatabasePlugin extends StoragePlugin {
       : `/*${comment}*/ ${query}`
   }
 
-  injectDbmQuery (span, query, serviceName, isPreparedStatement = false) {
+  createDbmComment (span, serviceName, isPreparedStatement = false) {
     const mode = this.config.dbmPropagationMode
     const dbmService = this.getDbmServiceName(span, serviceName)
 
     if (mode === 'disabled') {
-      return query
+      return null
     }
 
     const servicePropagation = this.createDBMPropagationCommentService(dbmService, span)
 
     if (isPreparedStatement || mode === 'service') {
-      return this.addComment(query, servicePropagation)
+      return servicePropagation
     } else if (mode === 'full') {
       span.setTag('_dd.dbm_trace_injected', 'true')
       const traceparent = span._spanContext.toTraceparent()
-      return this.addComment(query, `${servicePropagation},traceparent='${traceparent}'`)
+      return `${servicePropagation},traceparent='${traceparent}'`
     }
+  }
+
+  injectDbmQuery (span, query, serviceName, isPreparedStatement = false) {
+    const dbmTraceComment = this.createDbmComment(span, serviceName, isPreparedStatement)
+
+    if (!dbmTraceComment) {
+      return query
+    }
+
+    return this.addComment(query, dbmTraceComment)
   }
 
   maybeTruncate (query) {

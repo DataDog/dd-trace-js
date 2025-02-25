@@ -1,4 +1,3 @@
-/* eslint-disable @stylistic/js/max-len */
 'use strict'
 
 const semver = require('semver')

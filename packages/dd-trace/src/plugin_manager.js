@@ -31,6 +31,9 @@ loadChannel.subscribe(({ name }) => {
 // Globals
 maybeEnable(require('../../datadog-plugin-fetch/src'))
 
+// Always enabled
+maybeEnable(require('../../datadog-plugin-dd-trace-api/src'))
+
 function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
   if (!pluginClasses[Plugin.id]) {
@@ -140,7 +143,9 @@ module.exports = class PluginManager {
       memcachedCommandEnabled,
       ciVisibilityTestSessionName,
       ciVisAgentlessLogSubmissionEnabled,
-      isTestDynamicInstrumentationEnabled
+      isTestDynamicInstrumentationEnabled,
+      isServiceUserProvided,
+      middlewareTracingEnabled
     } = this._tracerConfig
 
     const sharedConfig = {
@@ -153,7 +158,8 @@ module.exports = class PluginManager {
       headers: headerTags || [],
       ciVisibilityTestSessionName,
       ciVisAgentlessLogSubmissionEnabled,
-      isTestDynamicInstrumentationEnabled
+      isTestDynamicInstrumentationEnabled,
+      isServiceUserProvided
     }
 
     if (logInjection !== undefined) {
@@ -170,6 +176,13 @@ module.exports = class PluginManager {
 
     if (clientIpEnabled !== undefined) {
       sharedConfig.clientIpEnabled = clientIpEnabled
+    }
+
+    // For the global setting, we use the name `middlewareTracingEnabled`, but
+    // for the plugin-specific setting, we use `middleware`. They mean the same
+    // to an individual plugin, so we normalize them here.
+    if (middlewareTracingEnabled !== undefined) {
+      sharedConfig.middleware = middlewareTracingEnabled
     }
 
     return sharedConfig

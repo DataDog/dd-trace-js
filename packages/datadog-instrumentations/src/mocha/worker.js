@@ -25,12 +25,21 @@ addHook({
 }, (Mocha) => {
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     if (this.options._ddKnownTests) {
-      // EFD is enabled if there's a list of known tests
-      config.isEarlyFlakeDetectionEnabled = true
+      // If there are known tests, it means isKnownTestsEnabled should be true
+      config.isKnownTestsEnabled = true
+      config.isEarlyFlakeDetectionEnabled = this.options._ddIsEfdEnabled
       config.knownTests = this.options._ddKnownTests
       config.earlyFlakeDetectionNumRetries = this.options._ddEfdNumRetries
+      delete this.options._ddIsEfdEnabled
       delete this.options._ddKnownTests
       delete this.options._ddEfdNumRetries
+      delete this.options._ddQuarantinedTests
+    }
+    if (this.options._ddIsQuarantinedEnabled) {
+      config.isQuarantinedEnabled = true
+      config.quarantinedTests = this.options._ddQuarantinedTests
+      delete this.options._ddIsQuarantinedEnabled
+      delete this.options._ddQuarantinedTests
     }
     return run.apply(this, arguments)
   })

@@ -1,4 +1,5 @@
-name: Plugin Tests
+name: Plugin and Upstream Tests
+description: Run plugin tests and upstream test suite
 runs:
   using: composite
   steps:
@@ -15,7 +16,7 @@ runs:
       shell: bash
     - run: yarn test:plugins:upstream
       shell: bash
-    - uses: codecov/codecov-action@v3
+    - uses: codecov/codecov-action@v5
     - if: always()
       uses: ./.github/actions/testagent/logs
       with:

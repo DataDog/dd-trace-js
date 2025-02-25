@@ -9,6 +9,7 @@ const testPassCh = channel('ci:vitest:test:pass')
 const testErrorCh = channel('ci:vitest:test:error')
 const testSkipCh = channel('ci:vitest:test:skip')
 const isNewTestCh = channel('ci:vitest:test:is-new')
+const isQuarantinedCh = channel('ci:vitest:test:is-quarantined')
 
 // test suite hooks
 const testSuiteStartCh = channel('ci:vitest:test-suite:start')
@@ -21,10 +22,13 @@ const testSessionFinishCh = channel('ci:vitest:session:finish')
 const libraryConfigurationCh = channel('ci:vitest:library-configuration')
 const knownTestsCh = channel('ci:vitest:known-tests')
 const isEarlyFlakeDetectionFaultyCh = channel('ci:vitest:is-early-flake-detection-faulty')
+const quarantinedTestsCh = channel('ci:vitest:quarantined-tests')
 
 const taskToAsync = new WeakMap()
 const taskToStatuses = new WeakMap()
 const newTasks = new WeakSet()
+const quarantinedTasks = new WeakSet()
+let isRetryReasonEfd = false
 const switchedStatuses = new WeakSet()
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -44,14 +48,20 @@ function getProvidedContext () {
       _ddIsEarlyFlakeDetectionEnabled,
       _ddIsDiEnabled,
       _ddKnownTests: knownTests,
-      _ddEarlyFlakeDetectionNumRetries: numRepeats
+      _ddEarlyFlakeDetectionNumRetries: numRepeats,
+      _ddIsKnownTestsEnabled: isKnownTestsEnabled,
+      _ddIsQuarantinedTestsEnabled: isQuarantinedTestsEnabled,
+      _ddQuarantinedTests: quarantinedTests
     } = globalThis.__vitest_worker__.providedContext
 
     return {
       isDiEnabled: _ddIsDiEnabled,
       isEarlyFlakeDetectionEnabled: _ddIsEarlyFlakeDetectionEnabled,
       knownTests,
-      numRepeats
+      numRepeats,
+      isKnownTestsEnabled,
+      isQuarantinedTestsEnabled,
+      quarantinedTests
     }
   } catch (e) {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -59,7 +69,10 @@ function getProvidedContext () {
       isDiEnabled: false,
       isEarlyFlakeDetectionEnabled: false,
       knownTests: {},
-      numRepeats: 0
+      numRepeats: 0,
+      isKnownTestsEnabled: false,
+      isQuarantinedTestsEnabled: false,
+      quarantinedTests: {}
     }
   }
 }
@@ -153,8 +166,11 @@ function getSortWrapper (sort) {
     let isEarlyFlakeDetectionEnabled = false
     let earlyFlakeDetectionNumRetries = 0
     let isEarlyFlakeDetectionFaulty = false
+    let isKnownTestsEnabled = false
+    let isQuarantinedTestsEnabled = false
     let isDiEnabled = false
     let knownTests = {}
+    let quarantinedTests = {}
 
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
@@ -164,22 +180,27 @@ function getSortWrapper (sort) {
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
         isDiEnabled = libraryConfig.isDiEnabled
+        isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
+        isQuarantinedTestsEnabled = libraryConfig.isQuarantinedTestsEnabled
       }
     } catch (e) {
       isFlakyTestRetriesEnabled = false
       isEarlyFlakeDetectionEnabled = false
       isDiEnabled = false
+      isKnownTestsEnabled = false
     }
 
     if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
       this.ctx.config.retry = flakyTestRetriesCount
     }
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
       if (!knownTestsResponse.err) {
         knownTests = knownTestsResponse.knownTests
-        const testFilepaths = await this.ctx.getTestFilepaths()
+        const getFilePaths = this.ctx.getTestFilepaths || this.ctx._globTestFilepaths
+
+        const testFilepaths = await getFilePaths.call(this.ctx)
 
         isEarlyFlakeDetectionFaultyCh.publish({
           knownTests: knownTests.vitest || {},
@@ -190,13 +211,15 @@ function getSortWrapper (sort) {
         })
         if (isEarlyFlakeDetectionFaulty) {
           isEarlyFlakeDetectionEnabled = false
-          log.warn('Early flake detection is disabled because the number of new tests is too high.')
+          isKnownTestsEnabled = false
+          log.warn('New test detection is disabled because the number of new tests is too high.')
         } else {
           // TODO: use this to pass session and module IDs to the worker, instead of polluting process.env
           // Note: setting this.ctx.config.provide directly does not work because it's cached
           try {
             const workspaceProject = this.ctx.getCoreWorkspaceProject()
-            workspaceProject._provided._ddKnownTests = knownTests.vitest
+            workspaceProject._provided._ddIsKnownTestsEnabled = isKnownTestsEnabled
+            workspaceProject._provided._ddKnownTests = knownTests.vitest || {}
             workspaceProject._provided._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
             workspaceProject._provided._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
           } catch (e) {
@@ -205,6 +228,7 @@ function getSortWrapper (sort) {
         }
       } else {
         isEarlyFlakeDetectionEnabled = false
+        isKnownTestsEnabled = false
       }
     }
 
@@ -214,6 +238,23 @@ function getSortWrapper (sort) {
         workspaceProject._provided._ddIsDiEnabled = isDiEnabled
       } catch (e) {
         log.warn('Could not send Dynamic Instrumentation configuration to workers.')
+      }
+    }
+
+    if (isQuarantinedTestsEnabled) {
+      const { err, quarantinedTests: receivedQuarantinedTests } = await getChannelPromise(quarantinedTestsCh)
+      if (!err) {
+        quarantinedTests = receivedQuarantinedTests
+        try {
+          const workspaceProject = this.ctx.getCoreWorkspaceProject()
+          workspaceProject._provided._ddIsQuarantinedTestsEnabled = isQuarantinedTestsEnabled
+          workspaceProject._provided._ddQuarantinedTests = quarantinedTests
+        } catch (e) {
+          log.warn('Could not send quarantined tests to workers so Quarantine will not work.')
+        }
+      } else {
+        isQuarantinedTestsEnabled = false
+        log.error('Could not get quarantined tests.')
       }
     }
 
@@ -251,6 +292,7 @@ function getSortWrapper (sort) {
           error,
           isEarlyFlakeDetectionEnabled,
           isEarlyFlakeDetectionFaulty,
+          isQuarantinedTestsEnabled,
           onFinish
         })
       })
@@ -293,17 +335,21 @@ addHook({
     const {
       knownTests,
       isEarlyFlakeDetectionEnabled,
+      isKnownTestsEnabled,
       numRepeats
     } = getProvidedContext()
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
       isNewTestCh.publish({
         knownTests,
         testSuiteAbsolutePath: task.file.filepath,
         testName,
         onDone: (isNew) => {
           if (isNew) {
-            task.repeats = numRepeats
+            if (isEarlyFlakeDetectionEnabled) {
+              isRetryReasonEfd = task.repeats !== numRepeats
+              task.repeats = numRepeats
+            }
             newTasks.add(task)
             taskToStatuses.set(task, [])
           }
@@ -316,7 +362,7 @@ addHook({
 
   // `onAfterRunTask` is run after all repetitions or attempts are run
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterRunTask', onAfterRunTask => async function (task) {
-    const { isEarlyFlakeDetectionEnabled } = getProvidedContext()
+    const { isEarlyFlakeDetectionEnabled, isQuarantinedTestsEnabled } = getProvidedContext()
 
     if (isEarlyFlakeDetectionEnabled && taskToStatuses.has(task)) {
       const statuses = taskToStatuses.get(task)
@@ -325,6 +371,12 @@ addHook({
         if (task.result.state === 'fail') {
           switchedStatuses.add(task)
         }
+        task.result.state = 'pass'
+      }
+    }
+
+    if (isQuarantinedTestsEnabled) {
+      if (quarantinedTasks.has(task)) {
         task.result.state = 'pass'
       }
     }
@@ -340,14 +392,32 @@ addHook({
     }
     const testName = getTestName(task)
     let isNew = false
+    let isQuarantined = false
 
     const {
+      isKnownTestsEnabled,
       isEarlyFlakeDetectionEnabled,
-      isDiEnabled
+      isDiEnabled,
+      isQuarantinedTestsEnabled,
+      quarantinedTests
     } = getProvidedContext()
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
       isNew = newTasks.has(task)
+    }
+
+    if (isQuarantinedTestsEnabled) {
+      isQuarantinedCh.publish({
+        quarantinedTests,
+        testSuiteAbsolutePath: task.file.filepath,
+        testName,
+        onDone: (isTestQuarantined) => {
+          isQuarantined = isTestQuarantined
+          if (isTestQuarantined) {
+            quarantinedTasks.add(task)
+          }
+        }
+      })
     }
 
     const { retry: numAttempt, repeats: numRepetition } = retryInfo
@@ -429,8 +499,10 @@ addHook({
         testName,
         testSuiteAbsolutePath: task.file.filepath,
         isRetry: numAttempt > 0 || numRepetition > 0,
+        isRetryReasonEfd,
         isNew,
-        mightHitProbe: isDiEnabled && numAttempt > 0
+        mightHitProbe: isDiEnabled && numAttempt > 0,
+        isQuarantined
       })
     })
     return onBeforeTryTask.apply(this, arguments)
@@ -494,15 +566,6 @@ addHook({
 
 addHook({
   name: 'vitest',
-  versions: ['>=2.1.0'],
-  filePattern: 'dist/chunks/RandomSequencer.*'
-}, (randomSequencerPackage) => {
-  shimmer.wrap(randomSequencerPackage.B.prototype, 'sort', getSortWrapper)
-  return randomSequencerPackage
-})
-
-addHook({
-  name: 'vitest',
   versions: ['>=2.0.5 <2.1.0'],
   filePattern: 'dist/chunks/index.*'
 }, (vitestPackage) => {
@@ -511,6 +574,24 @@ addHook({
   }
 
   return vitestPackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=2.1.0 <3.0.0'],
+  filePattern: 'dist/chunks/RandomSequencer.*'
+}, (randomSequencerPackage) => {
+  shimmer.wrap(randomSequencerPackage.B.prototype, 'sort', getSortWrapper)
+  return randomSequencerPackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=3.0.0'],
+  filePattern: 'dist/chunks/resolveConfig.*'
+}, (randomSequencerPackage) => {
+  shimmer.wrap(randomSequencerPackage.B.prototype, 'sort', getSortWrapper)
+  return randomSequencerPackage
 })
 
 // Can't specify file because compiled vitest includes hashes in their files
@@ -533,15 +614,17 @@ addHook({
   versions: ['>=1.6.0'],
   file: 'dist/index.js'
 }, (vitestPackage, frameworkVersion) => {
-  shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPath) {
+  shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPaths) {
     let testSuiteError = null
     if (!testSuiteStartCh.hasSubscribers) {
       return startTests.apply(this, arguments)
     }
+    // From >=3.0.1, the first arguments changes from a string to an object containing the filepath
+    const testSuiteAbsolutePath = testPaths[0]?.filepath || testPaths[0]
 
     const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
     testSuiteAsyncResource.runInAsyncScope(() => {
-      testSuiteStartCh.publish({ testSuiteAbsolutePath: testPath[0], frameworkVersion })
+      testSuiteStartCh.publish({ testSuiteAbsolutePath, frameworkVersion })
     })
     const startTestsResponse = await startTests.apply(this, arguments)
 
@@ -563,7 +646,11 @@ addHook({
       if (result) {
         const { state, duration, errors } = result
         if (state === 'skip') { // programmatic skip
-          testSkipCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.file.filepath })
+          testSkipCh.publish({
+            testName: getTestName(task),
+            testSuiteAbsolutePath: task.file.filepath,
+            isNew: newTasks.has(task)
+          })
         } else if (state === 'pass' && !isSwitchedStatus) {
           if (testAsyncResource) {
             testAsyncResource.runInAsyncScope(() => {
@@ -589,7 +676,11 @@ addHook({
           }
         }
       } else { // test.skip or test.todo
-        testSkipCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.file.filepath })
+        testSkipCh.publish({
+          testName: getTestName(task),
+          testSuiteAbsolutePath: task.file.filepath,
+          isNew: newTasks.has(task)
+        })
       }
     })
 

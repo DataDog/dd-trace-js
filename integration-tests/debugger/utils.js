@@ -18,9 +18,13 @@ module.exports = {
   setup
 }
 
-function setup ({ env, testApp } = {}) {
+function setup ({ env, testApp, testAppSource } = {}) {
   let sandbox, cwd, appPort
-  const breakpoints = getBreakpointInfo({ file: testApp, stackIndex: 1 }) // `1` to disregard the `setup` function
+  const breakpoints = getBreakpointInfo({
+    deployedFile: testApp,
+    sourceFile: testAppSource,
+    stackIndex: 1 // `1` to disregard the `setup` function
+  })
   const t = {
     breakpoint: breakpoints[0],
     breakpoints,
@@ -71,7 +75,7 @@ function setup ({ env, testApp } = {}) {
     sandbox = await createSandbox(['fastify']) // TODO: Make this dynamic
     cwd = sandbox.folder
     // The sandbox uses the `integration-tests` folder as its root
-    t.appFile = join(cwd, 'debugger', breakpoints[0].file)
+    t.appFile = join(cwd, 'debugger', breakpoints[0].deployedFile)
   })
 
   after(async function () {
@@ -110,8 +114,8 @@ function setup ({ env, testApp } = {}) {
   return t
 }
 
-function getBreakpointInfo ({ file, stackIndex = 0 }) {
-  if (!file) {
+function getBreakpointInfo ({ deployedFile, sourceFile = deployedFile, stackIndex = 0 } = {}) {
+  if (!deployedFile) {
     // First, get the filename of file that called this function
     const testFile = new Error().stack
       .split('\n')[stackIndex + 2] // +2 to skip this function + the first line, which is the error message
@@ -120,17 +124,17 @@ function getBreakpointInfo ({ file, stackIndex = 0 }) {
       .split(':')[0]
 
     // Then, find the corresponding file in which the breakpoint(s) exists
-    file = join('target-app', basename(testFile).replace('.spec', ''))
+    deployedFile = sourceFile = join('target-app', basename(testFile).replace('.spec', ''))
   }
 
   // Finally, find the line number(s) of the breakpoint(s)
-  const lines = readFileSync(join(__dirname, file), 'utf8').split('\n')
+  const lines = readFileSync(join(__dirname, sourceFile), 'utf8').split('\n')
   const result = []
   for (let i = 0; i < lines.length; i++) {
     const index = lines[i].indexOf(BREAKPOINT_TOKEN)
     if (index !== -1) {
       const url = lines[i].slice(index + BREAKPOINT_TOKEN.length + 1).trim()
-      result.push({ file, line: i + 1, url })
+      result.push({ sourceFile, deployedFile, line: i + 1, url })
     }
   }
 

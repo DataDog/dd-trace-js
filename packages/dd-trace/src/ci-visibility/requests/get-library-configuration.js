@@ -93,7 +93,9 @@ function getLibraryConfiguration ({
               require_git: requireGit,
               early_flake_detection: earlyFlakeDetectionConfig,
               flaky_test_retries_enabled: isFlakyTestRetriesEnabled,
-              di_enabled: isDiEnabled
+              di_enabled: isDiEnabled,
+              known_tests_enabled: isKnownTestsEnabled,
+              test_management: testManagementConfig
             }
           }
         } = JSON.parse(res)
@@ -103,13 +105,16 @@ function getLibraryConfiguration ({
           isSuitesSkippingEnabled,
           isItrEnabled,
           requireGit,
-          isEarlyFlakeDetectionEnabled: earlyFlakeDetectionConfig?.enabled ?? false,
+          isEarlyFlakeDetectionEnabled: isKnownTestsEnabled && (earlyFlakeDetectionConfig?.enabled ?? false),
           earlyFlakeDetectionNumRetries:
             earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES,
           earlyFlakeDetectionFaultyThreshold:
             earlyFlakeDetectionConfig?.faulty_session_threshold ?? DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD,
           isFlakyTestRetriesEnabled,
-          isDiEnabled: isDiEnabled && isFlakyTestRetriesEnabled
+          isDiEnabled: isDiEnabled && isFlakyTestRetriesEnabled,
+          isKnownTestsEnabled,
+          // TODO: should it be test management?
+          isQuarantinedTestsEnabled: (testManagementConfig?.enabled ?? false)
         }
 
         log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)

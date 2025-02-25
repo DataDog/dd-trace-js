@@ -734,7 +734,7 @@ describe('Plugin', () => {
             try {
               expect(client.queryQueue[0].text).to.equal(
                 'SELECT $1::text as message /*dddb=\'postgres\',dddbs=\'serviced\',dde=\'tester\',' +
-                `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/ `)
+                `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/`)
             } catch (e) {
               done(e)
             }
