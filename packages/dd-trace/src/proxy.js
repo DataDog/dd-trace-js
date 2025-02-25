@@ -27,18 +27,32 @@ class LazyModule {
 }
 
 function lazyProxy (obj, property, config, getClass, ...args) {
-  const get = () => {
-    const RealClass = getClass()
-    const value = new RealClass(...args)
-
-    Reflect.defineProperty(obj, property, { value, configurable: true, enumerable: true })
-
-    return value
+  if (config?._isInServerlessEnvironment?.() === false) { // Load eagerly
+    loadEagerly(obj, property, getClass, ...args)
+  } else { // Load lazily
+    loadLazily(obj, property, getClass, ...args)
   }
+}
 
-  if (config?._isInServerlessEnvironment?.() === false) return get()
+function loadEagerly (obj, property, getClass, ...args) {
+  const RealClass = getClass()
 
-  Reflect.defineProperty(obj, property, { get, configurable: true, enumerable: true })
+  obj[property] = new RealClass(...args)
+}
+
+function loadLazily (obj, property, getClass, ...args) {
+  Reflect.defineProperty(obj, property, {
+    get () {
+      const RealClass = getClass()
+      const value = new RealClass(...args)
+
+      Reflect.defineProperty(obj, property, { value, configurable: true, enumerable: true })
+
+      return value
+    },
+    configurable: true,
+    enumerable: true
+  })
 }
 
 class Tracer extends NoopProxy {
