@@ -52,15 +52,15 @@ function setCacheTTL () {
 
   cacheTimer = setTimeout(function () {
     cacheTimer = null
-    if (Date.now() - cacheTime < 1_000) {
-      // If the last cache entry was added less then 1s ago, keep the cache alive
+    if (Date.now() - cacheTime < 2_500) {
+      // If the last cache entry was added recently, keep the cache alive
       setCacheTTL()
     } else {
       // Optimize for app boot, where a lot of reads might happen
       // Clear cache a few seconds after it was last used
       cache.clear()
     }
-  }, 10_000).unref()
+  }, 5_000).unref()
 }
 
 function loadInlineSourceMap (data) {
