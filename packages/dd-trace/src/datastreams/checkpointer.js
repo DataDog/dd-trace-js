@@ -1,4 +1,4 @@
-const DataStreamsContext = require('./data_streams_context')
+const DataStreamsContext = require('./context')
 
 class DataStreamsCheckpointer {
   constructor (tracer) {

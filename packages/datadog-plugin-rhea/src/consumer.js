@@ -2,7 +2,7 @@
 
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { storage } = require('../../datadog-core')
-const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams/processor')
+const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams')
 
 class RheaConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'rhea' }
