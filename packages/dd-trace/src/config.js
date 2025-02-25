@@ -562,6 +562,7 @@ class Config {
     this._setValue(defaults, 'telemetry.logCollection', true)
     this._setValue(defaults, 'telemetry.metrics', true)
     this._setValue(defaults, 'traceEnabled', true)
+    this._setValue(defaults, 'traceExperimentalEnabled', false)
     this._setValue(defaults, 'traceId128BitGenerationEnabled', true)
     this._setValue(defaults, 'traceId128BitLoggingEnabled', false)
     this._setValue(defaults, 'tracePropagationExtractFirst', false)
@@ -667,6 +668,7 @@ class Config {
       DD_TRACE_CLIENT_IP_ENABLED,
       DD_TRACE_CLIENT_IP_HEADER,
       DD_TRACE_ENABLED,
+      DD_TRACE_EXPERIMENTAL_ENABLED,
       DD_TRACE_EXPERIMENTAL_EXPORTER,
       DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
       DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
@@ -711,8 +713,10 @@ class Config {
     const env = setHiddenProperty(this, '_env', {})
     setHiddenProperty(this, '_envUnprocessed', {})
 
+    this._setBoolean(env, 'traceExperimentalEnabled', DD_TRACE_EXPERIMENTAL_ENABLED)
     tagger.add(tags, OTEL_RESOURCE_ATTRIBUTES, true)
-    tagger.add(tags, DD_TAGS)
+    tagger.add(tags, DD_TAGS, false,
+      this._env.traceExperimentalEnabled ? this._env.traceExperimentalEnabled : this._defaults.traceExperimentalEnabled)
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 

@@ -227,6 +227,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', false)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', [])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', [])
+    expect(config).to.have.property('traceExperimentalEnabled', false)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
@@ -515,6 +516,7 @@ describe('Config', () => {
     process.env.DD_IAST_REDACTION_VALUE_PATTERN = 'REDACTION_VALUE_PATTERN'
     process.env.DD_IAST_TELEMETRY_VERBOSITY = 'DEBUG'
     process.env.DD_IAST_STACK_TRACE_ENABLED = 'false'
+    process.env.DD_TRACE_EXPERIMENTAL_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
     process.env.DD_PROFILING_ENABLED = 'true'
@@ -562,6 +564,7 @@ describe('Config', () => {
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.property('traceEnabled', true)
+    expect(config).to.have.property('traceExperimentalEnabled', true)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanAttributeSchema', 'v1')
@@ -721,11 +724,29 @@ describe('Config', () => {
   it('should ignore empty strings', () => {
     process.env.DD_TAGS = 'service:,env:,version:'
 
-    const config = new Config()
+    let config = new Config()
 
     expect(config).to.have.property('service', 'node')
     expect(config).to.have.property('env', undefined)
     expect(config).to.have.property('version', '')
+
+    process.env.DD_TRACE_EXPERIMENTAL_ENABLED = 'true'
+    process.env.DD_TAGS = 'service: env: version:'
+
+    config = new Config()
+
+    expect(config).to.have.property('service', 'node')
+    expect(config).to.have.property('env', undefined)
+    expect(config).to.have.property('version', '')
+  })
+
+  it('should support space separated tags when experimental mode enabled', () => {
+    process.env.DD_TRACE_EXPERIMENTAL_ENABLED = 'true'
+    process.env.DD_TAGS = 'key1:value1 key2:value2'
+
+    const config = new Config()
+
+    expect(config.tags).to.include({ key1: 'value1', key2: 'value2' })
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
