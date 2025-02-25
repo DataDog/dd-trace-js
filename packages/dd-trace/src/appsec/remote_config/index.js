@@ -93,7 +93,6 @@ function enableWafUpdate (appsecConfig) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, true)
 
@@ -128,7 +127,6 @@ function disableWafUpdate () {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, false)
 
