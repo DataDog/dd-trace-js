@@ -7,18 +7,32 @@ const {
   getSizeOrZero
 } = require('./size')
 
+// This is only needed because DSM code is spread across existing tracing
+// plugins instead of having dedicated DSM plugins that are themselves
+// lazy loaded.
+//
+// TODO: Remove this when DSM has been moved to dedicaed plugins.
 function lazyClass (classGetter, methods = [], staticMethods = []) {
   let constructorArgs
+  let ActiveClass
 
   const LazyClass = function (...args) {
     constructorArgs = args
   }
 
+  const activate = () => {
+    return (ActiveClass = ActiveClass || classGetter())
+  }
+
   for (const method of methods) {
     LazyClass.prototype[method] = function (...args) {
-      const ActiveClass = classGetter()
-      const instance = new ActiveClass(...constructorArgs)
+      const instance = activate() && new ActiveClass(...constructorArgs)
 
+      // Replace the whole prototype instead of only the method itself whenever
+      // any individual method is called to avoid running through this code
+      // again every time another method is called. This is not only more
+      // efficient but it also means that the class instance does not need to be
+      // stored for future calls to other methods.
       Object.setPrototypeOf(this, instance)
 
       return this[method](...args)
@@ -27,11 +41,7 @@ function lazyClass (classGetter, methods = [], staticMethods = []) {
 
   for (const method of staticMethods) {
     LazyClass[method] = function (...args) {
-      const ActiveClass = classGetter()
-
-      for (const method of staticMethods) {
-        LazyClass[method] = ActiveClass[method]
-      }
+      LazyClass[method] = activate() && ActiveClass[method]
 
       return LazyClass[method](...args)
     }
@@ -85,6 +95,8 @@ module.exports = {
   DataStreamsManager,
   DataStreamsProcessor,
   SchemaBuilder,
+
+  // These are small functions so they are exposed directly and not lazy loaded.
   getAmqpMessageSize,
   getHeadersSize,
   getMessageSize,
