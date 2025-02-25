@@ -715,6 +715,8 @@ class Config {
 
     this._setBoolean(env, 'traceExperimentalEnabled', DD_TRACE_EXPERIMENTAL_ENABLED)
     tagger.add(tags, OTEL_RESOURCE_ATTRIBUTES, true)
+    // TODO: For the next major release, always pass true for parseSpaceSeparatedTags
+    // & remove the experimental feature flag from it
     tagger.add(tags, DD_TAGS, false,
       this._env.traceExperimentalEnabled ? this._env.traceExperimentalEnabled : this._defaults.traceExperimentalEnabled)
     tagger.add(tags, DD_TRACE_TAGS)
