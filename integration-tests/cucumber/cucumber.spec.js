@@ -1587,7 +1587,7 @@ versions.forEach(version => {
           })
           // Dynamic instrumentation only supported from >=8.0.0
           context('dynamic instrumentation', () => {
-            it('does not activate if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
+            it('does not activate if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
               receiver.setSettings({
                 flaky_test_retries_enabled: true,
                 di_enabled: true
@@ -1621,7 +1621,10 @@ versions.forEach(version => {
                 './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature --retry 1',
                 {
                   cwd,
-                  env: envVars,
+                  env: {
+                    ...envVars,
+                    DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false'
+                  },
                   stdio: 'pipe'
                 }
               )
@@ -1666,10 +1669,7 @@ versions.forEach(version => {
                 './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature --retry 1',
                 {
                   cwd,
-                  env: {
-                    ...envVars,
-                    DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
-                  },
+                  env: envVars,
                   stdio: 'pipe'
                 }
               )
@@ -1748,10 +1748,7 @@ versions.forEach(version => {
                 './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature --retry 1',
                 {
                   cwd,
-                  env: {
-                    ...envVars,
-                    DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
-                  },
+                  env: envVars,
                   stdio: 'pipe'
                 }
               )
@@ -1800,10 +1797,7 @@ versions.forEach(version => {
                 './node_modules/.bin/cucumber-js ci-visibility/features-di/test-not-hit-breakpoint.feature --retry 1',
                 {
                   cwd,
-                  env: {
-                    ...envVars,
-                    DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
-                  },
+                  env: envVars,
                   stdio: 'pipe'
                 }
               )
