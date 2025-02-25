@@ -16,7 +16,7 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
-const { getIsGCPFunction, getIsAzureFunction } = require('./serverless')
+const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 
@@ -419,10 +419,7 @@ class Config {
   }
 
   _isInServerlessEnvironment () {
-    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
-    const isGCPFunction = getIsGCPFunction()
-    const isAzureFunction = getIsAzureFunction()
-    return inAWSLambda || isGCPFunction || isAzureFunction
+    return isInServerlessEnvironment()
   }
 
   // for _merge to work, every config value must have a default value
