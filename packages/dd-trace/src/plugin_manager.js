@@ -135,6 +135,7 @@ module.exports = class PluginManager {
       headerTags,
       dbmPropagationMode,
       dsmEnabled,
+      appendComment,
       clientIpEnabled,
       memcachedCommandEnabled,
       ciVisibilityTestSessionName,
@@ -144,6 +145,7 @@ module.exports = class PluginManager {
 
     const sharedConfig = {
       dbmPropagationMode,
+      appendComment,
       dsmEnabled,
       memcachedCommandEnabled,
       site,
