@@ -170,7 +170,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         try {
           const hasQuarantinedTests = !!quarantinedTests.jest
           this.quarantinedTestsForThisSuite = hasQuarantinedTests
-            ? this.getQuarantinedTestsForSuite(quarantinedTests.jest.suites[this.testSuite].tests)
+            ? this.getQuarantinedTestsForSuite(quarantinedTests.jest.suites?.[this.testSuite]?.tests)
             : this.getQuarantinedTestsForSuite(this.testEnvironmentOptions._ddQuarantinedTests)
         } catch (e) {
           log.error('Error parsing quarantined tests', e)
@@ -209,11 +209,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       return knownTestsForSuite
     }
 
-    getQuarantinedTestsForSuite (quaratinedTests) {
+    getQuarantinedTestsForSuite (quarantined) {
       if (this.quarantinedTestsForThisSuite) {
         return this.quarantinedTestsForThisSuite
       }
-      let quarantinedTestsForSuite = quaratinedTests
+      if (!quarantined) {
+        return []
+      }
+      let quarantinedTestsForSuite = quarantined
       // If jest is using workers, quarantined tests are serialized to json.
       // If jest runs in band, they are not.
       if (typeof quarantinedTestsForSuite === 'string') {
