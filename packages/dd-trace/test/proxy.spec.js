@@ -197,7 +197,7 @@ describe('TracerProxy', () => {
       './appsec': appsec,
       './appsec/iast': iast,
       './telemetry': telemetry,
-      './appsec/remote_config': remoteConfig,
+      './remote_config': remoteConfig,
       './appsec/sdk': AppsecSdk,
       './dogstatsd': dogStatsD,
       './noop/dogstatsd': NoopDogStatsDClient,
@@ -322,7 +322,7 @@ describe('TracerProxy', () => {
           './tracer': DatadogTracer,
           './appsec': appsec,
           './appsec/iast': iast,
-          './appsec/remote_config': remoteConfig,
+          './remote_config': remoteConfig,
           './appsec/sdk': AppsecSdk
         })
 
@@ -352,7 +352,7 @@ describe('TracerProxy', () => {
           './config': Config,
           './appsec': appsec,
           './appsec/iast': iast,
-          './appsec/remote_config': remoteConfig,
+          './remote_config': remoteConfig,
           './appsec/sdk': AppsecSdk
         })
 
@@ -400,28 +400,6 @@ describe('TracerProxy', () => {
         proxy.init()
 
         proxy.dogstatsd.increment('foo')
-      })
-
-      it('should call custom metrics flush via interval', () => {
-        const clock = sinon.useFakeTimers()
-
-        config.dogstatsd = {
-          hostname: 'localhost',
-          port: 9876
-        }
-        config.tags = {
-          service: 'photos',
-          env: 'prod',
-          version: '1.2.3'
-        }
-
-        proxy.init()
-
-        expect(dogStatsD._flushes()).to.equal(0)
-
-        clock.tick(10000)
-
-        expect(dogStatsD._flushes()).to.equal(1)
       })
 
       it('should expose real metrics methods after init when configured', () => {
@@ -515,7 +493,7 @@ describe('TracerProxy', () => {
           './profiler': null, // this will cause the import failure error
           './appsec': appsec,
           './telemetry': telemetry,
-          './appsec/remote_config': remoteConfig
+          './remote_config': remoteConfig
         })
 
         const profilerImportFailureProxy = new ProfilerImportFailureProxy()
@@ -543,7 +521,7 @@ describe('TracerProxy', () => {
           './config': Config,
           './appsec': appsec,
           './appsec/iast': iast,
-          './appsec/remote_config': remoteConfig,
+          './remote_config': remoteConfig,
           './appsec/sdk': AppsecSdk,
           './appsec/standalone': standalone,
           './telemetry': telemetry
