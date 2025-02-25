@@ -692,7 +692,7 @@ describe('Plugin', () => {
         })
       })
 
-      describe.skip('with DBM propagation enabled with append comment configurations', () => {
+      describe('with DBM propagation enabled with append comment configurations', () => {
         before(() => {
           return agent.load('pg', [{ dbmPropagationMode: 'service', service: () => 'serviced', appendComment: true }])
         })
