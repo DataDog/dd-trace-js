@@ -27,20 +27,20 @@ class LazyModule {
 }
 
 function lazyProxy (obj, property, config, getClass, ...args) {
-  if (config?._isInServerlessEnvironment?.() === false) { // Load eagerly
-    loadEagerly(obj, property, getClass, ...args)
-  } else { // Load lazily
-    loadLazily(obj, property, getClass, ...args)
+  if (config?._isInServerlessEnvironment?.() === false) {
+    defineEagerly(obj, property, getClass, ...args)
+  } else {
+    defineLazily(obj, property, getClass, ...args)
   }
 }
 
-function loadEagerly (obj, property, getClass, ...args) {
+function defineEagerly (obj, property, getClass, ...args) {
   const RealClass = getClass()
 
   obj[property] = new RealClass(...args)
 }
 
-function loadLazily (obj, property, getClass, ...args) {
+function defineLazily (obj, property, getClass, ...args) {
   Reflect.defineProperty(obj, property, {
     get () {
       const RealClass = getClass()
