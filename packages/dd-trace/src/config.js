@@ -742,7 +742,7 @@ class Config {
     this._envUnprocessed['appsec.stackTrace.maxStackTraces'] = DD_APPSEC_MAX_STACK_TRACES
     this._setValue(env, 'appsec.wafTimeout', maybeInt(DD_APPSEC_WAF_TIMEOUT))
     this._envUnprocessed['appsec.wafTimeout'] = DD_APPSEC_WAF_TIMEOUT
-    this._setString(env, 'appendComment', DD_DBM_APPEND_COMMENT)
+    this._setBoolean(env, 'appendComment', DD_DBM_APPEND_COMMENT)
     this._setValue(env, 'baggageMaxBytes', DD_TRACE_BAGGAGE_MAX_BYTES)
     this._setValue(env, 'baggageMaxItems', DD_TRACE_BAGGAGE_MAX_ITEMS)
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
