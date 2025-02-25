@@ -9,7 +9,7 @@ const DynamicInstrumentation = require('./debugger')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
-const remoteConfig = require('./appsec/remote_config')
+const remoteConfig = require('./remote_config')
 const AppsecSdk = require('./appsec/sdk')
 const dogstatsd = require('./dogstatsd')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
@@ -67,16 +67,7 @@ class Tracer extends NoopProxy {
       telemetry.start(config, this._pluginManager)
 
       if (config.dogstatsd) {
-        // Custom Metrics
         this.dogstatsd = new dogstatsd.CustomMetrics(config)
-
-        setInterval(() => {
-          this.dogstatsd.flush()
-        }, 10 * 1000).unref()
-
-        process.once('beforeExit', () => {
-          this.dogstatsd.flush()
-        })
       }
 
       if (config.spanLeakDebug > 0) {
@@ -201,7 +192,11 @@ class Tracer extends NoopProxy {
     try {
       return require('./profiler').start(config)
     } catch (e) {
-      log.error('Error starting profiler', e)
+      log.error(
+        'Error starting profiler. For troubleshooting tips, see ' +
+        '<https://dtdg.co/nodejs-profiler-troubleshooting>',
+        e
+      )
     }
   }
 

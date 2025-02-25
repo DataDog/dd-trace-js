@@ -1,7 +1,7 @@
 'use strict'
 
-const Capabilities = require('../../../src/appsec/remote_config/capabilities')
-const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../../src/appsec/remote_config/apply_states')
+const Capabilities = require('../../src/remote_config/capabilities')
+const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../src/remote_config/apply_states')
 
 const noop = () => {}
 
@@ -34,7 +34,7 @@ describe('RemoteConfigManager', () => {
 
     extraServices = []
 
-    RemoteConfigManager = proxyquire('../src/appsec/remote_config/manager', {
+    RemoteConfigManager = proxyquire('../src/remote_config/manager', {
       'crypto-randomuuid': uuid,
       './scheduler': Scheduler,
       '../../../../../package.json': { version: '3.0.0' },

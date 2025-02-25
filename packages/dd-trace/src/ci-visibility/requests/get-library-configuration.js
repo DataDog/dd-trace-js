@@ -94,7 +94,8 @@ function getLibraryConfiguration ({
               early_flake_detection: earlyFlakeDetectionConfig,
               flaky_test_retries_enabled: isFlakyTestRetriesEnabled,
               di_enabled: isDiEnabled,
-              known_tests_enabled: isKnownTestsEnabled
+              known_tests_enabled: isKnownTestsEnabled,
+              test_management: testManagementConfig
             }
           }
         } = JSON.parse(res)
@@ -111,7 +112,9 @@ function getLibraryConfiguration ({
             earlyFlakeDetectionConfig?.faulty_session_threshold ?? DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD,
           isFlakyTestRetriesEnabled,
           isDiEnabled: isDiEnabled && isFlakyTestRetriesEnabled,
-          isKnownTestsEnabled
+          isKnownTestsEnabled,
+          // TODO: should it be test management?
+          isQuarantinedTestsEnabled: (testManagementConfig?.enabled ?? false)
         }
 
         log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)

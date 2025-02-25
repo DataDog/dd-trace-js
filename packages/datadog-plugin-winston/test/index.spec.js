@@ -122,7 +122,7 @@ describe('Plugin', () => {
         it('should not alter the default behavior', () => {
           const meta = {
             dd: {
-              trace_id: span.context().toTraceId(),
+              trace_id: span.context().toTraceId(true),
               span_id: span.context().toSpanId()
             }
           }
@@ -150,7 +150,7 @@ describe('Plugin', () => {
           it('should add the trace identifiers to the default logger', async () => {
             const meta = {
               dd: {
-                trace_id: span.context().toTraceId(),
+                trace_id: span.context().toTraceId(true),
                 span_id: span.context().toSpanId()
               }
             }
@@ -170,7 +170,7 @@ describe('Plugin', () => {
 
             const meta = {
               dd: {
-                trace_id: span.context().toTraceId(),
+                trace_id: span.context().toTraceId(true),
                 span_id: span.context().toSpanId()
               }
             }
@@ -190,7 +190,7 @@ describe('Plugin', () => {
           it('should support errors', async () => {
             const meta = {
               dd: {
-                trace_id: span.context().toTraceId(),
+                trace_id: span.context().toTraceId(true),
                 span_id: span.context().toSpanId()
               }
             }
@@ -216,7 +216,7 @@ describe('Plugin', () => {
                 transports: [transport, httpTransport]
               })
               const dd = {
-                trace_id: span.context().toTraceId(),
+                trace_id: span.context().toTraceId(true),
                 span_id: span.context().toSpanId()
               }
 
@@ -287,7 +287,7 @@ describe('Plugin', () => {
 
             const meta = {
               dd: {
-                trace_id: span.context().toTraceId(),
+                trace_id: span.context().toTraceId(true),
                 span_id: span.context().toSpanId()
               }
             }

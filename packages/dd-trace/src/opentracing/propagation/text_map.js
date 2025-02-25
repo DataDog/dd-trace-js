@@ -3,7 +3,6 @@
 const pick = require('../../../../datadog-core/src/utils/src/pick')
 const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
-const OtelSpanContext = require('../../opentelemetry/span_context')
 const log = require('../../log')
 const TraceState = require('./tracestate')
 const tags = require('../../../../../ext/tags')
@@ -46,6 +45,7 @@ const tracestateTagKeyFilter = /[^\x21-\x2b\x2d-\x3c\x3e-\x7e]/g
 const tracestateTagValueFilter = /[^\x20-\x2b\x2d-\x3a\x3c-\x7d]/g
 const invalidSegment = /^0+$/
 const zeroTraceId = '0000000000000000'
+const hex16 = /^[0-9A-Fa-f]{16}$/
 
 class TextMapPropagator {
   constructor (config) {
@@ -325,6 +325,7 @@ class TextMapPropagator {
       if (context === null) {
         context = extractedContext
         if (this._config.tracePropagationExtractFirst) {
+          this._extractBaggageItems(carrier, context)
           return context
         }
       } else {
@@ -344,10 +345,7 @@ class TextMapPropagator {
       }
     }
 
-    if (this._hasPropagationStyle('extract', 'baggage') && carrier.baggage) {
-      context = context || new DatadogSpanContext()
-      this._extractBaggageItems(carrier, context)
-    }
+    this._extractBaggageItems(carrier, context)
 
     return context || this._extractSqsdContext(carrier)
   }
@@ -484,10 +482,20 @@ class TextMapPropagator {
               }
               break
             }
-            default:
+            default: {
               if (!key.startsWith('t.')) continue
-              spanContext._trace.tags[`_dd.p.${key.slice(2)}`] = value
-                .replace(/[\x7e]/gm, '=')
+              const subKey = key.slice(2) // e.g. t.tid -> tid
+              const transformedValue = value.replace(/[\x7e]/gm, '=')
+
+              // If subkey is tid  then do nothing because trace header tid should always be preserved
+              if (subKey === 'tid') {
+                if (!hex16.test(value) || spanContext._trace.tags['_dd.p.tid'] !== transformedValue) {
+                  log.error(`Invalid trace id ${value} in tracestate, skipping`)
+                }
+                continue
+              }
+              spanContext._trace.tags[`_dd.p.${subKey}`] = transformedValue
+            }
           }
         }
       })
@@ -596,6 +604,9 @@ class TextMapPropagator {
   }
 
   _extractBaggageItems (carrier, spanContext) {
+    if (!this._hasPropagationStyle('extract', 'baggage')) return
+    if (!carrier || !carrier.baggage) return
+    if (!spanContext) return
     const baggages = carrier.baggage.split(',')
     for (const keyValue of baggages) {
       if (!keyValue.includes('=')) {
@@ -644,7 +655,11 @@ class TextMapPropagator {
           log.error('Trace tags from carrier are invalid, skipping extraction.')
           return
         }
-
+        // Check if value is a valid 16 character lower-case hexadecimal encoded number as per spec
+        if (key === '_dd.p.tid' && !(hex16.test(value))) {
+          log.error(`Invalid _dd.p.tid tag ${value}, skipping`)
+          continue
+        }
         tags[key] = value
       }
 
@@ -690,48 +705,6 @@ class TextMapPropagator {
     }
 
     return spanContext._traceId.toString(16)
-  }
-
-  static _convertOtelContextToDatadog (traceId, spanId, traceFlag, ts, meta = {}) {
-    const origin = null
-    let samplingPriority = traceFlag
-
-    ts = ts?.traceparent || null
-
-    if (ts) {
-      // Use TraceState.fromString to parse the tracestate header
-      const traceState = TraceState.fromString(ts)
-      let ddTraceStateData = null
-
-      // Extract Datadog specific trace state data
-      traceState.forVendor('dd', (state) => {
-        ddTraceStateData = state
-        return state // You might need to adjust this part based on actual logic needed
-      })
-
-      if (ddTraceStateData) {
-        // Assuming ddTraceStateData is now a Map or similar structure containing Datadog trace state data
-        // Extract values as needed, similar to the original logic
-        const samplingPriorityTs = ddTraceStateData.get('s')
-        const origin = ddTraceStateData.get('o')
-        // Convert Map to object for meta
-        const otherPropagatedTags = Object.fromEntries(ddTraceStateData.entries())
-
-        // Update meta and samplingPriority based on extracted values
-        Object.assign(meta, otherPropagatedTags)
-        samplingPriority = TextMapPropagator._getSamplingPriority(traceFlag, parseInt(samplingPriorityTs, 10), origin)
-      } else {
-        log.debug(`no dd list member in tracestate from incoming request: ${ts}`)
-      }
-    }
-
-    const spanContext = new OtelSpanContext({
-      traceId: id(traceId, 16), spanId: id(), tags: meta, parentId: id(spanId, 16)
-    })
-
-    spanContext._sampling = { priority: samplingPriority }
-    spanContext._trace = { origin }
-    return spanContext
   }
 
   static _getSamplingPriority (traceparentSampled, tracestateSamplingPriority, origin = null) {

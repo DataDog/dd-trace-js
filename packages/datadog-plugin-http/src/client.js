@@ -21,7 +21,7 @@ class HttpClientPlugin extends ClientPlugin {
 
   bindStart (message) {
     const { args, http = {} } = message
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const options = args.options
     const agent = options.agent || options._defaultAgent || http.globalAgent || {}
     const protocol = options.protocol || agent.protocol || 'http:'
@@ -102,7 +102,9 @@ class HttpClientPlugin extends ClientPlugin {
       addResponseHeaders(res, span, this.config)
     }
 
-    addRequestHeaders(req, span, this.config)
+    if (req) {
+      addRequestHeaders(req, span, this.config)
+    }
 
     this.config.hooks.request(span, req, res)
 

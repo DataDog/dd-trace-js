@@ -72,7 +72,7 @@ describe('Plugin', () => {
             const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
             expect(record.dd).to.deep.include({
-              trace_id: span.context().toTraceId(),
+              trace_id: span.context().toTraceId(true),
               span_id: span.context().toSpanId()
             })
           })

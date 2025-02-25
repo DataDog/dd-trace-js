@@ -497,6 +497,7 @@ class Config {
     this._setValue(defaults, 'iast.redactionNamePattern', null)
     this._setValue(defaults, 'iast.redactionValuePattern', null)
     this._setValue(defaults, 'iast.requestSampling', 30)
+    this._setValue(defaults, 'iast.securityControlsConfiguration', null)
     this._setValue(defaults, 'iast.telemetryVerbosity', 'INFORMATION')
     this._setValue(defaults, 'iast.stackTrace.enabled', true)
     this._setValue(defaults, 'injectionEnabled', [])
@@ -518,6 +519,9 @@ class Config {
     this._setValue(defaults, 'ciVisAgentlessLogSubmissionEnabled', false)
     this._setValue(defaults, 'legacyBaggageEnabled', true)
     this._setValue(defaults, 'isTestDynamicInstrumentationEnabled', false)
+    this._setValue(defaults, 'isServiceUserProvided', false)
+    this._setValue(defaults, 'testManagementAttemptToFixRetries', 20)
+    this._setValue(defaults, 'isTestManagementEnabled', false)
     this._setValue(defaults, 'logInjection', false)
     this._setValue(defaults, 'lookup', undefined)
     this._setValue(defaults, 'inferredProxyServicesEnabled', false)
@@ -562,7 +566,7 @@ class Config {
     this._setValue(defaults, 'telemetry.metrics', true)
     this._setValue(defaults, 'traceEnabled', true)
     this._setValue(defaults, 'traceId128BitGenerationEnabled', true)
-    this._setValue(defaults, 'traceId128BitLoggingEnabled', false)
+    this._setValue(defaults, 'traceId128BitLoggingEnabled', true)
     this._setValue(defaults, 'tracePropagationExtractFirst', false)
     this._setValue(defaults, 'tracePropagationStyle.inject', ['datadog', 'tracecontext', 'baggage'])
     this._setValue(defaults, 'tracePropagationStyle.extract', ['datadog', 'tracecontext', 'baggage'])
@@ -571,7 +575,8 @@ class Config {
     this._setValue(defaults, 'url', undefined)
     this._setValue(defaults, 'version', pkg.version)
     this._setValue(defaults, 'instrumentation_config_id', undefined)
-    this._setValue(defaults, 'aws.dynamoDb.tablePrimaryKeys', undefined)
+    this._setValue(defaults, 'trace.aws.addSpanPointers', true)
+    this._setValue(defaults, 'trace.dynamoDb.tablePrimaryKeys', undefined)
   }
 
   _applyEnvironment () {
@@ -596,7 +601,6 @@ class Config {
       DD_APPSEC_RASP_ENABLED,
       DD_APPSEC_TRACE_RATE_LIMIT,
       DD_APPSEC_WAF_TIMEOUT,
-      DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS,
       DD_CRASHTRACKING_ENABLED,
       DD_CODE_ORIGIN_FOR_SPANS_ENABLED,
       DD_DATA_STREAMS_ENABLED,
@@ -624,6 +628,7 @@ class Config {
       DD_IAST_REDACTION_NAME_PATTERN,
       DD_IAST_REDACTION_VALUE_PATTERN,
       DD_IAST_REQUEST_SAMPLING,
+      DD_IAST_SECURITY_CONTROLS_CONFIGURATION,
       DD_IAST_TELEMETRY_VERBOSITY,
       DD_IAST_STACK_TRACE_ENABLED,
       DD_INJECTION_ENABLED,
@@ -661,10 +666,12 @@ class Config {
       DD_TRACE_AGENT_HOSTNAME,
       DD_TRACE_AGENT_PORT,
       DD_TRACE_AGENT_PROTOCOL_VERSION,
+      DD_TRACE_AWS_ADD_SPAN_POINTERS,
       DD_TRACE_BAGGAGE_MAX_BYTES,
       DD_TRACE_BAGGAGE_MAX_ITEMS,
       DD_TRACE_CLIENT_IP_ENABLED,
       DD_TRACE_CLIENT_IP_HEADER,
+      DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS,
       DD_TRACE_ENABLED,
       DD_TRACE_EXPERIMENTAL_EXPORTER,
       DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
@@ -792,6 +799,7 @@ class Config {
       this._setValue(env, 'iast.requestSampling', iastRequestSampling)
     }
     this._envUnprocessed['iast.requestSampling'] = DD_IAST_REQUEST_SAMPLING
+    this._setString(env, 'iast.securityControlsConfiguration', DD_IAST_SECURITY_CONTROLS_CONFIGURATION)
     this._setString(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
     this._setBoolean(env, 'iast.stackTrace.enabled', DD_IAST_STACK_TRACE_ENABLED)
     this._setArray(env, 'injectionEnabled', DD_INJECTION_ENABLED)
@@ -899,7 +907,8 @@ class Config {
     this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
     this._setString(env, 'version', DD_VERSION || tags.version)
     this._setBoolean(env, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
-    this._setString(env, 'aws.dynamoDb.tablePrimaryKeys', DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS)
+    this._setBoolean(env, 'trace.aws.addSpanPointers', DD_TRACE_AWS_ADD_SPAN_POINTERS)
+    this._setString(env, 'trace.dynamoDb.tablePrimaryKeys', DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS)
     this._setArray(env, 'graphqlErrorExtensions', DD_TRACE_GRAPHQL_ERROR_EXTENSIONS)
   }
 
@@ -984,14 +993,15 @@ class Config {
       this._setValue(opts, 'iast.requestSampling', iastRequestSampling)
       this._optsUnprocessed['iast.requestSampling'] = options.iast?.requestSampling
     }
-    this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
+    this._setValue(opts, 'iast.securityControlsConfiguration', options.iast?.securityControlsConfiguration)
     this._setBoolean(opts, 'iast.stackTrace.enabled', options.iast?.stackTrace?.enabled)
+    this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
     this._setBoolean(opts, 'legacyBaggageEnabled', options.legacyBaggageEnabled)
     this._setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)
     this._setString(opts, 'llmobs.mlApp', options.llmobs?.mlApp)
     this._setBoolean(opts, 'logInjection', options.logInjection)
-    this._setString(opts, 'lookup', options.lookup)
+    this._setValue(opts, 'lookup', options.lookup)
     this._setBoolean(opts, 'middlewareTracingEnabled', options.middlewareTracingEnabled)
     this._setBoolean(opts, 'openAiLogsEnabled', options.openAiLogsEnabled)
     this._setValue(opts, 'peerServiceMapping', options.peerServiceMapping)
@@ -1137,7 +1147,9 @@ class Config {
       DD_CIVISIBILITY_FLAKY_RETRY_COUNT,
       DD_TEST_SESSION_NAME,
       DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
-      DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED
+      DD_TEST_FAILED_TEST_REPLAY_ENABLED,
+      DD_TEST_MANAGEMENT_ENABLED,
+      DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES
     } = process.env
 
     if (DD_CIVISIBILITY_AGENTLESS_URL) {
@@ -1155,7 +1167,13 @@ class Config {
       this._setBoolean(calc, 'isManualApiEnabled', !isFalse(this._isCiVisibilityManualApiEnabled()))
       this._setString(calc, 'ciVisibilityTestSessionName', DD_TEST_SESSION_NAME)
       this._setBoolean(calc, 'ciVisAgentlessLogSubmissionEnabled', isTrue(DD_AGENTLESS_LOG_SUBMISSION_ENABLED))
-      this._setBoolean(calc, 'isTestDynamicInstrumentationEnabled', isTrue(DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED))
+      this._setBoolean(calc, 'isTestDynamicInstrumentationEnabled', !isFalse(DD_TEST_FAILED_TEST_REPLAY_ENABLED))
+      this._setBoolean(calc, 'isServiceUserProvided', !!this._env.service)
+      this._setBoolean(calc, 'isTestManagementEnabled', !isFalse(DD_TEST_MANAGEMENT_ENABLED))
+      this._setValue(calc,
+        'testManagementAttemptToFixRetries',
+        coalesce(maybeInt(DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES), 20)
+      )
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())
     this._setBoolean(calc, 'isGitUploadEnabled',

@@ -14,6 +14,7 @@ variables:
   # dd-trace-js has some exceptions to the default names
   AGENT_REPO_PRODUCT_NAME: auto_inject-node
   SYSTEM_TESTS_LIBRARY: nodejs
+  REPO_NOTIFICATION_CHANNEL: "#notifications-apm-js"
 
 onboarding_tests_installer:
   parallel:

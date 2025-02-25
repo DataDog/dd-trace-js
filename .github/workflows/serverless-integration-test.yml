@@ -5,14 +5,16 @@ on:
   push:
     branches: [master]
   schedule:
-    - cron: "0 4 * * *"
+    - cron: 0 4 * * *
+    - cron: 20 4 * * *
+    - cron: 40 4 * * *
 
 jobs:
   integration:
     # Google Auth permissions
     permissions:
-      contents: "read"
-      id-token: "write"
+      contents: 'read'
+      id-token: 'write'
     strategy:
       matrix:
         version: [18, latest]
