@@ -1,5 +1,5 @@
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
-const { getMessageSize } = require('../../dd-trace/src/datastreams/processor')
+const { getMessageSize } = require('../../dd-trace/src/datastreams')
 
 class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'kafkajs' }
