@@ -16,7 +16,7 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
-const { getIsGCPFunction, getIsAzureFunction } = require('./serverless')
+const { getIsGCPFunction, getIsAzureFunction, isInServerlessEnvironment } = require('./serverless')
 const { ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const StableConfig = require('./config_stable')
@@ -432,13 +432,6 @@ class Config {
       defaultPropagationStyle.push('b3 single header')
     }
     return defaultPropagationStyle
-  }
-
-  _isInServerlessEnvironment () {
-    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
-    const isGCPFunction = getIsGCPFunction()
-    const isAzureFunction = getIsAzureFunction()
-    return inAWSLambda || isGCPFunction || isAzureFunction
   }
 
   // for _merge to work, every config value must have a default value
@@ -865,7 +858,7 @@ class Config {
     this._setString(env, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
     this._setBoolean(env, 'remoteConfig.enabled', coalesce(
       DD_REMOTE_CONFIGURATION_ENABLED,
-      !this._isInServerlessEnvironment()
+      !isInServerlessEnvironment()
     ))
     this._setValue(env, 'remoteConfig.pollInterval', maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS))
     this._envUnprocessed['remoteConfig.pollInterval'] = DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
@@ -906,7 +899,7 @@ class Config {
     this._setBoolean(env, 'telemetry.enabled', coalesce(
       DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
       DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
-      !(this._isInServerlessEnvironment() || JEST_WORKER_ID)
+      !(isInServerlessEnvironment() || JEST_WORKER_ID)
     ))
     this._setString(env, 'instrumentation_config_id', DD_INSTRUMENTATION_CONFIG_ID)
     this._setBoolean(env, 'telemetry.debug', DD_TELEMETRY_DEBUG)

@@ -2522,5 +2522,18 @@ apm_configuration_default:
       const stableConfig2 = new StableConfig()
       expect(stableConfig2).to.have.property('wasm_loaded', true)
     })
+
+    it('should not load the WASM module in a serverless environment', () => {
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+apm_configuration_default:
+  DD_RUNTIME_METRICS_ENABLED: true
+`)
+
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
+      const stableConfig = new StableConfig()
+      expect(stableConfig).to.have.property('wasm_loaded', false)
+    })
   })
 })
