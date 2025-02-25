@@ -143,8 +143,6 @@ describe('reporter', () => {
     })
 
     it('should do nothing when passed incomplete objects', () => {
-      web.root.returns(null)
-
       Reporter.reportMetrics({})
 
       expect(span.setTag).not.to.have.been.called
@@ -182,7 +180,8 @@ describe('reporter', () => {
     })
 
     it('should set ext duration metrics if set', () => {
-      const metrics = { durationExt: 42 }
+      const metrics = { durationExt: 42, totalRuntime: 0 }
+
       Reporter.reportMetrics(metrics)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
@@ -255,9 +254,13 @@ describe('reporter', () => {
     })
 
     it('should call updateRaspRequestsMetricTags when raspRule is provided', () => {
-      const metrics = { rulesVersion: '1.2.3' }
-      const store = storage('legacy').getStore()
+      const metrics = {
+        rulesVersion: '1.2.3',
+        durationExt: 0,
+        totalRuntime: 0
+      }
 
+      const store = storage('legacy').getStore()
       const raspRule = { type: 'rule_type', variant: 'rule_variant' }
 
       Reporter.reportMetrics(metrics, raspRule)

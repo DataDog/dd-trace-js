@@ -34,7 +34,9 @@ class WAFContextWrapper {
     if (userId) {
       const cachedAction = this.cachedUserIdActions.get(userId)
       if (cachedAction) {
-        return cachedAction
+        return {
+          actions: cachedAction
+        }
       }
     }
 

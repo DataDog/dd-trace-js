@@ -49,7 +49,6 @@ describe('WAF Manager', () => {
     waf.destroy()
 
     sinon.stub(Reporter.metricsQueue, 'set')
-    sinon.stub(Reporter, 'reportMetrics')
     sinon.stub(Reporter, 'reportAttack')
     sinon.stub(Reporter, 'reportWafUpdate')
     sinon.stub(Reporter, 'reportDerivatives')
@@ -316,19 +315,16 @@ describe('WAF Manager', () => {
 
         const result = wafContextWrapper.run(params)
 
-        expect(result.result).to.deep.equal({
-          totalRuntime: 1,
-          durationExt: 1,
-          events: [],
-          actions: ['block']
-        })
+        expect(result.actions).to.deep.equal(['block'])
 
-        expect(result.metrics).to.deep.equal({
+        expect(result.metrics).to.include({
           rulesVersion: '1.0.0',
-          wafVersion: undefined
+          duration: 0.001,
+          blockTriggered: false,
+          ruleTriggered: false
         })
 
-        expect(result.durationExt).to.be.greaterThan(0)
+        expect(result.metrics.durationExt).to.be.greaterThan(0)
       })
 
       it('should report schemas when ddwafContext returns schemas in the derivatives', () => {

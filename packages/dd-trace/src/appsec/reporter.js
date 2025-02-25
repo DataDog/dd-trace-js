@@ -101,6 +101,8 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
 }
 
 function reportMetrics (metrics, raspRule) {
+  if (!metrics) return
+
   const store = storage('legacy').getStore()
   const rootSpan = store?.req && web.root(store.req)
 
