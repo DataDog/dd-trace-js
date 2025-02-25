@@ -5,7 +5,7 @@ const os = require('os')
 const { assert } = require('chai')
 const { pollInterval, setup } = require('./utils')
 const { assertObjectContains, assertUUID } = require('../helpers')
-const { ACKNOWLEDGED, ERROR } = require('../../packages/dd-trace/src/appsec/remote_config/apply_states')
+const { ACKNOWLEDGED, ERROR } = require('../../packages/dd-trace/src/remote_config/apply_states')
 const { version } = require('../../package.json')
 
 describe('Dynamic Instrumentation', function () {
