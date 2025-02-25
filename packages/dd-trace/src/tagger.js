@@ -53,7 +53,7 @@ function add (carrier, keyValuePairs, parseOtelTags = false, parseSpaceSeparated
 
         let trimmedValue = value.trim()
 
-        if (trimmedValue === '') {
+        if (trimmedValue === '' && parseSpaceSeparatedTags) {
           trimmedValue = skipEmptyString.has(key.trim()) ? '' : DD_EMPTY_USER_TAG
         }
 
