@@ -4,7 +4,7 @@
 const { performance } = require('perf_hooks')
 const now = performance.now.bind(performance)
 const dateNow = Date.now
-const semver = require('semver')
+const satisfies = require('semifies')
 const SpanContext = require('./span_context')
 const id = require('../id')
 const tagger = require('../tagger')
@@ -65,7 +65,7 @@ class DatadogSpan {
     this._debug = debug
     this._processor = processor
     this._prioritySampler = prioritySampler
-    this._store = storage.getHandle()
+    this._store = storage('legacy').getHandle()
     this._duration = undefined
 
     this._events = []
@@ -365,7 +365,7 @@ class DatadogSpan {
 }
 
 function createRegistry (type) {
-  if (!semver.satisfies(process.version, '>=14.6')) return
+  if (!satisfies(process.version, '>=14.6')) return
 
   return new global.FinalizationRegistry(name => {
     runtimeMetrics.decrement(`runtime.node.spans.${type}`)

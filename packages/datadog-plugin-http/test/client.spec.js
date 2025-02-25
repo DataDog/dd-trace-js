@@ -922,18 +922,36 @@ describe('Plugin', () => {
               })
 
             appListener = server(app, port => {
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
 
-              storage.enterWith({ noop: true })
+              storage('legacy').enterWith({ noop: true })
               const req = http.request(tracer._tracer._url.href)
 
               req.on('error', () => {})
               req.end()
 
-              storage.enterWith(store)
+              storage('legacy').enterWith(store)
             })
           })
         }
+
+        it('should record unfinished http requests as error spans', done => {
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('error', 1)
+              expect(traces[0][0].meta).to.not.have.property('http.status_code')
+            })
+            .then(done)
+            .catch(done)
+
+          try {
+            http.request('http://httpbin.org/get', { headers: { BadHeader: 'a\nb' } }, res => {
+              res.on('data', () => { })
+            })
+          } catch {
+            // expected to throw error
+          }
+        })
       })
 
       describe('with late plugin initialization and an external subscriber', () => {

@@ -31,7 +31,9 @@ const {
   MOCHA_IS_PARALLEL,
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_DRIVER,
-  TEST_RETRY_REASON
+  TEST_RETRY_REASON,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -47,6 +49,8 @@ const {
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const id = require('../../dd-trace/src/id')
 const log = require('../../dd-trace/src/log')
+
+const BREAKPOINT_SET_GRACE_PERIOD_MS = 200
 
 function getTestSuiteLevelVisibilityTags (testSuiteSpan) {
   const testSuiteSpanContext = testSuiteSpan.context()
@@ -155,13 +159,13 @@ class MochaPlugin extends CiPlugin {
       if (itrCorrelationId) {
         testSuiteSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
       }
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       this.enter(testSuiteSpan, store)
       this._testSuites.set(testSuite, testSuiteSpan)
     })
 
     this.addSub('ci:mocha:test-suite:finish', (status) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       if (store && store.span) {
         const span = store.span
         // the test status of the suite may have been set in ci:mocha:test-suite:error already
@@ -174,7 +178,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test-suite:error', (err) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       if (store && store.span) {
         const span = store.span
         span.setTag('error', err)
@@ -183,7 +187,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:start', (testInfo) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = this.startTestSpan(testInfo)
 
       this.enter(span, store)
@@ -195,7 +199,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:finish', ({ status, hasBeenRetried, isLastRetry }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = store?.span
 
       if (span) {
@@ -227,7 +231,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:skip', (testInfo) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       // skipped through it.skip, so the span is not created yet
       // for this test
       if (!store) {
@@ -237,7 +241,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:error', (err) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = store?.span
       if (err && span) {
         if (err.constructor.name === 'Pending' && !this.forbidPending) {
@@ -250,7 +254,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, willBeRetried, err, test }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = store?.span
       if (span) {
         span.setTag(TEST_STATUS, 'fail')
@@ -279,7 +283,12 @@ class MochaPlugin extends CiPlugin {
             this.runningTestProbe = { file, line }
             this.testErrorStackIndex = stackIndex
             test._ddShouldWaitForHitProbe = true
-            // TODO: we're not waiting for setProbePromise to be resolved, so there might be race conditions
+            const waitUntil = Date.now() + BREAKPOINT_SET_GRACE_PERIOD_MS
+            while (Date.now() < waitUntil) {
+              // TODO: To avoid a race condition, we should wait until `probeInformation.setProbePromise` has resolved.
+              // However, Mocha doesn't have a mechanism for waiting asyncrounously here, so for now, we'll have to
+              // fall back to a fixed syncronous delay.
+            }
           }
         }
 
@@ -302,6 +311,7 @@ class MochaPlugin extends CiPlugin {
       error,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
+      isQuarantinedTestsEnabled,
       isParallel
     }) => {
       if (this.testSessionSpan) {
@@ -316,6 +326,10 @@ class MochaPlugin extends CiPlugin {
 
         if (isParallel) {
           this.testSessionSpan.setTag(MOCHA_IS_PARALLEL, 'true')
+        }
+
+        if (isQuarantinedTestsEnabled) {
+          this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
         }
 
         addIntelligentTestRunnerSpanTags(
@@ -390,7 +404,8 @@ class MochaPlugin extends CiPlugin {
       isNew,
       isEfdRetry,
       testStartLine,
-      isParallel
+      isParallel,
+      isQuarantined
     } = testInfo
 
     const testName = removeEfdStringFromTestName(testInfo.testName)
@@ -407,6 +422,10 @@ class MochaPlugin extends CiPlugin {
 
     if (isParallel) {
       extraTags[MOCHA_IS_PARALLEL] = 'true'
+    }
+
+    if (isQuarantined) {
+      extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
     }
 
     const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)

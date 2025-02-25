@@ -14,9 +14,9 @@ const enabledFor = {
 
 let fsPlugin
 
-function enterWith (fsProps, store = storage.getStore()) {
+function enterWith (fsProps, store = storage('legacy').getStore()) {
   if (store && !store.fs?.opExcluded) {
-    storage.enterWith({
+    storage('legacy').enterWith({
       ...store,
       fs: {
         ...store.fs,
@@ -42,7 +42,7 @@ class AppsecFsPlugin extends Plugin {
   }
 
   _onFsOperationStart () {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     if (store) {
       enterWith({ root: store.fs?.root === undefined }, store)
     }
@@ -53,9 +53,9 @@ class AppsecFsPlugin extends Plugin {
   }
 
   _onFsOperationFinishOrRenderEnd () {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     if (store?.fs?.parentStore) {
-      storage.enterWith(store.fs.parentStore)
+      storage('legacy').enterWith(store.fs.parentStore)
     }
   }
 }

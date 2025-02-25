@@ -21,7 +21,7 @@ describe('untrusted-deserialization-analyzer with node-serialize', () => {
           })
 
           testThatRequestHasVulnerability(() => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const str = newTaintedString(iastContext, obj, 'query', 'Request')
             lib.unserialize(str)
