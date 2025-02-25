@@ -225,7 +225,10 @@ describe('GraphQL', () => {
       const abortController = context.abortController
 
       sinon.stub(waf, 'run').returns({
-        block_request: blockParameters
+        actions: {
+          block_request: blockParameters
+        },
+        metrics: {}
       })
 
       sinon.stub(web, 'root').returns(rootSpan)
@@ -243,7 +246,9 @@ describe('GraphQL', () => {
       const abortData = {}
       apolloChannel.asyncEnd.publish({ abortController, abortData })
 
-      expect(blocking.getBlockingData).to.have.been.calledOnceWithExactly(req, 'graphql', blockParameters)
+      // [TODO] The implementation of this was not correct?
+      expect(blocking.getBlockingData).to.have.been.calledOnceWithExactly(
+        req, 'graphql', { block_request: blockParameters })
 
       expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
     })

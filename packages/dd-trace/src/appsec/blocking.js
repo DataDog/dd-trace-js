@@ -99,7 +99,7 @@ function getBlockingData (req, specificType, actionParameters) {
   }
 }
 
-function block (req, res, rootSpan, abortController, actionParameters = defaultBlockingActionParameters) {
+function block (req, res, abortController, actionParameters = defaultBlockingActionParameters) {
   if (res.headersSent) {
     log.warn('[ASM] Cannot send blocking response when headers have already been sent')
 
@@ -119,7 +119,7 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
 
   responseBlockedSet.add(res)
 
-  abortController.abort()
+  abortController?.abort()
 }
 
 function getBlockingAction (actions) {

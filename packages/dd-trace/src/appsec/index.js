@@ -150,9 +150,9 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     persistent[addresses.HTTP_CLIENT_IP] = clientIp
   }
 
-  const actions = waf.run({ persistent }, req)
+  const results = waf.run({ persistent }, req)
 
-  handleResults(actions, req, res, rootSpan, abortController)
+  handleResults(results, req, res, rootSpan, abortController)
 }
 
 function incomingHttpEndTranslator ({ req, res }) {
@@ -274,12 +274,14 @@ function onResponseBody ({ req, res, body }) {
   if (!body || typeof body !== 'object') return
   if (!apiSecuritySampler.sampleRequest(req, res)) return
 
-  // we don't support blocking at this point, so no results needed
-  waf.run({
+  // we don't support blocking at this point, so no results needed only reporting
+  const results = waf.run({
     persistent: {
       [addresses.HTTP_INCOMING_RESPONSE_BODY]: body
     }
   }, req)
+
+  reportMetrics(results?.metrics, null)
 }
 
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
@@ -319,16 +321,17 @@ function onResponseSetHeader ({ res, abortController }) {
 }
 
 function handleResults (wafResults, req, res, rootSpan, abortController) {
-  const { metrics, durationExt, result } = wafResults
+  if (!wafResults) return
 
-  const ruleTriggered = !!result.events?.length
-  const blockTriggered = getBlockingAction(wafResults?.actions)
+  const { actions, metrics } = wafResults
 
-  const canBlock = wafResults?.actions && req && res && rootSpan && abortController
+  const blockTriggered = getBlockingAction(actions)
+
+  const canBlock = actions && req && res && rootSpan && abortController
 
   if (canBlock && blockTriggered) {
     try {
-      block(req, res, rootSpan, abortController, blockTriggered)
+      block(req, res, abortController, blockTriggered)
 
       rootSpan.addTags({
         'appsec.blocked': 'true'
@@ -342,14 +345,7 @@ function handleResults (wafResults, req, res, rootSpan, abortController) {
     }
   }
 
-  reportMetrics({
-    ...metrics,
-    durationExt,
-    duration: result.totalRuntime / 1e3,
-    ruleTriggered,
-    blockTriggered,
-    wafTimeout: result.timeout
-  }, null)
+  reportMetrics(metrics, null)
 }
 
 function disable () {

@@ -7,6 +7,7 @@ const {
   getBlockingData,
   getBlockingAction
 } = require('./blocking')
+const { reportMetrics } = require('./reporter')
 const log = require('../log')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -37,14 +38,18 @@ function onGraphqlStartResolve ({ context, resolverInfo }) {
 
   if (!resolverInfo || typeof resolverInfo !== 'object') return
 
-  const actions = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
-  const blockingAction = getBlockingAction(actions)
-  if (blockingAction) {
-    const requestData = graphqlRequestData.get(req)
-    if (requestData?.isInGraphqlRequest) {
-      requestData.blocked = true
-      requestData.wafAction = blockingAction
-      context?.abortController?.abort()
+  const wafResults = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
+
+  if (wafResults) {
+    const blockingAction = getBlockingAction(wafResults.actions)
+
+    if (blockingAction) {
+      const requestData = graphqlRequestData.get(req)
+      if (requestData?.isInGraphqlRequest) {
+        requestData.blocked = true
+        requestData.wafResults = wafResults
+        context?.abortController?.abort()
+      }
     }
   }
 }
@@ -96,7 +101,7 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
     if (!rootSpan) return
 
     try {
-      const blockingData = getBlockingData(req, specificBlockingTypes.GRAPHQL, requestData.wafAction)
+      const blockingData = getBlockingData(req, specificBlockingTypes.GRAPHQL, requestData.wafResults.actions)
       abortData.statusCode = blockingData.statusCode
       abortData.headers = blockingData.headers
       abortData.message = blockingData.body
@@ -104,6 +109,8 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
       abortController.abort()
 
       rootSpan.setTag('appsec.blocked', 'true')
+
+      reportMetrics(requestData.wafResults.metrics, null)
     } catch (err) {
       rootSpan.addTags({
         '_dd.appsec.block.failed': 1

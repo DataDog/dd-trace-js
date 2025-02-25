@@ -30,8 +30,11 @@ class DatadogRaspAbortError extends Error {
 }
 
 function handleResult (wafResults, req, res, abortController, config, raspRule) {
-  const { result, metrics, durationExt } = wafResults
-  const generateStackTraceAction = result.actions?.generate_stack
+  if (!wafResults) return
+
+  const { actions, metrics } = wafResults
+
+  const generateStackTraceAction = actions?.generate_stack
 
   const { enabled, maxDepth, maxStackTraces } = config.appsec.stackTrace
 
@@ -47,20 +50,11 @@ function handleResult (wafResults, req, res, abortController, config, raspRule) 
     )
   }
 
-  const ruleTriggered = !!result?.events?.length
-  const blockingAction = getBlockingAction(result?.actions)
-
-  reportMetrics({
-    ...metrics,
-    durationExt,
-    duration: result.totalRuntime / 1e3,
-    ruleTriggered,
-    blockingAction,
-    wafTimeout: result.timeout
-  }, raspRule)
+  reportMetrics(metrics, raspRule)
 
   if (!abortController || abortOnUncaughtException) return
 
+  const blockingAction = getBlockingAction(actions)
   if (blockingAction) {
     // Should block only in express
     if (rootSpan?.context()._name === 'express.request') {

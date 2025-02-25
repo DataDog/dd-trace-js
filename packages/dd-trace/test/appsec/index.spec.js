@@ -32,10 +32,16 @@ const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
 
 const resultActions = {
-  block_request: {
-    status_code: '401',
-    type: 'auto',
-    grpc_status_code: '10'
+  actions: {
+    block_request: {
+      status_code: '401',
+      type: 'auto',
+      grpc_status_code: '10'
+    }
+  },
+  metrics: {
+    rulesVersion: '1.0.0',
+    wafVersion: '1.0.0'
   }
 }
 
@@ -834,7 +840,7 @@ describe('AppSec Index', function () {
 
         passportVerify.publish(payload)
 
-        expect(storage('legacy').getStore).to.have.been.calledOnce
+        expect(storage('legacy').getStore).to.have.been.calledTwice
         expect(web.root).to.have.been.calledOnceWithExactly(req)
         expect(UserTracking.trackLogin).to.have.been.calledOnceWithExactly(
           payload.framework,
@@ -912,7 +918,7 @@ describe('AppSec Index', function () {
 
         passportUser.publish(payload)
 
-        expect(storage('legacy').getStore).to.have.been.calledOnce
+        expect(storage('legacy').getStore).to.have.been.calledTwice
         expect(web.root).to.have.been.calledOnceWithExactly(req)
         expect(UserTracking.trackUser).to.have.been.calledOnceWithExactly(
           payload.user,

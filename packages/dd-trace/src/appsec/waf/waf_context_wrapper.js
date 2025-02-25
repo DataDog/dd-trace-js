@@ -34,7 +34,9 @@ class WAFContextWrapper {
     if (userId) {
       const cachedAction = this.cachedUserIdActions.get(userId)
       if (cachedAction) {
-        return cachedAction
+        return {
+          actions: cachedAction
+        }
       }
     }
 
@@ -81,14 +83,28 @@ class WAFContextWrapper {
 
     const metrics = {
       rulesVersion: this.rulesVersion,
-      wafVersion: this.wafVersion
+      wafVersion: this.wafVersion,
+      wafTimeout: false,
+      duration: 0,
+      blockTriggered: false,
+      ruleTriggered: false
     }
 
     const result = this.ddwafContext.run(payload, this.wafTimeout)
 
+    this.addressesToSkip = newAddressesToSkip
+
+    const end = process.hrtime.bigint()
+    metrics.durationExt = parseInt(end - start) / 1e3
+
     if (!result) {
       // Binding or other waf unexpected errors
       metrics.errorCode = -127
+
+      return {
+        actions: null,
+        metrics
+      }
     } else {
       if (typeof result.errorCode === 'number' && result.errorCode < 0) {
         metrics.errorCode = result.errorCode
@@ -107,13 +123,9 @@ class WAFContextWrapper {
       }
     }
 
-    const end = process.hrtime.bigint()
+    const ruleTriggered = !!result.events?.length
 
-    this.addressesToSkip = newAddressesToSkip
-
-    const ruleTriggered = !!result?.events?.length
-
-    const blockTriggered = !!getBlockingAction(result?.actions)
+    const blockTriggered = !!getBlockingAction(result.actions)
 
     // SPECIAL CASE FOR USER_ID
     // TODO: make this universal
@@ -131,10 +143,14 @@ class WAFContextWrapper {
 
     Reporter.reportDerivatives(result.derivatives)
 
+    metrics.duration = result.totalRuntime / 1e3
+    metrics.blockTriggered = blockTriggered
+    metrics.ruleTriggered = ruleTriggered
+    metrics.wafTimeout = result.timeout
+
     return {
-      result,
-      metrics,
-      durationExt: parseInt(end - start) / 1e3
+      actions: result.actions,
+      metrics
     }
   }
 

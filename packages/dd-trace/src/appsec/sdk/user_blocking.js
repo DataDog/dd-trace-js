@@ -7,10 +7,18 @@ const { block, getBlockingAction } = require('../blocking')
 const { storage } = require('../../../../datadog-core')
 const { setUserTags } = require('./set_user')
 const log = require('../../log')
+const { reportMetrics } = require('../reporter')
 
 function isUserBlocked (user) {
-  const actions = waf.run({ persistent: { [USER_ID]: user.id } })
-  return !!getBlockingAction(actions)
+  const wafResults = waf.run({ persistent: { [USER_ID]: user.id } })
+
+  if (!wafResults) return
+
+  const blockTriggered = !!getBlockingAction(wafResults.actions)
+
+  reportMetrics(wafResults.metrics, null)
+
+  return blockTriggered
 }
 
 function checkUserAndSetUser (tracer, user) {
@@ -52,9 +60,19 @@ function blockRequest (tracer, req, res) {
     return false
   }
 
-  block(req, res, rootSpan)
+  try {
+    block(req, res)
 
-  return true
+    rootSpan.setTag('appsec.blocked', 'true')
+
+    return true
+  } catch (err) {
+    rootSpan.setTag('_dd.appsec.block.failed', 1)
+
+    log.error('[ASM] Blocking error', err)
+
+    return false
+  }
 }
 
 module.exports = {

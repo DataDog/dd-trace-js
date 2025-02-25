@@ -149,15 +149,28 @@ describe('reporter', () => {
     })
 
     it('should do nothing when passed incomplete objects', () => {
-      web.root.returns(null)
-
       Reporter.reportMetrics({})
 
       expect(span.setTag).not.to.have.been.called
     })
 
-    it('should set duration metrics if set', () => {
-      const metrics = { duration: 1337 }
+    it('should do nothing when rootSpan is not available', () => {
+      web.root.returns(null)
+
+      const metrics = {
+        durationExt: 42,
+        totalRuntime: 1337000
+      }
+
+      Reporter.reportMetrics(metrics)
+
+      expect(telemetry.updateWafRequestsMetricTags).not.to.have.been.called
+      expect(telemetry.updateRaspRequestsMetricTags).not.to.have.been.called
+    })
+
+    it('should set duration metrics from result.totalRuntime', () => {
+      const metrics = { durationExt: 42, totalRuntime: 1337000 }
+
       Reporter.reportMetrics(metrics)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
@@ -166,7 +179,8 @@ describe('reporter', () => {
     })
 
     it('should set ext duration metrics if set', () => {
-      const metrics = { durationExt: 42 }
+      const metrics = { durationExt: 42, totalRuntime: 0 }
+
       Reporter.reportMetrics(metrics)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
@@ -175,48 +189,86 @@ describe('reporter', () => {
     })
 
     it('should set rulesVersion if set', () => {
-      Reporter.reportMetrics({ rulesVersion: '1.2.3' })
-
-      expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.event_rules.version', '1.2.3')
-      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
-    })
-
-    it('should set max truncation string length metric if set', () => {
-      Reporter.reportMetrics({ maxTruncatedString: 300 })
-
-      expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.truncated.string_length', 300)
-    })
-
-    it('should set max truncation container size metric if set', () => {
-      Reporter.reportMetrics({ maxTruncatedContainerSize: 200 })
-
-      expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.truncated.container_size', 200)
-    })
-
-    it('should set max truncation container depth metric if set', () => {
-      Reporter.reportMetrics({ maxTruncatedContainerDepth: 100 })
-
-      expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.truncated.container_depth', 100)
-    })
-
-    it('should call updateWafRequestsMetricTags', () => {
-      const metrics = { rulesVersion: '1.2.3' }
-      const store = storage('legacy').getStore()
+      const metrics = {
+        rulesVersion: '1.2.3',
+        durationExt: 0,
+        totalRuntime: 0
+      }
 
       Reporter.reportMetrics(metrics)
 
-      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req)
-      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
+      expect(web.root).to.have.been.calledOnceWithExactly(req)
+      expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.event_rules.version', '1.2.3')
+    })
+
+    it('should set blockTriggered when provided', () => {
+      const metrics = {
+        durationExt: 0,
+        totalRuntime: 0,
+        blockTriggered: true
+      }
+
+      Reporter.reportMetrics(metrics, null)
+
+      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
+    })
+
+    it('should set wafTimeout when result has timeout', () => {
+      const metrics = {
+        durationExt: 0,
+        totalRuntime: 0,
+        timeout: true
+      }
+
+      Reporter.reportMetrics(metrics)
+
+      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
+    })
+
+    it('should set max truncation string length metric if set', () => {
+      const metrics = {
+        maxTruncatedString: 300,
+        durationExt: 0,
+        totalRuntime: 0
+      }
+
+      Reporter.reportMetrics(metrics)
+
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.truncated.string_length', 300)
+    })
+
+    it('should set max truncation container size metric if set', () => {
+      const metrics = {
+        maxTruncatedContainerSize: 200,
+        durationExt: 0,
+        totalRuntime: 0
+      }
+
+      Reporter.reportMetrics(metrics)
+
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.truncated.container_size', 200)
+    })
+
+    it('should set max truncation container depth metric if set', () => {
+      const metrics = {
+        maxTruncatedContainerDepth: 100,
+        durationExt: 0,
+        totalRuntime: 0
+      }
+
+      Reporter.reportMetrics(metrics)
+
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.truncated.container_depth', 100)
     })
 
     it('should call updateRaspRequestsMetricTags when raspRule is provided', () => {
-      const metrics = { rulesVersion: '1.2.3' }
-      const store = storage('legacy').getStore()
+      const metrics = {
+        rulesVersion: '1.2.3',
+        durationExt: 0,
+        totalRuntime: 0
+      }
 
+      const store = storage('legacy').getStore()
       const raspRule = { type: 'rule_type', variant: 'rule_variant' }
 
       Reporter.reportMetrics(metrics, raspRule)

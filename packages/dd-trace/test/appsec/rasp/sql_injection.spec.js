@@ -55,7 +55,7 @@ describe('RASP - sql_injection', () => {
         [addresses.DB_STATEMENT]: 'SELECT 1',
         [addresses.DB_SYSTEM]: 'postgresql'
       }
-      sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req, { type: 'sql_injection' })
+      sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req)
     })
 
     it('should not analyze sql injection if rasp is disabled', () => {
@@ -126,7 +126,7 @@ describe('RASP - sql_injection', () => {
         [addresses.DB_STATEMENT]: 'SELECT 1',
         [addresses.DB_SYSTEM]: 'mysql'
       }
-      sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req, { type: 'sql_injection' })
+      sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req)
     })
 
     it('should not analyze sql injection if rasp is disabled', () => {

@@ -8,6 +8,7 @@ const waf = require('../waf')
 const { SAMPLING_MECHANISM_APPSEC } = require('../../constants')
 const { keepTrace } = require('../../priority_sampler')
 const addresses = require('../addresses')
+const { reportMetrics } = require('../reporter')
 
 function trackUserLoginSuccessEvent (tracer, user, metadata) {
   // TODO: better user check here and in _setUser() ?
@@ -96,7 +97,11 @@ function runWaf (eventName, user) {
     persistent[addresses.USER_LOGIN] = '' + user.login
   }
 
-  waf.run({ persistent })
+  const wafResults = waf.run({ persistent })
+
+  if (!wafResults) return
+
+  reportMetrics(wafResults, null)
 }
 
 module.exports = {
