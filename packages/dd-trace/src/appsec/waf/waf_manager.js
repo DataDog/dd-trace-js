@@ -18,6 +18,7 @@ class WAFManager {
     const diagnosticsRules = this.ddwaf.diagnostics.rules || {}
 
     Reporter.reportWafInit(this.ddwafVersion, this.rulesVersion, diagnosticsRules, this.loadStatus)
+    Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion, this.loadStatus)
   }
 
   _loadDDWAF (rules) {
@@ -53,13 +54,20 @@ class WAFManager {
   }
 
   update (newRules) {
-    this.ddwaf.update(newRules)
+    let status = true
+    try {
+      this.ddwaf.update(newRules)
+    } catch {
+      log.error('[ASM] Could not updates WAF rules.')
+
+      status = false
+    }
 
     if (this.ddwaf.diagnostics.ruleset_version) {
       this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
     }
 
-    Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion)
+    Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion, status)
   }
 
   destroy () {
