@@ -147,10 +147,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       if (this.isKnownTestsEnabled) {
         try {
-          const hasKnownTests = !!knownTests.jest
+          const hasKnownTests = !!knownTests?.jest
           earlyFlakeDetectionNumRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionNumRetries
           this.knownTestsForThisSuite = hasKnownTests
-            ? (knownTests.jest[this.testSuite] || [])
+            ? (knownTests?.jest[this.testSuite] || [])
             : this.getKnownTestsForSuite(this.testEnvironmentOptions._ddKnownTests)
         } catch (e) {
           // If there has been an error parsing the tests, we'll disable Early Flake Deteciton
@@ -951,7 +951,7 @@ addHook({
     if (isKnownTestsEnabled) {
       const projectSuites = testPaths.tests.map(test => getTestSuitePath(test.path, test.context.config.rootDir))
       const isFaulty =
-        getIsFaultyEarlyFlakeDetection(projectSuites, knownTests.jest || {}, earlyFlakeDetectionFaultyThreshold)
+        getIsFaultyEarlyFlakeDetection(projectSuites, knownTests?.jest || {}, earlyFlakeDetectionFaultyThreshold)
       if (isFaulty) {
         log.error('Early flake detection is disabled because the number of new suites is too high.')
         isEarlyFlakeDetectionEnabled = false
@@ -1063,7 +1063,7 @@ addHook({
       }
       const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
-      const suiteKnownTests = knownTests.jest?.[testSuite] || []
+      const suiteKnownTests = knownTests?.jest?.[testSuite] || []
 
       const suiteQuarantinedTests = quarantinedTests.jest?.suites?.[testSuite]?.tests || {}
 
