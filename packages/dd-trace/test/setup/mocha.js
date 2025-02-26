@@ -10,7 +10,6 @@ const runtimeMetrics = require('../../src/runtime_metrics')
 const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')
-const { schemaDefinitions } = require('../../src/service-naming/schemas')
 const { getInstrumentation } = require('./helpers/load-inst')
 
 global.withVersions = withVersions
@@ -35,7 +34,7 @@ function withNamingSchema (
   const testTitle = 'service and operation naming' + (desc !== '' ? ` (${desc})` : '')
 
   describe(testTitle, () => {
-    Object.keys(schemaDefinitions).forEach(versionName => {
+    ['v0', 'v1'].forEach(versionName => {
       describe(`in version ${versionName}`, () => {
         before(() => {
           fullConfig = Nomenclature.config
