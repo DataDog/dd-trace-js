@@ -296,8 +296,10 @@ class NativeWallProfiler {
       labels['async id'] = asyncId
     }
 
+    // Native profiler doesn't set context.context for some samples, such as idle samples or when
+    // the context was otherwise unavailable when the sample was taken.
     const ref = context.context?.ref
-    if (ref === undefined) {
+    if (typeof ref !== 'object') {
       return labels
     }
 
