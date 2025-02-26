@@ -9,12 +9,15 @@ const contexts = new WeakMap()
 class WAFManager {
   constructor (rules, config) {
     this.config = config
+    this.loadStatus = true
     this.wafTimeout = config.wafTimeout
     this.ddwaf = this._loadDDWAF(rules)
     this.ddwafVersion = this.ddwaf.constructor.version()
     this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
 
-    Reporter.reportWafInit(this.ddwafVersion, this.rulesVersion, this.ddwaf.diagnostics.rules)
+    const diagnosticsRules = this.ddwaf.diagnostics.rules || {}
+
+    Reporter.reportWafInit(this.ddwafVersion, this.rulesVersion, diagnosticsRules, this.loadStatus)
   }
 
   _loadDDWAF (rules) {
@@ -27,6 +30,7 @@ class WAFManager {
     } catch (err) {
       log.error('[ASM] AppSec could not load native package. In-app WAF features will not be available.')
 
+      this.loadStatus = false
       throw err
     }
   }

@@ -74,10 +74,10 @@ function updateWafRequestsMetricTags (metrics, req) {
   return trackWafMetrics(store, metrics)
 }
 
-function incrementWafInitMetric (wafVersion, rulesVersion) {
+function incrementWafInitMetric (wafVersion, rulesVersion, success) {
   if (!enabled) return
 
-  incrementWafInit(wafVersion, rulesVersion)
+  incrementWafInit(wafVersion, rulesVersion, success)
 }
 
 function incrementWafUpdatesMetric (wafVersion, rulesVersion) {

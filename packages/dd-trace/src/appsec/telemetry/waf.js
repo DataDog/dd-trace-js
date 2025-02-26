@@ -138,10 +138,11 @@ function getOrCreateMetricTags (store, versionsTags) {
   return metricTags
 }
 
-function incrementWafInit (wafVersion, rulesVersion) {
+function incrementWafInit (wafVersion, rulesVersion, success) {
   const versionsTags = getVersionsTags(wafVersion, rulesVersion)
+  const initTags = { ...versionsTags, success }
 
-  appsecMetrics.count('waf.init', versionsTags).inc()
+  appsecMetrics.count('waf.init', initTags).inc()
 }
 
 function incrementWafUpdates (wafVersion, rulesVersion) {
