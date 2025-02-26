@@ -16,9 +16,11 @@ describe('profilers/native/wall', () => {
       time: {
         start: sinon.stub(),
         stop: sinon.stub().returns('profile'),
+        setContext: sinon.stub(),
         v8ProfilerStuckEventLoopDetected: sinon.stub().returns(false),
         constants: {
-          kSampleCount: 0
+          kSampleCount: 0,
+          NON_JS_THREADS_FUNCTION_NAME: 'Non JS threads activity'
         }
       }
     }
@@ -173,5 +175,92 @@ describe('profilers/native/wall', () => {
         workaroundV8Bug: false,
         collectCpuTime: false
       })
+  })
+
+  it('should generate appropriate sample labels', () => {
+    const profiler = new NativeWallProfiler({ timelineEnabled: true })
+    profiler.start()
+    profiler.stop()
+
+    function expectLabels (context, expected) {
+      const actual = profiler._generateLabels({ node: {}, context })
+      expect(actual).to.deep.equal(expected)
+    }
+
+    expect(profiler._generateLabels({ node: { name: 'Non JS threads activity' } })).to.deep.equal({
+      'thread name': 'Non-JS threads',
+      'thread id': 'NA',
+      'os thread id': 'NA'
+    })
+
+    const shared = require('../../../src/profiling/profilers/shared')
+    const nativeThreadId = shared.getThreadLabels()['os thread id']
+    const threadInfo = {
+      'thread name': 'Main Event Loop',
+      'thread id': '0',
+      'os thread id': nativeThreadId
+    }
+
+    expectLabels(undefined, threadInfo)
+
+    const threadInfoWithTimestamp = {
+      ...threadInfo,
+      end_timestamp_ns: 1234000n
+    }
+
+    expectLabels({ timestamp: 1234n }, threadInfoWithTimestamp)
+
+    expectLabels({ timestamp: 1234n, asyncId: -1 }, threadInfoWithTimestamp)
+
+    expectLabels({ timestamp: 1234n, asyncId: 1 }, {
+      ...threadInfoWithTimestamp,
+      'async id': 1
+    })
+
+    expectLabels({ timestamp: 1234n, context: {} }, threadInfoWithTimestamp)
+
+    expectLabels({ timestamp: 1234n, context: { ref: {} } }, threadInfoWithTimestamp)
+
+    expectLabels({ timestamp: 1234n, context: { ref: { spanId: 'foo' } } }, {
+      ...threadInfoWithTimestamp,
+      'span id': 'foo'
+    })
+
+    expectLabels({ timestamp: 1234n, context: { ref: { rootSpanId: 'foo' } } }, {
+      ...threadInfoWithTimestamp,
+      'local root span id': 'foo'
+    })
+
+    expectLabels({
+      timestamp: 1234n,
+      context: { ref: { webTags: { 'http.method': 'GET', 'http.route': '/foo/bar' } } }
+    }, {
+      ...threadInfoWithTimestamp,
+      'trace endpoint': 'GET /foo/bar'
+    })
+
+    expectLabels({ timestamp: 1234n, context: { ref: { endpoint: 'GET /foo/bar/2' } } }, {
+      ...threadInfoWithTimestamp,
+      'trace endpoint': 'GET /foo/bar/2'
+    })
+
+    // All at once
+    expectLabels({
+      timestamp: 1234n,
+      asyncId: 2,
+      context: {
+        ref: {
+          spanId: '1234567890',
+          rootSpanId: '0987654321',
+          webTags: { 'http.method': 'GET', 'http.route': '/foo/bar' }
+        }
+      }
+    }, {
+      ...threadInfoWithTimestamp,
+      'async id': 2,
+      'span id': '1234567890',
+      'local root span id': '0987654321',
+      'trace endpoint': 'GET /foo/bar'
+    })
   })
 })
