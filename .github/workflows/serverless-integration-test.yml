@@ -17,7 +17,7 @@ jobs:
       id-token: 'write'
     strategy:
       matrix:
-        version: [18, latest]
+        version: [vars.OLDEST_MAINTENANCE_LTS, latest]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2

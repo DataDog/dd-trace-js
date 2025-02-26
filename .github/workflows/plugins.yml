@@ -25,22 +25,22 @@ jobs:
         aerospike-image: [ce-5.7.0.15]
         test-image: [ubuntu-22.04]
         include:
-          - node-version: 18
+          - node-version: ${{ vars.OLDEST_MAINTENANCE_LTS }}
             range: '>=5.2.0'
             range_clean: gte.5.2.0
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
-          - node-version: 20
+          - node-version: ${{ vars.NEWEST_MAINTENANCE_LTS }}
             range: '>=5.5.0'
             range_clean: gte.5.5.0
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
-          - node-version: 22
+          - node-version: ${{ vars.ACTIVE_LTS }}
             range: '>=5.12.1'
             range_clean: gte.5.12.1
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
-          - node-version: 22
+          - node-version: ${{ vars.ACTIVE_LTS }}
             range: '>=6.0.0'
             range_clean: gte.6.0.0
             aerospike-image: ce-6.4.0.3
@@ -124,7 +124,7 @@ jobs:
   aws-sdk:
     strategy:
       matrix:
-        node-version: ['18', 'latest']
+        node-version: [vars.OLDEST_MAINTENANCE_LTS, latest]
     runs-on: ubuntu-latest
     services:
       localstack:
@@ -258,7 +258,7 @@ jobs:
         node-version: [16]
         range: ['^2.6.12', '^3.0.7', '>=4.0.0 <4.2.0']
         include:
-          - node-version: 18
+          - node-version: ${{ vars.OLDEST_MAINTENANCE_LTS }}
             range: '>=4.2.0'
     runs-on: ubuntu-latest
     services:
@@ -465,7 +465,7 @@ jobs:
   http:
     strategy:
       matrix:
-        node-version: ['18', '20', 'latest']
+        node-version: [vars.OLDEST_MAINTENANCE_LTS, vars.NEWEST_MAINTENANCE_LTS, latest]
     runs-on: ubuntu-latest
     env:
       PLUGINS: http
@@ -760,9 +760,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version:
-          - 18
-          - latest
+        version: [vars.OLDEST_MAINTENANCE_LTS, latest]
         range: ['>=10.2.0 <11', '>=11.0.0 <13', '11.1.4', '>=13.0.0 <14', '13.2.0', '>=14.0.0 <=14.2.6', '>=14.2.7 <15', '>=15.0.0']
         include:
           - range: '>=10.2.0 <11'
