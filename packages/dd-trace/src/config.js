@@ -720,12 +720,14 @@ class Config {
     setHiddenProperty(this, '_envUnprocessed', {})
 
     this._setBoolean(env, 'traceExperimentalEnabled', DD_TRACE_EXPERIMENTAL_ENABLED)
-    tagger.add(tags, OTEL_RESOURCE_ATTRIBUTES, true)
+
     // TODO: For the next major release, always pass true for parseSpaceSeparatedTags
     // & remove the experimental feature flag from it
     if (this._env.traceExperimentalEnabled || this._defaults.traceExperimentalEnabled) {
+      tagger.add(tags, OTEL_RESOURCE_ATTRIBUTES, true, true)
       tagger.add(tags, DD_TAGS, false, true)
     } else {
+      tagger.add(tags, OTEL_RESOURCE_ATTRIBUTES, true)
       tagger.add(tags, DD_TAGS, false)
     }
 
