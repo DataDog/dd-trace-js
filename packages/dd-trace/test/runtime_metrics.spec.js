@@ -9,6 +9,101 @@ const isWindows = os.platform() === 'win32'
 
 const suiteDescribe = isWindows ? describe.skip : describe
 
+suiteDescribe('runtimeMetrics (proxy)', () => {
+  let runtimeMetrics
+  let proxy
+
+  beforeEach(() => {
+    runtimeMetrics = sinon.spy({
+      start () {},
+      stop () {},
+      track () {},
+      boolean () {},
+      histogram () {},
+      count () {},
+      gauge () {},
+      increment () {},
+      decrement () {}
+    })
+
+    proxy = proxyquire('../src/runtime_metrics', {
+      './runtime_metrics': runtimeMetrics
+    })
+  })
+
+  it('should be noop when disabled', () => {
+    proxy.start()
+    proxy.track()
+    proxy.boolean()
+    proxy.histogram()
+    proxy.count()
+    proxy.gauge()
+    proxy.increment()
+    proxy.decrement()
+    proxy.stop()
+
+    expect(runtimeMetrics.start).to.not.have.been.called
+    expect(runtimeMetrics.track).to.not.have.been.called
+    expect(runtimeMetrics.boolean).to.not.have.been.called
+    expect(runtimeMetrics.histogram).to.not.have.been.called
+    expect(runtimeMetrics.count).to.not.have.been.called
+    expect(runtimeMetrics.gauge).to.not.have.been.called
+    expect(runtimeMetrics.increment).to.not.have.been.called
+    expect(runtimeMetrics.decrement).to.not.have.been.called
+    expect(runtimeMetrics.stop).to.not.have.been.called
+  })
+
+  it('should proxy when enabled', () => {
+    const config = { runtimeMetrics: true }
+
+    proxy.start(config)
+    proxy.track()
+    proxy.boolean()
+    proxy.histogram()
+    proxy.count()
+    proxy.gauge()
+    proxy.increment()
+    proxy.decrement()
+    proxy.stop()
+
+    expect(runtimeMetrics.start).to.have.been.calledWith(config)
+    expect(runtimeMetrics.track).to.have.been.called
+    expect(runtimeMetrics.boolean).to.have.been.called
+    expect(runtimeMetrics.histogram).to.have.been.called
+    expect(runtimeMetrics.count).to.have.been.called
+    expect(runtimeMetrics.gauge).to.have.been.called
+    expect(runtimeMetrics.increment).to.have.been.called
+    expect(runtimeMetrics.decrement).to.have.been.called
+    expect(runtimeMetrics.stop).to.have.been.called
+  })
+
+  it('should be noop when disabled after being enabled', () => {
+    const config = { runtimeMetrics: true }
+
+    proxy.start(config)
+    proxy.stop()
+    proxy.start()
+    proxy.track()
+    proxy.boolean()
+    proxy.histogram()
+    proxy.count()
+    proxy.gauge()
+    proxy.increment()
+    proxy.decrement()
+    proxy.stop()
+
+    expect(runtimeMetrics.start).to.have.been.calledOnce
+    expect(runtimeMetrics.track).to.not.have.been.called
+    expect(runtimeMetrics.boolean).to.not.have.been.called
+    expect(runtimeMetrics.histogram).to.not.have.been.called
+    expect(runtimeMetrics.count).to.not.have.been.called
+    expect(runtimeMetrics.gauge).to.not.have.been.called
+    expect(runtimeMetrics.increment).to.not.have.been.called
+    expect(runtimeMetrics.decrement).to.not.have.been.called
+    expect(runtimeMetrics.stop).to.have.been.calledOnce
+  })
+})
+
 suiteDescribe('runtimeMetrics', () => {
   let runtimeMetrics
   let config
@@ -31,8 +126,8 @@ suiteDescribe('runtimeMetrics', () => {
       flush: sinon.spy()
     }
 
-    runtimeMetrics = proxyquire('../src/runtime_metrics', {
-      './dogstatsd': {
+    runtimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
+      '../dogstatsd': {
         DogStatsDClient: Client
       }
     })
@@ -301,8 +396,8 @@ suiteDescribe('runtimeMetrics', () => {
 
     describe('without native runtimeMetrics', () => {
       beforeEach(() => {
-        runtimeMetrics = proxyquire('../src/runtime_metrics', {
-          './dogstatsd': Client,
+        runtimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
+          '../dogstatsd': Client,
           'node-gyp-build': sinon.stub().returns(null)
         })
       })
