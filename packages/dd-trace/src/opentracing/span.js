@@ -13,7 +13,6 @@ const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
-const spanleak = require('../spanleak')
 const util = require('util')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
@@ -99,7 +98,18 @@ class DatadogSpan {
 
       unfinishedRegistry.register(this, operationName, this)
     }
-    spanleak.addSpan(this, operationName)
+
+    // Nullish operator is used here because both `tracer` and `tracer._config`
+    // can be null and there are tests passing invalid values to the `Span`
+    // constructor which still succeed today. Part of the problem is that `Span`
+    // stores only the tracer and not the config, so anything that needs the
+    // config has to read it from the tracer stored on the span, including
+    // even `Span` itself in this case.
+    //
+    // TODO: Refactor Tracer/Span + tests to avoid having to do nullish checks.
+    if (tracer?._config?.spanLeakDebug > 0) {
+      require('../spanleak').addSpan(this, operationName)
+    }
 
     if (startCh.hasSubscribers) {
       startCh.publish({ span: this, fields })

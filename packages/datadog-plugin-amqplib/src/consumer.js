@@ -2,7 +2,7 @@
 
 const { TEXT_MAP } = require('../../../ext/formats')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
-const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams/processor')
+const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams')
 const { getResourceName } = require('./util')
 
 class AmqplibConsumerPlugin extends ConsumerPlugin {

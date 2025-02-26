@@ -9,11 +9,10 @@ const DynamicInstrumentation = require('./debugger')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
-const remoteConfig = require('./appsec/remote_config')
+const remoteConfig = require('./remote_config')
 const AppsecSdk = require('./appsec/sdk')
 const dogstatsd = require('./dogstatsd')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
-const spanleak = require('./spanleak')
 const { SSIHeuristics } = require('./profiling/ssi-heuristics')
 const appsecStandalone = require('./appsec/standalone')
 const LLMObsSDK = require('./llmobs/sdk')
@@ -67,19 +66,11 @@ class Tracer extends NoopProxy {
       telemetry.start(config, this._pluginManager)
 
       if (config.dogstatsd) {
-        // Custom Metrics
         this.dogstatsd = new dogstatsd.CustomMetrics(config)
-
-        setInterval(() => {
-          this.dogstatsd.flush()
-        }, 10 * 1000).unref()
-
-        process.once('beforeExit', () => {
-          this.dogstatsd.flush()
-        })
       }
 
       if (config.spanLeakDebug > 0) {
+        const spanleak = require('./spanleak')
         if (config.spanLeakDebug === spanleak.MODES.LOG) {
           spanleak.enableLogging()
         } else if (config.spanLeakDebug === spanleak.MODES.GC_AND_LOG) {

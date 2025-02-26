@@ -40,10 +40,25 @@ describe('Plugin', () => {
         })
 
         before(async () => {
+          await agent.load('aws-sdk')
+          await agent.close({ ritmReset: false, wipe: true })
+          await agent.load(
+            'aws-sdk',
+            {},
+            {
+              cloudPayloadTagging: {
+                requestsEnabled: true,
+                responsesEnabled: true,
+                request: '$.Item.name',
+                response: '$.Attributes,$.Item.data',
+                maxDepth: 5
+              }
+            }
+          )
           AWS = require(`../../../versions/${dynamoClientName}@${version}`).get()
           dynamo = new AWS.DynamoDB({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
 
-          const deleteTable = async (tableName) => {
+          const deleteTable = async tableName => {
             if (dynamoClientName === '@aws-sdk/client-dynamodb') {
               try {
                 await dynamo.deleteTable({ TableName: tableName })
@@ -125,10 +140,143 @@ describe('Plugin', () => {
           return agent.close({ ritmReset: false })
         })
 
+        describe('with payload tagging', () => {
+          it('adds request and response payloads as flattened tags for putItem', done => {
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+
+                expect(span.resource).to.equal(`putItem ${oneKeyTableName}`)
+                expect(span.meta).to.include({
+                  'aws.dynamodb.table_name': oneKeyTableName,
+                  aws_service: 'DynamoDB',
+                  region: 'us-east-1',
+                  'aws.request.body.TableName': oneKeyTableName,
+                  'aws.request.body.Item.name': 'redacted',
+                  'aws.request.body.Item.data.S': 'test-data'
+                })
+              })
+              .then(done, done)
+
+            dynamo.putItem(
+              {
+                TableName: oneKeyTableName,
+                Item: {
+                  name: { S: 'test-name' },
+                  data: { S: 'test-data' }
+                }
+              },
+              e => e && done(e)
+            )
+          })
+
+          it('adds request and response payloads as flattened tags for updateItem', (done) => {
+            agent
+              .use((traces) => {
+                const span = traces[0][0]
+
+                expect(span.resource).to.equal(`updateItem ${oneKeyTableName}`)
+                expect(span.meta).to.include({
+                  'aws.dynamodb.table_name': oneKeyTableName,
+                  aws_service: 'DynamoDB',
+                  region: 'us-east-1',
+                  'aws.request.body.TableName': oneKeyTableName,
+                  'aws.request.body.Key.name.S': 'test-name',
+                  'aws.request.body.AttributeUpdates.data.Value.S': 'updated-data'
+                })
+              })
+              .then(done, done)
+
+            dynamo.updateItem(
+              {
+                TableName: oneKeyTableName,
+                Key: {
+                  name: { S: 'test-name' }
+                },
+                AttributeUpdates: {
+                  data: {
+                    Action: 'PUT',
+                    Value: { S: 'updated-data' }
+                  }
+                }
+              },
+              (e) => e && done(e)
+            )
+          })
+
+          it('adds request and response payloads as flattened tags for deleteItem', (done) => {
+            agent
+              .use((traces) => {
+                const span = traces[0][0]
+
+                expect(span.resource).to.equal(`deleteItem ${oneKeyTableName}`)
+                expect(span.meta).to.include({
+                  'aws.dynamodb.table_name': oneKeyTableName,
+                  aws_service: 'DynamoDB',
+                  region: 'us-east-1',
+                  'aws.request.body.TableName': oneKeyTableName,
+                  'aws.request.body.Key.name.S': 'test-name'
+                })
+              })
+              .then(done, done)
+
+            dynamo.deleteItem(
+              {
+                TableName: oneKeyTableName,
+                Key: {
+                  name: { S: 'test-name' }
+                }
+              },
+              (e) => e && done(e)
+            )
+          })
+
+          it('adds request and response payloads as flattened tags for getItem', (done) => {
+            dynamo.putItem({
+              TableName: oneKeyTableName,
+              Item: {
+                name: { S: 'test-get-name' },
+                data: { S: 'test-get-data' }
+              }
+            }, (putErr) => {
+              if (putErr) return done(putErr)
+
+              setTimeout(() => {
+                agent
+                  .use((traces) => {
+                    const span = traces[0][0]
+
+                    expect(span.resource).to.equal(`getItem ${oneKeyTableName}`)
+                    expect(span.meta).to.include({
+                      'aws.dynamodb.table_name': oneKeyTableName,
+                      aws_service: 'DynamoDB',
+                      region: 'us-east-1',
+                      'aws.request.body.TableName': oneKeyTableName,
+                      'aws.request.body.Key.name.S': 'test-get-name',
+                      'aws.response.body.Item.name.S': 'test-get-name',
+                      'aws.response.body.Item.data': 'redacted'
+                    })
+                  })
+                  .then(done, done)
+
+                dynamo.getItem(
+                  {
+                    TableName: oneKeyTableName,
+                    Key: {
+                      name: { S: 'test-get-name' }
+                    }
+                  },
+                  (e) => e && done(e)
+                )
+              }, 100) // Small delay to ensure put completes
+            })
+          })
+        })
+
         describe('span pointers', () => {
           beforeEach(() => {
             DynamoDb.dynamoPrimaryKeyConfig = null
-            delete process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS
+            delete process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS
           })
 
           function testSpanPointers ({ expectedHashes, operation }) {
@@ -178,7 +326,7 @@ describe('Plugin', () => {
               testSpanPointers({
                 expectedHashes: '27f424c8202ab35efbf8b0b444b1928f',
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS =
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS =
                     '{"OneKeyTable": ["name"]}'
                   dynamo.putItem({
                     TableName: oneKeyTableName,
@@ -194,7 +342,7 @@ describe('Plugin', () => {
             it('should not add links or error for putItem when config is invalid', () => {
               testSpanPointers({
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = '{"DifferentTable": ["test"]}'
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = '{"DifferentTable": ["test"]}'
                   dynamo.putItem({
                     TableName: oneKeyTableName,
                     Item: {
@@ -209,7 +357,7 @@ describe('Plugin', () => {
             it('should not add links or error for putItem when config is missing', () => {
               testSpanPointers({
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = null
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = null
                   dynamo.putItem({
                     TableName: oneKeyTableName,
                     Item: {
@@ -263,7 +411,7 @@ describe('Plugin', () => {
                   '9682c132f1900106a792f166d0619e0b'
                 ],
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = '{"OneKeyTable": ["name"]}'
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = '{"OneKeyTable": ["name"]}'
                   dynamo.transactWriteItems({
                     TransactItems: [
                       {
@@ -308,7 +456,7 @@ describe('Plugin', () => {
                   '9682c132f1900106a792f166d0619e0b'
                 ],
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = '{"OneKeyTable": ["name"]}'
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = '{"OneKeyTable": ["name"]}'
                   dynamo.batchWriteItem({
                     RequestItems: {
                       [oneKeyTableName]: [
@@ -340,7 +488,7 @@ describe('Plugin', () => {
               testSpanPointers({
                 expectedHashes: 'cc32f0e49ee05d3f2820ccc999bfe306',
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = '{"TwoKeyTable": ["id", "binary"]}'
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = '{"TwoKeyTable": ["id", "binary"]}'
                   dynamo.putItem({
                     TableName: twoKeyTableName,
                     Item: {
@@ -355,7 +503,7 @@ describe('Plugin', () => {
             it('should not add links or error for putItem when config is invalid', () => {
               testSpanPointers({
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = '{"DifferentTable": ["test"]}'
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = '{"DifferentTable": ["test"]}'
                   dynamo.putItem({
                     TableName: twoKeyTableName,
                     Item: {
@@ -370,7 +518,7 @@ describe('Plugin', () => {
             it('should not add links or error for putItem when config is missing', () => {
               testSpanPointers({
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = null
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = null
                   dynamo.putItem({
                     TableName: twoKeyTableName,
                     Item: {
@@ -452,7 +600,7 @@ describe('Plugin', () => {
                   '8a6f801cc4e7d1d5e0dd37e0904e6316'
                 ],
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = '{"TwoKeyTable": ["id", "binary"]}'
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = '{"TwoKeyTable": ["id", "binary"]}'
                   dynamo.transactWriteItems({
                     TransactItems: [
                       {
@@ -505,7 +653,7 @@ describe('Plugin', () => {
                   '8a6f801cc4e7d1d5e0dd37e0904e6316'
                 ],
                 operation: (callback) => {
-                  process.env.DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS = '{"TwoKeyTable": ["id", "binary"]}'
+                  process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = '{"TwoKeyTable": ["id", "binary"]}'
                   dynamo.batchWriteItem({
                     RequestItems: {
                       [twoKeyTableName]: [
@@ -560,7 +708,7 @@ describe('Plugin', () => {
 
       it('should parse valid config with single table', () => {
         const configStr = '{"Table1": ["key1", "key2"]}'
-        dynamoDbInstance._tracerConfig = { aws: { dynamoDb: { tablePrimaryKeys: configStr } } }
+        dynamoDbInstance._tracerConfig = { trace: { dynamoDb: { tablePrimaryKeys: configStr } } }
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
         expect(result).to.deep.equal({
@@ -570,7 +718,7 @@ describe('Plugin', () => {
 
       it('should parse valid config with multiple tables', () => {
         const configStr = '{"Table1": ["key1"], "Table2": ["key2", "key3"]}'
-        dynamoDbInstance._tracerConfig = { aws: { dynamoDb: { tablePrimaryKeys: configStr } } }
+        dynamoDbInstance._tracerConfig = { trace: { dynamoDb: { tablePrimaryKeys: configStr } } }
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
         expect(result).to.deep.equal({

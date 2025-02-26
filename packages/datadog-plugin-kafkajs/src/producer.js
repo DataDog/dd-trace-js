@@ -1,10 +1,10 @@
 'use strict'
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
-const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
-const { getMessageSize } = require('../../dd-trace/src/datastreams/processor')
+const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
 
 const BOOTSTRAP_SERVERS_KEY = 'messaging.kafka.bootstrap.servers'
+const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
 
 class KafkajsProducerPlugin extends ProducerPlugin {
   static get id () { return 'kafkajs' }
@@ -72,7 +72,8 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       meta: {
         component: 'kafkajs',
         'kafka.topic': topic,
-        'kafka.cluster_id': clusterId
+        'kafka.cluster_id': clusterId,
+        [MESSAGING_DESTINATION_KEY]: topic
       },
       metrics: {
         'kafka.batch_size': messages.length

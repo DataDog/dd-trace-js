@@ -1,7 +1,7 @@
 'use strict'
 
-const RemoteConfigCapabilities = require('../../../src/appsec/remote_config/capabilities')
-const { kPreUpdate } = require('../../../src/appsec/remote_config/manager')
+const RemoteConfigCapabilities = require('../../src/remote_config/capabilities')
+const { kPreUpdate } = require('../../src/remote_config/manager')
 
 let config
 let rc
@@ -50,7 +50,7 @@ describe('Remote Config index', () => {
       disable: sinon.spy()
     }
 
-    remoteConfig = proxyquire('../src/appsec/remote_config', {
+    remoteConfig = proxyquire('../src/remote_config', {
       './manager': RemoteConfigManager,
       '../rule_manager': RuleManager,
       '../user_tracking': UserTracking,
@@ -233,6 +233,8 @@ describe('Remote Config index', () => {
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, true)
         expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, true)
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, true)
@@ -278,6 +280,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, true)
         expect(rc.updateCapabilities)
@@ -327,6 +331,8 @@ describe('Remote Config index', () => {
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, true)
         expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, true)
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, true)
@@ -370,6 +376,8 @@ describe('Remote Config index', () => {
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, true)
         expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, true)
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, true)
@@ -412,6 +420,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, false)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, false)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, false)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, false)
         expect(rc.updateCapabilities)
