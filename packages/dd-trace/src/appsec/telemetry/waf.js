@@ -70,11 +70,19 @@ function trackWafMetrics (store, metrics) {
     metricTags[tags.BLOCK_FAILURE] = true
   }
 
-  if (getTruncationReason(metrics) > 0) {
+  const truncationReason = getTruncationReason(metrics)
+  if (truncationReason > 0) {
     metricTags[tags.INPUT_TRUNCATED] = true
+
+    incrementTruncatedMetrics(truncationReason)
   }
 
   return metricTags
+}
+
+function incrementTruncatedMetrics (truncationReason) {
+  const truncationTags = { truncation_reason: truncationReason }
+  appsecMetrics.count('appsec.waf.input_truncated', truncationTags).inc(1)
 }
 
 function getTruncationReason ({ maxTruncatedString, maxTruncatedContainerSize, maxTruncatedContainerDepth }) {
