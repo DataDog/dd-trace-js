@@ -43,7 +43,7 @@ function processStringTags (carrier, tagStr, parseOtelTags, spaceSeparatedMode =
       : trimmedSegment.indexOf(':')
 
     if (separatorIndex === -1) {
-      if (spaceSeparatedMode) continue
+      if (!spaceSeparatedMode) continue
       carrier[trimmedSegment] = skipEmptyString.has(trimmedSegment)
         ? ''
         : DD_EMPTY_USER_TAG
