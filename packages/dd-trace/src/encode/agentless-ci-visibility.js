@@ -69,8 +69,6 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       }
     }
 
-    this.metadataTags = target
-
     // PREVIOUS APPROACH
     // if (testLevel) {
     //   this.metadataTags[testLevel] = { ...this.metadataTags[testLevel], ...tags }
