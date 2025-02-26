@@ -29,6 +29,9 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:debugger:ci
       - run: yarn test:integration:debugger
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:debugger:ci
+      - run: yarn test:integration:debugger
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
