@@ -90,7 +90,7 @@ class WAFContextWrapper {
       ruleTriggered: false
     }
 
-    const result = this.ddwafContext.run(payload, this.wafTimeout)
+    const result = this.runWaf(payload, this.wafTimeout)
 
     this.addressesToSkip = newAddressesToSkip
 
