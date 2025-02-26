@@ -317,14 +317,13 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
 
     if (this.metadataTags.test) {
       if (!this.metadataTags.test.TAG_TEST_IMPACT_ANALYSIS) {
-        this.metadataTags.test.TAG_TEST_IMPACT_ANALYSIS = undefined
+        payload.test.TAG_TEST_IMPACT_ANALYSIS = undefined
       } else {
-        this.metadataTags.test.TAG_TEST_IMPACT_ANALYSIS = this.libraryConfig?.isItrEnabled ? 'true' : 'false'
+        payload.test.TAG_TEST_IMPACT_ANALYSIS = this.libraryConfig?.isItrEnabled ? 'true' : 'false'
       }
     }
     payload.metadata.test = {
       ...payload.metadata.test,
-      TAG_TEST_IMPACT_ANALYSIS: this.libraryConfig?.isItrEnabled ? 'true' : 'false',
       TAG_EARLY_FLAKE_DETECTION: this.libraryConfig?.isEarlyFlakeDetectionEnabled ? 'true' : 'false',
       TAG_AUTO_TEST_RETRIES: true // There is no flag from the libraryConfig
     }
