@@ -9,6 +9,7 @@ const {
   TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
   TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT
 } = require('../ci-visibility/telemetry')
+
 const ENCODING_VERSION = 1
 const ALLOWED_CONTENT_TYPES = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
 
