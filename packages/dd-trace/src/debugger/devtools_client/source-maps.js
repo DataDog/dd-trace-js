@@ -39,6 +39,8 @@ const self = module.exports = {
 // might throw an uncatchable error from within `AsyncLocalStorage._propagate` with the following error message:
 //
 //     TypeError: Cannot read properties of undefined (reading 'Symbol(kResourceStore)')
+//
+// Source: https://github.com/nodejs/node/blob/v18.20.6/lib/async_hooks.js#L312
 function cacheIt (key, value) {
   if (NODE_MAJOR < 20) return value
   cacheTime = Date.now()
