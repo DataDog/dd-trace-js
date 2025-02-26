@@ -27,7 +27,10 @@ const {
   DI_DEBUG_ERROR_PREFIX,
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_FILE_SUFFIX,
-  DI_DEBUG_ERROR_LINE_SUFFIX
+  DI_DEBUG_ERROR_LINE_SUFFIX,
+  TAG_EARLY_FLAKE_DETECTION,
+  TAG_AUTO_TEST_RETRIES,
+  TAG_TEST_IMPACT_ANALYSIS
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -48,7 +51,7 @@ module.exports = class CiPlugin extends Plugin {
     this.fileLineToProbeId = new Map()
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
 
-    this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone }) => {
+    this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone, isParallel }) => {
       if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
@@ -58,6 +61,19 @@ module.exports = class CiPlugin extends Plugin {
         } else {
           this.libraryConfig = libraryConfig
         }
+        const metadataTags = {
+          test: {
+            [TAG_TEST_IMPACT_ANALYSIS]: this.libraryConfig?.isItrEnabled ? 'true' : 'false',
+            [TAG_EARLY_FLAKE_DETECTION]: this.libraryConfig?.isEarlyFlakeDetectionEnabled ? 'true' : 'false',
+            [TAG_AUTO_TEST_RETRIES]: this.libraryConfig?.isFlakyTestRetriesEnabled ? 'true' : 'false'
+          }
+        }
+        if (this.constructor.id === 'playwright' ||
+          this.constructor.id === 'vitest' ||
+          ((this.constructor.id === 'cucumber' || this.constructor.id === 'mocha') && isParallel)) {
+          metadataTags.test[TAG_TEST_IMPACT_ANALYSIS] = undefined
+        }
+        this.tracer._tracer._exporter.setMetadataTags(metadataTags)
         onDone({ err, libraryConfig })
       })
     })

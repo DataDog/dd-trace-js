@@ -20,8 +20,7 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
-  TEST_MANAGEMENT_IS_QUARANTINED,
-  TAG_TEST_IMPACT_ANALYSIS
+  TEST_MANAGEMENT_IS_QUARANTINED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -232,8 +231,6 @@ class VitestPlugin extends CiPlugin {
       if (codeOwners) {
         testSuiteMetadata[TEST_CODE_OWNERS] = codeOwners
       }
-
-      testSuiteMetadata['test.' + TAG_TEST_IMPACT_ANALYSIS] = 'false'
 
       const testSuiteSpan = this.tracer.startSpan('vitest.test_suite', {
         childOf: testSessionSpanContext,
