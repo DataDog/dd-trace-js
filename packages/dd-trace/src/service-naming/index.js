@@ -31,10 +31,10 @@ class SchemaManager {
   configure (config = {}) {
     switch (config.spanAttributeSchema) {
       case 'v1':
-        this.schemas.v1 = require('./schemas/v1')
+        this.schemas.v1 = this.schemas.v1 || require('./schemas/v1')
         break
       default:
-        this.schemas.v0 = require('./schemas/v0')
+        this.schemas.v0 = this.schemas.v0 || require('./schemas/v0')
     }
 
     this.config = config
