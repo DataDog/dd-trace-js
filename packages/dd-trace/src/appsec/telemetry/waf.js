@@ -80,9 +80,27 @@ function trackWafMetrics (store, metrics) {
   return metricTags
 }
 
-function incrementTruncatedMetrics (truncationReason) {
+function incrementTruncatedMetrics (metrics, truncationReason) {
   const truncationTags = { truncation_reason: truncationReason }
   appsecMetrics.count('appsec.waf.input_truncated', truncationTags).inc(1)
+
+  if (metrics?.maxTruncatedString) {
+    appsecMetrics.distribution('appsec.waf.truncated_value_size',
+      { truncation_reason: TRUNCATION_FLAGS.LONG_STRING })
+      .track(metrics.maxTruncatedString)
+  }
+
+  if (metrics?.maxTruncatedContainerSize) {
+    appsecMetrics.distribution('appsec.waf.truncated_value_size',
+      { truncation_reason: TRUNCATION_FLAGS.LARGE_CONTAINER })
+      .track(metrics.maxTruncatedContainerSize)
+  }
+
+  if (metrics?.maxTruncatedContainerDepth) {
+    appsecMetrics.distribution('appsec.waf.truncated_value_size',
+      { truncation_reason: TRUNCATION_FLAGS.DEEP_CONTAINER })
+      .track(metrics.maxTruncatedContainerDepth)
+  }
 }
 
 function getTruncationReason ({ maxTruncatedString, maxTruncatedContainerSize, maxTruncatedContainerDepth }) {
