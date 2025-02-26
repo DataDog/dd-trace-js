@@ -117,7 +117,7 @@ jobs:
       DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/setup
+      - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
         with:
@@ -138,11 +138,8 @@ jobs:
       DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/setup
+      - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
-      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
-        with:
-          node-version: 20
       - run: yarn test:integration:vitest
         env:
           NODE_OPTIONS: '-r ./ci/init'
@@ -151,7 +148,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/setup
+      - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: yarn lint
 
@@ -159,7 +156,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/setup
+      - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: yarn type:test
       - run: yarn type:doc
@@ -168,6 +165,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/setup
+      - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: node scripts/verify-ci-config.js
