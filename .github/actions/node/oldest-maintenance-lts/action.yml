@@ -1,5 +1,5 @@
-name: Node Setup
-description: Install Node.js
+name: Node.js Oldest Maintenance LTS
+description: Install the oldest Maintenance LTS version of Node.js
 runs:
   using: composite
   steps:
