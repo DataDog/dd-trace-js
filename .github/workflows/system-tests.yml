@@ -21,7 +21,7 @@ jobs:
       - name: Pack dd-trace-js
         run: mkdir -p ./binaries && echo /binaries/$(npm pack --pack-destination ./binaries ./dd-trace-js) > ./binaries/nodejs-load-from-npm
       - name: Upload artifact
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: system_tests_binaries
           path: ./binaries/**/*
@@ -78,7 +78,7 @@ jobs:
         if: ${{ always() }}
         run: tar -czvf artifact.tar.gz $(ls | grep logs)
       - name: Upload artifact
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         if: ${{ always() }}
         with:
           name: logs_${{ matrix.weblog-variant }}-${{ matrix.scenario }}
