@@ -49,8 +49,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   setMetadataTags (tags, testLevel) {
-    const target = structuredClone(this.metadataTags) // Deep clone the metadataTags object
-    const stack = [{ target, source: tags }]
+    const stack = [{ target: this.metadataTags, source: tags }]
     while (stack.length > 0) {
       const { target, source } = stack.pop()
 
