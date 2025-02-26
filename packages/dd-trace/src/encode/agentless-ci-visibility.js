@@ -9,7 +9,6 @@ const {
   TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
   TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT
 } = require('../ci-visibility/telemetry')
-
 const ENCODING_VERSION = 1
 const ALLOWED_CONTENT_TYPES = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
 
@@ -313,6 +312,20 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
         ...this.metadataTags
       },
       events: []
+    }
+
+    if (this.metadataTags.test) {
+      if (!this.metadataTags.test.TAG_TEST_IMPACT_ANALYSIS) {
+        this.metadataTags.test.TAG_TEST_IMPACT_ANALYSIS = undefined
+      } else {
+        this.metadataTags.test.TAG_TEST_IMPACT_ANALYSIS = this.libraryConfig?.isItrEnabled ? 'true' : 'false'
+      }
+    }
+    payload.metadata.test = {
+      ...payload.metadata.test,
+      TAG_TEST_IMPACT_ANALYSIS: this.libraryConfig?.isItrEnabled ? 'true' : 'false',
+      TAG_EARLY_FLAKE_DETECTION: this.libraryConfig?.isEarlyFlakeDetectionEnabled ? 'true' : 'false',
+      TAG_AUTO_TEST_RETRIES: true // There is no flag from the libraryConfig
     }
 
     if (this.env) {

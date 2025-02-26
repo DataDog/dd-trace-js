@@ -19,7 +19,8 @@ const {
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_ENABLED,
-  TEST_BROWSER_NAME
+  TEST_BROWSER_NAME,
+  TAG_TEST_IMPACT_ANALYSIS
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -220,7 +221,8 @@ class PlaywrightPlugin extends CiPlugin {
     const testSuiteSpan = this._testSuites.get(testSuite)
 
     const extraTags = {
-      [TEST_SOURCE_START]: testSourceLine
+      [TEST_SOURCE_START]: testSourceLine,
+      ['test.' + TAG_TEST_IMPACT_ANALYSIS]: 'false'
     }
     if (testSourceFile) {
       extraTags[TEST_SOURCE_FILE] = testSourceFile || testSuite

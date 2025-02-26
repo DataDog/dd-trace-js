@@ -99,6 +99,16 @@ const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
 const EFD_STRING = "Retried by Datadog's Early Flake Detection"
 const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
 
+// Library Capabilities Tagging
+const TAG_TEST_IMPACT_ANALYSIS = '_dd.library_capabilities.test_impact_analysis'
+const TAG_EARLY_FLAKE_DETECTION = '_dd.library_capabilities.early_flake_detection'
+const TAG_AUTO_TEST_RETRIES = '_dd.library_capabilities.auto_test_retries'
+const TAG_IMPACTED_TESTS = '_dd.library_capabilities.impacted_tests'
+const TAG_FAIL_FAST_TEST_ORDER = '_dd.library_capabilities.fail_fast_test_order'
+const TAG_TEST_MANAGEMENT_QUARANTINE = '_dd.library_capabilities.test_management.quarantine'
+const TAG_TEST_MANAGEMENT_DISABLE = '_dd.library_capabilities.test_management.disable'
+const TAG_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities.test_management.attempt_to_fix'
+
 const TEST_LEVEL_EVENT_TYPES = [
   'test',
   'test_suite_end',
@@ -193,6 +203,14 @@ module.exports = {
   TEST_BROWSER_NAME,
   TEST_BROWSER_VERSION,
   getTestSessionName,
+  TAG_TEST_IMPACT_ANALYSIS,
+  TAG_EARLY_FLAKE_DETECTION,
+  TAG_AUTO_TEST_RETRIES,
+  TAG_IMPACTED_TESTS,
+  TAG_FAIL_FAST_TEST_ORDER,
+  TAG_TEST_MANAGEMENT_QUARANTINE,
+  TAG_TEST_MANAGEMENT_DISABLE,
+  TAG_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   TEST_LEVEL_EVENT_TYPES,
   getNumFromKnownTests,
   getFileAndLineNumberFromError,

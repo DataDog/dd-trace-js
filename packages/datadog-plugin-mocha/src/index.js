@@ -33,7 +33,8 @@ const {
   TEST_BROWSER_DRIVER,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
-  TEST_MANAGEMENT_IS_QUARANTINED
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TAG_TEST_IMPACT_ANALYSIS
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -422,6 +423,7 @@ class MochaPlugin extends CiPlugin {
 
     if (isParallel) {
       extraTags[MOCHA_IS_PARALLEL] = 'true'
+      extraTags['test.' + TAG_TEST_IMPACT_ANALYSIS] = 'false'
     }
 
     if (isQuarantined) {

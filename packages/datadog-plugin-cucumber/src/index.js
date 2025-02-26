@@ -29,7 +29,8 @@ const {
   CUCUMBER_IS_PARALLEL,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
-  TEST_MANAGEMENT_IS_QUARANTINED
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TAG_TEST_IMPACT_ANALYSIS
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -230,6 +231,7 @@ class CucumberPlugin extends CiPlugin {
       }
       if (isParallel) {
         extraTags[CUCUMBER_IS_PARALLEL] = 'true'
+        extraTags['test.' + TAG_TEST_IMPACT_ANALYSIS] = 'false'
       }
 
       const testSpan = this.startTestSpan(testName, testSuite, extraTags)
