@@ -64,6 +64,9 @@ function trackWafMetrics (store, metrics) {
 
   if (metrics.errorCode) {
     metricTags[tags.WAF_ERROR] = true
+
+    const errorTags = { ...versionsTags, waf_error: metrics.errorCode }
+    appsecMetrics.count('waf.error', errorTags).inc(1)
   }
 
   if (metrics.blockFailed) {
