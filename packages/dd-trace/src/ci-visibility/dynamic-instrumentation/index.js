@@ -38,17 +38,18 @@ class TestVisDynamicInstrumentation {
     }
     const probeId = randomUUID()
 
-    this.breakpointSetChannel.port2.postMessage(
-      { id: probeId, file, line }
-    )
-
     this.onHitBreakpointByProbeId.set(probeId, onHitBreakpoint)
 
     return [
       probeId,
       new Promise(resolve => {
+        probeIdToResolveBreakpointSet.set(probeId, resolve)
+
         this._readyPromise.then(() => {
-          probeIdToResolveBreakpointSet.set(probeId, resolve)
+          // We only post the message when the worker is ready
+          this.breakpointSetChannel.port2.postMessage(
+            { id: probeId, file, line }
+          )
         })
       })
     ]
