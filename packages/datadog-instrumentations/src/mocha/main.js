@@ -349,7 +349,6 @@ addHook({
   versions: ['>=5.2.0'],
   file: 'lib/cli/run-helpers.js'
 }, (run) => {
-  // The original function is async, but no need to mark it as such as long as it returns a promise
   shimmer.wrap(run, 'runMocha', runMocha => function () {
     if (!testStartCh.hasSubscribers) {
       return runMocha.apply(this, arguments)

@@ -10,7 +10,6 @@ addHook({ name: 'apollo-server-core', file: 'dist/runHttpQuery.js', versions: ['
   const HttpQueryError = runHttpQueryModule.HttpQueryError
 
   shimmer.wrap(runHttpQueryModule, 'runHttpQuery', function wrapRunHttpQuery (originalRunHttpQuery) {
-    // The original function is async, but no need to mark it as such as long as it returns a promise
     return function runHttpQuery () {
       if (!requestChannel.start.hasSubscribers) {
         return originalRunHttpQuery.apply(this, arguments)
