@@ -70,6 +70,10 @@ function trackWafMetrics (store, metrics) {
     metricTags[tags.BLOCK_FAILURE] = true
   }
 
+  if (metrics.rateLimited) {
+    metricTags[tags.RATE_LIMITED] = true
+  }
+
   const truncationReason = getTruncationReason(metrics)
   if (truncationReason > 0) {
     metricTags[tags.INPUT_TRUNCATED] = true
@@ -124,6 +128,7 @@ function getOrCreateMetricTags (store, versionsTags) {
       [tags.WAF_ERROR]: false,
       [tags.BLOCK_FAILURE]: false,
       [tags.INPUT_TRUNCATED]: false,
+      [tags.RATE_LIMITED]: false,
 
       ...versionsTags
     }

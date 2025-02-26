@@ -7,6 +7,7 @@ const tags = {
   EVENT_RULES_VERSION: 'event_rules_version',
   INPUT_TRUNCATED: 'input_truncated',
   REQUEST_BLOCKED: 'request_blocked',
+  RATE_LIMITED: 'rate_limited',
   RULE_TRIGGERED: 'rule_triggered',
   WAF_ERROR: 'waf_error',
   WAF_TIMEOUT: 'waf_timeout',
