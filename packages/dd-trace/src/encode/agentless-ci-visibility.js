@@ -48,8 +48,36 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this.reset()
   }
 
-  setMetadataTags (tags) {
-    this.metadataTags = tags
+  setMetadataTags (tags, testLevel) {
+    const target = structuredClone(this.metadataTags) // Deep clone the metadataTags object
+    const stack = [{ target, source: tags }]
+    while (stack.length > 0) {
+      const { target, source } = stack.pop()
+
+      for (const key in source) {
+        if (source.hasOwnProperty(key)) {
+          if (typeof source[key] === 'object' &&
+          source[key] !== null &&
+          typeof target[key] === 'object' &&
+          target[key] !== null) {
+            // Keep iterating through the object
+            stack.push({ target: target[key], source: source[key] })
+          } else {
+            // Directly assign the value
+            target[key] = source[key]
+          }
+        }
+      }
+    }
+
+    this.metadataTags = target
+
+    // PREVIOUS APPROACH
+    // if (testLevel) {
+    //   this.metadataTags[testLevel] = { ...this.metadataTags[testLevel], ...tags }
+    // } else {
+    //   this.metadataTags = tags
+    // }
   }
 
   _encodeTestSuite (bytes, content) {
