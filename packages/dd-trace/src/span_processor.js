@@ -3,6 +3,7 @@
 const log = require('./log')
 const format = require('./format')
 const SpanSampler = require('./span_sampler')
+const { spanFilter } = require('./span_filter')
 const GitMetadataTagger = require('./git_metadata_tagger')
 
 const { SpanStatsProcessor } = require('./span_stats')
@@ -43,15 +44,57 @@ class SpanProcessor {
       this._spanSampler.sample(spanContext)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
-      for (const span of started) {
-        if (span._duration !== undefined) {
-          const formattedSpan = format(span)
+      for (const currentSpan of started.slice()) { // Use a copy to avoid modification issues
+        if (currentSpan._duration !== undefined) {
+          if (spanFilter) {
+            const tags = currentSpan.context()._tags
+
+            // Check if the span has already been filtered
+            if ('_dd.filtered' in tags) {
+              // Span was previously filtered out, already removed from arrays
+              // No need to process further
+              continue
+            } else {
+              // Determine whether to keep or skip the span based on the filter
+              if (!spanFilter.shouldKeepSpan(currentSpan.context())) {
+              // Mark the span as filtered (skipped)
+                tags['_dd.filtered'] = true
+
+                // Remove the span from the 'started' array
+                const startIndex = started.indexOf(currentSpan)
+                if (startIndex !== -1) {
+                  started.splice(startIndex, 1)
+                }
+
+                // Remove the span from the 'finished' array if it's already finished
+                const finishIndex = finished.indexOf(currentSpan)
+                if (finishIndex !== -1) {
+                  finished.splice(finishIndex, 1)
+                }
+
+                // Remove all references to the span to allow garbage collection
+                // This assumes there are no other references elsewhere in the code
+                // In JavaScript, simply removing from arrays is typically sufficient
+                // If there are other references, ensure they are also removed or set to null
+                // Example (if applicable):
+                // someOtherObject.span = null;
+
+                // Continue to the next span
+                continue
+              } else {
+              // Mark the span as not filtered (kept)
+                tags['_dd.filtered'] = false
+              }
+            }
+          }
+
+          const formattedSpan = format(currentSpan)
           this._stats.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
 
-          spanProcessCh.publish({ span })
+          spanProcessCh.publish({ span: currentSpan })
         } else {
-          active.push(span)
+          active.push(currentSpan)
         }
       }
 
