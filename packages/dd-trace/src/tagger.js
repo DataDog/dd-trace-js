@@ -29,7 +29,11 @@ function processObjectCarrier (carrier, keyValuePairs) {
 function processStringTags (carrier, tagStr, parseOtelTags, spaceSeparatedMode = false) {
   let segments
   if (spaceSeparatedMode) {
-    segments = tagStr.split(/\s+/)
+    const separator = tagStr.includes(',') ? ',' : ' '
+    segments =
+        separator === ' '
+          ? tagStr.split(/\s+/)
+          : tagStr.split(separator)
   } else {
     segments = tagStr.split(',')
   }
@@ -69,7 +73,7 @@ function add (carrier, keyValuePairs, parseOtelTags = false, spaceSeparatedMode 
   if (!carrier || !keyValuePairs) return
   try {
     if (Array.isArray(keyValuePairs)) {
-      keyValuePairs.forEach(tags => add(carrier, tags, parseOtelTags))
+      keyValuePairs.forEach(tags => add(carrier, tags, parseOtelTags, spaceSeparatedMode))
     } else if (typeof keyValuePairs === 'string') {
       processStringTags(carrier, keyValuePairs, parseOtelTags, spaceSeparatedMode)
     } else {
