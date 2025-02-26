@@ -114,6 +114,8 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
 
       log.error('[ASM] Blocking error', err)
     }
+
+    reportMetrics(requestData.wafResults.metrics, null)
   }
 
   graphqlRequestData.delete(req)
