@@ -73,7 +73,7 @@ module.exports = class CiPlugin extends Plugin {
           ((this.constructor.id === 'cucumber' || this.constructor.id === 'mocha') && isParallel)) {
           metadataTags.test[TAG_TEST_IMPACT_ANALYSIS] = undefined
         }
-        this.tracer._tracer._exporter.setMetadataTags(metadataTags)
+        this.tracer._exporter.setMetadataTags(metadataTags)
         onDone({ err, libraryConfig })
       })
     })
