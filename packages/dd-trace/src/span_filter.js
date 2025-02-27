@@ -50,10 +50,10 @@ class SpanFilter {
 
 // Usage
 const predefinedFilters = [
-  {
-    type: 'service',
-    criteria: { tags: ['my-service', 'express-app'] }
-  },
+  // {
+  //   type: 'service',
+  //   criteria: { tags: ['my-service', 'express-app'] }
+  // },
   {
     type: 'tag',
     criteria: { tags: ['span.kind'] }

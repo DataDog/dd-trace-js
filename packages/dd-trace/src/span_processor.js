@@ -53,7 +53,7 @@ class SpanProcessor {
             if ('_dd.filtered' in tags) {
               // Span was previously filtered out, already removed from arrays
               // No need to process further
-              continue
+              // pass
             } else {
               // Determine whether to keep or skip the span based on the filter
               if (!spanFilter.shouldKeepSpan(currentSpan.context())) {
