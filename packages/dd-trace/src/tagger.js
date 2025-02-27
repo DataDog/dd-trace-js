@@ -6,7 +6,6 @@ const ERROR_MESSAGE = constants.ERROR_MESSAGE
 const ERROR_STACK = constants.ERROR_STACK
 const ERROR_TYPE = constants.ERROR_TYPE
 
-
 function add (carrier, keyValuePairs) {
   if (!carrier || !keyValuePairs) return
 
