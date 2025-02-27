@@ -42,7 +42,10 @@ const {
   DI_DEBUG_ERROR_LINE_SUFFIX,
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   TEST_MANAGEMENT_ENABLED,
-  TEST_MANAGEMENT_IS_QUARANTINED
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TAG_TEST_IMPACT_ANALYSIS,
+  TAG_EARLY_FLAKE_DETECTION,
+  TAG_AUTO_TEST_RETRIES
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -3060,6 +3063,47 @@ describe('jest CommonJS', () => {
         },
         true
       )
+    })
+  })
+
+  context('libraries capabilities', () => {
+    it.only('adds capabilities to tests', (done) => {
+      receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+        const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+        assert.isNotEmpty(metadataDicts)
+        metadataDicts.forEach(metadata => {
+          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+            if (testLevel === 'test') {
+              assert.equal(metadata[testLevel][TAG_TEST_IMPACT_ANALYSIS], 'true')
+              assert.equal(metadata[testLevel][TAG_EARLY_FLAKE_DETECTION], 'false')
+              assert.equal(metadata[testLevel][TAG_AUTO_TEST_RETRIES], 'false')
+            }
+            assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+          }
+        })
+
+        done()
+      })
+
+      childProcess = fork(startupTestFile, {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          DD_TEST_SESSION_NAME: 'my-test-session',
+          DD_SERVICE: undefined
+        },
+        stdio: 'pipe'
+      })
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      childProcess.stdout.pipe(process.stdout)
+      childProcess.stderr.pipe(process.stderr)
     })
   })
 })
