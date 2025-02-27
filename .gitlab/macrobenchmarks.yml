@@ -1,7 +1,7 @@
 .macrobenchmarks:
   stage: macrobenchmarks
   rules:
-    - if: ($NIGHTLY_BENCHMARKS || $CI_PIPELINE_SOURCE != "schedule") && $CI_COMMIT_REF_NAME == "master"
+    - if: ($NIGHTLY_BENCHMARKS || $CI_PIPELINE_SOURCE != "schedule") && $CI_COMMIT_REF_NAME == "main"
       when: always
     - when: manual
   tags: ["runner:apm-k8s-same-cpu"]

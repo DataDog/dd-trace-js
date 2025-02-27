@@ -66,7 +66,7 @@ try {
 
   const lastVersion = require('../../package.json').version
   const [, lastMinor, lastPatch] = lastVersion.split('.').map(Number)
-  const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x master`)
+  const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x main`)
   const isMinor = flags.minor || (!flags.patch && lineDiff.includes('SEMVER-MINOR'))
   const newVersion = isMinor
     ? `${releaseLine}.${lastMinor + 1}.0`
@@ -96,12 +96,12 @@ try {
 
   // Get the hashes of the last version and the commits to add.
   const lastCommit = capture('git log -1 --pretty=%B').trim()
-  const proposalDiff = capture(`${diffCmd} --format=sha --reverse v${newVersion}-proposal master`)
+  const proposalDiff = capture(`${diffCmd} --format=sha --reverse v${newVersion}-proposal main`)
     .replace(/\n/g, ' ').trim()
 
   if (proposalDiff) {
     // Get new changes since last commit of the proposal branch.
-    const newChanges = capture(`${diffCmd} v${newVersion}-proposal master`)
+    const newChanges = capture(`${diffCmd} v${newVersion}-proposal main`)
 
     pass(`\n${newChanges}`)
 
