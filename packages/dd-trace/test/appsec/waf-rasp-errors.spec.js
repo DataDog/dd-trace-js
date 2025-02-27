@@ -56,6 +56,7 @@ describe('WAF/RASP - timeout', () => {
     await agent.stop()
   })
 
+  // This test could be Flaky since the WAF could return result before 1ms
   it('Should not block since waf will timeout', async () => {
     const longValue = 'testattack'.repeat(500)
 
