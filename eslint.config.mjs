@@ -87,7 +87,8 @@ export default [
       'no-console': 'error',
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommnded)
       'no-unused-expressions': 'off', // Override (turned on by standard)
-      'no-var': 'error' // Override (set to warn in standard)
+      'no-var': 'error', // Override (set to warn in standard)
+      'require-await': 'error'
     }
   },
   {
@@ -212,7 +213,8 @@ export default [
       'mocha/no-sibling-hooks': 'off',
       'mocha/no-skipped-tests': 'off',
       'mocha/no-top-level-hooks': 'off',
-      'n/handle-callback-err': 'off'
+      'n/handle-callback-err': 'off',
+      'require-await': 'off'
     }
   },
   {
