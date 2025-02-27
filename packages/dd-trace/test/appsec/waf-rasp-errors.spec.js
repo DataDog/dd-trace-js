@@ -10,7 +10,7 @@ describe('WAF/RASP - timeout', () => {
   let axios, sandbox, cwd, appPort, appFile, agent, proc
 
   before(async function () {
-    this.timeout(process.platform === 'win32' ? 90000 : 30000)
+    this.timeout(90000)
 
     sandbox = await createSandbox(
       ['express'],
@@ -31,7 +31,7 @@ describe('WAF/RASP - timeout', () => {
   })
 
   after(async function () {
-    this.timeout(60000)
+    this.timeout(90000)
     await sandbox.remove()
   })
 
@@ -72,7 +72,7 @@ describe('WAF/RASP - error', () => {
   let axios, sandbox, cwd, appPort, appFile, agent, proc
 
   before(async function () {
-    this.timeout(process.platform === 'win32' ? 90000 : 30000)
+    this.timeout(90000)
 
     sandbox = await createSandbox(
       ['express'],
@@ -93,7 +93,7 @@ describe('WAF/RASP - error', () => {
   })
 
   after(async function () {
-    this.timeout(60000)
+    this.timeout(90000)
     await sandbox.remove()
   })
 
