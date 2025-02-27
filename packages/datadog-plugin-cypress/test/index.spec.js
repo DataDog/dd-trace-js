@@ -56,6 +56,10 @@ describe('Plugin', function () {
           ? 'app-10'
           : 'app'
 
+        const TestSourceFile = semver.intersects(version, '>=10')
+          ? `packages/datadog-plugin-cypress/test/${testSuiteFolder}/cypress/integration/integration-test.js`
+          : 'cypress/integration/integration-test.js'
+
         cypressExecutable.run({
           project: `./packages/datadog-plugin-cypress/test/${testSuiteFolder}`,
           config: {
@@ -82,15 +86,18 @@ describe('Plugin', function () {
             [TEST_NAME]: 'can visit a page renders a hello world',
             [TEST_STATUS]: 'pass',
             [TEST_SUITE]: 'cypress/integration/integration-test.js',
-            [TEST_SOURCE_FILE]:
-              `packages/datadog-plugin-cypress/test/${testSuiteFolder}/cypress/integration/integration-test.js`,
+            [TEST_SOURCE_FILE]: TestSourceFile,
             [TEST_TYPE]: 'browser',
             [ORIGIN_KEY]: CI_APP_ORIGIN,
             [TEST_IS_RUM_ACTIVE]: 'true',
             [LIBRARY_VERSION]: ddTraceVersion,
             [COMPONENT]: 'cypress'
           })
-          expect(passedTestSpan.meta[TEST_CODE_OWNERS]).to.contain('@DataDog')
+
+          if (semver.intersects(version, '>=10')) {
+            expect(passedTestSpan.meta[TEST_CODE_OWNERS]).to.contain('@DataDog')
+          }
+
           expect(passedTestSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           expect(passedTestSpan.metrics[TEST_SOURCE_START]).to.exist
 
@@ -108,8 +115,7 @@ describe('Plugin', function () {
             [TEST_NAME]: 'can visit a page will fail',
             [TEST_STATUS]: 'fail',
             [TEST_SUITE]: 'cypress/integration/integration-test.js',
-            [TEST_SOURCE_FILE]:
-              `packages/datadog-plugin-cypress/test/${testSuiteFolder}/cypress/integration/integration-test.js`,
+            [TEST_SOURCE_FILE]: TestSourceFile,
             [TEST_TYPE]: 'browser',
             [ORIGIN_KEY]: CI_APP_ORIGIN,
             [ERROR_TYPE]: 'AssertionError',
