@@ -594,12 +594,41 @@ class Config {
 
   _applyLocalStableConfig () {
     const obj = setHiddenProperty(this, '_localStableConfig', {})
-    this.stableConfig.applyLocalConfig(obj)
+    this._applyStableConfig(this.stableConfig.localEntries, obj)
   }
 
   _applyFleetStableConfig () {
     const obj = setHiddenProperty(this, '_fleetStableConfig', {})
-    this.stableConfig.applyFleetConfig(obj)
+    this._applyStableConfig(this.stableConfig.fleetEntries, obj)
+  }
+
+  _applyStableConfig (config, obj) {
+    const {
+      DD_APPSEC_ENABLED,
+      DD_APPSEC_SCA_ENABLED,
+      DD_DATA_STREAMS_ENABLED,
+      DD_DYNAMIC_INSTRUMENTATION_ENABLED,
+      DD_ENV,
+      DD_IAST_ENABLED,
+      DD_LOGS_INJECTION,
+      DD_PROFILING_ENABLED,
+      DD_RUNTIME_METRICS_ENABLED,
+      DD_SERVICE,
+      DD_VERSION
+    } = config
+
+    this._setBoolean(obj, 'appsec.enabled', DD_APPSEC_ENABLED)
+    this._setBoolean(obj, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
+    this._setBoolean(obj, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
+    this._setBoolean(obj, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
+    this._setString(obj, 'env', DD_ENV)
+    this._setBoolean(obj, 'iast.enabled', DD_IAST_ENABLED)
+    this._setBoolean(obj, 'logInjection', DD_LOGS_INJECTION)
+    const profilingEnabled = normalizeProfilingEnabledValue(DD_PROFILING_ENABLED)
+    this._setString(obj, 'profiling.enabled', profilingEnabled)
+    this._setBoolean(obj, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED)
+    this._setString(obj, 'service', DD_SERVICE)
+    this._setString(obj, 'version', DD_VERSION)
   }
 
   _applyEnvironment () {
@@ -850,8 +879,7 @@ class Config {
       this._envUnprocessed.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     }
     this._setString(env, 'port', DD_TRACE_AGENT_PORT)
-    const profilingEnabledEnv = coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED)
-    const profilingEnabled = normalizeProfilingEnabledValue(profilingEnabledEnv)
+    const profilingEnabled = normalizeProfilingEnabledValue(coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED))
     this._setString(env, 'profiling.enabled', profilingEnabled)
     this._setString(env, 'profiling.exporters', DD_PROFILING_EXPORTERS)
     this._setBoolean(env, 'profiling.sourceMap', DD_PROFILING_SOURCE_MAP && !isFalse(DD_PROFILING_SOURCE_MAP))
@@ -1364,9 +1392,9 @@ class Config {
     const origins = [
       'remote_config',
       'code',
-      this.stableConfig.FLEET_STABLE_CONFIG_ORIGIN,
+      'fleet_stable_config',
       'env_var',
-      this.stableConfig.LOCAL_STABLE_CONFIG_ORIGIN,
+      'local_stable_config',
       'calculated',
       'default'
     ]

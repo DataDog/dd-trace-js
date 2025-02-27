@@ -1,6 +1,5 @@
 const os = require('os')
 const fs = require('fs')
-const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { isInServerlessEnvironment } = require('./serverless')
 
 class StableConfig {
@@ -17,11 +16,19 @@ class StableConfig {
 
     const { localConfigPath, fleetConfigPath } = this._getStableConfigPaths()
     if (!fs.existsSync(localConfigPath) && !fs.existsSync(fleetConfigPath)) {
-      // Check if files exist, if not bail out early to avoid unnecessary library loading
+      // Bail out early if files don't exist to avoid unnecessary library loading
       return
     }
 
-    // libdatadog isn't always available (e.g serverless) so we need to handle that case gracefully
+    const localConfig = this._readConfigFromPath(localConfigPath)
+    const fleetConfig = this._readConfigFromPath(fleetConfigPath)
+    if (!localConfig && !fleetConfig) {
+      // Bail out early if files are empty or we can't read them to avoid unnecessary library loading
+      return
+    }
+
+    // Note: we don't enforce loading because there may be cases where the library is not available and we
+    // want to avoid breaking the application. In those cases, we will not have the file-based configuration.
     let libdatadog
     try {
       libdatadog = require('@datadog/libdatadog')
@@ -31,48 +38,38 @@ class StableConfig {
       return
     }
 
-    // Note: we use maybeLoad because there may be cases where the library is not available and we
-    // want to avoid breaking the application. In those cases, we will not have the file-based configuration.
     const libconfig = libdatadog.maybeLoad('library_config')
-    if (libconfig !== undefined) {
-      let localConfig = ''
-      try {
-        localConfig = fs.readFileSync(localConfigPath, 'utf8')
-      } catch (err) {
-        if (err.code !== 'ENOENT') {
-          this.warnings.push(`Error reading local config file: ${localConfigPath}`)
-        }
-      }
-      let fleetConfig = ''
-      try {
-        fleetConfig = fs.readFileSync(fleetConfigPath, 'utf8')
-      } catch (err) {
-        if (err.code !== 'ENOENT') {
-          this.warnings.push(`Error reading fleet config file: ${fleetConfigPath}`)
-        }
-      }
+    if (libconfig === undefined) {
+      this.warnings.push('Can\'t load library_config library')
+      return
+    }
 
-      if (localConfig || fleetConfig) {
-        try {
-          const configurator = new libconfig.JsConfigurator()
-          configurator.set_envp(Object.entries(process.env).map(([key, value]) => `${key}=${value}`))
-          configurator.set_args(process.argv)
-          configurator.get_configuration(localConfig.toString(), fleetConfig.toString()).forEach((entry) => {
-            if (entry.source === 'local_stable_config') {
-              this.localEntries[entry.name] = entry.value
-            } else if (entry.source === 'fleet_stable_config') {
-              this.fleetEntries[entry.name] = entry.value
-            }
-          })
-        } catch (e) {
-          this.warnings.push(`Error parsing configuration from file: ${e.message}`)
+    try {
+      const configurator = new libconfig.JsConfigurator()
+      configurator.set_envp(Object.entries(process.env).map(([key, value]) => `${key}=${value}`))
+      configurator.set_args(process.argv)
+      configurator.get_configuration(localConfig.toString(), fleetConfig.toString()).forEach((entry) => {
+        if (entry.source === 'local_stable_config') {
+          this.localEntries[entry.name] = entry.value
+        } else if (entry.source === 'fleet_stable_config') {
+          this.fleetEntries[entry.name] = entry.value
         }
-      }
+      })
+    } catch (e) {
+      this.warnings.push(`Error parsing configuration from file: ${e.message}`)
     }
   }
 
-  FLEET_STABLE_CONFIG_ORIGIN = 'fleet_stable_config'
-  LOCAL_STABLE_CONFIG_ORIGIN = 'local_stable_config'
+  _readConfigFromPath (path) {
+    try {
+      return fs.readFileSync(path, 'utf8')
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        this.warnings.push(`Error reading config file at ${fleetConfigPath}. ${err.code}: ${err.message}`)
+      }
+      return '' // Always return a string to avoid undefined.toString() errors
+    }
+  }
 
   _getStableConfigPaths () {
     let localConfigPath = ''
@@ -103,62 +100,6 @@ class StableConfig {
     }
 
     return { localConfigPath, fleetConfigPath }
-  }
-
-  applyLocalConfig (obj) {
-    this._applyConfig(this.localEntries, obj)
-  }
-
-  applyFleetConfig (obj) {
-    this._applyConfig(this.fleetEntries, obj)
-  }
-
-  _applyConfig (config, obj) {
-    const {
-      DD_APPSEC_ENABLED,
-      DD_APPSEC_SCA_ENABLED,
-      DD_DATA_STREAMS_ENABLED,
-      DD_DYNAMIC_INSTRUMENTATION_ENABLED,
-      DD_ENV,
-      DD_IAST_ENABLED,
-      DD_LOGS_INJECTION,
-      DD_PROFILING_ENABLED,
-      DD_RUNTIME_METRICS_ENABLED,
-      DD_SERVICE,
-      DD_VERSION
-    } = config
-
-    this._setBoolean(obj, 'appsec.enabled', DD_APPSEC_ENABLED)
-    this._setBoolean(obj, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
-    this._setBoolean(obj, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
-    this._setBoolean(obj, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
-    this._setString(obj, 'env', DD_ENV)
-    this._setBoolean(obj, 'iast.enabled', DD_IAST_ENABLED)
-    this._setBoolean(obj, 'logInjection', DD_LOGS_INJECTION)
-    const profilingEnabledEnv = DD_PROFILING_ENABLED
-    const profilingEnabled = normalizeProfilingEnabledValue(profilingEnabledEnv)
-    this._setString(obj, 'profiling.enabled', profilingEnabled)
-    this._setBoolean(obj, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED)
-    this._setString(obj, 'service', DD_SERVICE)
-    this._setString(obj, 'version', DD_VERSION)
-  }
-
-  _setBoolean (obj, name, value) {
-    if (value === undefined || value === null) {
-      this._setValue(obj, name, value)
-    } else if (isTrue(value)) {
-      this._setValue(obj, name, true)
-    } else if (isFalse(value)) {
-      this._setValue(obj, name, false)
-    }
-  }
-
-  _setString (obj, name, value) {
-    obj[name] = value ? String(value) : undefined // unset for empty strings
-  }
-
-  _setValue (obj, name, value) {
-    obj[name] = value
   }
 }
 
