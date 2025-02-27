@@ -73,10 +73,27 @@ async function assertInstrumentation (instrumentation, external) {
   for (const version of versions) {
     if (version) {
       if (version !== '*') {
-        await assertModules(instrumentation.name, semver.coerce(version).version, external)
+        const name = instrumentation.name
+        if (version.includes('>') || version.includes('<') || version.includes('~') || version.includes('^')) {
+          // For version ranges, determine the actual version to use
+          const latestVersion = latests.latests[name]
+          if (latestVersion && semver.satisfies(latestVersion, version)) {
+            // Use the latest version that satisfies this range
+            await assertModules(name, latestVersion, external)
+          } else {
+            // Fallback to coerced version if range doesn't include latest
+            await assertModules(name, semver.coerce(version).version, external)
+          }
+        } else {
+          // For exact versions, use as-is
+          await assertModules(name, semver.coerce(version).version, external)
+        }
       }
 
-      await assertModules(instrumentation.name, version, external)
+      // This shouldn't reach here if the range was processed above
+      if (!version.includes('>') && !version.includes('<') && !version.includes('~') && !version.includes('^')) {
+        await assertModules(instrumentation.name, version, external);
+      }
     }
   }
 }

@@ -144,7 +144,7 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
   })
 }
 
-function isVersionInRange(version, latestVersion) {
+function isVersionInRange (version, latestVersion) {
   if (!latestVersion) return true
   try {
     return semver.lte(version, latestVersion)
@@ -178,9 +178,6 @@ function withVersions (plugin, modules, range, cb) {
 
       if (!packages.includes(moduleName)) return
     }
-
-    const latestVersion = latestVersions[moduleName]
-
     const testVersions = new Map()
 
     instrumentations
@@ -199,21 +196,23 @@ function withVersions (plugin, modules, range, cb) {
             }
 
             // attempt to find the latest version that satisfies the version range
-            if (latestVersion && !process.env.PACKAGE_VERSION_RANGE) {
+            if (latestVersions[moduleName] && !process.env.PACKAGE_VERSION_RANGE) {
               if (semver.valid(version)) {
-                const testVersion = isVersionInRange(version, latestVersion) ? version : latestVersion
+                const testVersion = isVersionInRange(version, latestVersions[moduleName])
+                  ? version
+                  : latestVersions[moduleName]
                 testVersions.set(testVersion, { range: version, test: testVersion })
               } else if (semver.validRange(version)) {
-                const testVersion = semver.maxSatisfying([latestVersion], version)
+                const testVersion = semver.maxSatisfying([latestVersions[moduleName]], version)
                 if (testVersion) {
                   testVersions.set(testVersion, { range: version, test: testVersion })
                 }
               }
-            } else if (latestVersion) {
+            } else if (latestVersions[moduleName]) {
               const range = process.env.PACKAGE_VERSION_RANGE
-              const testVersion = semver.satisfies(latestVersion, range)
-                ? latestVersion
-                : semver.maxSatisfying([latestVersion], range)
+              const testVersion = semver.satisfies(latestVersions[moduleName], range)
+                ? latestVersions[moduleName]
+                : semver.maxSatisfying([latestVersions[moduleName]], range)
               if (testVersion) {
                 testVersions.set(testVersion, { range: version, test: testVersion })
               }
@@ -237,7 +236,6 @@ function withVersions (plugin, modules, range, cb) {
           __dirname, '../../../../versions/',
           `${moduleName}@${v.test}/node_modules`
         )
-
         describe(`with ${moduleName} ${v.range} (${v.version})`, () => {
           let nodePath
 
