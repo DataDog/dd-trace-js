@@ -757,7 +757,6 @@ describe('Config', () => {
 
     expect(config.tags).to.include({ key1: 'value1', key2: 'value2' })
 
-
     process.env.DD_TRACE_EXPERIMENTAL_ENABLED = 'true'
     process.env.DD_TAGS = 'env:test aKey:aVal bKey:bVal cKey:'
 

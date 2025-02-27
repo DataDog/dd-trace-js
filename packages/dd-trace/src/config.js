@@ -1390,15 +1390,15 @@ class Config {
   }
 }
 
-function handleOtel(tagString) {
+function handleOtel (tagString) {
   return tagString
     ?.replace(/(^|,)deployment\.environment=/, '$1env:')
     .replace(/(^|,)service\.name=/, '$1service:')
     .replace(/(^|,)service\.version=/, '$1version:')
-    .replace(/=/g, ":")
+    .replace(/=/g, ':')
 }
 
-function parseSpaceSeparatedTags(tags, tagString) {
+function parseSpaceSeparatedTags (tags, tagString) {
   if (tagString) {
     if (!tagString.includes(',')) {
       tagString = tagString.replace(/\s+/g, ',')

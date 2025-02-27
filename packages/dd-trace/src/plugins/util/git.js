@@ -345,7 +345,7 @@ function getGitMetadata (ciMetadata) {
     [GIT_COMMIT_COMMITTER_DATE], committerDate,
     [GIT_COMMIT_COMMITTER_NAME], committerName,
     [GIT_COMMIT_COMMITTER_EMAIL], committerEmail,
-    [GIT_TAG], tag,
+    [GIT_TAG], tag
   ]
 
   for (let i = 0; i < entries.length; i += 2) {
