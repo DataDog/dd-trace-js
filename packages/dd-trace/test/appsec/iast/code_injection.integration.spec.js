@@ -10,7 +10,7 @@ describe('IAST - code_injection - integration', () => {
   let axios, sandbox, cwd, appPort, agent, proc
 
   before(async function () {
-    this.timeout(process.platform === 'win32' ? 90000 : 30000)
+    this.timeout(process.platform === 'win32' ? 100000 : 30000)
 
     sandbox = await createSandbox(
       ['express'],
@@ -27,7 +27,7 @@ describe('IAST - code_injection - integration', () => {
 
   after(async function () {
     this.timeout(60000)
-    await sandbox.remove()
+    await sandbox?.remove()
   })
 
   beforeEach(async () => {
