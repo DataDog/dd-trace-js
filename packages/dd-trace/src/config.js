@@ -721,8 +721,8 @@ class Config {
     // TODO: For the next major release, always pass true for parseSpaceSeparatedTags
     // & remove the experimental feature flag from it
     if (this._env.traceExperimentalEnabled || this._defaults.traceExperimentalEnabled) {
-      tagger.add(tags, OTEL_RESOURCE_ATTRIBUTES, true, true)
-      tagger.add(tags, DD_TAGS, false, true)
+      parseSpaceSeparatedTags(tags, OTEL_RESOURCE_ATTRIBUTES, true, true)
+      parseSpaceSeparatedTags(tags, DD_TAGS, false, true)
     } else {
       tagger.add(tags, OTEL_RESOURCE_ATTRIBUTES, true)
       tagger.add(tags, DD_TAGS, false)
@@ -1386,6 +1386,21 @@ class Config {
     }
 
     return this
+  }
+}
+
+function handleOtel(tags, tagString) {
+  if (tagString) {
+    tagger.add(tags, tagString.replace(/(^|,)deployment\.environment=/, '$1env:').replace(/(^|,)service.name=/, '$1service:').replace(/(^|,)service\.version=/, '$1version:'))
+  }
+}
+
+function parseSpaceSeparatedTags(tags, tagString) {
+  if (tagString) {
+    if (!tagString.includes(',')) {
+      tagString = tagString.replace(/\s+/g, ',')
+    }
+    tagger.add(tags, tagString)
   }
 }
 

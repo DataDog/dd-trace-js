@@ -753,9 +753,42 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_ENABLED = 'true'
     process.env.DD_TAGS = 'key1:value1 key2:value2'
 
-    const config = new Config()
+    let config = new Config()
 
     expect(config.tags).to.include({ key1: 'value1', key2: 'value2' })
+
+
+    process.env.DD_TRACE_EXPERIMENTAL_ENABLED = 'true'
+    process.env.DD_TAGS = 'env:test aKey:aVal bKey:bVal cKey:'
+
+    config = new Config()
+
+    expect(config.tags).to.have.property('env', 'test')
+    expect(config.tags).to.have.property('aKey', 'aVal')
+    expect(config.tags).to.have.property('bKey', 'bVal')
+    expect(config.tags).to.have.property('cKey', '')
+
+    process.env.DD_TRACE_EXPERIMENTAL_ENABLED = 'true'
+    process.env.DD_TAGS = 'env:test,aKey:aVal bKey:bVal cKey:'
+
+    config = new Config()
+    expect(config.tags).to.have.property('env', 'test')
+    expect(config.tags).to.have.property('aKey', 'aVal bKey:bVal cKey:')
+
+    process.env.DD_TRACE_EXPERIMENTAL_ENABLED = 'true'
+    process.env.DD_TAGS = 'a:b:c:d'
+
+    config = new Config()
+
+    expect(config.tags).to.have.property('a', 'b:c:d')
+
+    process.env.DD_TRACE_EXPERIMENTAL_ENABLED = 'true'
+    process.env.DD_TAGS = 'a,1'
+
+    config = new Config()
+
+    expect(config.tags).to.have.property('a', '')
+    expect(config.tags).to.have.property('1', '')
   })
 
   it('should read case-insensitive booleans from environment variables', () => {

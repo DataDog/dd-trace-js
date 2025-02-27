@@ -328,22 +328,33 @@ function getGitMetadata (ciMetadata) {
     committerDate
   ] = sanitizedExec('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI']).split(',')
 
-  return {
-    [GIT_REPOSITORY_URL]:
-      filterSensitiveInfoFromRepository(repositoryUrl || sanitizedExec('git', ['ls-remote', '--get-url'])),
+  const tags = {
     [GIT_COMMIT_MESSAGE]:
       commitMessage || sanitizedExec('git', ['show', '-s', '--format=%s']),
-    [GIT_COMMIT_AUTHOR_DATE]: authorDate,
-    [GIT_COMMIT_AUTHOR_NAME]: ciAuthorName || authorName,
-    [GIT_COMMIT_AUTHOR_EMAIL]: ciAuthorEmail || authorEmail,
-    [GIT_COMMIT_COMMITTER_DATE]: committerDate,
-    [GIT_COMMIT_COMMITTER_NAME]: committerName,
-    [GIT_COMMIT_COMMITTER_EMAIL]: committerEmail,
     [GIT_BRANCH]: branch || sanitizedExec('git', ['rev-parse', '--abbrev-ref', 'HEAD']),
     [GIT_COMMIT_SHA]: commitSHA || sanitizedExec('git', ['rev-parse', 'HEAD']),
-    [GIT_TAG]: tag,
     [CI_WORKSPACE_PATH]: ciWorkspacePath || sanitizedExec('git', ['rev-parse', '--show-toplevel'])
   }
+
+  const entries = [
+    [GIT_REPOSITORY_URL],
+    filterSensitiveInfoFromRepository(repositoryUrl || sanitizedExec('git', ['ls-remote', '--get-url'])),
+    [GIT_COMMIT_AUTHOR_DATE], authorDate,
+    [GIT_COMMIT_AUTHOR_NAME], ciAuthorName || authorName,
+    [GIT_COMMIT_AUTHOR_EMAIL], ciAuthorEmail || authorEmail,
+    [GIT_COMMIT_COMMITTER_DATE], committerDate,
+    [GIT_COMMIT_COMMITTER_NAME], committerName,
+    [GIT_COMMIT_COMMITTER_EMAIL], committerEmail,
+    [GIT_TAG], tag,
+  ]
+
+  for (let i = 0; i < entries.length; i += 2) {
+    if (entries[i + 1]) {
+      tags[entries[i]] = entries[i + 1]
+    }
+  }
+
+  return tags
 }
 
 module.exports = {

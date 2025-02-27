@@ -299,9 +299,9 @@ describe('format', () => {
       })
     })
 
-    it('should extract DD_EMPTY_USER_TAG tags as empty tags', () => {
+    it('should extract empty tags', () => {
       spanContext._trace.tags = {
-        foo: constants.DD_EMPTY_USER_TAG,
+        foo: '',
         count: 1
       }
 
