@@ -34,6 +34,8 @@ jobs:
       - run: yarn test:appsec:ci
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:appsec:ci
       - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
 
   windows:
@@ -189,6 +191,8 @@ jobs:
       - uses: ./.github/actions/node/newest-maintenance-lts
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/active-lts
+      - run: yarn test:appsec:plugins:ci
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
 

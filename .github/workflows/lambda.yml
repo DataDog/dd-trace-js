@@ -26,6 +26,8 @@ jobs:
       - run: yarn test:lambda:ci
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:lambda:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:lambda:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:

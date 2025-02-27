@@ -26,6 +26,8 @@ jobs:
       - run: yarn test:llmobs:sdk:ci
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:llmobs:sdk:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:llmobs:sdk:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
