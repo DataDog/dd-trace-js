@@ -52,6 +52,5 @@ module.exports = {
   SPAN_POINTER_DIRECTION: Object.freeze({
     UPSTREAM: 'u',
     DOWNSTREAM: 'd'
-  }),
-  DD_EMPTY_USER_TAG: 'dd.empty.user.tag'
+  })
 }
