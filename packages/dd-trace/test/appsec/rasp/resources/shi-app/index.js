@@ -10,7 +10,7 @@ const bodyParser = require('body-parser')
 const childProcess = require('child_process')
 
 const app = express()
-app.use(bodyParser.json());
+app.use(bodyParser.json())
 
 const port = process.env.APP_PORT || 3000
 
