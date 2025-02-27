@@ -61,7 +61,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
           target[key] !== null) {
             // Keep iterating through the object
             stack.push({ target: target[key], source: source[key] })
-          } else if (source[key] !== null) {
+          } else {
             // Directly assign the value
             target[key] = source[key]
           }

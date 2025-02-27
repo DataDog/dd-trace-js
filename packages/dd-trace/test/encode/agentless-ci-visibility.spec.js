@@ -309,7 +309,7 @@ describe('agentless-ci-visibility-encode', () => {
       encoder.metadataTags = { key1: 'value1' }
       const tags = { key2: null }
       encoder.setMetadataTags(tags)
-      expect(encoder.metadataTags).to.eql({ key1: 'value1' })
+      expect(encoder.metadataTags).to.eql({ key1: 'value1', key2: null })
     })
   })
 })
