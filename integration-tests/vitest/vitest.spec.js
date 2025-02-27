@@ -1447,7 +1447,7 @@ versions.forEach((version) => {
     }
 
     context('libraries capabilities', () => {
-      it.only('adds capabilities to tests', (done) => {
+      it('adds capabilities to tests', (done) => {
         receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 

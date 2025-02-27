@@ -1,9 +1,6 @@
 'use strict'
 
-const {
-  exec,
-  fork
-} = require('child_process')
+const { exec } = require('child_process')
 
 const getPort = require('get-port')
 const { assert } = require('chai')
@@ -2132,25 +2129,26 @@ versions.forEach(version => {
         it(`(${runMode}) adds capabilities to tests`, (done) => {
           const runCommand = runMode === 'parallel' ? parallelModeCommand : runTestsCommand
 
-          const receiverPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
-            assert.isNotEmpty(metadataDicts)
-            metadataDicts.forEach(metadata => {
-              for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-                if (testLevel === 'test') {
-                  if (runMode === 'parallel') {
-                    assert.equal(metadata[testLevel][TAG_TEST_IMPACT_ANALYSIS], undefined)
-                  } else {
-                    assert.equal(metadata[testLevel][TAG_TEST_IMPACT_ANALYSIS], 'true')
+              assert.isNotEmpty(metadataDicts)
+              metadataDicts.forEach(metadata => {
+                for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+                  if (testLevel === 'test') {
+                    if (runMode === 'parallel') {
+                      assert.equal(metadata[testLevel][TAG_TEST_IMPACT_ANALYSIS], undefined)
+                    } else {
+                      assert.equal(metadata[testLevel][TAG_TEST_IMPACT_ANALYSIS], 'true')
+                    }
+                    assert.equal(metadata[testLevel][TAG_EARLY_FLAKE_DETECTION], 'false')
+                    assert.equal(metadata[testLevel][TAG_AUTO_TEST_RETRIES], 'false')
                   }
-                  assert.equal(metadata[testLevel][TAG_EARLY_FLAKE_DETECTION], 'false')
-                  assert.equal(metadata[testLevel][TAG_AUTO_TEST_RETRIES], 'false')
+                  assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
                 }
-                assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-              }
+              })
             })
-          })
 
           childProcess = exec(
             runCommand,
