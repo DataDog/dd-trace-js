@@ -18,7 +18,9 @@ describe('track_event', () => {
     let setUserTags
     let sample
     let waf
+    let telemetryMetrics, count, inc
     let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent
+    let trackUserLoginSuccessV2
 
     beforeEach(() => {
       log = {
@@ -41,6 +43,28 @@ describe('track_event', () => {
 
       sample = sinon.stub()
 
+      inc = sinon.stub()
+
+      count = sinon.stub().callsFake(() => {
+        return {
+          inc
+        }
+      })
+
+      telemetryMetrics = {
+        manager: {
+          namespace: function (name) {
+            if (name === 'appsec') {
+              return {
+                count
+              }
+            }
+
+            return null
+          }
+        }
+      }
+
       waf = {
         run: sinon.spy()
       }
@@ -56,10 +80,12 @@ describe('track_event', () => {
         '../standalone': {
           sample
         },
-        '../waf': waf
+        '../waf': waf,
+        '../../telemetry/metrics': telemetryMetrics
       })
 
       trackUserLoginSuccessEvent = trackEvents.trackUserLoginSuccessEvent
+      trackUserLoginSuccessV2 = trackEvents.trackUserLoginSuccessV2
       trackUserLoginFailureEvent = trackEvents.trackUserLoginFailureEvent
       trackCustomEvent = trackEvents.trackCustomEvent
     })
@@ -332,6 +358,278 @@ describe('track_event', () => {
         expect(prioritySampler.setPriority)
           .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
         expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
+      })
+    })
+
+    describe('v2', () => {
+      describe('trackUserLoginSuccessV2', () => {
+        it('should log warning when root span is not available', () => {
+          rootSpan = undefined
+
+          trackUserLoginSuccessV2(tracer, 'login')
+
+          expect(log.warn)
+            .to.have.been.calledOnceWithExactly('[ASM] Root span not available in v2.trackUserLoginSuccess')
+          expect(setUserTags).to.not.have.been.called
+        })
+
+        it('should log warning when passed invalid login', () => {
+          trackUserLoginSuccessV2(tracer, null)
+          trackUserLoginSuccessV2(tracer, {})
+
+          expect(log.warn).to.have.been.calledTwice
+          expect(log.warn.firstCall)
+            .to.have.been.calledWithExactly('[ASM] Invalid login provided to v2.trackUserLoginSuccess')
+          expect(log.warn.secondCall)
+            .to.have.been.calledWithExactly('[ASM] Invalid login provided to v2.trackUserLoginSuccess')
+          expect(setUserTags).to.not.have.been.called
+          expect(rootSpan.addTags).to.not.have.been.called
+          expect(waf.run).to.not.have.been.called
+        })
+
+        it('should call to addTags and waf only with login', () => {
+          trackUserLoginSuccessV2(tracer, 'login')
+
+          expect(log.warn).to.not.have.been.called
+          expect(setUserTags).to.not.have.been.called
+
+          expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
+            {
+              'appsec.events.users.login.success.track': 'true',
+              '_dd.appsec.events.users.login.success.sdk': 'true',
+              'appsec.events.users.login.success.usr.login': 'login'
+            })
+
+          expect(waf.run).to.have.been.calledOnceWithExactly({
+            persistent: {
+              [LOGIN_SUCCESS]: null,
+              [USER_LOGIN]: 'login'
+            }
+          })
+
+          expect(prioritySampler.setPriority)
+            .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+          expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
+
+          expect(count).to.have.been.calledOnceWithExactly('sdk.event', {
+            event_type: 'login_success',
+            sdk_version: 'v2'
+          })
+          expect(inc).to.have.been.calledOnceWithExactly(1)
+        })
+
+        it('should call to setUser, addTags and waf with login and userId', () => {
+          trackUserLoginSuccessV2(tracer, 'login', 'userId')
+
+          expect(log.warn).to.not.have.been.called
+          expect(setUserTags).to.have.been.calledOnceWithExactly({ id: 'userId' }, rootSpan)
+
+          expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
+            {
+              'appsec.events.users.login.success.track': 'true',
+              '_dd.appsec.events.users.login.success.sdk': 'true',
+              'appsec.events.users.login.success.usr.id': 'userId',
+              'appsec.events.users.login.success.usr.login': 'login'
+            })
+
+          expect(waf.run).to.have.been.calledOnceWithExactly({
+            persistent: {
+              [LOGIN_SUCCESS]: null,
+              [USER_ID]: 'userId',
+              [USER_LOGIN]: 'login'
+            }
+          })
+
+          expect(prioritySampler.setPriority)
+            .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+          expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
+
+          expect(count).to.have.been.calledOnceWithExactly('sdk.event', {
+            event_type: 'login_success',
+            sdk_version: 'v2'
+          })
+          expect(inc).to.have.been.calledOnceWithExactly(1)
+        })
+
+        it('should call to setUser, addTags and waf with login and user object', () => {
+          const user = {
+            id: 'userId',
+            email: 'email@to.com'
+          }
+
+          trackUserLoginSuccessV2(tracer, 'login', user)
+
+          expect(log.warn).to.not.have.been.called
+          expect(setUserTags).to.have.been.calledOnceWithExactly(user, rootSpan)
+
+          expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
+            {
+              'appsec.events.users.login.success.track': 'true',
+              '_dd.appsec.events.users.login.success.sdk': 'true',
+              'appsec.events.users.login.success.usr.id': 'userId',
+              'appsec.events.users.login.success.usr.email': 'email@to.com',
+              'appsec.events.users.login.success.usr.login': 'login'
+            })
+
+          expect(waf.run).to.have.been.calledOnceWithExactly({
+            persistent: {
+              [LOGIN_SUCCESS]: null,
+              [USER_ID]: 'userId',
+              [USER_LOGIN]: 'login'
+            }
+          })
+
+          expect(prioritySampler.setPriority)
+            .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+          expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
+
+          expect(count).to.have.been.calledOnceWithExactly('sdk.event', {
+            event_type: 'login_success',
+            sdk_version: 'v2'
+          })
+          expect(inc).to.have.been.calledOnceWithExactly(1)
+        })
+
+        it('should call to addTags and waf with login and metadata', () => {
+          const metadata = {
+            metakey1: 'metaValue1',
+            metakey2: 'metaValue2',
+            metakey3: 'metaValue3'
+          }
+
+          trackUserLoginSuccessV2(tracer, 'login', null, metadata)
+
+          expect(log.warn).to.not.have.been.called
+          expect(setUserTags).to.not.have.been.called
+
+          expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
+            {
+              'appsec.events.users.login.success.track': 'true',
+              '_dd.appsec.events.users.login.success.sdk': 'true',
+              'appsec.events.users.login.success.usr.login': 'login',
+              'appsec.events.users.login.success.metakey1': 'metaValue1',
+              'appsec.events.users.login.success.metakey2': 'metaValue2',
+              'appsec.events.users.login.success.metakey3': 'metaValue3'
+            })
+
+          expect(waf.run).to.have.been.calledOnceWithExactly({
+            persistent: {
+              [LOGIN_SUCCESS]: null,
+              [USER_LOGIN]: 'login'
+            }
+          })
+
+          expect(prioritySampler.setPriority)
+            .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+          expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
+
+          expect(count).to.have.been.calledOnceWithExactly('sdk.event', {
+            event_type: 'login_success',
+            sdk_version: 'v2'
+          })
+          expect(inc).to.have.been.calledOnceWithExactly(1)
+        })
+
+        it('should call to addTags and waf with login, userId and metadata', () => {
+          const metadata = {
+            metakey1: 'metaValue1',
+            metakey2: 'metaValue2',
+            metakey3: 'metaValue3'
+          }
+
+          trackUserLoginSuccessV2(tracer, 'login', 'userId', metadata)
+
+          expect(log.warn).to.not.have.been.called
+          expect(setUserTags).to.have.been.calledOnceWithExactly({
+            id: 'userId'
+          }, rootSpan)
+
+          expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
+            {
+              'appsec.events.users.login.success.track': 'true',
+              '_dd.appsec.events.users.login.success.sdk': 'true',
+              'appsec.events.users.login.success.usr.login': 'login',
+              'appsec.events.users.login.success.usr.id': 'userId',
+              'appsec.events.users.login.success.metakey1': 'metaValue1',
+              'appsec.events.users.login.success.metakey2': 'metaValue2',
+              'appsec.events.users.login.success.metakey3': 'metaValue3'
+            })
+
+          expect(waf.run).to.have.been.calledOnceWithExactly({
+            persistent: {
+              [LOGIN_SUCCESS]: null,
+              [USER_ID]: 'userId',
+              [USER_LOGIN]: 'login'
+            }
+          })
+
+          expect(prioritySampler.setPriority)
+            .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+          expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
+
+          expect(count).to.have.been.calledOnceWithExactly('sdk.event', {
+            event_type: 'login_success',
+            sdk_version: 'v2'
+          })
+          expect(inc).to.have.been.calledOnceWithExactly(1)
+        })
+
+        it('Should truncate metadata when depth > 5', () => {
+          const metadata = {
+            prop1: {
+              prop2: {
+                prop3: {
+                  prop4: {
+                    data1: 'metavalue1',
+                    prop5: {
+                      prop6: 'ignored value'
+                    }
+                  }
+                }
+              }
+            },
+            arr: [
+              {
+                key: 'metavalue2'
+              },
+              'metavalue3'
+            ]
+          }
+
+          trackUserLoginSuccessV2(tracer, 'login', null, metadata)
+
+          expect(log.warn).to.have.been.calledOnceWithExactly(
+            '[ASM] Too deep object provided in the SDK method %s, object truncated',
+            'v2.trackUserLoginSuccess'
+          )
+
+          expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
+            {
+              'appsec.events.users.login.success.track': 'true',
+              '_dd.appsec.events.users.login.success.sdk': 'true',
+              'appsec.events.users.login.success.usr.login': 'login',
+              'appsec.events.users.login.success.prop1.prop2.prop3.prop4.data1': 'metavalue1',
+              'appsec.events.users.login.success.arr.0.key': 'metavalue2',
+              'appsec.events.users.login.success.arr.1': 'metavalue3'
+            })
+        })
+
+        it('Should ignore undefined properties and set to \'null\' the null values in the metadata', () => {
+          const metadata = {
+            prop1: undefined,
+            prop2: null
+          }
+
+          trackUserLoginSuccessV2(tracer, 'login', null, metadata)
+
+          expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
+            {
+              'appsec.events.users.login.success.track': 'true',
+              '_dd.appsec.events.users.login.success.sdk': 'true',
+              'appsec.events.users.login.success.usr.login': 'login',
+              'appsec.events.users.login.success.prop2': 'null'
+            })
+        })
       })
     })
   })
