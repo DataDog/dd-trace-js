@@ -39,13 +39,13 @@ function onGraphqlStartResolve ({ context, resolverInfo }) {
   if (!resolverInfo || typeof resolverInfo !== 'object') return
 
   const wafResults = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
+  const requestData = graphqlRequestData.get(req)
 
-  if (wafResults) {
-    const requestData = graphqlRequestData.get(req)
+  if (wafResults && requestData) {
     requestData.wafResults = wafResults
     const blockingAction = getBlockingAction(wafResults.actions)
 
-    if (blockingAction && requestData?.isInGraphqlRequest) {
+    if (blockingAction && requestData.isInGraphqlRequest) {
       requestData.blocked = true
       context?.abortController?.abort()
     }
