@@ -23,8 +23,8 @@ let timer
 let current
 
 // Output a command to the terminal and execute it.
-function run (cmd) {
-  capture(cmd)
+function run (cmd, ignoreErrors) {
+  capture(cmd, ignoreErrors)
 }
 
 // Ask a question in terminal and return the response.
@@ -54,12 +54,19 @@ function checkpoint (question) {
 }
 
 // Run a command and capture its output to return it to the caller.
-function capture (cmd) {
+function capture (cmd, ignoreErrors = false) {
   if (flags.debug) {
     log(`${GRAY}> ${cmd}${RESET}`)
   }
 
-  const output = execSync(cmd, { encoding: 'utf8', stdio: 'pipe' }).toString().trim()
+  const opts = {
+    encoding: 'utf8',
+    // execSync will only return the value of STDOUT.
+    // The easiest way to get access STDERR is not set `stdio`, which will force STDERR to be piped to `process.stderr`
+    stdio: ignoreErrors ? 'pipe' : undefined
+  }
+
+  const output = execSync(cmd, opts).trim()
 
   if (flags.debug) {
     log(output)

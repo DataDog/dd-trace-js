@@ -122,6 +122,7 @@
     "@msgpack/msgpack": "^3.0.0-beta3",
     "@stylistic/eslint-plugin-js": "^3.0.1",
     "@types/node": "^16.0.0",
+    "application-config-path": "^1.0.0",
     "autocannon": "^4.5.2",
     "aws-sdk": "^2.1446.0",
     "axios": "^1.7.4",
