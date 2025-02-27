@@ -1,3 +1,5 @@
+'use strict'
+
 const {
   ENCODER_VERSION
 } = process.env

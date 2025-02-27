@@ -107,7 +107,8 @@ export default [
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommnded)
       'no-unused-expressions': 'off', // Override (turned on by standard)
       'no-var': 'error', // Override (set to warn in standard)
-      'require-await': 'error'
+      'require-await': 'error',
+      strict: 'error'
     }
   },
   {

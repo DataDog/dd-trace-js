@@ -1,4 +1,5 @@
 'use strict'
+
 /* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['fetch', 'Request'] }] */
 
 const agent = require('../../dd-trace/test/plugins/agent')
