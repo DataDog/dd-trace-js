@@ -442,6 +442,7 @@ addHook({
 }, getTestEnvironment)
 
 function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
+  // `scheduleTests` is an async function
   return function (tests) {
     if (!isSuitesSkippingEnabled || hasFilteredSkippableSuites) {
       return scheduleTests.apply(this, arguments)
@@ -744,6 +745,7 @@ function coverageReporterWrapper (coverageReporter) {
    * This calculation adds no value, so we'll skip it, as long as the user has not manually opted in to code coverage,
    * in which case we'll leave it.
    */
+  // `_addUntestedFiles` is an async function
   shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function () {
     // If the user has added coverage manually, they're willing to pay the price of this execution, so
     // we will not skip it.
@@ -901,6 +903,7 @@ addHook({
 }, transformPackage => {
   const originalCreateScriptTransformer = transformPackage.createScriptTransformer
 
+  // `createScriptTransformer` is an async function
   transformPackage.createScriptTransformer = function (config) {
     const { testEnvironmentOptions, ...restOfConfig } = config
     const {
