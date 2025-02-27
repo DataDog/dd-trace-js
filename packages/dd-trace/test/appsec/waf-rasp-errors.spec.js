@@ -6,7 +6,7 @@ const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
 
-describe.only('WAF/RASP - timeout', () => {
+describe('WAF/RASP - timeout', () => {
   let axios, sandbox, cwd, appPort, appFile, agent, proc
 
   before(async function () {
@@ -68,7 +68,7 @@ describe.only('WAF/RASP - timeout', () => {
   })
 })
 
-describe.only('WAF/RASP - error', () => {
+describe('WAF/RASP - error', () => {
   let axios, sandbox, cwd, appPort, appFile, agent, proc
 
   before(async function () {
