@@ -33,7 +33,10 @@ const {
   TEST_RETRY_REASON,
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   TEST_MANAGEMENT_ENABLED,
-  TEST_MANAGEMENT_IS_QUARANTINED
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TAG_TEST_IMPACT_ANALYSIS,
+  TAG_EARLY_FLAKE_DETECTION,
+  TAG_AUTO_TEST_RETRIES
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
@@ -1442,5 +1445,39 @@ versions.forEach((version) => {
         })
       })
     }
+
+    context('libraries capabilities', () => {
+      it.only('adds capabilities to tests', (done) => {
+        receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+          assert.isNotEmpty(metadataDicts)
+          metadataDicts.forEach(metadata => {
+            for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+              if (testLevel === 'test') {
+                assert.equal(metadata[testLevel][TAG_TEST_IMPACT_ANALYSIS], undefined)
+                assert.equal(metadata[testLevel][TAG_EARLY_FLAKE_DETECTION], 'false')
+                assert.equal(metadata[testLevel][TAG_AUTO_TEST_RETRIES], 'false')
+              }
+              assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+            }
+          })
+        }).then(() => done()).catch(done)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
+              DD_TEST_SESSION_NAME: 'my-test-session',
+              DD_SERVICE: undefined
+            },
+            stdio: 'pipe'
+          }
+        )
+      })
+    })
   })
 })
