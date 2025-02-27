@@ -2129,7 +2129,7 @@ versions.forEach(version => {
       }
 
       runModes.forEach((runMode) => {
-        it.only(`(${runMode}) adds capabilities to tests`, (done) => {
+        it(`(${runMode}) adds capabilities to tests`, (done) => {
           const runCommand = runMode === 'parallel' ? parallelModeCommand : runTestsCommand
 
           const receiverPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
