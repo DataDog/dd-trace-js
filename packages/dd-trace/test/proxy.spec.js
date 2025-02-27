@@ -655,7 +655,7 @@ describe('TracerProxy', () => {
       it('should not throw when calling noop methods', () => {
         proxy.dogstatsd.increment('inc')
         expect(noopDogStatsDClient.increment).to.have.been.calledWith('inc')
-        proxy.dogstatsd.increment('dec')
+        proxy.dogstatsd.decrement('dec')
         expect(noopDogStatsDClient.decrement).to.have.been.calledWith('dec')
         proxy.dogstatsd.distribution('dist')
         expect(noopDogStatsDClient.distribution).to.have.been.calledWith('dist')
