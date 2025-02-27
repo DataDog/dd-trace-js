@@ -720,12 +720,13 @@ class Config {
 
     // TODO: For the next major release, always pass true for parseSpaceSeparatedTags
     // & remove the experimental feature flag from it
+    const otelResourceAttributes = handleOtel(OTEL_RESOURCE_ATTRIBUTES)
     if (this._env.traceExperimentalEnabled || this._defaults.traceExperimentalEnabled) {
-      parseSpaceSeparatedTags(tags, OTEL_RESOURCE_ATTRIBUTES, true, true)
-      parseSpaceSeparatedTags(tags, DD_TAGS, false, true)
+      parseSpaceSeparatedTags(tags, otelResourceAttributes)
+      parseSpaceSeparatedTags(tags, DD_TAGS)
     } else {
-      tagger.add(tags, OTEL_RESOURCE_ATTRIBUTES, true)
-      tagger.add(tags, DD_TAGS, false)
+      tagger.add(tags, otelResourceAttributes)
+      tagger.add(tags, DD_TAGS)
     }
 
     tagger.add(tags, DD_TRACE_TAGS)
@@ -1386,6 +1387,16 @@ class Config {
     }
 
     return this
+  }
+}
+
+function handleOtel(tagString) {
+  if (tagString) {
+    return tagString
+      .replace(/(^|,)deployment\.environment=/, '$1env:')
+      .replace(/(^|,)service.name=/, '$1service:')
+      .replace(/(^|,)service\.version=/, '$1version:')
+      .replace(/=/g, ":")
   }
 }
 

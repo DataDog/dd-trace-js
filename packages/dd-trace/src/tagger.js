@@ -12,7 +12,7 @@ const otelTagMap = {
   'service.version': 'version'
 }
 
-function add (carrier, keyValuePairs, parseOtelTags = false) {
+function add (carrier, keyValuePairs) {
   if (!carrier || !keyValuePairs) return
 
   if (Array.isArray(keyValuePairs)) {
@@ -22,17 +22,13 @@ function add (carrier, keyValuePairs, parseOtelTags = false) {
     if (typeof keyValuePairs === 'string') {
       const segments = keyValuePairs.split(',')
       for (const segment of segments) {
-        const separatorIndex = parseOtelTags ? segment.indexOf('=') : segment.indexOf(':')
+        const separatorIndex = segment.indexOf(':')
 
         let value = ''
         let key = segment
         if (separatorIndex !== -1) {
           key = segment.slice(0, separatorIndex)
           value = segment.slice(separatorIndex + 1)
-        }
-
-        if (parseOtelTags && key in otelTagMap) {
-          key = otelTagMap[key]
         }
 
         carrier[key.trim()] = value.trim()
