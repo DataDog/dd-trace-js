@@ -106,6 +106,7 @@ typings/
 
 # End of https://www.gitignore.io/api/node,macos,visualstudiocode
 
+.tap
 .next
 package-lock.json
 out
