@@ -2398,5 +2398,38 @@ describe('Config', () => {
       })
       expect(config).to.have.property('apmTracingEnabled', false)
     })
+
+    it('should not affect stats', () => {
+      process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
+
+      const config = new Config()
+      expect(config).to.have.property('apmTracingEnabled', true)
+      expect(config).to.have.nested.property('stats.enabled', true)
+
+      expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
+        { name: 'stats.enabled', value: true, origin: 'calculated' }
+      ])
+    })
+
+    it('should disable stats', () => {
+      process.env.DD_APM_TRACING_ENABLED = 'false'
+      process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
+
+      const config = new Config()
+      expect(config).to.have.property('apmTracingEnabled', false)
+      expect(config).to.have.nested.property('stats.enabled', false)
+
+      expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
+        { name: 'stats.enabled', value: false, origin: 'calculated' }
+      ])
+    })
+
+    it('should disable stats if config property is used', () => {
+      const config = new Config({
+        apmTracingEnabled: false
+      })
+      expect(config).to.have.property('apmTracingEnabled', false)
+      expect(config).to.have.nested.property('stats.enabled', false)
+    })
   })
 })

@@ -1124,7 +1124,10 @@ class Config {
   }
 
   _isTraceStatsComputationEnabled () {
-    return coalesce(
+    const apmTracingEnabled = this._options.apmTracingEnabled !== false &&
+      this._env.apmTracingEnabled !== false
+
+    return apmTracingEnabled && coalesce(
       this._optionsArg.stats,
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
       getIsGCPFunction() || getIsAzureFunction()
