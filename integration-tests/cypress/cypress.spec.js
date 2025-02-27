@@ -40,7 +40,10 @@ const {
   TEST_RETRY_REASON,
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   TEST_MANAGEMENT_IS_QUARANTINED,
-  TEST_MANAGEMENT_ENABLED
+  TEST_MANAGEMENT_ENABLED,
+  TAG_TEST_IMPACT_ANALYSIS,
+  TAG_EARLY_FLAKE_DETECTION,
+  TAG_AUTO_TEST_RETRIES
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -1830,6 +1833,51 @@ moduleTypes.forEach(({
         receiver.setSettings({ test_management: { enabled: true } })
 
         runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+      })
+    })
+
+    context('libraries capabilities', () => {
+      it('adds capabilities to tests', (done) => {
+        const receiverPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+          assert.isNotEmpty(metadataDicts)
+          metadataDicts.forEach(metadata => {
+            for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+              if (testLevel === 'test') {
+                assert.equal(metadata[testLevel][TAG_TEST_IMPACT_ANALYSIS], 'true')
+                assert.equal(metadata[testLevel][TAG_EARLY_FLAKE_DETECTION], 'false')
+                assert.equal(metadata[testLevel][TAG_AUTO_TEST_RETRIES], 'false')
+              }
+              assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+            }
+          })
+        }, 25000)
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        childProcess = exec(
+          testCommand,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              DD_TEST_SESSION_NAME: 'my-test-session',
+              DD_SERVICE: undefined
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
+            done()
+          }).catch(done)
+        })
       })
     })
   })
