@@ -1389,12 +1389,6 @@ class Config {
   }
 }
 
-function handleOtel(tags, tagString) {
-  if (tagString) {
-    tagger.add(tags, tagString.replace(/(^|,)deployment\.environment=/, '$1env:').replace(/(^|,)service.name=/, '$1service:').replace(/(^|,)service\.version=/, '$1version:'))
-  }
-}
-
 function parseSpaceSeparatedTags(tags, tagString) {
   if (tagString) {
     if (!tagString.includes(',')) {
