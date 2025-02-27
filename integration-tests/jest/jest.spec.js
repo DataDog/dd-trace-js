@@ -3101,9 +3101,6 @@ describe('jest CommonJS', () => {
       childProcess.stderr.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-
-      childProcess.stdout.pipe(process.stdout)
-      childProcess.stderr.pipe(process.stderr)
     })
   })
 })
