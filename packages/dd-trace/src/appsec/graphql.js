@@ -41,15 +41,13 @@ function onGraphqlStartResolve ({ context, resolverInfo }) {
   const wafResults = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
 
   if (wafResults) {
+    const requestData = graphqlRequestData.get(req)
+    requestData.wafResults = wafResults
     const blockingAction = getBlockingAction(wafResults.actions)
 
-    if (blockingAction) {
-      const requestData = graphqlRequestData.get(req)
-      if (requestData?.isInGraphqlRequest) {
-        requestData.blocked = true
-        requestData.wafResults = wafResults
-        context?.abortController?.abort()
-      }
+    if (blockingAction && requestData?.isInGraphqlRequest) {
+      requestData.blocked = true
+      context?.abortController?.abort()
     }
   }
 }
@@ -117,9 +115,9 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
 
       log.error('[ASM] Blocking error', err)
     }
-
-    reportMetrics(requestData.wafResults.metrics, null)
   }
+
+  reportMetrics(requestData.wafResults.metrics, null)
 
   graphqlRequestData.delete(req)
 }
