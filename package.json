@@ -81,6 +81,24 @@
   "engines": {
     "node": ">=18"
   },
+  "files": [
+    "ci/**/*",
+    "cypress/**/*",
+    "esbuild.js",
+    "ext/**/*",
+    "index.d.ts",
+    "init.js",
+    "initialize.mjs",
+    "LICENSE-3rdparty.csv",
+    "loader-hook.mjs",
+    "packages/*/index.js",
+    "packages/*/lib/**/*",
+    "packages/*/src/**/*",
+    "register.js",
+    "scripts/preinstall.js",
+    "vendor/**/*",
+    "version.js"
+  ],
   "dependencies": {
     "@datadog/libdatadog": "^0.4.0",
     "@datadog/native-appsec": "8.4.0",
