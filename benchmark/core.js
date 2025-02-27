@@ -28,7 +28,6 @@ const Histogram = require('../packages/dd-trace/src/histogram')
 const histogram = new Histogram()
 const runtimeMetrics = require('../packages/dd-trace/src/runtime_metrics')
 const log = require('../packages/dd-trace/src/log')
-const tagger = require('../packages/dd-trace/src/tagger')
 
 const encoder04 = new Agent04Encoder({ flush: () => encoder04.makePayload() })
 const encoder05 = new Agent05Encoder({ flush: () => encoder05.makePayload() })
@@ -201,11 +200,6 @@ suite
 
     fn () {
       log.debug(() => (new Error('boom')).message)
-    }
-  })
-  .add('tagger#add', {
-    fn () {
-      tagger.add({}, 'foo:bar,baz:qux:quxx,invalid')
     }
   })
 
