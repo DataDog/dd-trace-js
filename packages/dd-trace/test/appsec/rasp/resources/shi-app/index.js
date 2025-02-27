@@ -6,9 +6,12 @@ tracer.init({
 })
 
 const express = require('express')
+const bodyParser = require('body-parser')
 const childProcess = require('child_process')
 
 const app = express()
+app.use(bodyParser.json());
+
 const port = process.env.APP_PORT || 3000
 
 app.get('/shi/execFileSync', async (req, res) => {
@@ -51,6 +54,12 @@ app.get('/cmdi/execFileSync/out-of-express-scope', async (req, res) => {
 
     res.end('OK')
   })
+})
+
+app.post('/shi/execFileSync', async (req, res) => {
+  childProcess.execFileSync('ls', [req.query.dir], { shell: true })
+
+  res.end('OK')
 })
 
 app.listen(port, () => {

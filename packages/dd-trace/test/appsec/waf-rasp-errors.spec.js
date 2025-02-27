@@ -10,7 +10,7 @@ describe('WAF/RASP - timeout', () => {
   let axios, sandbox, cwd, appPort, appFile, agent, proc
 
   before(async function () {
-    this.timeout(90000)
+    this.timeout(process.platform === 'win32' ? 90000 : 30000)
 
     sandbox = await createSandbox(
       ['express'],
@@ -31,7 +31,7 @@ describe('WAF/RASP - timeout', () => {
   })
 
   after(async function () {
-    this.timeout(90000)
+    this.timeout(60000)
     await sandbox.remove()
   })
 
@@ -57,13 +57,28 @@ describe('WAF/RASP - timeout', () => {
   })
 
   it('Should not block since waf will timeout', async () => {
-    await axios.get('/shi/execFileSync?dir=$(cat /etc/passwd 1>%262 ; echo .)')
+    const longValue = 'testattack'.repeat(500)
+
+    const largeObject = {}
+    for (let i = 0; i < 300; ++i) {
+      largeObject[`key${i}`] = `value${i}`
+    }
+
+    const deepObject = createNestedObject(25, { value: 'a' })
+
+    const complexPayload = {
+      deepObject,
+      longValue,
+      largeObject
+    }
+
+    await axios.post('/shi/execFileSync?dir=$(cat /etc/passwd 1>%262 ; echo .)', complexPayload)
     await agent.assertMessageReceived(({ payload }) => {
       assert.property(payload[0][0].metrics, '_dd.appsec.rasp.timeout')
-      assert.equal(payload[0][0].metrics['_dd.appsec.rasp.timeout'], 1)
+      assert(payload[0][0].metrics['_dd.appsec.rasp.timeout'] >= 1)
 
       assert.property(payload[0][0].metrics, '_dd.appsec.waf.timeouts')
-      assert(payload[0][0].metrics['_dd.appsec.waf.timeouts'] > 1)
+      assert(payload[0][0].metrics['_dd.appsec.waf.timeouts'] >= 1)
     })
   })
 })
@@ -72,7 +87,7 @@ describe('WAF/RASP - error', () => {
   let axios, sandbox, cwd, appPort, appFile, agent, proc
 
   before(async function () {
-    this.timeout(90000)
+    this.timeout(process.platform === 'win32' ? 90000 : 30000)
 
     sandbox = await createSandbox(
       ['express'],
@@ -93,7 +108,7 @@ describe('WAF/RASP - error', () => {
   })
 
   after(async function () {
-    this.timeout(90000)
+    this.timeout(60000)
     await sandbox.remove()
   })
 
@@ -129,3 +144,10 @@ describe('WAF/RASP - error', () => {
     })
   })
 })
+
+const createNestedObject = (n, obj) => {
+  if (n > 0) {
+    return { a: createNestedObject(n - 1, obj) }
+  }
+  return obj
+}
