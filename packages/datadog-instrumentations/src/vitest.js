@@ -329,6 +329,7 @@ addHook({
   const { VitestTestRunner } = vitestPackage
 
   // `onBeforeRunTask` is run before any repetition or attempt is run
+  // `onBeforeRunTask` is an async function
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => function (task) {
     const testName = getTestName(task)
 
@@ -361,6 +362,7 @@ addHook({
   })
 
   // `onAfterRunTask` is run after all repetitions or attempts are run
+  // `onAfterRunTask` is an async function
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterRunTask', onAfterRunTask => function (task) {
     const { isEarlyFlakeDetectionEnabled, isQuarantinedTestsEnabled } = getProvidedContext()
 
