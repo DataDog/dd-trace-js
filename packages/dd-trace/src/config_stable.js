@@ -1,6 +1,5 @@
 const os = require('os')
 const fs = require('fs')
-const { isInServerlessEnvironment } = require('./serverless')
 
 class StableConfig {
   constructor () {
@@ -8,11 +7,6 @@ class StableConfig {
     this.localEntries = {}
     this.fleetEntries = {}
     this.wasm_loaded = false
-
-    if (isInServerlessEnvironment()) {
-      // Bail out early if we're in a serverless environment, stable config isn't supported
-      return
-    }
 
     const { localConfigPath, fleetConfigPath } = this._getStableConfigPaths()
     if (!fs.existsSync(localConfigPath) && !fs.existsSync(fleetConfigPath)) {

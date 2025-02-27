@@ -19,7 +19,6 @@ const telemetryMetrics = require('./telemetry/metrics')
 const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
-const StableConfig = require('./config_stable')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -237,7 +236,11 @@ function reformatSpanSamplingRules (rules) {
 
 class Config {
   constructor (options = {}) {
-    this.stableConfig = new StableConfig()
+    if (!isInServerlessEnvironment()) {
+      // Bail out early if we're in a serverless environment, stable config isn't supported
+      const StableConfig = require('./config_stable')
+      this.stableConfig = new StableConfig()
+    }
 
     options = {
       ...options,
@@ -248,20 +251,20 @@ class Config {
     // Configure the logger first so it can be used to warn about other configs
     const logConfig = log.getConfig()
     this.debug = log.isEnabled(
-      this.stableConfig.fleetEntries?.DD_TRACE_DEBUG,
-      this.stableConfig.localEntries?.DD_TRACE_DEBUG
+      this.stableConfig?.fleetEntries?.DD_TRACE_DEBUG,
+      this.stableConfig?.localEntries?.DD_TRACE_DEBUG
     )
     this.logger = coalesce(options.logger, logConfig.logger)
     this.logLevel = log.getLogLevel(
       options.logLevel,
-      this.stableConfig.fleetEntries?.DD_TRACE_LOG_LEVEL,
-      this.stableConfig.localEntries?.DD_TRACE_LOG_LEVEL
+      this.stableConfig?.fleetEntries?.DD_TRACE_LOG_LEVEL,
+      this.stableConfig?.localEntries?.DD_TRACE_LOG_LEVEL
     )
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel)
 
     // Process stable config warnings, if any
-    for (const warning of this.stableConfig.warnings) {
+    for (const warning of this.stableConfig?.warnings ?? []) {
       log.warn(warning)
     }
 
@@ -594,12 +597,12 @@ class Config {
 
   _applyLocalStableConfig () {
     const obj = setHiddenProperty(this, '_localStableConfig', {})
-    this._applyStableConfig(this.stableConfig.localEntries, obj)
+    this._applyStableConfig(this.stableConfig?.localEntries ?? {}, obj)
   }
 
   _applyFleetStableConfig () {
     const obj = setHiddenProperty(this, '_fleetStableConfig', {})
-    this._applyStableConfig(this.stableConfig.fleetEntries, obj)
+    this._applyStableConfig(this.stableConfig?.fleetEntries ?? {}, obj)
   }
 
   _applyStableConfig (config, obj) {

@@ -2532,8 +2532,8 @@ apm_configuration_default:
 `)
 
       process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
-      const stableConfig = new StableConfig()
-      expect(stableConfig).to.have.property('wasm_loaded', false)
+      const stableConfig = new Config()
+      expect(stableConfig).to.not.have.property('stableConfig')
     })
   })
 })
