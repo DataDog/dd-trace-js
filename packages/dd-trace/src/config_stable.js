@@ -59,7 +59,7 @@ class StableConfig {
       return fs.readFileSync(path, 'utf8')
     } catch (err) {
       if (err.code !== 'ENOENT') {
-        this.warnings.push(`Error reading config file at ${fleetConfigPath}. ${err.code}: ${err.message}`)
+        this.warnings.push(`Error reading config file at ${path}. ${err.code}: ${err.message}`)
       }
       return '' // Always return a string to avoid undefined.toString() errors
     }
