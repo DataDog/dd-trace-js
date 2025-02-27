@@ -537,7 +537,6 @@ declare namespace tracer {
          * Deprecated in favor of `apmTracingEnabled`.
          *
          * @deprecated
-         * @hidden
          */
         standalone?: {
           /**
