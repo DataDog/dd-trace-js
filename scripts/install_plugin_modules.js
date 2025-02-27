@@ -66,33 +66,54 @@ async function assertVersions () {
 }
 
 async function assertInstrumentation (instrumentation, external) {
+  const name = instrumentation.name
   const versions = process.env.PACKAGE_VERSION_RANGE && !external
     ? [process.env.PACKAGE_VERSION_RANGE]
     : [].concat(instrumentation.versions || [])
 
-  for (const version of versions) {
-    if (version) {
-      if (version !== '*') {
-        const name = instrumentation.name
-        if (version.includes('>') || version.includes('<') || version.includes('~') || version.includes('^')) {
-          // For version ranges, determine the actual version to use
-          const latestVersion = latests.latests[name]
-          if (latestVersion && semver.satisfies(latestVersion, version)) {
-            // Use the latest version that satisfies this range
-            await assertModules(name, latestVersion, external)
-          } else {
-            // Fallback to coerced version if range doesn't include latest
-            await assertModules(name, semver.coerce(version).version, external)
-          }
-        } else {
-          // For exact versions, use as-is
-          await assertModules(name, semver.coerce(version).version, external)
+  for (const versionRange of versions) {
+    if (!versionRange || versionRange === '*') continue
+
+    // For exact versions, just use them
+    if (semver.valid(versionRange)) {
+      await assertModules(name, versionRange, external)
+      continue
+    }
+    // For version ranges
+    if (semver.validRange(versionRange)) {
+      const latestVersion = latests.latests[name]
+
+      // Always install the latest version from latests.json if it satisfies the range
+      if (latestVersion && semver.satisfies(latestVersion, versionRange)) {
+        await assertModules(name, latestVersion, external)
+      }
+
+      // For ranges with a minimum version (like >=2.0.0), also install the minimum version
+      if (versionRange.startsWith('>=')) {
+        // Extract the exact version after >=
+        const minVersion = versionRange.substring(2).trim()
+
+        // If it's not a valid semver (like just "2"), coerce it to a proper version (2.0.0)
+        const parsedMinVersion = semver.valid(minVersion) ? minVersion : semver.coerce(minVersion).version
+
+        if (parsedMinVersion && parsedMinVersion !== latestVersion) {
+          await assertModules(name, parsedMinVersion, external)
         }
       }
 
-      // This shouldn't reach here if the range was processed above
-      if (!version.includes('>') && !version.includes('<') && !version.includes('~') && !version.includes('^')) {
-        await assertModules(instrumentation.name, version, external);
+      // For broader ranges, get the lower bound
+      if (!versionRange.startsWith('>=')) {
+        let lowerBound
+        try {
+          // Try to extract the lower bound from the range
+          lowerBound = semver.coerce(versionRange).version
+        } catch (e) {
+          // FIX ME: log?
+        }
+
+        if (lowerBound && lowerBound !== latestVersion) {
+          await assertModules(name, lowerBound, external)
+        }
       }
     }
   }
@@ -217,7 +238,15 @@ function install () {
 }
 
 function addFolder (name, version) {
-  const basename = [name, version].filter(val => val).join('@')
+  // Skip if either name or version is undefined
+  // was seeing many of these in the logs when debugging
+  // e.g. mysql@undefined
+  if (!name || !version) {
+    return
+  }
+
+  const basename = `${name}@${version}`
+
   if (!excludeList.includes(name)) workspaces.add(basename)
 }
 
