@@ -12,6 +12,7 @@ const {
   incomingHttpRequestEnd,
   passportVerify,
   passportUser,
+  expressSession,
   queryParser,
   nextBodyParsed,
   nextQueryParsed,
@@ -186,6 +187,7 @@ describe('AppSec Index', function () {
       expect(cookieParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
       expect(passportUser.hasSubscribers).to.be.false
+      expect(expressSession.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(nextBodyParsed.hasSubscribers).to.be.false
       expect(nextQueryParsed.hasSubscribers).to.be.false
@@ -200,6 +202,7 @@ describe('AppSec Index', function () {
       expect(cookieParser.hasSubscribers).to.be.true
       expect(passportVerify.hasSubscribers).to.be.true
       expect(passportUser.hasSubscribers).to.be.true
+      expect(expressSession.hasSubscribers).to.be.true
       expect(queryParser.hasSubscribers).to.be.true
       expect(nextBodyParsed.hasSubscribers).to.be.true
       expect(nextQueryParsed.hasSubscribers).to.be.true
@@ -283,6 +286,7 @@ describe('AppSec Index', function () {
       expect(cookieParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
       expect(passportUser.hasSubscribers).to.be.false
+      expect(expressSession.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(nextBodyParsed.hasSubscribers).to.be.false
       expect(nextQueryParsed.hasSubscribers).to.be.false
@@ -655,8 +659,12 @@ describe('AppSec Index', function () {
     let abortController, req, res, rootSpan
 
     beforeEach(() => {
+      sinon.stub(waf, 'run')
+
       rootSpan = {
-        addTags: sinon.stub()
+        addTags: sinon.stub(),
+        _tags: {},
+        context: () => ({ _tags: rootSpan._tags })
       }
       web.root.returns(rootSpan)
 
@@ -691,13 +699,10 @@ describe('AppSec Index', function () {
       }
 
       AppSec.enable(config)
-      AppSec.incomingHttpStartTranslator({ req, res })
     })
 
     describe('onRequestBodyParsed', () => {
       it('Should not block without body', () => {
-        sinon.stub(waf, 'run')
-
         bodyParser.publish({ req, res, abortController })
 
         expect(waf.run).not.to.have.been.called
@@ -708,7 +713,6 @@ describe('AppSec Index', function () {
       it('Should not block with body by default', () => {
         const body = { key: 'value' }
         req.body = body
-        sinon.stub(waf, 'run')
 
         bodyParser.publish({ req, res, body, abortController })
 
@@ -724,7 +728,7 @@ describe('AppSec Index', function () {
       it('Should block when it is detected as attack', () => {
         const body = { key: 'value' }
         req.body = body
-        sinon.stub(waf, 'run').returns(resultActions)
+        waf.run.returns(resultActions)
 
         bodyParser.publish({ req, res, body, abortController })
 
@@ -740,8 +744,6 @@ describe('AppSec Index', function () {
 
     describe('onRequestCookieParsed', () => {
       it('Should not block without cookie', () => {
-        sinon.stub(waf, 'run')
-
         cookieParser.publish({ req, res, abortController })
 
         expect(waf.run).not.to.have.been.called
@@ -751,7 +753,6 @@ describe('AppSec Index', function () {
 
       it('Should not block with cookie by default', () => {
         const cookies = { key: 'value' }
-        sinon.stub(waf, 'run')
 
         cookieParser.publish({ req, res, abortController, cookies })
 
@@ -766,7 +767,7 @@ describe('AppSec Index', function () {
 
       it('Should block when it is detected as attack', () => {
         const cookies = { key: 'value' }
-        sinon.stub(waf, 'run').returns(resultActions)
+        waf.run.returns(resultActions)
 
         cookieParser.publish({ req, res, abortController, cookies })
 
@@ -782,8 +783,6 @@ describe('AppSec Index', function () {
 
     describe('onRequestQueryParsed', () => {
       it('Should not block without query', () => {
-        sinon.stub(waf, 'run')
-
         queryParser.publish({ req, res, abortController })
 
         expect(waf.run).not.to.have.been.called
@@ -794,7 +793,6 @@ describe('AppSec Index', function () {
       it('Should not block with query by default', () => {
         const query = { key: 'value' }
         req.query = query
-        sinon.stub(waf, 'run')
 
         queryParser.publish({ req, res, query, abortController })
 
@@ -810,7 +808,7 @@ describe('AppSec Index', function () {
       it('Should block when it is detected as attack', () => {
         const query = { key: 'value' }
         req.query = query
-        sinon.stub(waf, 'run').returns(resultActions)
+        waf.run.returns(resultActions)
 
         queryParser.publish({ req, res, query, abortController })
 
@@ -826,7 +824,6 @@ describe('AppSec Index', function () {
 
     describe('onPassportVerify', () => {
       beforeEach(() => {
-        web.root.resetHistory()
         sinon.stub(storage('legacy'), 'getStore').returns({ req })
       })
 
@@ -908,7 +905,6 @@ describe('AppSec Index', function () {
 
     describe('onPassportDeserializeUser', () => {
       beforeEach(() => {
-        web.root.resetHistory()
         sinon.stub(storage('legacy'), 'getStore').returns({ req })
       })
 
@@ -973,9 +969,65 @@ describe('AppSec Index', function () {
       })
     })
 
+    describe('onExpressSession', () => {
+      it('should not call waf and call log if no rootSpan is found', () => {
+        web.root.returns(null)
+
+        expressSession.publish({ req, res, sessionId: '1234', abortController })
+
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] No rootSpan found in onExpressSession')
+        expect(waf.run).to.not.have.been.called
+        expect(abortController.abort).to.not.have.been.called
+        expect(res.constructor.prototype.end).to.not.have.been.called
+      })
+
+      it('should not call waf when sessionID was set by SDK', () => {
+        rootSpan._tags['usr.session_id'] = 'sdk_sessid'
+
+        expressSession.publish({ req, res, sessionId: '1234', abortController })
+
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(log.warn).to.not.have.been.called
+        expect(waf.run).to.not.have.been.called
+        expect(abortController.abort).to.not.have.been.called
+        expect(res.constructor.prototype.end).to.not.have.been.called
+      })
+
+      it('should call waf and not block with no attack', () => {
+        expressSession.publish({ req, res, sessionId: '1234', abortController })
+
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(log.warn).to.not.have.been.called
+        expect(waf.run).to.have.been.calledOnceWithExactly({
+          persistent: {
+            'usr.session_id': '1234'
+          }
+        }, req)
+        expect(abortController.abort).to.not.have.been.called
+        expect(res.constructor.prototype.end).to.not.have.been.called
+      })
+
+      it('should call waf and block with attack', () => {
+        waf.run.returns(resultActions)
+
+        expressSession.publish({ req, res, sessionId: '1234', abortController })
+
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(log.warn).to.not.have.been.called
+        expect(waf.run).to.have.been.calledOnceWithExactly({
+          persistent: {
+            'usr.session_id': '1234'
+          }
+        }, req)
+        expect(abortController.abort).to.have.been.called
+        expect(res.constructor.prototype.end).to.have.been.called
+      })
+    })
+
     describe('onResponseWriteHead', () => {
       it('should call abortController if response was already blocked', () => {
-        sinon.stub(waf, 'run').returns(resultActions)
+        waf.run.returns(resultActions)
 
         const responseHeaders = {
           'content-type': 'application/json',
@@ -1007,7 +1059,7 @@ describe('AppSec Index', function () {
       })
 
       it('should not call the WAF if response was already analyzed', () => {
-        sinon.stub(waf, 'run').returns(null)
+        waf.run.returns(null)
 
         const responseHeaders = {
           'content-type': 'application/json',
@@ -1038,7 +1090,7 @@ describe('AppSec Index', function () {
 
       it('should not do anything without a root span', () => {
         web.root.returns(null)
-        sinon.stub(waf, 'run').returns(null)
+        waf.run.returns(null)
 
         const responseHeaders = {
           'content-type': 'application/json',
@@ -1054,7 +1106,7 @@ describe('AppSec Index', function () {
       })
 
       it('should call the WAF with responde code and headers', () => {
-        sinon.stub(waf, 'run').returns(resultActions)
+        waf.run.returns(resultActions)
 
         const responseHeaders = {
           'content-type': 'application/json',
@@ -1081,7 +1133,7 @@ describe('AppSec Index', function () {
     describe('onResponseSetHeader', () => {
       it('should call abortController if response was already blocked', () => {
         // First block the request
-        sinon.stub(waf, 'run').returns(resultActions)
+        waf.run.returns(resultActions)
 
         const responseHeaders = {
           'content-type': 'application/json',

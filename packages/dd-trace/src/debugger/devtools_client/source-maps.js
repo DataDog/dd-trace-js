@@ -4,9 +4,11 @@ const { join, dirname } = require('path')
 const { readFileSync } = require('fs')
 const { readFile } = require('fs/promises')
 const { SourceMapConsumer } = require('source-map')
+const { NODE_MAJOR } = require('../../../../../version')
 
 const cache = new Map()
 let cacheTimer = null
+let cacheTime = null
 
 const self = module.exports = {
   async loadSourceMap (dir, url) {
@@ -33,15 +35,34 @@ const self = module.exports = {
   }
 }
 
+// The version check inside this function is to guard against a bug Node.js version 18, in which calls to `setTimeout`
+// might throw an uncatchable error from within `AsyncLocalStorage._propagate` with the following error message:
+//
+//     TypeError: Cannot read properties of undefined (reading 'Symbol(kResourceStore)')
+//
+// Source: https://github.com/nodejs/node/blob/v18.20.6/lib/async_hooks.js#L312
 function cacheIt (key, value) {
-  clearTimeout(cacheTimer)
-  cacheTimer = setTimeout(function () {
-    // Optimize for app boot, where a lot of reads might happen
-    // Clear cache a few seconds after it was last used
-    cache.clear()
-  }, 10_000).unref()
+  if (NODE_MAJOR < 20) return value
+  cacheTime = Date.now()
+  setCacheTTL()
   cache.set(key, value)
   return value
+}
+
+function setCacheTTL () {
+  if (cacheTimer !== null) return
+
+  cacheTimer = setTimeout(function () {
+    cacheTimer = null
+    if (Date.now() - cacheTime < 2_500) {
+      // If the last cache entry was added recently, keep the cache alive
+      setCacheTTL()
+    } else {
+      // Optimize for app boot, where a lot of reads might happen
+      // Clear cache a few seconds after it was last used
+      cache.clear()
+    }
+  }, 5_000).unref()
 }
 
 function loadInlineSourceMap (data) {
