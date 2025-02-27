@@ -101,7 +101,8 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
     if (!rootSpan) return
 
     try {
-      const blockingData = getBlockingData(req, specificBlockingTypes.GRAPHQL, requestData.wafResults.actions)
+      const blockingAction = getBlockingAction(requestData.wafResults.actions)
+      const blockingData = getBlockingData(req, specificBlockingTypes.GRAPHQL, blockingAction)
       abortData.statusCode = blockingData.statusCode
       abortData.headers = blockingData.headers
       abortData.message = blockingData.body
