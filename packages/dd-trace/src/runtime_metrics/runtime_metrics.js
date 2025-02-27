@@ -4,12 +4,12 @@
 
 const v8 = require('v8')
 const os = require('os')
-const { DogStatsDClient } = require('./dogstatsd')
-const log = require('./log')
-const Histogram = require('./histogram')
+const { DogStatsDClient } = require('../dogstatsd')
+const log = require('../log')
+const Histogram = require('../histogram')
 const { performance, PerformanceObserver } = require('perf_hooks')
 
-const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
+const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
 const INTERVAL = 10 * 1000
 
 // Node >=16 has PerformanceObserver with `gc` type, but <16.7 had a critical bug.

@@ -4,10 +4,11 @@ const { join, dirname } = require('path')
 const { readFileSync } = require('fs')
 const { readFile } = require('fs/promises')
 const { SourceMapConsumer } = require('source-map')
+const { NODE_MAJOR } = require('../../../../../version')
 
 const cache = new Map()
 let cacheTimer = null
-let cacheTimerLastSet = 0
+let cacheTime = null
 
 const self = module.exports = {
   async loadSourceMap (dir, url) {
@@ -34,28 +35,34 @@ const self = module.exports = {
   }
 }
 
-// TODO: Remove if-statement around `setTimeout` below once it's safe to do so.
-//
-// This is a workaround for, what seems like a bug in Node.js core, that seems to trigger when, among other things, a
-// lot of timers are being created very rapidly. This makes the call to `setTimeout` throw an error from within
-// `AsyncLocalStorage._propagate` with the following error message:
+// The version check inside this function is to guard against a bug Node.js version 18, in which calls to `setTimeout`
+// might throw an uncatchable error from within `AsyncLocalStorage._propagate` with the following error message:
 //
 //     TypeError: Cannot read properties of undefined (reading 'Symbol(kResourceStore)')
 //
 // Source: https://github.com/nodejs/node/blob/v18.20.6/lib/async_hooks.js#L312
 function cacheIt (key, value) {
-  const now = Date.now()
-  if (now > cacheTimerLastSet + 1_000) {
-    clearTimeout(cacheTimer)
-    cacheTimer = setTimeout(function () {
+  if (NODE_MAJOR < 20) return value
+  cacheTime = Date.now()
+  setCacheTTL()
+  cache.set(key, value)
+  return value
+}
+
+function setCacheTTL () {
+  if (cacheTimer !== null) return
+
+  cacheTimer = setTimeout(function () {
+    cacheTimer = null
+    if (Date.now() - cacheTime < 2_500) {
+      // If the last cache entry was added recently, keep the cache alive
+      setCacheTTL()
+    } else {
       // Optimize for app boot, where a lot of reads might happen
       // Clear cache a few seconds after it was last used
       cache.clear()
-    }, 10_000).unref()
-    cacheTimerLastSet = now
-  }
-  cache.set(key, value)
-  return value
+    }
+  }, 5_000).unref()
 }
 
 function loadInlineSourceMap (data) {

@@ -1,11 +1,11 @@
 'use strict'
 
-const Activation = require('../activation')
+const Activation = require('../appsec/activation')
 
 const RemoteConfigManager = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
-const { setCollectionMode } = require('../user_tracking')
-const log = require('../../log')
+const { setCollectionMode } = require('../appsec/user_tracking')
+const log = require('../log')
 
 let rc
 
@@ -80,7 +80,7 @@ function enableOrDisableAppsec (action, rcConfig, config, appsec) {
 function enableWafUpdate (appsecConfig) {
   if (rc && appsecConfig && !appsecConfig.rules) {
     // dirty require to make startup faster for serverless
-    const RuleManager = require('../rule_manager')
+    const RuleManager = require('../appsec/rule_manager')
 
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_USER_BLOCKING, true)
@@ -93,6 +93,7 @@ function enableWafUpdate (appsecConfig) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, true)
 
@@ -115,7 +116,7 @@ function enableWafUpdate (appsecConfig) {
 
 function disableWafUpdate () {
   if (rc) {
-    const RuleManager = require('../rule_manager')
+    const RuleManager = require('../appsec/rule_manager')
 
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_IP_BLOCKING, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_USER_BLOCKING, false)
@@ -127,6 +128,7 @@ function disableWafUpdate () {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, false)
 

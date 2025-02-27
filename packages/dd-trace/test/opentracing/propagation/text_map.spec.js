@@ -21,6 +21,7 @@ describe('TextMapPropagator', () => {
   let textMap
   let baggageItems
   let config
+  let log
 
   const createContext = (params = {}) => {
     const trace = { started: [], finished: [], tags: {} }
@@ -40,7 +41,12 @@ describe('TextMapPropagator', () => {
   }
 
   beforeEach(() => {
-    TextMapPropagator = require('../../../src/opentracing/propagation/text_map')
+    log = {
+      debug: sinon.spy()
+    }
+    TextMapPropagator = proxyquire('../src/opentracing/propagation/text_map', {
+      '../../log': log
+    })
     config = new Config({ tagsHeaderMaxLength: 512 })
     propagator = new TextMapPropagator(config)
     textMap = {
@@ -782,6 +788,18 @@ describe('TextMapPropagator', () => {
       expect(first._links[0].attributes.context_headers).to.equal('datadog')
     })
 
+    it('should log extraction', () => {
+      const carrier = textMap
+
+      propagator.extract(carrier)
+
+      expect(log.debug).to.have.been.called
+      expect(log.debug.firstCall.args[0]()).to.equal([
+        'Extract from carrier (datadog, tracecontext, baggage):',
+        '{"x-datadog-trace-id":"123","x-datadog-parent-id":"456"}.'
+      ].join(' '))
+    })
+
     describe('with B3 propagation as multiple headers', () => {
       beforeEach(() => {
         config.tracePropagationStyle.extract = ['b3multi']
@@ -856,6 +874,19 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
 
         expect(spanContext).to.be.null
+      })
+
+      it('should log extraction', () => {
+        textMap['x-b3-traceid'] = '0000000000000123'
+        textMap['x-b3-spanid'] = '0000000000000456'
+
+        propagator.extract(textMap)
+
+        expect(log.debug).to.have.been.called
+        expect(log.debug.firstCall.args[0]()).to.equal([
+          'Extract from carrier (b3multi):',
+          '{"x-b3-traceid":"0000000000000123","x-b3-spanid":"0000000000000456"}.'
+        ].join(' '))
       })
     })
 
@@ -991,6 +1022,17 @@ describe('TextMapPropagator', () => {
           spanId: id('456', 16)
         }))
       })
+
+      it('should log extraction', () => {
+        textMap.b3 = '0000000000000123-0000000000000456'
+
+        propagator.extract(textMap)
+
+        expect(log.debug).to.have.been.called
+        expect(log.debug.firstCall.args[0]()).to.equal(
+          `Extract from carrier (b3 single header): {"b3":"${textMap.b3}"}.`
+        )
+      })
     })
 
     describe('With traceparent propagation as single header', () => {
@@ -1118,6 +1160,21 @@ describe('TextMapPropagator', () => {
 
         expect(carrier['x-datadog-tags']).to.include('_dd.p.dm=-0')
         expect(spanContext._trace.tags['_dd.p.dm']).to.eql('-0')
+      })
+
+      it('should log extraction', () => {
+        const traceparent = textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
+        const tracestate = textMap.tracestate = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-4'
+
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        propagator.extract(textMap)
+
+        expect(log.debug).to.have.been.called
+        expect(log.debug.firstCall.args[0]()).to.equal([
+          'Extract from carrier (tracecontext):',
+          `{"traceparent":"${traceparent}","tracestate":"${tracestate}"}.`
+        ].join(' '))
       })
     })
   })
