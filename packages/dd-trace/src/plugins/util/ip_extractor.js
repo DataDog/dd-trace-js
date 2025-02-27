@@ -27,8 +27,6 @@ const privateCIDRs = [
   'fd00::/8'
 ]
 
-
-
 let privateIPMatcher
 
 try {
