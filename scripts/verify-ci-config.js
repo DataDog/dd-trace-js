@@ -161,8 +161,6 @@ checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'appsec.yml'))
 
 const IGNORED_WORKFLOWS = {
   all: [
-    'prepare-release-proposal.yml',
-    'rebase-release-proposal.yml',
     'release-3.yml',
     'release-4.yml',
     'release-dev.yml',
