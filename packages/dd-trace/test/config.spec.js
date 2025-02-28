@@ -241,6 +241,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
+    expect(config).to.have.nested.property('apmTracingEnabled', true)
     expect(config).to.have.nested.property('appsec.enabled', undefined)
     expect(config).to.have.nested.property('appsec.rules', undefined)
     expect(config).to.have.nested.property('appsec.rasp.enabled', true)
@@ -258,7 +259,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 30)
     expect(config).to.have.nested.property('appsec.sca.enabled', null)
-    expect(config).to.have.nested.property('appsec.standalone.enabled', undefined)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
@@ -277,6 +277,7 @@ describe('Config', () => {
     expect(updateConfig).to.be.calledOnce
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
+      { name: 'apmTracingEnabled', value: true, origin: 'default' },
       { name: 'appsec.blockedTemplateHtml', value: undefined, origin: 'default' },
       { name: 'appsec.blockedTemplateJson', value: undefined, origin: 'default' },
       { name: 'appsec.enabled', value: undefined, origin: 'default' },
@@ -297,7 +298,6 @@ describe('Config', () => {
       { name: 'appsec.rateLimit', value: 100, origin: 'default' },
       { name: 'appsec.rules', value: undefined, origin: 'default' },
       { name: 'appsec.sca.enabled', value: null, origin: 'default' },
-      { name: 'appsec.standalone.enabled', value: undefined, origin: 'default' },
       { name: 'appsec.stackTrace.enabled', value: true, origin: 'default' },
       { name: 'appsec.stackTrace.maxDepth', value: 32, origin: 'default' },
       { name: 'appsec.stackTrace.maxStackTraces', value: 2, origin: 'default' },
@@ -486,6 +486,7 @@ describe('Config', () => {
     process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
     process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = 'true'
     process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = true
+    process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_APPSEC_ENABLED = 'true'
     process.env.DD_APPSEC_MAX_STACK_TRACES = '5'
     process.env.DD_APPSEC_MAX_STACK_TRACE_DEPTH = '42'
@@ -501,7 +502,6 @@ describe('Config', () => {
     process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_GRAPHQL_PATH
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
     process.env.DD_APPSEC_SCA_ENABLED = true
-    process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'true'
     process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_IAST_ENABLED = 'true'
@@ -601,6 +601,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
+    expect(config).to.have.nested.property('apmTracingEnabled', false)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rasp.enabled', false)
     expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
@@ -618,7 +619,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 25)
     expect(config).to.have.nested.property('appsec.sca.enabled', true)
-    expect(config).to.have.nested.property('appsec.standalone.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
@@ -646,6 +646,7 @@ describe('Config', () => {
     expect(updateConfig).to.be.calledOnce
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
+      { name: 'apmTracingEnabled', value: false, origin: 'env_var' },
       { name: 'appsec.blockedTemplateHtml', value: BLOCKED_TEMPLATE_HTML_PATH, origin: 'env_var' },
       { name: 'appsec.blockedTemplateJson', value: BLOCKED_TEMPLATE_JSON_PATH, origin: 'env_var' },
       { name: 'appsec.enabled', value: true, origin: 'env_var' },
@@ -659,7 +660,6 @@ describe('Config', () => {
       { name: 'appsec.stackTrace.maxDepth', value: '42', origin: 'env_var' },
       { name: 'appsec.stackTrace.maxStackTraces', value: '5', origin: 'env_var' },
       { name: 'appsec.sca.enabled', value: true, origin: 'env_var' },
-      { name: 'appsec.standalone.enabled', value: true, origin: 'env_var' },
       { name: 'appsec.wafTimeout', value: '42', origin: 'env_var' },
       { name: 'clientIpEnabled', value: true, origin: 'env_var' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'env_var' },
@@ -897,11 +897,6 @@ describe('Config', () => {
           stackTrace: {
             enabled: false
           }
-        },
-        appsec: {
-          standalone: {
-            enabled: true
-          }
         }
       },
       appsec: false,
@@ -960,7 +955,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', false)
-    expect(config).to.have.nested.property('appsec.standalone.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 50)
@@ -1003,7 +997,6 @@ describe('Config', () => {
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
       { name: 'appsec.enabled', value: false, origin: 'code' },
-      { name: 'appsec.standalone.enabled', value: true, origin: 'code' },
       { name: 'clientIpEnabled', value: true, origin: 'code' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'code' },
       { name: 'codeOriginForSpans.enabled', value: false, origin: 'code' },
@@ -1238,6 +1231,7 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_TRACE_MIDDLEWARE_TRACING_ENABLED = 'false'
+    process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_APPSEC_ENABLED = 'false'
     process.env.DD_APPSEC_MAX_STACK_TRACES = '11'
     process.env.DD_APPSEC_MAX_STACK_TRACE_DEPTH = '11'
@@ -1313,6 +1307,7 @@ describe('Config', () => {
         exporter: 'agent',
         enableGetRumData: false
       },
+      apmTracingEnabled: true,
       appsec: {
         enabled: true,
         rules: RULES_JSON_PATH,
@@ -1397,6 +1392,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
+    expect(config).to.have.nested.property('apmTracingEnabled', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rasp.enabled', false)
     expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
@@ -1530,9 +1526,6 @@ describe('Config', () => {
       },
       rasp: {
         enabled: false
-      },
-      standalone: {
-        enabled: undefined
       },
       stackTrace: {
         enabled: true,
@@ -2370,6 +2363,73 @@ describe('Config', () => {
       expect(taggingConfig).to.have.property('requestsEnabled', true)
       expect(taggingConfig).to.have.property('responsesEnabled', true)
       expect(taggingConfig).to.have.property('maxDepth', 7)
+    })
+  })
+
+  context('standalone', () => {
+    it('should disable apm tracing with legacy DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED', () => {
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '1'
+
+      const config = new Config()
+      expect(config).to.have.property('apmTracingEnabled', false)
+    })
+
+    it('should win DD_APM_TRACING_ENABLED', () => {
+      process.env.DD_APM_TRACING_ENABLED = '1'
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'true'
+
+      const config = new Config()
+      expect(config).to.have.property('apmTracingEnabled', true)
+    })
+
+    it('should disable apm tracing with legacy experimental.appsec.standalone.enabled option', () => {
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '0'
+
+      const config = new Config({ experimental: { appsec: { standalone: { enabled: true } } } })
+      expect(config).to.have.property('apmTracingEnabled', false)
+    })
+
+    it('should win apmTracingEnabled option', () => {
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'true'
+
+      const config = new Config({
+        apmTracingEnabled: false,
+        experimental: { appsec: { standalone: { enabled: true } } }
+      })
+      expect(config).to.have.property('apmTracingEnabled', false)
+    })
+
+    it('should not affect stats', () => {
+      process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
+
+      const config = new Config()
+      expect(config).to.have.property('apmTracingEnabled', true)
+      expect(config).to.have.nested.property('stats.enabled', true)
+
+      expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
+        { name: 'stats.enabled', value: true, origin: 'calculated' }
+      ])
+    })
+
+    it('should disable stats', () => {
+      process.env.DD_APM_TRACING_ENABLED = 'false'
+      process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
+
+      const config = new Config()
+      expect(config).to.have.property('apmTracingEnabled', false)
+      expect(config).to.have.nested.property('stats.enabled', false)
+
+      expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
+        { name: 'stats.enabled', value: false, origin: 'calculated' }
+      ])
+    })
+
+    it('should disable stats if config property is used', () => {
+      const config = new Config({
+        apmTracingEnabled: false
+      })
+      expect(config).to.have.property('apmTracingEnabled', false)
+      expect(config).to.have.nested.property('stats.enabled', false)
     })
   })
 

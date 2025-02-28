@@ -127,11 +127,8 @@ describe('TracerProxy', () => {
       logger: 'logger',
       debug: true,
       profiling: {},
-      appsec: {
-        standalone: {
-          enabled: true
-        }
-      },
+      apmTracingEnabled: false,
+      appsec: {},
       iast: {},
       crashtracking: {},
       dynamicInstrumentation: {},
@@ -516,7 +513,7 @@ describe('TracerProxy', () => {
         expect(telemetry.start).to.have.been.called
       })
 
-      it('should configure appsec standalone', () => {
+      it('should configure standalone', () => {
         const standalone = {
           configure: sinon.stub()
         }
@@ -529,7 +526,7 @@ describe('TracerProxy', () => {
           './appsec/iast': iast,
           './remote_config': remoteConfig,
           './appsec/sdk': AppsecSdk,
-          './appsec/standalone': standalone,
+          './standalone': standalone,
           './telemetry': telemetry
         })
 
