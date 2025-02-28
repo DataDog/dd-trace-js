@@ -15,7 +15,7 @@ describe('WAF - error', () => {
     sandbox = await createSandbox(
       ['express'],
       false,
-      [path.join(__dirname, 'resources')]
+      [path.join(__dirname, 'rasp', 'resources')]
     )
 
     appPort = await getPort()
