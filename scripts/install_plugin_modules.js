@@ -9,6 +9,7 @@ const exec = require('./helpers/exec')
 const childProcess = require('child_process')
 const externals = require('../packages/dd-trace/test/plugins/externals')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
+const latests = require('../packages/datadog-instrumentations/src/helpers/latests.json')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
@@ -106,9 +107,21 @@ function assertFolder (name, version) {
 }
 
 async function assertPackage (name, version, dependencyVersionRange, external) {
-  const dependencies = { [name]: dependencyVersionRange }
+  // Apply version cap from latests.json if available
+  // TODO: pinned versions?
+  let cappedVersionRange = dependencyVersionRange
+  if (latests.latests[name]) {
+    const latestVersion = latests.latests[name]
+    // If the range would allow versions beyond what we've tested, cap it
+    if (semver.validRange(dependencyVersionRange) &&
+        !semver.subset(`<=${latestVersion}`, dependencyVersionRange)) {
+      cappedVersionRange = `${dependencyVersionRange} <=${latestVersion}`
+    }
+  }
+  
+  const dependencies = { [name]: cappedVersionRange }
   if (deps[name]) {
-    await addDependencies(dependencies, name, dependencyVersionRange)
+    await addDependencies(dependencies, name, cappedVersionRange)
   }
   const pkg = {
     name: [name, sha1(name).substr(0, 8), sha1(version)].filter(val => val).join('-'),
