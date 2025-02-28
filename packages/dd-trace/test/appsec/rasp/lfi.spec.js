@@ -16,7 +16,7 @@ describe('RASP - lfi.js', () => {
 
     waf = {
       run: sinon.stub().returns({
-        result: {
+        metrics: {
           totalRuntime: 30,
           timeout: false
         }
