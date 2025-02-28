@@ -39,6 +39,7 @@ let promise: Promise<void>;
 
 ddTrace.init();
 tracer.init({
+  apmTracingEnabled: false,
   logInjection: true,
   startupLogs: false,
   env: 'test',
@@ -144,7 +145,6 @@ tracer.init({
 });
 
 tracer.init({
-  apmTracingEnabled: false,
   experimental: {
     iast: {
       enabled: true,
@@ -158,6 +158,11 @@ tracer.init({
       redactionNamePattern: 'password',
       redactionValuePattern: 'bearer',
       telemetryVerbosity: 'OFF'
+    },
+    appsec: {
+      standalone: {
+        enabled: true
+      }
     }
   }
 })
