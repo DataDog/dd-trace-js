@@ -34,7 +34,7 @@ module.exports = {
   SCI_REPOSITORY_URL: '_dd.git.repository_url',
   SCI_COMMIT_SHA: '_dd.git.commit.sha',
   APM_TRACING_ENABLED_KEY: '_dd.apm.enabled',
-  APPSEC_PROPAGATION_KEY: '_dd.p.appsec',
+  TRACE_SOURCE_PROPAGATION_KEY: '_dd.p.ts',
   PAYLOAD_TAG_REQUEST_PREFIX: 'aws.request.body',
   PAYLOAD_TAG_RESPONSE_PREFIX: 'aws.response.body',
   PAYLOAD_TAGGING_MAX_TAGS: 758,
