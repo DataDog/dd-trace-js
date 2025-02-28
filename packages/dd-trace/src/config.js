@@ -812,7 +812,10 @@ class Config {
     this._setValue(env, 'baggageMaxItems', DD_TRACE_BAGGAGE_MAX_ITEMS)
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
-    this._setBoolean(env, 'crashtracking.enabled', DD_CRASHTRACKING_ENABLED)
+    this._setBoolean(env, 'crashtracking.enabled', coalesce(
+      DD_CRASHTRACKING_ENABLED,
+      !this._isInServerlessEnvironment()
+    ))
     this._setBoolean(env, 'codeOriginForSpans.enabled', DD_CODE_ORIGIN_FOR_SPANS_ENABLED)
     this._setString(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
     this._setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOST || DD_DOGSTATSD_HOSTNAME)
@@ -883,7 +886,11 @@ class Config {
     }
     this._setString(env, 'port', DD_TRACE_AGENT_PORT)
     const profilingEnabled = normalizeProfilingEnabledValue(
-      coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED)
+      coalesce(
+        DD_EXPERIMENTAL_PROFILING_ENABLED,
+        DD_PROFILING_ENABLED,
+        this._isInServerlessEnvironment() ? 'false' : undefined
+      )
     )
     this._setString(env, 'profiling.enabled', profilingEnabled)
     this._setString(env, 'profiling.exporters', DD_PROFILING_EXPORTERS)

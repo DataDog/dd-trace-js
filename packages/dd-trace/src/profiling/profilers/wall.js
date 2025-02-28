@@ -286,13 +286,24 @@ class NativeWallProfiler {
 
     const labels = { ...getThreadLabels() }
 
-    const { context: { ref }, timestamp } = context
-    const { spanId, rootSpanId, webTags, endpoint } = ref ?? {}
-
     if (this._timelineEnabled) {
       // Incoming timestamps are in microseconds, we emit nanos.
-      labels[END_TIMESTAMP_LABEL] = timestamp * 1000n
+      labels[END_TIMESTAMP_LABEL] = context.timestamp * 1000n
     }
+
+    const asyncId = context.asyncId
+    if (asyncId !== undefined && asyncId !== -1) {
+      labels['async id'] = asyncId
+    }
+
+    // Native profiler doesn't set context.context for some samples, such as idle samples or when
+    // the context was otherwise unavailable when the sample was taken.
+    const ref = context.context?.ref
+    if (typeof ref !== 'object') {
+      return labels
+    }
+
+    const { spanId, rootSpanId, webTags, endpoint } = ref
 
     if (spanId !== undefined) {
       labels[SPAN_ID_LABEL] = spanId

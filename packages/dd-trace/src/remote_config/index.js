@@ -77,6 +77,7 @@ function enableOrDisableAppsec (action, rcConfig, config, appsec) {
   }
 }
 
+// TODO: all appsec specific stuff should be moved back in the appsec folder
 function enableWafUpdate (appsecConfig) {
   if (rc && appsecConfig && !appsecConfig.rules) {
     // dirty require to make startup faster for serverless
