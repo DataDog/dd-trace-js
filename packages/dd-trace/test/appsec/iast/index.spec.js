@@ -105,6 +105,7 @@ describe('IAST Index', () => {
     let mockOverheadController
     let appsecFsPlugin
     let analyzers
+    let standalone
 
     const config = new Config({
       experimental: {
@@ -135,11 +136,16 @@ describe('IAST Index', () => {
       analyzers = {
         enableAllAnalyzers: sinon.stub()
       }
+      standalone = {
+        configure: sinon.stub(),
+        disable: sinon.stub()
+      }
       mockIast = proxyquire('../../../src/appsec/iast', {
         './vulnerability-reporter': mockVulnerabilityReporter,
         './overhead-controller': mockOverheadController,
         '../rasp/fs-plugin': appsecFsPlugin,
-        './analyzers': analyzers
+        './analyzers': analyzers,
+        '../standalone': standalone
       })
     })
 
