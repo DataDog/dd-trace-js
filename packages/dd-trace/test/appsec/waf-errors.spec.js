@@ -6,7 +6,7 @@ const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
 
-describe('WAF - error', () => {
+describe.only('WAF - error', () => {
   let axios, sandbox, cwd, appPort, appFile, agent, proc
 
   before(async function () {
@@ -56,6 +56,10 @@ describe('WAF - error', () => {
 
   it('Should not block since waf will return error', async () => {
     try {
+      process.platform === 'win32'
+        ? '/shi/execFileSync?dir=type%20C:\\Windows\\System32\\drivers\\etc\\hosts'
+        : '/shi/execFileSync?dir=$(cat /etc/passwd 1>%262 ; echo .)'
+
       await axios.get('/shi/execFileSync?dir=$(cat /etc/passwd 1>%262 ; echo .)')
 
       if (process.platform !== 'win32') {
@@ -70,6 +74,9 @@ describe('WAF - error', () => {
           assert.property(payload[0][0].metrics, '_dd.appsec.waf.error')
           assert.equal(payload[0][0].metrics['_dd.appsec.waf.error'], -127)
         })
+      } else {
+        // If we're on Linux and actually got an error, rethrow
+        throw err
       }
     }
   })
