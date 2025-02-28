@@ -328,8 +328,7 @@ function updateConfig (changes, config) {
     clientIpHeader: 'DD_TRACE_CLIENT_IP_HEADER',
     'grpc.client.error.statuses': 'DD_GRPC_CLIENT_ERROR_STATUSES',
     'grpc.server.error.statuses': 'DD_GRPC_SERVER_ERROR_STATUSES',
-    traceId128BitLoggingEnabled: 'DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED',
-    traceExperimentalEnabled: 'DD_TRACE_EXPERIMENTAL_ENABLED'
+    traceId128BitLoggingEnabled: 'DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED'
   }
 
   const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
