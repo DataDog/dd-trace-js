@@ -346,7 +346,7 @@ declare namespace tracer {
    */
   export interface TracerOptions {
     /**
-     * Whether to disable APM Tracing
+     * Used to disable APM Tracing when using standalone products
      * @default true
      */
     apmTracingEnabled?: boolean
