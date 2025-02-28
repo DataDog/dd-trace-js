@@ -68,13 +68,6 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
         }
       }
     }
-
-    // PREVIOUS APPROACH
-    // if (testLevel) {
-    //   this.metadataTags[testLevel] = { ...this.metadataTags[testLevel], ...tags }
-    // } else {
-    //   this.metadataTags = tags
-    // }
   }
 
   _encodeTestSuite (bytes, content) {
