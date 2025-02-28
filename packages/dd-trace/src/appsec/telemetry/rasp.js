@@ -1,7 +1,7 @@
 'use strict'
 
 const telemetryMetrics = require('../../telemetry/metrics')
-const { DD_TELEMETRY_REQUEST_METRICS } = require('./common')
+const { getVersionsTags, DD_TELEMETRY_REQUEST_METRICS } = require('./common')
 
 const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
@@ -27,7 +27,9 @@ function addRaspRequestMetrics (store, { duration, durationExt, wafTimeout, erro
 }
 
 function trackRaspMetrics (metrics, raspRule) {
-  const tags = { rule_type: raspRule.type, waf_version: metrics.wafVersion }
+  const versionsTags = getVersionsTags(metrics.wafVersion, metrics.rulesVersion)
+
+  const tags = { rule_type: raspRule.type, ...versionsTags }
 
   if (raspRule.variant) {
     tags.rule_variant = raspRule.variant
@@ -40,7 +42,28 @@ function trackRaspMetrics (metrics, raspRule) {
   }
 
   if (metrics.ruleTriggered) {
+    // TODO: block
     appsecMetrics.count('rasp.rule.match', tags).inc(1)
+  }
+
+  if (metrics.duration) {
+    appsecMetrics.distribution('rasp.rule.duration', tags).track(metrics.duration)
+  }
+
+  if (metrics.duration) {
+    const raspDuration = store[DD_TELEMETRY_REQUEST_METRICS].raspDuration
+    appsecMetrics.distribution('rasp.duration', versionsTags).track(raspDuration)
+  }
+
+  if (metrics.durationExt) {
+    const raspDurationExt = store[DD_TELEMETRY_REQUEST_METRICS].raspDurationExt
+    appsecMetrics.distribution('rasp.duration_ext', versionsTags).track(raspDurationExt)
+  }
+
+  if (metrics.errorCode) {
+    const errorTags = { ...tags, waf_error: metrics.errorCode }
+
+    appsecMetrics.count('rasp.error', errorTags).inc(1)
   }
 }
 
