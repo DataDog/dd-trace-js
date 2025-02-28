@@ -440,6 +440,7 @@ class Config {
 
     const defaults = setHiddenProperty(this, '_defaults', {})
 
+    this._setBoolean(defaults, 'apmTracingEnabled', true)
     this._setValue(defaults, 'appsec.apiSecurity.enabled', true)
     this._setValue(defaults, 'appsec.apiSecurity.sampleDelay', 30)
     this._setValue(defaults, 'appsec.blockedTemplateGraphql', undefined)
@@ -453,7 +454,6 @@ class Config {
     this._setValue(defaults, 'appsec.rateLimit', 100)
     this._setValue(defaults, 'appsec.rules', undefined)
     this._setValue(defaults, 'appsec.sca.enabled', null)
-    this._setValue(defaults, 'appsec.standalone.enabled', undefined)
     this._setValue(defaults, 'appsec.stackTrace.enabled', true)
     this._setValue(defaults, 'appsec.stackTrace.maxDepth', 32)
     this._setValue(defaults, 'appsec.stackTrace.maxStackTraces', 2)
@@ -582,6 +582,7 @@ class Config {
       DD_AGENT_HOST,
       DD_API_SECURITY_ENABLED,
       DD_API_SECURITY_SAMPLE_DELAY,
+      DD_APM_TRACING_ENABLED,
       DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
       DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
       DD_APPSEC_ENABLED,
@@ -719,6 +720,10 @@ class Config {
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
+    this._setBoolean(env, 'apmTracingEnabled', coalesce(
+      DD_APM_TRACING_ENABLED,
+      DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED && isFalse(DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED)
+    ))
     this._setBoolean(env, 'appsec.apiSecurity.enabled', coalesce(
       DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED),
       DD_EXPERIMENTAL_API_SECURITY_ENABLED && isTrue(DD_EXPERIMENTAL_API_SECURITY_ENABLED)
@@ -742,7 +747,6 @@ class Config {
     this._setString(env, 'appsec.rules', DD_APPSEC_RULES)
     // DD_APPSEC_SCA_ENABLED is never used locally, but only sent to the backend
     this._setBoolean(env, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
-    this._setBoolean(env, 'appsec.standalone.enabled', DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED)
     this._setBoolean(env, 'appsec.stackTrace.enabled', DD_APPSEC_STACK_TRACE_ENABLED)
     this._setValue(env, 'appsec.stackTrace.maxDepth', maybeInt(DD_APPSEC_MAX_STACK_TRACE_DEPTH))
     this._envUnprocessed['appsec.stackTrace.maxDepth'] = DD_APPSEC_MAX_STACK_TRACE_DEPTH
@@ -925,6 +929,10 @@ class Config {
 
     tagger.add(tags, options.tags)
 
+    this._setBoolean(opts, 'apmTracingEnabled', coalesce(
+      options.apmTracingEnabled,
+      options.experimental?.appsec?.standalone && !options.experimental.appsec.standalone.enabled
+    ))
     this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec.apiSecurity?.enabled)
     this._setValue(opts, 'appsec.blockedTemplateGraphql', maybeFile(options.appsec.blockedTemplateGraphql))
     this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(options.appsec.blockedTemplateHtml))
@@ -939,7 +947,6 @@ class Config {
     this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec.rateLimit))
     this._optsUnprocessed['appsec.rateLimit'] = options.appsec.rateLimit
     this._setString(opts, 'appsec.rules', options.appsec.rules)
-    this._setBoolean(opts, 'appsec.standalone.enabled', options.experimental?.appsec?.standalone?.enabled)
     this._setBoolean(opts, 'appsec.stackTrace.enabled', options.appsec.stackTrace?.enabled)
     this._setValue(opts, 'appsec.stackTrace.maxDepth', maybeInt(options.appsec.stackTrace?.maxDepth))
     this._optsUnprocessed['appsec.stackTrace.maxDepth'] = options.appsec.stackTrace?.maxDepth
@@ -1124,7 +1131,10 @@ class Config {
   }
 
   _isTraceStatsComputationEnabled () {
-    return coalesce(
+    const apmTracingEnabled = this._options.apmTracingEnabled !== false &&
+      this._env.apmTracingEnabled !== false
+
+    return apmTracingEnabled && coalesce(
       this._optionsArg.stats,
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
       getIsGCPFunction() || getIsAzureFunction()
