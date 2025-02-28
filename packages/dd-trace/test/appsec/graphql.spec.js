@@ -246,8 +246,7 @@ describe('GraphQL', () => {
       const abortData = {}
       apolloChannel.asyncEnd.publish({ abortController, abortData })
 
-      expect(blocking.getBlockingData).to.have.been.calledOnceWithExactly(
-        req, 'graphql', blockParameters)
+      expect(blocking.getBlockingData).to.have.been.calledOnceWithExactly(req, 'graphql', blockParameters)
 
       expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
     })
