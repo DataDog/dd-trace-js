@@ -75,6 +75,7 @@ describe('TracerProxy', () => {
 
     noopDogStatsDClient = {
       increment: sinon.spy(),
+      decrement: sinon.spy(),
       gauge: sinon.spy(),
       distribution: sinon.spy(),
       histogram: sinon.spy(),
@@ -126,7 +127,11 @@ describe('TracerProxy', () => {
       logger: 'logger',
       debug: true,
       profiling: {},
-      appsec: {},
+      appsec: {
+        standalone: {
+          enabled: true
+        }
+      },
       iast: {},
       crashtracking: {},
       dynamicInstrumentation: {},
@@ -328,6 +333,7 @@ describe('TracerProxy', () => {
 
         const remoteConfigProxy = new RemoteConfigProxy()
         remoteConfigProxy.init()
+        remoteConfigProxy.appsec // Eagerly trigger lazy loading.
         expect(DatadogTracer).to.have.been.calledOnce
         expect(AppsecSdk).to.have.been.calledOnce
         expect(appsec.enable).to.not.have.been.called
@@ -414,11 +420,11 @@ describe('TracerProxy', () => {
         }
 
         proxy.init()
+        proxy.dogstatsd.increment('foo', 10, { alpha: 'bravo' })
+
+        const incs = dogStatsD._increments()
 
         expect(dogStatsD._config().dogstatsd.hostname).to.equal('localhost')
-
-        proxy.dogstatsd.increment('foo', 10, { alpha: 'bravo' })
-        const incs = dogStatsD._increments()
         expect(incs.length).to.equal(1)
         expect(incs[0][0]).to.equal('foo')
         expect(incs[0][1]).to.equal(10)
@@ -529,6 +535,7 @@ describe('TracerProxy', () => {
 
         const proxy = new DatadogProxy()
         proxy.init(options)
+        proxy.appsec // Eagerly trigger lazy loading.
 
         const config = AppsecSdk.firstCall.args[1]
         expect(standalone.configure).to.have.been.calledOnceWithExactly(config)
@@ -654,6 +661,8 @@ describe('TracerProxy', () => {
       it('should not throw when calling noop methods', () => {
         proxy.dogstatsd.increment('inc')
         expect(noopDogStatsDClient.increment).to.have.been.calledWith('inc')
+        proxy.dogstatsd.decrement('dec')
+        expect(noopDogStatsDClient.decrement).to.have.been.calledWith('dec')
         proxy.dogstatsd.distribution('dist')
         expect(noopDogStatsDClient.distribution).to.have.been.calledWith('dist')
         proxy.dogstatsd.histogram('hist')

@@ -822,43 +822,43 @@ declare namespace tracer {
   export interface DogStatsD {
     /**
      * Increments a metric by the specified value, optionally specifying tags.
-     * @param {string} stat The dot-separated metric name.
-     * @param {number} value The amount to increment the stat by.
-     * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
+     * @param stat The dot-separated metric name.
+     * @param value The amount to increment the stat by.
+     * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    increment(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+    increment(stat: string, value?: number, tags?: Record<string, string|number>): void
 
     /**
      * Decrements a metric by the specified value, optionally specifying tags.
-     * @param {string} stat The dot-separated metric name.
-     * @param {number} value The amount to decrement the stat by.
-     * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
+     * @param stat The dot-separated metric name.
+     * @param value The amount to decrement the stat by.
+     * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    decrement(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+    decrement(stat: string, value?: number, tags?: Record<string, string|number>): void
 
     /**
      * Sets a distribution value, optionally specifying tags.
-     * @param {string} stat The dot-separated metric name.
-     * @param {number} value The amount to increment the stat by.
-     * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
+     * @param stat The dot-separated metric name.
+     * @param value The amount to increment the stat by.
+     * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    distribution(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+    distribution(stat: string, value?: number, tags?: Record<string, string|number>): void
 
     /**
      * Sets a gauge value, optionally specifying tags.
-     * @param {string} stat The dot-separated metric name.
-     * @param {number} value The amount to increment the stat by.
-     * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
+     * @param stat The dot-separated metric name.
+     * @param value The amount to increment the stat by.
+     * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    gauge(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+    gauge(stat: string, value?: number, tags?: Record<string, string|number>): void
 
     /**
      * Sets a histogram value, optionally specifying tags.
-     * @param {string} stat The dot-separated metric name.
-     * @param {number} value The amount to increment the stat by.
-     * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
+     * @param stat The dot-separated metric name.
+     * @param value The amount to increment the stat by.
+     * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    histogram(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+    histogram(stat: string, value?: number, tags?: Record<string, string|number>): void
 
     /**
      * Forces any unsent metrics to be sent
@@ -880,7 +880,7 @@ declare namespace tracer {
 
     /**
      * Links a failed login event to the current trace.
-     * @param {string} userId The user id of the attemped login.
+     * @param {string} userId The user id of the attempted login.
      * @param {boolean} exists If the user id exists.
      * @param {[key: string]: string} metadata Custom fields to link to the login failure event.
      *
