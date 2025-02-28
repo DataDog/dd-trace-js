@@ -58,6 +58,7 @@ describe('AppSec Index', function () {
   let graphql
   let apiSecuritySampler
   let rasp
+  let standalone
 
   const RULES = { rules: [{ a: 1 }] }
 
@@ -129,6 +130,11 @@ describe('AppSec Index', function () {
       disable: sinon.stub()
     }
 
+    standalone = {
+      configure: sinon.stub(),
+      disable: sinon.stub()
+    }
+
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
       '../plugins/util/web': web,
@@ -137,7 +143,8 @@ describe('AppSec Index', function () {
       './telemetry': appsecTelemetry,
       './graphql': graphql,
       './api_security_sampler': apiSecuritySampler,
-      './rasp': rasp
+      './rasp': rasp,
+      './standalone': standalone
     })
 
     sinon.stub(fs, 'readFileSync').returns(JSON.stringify(RULES))

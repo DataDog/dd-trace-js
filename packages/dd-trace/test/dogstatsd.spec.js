@@ -155,11 +155,12 @@ describe('dogstatsd', () => {
 
     client.gauge('test.avg', 10)
     client.increment('test.count', 10)
+    client.decrement('test.count', 5)
     client.flush()
 
     expect(udp4.send).to.have.been.called
-    expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g\ntest.count:10|c\n')
-    expect(udp4.send.firstCall.args[2]).to.equal(30)
+    expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g\ntest.count:10|c\ntest.count:-5|c\n')
+    expect(udp4.send.firstCall.args[2]).to.equal(46)
   })
 
   it('should support tags', () => {
