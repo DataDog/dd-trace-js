@@ -235,7 +235,7 @@ class Tracer extends NoopProxy {
         this._modules.llmobs.enable(config)
       }
       if (!this._tracingInitialized) {
-        const prioritySampler = config.apmTracingEnabled !== false && require('./standalone').configure(config)
+        const prioritySampler = config.apmTracingEnabled === false && require('./standalone').configure(config)
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', config, () => require('./appsec/sdk'), this._tracer, config)
