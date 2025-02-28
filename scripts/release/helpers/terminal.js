@@ -1,6 +1,6 @@
 'use strict'
 
-const { execSync, spawnSync } = require('child_process')
+const { spawnSync } = require('child_process')
 
 const { params, flags } = parse()
 
@@ -23,19 +23,20 @@ let timer
 let current
 
 // Output a command to the terminal and execute it.
-function run (cmd, ignoreErrors) {
-  capture(cmd, ignoreErrors)
+function run (cmd, treatStderrAsFailure = true) {
+  capture(cmd, treatStderrAsFailure)
 }
 
 // Ask a question in terminal and return the response.
 function prompt (question) {
   print(`${BOLD}${CYAN}?${RESET} ${BOLD}${question}${RESET} `)
 
-  const child = spawnSync('bash', ['-c', 'read answer && echo $answer'], {
+  const { stdout } = spawnSync('bash', ['-c', 'read answer && echo $answer'], {
+    encoding: 'utf8',
     stdio: ['inherit']
   })
 
-  return child.stdout.toString()
+  return stdout
 }
 
 // Ask whether to continue and otherwise exit the process.
@@ -54,25 +55,49 @@ function checkpoint (question) {
 }
 
 // Run a command and capture its output to return it to the caller.
-function capture (cmd, ignoreErrors = false) {
+function capture (cmd, treatStderrAsFailure = true) {
   if (flags.debug) {
     log(`${GRAY}> ${cmd}${RESET}`)
   }
 
-  const opts = {
-    encoding: 'utf8',
-    // execSync will only return the value of STDOUT.
-    // The easiest way to get access STDERR is not set `stdio`, which will force STDERR to be piped to `process.stderr`
-    stdio: ignoreErrors ? 'pipe' : undefined
+  const result = spawnSync(cmd, { encoding: 'utf8', shell: true })
+
+  if (result.error) throw result.error
+  if (result.status !== 0) {
+    const err = new Error(`Command failed: ${cmd}\n${result.stderr}`)
+    for (const [k, v] of Object.entries(result)) {
+      err[k] = v
+    }
+    throw err
   }
 
-  const output = execSync(cmd, opts).trim()
+  const stdout = result.stdout.trim()
+  const stderr = result.stderr.trim()
 
   if (flags.debug) {
-    log(output)
+    log(stdout)
+    if (stderr) {
+      if (flags['no-abort-on-error']) {
+        log(`${RED}${stderr}${RESET}`)
+      } else {
+        fatal(
+          stderr,
+          'Aborting due to error! Use --no-abort-on-error to ignore and continue.'
+        )
+      }
+    }
+  } else if (treatStderrAsFailure && stderr) {
+    if (flags['no-abort-on-error']) {
+      log(`${RED}${stderr}${RESET}`)
+    } else {
+      fatal(
+        stderr,
+        'Aborting due to error! Use --no-abort-on-error to ignore and continue.'
+      )
+    }
   }
 
-  return output
+  return stdout
 }
 
 // Start an operation and show a spinner until it reports as passing or failing.

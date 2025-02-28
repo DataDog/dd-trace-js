@@ -10,7 +10,7 @@ const { capture, fatal, run } = require('./terminal')
 // Check that the `git` CLI is installed.
 function checkGit () {
   try {
-    run('git --version', true)
+    run('git --version', false)
   } catch (e) {
     fatal(
       'The "git" CLI could not be found.',
@@ -22,7 +22,7 @@ function checkGit () {
 // Check that the `branch-diff` CLI is installed.
 function checkBranchDiff () {
   try {
-    run('branch-diff --version', true)
+    run('branch-diff --version', false)
   } catch (e) {
     const link = [
       'https://datadoghq.atlassian.net/wiki/spaces/DL/pages/3125511269/Node.js+Tracer+Release+Process',
@@ -66,7 +66,7 @@ function checkGitHub () {
   }
 
   try {
-    run('gh --version', true)
+    run('gh --version', false)
   } catch (e) {
     fatal(
       'The "gh" CLI could not be found.',

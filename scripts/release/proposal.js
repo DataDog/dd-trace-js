@@ -65,7 +65,7 @@ try {
   start('Determine version increment')
 
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
-  const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x master`, false)
+  const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x master`)
   const isMinor = flags.minor || (!flags.patch && lineDiff.includes('SEMVER-MINOR'))
   const newVersion = isMinor
     ? `${releaseLine}.${DD_MINOR + 1}.0`
@@ -82,7 +82,7 @@ try {
 
   try {
     // Pull latest changes in case the release was started by someone else.
-    run(`git remote show origin | grep v${newVersion} && git pull --ff-only`)
+    run(`git remote show origin | grep v${newVersion} && git pull --ff-only`, false)
   } catch (e) {
     // Either there is no remote to pull from or the local and remote branches
     // have diverged. In both cases we ignore the error and will just use our
@@ -94,7 +94,7 @@ try {
   start('Check for new changes')
 
   // Get the hashes of the last version and the commits to add.
-  const lastCommit = capture('git log -1 --pretty=%B').trim()
+  const lastCommit = capture('git log -1 --pretty=%B')
   const proposalDiff = capture(`${diffCmd} --format=sha --reverse v${newVersion}-proposal master`)
     .replace(/\n/g, ' ').trim()
 
@@ -113,7 +113,7 @@ try {
 
     // Cherry pick all new commits to the proposal branch.
     try {
-      run(`echo "${proposalDiff}" | xargs git cherry-pick`, true)
+      run(`echo "${proposalDiff}" | xargs git cherry-pick`, false)
 
       pass()
     } catch (err) {
@@ -147,7 +147,7 @@ try {
 
   // Create or edit the PR. This will also automatically output a link to the PR.
   try {
-    run(`gh pr create -d -B v${releaseLine}.x -t "v${newVersion} proposal" -F ${notesFile}`)
+    run(`gh pr create -d -B v${releaseLine}.x -t "v${newVersion} proposal" -F ${notesFile}`, false)
   } catch (e) {
     // PR already exists so update instead.
     // TODO: Keep existing non-release-notes PR description if there is one.
