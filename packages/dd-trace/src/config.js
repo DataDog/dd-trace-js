@@ -562,7 +562,6 @@ class Config {
     this._setValue(defaults, 'telemetry.logCollection', true)
     this._setValue(defaults, 'telemetry.metrics', true)
     this._setValue(defaults, 'traceEnabled', true)
-    this._setValue(defaults, 'traceExperimentalEnabled', false)
     this._setValue(defaults, 'traceId128BitGenerationEnabled', true)
     this._setValue(defaults, 'traceId128BitLoggingEnabled', true)
     this._setValue(defaults, 'tracePropagationExtractFirst', false)
@@ -716,19 +715,8 @@ class Config {
     const env = setHiddenProperty(this, '_env', {})
     setHiddenProperty(this, '_envUnprocessed', {})
 
-    this._setBoolean(env, 'traceExperimentalEnabled', DD_TRACE_EXPERIMENTAL_ENABLED)
-
-    // TODO: For the next major release, always pass true for parseSpaceSeparatedTags
-    // & remove the experimental feature flag from it
-    const otelResourceAttributes = handleOtel(OTEL_RESOURCE_ATTRIBUTES)
-    if (this._env.traceExperimentalEnabled || this._defaults.traceExperimentalEnabled) {
-      parseSpaceSeparatedTags(tags, otelResourceAttributes)
-      parseSpaceSeparatedTags(tags, DD_TAGS)
-    } else {
-      tagger.add(tags, otelResourceAttributes)
-      tagger.add(tags, DD_TAGS)
-    }
-
+    parseSpaceSeparatedTags(tags, handleOtel(OTEL_RESOURCE_ATTRIBUTES))
+    parseSpaceSeparatedTags(tags, DD_TAGS)
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
