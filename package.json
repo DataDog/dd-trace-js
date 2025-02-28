@@ -15,6 +15,7 @@
     "lint:fix": "node scripts/check_licenses.js && eslint . --max-warnings 0 --fix && yarn audit",
     "lint:inspect": "npx @eslint/config-inspector@latest",
     "release:proposal": "node scripts/release/proposal",
+    "release:status": "node scripts/release/status",
     "services": "node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",
     "test": "SERVICES=* yarn services && mocha --expose-gc 'packages/dd-trace/test/setup/node.js' 'packages/*/test/**/*.spec.js'",
     "test:appsec": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" --exclude \"packages/dd-trace/test/appsec/**/*.plugin.spec.js\" \"packages/dd-trace/test/appsec/**/*.spec.js\"",
