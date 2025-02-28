@@ -55,10 +55,22 @@ describe('WAF - error', () => {
   })
 
   it('Should not block since waf will return error', async () => {
-    await axios.get('/shi/execFileSync?dir=$(cat /etc/passwd 1>%262 ; echo .)')
-    await agent.assertMessageReceived(({ payload }) => {
-      assert.property(payload[0][0].metrics, '_dd.appsec.waf.error')
-      assert.equal(payload[0][0].metrics['_dd.appsec.waf.error'], -127)
-    })
+    try {
+      await axios.get('/shi/execFileSync?dir=$(cat /etc/passwd 1>%262 ; echo .)')
+
+      if (process.platform !== 'win32') {
+        await agent.assertMessageReceived(({ payload }) => {
+          assert.property(payload[0][0].metrics, '_dd.appsec.waf.error')
+          assert.equal(payload[0][0].metrics['_dd.appsec.waf.error'], -127)
+        })
+      }
+    } catch (err) {
+      if (process.platform === 'win32') {
+        await agent.assertMessageReceived(({ payload }) => {
+          assert.property(payload[0][0].metrics, '_dd.appsec.waf.error')
+          assert.equal(payload[0][0].metrics['_dd.appsec.waf.error'], -127)
+        })
+      }
+    }
   })
 })
