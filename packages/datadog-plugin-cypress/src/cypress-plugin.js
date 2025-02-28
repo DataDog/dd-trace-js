@@ -35,7 +35,10 @@ const {
   TEST_RETRY_REASON,
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   TEST_MANAGEMENT_IS_QUARANTINED,
-  TEST_MANAGEMENT_ENABLED
+  TEST_MANAGEMENT_ENABLED,
+  TAG_EARLY_FLAKE_DETECTION,
+  TAG_AUTO_TEST_RETRIES,
+  TAG_TEST_IMPACT_ANALYSIS
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -459,6 +462,13 @@ class CypressPlugin {
           [TEST_SESSION_NAME]: testSessionName
         }
       }
+      metadataTags.test = {
+        ...metadataTags.test,
+        [TAG_TEST_IMPACT_ANALYSIS]: this.isSuitesSkippingEnabled ? 'true' : 'false',
+        [TAG_EARLY_FLAKE_DETECTION]: this.isEarlyFlakeDetectionEnabled ? 'true' : 'false',
+        [TAG_AUTO_TEST_RETRIES]: this.isFlakyTestRetriesEnabled ? 'true' : 'false'
+      }
+
       this.tracer._tracer._exporter.setMetadataTags(metadataTags)
     }
 
