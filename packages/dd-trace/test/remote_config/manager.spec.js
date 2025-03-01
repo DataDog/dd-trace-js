@@ -76,7 +76,7 @@ describe('RemoteConfigManager', () => {
 
     expect(rc.scheduler).to.equal(scheduler)
 
-    expect(rc.url).to.deep.equal(config.url)
+    expect(rc.url).to.equal(config.url)
 
     expect(rc.state).to.deep.equal({
       client: {

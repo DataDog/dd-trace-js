@@ -163,7 +163,7 @@ suiteDescribe('runtimeMetrics', () => {
       runtimeMetrics.start(config)
 
       expect(Client).to.have.been.calledWithMatch({
-        metricsProxyUrl: new URL('http://localhost:8126'),
+        metricsProxyUrl: 'http://localhost:8126',
         host: 'localhost',
         tags: [
           'str:bar',
@@ -179,7 +179,7 @@ suiteDescribe('runtimeMetrics', () => {
       runtimeMetrics.start(config)
 
       expect(Client).to.have.been.calledWithMatch({
-        metricsProxyUrl: new URL('http://[::1]:8126'),
+        metricsProxyUrl: 'http://[::1]:8126',
         host: 'localhost',
         tags: [
           'str:bar',

@@ -86,6 +86,6 @@ describe('OTel Span Context', () => {
       tracestate
     })
 
-    expect(context.traceState.serialize()).to.equal('dd=foo:bar')
+    expect(context.traceState).to.equal('dd=foo:bar')
   })
 })
