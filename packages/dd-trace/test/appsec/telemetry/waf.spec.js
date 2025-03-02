@@ -57,7 +57,11 @@ describe('Appsec Waf Telemetry metrics', () => {
           event_rules_version: rulesVersion,
           request_blocked: false,
           rule_triggered: false,
-          waf_timeout: false
+          waf_timeout: false,
+          waf_error: false,
+          rate_limited: false,
+          input_truncated: false,
+          block_failure: false
         })
       })
 
@@ -74,7 +78,11 @@ describe('Appsec Waf Telemetry metrics', () => {
           event_rules_version: rulesVersion,
           request_blocked: true,
           rule_triggered: true,
-          waf_timeout: true
+          waf_timeout: true,
+          waf_error: false,
+          rate_limited: false,
+          input_truncated: false,
+          block_failure: false
         })
       })
 
@@ -93,7 +101,11 @@ describe('Appsec Waf Telemetry metrics', () => {
           event_rules_version: rulesVersion,
           request_blocked: false,
           rule_triggered: true,
-          waf_timeout: false
+          waf_timeout: false,
+          waf_error: false,
+          rate_limited: false,
+          input_truncated: false,
+          block_failure: false
         })
       })
 
@@ -120,7 +132,11 @@ describe('Appsec Waf Telemetry metrics', () => {
           event_rules_version: rulesVersion,
           request_blocked: true,
           rule_triggered: true,
-          waf_timeout: true
+          waf_timeout: true,
+          waf_error: false,
+          rate_limited: false,
+          input_truncated: false,
+          block_failure: false
         })
       })
 
@@ -179,21 +195,40 @@ describe('Appsec Waf Telemetry metrics', () => {
 
     describe('incWafInitMetric', () => {
       it('should increment waf.init metric', () => {
-        appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion)
+        appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, true)
 
         expect(count).to.have.been.calledOnceWithExactly('waf.init', {
           waf_version: wafVersion,
-          event_rules_version: rulesVersion
+          event_rules_version: rulesVersion,
+          success: true
         })
         expect(inc).to.have.been.calledOnce
+      })
+
+      it('should increment waf.init and waf.config_errors metrics when init is not successful', () => {
+        appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, false)
+
+        expect(count).to.have.been.calledTwice
+        expect(inc).to.have.been.calledTwice
+
+        expect(count).to.have.been.calledWithExactly('waf.init', {
+          waf_version: wafVersion,
+          event_rules_version: rulesVersion,
+          success: false
+        })
+
+        expect(count).to.have.been.calledWithExactly('waf.config_errors', {
+          waf_version: wafVersion,
+          event_rules_version: rulesVersion
+        })
       })
 
       it('should increment waf.init metric multiple times', () => {
         sinon.restore()
 
-        appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion)
-        appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion)
-        appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion)
+        appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, true)
+        appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, true)
+        appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, true)
 
         const { metrics } = appsecNamespace.toJSON()
         expect(metrics.series.length).to.be.eq(1)
@@ -207,21 +242,40 @@ describe('Appsec Waf Telemetry metrics', () => {
 
     describe('incWafUpdatesMetric', () => {
       it('should increment waf.updates metric', () => {
-        appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion)
+        appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion, true)
 
         expect(count).to.have.been.calledOnceWithExactly('waf.updates', {
           waf_version: wafVersion,
-          event_rules_version: rulesVersion
+          event_rules_version: rulesVersion,
+          success: true
         })
         expect(inc).to.have.been.calledOnce
+      })
+
+      it.only('should increment waf.updates and waf.config_errors metrics when updates is not successful', () => {
+        appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion, false)
+
+        expect(count).to.have.been.calledTwice
+        expect(inc).to.have.been.calledTwice
+
+        expect(count).to.have.been.calledWithExactly('waf.updates', {
+          waf_version: wafVersion,
+          event_rules_version: rulesVersion,
+          success: false
+        })
+
+        expect(count).to.have.been.calledWithExactly('waf.config_errors', {
+          waf_version: wafVersion,
+          event_rules_version: rulesVersion
+        })
       })
 
       it('should increment waf.updates metric multiple times', () => {
         sinon.restore()
 
-        appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion)
-        appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion)
-        appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion)
+        appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion, true)
+        appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion, true)
+        appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion, true)
 
         const { metrics } = appsecNamespace.toJSON()
         expect(metrics.series.length).to.be.eq(1)
@@ -250,7 +304,11 @@ describe('Appsec Waf Telemetry metrics', () => {
           rule_triggered: false,
           waf_timeout: true,
           waf_version: wafVersion,
-          event_rules_version: rulesVersion
+          event_rules_version: rulesVersion,
+          waf_error: false,
+          block_failure: false,
+          input_truncated: false,
+          rate_limited: false,
         })
       })
 

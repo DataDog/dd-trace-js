@@ -58,7 +58,7 @@ function updateRaspRequestsMetricTags (metrics, req, raspRule) {
 
   if (!enabled) return
 
-  trackRaspMetrics(metrics, raspRule)
+  trackRaspMetrics(store, metrics, raspRule)
 }
 
 function updateWafRequestsMetricTags (metrics, req) {

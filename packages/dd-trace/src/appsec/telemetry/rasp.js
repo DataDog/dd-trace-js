@@ -26,7 +26,7 @@ function addRaspRequestMetrics (store, { duration, durationExt, wafTimeout, erro
   }
 }
 
-function trackRaspMetrics (metrics, raspRule) {
+function trackRaspMetrics (store, metrics, raspRule) {
   const versionsTags = getVersionsTags(metrics.wafVersion, metrics.rulesVersion)
 
   const tags = { rule_type: raspRule.type, ...versionsTags }

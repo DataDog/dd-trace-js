@@ -1189,7 +1189,7 @@ describe('AppSec Index', function () {
       appsecNamespace.reset()
     })
 
-    it('should increment waf.init metric', () => {
+    it('should increment waf.init and waf.updates metric', () => {
       config.telemetry.enabled = true
       config.telemetry.metrics = true
 
@@ -1197,8 +1197,12 @@ describe('AppSec Index', function () {
 
       const metrics = appsecNamespace.metrics.toJSON()
 
-      expect(metrics.series.length).to.equal(1)
+      expect(metrics.series.length).to.equal(2)
       expect(metrics.series[0].metric).to.equal('waf.init')
+      expect(metrics.series[0].tags).to.include('success:true')
+
+      expect(metrics.series[1].metric).to.equal('waf.updates')
+      expect(metrics.series[1].tags).to.include('success:true')
     })
 
     it('should not increment waf.init metric if metrics are not enabled', () => {

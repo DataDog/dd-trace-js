@@ -101,7 +101,7 @@ describe('reporter', () => {
     }
 
     it('should add some entries to metricsQueue', () => {
-      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules)
+      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules, true)
 
       expect(Reporter.metricsQueue.get('_dd.appsec.waf.version')).to.be.eq(wafVersion)
       expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.loaded')).to.be.eq(3)
@@ -111,9 +111,9 @@ describe('reporter', () => {
     })
 
     it('should call incrementWafInitMetric', () => {
-      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules)
+      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules, true)
 
-      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion)
+      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion, true)
     })
 
     it('should not fail with undefined arguments', () => {
@@ -121,12 +121,12 @@ describe('reporter', () => {
       const rulesVersion = undefined
       const diagnosticsRules = undefined
 
-      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules)
+      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules, true)
 
       expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.loaded')).to.be.eq(0)
       expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.error_count')).to.be.eq(0)
 
-      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion)
+      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion, true)
     })
   })
 
@@ -322,25 +322,24 @@ describe('reporter', () => {
 
     it('should not add manual.keep when rate limit is reached', (done) => {
       const addTags = span.addTags
-      const params = {}
 
-      expect(Reporter.reportAttack('', params)).to.not.be.false
-      expect(Reporter.reportAttack('', params)).to.not.be.false
-      expect(Reporter.reportAttack('', params)).to.not.be.false
+      expect(Reporter.reportAttack('')).to.not.be.false
+      expect(Reporter.reportAttack('')).to.not.be.false
+      expect(Reporter.reportAttack('')).to.not.be.false
 
       expect(prioritySampler.setPriority).to.have.callCount(3)
 
       Reporter.setRateLimit(1)
 
-      expect(Reporter.reportAttack('', params)).to.not.be.false
+      expect(Reporter.reportAttack('')).to.not.be.false
       expect(addTags.getCall(3).firstArg).to.have.property('appsec.event').that.equals('true')
       expect(prioritySampler.setPriority).to.have.callCount(4)
-      expect(Reporter.reportAttack('', params)).to.not.be.false
+      expect(Reporter.reportAttack('')).to.not.be.true
       expect(addTags.getCall(4).firstArg).to.have.property('appsec.event').that.equals('true')
       expect(prioritySampler.setPriority).to.have.callCount(4)
 
       setTimeout(() => {
-        expect(Reporter.reportAttack('', params)).to.not.be.false
+        expect(Reporter.reportAttack('')).to.not.be.false
         expect(prioritySampler.setPriority).to.have.callCount(5)
         done()
       }, 1020)
@@ -349,7 +348,7 @@ describe('reporter', () => {
     it('should not overwrite origin tag', () => {
       span.context()._tags = { '_dd.origin': 'tracer' }
 
-      const result = Reporter.reportAttack('[]', {})
+      const result = Reporter.reportAttack('[]')
       expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
 

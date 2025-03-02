@@ -166,7 +166,8 @@ describe('WAF Manager', () => {
       waf.update(rules)
 
       expect(DDWAF.prototype.update).to.be.calledOnceWithExactly(rules)
-      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '1.0.0')
+      expect(Reporter.reportWafUpdate).to.be.calledTwice
+      expect(Reporter.reportWafUpdate).to.be.calledWith(wafVersion, '1.0.0', true)
     })
 
     it('should call Reporter.reportWafUpdate', () => {
@@ -190,7 +191,9 @@ describe('WAF Manager', () => {
 
       waf.update(rules)
 
-      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '4.2.0')
+      expect(Reporter.reportWafUpdate).to.be.calledTwice;
+      expect(Reporter.reportWafUpdate.firstCall.args).to.deep.equal([wafVersion, '1.0.0', true])
+      expect(Reporter.reportWafUpdate.secondCall.args).to.deep.equal([wafVersion, '4.2.0', true])
     })
   })
 

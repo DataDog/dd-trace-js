@@ -112,6 +112,10 @@ function reportMetrics (metrics, raspRule) {
     rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
   }
 
+  if (metricsQueue.size) {
+    metrics.rateLimited = true
+  }
+
   if (raspRule) {
     updateRaspRequestsMetricTags(metrics, store.req, raspRule)
   } else {

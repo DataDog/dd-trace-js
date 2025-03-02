@@ -9,7 +9,6 @@ const contexts = new WeakMap()
 class WAFManager {
   constructor (rules, config) {
     this.config = config
-    this.loadStatus = true
     this.wafTimeout = config.wafTimeout
     this.ddwaf = this._loadDDWAF(rules)
     this.ddwafVersion = this.ddwaf.constructor.version()
@@ -17,8 +16,8 @@ class WAFManager {
 
     const diagnosticsRules = this.ddwaf.diagnostics.rules || {}
 
-    Reporter.reportWafInit(this.ddwafVersion, this.rulesVersion, diagnosticsRules, this.loadStatus)
-    Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion, this.loadStatus)
+    Reporter.reportWafInit(this.ddwafVersion, this.rulesVersion, diagnosticsRules, true)
+    Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion, true)
   }
 
   _loadDDWAF (rules) {
@@ -31,7 +30,9 @@ class WAFManager {
     } catch (err) {
       log.error('[ASM] AppSec could not load native package. In-app WAF features will not be available.')
 
-      this.loadStatus = false
+      Reporter.reportWafInit('v.0.0.0', 'v.0.0.0', {}, false)
+      Reporter.reportWafUpdate('v.0.0.0', 'v.0.0.0', false)
+
       throw err
     }
   }
@@ -61,13 +62,13 @@ class WAFManager {
       log.error('[ASM] Could not updates WAF rules.')
 
       status = false
-    }
+    } finally {
+      if (this.ddwaf.diagnostics.ruleset_version) {
+        this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
+      }
 
-    if (this.ddwaf.diagnostics.ruleset_version) {
-      this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
+      Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion, status)
     }
-
-    Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion, status)
   }
 
   destroy () {
