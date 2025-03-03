@@ -12,7 +12,7 @@ const telemetryMetrics = require('../../telemetry/metrics')
 
 const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
-function increaseSdkEventMetric(eventType, version) {
+function increaseSdkEventMetric (eventType, version) {
   const tags = {
     event_type: eventType,
     sdk_version: version
@@ -42,7 +42,6 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
   const login = user.login ?? user.id
 
   metadata = { 'usr.login': login, ...metadata }
-
 
   trackEvent('users.login.success', metadata, 'trackUserLoginSuccessEvent', rootSpan)
 
@@ -78,7 +77,7 @@ function trackUserLoginSuccessV2 (tracer, login, user, metadata) {
     if (user.id) {
       wafData.id = user.id
       setUserTags(user, rootSpan)
-      metadata['usr'] = user
+      metadata.usr = user
     }
   }
 

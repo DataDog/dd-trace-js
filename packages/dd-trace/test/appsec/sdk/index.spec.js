@@ -1,7 +1,6 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
-const { trackUserLoginSuccessV2, trackUserLoginFailureV2 } = require('../../../src/appsec/sdk/track_event')
 
 describe('Appsec SDK', () => {
   let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent

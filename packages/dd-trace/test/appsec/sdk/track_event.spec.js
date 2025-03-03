@@ -316,8 +316,6 @@ describe('track_event', () => {
       })
 
       it('should increase metrics for "sdk.event" for v1', () => {
-        const user = { id: 'user_id', login: 'user_login' }
-
         trackUserLoginFailureEvent(tracer, 'user_id', true)
 
         expect(count).to.have.been.calledOnceWithExactly('sdk.event', {
@@ -388,8 +386,6 @@ describe('track_event', () => {
       })
 
       it('should increase metrics for "sdk.event" for v1', () => {
-        const user = { id: 'user_id', login: 'user_login' }
-
         trackCustomEvent(tracer, 'custom_event')
 
         expect(count).to.have.been.calledOnceWithExactly('sdk.event', {
