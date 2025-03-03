@@ -337,20 +337,21 @@ function getGitMetadata (ciMetadata) {
   }
 
   const entries = [
-    [GIT_REPOSITORY_URL],
+    GIT_REPOSITORY_URL,
     filterSensitiveInfoFromRepository(repositoryUrl || sanitizedExec('git', ['ls-remote', '--get-url'])),
-    [GIT_COMMIT_AUTHOR_DATE], authorDate,
-    [GIT_COMMIT_AUTHOR_NAME], ciAuthorName || authorName,
-    [GIT_COMMIT_AUTHOR_EMAIL], ciAuthorEmail || authorEmail,
-    [GIT_COMMIT_COMMITTER_DATE], committerDate,
-    [GIT_COMMIT_COMMITTER_NAME], committerName,
-    [GIT_COMMIT_COMMITTER_EMAIL], committerEmail,
-    [GIT_TAG], tag
+    GIT_COMMIT_AUTHOR_DATE, authorDate,
+    GIT_COMMIT_AUTHOR_NAME, ciAuthorName || authorName,
+    GIT_COMMIT_AUTHOR_EMAIL, ciAuthorEmail || authorEmail,
+    GIT_COMMIT_COMMITTER_DATE, committerDate,
+    GIT_COMMIT_COMMITTER_NAME, committerName,
+    GIT_COMMIT_COMMITTER_EMAIL, committerEmail,
+    GIT_TAG, tag
   ]
 
   for (let i = 0; i < entries.length; i += 2) {
-    if (entries[i + 1]) {
-      tags[entries[i]] = entries[i + 1]
+    const value = entries[i + 1]
+    if (value) {
+      tags[entries[i]] = value
     }
   }
 

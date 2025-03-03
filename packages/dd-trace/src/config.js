@@ -1386,10 +1386,8 @@ function handleOtel (tagString) {
 }
 
 function parseSpaceSeparatedTags (tagString) {
-  if (tagString) {
-    if (!tagString.includes(',')) {
-      tagString = tagString.replace(/\s+/g, ',')
-    }
+  if (tagString && !tagString.includes(',')) {
+    tagString = tagString.replace(/\s+/g, ',')
   }
   return tagString
 }
