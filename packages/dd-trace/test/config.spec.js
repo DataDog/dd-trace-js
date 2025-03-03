@@ -730,11 +730,55 @@ describe('Config', () => {
   it('should ignore empty strings', () => {
     process.env.DD_TAGS = 'service:,env:,version:'
 
-    const config = new Config()
+    let config = new Config()
 
     expect(config).to.have.property('service', 'node')
     expect(config).to.have.property('env', undefined)
     expect(config).to.have.property('version', '')
+
+    process.env.DD_TAGS = 'service: env: version:'
+
+    config = new Config()
+
+    expect(config).to.have.property('service', 'node')
+    expect(config).to.have.property('env', undefined)
+    expect(config).to.have.property('version', '')
+  })
+
+  it('should support space separated tags when experimental mode enabled', () => {
+    process.env.DD_TAGS = 'key1:value1 key2:value2'
+
+    let config = new Config()
+
+    expect(config.tags).to.include({ key1: 'value1', key2: 'value2' })
+
+    process.env.DD_TAGS = 'env:test aKey:aVal bKey:bVal cKey:'
+
+    config = new Config()
+
+    expect(config.tags).to.have.property('env', 'test')
+    expect(config.tags).to.have.property('aKey', 'aVal')
+    expect(config.tags).to.have.property('bKey', 'bVal')
+    expect(config.tags).to.have.property('cKey', '')
+
+    process.env.DD_TAGS = 'env:test,aKey:aVal bKey:bVal cKey:'
+
+    config = new Config()
+    expect(config.tags).to.have.property('env', 'test')
+    expect(config.tags).to.have.property('aKey', 'aVal bKey:bVal cKey:')
+
+    process.env.DD_TAGS = 'a:b:c:d'
+
+    config = new Config()
+
+    expect(config.tags).to.have.property('a', 'b:c:d')
+
+    process.env.DD_TAGS = 'a,1'
+
+    config = new Config()
+
+    expect(config.tags).to.have.property('a', '')
+    expect(config.tags).to.have.property('1', '')
   })
 
   it('should read case-insensitive booleans from environment variables', () => {

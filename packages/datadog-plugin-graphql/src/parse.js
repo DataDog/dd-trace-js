@@ -10,9 +10,7 @@ class GraphQLParsePlugin extends TracingPlugin {
     this.startSpan('graphql.parse', {
       service: this.config.service,
       type: 'graphql',
-      meta: {
-        'graphql.source': ''
-      }
+      meta: {}
     })
   }
 
