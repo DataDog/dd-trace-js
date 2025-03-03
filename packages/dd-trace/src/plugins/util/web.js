@@ -475,9 +475,9 @@ function addRequestTags (context, spanType) {
 function addResponseTags (context) {
   const { req, res, paths, span, inferredProxySpan } = context
 
-  if (paths.length > 0) {
-    const pathStr = paths.join('')
-    if (pathStr.length > 0) span.setTag(HTTP_ROUTE, paths.join(''))
+  const route = paths.join('')
+  if (route) {
+    span.setTag(HTTP_ROUTE, route)
   }
 
   span.addTags({
