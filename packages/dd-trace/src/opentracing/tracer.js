@@ -16,7 +16,7 @@ const log = require('../log')
 const runtimeMetrics = require('../runtime_metrics')
 const getExporter = require('../exporter')
 const SpanContext = require('./span_context')
-const { spanFilter } = require('../span_filter')
+const { SpanFilter } = require('../span_filter')
 
 const REFERENCE_CHILD_OF = 'child_of'
 const REFERENCE_FOLLOWS_FROM = 'follows_from'
@@ -47,6 +47,7 @@ class DatadogTracer {
     if (config.reportHostname) {
       this._hostname = os.hostname()
     }
+    this._spanFilter = new SpanFilter(this)
   }
 
   startSpan (name, options = {}) {
@@ -66,7 +67,7 @@ class DatadogTracer {
 
     options.tags = tags
 
-    if (this._config.traceLevel !== 'debug') {
+    if (this._config.traceLevel !== 'debug' || this._config.spanFilters !== '') {
       const traceLevelSpan = this._useTraceLevel(parent, options)
       if (traceLevelSpan) {
         return traceLevelSpan
@@ -124,14 +125,14 @@ class DatadogTracer {
 
   _useTraceLevel (parent, options) {
     // service trace level indicates service exit / entry spans only
-    if (this._config.traceLevel === 'service') {
-      if (!spanFilter.shouldKeepSpan(options.tags)) {
-        return new NoopSpan(this, parent, { keepParent: true })
-      }
-    } else {
-      log.warn(`Received invalid Datadog Trace Level Configuration: ${this._config.traceLevel}`)
-      return null
+    // if (this._config.traceLevel === 'service') {
+    if (!this._spanFilter.shouldKeepSpan(options.tags)) {
+      return new NoopSpan(this, parent, { keepParent: true })
     }
+    // } else {
+    //   log.warn(`Received invalid Datadog Trace Level Configuration: ${this._config.traceLevel}`)
+    //   return null
+    // }
   }
 }
 
