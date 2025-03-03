@@ -305,7 +305,11 @@ class MetricsAggregationClient {
   }
 }
 
-// This is a simplified user-facing proxy to the underlying DogStatsDClient instance
+/**
+ * This is a simplified user-facing proxy to the underlying DogStatsDClient instance
+ *
+ * @implements {DogStatsD}
+ */
 class CustomMetrics {
   constructor (config) {
     const clientConfig = DogStatsDClient.generateClientConfig(config)
