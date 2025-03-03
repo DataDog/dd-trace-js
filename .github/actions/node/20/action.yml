@@ -1,8 +1,0 @@
-name: Node 20
-description: Install Node 20
-runs:
-  using: composite
-  steps:
-    - uses: actions/setup-node@v4
-      with:
-        node-version: '20'

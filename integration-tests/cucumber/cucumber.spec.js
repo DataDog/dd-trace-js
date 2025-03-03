@@ -42,7 +42,10 @@ const {
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
-  TEST_RETRY_REASON
+  TEST_RETRY_REASON,
+  DD_TEST_IS_USER_PROVIDED_SERVICE,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
@@ -206,6 +209,7 @@ versions.forEach(version => {
                   assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
                   assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
                   assert.equal(meta[TEST_SOURCE_FILE].startsWith('ci-visibility/features'), true)
+                  assert.equal(meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
                   // Can read DD_TAGS
                   assert.propertyVal(meta, 'test.customtag', 'customvalue')
                   assert.propertyVal(meta, 'test.customtag2', 'customvalue2')
@@ -228,7 +232,8 @@ versions.forEach(version => {
                 env: {
                   ...envVars,
                   DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-                  DD_TEST_SESSION_NAME: 'my-test-session'
+                  DD_TEST_SESSION_NAME: 'my-test-session',
+                  DD_SERVICE: undefined
                 },
                 stdio: 'pipe'
               }
@@ -1582,7 +1587,7 @@ versions.forEach(version => {
           })
           // Dynamic instrumentation only supported from >=8.0.0
           context('dynamic instrumentation', () => {
-            it('does not activate if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
+            it('does not activate if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
               receiver.setSettings({
                 flaky_test_retries_enabled: true,
                 di_enabled: true
@@ -1616,7 +1621,10 @@ versions.forEach(version => {
                 './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature --retry 1',
                 {
                   cwd,
-                  env: envVars,
+                  env: {
+                    ...envVars,
+                    DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false'
+                  },
                   stdio: 'pipe'
                 }
               )
@@ -1661,10 +1669,7 @@ versions.forEach(version => {
                 './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature --retry 1',
                 {
                   cwd,
-                  env: {
-                    ...envVars,
-                    DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
-                  },
+                  env: envVars,
                   stdio: 'pipe'
                 }
               )
@@ -1743,10 +1748,7 @@ versions.forEach(version => {
                 './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature --retry 1',
                 {
                   cwd,
-                  env: {
-                    ...envVars,
-                    DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
-                  },
+                  env: envVars,
                   stdio: 'pipe'
                 }
               )
@@ -1795,10 +1797,7 @@ versions.forEach(version => {
                 './node_modules/.bin/cucumber-js ci-visibility/features-di/test-not-hit-breakpoint.feature --retry 1',
                 {
                   cwd,
-                  env: {
-                    ...envVars,
-                    DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
-                  },
+                  env: envVars,
                   stdio: 'pipe'
                 }
               )
@@ -1994,6 +1993,125 @@ versions.forEach(version => {
             done()
           }).catch(done)
         })
+      })
+    })
+
+    it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', (done) => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          tests.forEach(test => {
+            assert.equal(test.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'true')
+          })
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_SERVICE: 'my-service'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    context('quarantine', () => {
+      beforeEach(() => {
+        receiver.setQuarantinedTests({
+          cucumber: {
+            suites: {
+              'ci-visibility/features-quarantine/quarantine.feature': {
+                tests: {
+                  'Say quarantine': {
+                    properties: {
+                      quarantined: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        })
+      })
+
+      const getTestAssertions = (isQuarantining) =>
+        receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const failedTest = events.find(event => event.type === 'test').content
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            if (isQuarantining) {
+              assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+            } else {
+              assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+            }
+
+            assert.equal(failedTest.resource, 'ci-visibility/features-quarantine/quarantine.feature.Say quarantine')
+
+            assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+            if (isQuarantining) {
+              assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+            } else {
+              assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+            }
+          })
+
+      const runTest = (done, isQuarantining, extraEnvVars) => {
+        const testAssertionsPromise = getTestAssertions(isQuarantining)
+
+        childProcess = exec(
+          './node_modules/.bin/cucumber-js ci-visibility/features-quarantine/*.feature',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              ...extraEnvVars
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.on('exit', exitCode => {
+          testAssertionsPromise.then(() => {
+            if (isQuarantining) {
+              // even though a test fails, the exit code is 1 because the test is quarantined
+              assert.equal(exitCode, 0)
+            } else {
+              assert.equal(exitCode, 1)
+            }
+            done()
+          }).catch(done)
+        })
+      }
+
+      it('can quarantine tests', (done) => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        runTest(done, true)
+      })
+
+      it('fails if quarantine is not enabled', (done) => {
+        receiver.setSettings({ test_management: { enabled: false } })
+
+        runTest(done, false)
+      })
+
+      it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        runTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
       })
     })
   })

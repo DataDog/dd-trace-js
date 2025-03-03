@@ -2,7 +2,7 @@
 
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { storage } = require('../../datadog-core')
-const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams/processor')
+const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams')
 
 class RheaConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'rhea' }
@@ -11,7 +11,7 @@ class RheaConsumerPlugin extends ConsumerPlugin {
     super(...args)
 
     this.addTraceSub('dispatch', ({ state }) => {
-      const span = storage.getStore().span
+      const span = storage('legacy').getStore().span
       span.setTag('amqp.delivery.state', state)
     })
   }

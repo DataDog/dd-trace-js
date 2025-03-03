@@ -40,16 +40,18 @@ const {
 } = require('../ci-visibility/telemetry')
 const { CI_PROVIDER_NAME, GIT_REPOSITORY_URL, GIT_COMMIT_SHA, GIT_BRANCH, CI_WORKSPACE_PATH } = require('./util/tags')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
+const getDiClient = require('../ci-visibility/dynamic-instrumentation')
 
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
+    this.fileLineToProbeId = new Map()
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
 
     this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone }) => {
       if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
-        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
         if (err) {
@@ -63,7 +65,7 @@ module.exports = class CiPlugin extends Plugin {
 
     this.addSub(`ci:${this.constructor.id}:test-suite:skippable`, ({ onDone }) => {
       if (!this.tracer._exporter?.getSkippableSuites) {
-        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites, itrCorrelationId) => {
         if (err) {
@@ -152,7 +154,7 @@ module.exports = class CiPlugin extends Plugin {
 
     this.addSub(`ci:${this.constructor.id}:known-tests`, ({ onDone }) => {
       if (!this.tracer._exporter?.getKnownTests) {
-        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getKnownTests(this.testConfiguration, (err, knownTests) => {
         if (err) {
@@ -161,6 +163,19 @@ module.exports = class CiPlugin extends Plugin {
           this.libraryConfig.isKnownTestsEnabled = false
         }
         onDone({ err, knownTests })
+      })
+    })
+
+    this.addSub(`ci:${this.constructor.id}:quarantined-tests`, ({ onDone }) => {
+      if (!this.tracer._exporter?.getQuarantinedTests) {
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
+      }
+      this.tracer._exporter.getQuarantinedTests(this.testConfiguration, (err, quarantinedTests) => {
+        if (err) {
+          log.error('Quarantined tests could not be fetched. %s', err.message)
+          this.libraryConfig.isQuarantinedTestsEnabled = false
+        }
+        onDone({ err, quarantinedTests })
       })
     })
   }
@@ -188,13 +203,12 @@ module.exports = class CiPlugin extends Plugin {
   configure (config, shouldGetEnvironmentData = true) {
     super.configure(config)
 
-    if (config.isTestDynamicInstrumentationEnabled && !this.di) {
-      const testVisibilityDynamicInstrumentation = require('../ci-visibility/dynamic-instrumentation')
-      this.di = testVisibilityDynamicInstrumentation
-    }
-
     if (!shouldGetEnvironmentData) {
       return
+    }
+
+    if (config.isTestDynamicInstrumentationEnabled && !this.di) {
+      this.di = getDiClient()
     }
 
     this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.id, this.config)
@@ -335,7 +349,22 @@ module.exports = class CiPlugin extends Plugin {
     })
   }
 
-  removeDiProbe (probeId) {
+  removeAllDiProbes () {
+    if (this.fileLineToProbeId.size === 0) {
+      return Promise.resolve()
+    }
+    log.debug('Removing all Dynamic Instrumentation probes')
+    return Promise.all(Array.from(this.fileLineToProbeId.keys())
+      .map((fileLine) => {
+        const [file, line] = fileLine.split(':')
+        return this.removeDiProbe({ file, line })
+      }))
+  }
+
+  removeDiProbe ({ file, line }) {
+    const probeId = this.fileLineToProbeId.get(`${file}:${line}`)
+    log.warn(`Removing probe from ${file}:${line}, with id: ${probeId}`)
+    this.fileLineToProbeId.delete(probeId)
     return this.di.removeProbe(probeId)
   }
 
@@ -346,8 +375,26 @@ module.exports = class CiPlugin extends Plugin {
       log.warn('Could not add breakpoint for dynamic instrumentation')
       return
     }
+    log.debug('Adding breakpoint for Dynamic Instrumentation')
+
+    this.testErrorStackIndex = stackIndex
+    const activeProbeKey = `${file}:${line}`
+
+    if (this.fileLineToProbeId.has(activeProbeKey)) {
+      log.warn('Probe already set for this line')
+      const oldProbeId = this.fileLineToProbeId.get(activeProbeKey)
+      return {
+        probeId: oldProbeId,
+        setProbePromise: Promise.resolve(),
+        stackIndex,
+        file,
+        line
+      }
+    }
 
     const [probeId, setProbePromise] = this.di.addLineProbe({ file, line }, this.onDiBreakpointHit.bind(this))
+
+    this.fileLineToProbeId.set(activeProbeKey, probeId)
 
     return {
       probeId,

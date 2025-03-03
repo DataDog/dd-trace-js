@@ -85,10 +85,6 @@ interface Tracer extends opentracing.Tracer {
    * span will finish when that callback is called.
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
-   *
-   * If the `orphanable` option is set to false, the function will not be traced
-   * unless there is already an active span or `childOf` option. Note that this
-   * option is deprecated and has been removed in version 4.0.
    */
   trace<T> (name: string, fn: (span: tracer.Span) => T): T;
   trace<T> (name: string, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T;
@@ -350,6 +346,12 @@ declare namespace tracer {
    */
   export interface TracerOptions {
     /**
+     * Used to disable APM Tracing when using standalone products
+     * @default true
+     */
+    apmTracingEnabled?: boolean
+
+    /**
      * Whether to enable trace ID injection in log records to be able to correlate
      * traces with logs.
      * @default false
@@ -532,6 +534,9 @@ declare namespace tracer {
       appsec?: {
         /**
          * Configuration of Standalone ASM mode
+         * Deprecated in favor of `apmTracingEnabled`.
+         *
+         * @deprecated
          */
         standalone?: {
           /**
@@ -659,13 +664,13 @@ declare namespace tracer {
          * *  'anonymous': will hash user IDs and user logins before collecting them
          * *  'anon': alias for 'anonymous'
          * *  'safe': deprecated alias for 'anonymous'
-         * 
+         *
          * *  'identification': will collect user IDs and logins without redaction
          * *  'ident': alias for 'identification'
          * *  'extended': deprecated alias for 'identification'
-         * 
+         *
          * *  'disabled': will not collect user IDs and logins
-         * 
+         *
          * Unknown values will be considered as 'disabled'
          * @default 'identification'
          */
@@ -817,43 +822,43 @@ declare namespace tracer {
   export interface DogStatsD {
     /**
      * Increments a metric by the specified value, optionally specifying tags.
-     * @param {string} stat The dot-separated metric name.
-     * @param {number} value The amount to increment the stat by.
-     * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
+     * @param stat The dot-separated metric name.
+     * @param value The amount to increment the stat by.
+     * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    increment(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+    increment(stat: string, value?: number, tags?: Record<string, string|number>): void
 
     /**
      * Decrements a metric by the specified value, optionally specifying tags.
-     * @param {string} stat The dot-separated metric name.
-     * @param {number} value The amount to decrement the stat by.
-     * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
+     * @param stat The dot-separated metric name.
+     * @param value The amount to decrement the stat by.
+     * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    decrement(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+    decrement(stat: string, value?: number, tags?: Record<string, string|number>): void
 
     /**
      * Sets a distribution value, optionally specifying tags.
-     * @param {string} stat The dot-separated metric name.
-     * @param {number} value The amount to increment the stat by.
-     * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
+     * @param stat The dot-separated metric name.
+     * @param value The amount to increment the stat by.
+     * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    distribution(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+    distribution(stat: string, value?: number, tags?: Record<string, string|number>): void
 
     /**
      * Sets a gauge value, optionally specifying tags.
-     * @param {string} stat The dot-separated metric name.
-     * @param {number} value The amount to increment the stat by.
-     * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
+     * @param stat The dot-separated metric name.
+     * @param value The amount to increment the stat by.
+     * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    gauge(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+    gauge(stat: string, value?: number, tags?: Record<string, string|number>): void
 
     /**
      * Sets a histogram value, optionally specifying tags.
-     * @param {string} stat The dot-separated metric name.
-     * @param {number} value The amount to increment the stat by.
-     * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
+     * @param stat The dot-separated metric name.
+     * @param value The amount to increment the stat by.
+     * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    histogram(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+    histogram(stat: string, value?: number, tags?: Record<string, string|number>): void
 
     /**
      * Forces any unsent metrics to be sent
@@ -875,7 +880,7 @@ declare namespace tracer {
 
     /**
      * Links a failed login event to the current trace.
-     * @param {string} userId The user id of the attemped login.
+     * @param {string} userId The user id of the attempted login.
      * @param {boolean} exists If the user id exists.
      * @param {[key: string]: string} metadata Custom fields to link to the login failure event.
      *
@@ -2229,6 +2234,11 @@ declare namespace tracer {
      * Specifies a regex that will redact sensitive source values in vulnerability reports.
      */
     redactionValuePattern?: string,
+
+    /**
+     * Allows to enable security controls.
+     */
+    securityControlsConfiguration?: string,
 
     /**
      * Specifies the verbosity of the sent telemetry. Default 'INFORMATION'

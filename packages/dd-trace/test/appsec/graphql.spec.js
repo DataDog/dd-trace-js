@@ -95,7 +95,7 @@ describe('GraphQL', () => {
   describe('onGraphqlStartResolve', () => {
     beforeEach(() => {
       sinon.stub(waf, 'run').returns([''])
-      sinon.stub(storage, 'getStore').returns({ req: {} })
+      sinon.stub(storage('legacy'), 'getStore').returns({ req: {} })
       sinon.stub(web, 'root').returns({})
       graphql.enable()
     })
@@ -131,7 +131,7 @@ describe('GraphQL', () => {
         user: [{ id: '1234' }]
       }
 
-      storage.getStore().req = undefined
+      storage('legacy').getStore().req = undefined
 
       startGraphqlResolve.publish({ context, resolverInfo })
 
@@ -160,7 +160,7 @@ describe('GraphQL', () => {
     const res = {}
 
     beforeEach(() => {
-      sinon.stub(storage, 'getStore').returns({ req, res })
+      sinon.stub(storage('legacy'), 'getStore').returns({ req, res })
 
       graphql.enable()
       graphqlMiddlewareChannel.start.publish({ req, res })

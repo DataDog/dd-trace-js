@@ -14,6 +14,69 @@ const DEFAULT_HEARTBEAT_INTERVAL = 60000
 
 let traceAgent
 
+describe('telemetry (proxy)', () => {
+  let telemetry
+  let proxy
+
+  beforeEach(() => {
+    telemetry = sinon.spy({
+      start () {},
+      stop () {},
+      updateIntegrations () {},
+      updateConfig () {},
+      appClosing () {}
+    })
+
+    proxy = proxyquire('../../src/telemetry', {
+      './telemetry': telemetry
+    })
+  })
+
+  it('should be noop when disabled', () => {
+    proxy.start()
+    proxy.updateIntegrations()
+    proxy.updateConfig([])
+    proxy.appClosing()
+    proxy.stop()
+
+    expect(telemetry.start).to.not.have.been.called
+    expect(telemetry.updateIntegrations).to.not.have.been.called
+    expect(telemetry.updateConfig).to.not.have.been.called
+    expect(telemetry.appClosing).to.not.have.been.called
+    expect(telemetry.stop).to.not.have.been.called
+  })
+
+  it('should proxy when enabled', () => {
+    const config = { telemetry: { enabled: true } }
+
+    proxy.start(config)
+    proxy.updateIntegrations()
+    proxy.updateConfig()
+    proxy.appClosing()
+    proxy.stop()
+
+    expect(telemetry.start).to.have.been.calledWith(config)
+    expect(telemetry.updateIntegrations).to.have.been.called
+    expect(telemetry.updateConfig).to.have.been.called
+    expect(telemetry.appClosing).to.have.been.called
+    expect(telemetry.stop).to.have.been.called
+  })
+
+  it('should proxy when enabled from updateConfig', () => {
+    const config = { telemetry: { enabled: true } }
+
+    proxy.updateConfig([], config)
+    proxy.updateIntegrations()
+    proxy.appClosing()
+    proxy.stop()
+
+    expect(telemetry.updateIntegrations).to.have.been.called
+    expect(telemetry.updateConfig).to.have.been.calledWith([], config)
+    expect(telemetry.appClosing).to.have.been.called
+    expect(telemetry.stop).to.have.been.called
+  })
+})
+
 describe('telemetry', () => {
   let telemetry
   let pluginsByName
@@ -24,7 +87,7 @@ describe('telemetry', () => {
     // If we don't no-op the server inside it, it will trace it, which will
     // screw up this test file entirely. -- bengl
 
-    storage.run({ noop: true }, () => {
+    storage('legacy').run({ noop: true }, () => {
       traceAgent = http.createServer(async (req, res) => {
         const chunks = []
         for await (const chunk of req) {
@@ -39,7 +102,7 @@ describe('telemetry', () => {
 
     traceAgent.reqs = []
 
-    telemetry = proxyquire('../../src/telemetry', {
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
@@ -171,7 +234,7 @@ describe('telemetry', () => {
 
   it('should not send app-closing if telemetry is not enabled', () => {
     const sendDataStub = sinon.stub()
-    const notEnabledTelemetry = proxyquire('../../src/telemetry', {
+    const notEnabledTelemetry = proxyquire('../../src/telemetry/telemetry', {
       './send-data': {
         sendData: sendDataStub
       }
@@ -213,7 +276,7 @@ describe('telemetry app-heartbeat', () => {
         }
       }
     }
-    telemetry = proxyquire('../../src/telemetry', {
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
@@ -278,7 +341,7 @@ describe('Telemetry extended heartbeat', () => {
       }
 
     }
-    telemetry = proxyquire('../../src/telemetry', {
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
@@ -320,7 +383,7 @@ describe('Telemetry extended heartbeat', () => {
       }
 
     }
-    telemetry = proxyquire('../../src/telemetry', {
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
@@ -463,7 +526,7 @@ describe('Telemetry retry', () => {
       }
 
     }
-    telemetry = proxyquire('../../src/telemetry', {
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
@@ -549,7 +612,7 @@ describe('Telemetry retry', () => {
       }
 
     }
-    telemetry = proxyquire('../../src/telemetry', {
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
@@ -618,7 +681,7 @@ describe('Telemetry retry', () => {
       }
 
     }
-    telemetry = proxyquire('../../src/telemetry', {
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
@@ -678,7 +741,7 @@ describe('Telemetry retry', () => {
       }
 
     }
-    telemetry = proxyquire('../../src/telemetry', {
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
@@ -760,7 +823,7 @@ describe('Telemetry retry', () => {
       }
 
     }
-    telemetry = proxyquire('../../src/telemetry', {
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
@@ -832,7 +895,7 @@ describe('AVM OSS', () => {
         before((done) => {
           clock = sinon.useFakeTimers()
 
-          storage.run({ noop: true }, () => {
+          storage('legacy').run({ noop: true }, () => {
             traceAgent = http.createServer(async (req, res) => {
               const chunks = []
               for await (const chunk of req) {
@@ -848,8 +911,8 @@ describe('AVM OSS', () => {
           traceAgent.reqs = []
 
           delete require.cache[require.resolve('../../src/telemetry/send-data')]
-          delete require.cache[require.resolve('../../src/telemetry')]
-          telemetry = require('../../src/telemetry')
+          delete require.cache[require.resolve('../../src/telemetry/telemetry')]
+          telemetry = require('../../src/telemetry/telemetry')
 
           telemetryConfig = {
             telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
@@ -909,7 +972,7 @@ describe('AVM OSS', () => {
     }
 
     before(() => {
-      telemetry = proxyquire('../../src/telemetry', {
+      telemetry = proxyquire('../../src/telemetry/telemetry', {
         '../log': logSpy
       })
     })

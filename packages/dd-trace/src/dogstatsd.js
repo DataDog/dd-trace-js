@@ -14,6 +14,10 @@ const TYPE_GAUGE = 'g'
 const TYPE_DISTRIBUTION = 'd'
 const TYPE_HISTOGRAM = 'h'
 
+/**
+ * @import { DogStatsD } from "../../../index.d.ts"
+ * @implements {DogStatsD}
+ */
 class DogStatsDClient {
   constructor (options = {}) {
     if (options.metricsProxyUrl) {
@@ -37,6 +41,10 @@ class DogStatsDClient {
 
   increment (stat, value, tags) {
     this._add(stat, value, TYPE_COUNTER, tags)
+  }
+
+  decrement (stat, value, tags) {
+    this._add(stat, -value, TYPE_COUNTER, tags)
   }
 
   gauge (stat, value, tags) {
@@ -77,7 +85,7 @@ class DogStatsDClient {
           // we're not getting a 200 from the proxy endpoint. If it's a 404,
           // then we know we'll never have the endpoint, so just clear out the
           // options. Either way, we can give UDP a try.
-          this._httpOptions = null
+          this._httpOptions = undefined
         }
         this._sendUdp(queue)
       }
@@ -185,11 +193,22 @@ class DogStatsDClient {
   }
 }
 
-// This is a simplified user-facing proxy to the underlying DogStatsDClient instance
+/**
+ * This is a simplified user-facing proxy to the underlying DogStatsDClient instance
+ *
+ * @implements {DogStatsD}
+ */
 class CustomMetrics {
   constructor (config) {
     const clientConfig = DogStatsDClient.generateClientConfig(config)
     this.dogstatsd = new DogStatsDClient(clientConfig)
+
+    const flush = this.flush.bind(this)
+
+    // TODO(bengl) this magic number should be configurable
+    setInterval(flush, 10 * 1000).unref()
+
+    process.once('beforeExit', flush)
   }
 
   increment (stat, value = 1, tags) {
@@ -201,9 +220,9 @@ class CustomMetrics {
   }
 
   decrement (stat, value = 1, tags) {
-    return this.dogstatsd.increment(
+    return this.dogstatsd.decrement(
       stat,
-      value * -1,
+      value,
       CustomMetrics.tagTranslator(tags)
     )
   }

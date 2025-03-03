@@ -7,7 +7,8 @@ addHook({
   name: 'nyc',
   versions: ['>=17']
 }, (nycPackage) => {
-  shimmer.wrap(nycPackage.prototype, 'wrap', wrap => async function () {
+  // `wrap` is an async function
+  shimmer.wrap(nycPackage.prototype, 'wrap', wrap => function () {
     // Only relevant if the config `all` is set to true
     try {
       if (JSON.parse(process.env.NYC_CONFIG).all) {

@@ -52,8 +52,6 @@ const TEST_MODULE_ID = 'test_module_id'
 const TEST_SUITE_ID = 'test_suite_id'
 const TEST_TOOLCHAIN = 'test.toolchain'
 const TEST_SKIPPED_BY_ITR = 'test.skipped_by_itr'
-// Browser used in browser test. Namespaced by test.configuration because it affects the fingerprint
-const TEST_CONFIGURATION_BROWSER_NAME = 'test.configuration.browser_name'
 // Early flake detection
 const TEST_IS_NEW = 'test.is_new'
 const TEST_IS_RETRY = 'test.is_retry'
@@ -108,12 +106,17 @@ const TEST_LEVEL_EVENT_TYPES = [
   'test_session_end'
 ]
 
+const DD_TEST_IS_USER_PROVIDED_SERVICE = '_dd.test.is_user_provided_service'
+
 // Dynamic instrumentation - Test optimization integration tags
 const DI_ERROR_DEBUG_INFO_CAPTURED = 'error.debug_info_captured'
 const DI_DEBUG_ERROR_PREFIX = '_dd.debug.error'
 const DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX = 'snapshot_id'
 const DI_DEBUG_ERROR_FILE_SUFFIX = 'file'
 const DI_DEBUG_ERROR_LINE_SUFFIX = 'line'
+
+const TEST_MANAGEMENT_IS_QUARANTINED = 'test.test_management.is_quarantined'
+const TEST_MANAGEMENT_ENABLED = 'test.test_management.enabled'
 
 module.exports = {
   TEST_CODE_OWNERS,
@@ -141,7 +144,6 @@ module.exports = {
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
-  TEST_CONFIGURATION_BROWSER_NAME,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
@@ -199,7 +201,10 @@ module.exports = {
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
-  getFormattedError
+  getFormattedError,
+  DD_TEST_IS_USER_PROVIDED_SERVICE,
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_ENABLED
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -275,6 +280,7 @@ function getTestEnvironmentMetadata (testFramework, config) {
 
   const metadata = {
     [TEST_FRAMEWORK]: testFramework,
+    [DD_TEST_IS_USER_PROVIDED_SERVICE]: (config && config.isServiceUserProvided) ? 'true' : 'false',
     ...gitMetadata,
     ...ciMetadata,
     ...userProvidedGitMetadata,

@@ -11,7 +11,7 @@ const { testInRequest } = require('../../utils')
 
 describe('Headers sourcing', () => {
   function app (req) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const iastContext = iastContextFunctions.getIastContext(store)
 
     Object.keys(req.headers).forEach(headerName => {

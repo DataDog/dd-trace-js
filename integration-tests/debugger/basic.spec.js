@@ -5,7 +5,7 @@ const os = require('os')
 const { assert } = require('chai')
 const { pollInterval, setup } = require('./utils')
 const { assertObjectContains, assertUUID } = require('../helpers')
-const { ACKNOWLEDGED, ERROR } = require('../../packages/dd-trace/src/appsec/remote_config/apply_states')
+const { ACKNOWLEDGED, ERROR } = require('../../packages/dd-trace/src/remote_config/apply_states')
 const { version } = require('../../package.json')
 
 describe('Dynamic Instrumentation', function () {
@@ -535,7 +535,7 @@ function assertBasicInputPayload (t, payload) {
     service: 'node',
     message: 'Hello World!',
     logger: {
-      name: t.breakpoint.file,
+      name: t.breakpoint.deployedFile,
       method: 'fooHandler',
       version,
       thread_name: 'MainThread'
@@ -544,7 +544,7 @@ function assertBasicInputPayload (t, payload) {
       probe: {
         id: t.rcConfig.config.id,
         version: 0,
-        location: { file: t.breakpoint.file, lines: [String(t.breakpoint.line)] }
+        location: { file: t.breakpoint.deployedFile, lines: [String(t.breakpoint.line)] }
       },
       language: 'javascript'
     }

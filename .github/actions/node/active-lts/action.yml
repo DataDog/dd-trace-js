@@ -1,0 +1,9 @@
+name: Node.js Active LTS
+description: Install the current Active LTS version of Node.js
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        cache: yarn
+        node-version: '22'

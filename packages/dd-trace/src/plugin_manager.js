@@ -28,8 +28,8 @@ loadChannel.subscribe(({ name }) => {
   maybeEnable(plugins[name])
 })
 
-// Globals
-maybeEnable(require('../../datadog-plugin-fetch/src'))
+// Always enabled
+maybeEnable(require('../../datadog-plugin-dd-trace-api/src'))
 
 function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
@@ -103,6 +103,10 @@ module.exports = class PluginManager {
     this._tracerConfig = config
     this._tracer._nomenclature.configure(config)
 
+    if (!config._isInServerlessEnvironment?.()) {
+      maybeEnable(require('../../datadog-plugin-fetch/src'))
+    }
+
     for (const name in pluginClasses) {
       this.loadPlugin(name)
     }
@@ -140,6 +144,7 @@ module.exports = class PluginManager {
       ciVisibilityTestSessionName,
       ciVisAgentlessLogSubmissionEnabled,
       isTestDynamicInstrumentationEnabled,
+      isServiceUserProvided,
       middlewareTracingEnabled
     } = this._tracerConfig
 
@@ -152,7 +157,8 @@ module.exports = class PluginManager {
       headers: headerTags || [],
       ciVisibilityTestSessionName,
       ciVisAgentlessLogSubmissionEnabled,
-      isTestDynamicInstrumentationEnabled
+      isTestDynamicInstrumentationEnabled,
+      isServiceUserProvided
     }
 
     if (logInjection !== undefined) {

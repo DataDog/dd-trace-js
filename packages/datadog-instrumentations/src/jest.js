@@ -43,6 +43,7 @@ const testErrCh = channel('ci:jest:test:err')
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
 const knownTestsCh = channel('ci:jest:known-tests')
+const quarantinedTestsCh = channel('ci:jest:quarantined-tests')
 
 const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 
@@ -70,6 +71,8 @@ let earlyFlakeDetectionFaultyThreshold = 30
 let isEarlyFlakeDetectionFaulty = false
 let hasFilteredSkippableSuites = false
 let isKnownTestsEnabled = false
+let isQuarantinedTestsEnabled = false
+let quarantinedTests = {}
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -140,13 +143,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.flakyTestRetriesCount = this.testEnvironmentOptions._ddFlakyTestRetriesCount
       this.isDiEnabled = this.testEnvironmentOptions._ddIsDiEnabled
       this.isKnownTestsEnabled = this.testEnvironmentOptions._ddIsKnownTestsEnabled
+      this.isQuarantinedTestsEnabled = this.testEnvironmentOptions._ddIsQuarantinedTestsEnabled
 
       if (this.isKnownTestsEnabled) {
         try {
-          const hasKnownTests = !!knownTests.jest
+          const hasKnownTests = !!knownTests?.jest
           earlyFlakeDetectionNumRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionNumRetries
           this.knownTestsForThisSuite = hasKnownTests
-            ? (knownTests.jest[this.testSuite] || [])
+            ? (knownTests?.jest[this.testSuite] || [])
             : this.getKnownTestsForSuite(this.testEnvironmentOptions._ddKnownTests)
         } catch (e) {
           // If there has been an error parsing the tests, we'll disable Early Flake Deteciton
@@ -159,6 +163,18 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const currentNumRetries = this.global[RETRY_TIMES]
         if (!currentNumRetries) {
           this.global[RETRY_TIMES] = this.flakyTestRetriesCount
+        }
+      }
+
+      if (this.isQuarantinedTestsEnabled) {
+        try {
+          const hasQuarantinedTests = !!quarantinedTests.jest
+          this.quarantinedTestsForThisSuite = hasQuarantinedTests
+            ? this.getQuarantinedTestsForSuite(quarantinedTests.jest.suites?.[this.testSuite]?.tests)
+            : this.getQuarantinedTestsForSuite(this.testEnvironmentOptions._ddQuarantinedTests)
+        } catch (e) {
+          log.error('Error parsing quarantined tests', e)
+          this.isQuarantinedTestsEnabled = false
         }
       }
     }
@@ -193,8 +209,28 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       return knownTestsForSuite
     }
 
+    getQuarantinedTestsForSuite (quarantined) {
+      if (this.quarantinedTestsForThisSuite) {
+        return this.quarantinedTestsForThisSuite
+      }
+      if (!quarantined) {
+        return []
+      }
+      let quarantinedTestsForSuite = quarantined
+      // If jest is using workers, quarantined tests are serialized to json.
+      // If jest runs in band, they are not.
+      if (typeof quarantinedTestsForSuite === 'string') {
+        quarantinedTestsForSuite = JSON.parse(quarantinedTestsForSuite)
+      }
+      return Object.entries(quarantinedTestsForSuite).reduce((acc, [testName, { properties }]) => {
+        if (properties?.quarantined) {
+          acc.push(testName)
+        }
+        return acc
+      }, [])
+    }
+
     // Add the `add_test` event we don't have the test object yet, so
-    // we use its describe block to get the full name
     getTestNameFromAddTestEvent (event, state) {
       const describeSuffix = getJestTestName(state.currentDescribeBlock)
       const fullTestName = describeSuffix ? `${describeSuffix} ${event.testName}` : event.testName
@@ -303,6 +339,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             }
           }
         }
+        let isQuarantined = false
+
+        if (this.isQuarantinedTestsEnabled) {
+          const testName = getJestTestName(event.test)
+          isQuarantined = this.quarantinedTestsForThisSuite?.includes(testName)
+        }
 
         const promises = {}
         const numRetries = this.global[RETRY_TIMES]
@@ -313,10 +355,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const asyncResource = asyncResources.get(event.test)
 
         if (status === 'fail') {
+          const shouldSetProbe = this.isDiEnabled && willBeRetried && numTestExecutions === 1
           asyncResource.runInAsyncScope(() => {
             testErrCh.publish({
               error: formatJestError(event.test.errors[0]),
-              shouldSetProbe: this.isDiEnabled && willBeRetried && numTestExecutions === 1,
+              shouldSetProbe,
               promises
             })
           })
@@ -336,17 +379,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           testFinishCh.publish({
             status,
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite),
-            promises,
-            shouldRemoveProbe: this.isDiEnabled && !willBeRetried
+            isQuarantined
           })
         })
 
         if (promises.isProbeReady) {
           await promises.isProbeReady
-        }
-
-        if (promises.isProbeRemoved) {
-          await promises.isProbeRemoved
         }
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
@@ -404,7 +442,8 @@ addHook({
 }, getTestEnvironment)
 
 function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
-  return async function (tests) {
+  // `scheduleTests` is an async function
+  return function (tests) {
     if (!isSuitesSkippingEnabled || hasFilteredSkippableSuites) {
       return scheduleTests.apply(this, arguments)
     }
@@ -489,6 +528,7 @@ function cliWrapper (cli, jestVersion) {
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
         earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
+        isQuarantinedTestsEnabled = libraryConfig.isQuarantinedTestsEnabled
       }
     } catch (err) {
       log.error('Jest library configuration error', err)
@@ -533,6 +573,25 @@ function cliWrapper (cli, jestVersion) {
         }
       } catch (err) {
         log.error('Jest test-suite skippable error', err)
+      }
+    }
+
+    if (isQuarantinedTestsEnabled) {
+      const quarantinedTestsPromise = new Promise((resolve) => {
+        onDone = resolve
+      })
+
+      sessionAsyncResource.runInAsyncScope(() => {
+        quarantinedTestsCh.publish({ onDone })
+      })
+
+      try {
+        const { err, quarantinedTests: receivedQuarantinedTests } = await quarantinedTestsPromise
+        if (!err) {
+          quarantinedTests = receivedQuarantinedTests
+        }
+      } catch (err) {
+        log.error('Jest quarantined tests error', err)
       }
     }
 
@@ -605,6 +664,7 @@ function cliWrapper (cli, jestVersion) {
         error,
         isEarlyFlakeDetectionEnabled,
         isEarlyFlakeDetectionFaulty,
+        isQuarantinedTestsEnabled,
         onDone
       })
     })
@@ -638,6 +698,37 @@ function cliWrapper (cli, jestVersion) {
       }
     }
 
+    if (isQuarantinedTestsEnabled) {
+      const failedTests = result
+        .results
+        .testResults.flatMap(({ testResults, testFilePath: testSuiteAbsolutePath }) => (
+          testResults.map(({ fullName: testName, status }) => ({ testName, testSuiteAbsolutePath, status }))
+        ))
+        .filter(({ status }) => status === 'failed')
+
+      let numFailedQuarantinedTests = 0
+
+      for (const { testName, testSuiteAbsolutePath } of failedTests) {
+        const testSuite = getTestSuitePath(testSuiteAbsolutePath, result.globalConfig.rootDir)
+        const isQuarantined = quarantinedTests
+          ?.jest
+          ?.suites
+          ?.[testSuite]
+          ?.tests
+          ?.[testName]
+          ?.properties
+          ?.quarantined
+        if (isQuarantined) {
+          numFailedQuarantinedTests++
+        }
+      }
+
+      // If every test that failed was quarantined, we'll consider the suite passed
+      if (numFailedQuarantinedTests !== 0 && result.results.numFailedTests === numFailedQuarantinedTests) {
+        result.results.success = true
+      }
+    }
+
     return result
   })
 
@@ -654,7 +745,8 @@ function coverageReporterWrapper (coverageReporter) {
    * This calculation adds no value, so we'll skip it, as long as the user has not manually opted in to code coverage,
    * in which case we'll leave it.
    */
-  shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => async function () {
+  // `_addUntestedFiles` is an async function
+  shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function () {
     // If the user has added coverage manually, they're willing to pay the price of this execution, so
     // we will not skip it.
     if (isSuitesSkippingEnabled && !isUserCodeCoverageEnabled) {
@@ -811,7 +903,8 @@ addHook({
 }, transformPackage => {
   const originalCreateScriptTransformer = transformPackage.createScriptTransformer
 
-  transformPackage.createScriptTransformer = async function (config) {
+  // `createScriptTransformer` is an async function
+  transformPackage.createScriptTransformer = function (config) {
     const { testEnvironmentOptions, ...restOfConfig } = config
     const {
       _ddTestModuleId,
@@ -829,6 +922,8 @@ addHook({
       _ddFlakyTestRetriesCount,
       _ddIsDiEnabled,
       _ddIsKnownTestsEnabled,
+      _ddIsQuarantinedTestsEnabled,
+      _ddQuarantinedTests,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 
@@ -859,7 +954,7 @@ addHook({
     if (isKnownTestsEnabled) {
       const projectSuites = testPaths.tests.map(test => getTestSuitePath(test.path, test.context.config.rootDir))
       const isFaulty =
-        getIsFaultyEarlyFlakeDetection(projectSuites, knownTests.jest || {}, earlyFlakeDetectionFaultyThreshold)
+        getIsFaultyEarlyFlakeDetection(projectSuites, knownTests?.jest || {}, earlyFlakeDetectionFaultyThreshold)
       if (isFaulty) {
         log.error('Early flake detection is disabled because the number of new suites is too high.')
         isEarlyFlakeDetectionEnabled = false
@@ -940,8 +1035,9 @@ addHook({
 })
 
 /*
-* This hook does two things:
+* This hook does three things:
 * - Pass known tests to the workers.
+* - Pass quarantined tests to the workers.
 * - Receive trace, coverage and logs payloads from the workers.
 */
 addHook({
@@ -951,7 +1047,7 @@ addHook({
 }, (childProcessWorker) => {
   const ChildProcessWorker = childProcessWorker.default
   shimmer.wrap(ChildProcessWorker.prototype, 'send', send => function (request) {
-    if (!isKnownTestsEnabled) {
+    if (!isKnownTestsEnabled && !isQuarantinedTestsEnabled) {
       return send.apply(this, arguments)
     }
     const [type] = request
@@ -970,12 +1066,16 @@ addHook({
       }
       const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
-      const suiteKnownTests = knownTests.jest?.[testSuite] || []
+      const suiteKnownTests = knownTests?.jest?.[testSuite] || []
+
+      const suiteQuarantinedTests = quarantinedTests.jest?.suites?.[testSuite]?.tests || {}
+
       args[0].config = {
         ...config,
         testEnvironmentOptions: {
           ...config.testEnvironmentOptions,
-          _ddKnownTests: suiteKnownTests
+          _ddKnownTests: suiteKnownTests,
+          _ddQuarantinedTests: suiteQuarantinedTests
         }
       }
     }
