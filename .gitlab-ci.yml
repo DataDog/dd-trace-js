@@ -6,7 +6,8 @@ stages:
   - macrobenchmarks
 
 include:
-  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include/one-pipeline.yml
+  #- remote: https://gitlab-templates.ddbuild.io/libdatadog/include/one-pipeline.yml
+  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include-wip/robertomonteromiguel/new_ssi_gilab_ci/one-pipeline.yml
   - local: ".gitlab/benchmarks.yml"
   - local: ".gitlab/macrobenchmarks.yml"
 
@@ -19,15 +20,20 @@ variables:
 onboarding_tests_installer:
   parallel:
     matrix:
-      - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs,test-app-nodejs-container]
-        SCENARIO: [ SIMPLE_INSTALLER_AUTO_INJECTION, SIMPLE_AUTO_INJECTION_PROFILING ]
+      - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs]
+        SCENARIO: [ SIMPLE_INSTALLER_AUTO_INJECTION ]
 
 onboarding_tests_k8s_injection:
   parallel:
     matrix:
       - WEBLOG_VARIANT: [sample-app]
-        SCENARIO: [K8S_LIB_INJECTION, K8S_LIB_INJECTION_UDS, K8S_LIB_INJECTION_NO_AC, K8S_LIB_INJECTION_NO_AC_UDS, K8S_LIB_INJECTION_PROFILING_DISABLED, K8S_LIB_INJECTION_PROFILING_ENABLED, K8S_LIB_INJECTION_PROFILING_OVERRIDE]
-        K8S_CLUSTER_VERSION: ['7.56.2', '7.57.0', '7.59.0']
+        SCENARIO: [K8S_LIB_INJECTION]
+        K8S_CLUSTER_VERSION: ['7.59.0']
+    
+compute_ssi_tests_pipeline:
+  extends: .compute_ssi_tests_pipeline
+  variables:
+    SYSTEM_SCENARIO_GROUPS: "simple_onboarding,docker-ssi,lib-injection"
 
 requirements_json_test:
   rules:
