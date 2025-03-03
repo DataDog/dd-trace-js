@@ -18,7 +18,6 @@ function increaseSdkEventMetric(eventType, version) {
     sdk_version: version
   }
 
-  console.log('ugaitz - tags', tags)
   appsecMetrics.count('sdk.event', tags).inc(1)
 }
 
@@ -98,11 +97,16 @@ function trackUserLoginFailureV2 (tracer, login, exists, metadata) {
 
   const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
-    log.warn('[ASM] Root span not available in v2.trackUserLoginSuccess')
+    log.warn('[ASM] Root span not available in v2.trackUserLoginFailure')
     return
   }
 
   const wafData = { login }
+
+  if (typeof exists === 'object' && typeof metadata === 'undefined') {
+    metadata = exists
+    exists = false
+  }
 
   metadata = {
     'usr.login': login,
@@ -146,19 +150,26 @@ function trackCustomEvent (tracer, eventName, metadata) {
   trackEvent(eventName, metadata, 'trackCustomEvent', getRootSpan(tracer))
 
   increaseSdkEventMetric('custom', 'v1')
+
+  if (eventName === 'users.login.success' || eventName === 'users.login.failure') {
+    runWaf(eventName)
+  }
 }
 
 function flattenFields (fields, sdkMethodName, depth = 0) {
   if (depth > 4) {
-    log.warn('[ASM] Too deep object provided in the SDK method %s, object truncated', sdkMethodName)
-    return
+    return {
+      truncated: true
+    }
   }
   const result = {}
+  let truncated = false
   for (const key of Object.keys(fields)) {
     const value = fields[key]
 
     if (value && typeof value === 'object') {
-      const flatValue = flattenFields(value, sdkMethodName, depth + 1)
+      const { result: flatValue, truncated: inheritTruncated } = flattenFields(value, sdkMethodName, depth + 1)
+      truncated = truncated || inheritTruncated
       if (flatValue) {
         for (const flatKey of Object.keys(flatValue)) {
           result[`${key}.${flatKey}`] = flatValue[flatKey]
@@ -171,7 +182,7 @@ function flattenFields (fields, sdkMethodName, depth = 0) {
     }
   }
 
-  return result
+  return { result, truncated }
 }
 
 function trackEvent (eventName, fields, sdkMethodName, rootSpan) {
@@ -186,7 +197,12 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan) {
   }
 
   if (fields) {
-    const flatFields = flattenFields(fields, sdkMethodName)
+    const { result: flatFields, truncated } = flattenFields(fields, sdkMethodName)
+
+    if (truncated) {
+      log.warn('[ASM] Too deep object provided in the SDK method %s, object truncated', sdkMethodName)
+    }
+
     for (const metadataKey of Object.keys(flatFields)) {
       tags[`appsec.events.${eventName}.${metadataKey}`] = '' + flatFields[metadataKey]
     }
@@ -203,15 +219,14 @@ function runWaf (eventName, user) {
     [`server.business_logic.${eventName}`]: null
   }
 
-  if (user.id) {
+  if (user?.id) {
     persistent[addresses.USER_ID] = '' + user.id
   }
 
-  if (user.login) {
+  if (user?.login) {
     persistent[addresses.USER_LOGIN] = '' + user.login
   }
 
-  console.log('ugaitz - persistent - ', persistent)
   waf.run({ persistent })
 }
 
