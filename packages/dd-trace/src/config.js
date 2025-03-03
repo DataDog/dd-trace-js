@@ -773,8 +773,8 @@ class Config {
     const env = setHiddenProperty(this, '_env', {})
     setHiddenProperty(this, '_envUnprocessed', {})
 
-    tagger.add(tags, OTEL_RESOURCE_ATTRIBUTES, true)
-    tagger.add(tags, DD_TAGS)
+    tagger.add(tags, parseSpaceSeparatedTags(handleOtel(OTEL_RESOURCE_ATTRIBUTES)))
+    tagger.add(tags, parseSpaceSeparatedTags(DD_TAGS))
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
@@ -1471,6 +1471,21 @@ class Config {
 
     return this
   }
+}
+
+function handleOtel (tagString) {
+  return tagString
+    ?.replace(/(^|,)deployment\.environment=/, '$1env:')
+    .replace(/(^|,)service\.name=/, '$1service:')
+    .replace(/(^|,)service\.version=/, '$1version:')
+    .replace(/=/g, ':')
+}
+
+function parseSpaceSeparatedTags (tagString) {
+  if (tagString && !tagString.includes(',')) {
+    tagString = tagString.replace(/\s+/g, ',')
+  }
+  return tagString
 }
 
 function maybeInt (number) {
