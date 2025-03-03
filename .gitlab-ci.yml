@@ -36,6 +36,18 @@ compute_ssi_tests_pipeline:
     #SYSTEM_SCENARIO_GROUPS: "simple_onboarding,docker-ssi,lib-injection" TEST
     SYSTEM_SCENARIO_GROUPS: "simple_onboarding"
 
+execute_ssi_tests_pipeline:
+  stage: shared-pipeline
+  needs: ["compute_ssi_tests_pipeline"]
+  allow_failure: true
+  variables:
+    PARENT_PIPELINE_SOURCE: $CI_PIPELINE_SOURCE
+  trigger:
+    include:
+      - artifact: ssi_tests_pipeline.yml
+        job: compute_ssi_tests_pipeline
+    strategy: depend
+
 requirements_json_test:
   rules:
     - when: on_success
