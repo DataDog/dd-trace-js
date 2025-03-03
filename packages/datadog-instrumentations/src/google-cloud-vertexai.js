@@ -39,10 +39,7 @@ function wrapGenerateStream (generateStream) {
       try {
         streamingResult = generateStream.apply(this, arguments)
       } catch (e) {
-        ctx.error = e
-        vertexaiTracingChannel.error.publish(e)
-        vertexaiTracingChannel.end.publish(ctx)
-        vertexaiTracingChannel.asyncEnd.publish(ctx)
+        finish(ctx, null, e, true)
         throw e
       }
 
@@ -50,24 +47,34 @@ function wrapGenerateStream (generateStream) {
 
       return streamingResult.then(stream => {
         stream.response.then(response => {
-          ctx.result = { response }
-          vertexaiTracingChannel.asyncEnd.publish(ctx)
+          finish(ctx, response, null)
         })
         return stream
       }).catch(e => {
-        ctx.error = e
-        vertexaiTracingChannel.error.publish(e)
-        vertexaiTracingChannel.asyncEnd.publish(ctx)
+        finish(ctx, null, e)
         throw e
       })
     })
   }
 }
 
+function finish (ctx, response, err, publishEndEvent = false) {
+  if (err) {
+    ctx.error = err
+    vertexaiTracingChannel.error.publish(ctx)
+  }
+
+  ctx.result = { response }
+
+  if (publishEndEvent) vertexaiTracingChannel.end.publish(ctx)
+
+  vertexaiTracingChannel.asyncEnd.publish(ctx)
+}
+
 addHook({
   name: '@google-cloud/vertexai',
   file: 'build/src/models/generative_models.js',
-  versions: ['>=1.0.0']
+  versions: ['>=1']
 }, exports => {
   const GenerativeModel = exports.GenerativeModel
 
@@ -80,7 +87,7 @@ addHook({
 addHook({
   name: '@google-cloud/vertexai',
   file: 'build/src/models/chat_session.js',
-  versions: ['>=1.0.0']
+  versions: ['>=1']
 }, exports => {
   const ChatSession = exports.ChatSession
 
