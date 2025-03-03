@@ -5,8 +5,8 @@
 const { GITHUB_REF, GITHUB_TOKEN } = process.env
 
 const CONTEXT = 'dd-gitlab/default-pipeline'
-const TIMEOUT = 60 * 1000
-const MAX_ATTEMPTS = 10
+const TIMEOUT = 30 * 1000
+const MAX_ATTEMPTS = 20
 
 let attempts = 0
 
@@ -39,7 +39,7 @@ async function checkStatus () {
         case 'stale':
         case 'timed_out':
           throw new Error(
-            `The ${CONTEXT} GitLab job was not successful. The OCI image may not have been published.`
+            `The "${CONTEXT}" GitLab job was not successful. The OCI image may not have been published.`
           )
       }
     }
@@ -47,9 +47,11 @@ async function checkStatus () {
 
   attempts++
 
-  if (attempts > MAX_ATTEMPTS) {
-    setTimeout(checkStatus, TIMEOUT)
+  if (attempts >= MAX_ATTEMPTS) {
+    throw new Error(`The "${CONTEXT}" GitLab job did not finish before timeout.`)
   }
+
+  setTimeout(checkStatus, TIMEOUT)
 }
 
 checkStatus()
