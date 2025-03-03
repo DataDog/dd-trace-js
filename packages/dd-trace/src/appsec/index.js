@@ -34,7 +34,6 @@ const UserTracking = require('./user_tracking')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
 const rasp = require('./rasp')
-const { reportMetrics } = require('./reporter')
 
 const responseAnalyzedSet = new WeakSet()
 
@@ -180,7 +179,9 @@ function incomingHttpEndTranslator ({ req, res }) {
   }
 
   if (Object.keys(persistent).length) {
-    waf.run({ persistent }, req)
+    const wafResults = waf.run({ persistent }, req)
+
+    Reporter.reportMetrics(wafResults?.metrics, null)
   }
 
   waf.disposeContext(req)
@@ -281,7 +282,7 @@ function onResponseBody ({ req, res, body }) {
     }
   }, req)
 
-  reportMetrics(results?.metrics, null)
+  Reporter.reportMetrics(results?.metrics, null)
 }
 
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
@@ -345,7 +346,7 @@ function handleResults (wafResults, req, res, rootSpan, abortController) {
     }
   }
 
-  reportMetrics(metrics, null)
+  Reporter.reportMetrics(metrics, null)
 }
 
 function disable () {
