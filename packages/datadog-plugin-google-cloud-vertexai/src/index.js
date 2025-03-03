@@ -90,32 +90,34 @@ class GoogleCloudVertexAIPlugin extends TracingPlugin {
 
     if (typeof contents === 'string') {
       tags['vertexai.request.contents.0.text'] = contents
-    } else {
-      for (const contentIdx in contents) {
-        const content = contents[contentIdx]
 
-        const role = content?.role
-        const parts = content?.parts
+      return tags
+    }
 
-        tags[`vertexai.request.contents.${contentIdx}.role`] = role
-        for (const partIdx in parts) {
-          const part = parts[partIdx]
-          tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.text`] = part.text
+    for (const contentIdx in contents) {
+      const content = contents[contentIdx]
 
-          const functionCall = part.functionCall
-          const functionResponse = part.functionResponse
+      const role = content?.role
+      const parts = content?.parts
 
-          if (functionCall) {
-            tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_call.name`] = functionCall.name
-            tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_call.args`] =
+      tags[`vertexai.request.contents.${contentIdx}.role`] = role
+      for (const partIdx in parts) {
+        const part = parts[partIdx]
+        tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.text`] = part.text
+
+        const functionCall = part.functionCall
+        const functionResponse = part.functionResponse
+
+        if (functionCall) {
+          tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_call.name`] = functionCall.name
+          tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_call.args`] =
               JSON.stringify(functionCall.args)
-          }
-          if (functionResponse) {
-            tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_response.name`] =
+        }
+        if (functionResponse) {
+          tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_response.name`] =
               functionResponse.name
-            tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_response.response`] =
+          tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_response.response`] =
               JSON.stringify(functionResponse.response)
-          }
         }
       }
     }
