@@ -572,6 +572,7 @@ class Config {
     this._setValue(defaults, 'version', pkg.version)
     this._setValue(defaults, 'instrumentation_config_id', undefined)
     this._setValue(defaults, 'aws.dynamoDb.tablePrimaryKeys', undefined)
+    this._setValue(defaults, 'fetchAgentInfo', true)
   }
 
   _applyEnvironment () {
@@ -698,6 +699,7 @@ class Config {
       DD_TRACING_ENABLED,
       DD_VERSION,
       DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED,
+      DD_FETCH_AGENT_INFO,
       OTEL_METRICS_EXPORTER,
       OTEL_PROPAGATORS,
       OTEL_RESOURCE_ATTRIBUTES,
@@ -901,6 +903,7 @@ class Config {
     this._setBoolean(env, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
     this._setString(env, 'aws.dynamoDb.tablePrimaryKeys', DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS)
     this._setArray(env, 'graphqlErrorExtensions', DD_TRACE_GRAPHQL_ERROR_EXTENSIONS)
+    this._setBoolean(env, 'fetchAgentInfo', DD_FETCH_AGENT_INFO)
   }
 
   _applyOptions (options) {
@@ -1028,6 +1031,7 @@ class Config {
     this._setString(opts, 'version', options.version || tags.version)
     this._setBoolean(opts, 'inferredProxyServicesEnabled', options.inferredProxyServicesEnabled)
     this._setBoolean(opts, 'graphqlErrorExtensions', options.graphqlErrorExtensions)
+    this._setBoolean(opts, 'fetchAgentInfo', options.fetchAgentInfo)
 
     // For LLMObs, we want the environment variable to take precedence over the options.
     // This is reliant on environment config being set before options.

@@ -16,16 +16,18 @@ class AgentExporter {
     }))
 
     this._agentSupportsTopLevelSpanEvents = false
-    try {
-      fetchAgentInfo(this._url, (err, agentInfo) => {
-        if (err) {
-          this._agentSupportsTopLevelSpanEvents = false
-        } else {
-          this._agentSupportsTopLevelSpanEvents = agentInfo?.span_events === true
-        }
-      })
-    } catch {
+    if (this._config.fetchAgentInfo) {
+      try {
+        fetchAgentInfo(this._url, (err, agentInfo) => {
+          if (err) {
+            this._agentSupportsTopLevelSpanEvents = false
+          } else {
+            this._agentSupportsTopLevelSpanEvents = agentInfo?.span_events === true
+          }
+        })
+      } catch {
       // pass
+      }
     }
 
     const headers = {}
