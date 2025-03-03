@@ -436,8 +436,6 @@ describe('Plugin', () => {
         it('DBM propagation should not inject comment', done => {
           agent
             .use(traces => {
-              const span = traces[0][0]
-
               expect(startSpy.called).to.be.true
               const ops = startSpy.getCall(0).args[0].ops
               expect(ops).to.not.have.property('comment')
@@ -482,8 +480,6 @@ describe('Plugin', () => {
         it('DBM propagation should not inject comment', done => {
           agent
             .use(traces => {
-              const span = traces[0][0]
-
               expect(startSpy.called).to.be.true
               const { comment } = startSpy.getCall(0).args[0].ops
               expect(comment).to.be.undefined
@@ -497,8 +493,6 @@ describe('Plugin', () => {
         it('DBM propagation should not alter existing comment', done => {
           agent
             .use(traces => {
-              const span = traces[0][0]
-
               expect(startSpy.called).to.be.true
               const { comment } = startSpy.getCall(0).args[0].ops
               expect(comment).to.equal('test comment')

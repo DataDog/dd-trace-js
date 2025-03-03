@@ -25,7 +25,7 @@ class MongodbCorePlugin extends DatabasePlugin {
         'out.port': options.port
       }
     })
-    comment = this.injectDbmComment(span, ops.comment, service)
+    const comment = this.injectDbmComment(span, ops.comment, service)
     if (comment) {
       ops.comment = comment
     }
