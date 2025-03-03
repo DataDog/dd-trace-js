@@ -714,8 +714,8 @@ class Config {
     const env = setHiddenProperty(this, '_env', {})
     setHiddenProperty(this, '_envUnprocessed', {})
 
-    parseSpaceSeparatedTags(tags, handleOtel(OTEL_RESOURCE_ATTRIBUTES))
-    parseSpaceSeparatedTags(tags, DD_TAGS)
+    tagger.add(tags, parseSpaceSeparatedTags(handleOtel(OTEL_RESOURCE_ATTRIBUTES)))
+    tagger.add(tags, parseSpaceSeparatedTags(DD_TAGS))
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
@@ -1385,13 +1385,13 @@ function handleOtel (tagString) {
     .replace(/=/g, ':')
 }
 
-function parseSpaceSeparatedTags (tags, tagString) {
+function parseSpaceSeparatedTags (tagString) {
   if (tagString) {
     if (!tagString.includes(',')) {
       tagString = tagString.replace(/\s+/g, ',')
     }
-    tagger.add(tags, tagString)
   }
+  return tagString
 }
 
 function maybeInt (number) {
