@@ -165,6 +165,7 @@ interface Plugins {
   "fetch": tracer.plugins.fetch;
   "generic-pool": tracer.plugins.generic_pool;
   "google-cloud-pubsub": tracer.plugins.google_cloud_pubsub;
+  "google-cloud-vertexai": tracer.plugins.google_cloud_vertexai;
   "graphql": tracer.plugins.graphql;
   "grpc": tracer.plugins.grpc;
   "hapi": tracer.plugins.hapi;
@@ -1360,6 +1361,12 @@ declare namespace tracer {
      * [@google-cloud/pubsub](https://github.com/googleapis/nodejs-pubsub) module.
      */
     interface google_cloud_pubsub extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
+     * [@google-cloud/vertexai](https://github.com/googleapis/nodejs-vertexai) module.
+     */
+    interface google_cloud_vertexai extends Integration {}
 
     /** @hidden */
     interface ExecutionArgs {
