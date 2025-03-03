@@ -7,6 +7,7 @@ const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
 const { channel } = require('dc-polyfill')
 const startCh = channel('dd-trace:span:start')
+const { storage } = require('../../../datadog-core')
 
 describe('Span', () => {
   let Span
@@ -216,8 +217,9 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
       span.setBaggageItem('foo', 'bar')
 
-      expect(span.context()._baggageItems).to.have.property('foo', 'bar')
-      expect(parent._baggageItems).to.not.have.property('foo', 'bar')
+      expect(storage('baggage').getStore()).to.deep.equal({ foo: 'bar' })
+      // expect(span.context()._baggageItems).to.have.property('foo', 'bar')
+      // expect(parent._baggageItems).to.not.have.property('foo', 'bar')
     })
 
     it('should pass baggage items to future causal spans', () => {
@@ -371,41 +373,48 @@ describe('Span', () => {
   describe('getBaggageItem', () => {
     it('should get a baggage item', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
-      span._spanContext._baggageItems.foo = 'bar'
+      // span._spanContext._baggageItems.foo = 'bar'
+      storage('baggage').enterWith({ baz: 'qux' })
 
-      expect(span.getBaggageItem('foo')).to.equal('bar')
+      // expect(span.getBaggageItem('foo')).to.equal('bar')
+      expect(span.getBaggageItem('baz')).to.equal('qux')
     })
   })
 
   describe('getAllBaggageItems', () => {
     it('should get all baggage items', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
-      expect(span.getAllBaggageItems()).to.equal(JSON.stringify({}))
+      // expect(span.getAllBaggageItems()).to.equal(JSON.stringify({}))
+      expect(span.getAllBaggageItems()).to.be.undefined
 
-      span._spanContext._baggageItems.foo = 'bar'
-      span._spanContext._baggageItems.raccoon = 'cute'
-      expect(span.getAllBaggageItems()).to.equal(JSON.stringify({
+      // span._spanContext._baggageItems.foo = 'bar'
+      // span._spanContext._baggageItems.raccoon = 'cute'
+      const baggages = {
         foo: 'bar',
         raccoon: 'cute'
-      }))
+      }
+      storage('baggage').enterWith(baggages)
+      expect(span.getAllBaggageItems()).to.equal(JSON.stringify(baggages))
     })
   })
 
   describe('removeBaggageItem', () => {
     it('should remove a baggage item', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
-      span._spanContext._baggageItems.foo = 'bar'
-      expect(span.getBaggageItem('foo')).to.equal('bar')
-      span.removeBaggageItem('foo')
-      expect(span.getBaggageItem('foo')).to.be.undefined
+      // span._spanContext._baggageItems.foo = 'bar'
+      // expect(span.getBaggageItem('foo')).to.equal('bar')
+      storage('baggage').enterWith({ chicken: 'egg' })
+      span.removeBaggageItem('chicken')
+      expect(span.getBaggageItem('chicken')).to.be.undefined
     })
   })
 
   describe('removeAllBaggageItems', () => {
     it('should remove all baggage items', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
-      span._spanContext._baggageItems.foo = 'bar'
-      span._spanContext._baggageItems.raccoon = 'cute'
+      // span._spanContext._baggageItems.foo = 'bar'
+      // span._spanContext._baggageItems.raccoon = 'cute'
+      storage('baggage').enterWith({ backyard: 'sunflower', frontgarden: 'sweet pea' })
       span.removeAllBaggageItems()
       expect(span._spanContext._baggageItems).to.deep.equal({})
     })

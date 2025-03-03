@@ -157,24 +157,29 @@ class DatadogSpan {
   }
 
   setBaggageItem (key, value) {
-    this._spanContext._baggageItems[key] = value
+    // this._spanContext._baggageItems[key] = value
+    storage('baggage').enterWith({ ...storage('baggage').getStore(), [key]: value })
     return this
   }
 
   getBaggageItem (key) {
-    return this._spanContext._baggageItems[key]
+    // return this._spanContext._baggageItems[key]
+    return storage('baggage').getStore()?.[key]
   }
 
   getAllBaggageItems () {
-    return JSON.stringify(this._spanContext._baggageItems)
+    return JSON.stringify(storage('baggage').getStore())
+    // return JSON.stringify(this._spanContext._baggageItems)
   }
 
   removeBaggageItem (key) {
-    delete this._spanContext._baggageItems[key]
+    // delete this._spanContext._baggageItems[key]
+    delete storage('baggage').getStore()?.[key]
   }
 
   removeAllBaggageItems () {
-    this._spanContext._baggageItems = {}
+    // this._spanContext._baggageItems = {}
+    storage('baggage').enterWith({})
   }
 
   setTag (key, value) {
