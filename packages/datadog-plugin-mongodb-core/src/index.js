@@ -25,7 +25,10 @@ class MongodbCorePlugin extends DatabasePlugin {
         'out.port': options.port
       }
     })
-    ops.comment = this.injectDbmComment(span, ops.comment, service)
+    comment = this.injectDbmComment(span, ops.comment, service)
+    if (comment) {
+      ops.comment = comment
+    }
   }
 
   getPeerService (tags) {

@@ -403,6 +403,119 @@ describe('Plugin', () => {
         )
       })
 
+      describe('with dbmPropagationMode disabled by default', () => {
+        before(() => {
+          return agent.load('mongodb-core')
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(done => {
+          const Server = getServer()
+
+          server = new Server({
+            host: '127.0.0.1',
+            port: 27017,
+            reconnect: false
+          })
+
+          server.on('connect', () => done())
+          server.on('error', done)
+
+          server.connect()
+
+          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+        })
+
+        afterEach(() => {
+          startSpy?.restore()
+        })
+
+        it('DBM propagation should not inject comment', done => {
+          agent
+            .use(traces => {
+              const span = traces[0][0]
+
+              expect(startSpy.called).to.be.true
+              const ops = startSpy.getCall(0).args[0].ops
+              expect(ops).to.not.have.property('comment')
+            })
+            .then(done)
+            .catch(done)
+
+          server.insert(`test.${collection}`, [{ a: 1 }], () => {})
+        })
+      })
+
+      describe('with dbmPropagationMode explicitly disabled', () => {
+        before(() => {
+          return agent.load('mongodb-core', { dbmPropagationMode: 'disabled' })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(done => {
+          const Server = getServer()
+
+          server = new Server({
+            host: '127.0.0.1',
+            port: 27017,
+            reconnect: false
+          })
+
+          server.on('connect', () => done())
+          server.on('error', done)
+
+          server.connect()
+
+          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+        })
+
+        afterEach(() => {
+          startSpy?.restore()
+        })
+
+        it('DBM propagation should not inject comment', done => {
+          agent
+            .use(traces => {
+              const span = traces[0][0]
+
+              expect(startSpy.called).to.be.true
+              const { comment } = startSpy.getCall(0).args[0].ops
+              expect(comment).to.be.undefined
+            })
+            .then(done)
+            .catch(done)
+
+          server.insert(`test.${collection}`, [{ a: 1 }], () => {})
+        })
+
+        it('DBM propagation should not alter existing comment', done => {
+          agent
+            .use(traces => {
+              const span = traces[0][0]
+
+              expect(startSpy.called).to.be.true
+              const { comment } = startSpy.getCall(0).args[0].ops
+              expect(comment).to.equal('test comment')
+            })
+            .then(done)
+            .catch(done)
+
+          server.command(`test.${collection}`, {
+            find: `test.${collection}`,
+            query: {
+              _id: Buffer.from('1234')
+            },
+            comment: 'test comment'
+          }, () => {})
+        })
+      })
+
       describe('with dbmPropagationMode service', () => {
         before(() => {
           return agent.load('mongodb-core', { dbmPropagationMode: 'service' })
