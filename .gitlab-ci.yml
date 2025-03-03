@@ -33,7 +33,7 @@ onboarding_tests_k8s_injection:
 compute_ssi_tests_pipeline:
   extends: .compute_ssi_tests_pipeline
   variables:
-    #SYSTEM_SCENARIO_GROUPS: "simple_onboarding,docker-ssi,lib-injection" TEST8
+    #SYSTEM_SCENARIO_GROUPS: "simple_onboarding,docker-ssi,lib-injection" TEST9
     SYSTEM_SCENARIO_GROUPS: "lib-injection"
 
 execute_ssi_tests_pipeline:
