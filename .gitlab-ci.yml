@@ -34,7 +34,7 @@ compute_ssi_tests_pipeline:
   extends: .compute_ssi_tests_pipeline
   variables:
     SYSTEM_SCENARIO_GROUPS: "simple_onboarding,docker-ssi,lib-injection"
-    #TEST3
+    #TEST4
 
 execute_ssi_tests_pipeline:
   stage: shared-pipeline
