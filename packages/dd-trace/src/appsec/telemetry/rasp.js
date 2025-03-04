@@ -5,6 +5,12 @@ const { getVersionsTags, DD_TELEMETRY_REQUEST_METRICS } = require('./common')
 
 const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
+const BLOCKING_STATUS = {
+  FAILURE: 'failure',
+  IRRELEVANT: 'irrelevant',
+  SUCCESS: 'success'
+}
+
 function addRaspRequestMetrics (store, { duration, durationExt, wafTimeout, errorCode }) {
   store[DD_TELEMETRY_REQUEST_METRICS].raspDuration += duration || 0
   store[DD_TELEMETRY_REQUEST_METRICS].raspDurationExt += durationExt || 0
@@ -41,11 +47,6 @@ function trackRaspMetrics (store, metrics, raspRule) {
     appsecMetrics.count('rasp.timeout', tags).inc(1)
   }
 
-  if (metrics.ruleTriggered) {
-    // TODO: block
-    appsecMetrics.count('rasp.rule.match', tags).inc(1)
-  }
-
   if (metrics.duration) {
     appsecMetrics.distribution('rasp.rule.duration', tags).track(metrics.duration)
   }
@@ -67,7 +68,34 @@ function trackRaspMetrics (store, metrics, raspRule) {
   }
 }
 
+function trackRuleMatchMetric (metrics, raspRule) {
+  const versionsTags = getVersionsTags(metrics.wafVersion, metrics.rulesVersion)
+
+  const tags = { rule_type: raspRule.type, ...versionsTags }
+
+  if (raspRule.variant) {
+    tags.rule_variant = raspRule.variant
+  }
+
+  if (metrics.ruleTriggered) {
+    const block = getRuleMatchBlockingStatus(metrics)
+    const ruleMatchTags = { ...tags, block }
+
+    appsecMetrics.count('rasp.rule.match', ruleMatchTags).inc(1)
+  }
+
+}
+
+function getRuleMatchBlockingStatus ({ blockTriggered, blockFailed }) {
+  if (!blockTriggered) {
+    return BLOCKING_STATUS.IRRELEVANT
+  }
+
+  return blockFailed ? BLOCKING_STATUS.FAILURE : BLOCKING_STATUS.SUCCESS
+}
+
 module.exports = {
   addRaspRequestMetrics,
-  trackRaspMetrics
+  trackRaspMetrics,
+  trackRuleMatchMetric
 }

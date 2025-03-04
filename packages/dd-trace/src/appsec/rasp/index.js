@@ -8,6 +8,7 @@ const sqli = require('./sql_injection')
 const lfi = require('./lfi')
 const cmdi = require('./command_injection')
 const log = require('../../log')
+const { updateRaspRuleMatchMetric } = require('../telemetry')
 
 const { DatadogRaspAbortError } = require('./utils')
 
@@ -85,7 +86,7 @@ function blockOnDatadogRaspAbortError ({ error }) {
   const abortError = findDatadogRaspAbortError(error)
   if (!abortError) return false
 
-  const { req, res, blockingAction } = abortError
+  const { req, res, blockingAction, metrics, raspRule } = abortError
   if (!isBlocked(res)) {
     const rootSpan = web.root(req)
 
@@ -95,12 +96,18 @@ function blockOnDatadogRaspAbortError ({ error }) {
       rootSpan?.addTags({
         'appsec.blocked': 'true'
       })
+      metrics.blockFailed = false
     } catch (err) {
       rootSpan?.addTags({
         '_dd.appsec.block.failed': 1
       })
 
       log.error('[ASM] Blocking error', err)
+      metrics.blockFailed = true
+    } finally {
+      updateRaspRuleMatchMetric(metrics, raspRule)
+
+      return !metrics.blockFailed
     }
   }
 

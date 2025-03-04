@@ -20,12 +20,14 @@ const RULE_TYPES = {
 }
 
 class DatadogRaspAbortError extends Error {
-  constructor (req, res, blockingAction) {
+  constructor (req, res, blockingAction, metrics, raspRule) {
     super('DatadogRaspAbortError')
     this.name = 'DatadogRaspAbortError'
     this.req = req
     this.res = res
     this.blockingAction = blockingAction
+    this.metrics = metrics
+    this.raspRule = raspRule
   }
 }
 
@@ -58,7 +60,7 @@ function handleResult (wafResults, req, res, abortController, config, raspRule) 
   if (blockingAction) {
     // Should block only in express
     if (rootSpan?.context()._name === 'express.request') {
-      const abortError = new DatadogRaspAbortError(req, res, blockingAction)
+      const abortError = new DatadogRaspAbortError(req, res, blockingAction, metrics, raspRule)
       abortController.abort(abortError)
 
       // TODO Delete this when support for node 16 is removed

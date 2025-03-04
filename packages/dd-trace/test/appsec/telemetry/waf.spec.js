@@ -252,7 +252,7 @@ describe('Appsec Waf Telemetry metrics', () => {
         expect(inc).to.have.been.calledOnce
       })
 
-      it.only('should increment waf.updates and waf.config_errors metrics when updates is not successful', () => {
+      it('should increment waf.updates and waf.config_errors metrics when updates is not successful', () => {
         appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion, false)
 
         expect(count).to.have.been.calledTwice

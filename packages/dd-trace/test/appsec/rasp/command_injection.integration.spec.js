@@ -87,6 +87,7 @@ describe('RASP - command_injection - integration', () => {
 
           assert.exists(matchSerie, 'match serie should exist')
           assert.include(matchSerie.tags, 'rule_type:command_injection')
+          assert.include(matchSerie.tags, 'block:success')
           assert.include(matchSerie.tags, `rule_variant:${variant}`)
           assert.strictEqual(matchSerie.type, 'count')
         }
