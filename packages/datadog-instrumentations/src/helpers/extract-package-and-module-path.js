@@ -10,7 +10,7 @@ const NM = 'node_modules/'
  */
 module.exports = function extractPackageAndModulePath (fullPath) {
   const nm = fullPath.lastIndexOf(NM)
-  if (nm < 0) {
+  if (nm === -1) {
     return { pkg: null, path: null }
   }
 

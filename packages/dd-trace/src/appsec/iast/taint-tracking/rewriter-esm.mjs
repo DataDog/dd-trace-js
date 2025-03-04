@@ -12,7 +12,7 @@ const ddTraceDir = path.join(currentUrl.pathname, '..', '..', '..', '..', '..', 
 let port, rewriter
 
 export async function initialize (data) {
-  if (rewriter) return Promise.reject(new Error('ALREADY INITIALIZED'))
+  if (rewriter) throw new Error('ALREADY INITIALIZED')
 
   const { csiMethods, telemetryVerbosity, chainSourceMap } = data
   port = data.port

@@ -232,8 +232,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
             childProcessChannel.error.publish(e)
           })
 
-          childProcess.on('close', (code) => {
-            code = code || 0
+          childProcess.on('close', (code = 0) => {
             if (!errorExecuted && code !== 0) {
               childProcessChannel.error.publish()
             }

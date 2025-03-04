@@ -10,7 +10,7 @@ class SpanSampler {
 
   findRule (context) {
     for (const rule of this._rules) {
-      if (rule.match(context)) {
+      if (context.test(rule)) {
         return rule
       }
     }
