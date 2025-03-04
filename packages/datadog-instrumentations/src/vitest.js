@@ -123,7 +123,6 @@ function getSessionStatus (state) {
   return 'pass'
 }
 
-// eslint-disable-next-line
 // From https://github.com/vitest-dev/vitest/blob/51c04e2f44d91322b334f8ccbcdb368facc3f8ec/packages/runner/src/run.ts#L243-L250
 function getVitestTestStatus (test, retryCount) {
   if (test.result.state !== 'fail') {

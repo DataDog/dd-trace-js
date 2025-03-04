@@ -1,3 +1,4 @@
+/* eslint-disable unicorn/prefer-math-trunc */
 'use strict'
 
 const log = require('../../log')
@@ -13,7 +14,6 @@ function hashCode (hashSource) {
   let hash = 0
   const size = hashSource.length
   for (let offset = 0; offset < size; offset++) {
-    // eslint-disable-next-line unicorn/prefer-code-point
     hash = (((hash * 31) | 0) + hashSource.charCodeAt(offset)) | 0
   }
   return hash

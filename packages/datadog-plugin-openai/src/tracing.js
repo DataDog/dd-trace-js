@@ -256,9 +256,11 @@ class OpenAiTracingPlugin extends TracingPlugin {
     if (error) {
       this.metrics.increment('openai.request.error', 1, tags)
     } else {
-      tags.push(`org:${headers['openai-organization']}`)
-      tags.push(`endpoint:${endpoint}`) // just "/v1/models", no method
-      tags.push(`model:${headers['openai-model'] || body.model}`)
+      tags.push(
+        `org:${headers['openai-organization']}`,
+        `endpoint:${endpoint}`,
+        `model:${headers['openai-model'] || body.model}`
+      )
     }
 
     this.metrics.distribution('openai.request.duration', duration * 1000, tags)

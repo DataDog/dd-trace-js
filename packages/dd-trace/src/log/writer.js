@@ -42,7 +42,7 @@ function toggle (enable, level) {
 }
 
 function use (newLogger) {
-  if (newLogger && newLogger.debug instanceof Function && newLogger.error instanceof Function) {
+  if (newLogger && typeof newLogger.debug === 'function' && typeof newLogger.error === 'function') {
     logger = newLogger
   }
 }

@@ -96,7 +96,7 @@ function wrapMethod (method, path, type, hasPeer) {
   return wrapped
 }
 
-function wrapCallback (ctx, callback = () => { }) {
+function wrapCallback (ctx, callback = () => {}) {
   return shimmer.wrapFunction(callback, callback => function (err) {
     if (err) {
       ctx.error = err

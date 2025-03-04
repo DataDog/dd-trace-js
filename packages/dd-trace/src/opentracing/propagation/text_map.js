@@ -31,8 +31,8 @@ const b3HeaderKey = 'b3'
 const sqsdHeaderHey = 'x-aws-sqsd-attr-_datadog'
 const b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}(-[01d](-[0-9a-f]{16})?)?|[01d])$/i
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
-const tagKeyExpr = /^_dd\.p\.[\x21-\x2b\x2d-\x7e]+$/ // ASCII minus spaces and commas
-const tagValueExpr = /^[\x20-\x2b\x2d-\x7e]*$/ // ASCII minus commas
+const tagKeyExpr = /^_dd\.p\.[\x21-\x2B\x2D-\x7E]+$/ // ASCII minus spaces and commas
+const tagValueExpr = /^[\x20-\x2B\x2D-\x7E]*$/ // ASCII minus commas
 const traceparentExpr = /^([a-f0-9]{2})-([a-f0-9]{32})-([a-f0-9]{16})-([a-f0-9]{2})(-.*)?$/i
 const traceparentKey = 'traceparent'
 const tracestateKey = 'tracestate'
@@ -41,11 +41,11 @@ const b3Keys = [b3TraceKey, b3SpanKey, b3ParentKey, b3SampledKey, b3FlagsKey, b3
 const w3cKeys = [traceparentKey, tracestateKey]
 const logKeys = ddKeys.concat(b3Keys, w3cKeys)
 // Origin value in tracestate replaces '~', ',' and ';' with '_"
-const tracestateOriginFilter = /[^\x20-\x2b\x2d-\x3a\x3c-\x7d]/g
+const tracestateOriginFilter = /[^\x20-\x2B\x2D-\x3A\x3C-\x7D]/g
 // Tag keys in tracestate replace ' ', ',' and '=' with '_'
-const tracestateTagKeyFilter = /[^\x21-\x2b\x2d-\x3c\x3e-\x7e]/g
+const tracestateTagKeyFilter = /[^\x21-\x2B\x2D-\x3C\x3E-\x7E]/g
 // Tag values in tracestate replace ',', '~' and ';' with '_'
-const tracestateTagValueFilter = /[^\x20-\x2b\x2d-\x3a\x3c-\x7d]/g
+const tracestateTagValueFilter = /[^\x20-\x2B\x2D-\x3A\x3C-\x7D]/g
 const invalidSegment = /^0+$/
 const zeroTraceId = '0000000000000000'
 const hex16 = /^[0-9A-Fa-f]{16}$/
@@ -240,7 +240,7 @@ class TextMapPropagator {
       if (typeof origin === 'string') {
         const originValue = origin
           .replace(tracestateOriginFilter, '_')
-          .replace(/[\x3d]/g, '~')
+          .replace(/[\x3D]/g, '~')
 
         state.set('o', originValue)
       }
@@ -254,7 +254,7 @@ class TextMapPropagator {
         const tagValue = tags[key]
           .toString()
           .replace(tracestateTagValueFilter, '_')
-          .replace(/[\x3d]/g, '~')
+          .replace(/[\x3D]/g, '~')
 
         state.set(tagKey, tagValue)
       }
@@ -510,7 +510,7 @@ class TextMapPropagator {
             default: {
               if (!key.startsWith('t.')) continue
               const subKey = key.slice(2) // e.g. t.tid -> tid
-              const transformedValue = value.replace(/[\x7e]/gm, '=')
+              const transformedValue = value.replace(/[\x7E]/gm, '=')
 
               // If subkey is tid  then do nothing because trace header tid should always be preserved
               if (subKey === 'tid') {

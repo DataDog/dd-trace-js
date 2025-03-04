@@ -88,7 +88,6 @@ function pathToStr (path) {
   if (!path) return
 
   if (typeof path === 'string' ||
-      path instanceof String ||
       path instanceof Buffer ||
       path instanceof URL) {
     return path.toString()
