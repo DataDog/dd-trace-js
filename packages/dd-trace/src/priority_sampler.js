@@ -227,7 +227,7 @@ class PrioritySampler {
 
   _findRule (span) {
     for (const rule of this._rules) {
-      if (rule.match(span)) return rule
+      if (span.test(rule)) return rule
     }
   }
 

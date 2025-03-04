@@ -106,9 +106,7 @@ for (const packageName of names) {
           log.error('Error getting version for "%s": %s', name, e.message, e)
           continue
         }
-        if (typeof namesAndSuccesses[`${name}@${version}`] === 'undefined') {
-          namesAndSuccesses[`${name}@${version}`] = false
-        }
+        namesAndSuccesses[`${name}@${version}`] ??= false
 
         if (matchVersion(version, versions)) {
           // Check if the hook already has a set moduleExport

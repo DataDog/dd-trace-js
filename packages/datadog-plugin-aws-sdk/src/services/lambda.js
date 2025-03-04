@@ -33,7 +33,7 @@ class Lambda extends BaseAwsSdkPlugin {
           // Check to see if there's already a config on the request
           let clientContext = {}
           if (request.params.ClientContext) {
-            const clientContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf-8')
+            const clientContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf8')
             clientContext = JSON.parse(clientContextJson)
           }
           if (!clientContext.custom) {

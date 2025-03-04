@@ -36,7 +36,7 @@ class CookieAnalyzer extends Analyzer {
   }
 
   _createHashSource (type, evidence, location) {
-    if (typeof evidence.value === 'string' && evidence.value.match(this.cookieFilterRegExp)) {
+    if (typeof evidence.value === 'string' && this.cookieFilterRegExp?.test(evidence.value)) {
       return 'FILTERED_' + this._type
     }
 
