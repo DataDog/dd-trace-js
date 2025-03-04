@@ -43,7 +43,7 @@ const testErrCh = channel('ci:jest:test:err')
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
 const knownTestsCh = channel('ci:jest:known-tests')
-const quarantinedTestsCh = channel('ci:jest:quarantined-tests')
+const testManagementTestsCh = channel('ci:jest:test-management-tests')
 
 const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 
@@ -71,8 +71,8 @@ let earlyFlakeDetectionFaultyThreshold = 30
 let isEarlyFlakeDetectionFaulty = false
 let hasFilteredSkippableSuites = false
 let isKnownTestsEnabled = false
-let isQuarantinedTestsEnabled = false
-let quarantinedTests = {}
+let isTestManagementTestsEnabled = false
+let testManagementTests = {}
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -143,7 +143,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.flakyTestRetriesCount = this.testEnvironmentOptions._ddFlakyTestRetriesCount
       this.isDiEnabled = this.testEnvironmentOptions._ddIsDiEnabled
       this.isKnownTestsEnabled = this.testEnvironmentOptions._ddIsKnownTestsEnabled
-      this.isQuarantinedTestsEnabled = this.testEnvironmentOptions._ddIsQuarantinedTestsEnabled
+      this.isTestManagementEnabled = this.testEnvironmentOptions._ddIsTestManagementTestsEnabled
 
       if (this.isKnownTestsEnabled) {
         try {
@@ -166,15 +166,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
       }
 
-      if (this.isQuarantinedTestsEnabled) {
+      if (this.isTestManagementTestsEnabled) {
         try {
-          const hasQuarantinedTests = !!quarantinedTests.jest
-          this.quarantinedTestsForThisSuite = hasQuarantinedTests
-            ? this.getQuarantinedTestsForSuite(quarantinedTests.jest.suites?.[this.testSuite]?.tests)
-            : this.getQuarantinedTestsForSuite(this.testEnvironmentOptions._ddQuarantinedTests)
+          const hasTestManagementTests = !!testManagementTests.jest
+          this.testManagementTestsForThisSuite = hasTestManagementTests
+            ? this.getTestManagementTestsForSuite(testManagementTests.jest.suites?.[this.testSuite]?.tests)
+            : this.getTestManagementTestsForSuite(this.testEnvironmentOptions._ddTestManagementTests)
         } catch (e) {
-          log.error('Error parsing quarantined tests', e)
-          this.isQuarantinedTestsEnabled = false
+          log.error('Error parsing test management tests', e)
+          this.isTestManagementTestsEnabled = false
         }
       }
     }
@@ -209,25 +209,39 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       return knownTestsForSuite
     }
 
-    getQuarantinedTestsForSuite (quarantined) {
-      if (this.quarantinedTestsForThisSuite) {
-        return this.quarantinedTestsForThisSuite
+    getTestManagementTestsForSuite (testManagementTests) {
+      if (this.testManagementTestsForThisSuite) {
+        return this.testManagementTestsForThisSuite
       }
-      if (!quarantined) {
-        return []
-      }
-      let quarantinedTestsForSuite = quarantined
-      // If jest is using workers, quarantined tests are serialized to json.
-      // If jest runs in band, they are not.
-      if (typeof quarantinedTestsForSuite === 'string') {
-        quarantinedTestsForSuite = JSON.parse(quarantinedTestsForSuite)
-      }
-      return Object.entries(quarantinedTestsForSuite).reduce((acc, [testName, { properties }]) => {
-        if (properties?.quarantined) {
-          acc.push(testName)
+      // TODO - ADD ATTEMPT_TO_FIX tests
+      if (!testManagementTests) {
+        return {
+          disabled: [],
+          quarantined: []
         }
-        return acc
-      }, [])
+      }
+      let testManagementTestsForSuite = testManagementTests
+      // If jest is using workers, test management tests are serialized to json.
+      // If jest runs in band, they are not.
+      if (typeof testManagementTestsForSuite === 'string') {
+        testManagementTestsForSuite = JSON.parse(testManagementTestsForSuite)
+      }
+
+      const result = {
+        disabled: [],
+        quarantined: []
+      }
+
+      Object.entries(testManagementTestsForSuite).forEach(([testName, { properties }]) => {
+        // if (properties?.disabled) {
+        //   result.disabled.push(testName)
+        // } else
+        if (properties?.quarantined) {
+          result.quarantined.push(testName)
+        }
+      })
+
+      return result
     }
 
     // Add the `add_test` event we don't have the test object yet, so
@@ -341,9 +355,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
         let isQuarantined = false
 
-        if (this.isQuarantinedTestsEnabled) {
+        if (this.isTestManagementTestsEnabled) {
           const testName = getJestTestName(event.test)
-          isQuarantined = this.quarantinedTestsForThisSuite?.includes(testName)
+          isQuarantined = this.testManagementTestsForThisSuite?.quarantined?.includes(testName)
         }
 
         const promises = {}
@@ -528,7 +542,7 @@ function cliWrapper (cli, jestVersion) {
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
         earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
-        isQuarantinedTestsEnabled = libraryConfig.isQuarantinedTestsEnabled
+        isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
       }
     } catch (err) {
       log.error('Jest library configuration error', err)
@@ -576,22 +590,22 @@ function cliWrapper (cli, jestVersion) {
       }
     }
 
-    if (isQuarantinedTestsEnabled) {
-      const quarantinedTestsPromise = new Promise((resolve) => {
+    if (isTestManagementTestsEnabled) {
+      const testManagementTestsPromise = new Promise((resolve) => {
         onDone = resolve
       })
 
       sessionAsyncResource.runInAsyncScope(() => {
-        quarantinedTestsCh.publish({ onDone })
+        testManagementTestsCh.publish({ onDone })
       })
 
       try {
-        const { err, quarantinedTests: receivedQuarantinedTests } = await quarantinedTestsPromise
+        const { err, testManagementTests: receivedTestManagementTests } = await testManagementTestsPromise
         if (!err) {
-          quarantinedTests = receivedQuarantinedTests
+          testManagementTests = receivedTestManagementTests
         }
       } catch (err) {
-        log.error('Jest quarantined tests error', err)
+        log.error('Jest test management tests error', err)
       }
     }
 
@@ -664,7 +678,7 @@ function cliWrapper (cli, jestVersion) {
         error,
         isEarlyFlakeDetectionEnabled,
         isEarlyFlakeDetectionFaulty,
-        isQuarantinedTestsEnabled,
+        isTestManagementTestsEnabled,
         onDone
       })
     })
@@ -698,7 +712,7 @@ function cliWrapper (cli, jestVersion) {
       }
     }
 
-    if (isQuarantinedTestsEnabled) {
+    if (isTestManagementTestsEnabled) {
       const failedTests = result
         .results
         .testResults.flatMap(({ testResults, testFilePath: testSuiteAbsolutePath }) => (
@@ -710,14 +724,8 @@ function cliWrapper (cli, jestVersion) {
 
       for (const { testName, testSuiteAbsolutePath } of failedTests) {
         const testSuite = getTestSuitePath(testSuiteAbsolutePath, result.globalConfig.rootDir)
-        const isQuarantined = quarantinedTests
-          ?.jest
-          ?.suites
-          ?.[testSuite]
-          ?.tests
-          ?.[testName]
-          ?.properties
-          ?.quarantined
+        const isQuarantined = testManagementTests.quarantined.includes(testSuite) &&
+          testManagementTests.quarantined.includes(testName)
         if (isQuarantined) {
           numFailedQuarantinedTests++
         }
@@ -922,8 +930,8 @@ addHook({
       _ddFlakyTestRetriesCount,
       _ddIsDiEnabled,
       _ddIsKnownTestsEnabled,
-      _ddIsQuarantinedTestsEnabled,
-      _ddQuarantinedTests,
+      _ddIsTestManagementTestsEnabled,
+      _ddTestManagementTests,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 
@@ -1037,7 +1045,7 @@ addHook({
 /*
 * This hook does three things:
 * - Pass known tests to the workers.
-* - Pass quarantined tests to the workers.
+* - Pass test management tests to the workers.
 * - Receive trace, coverage and logs payloads from the workers.
 */
 addHook({
@@ -1047,7 +1055,7 @@ addHook({
 }, (childProcessWorker) => {
   const ChildProcessWorker = childProcessWorker.default
   shimmer.wrap(ChildProcessWorker.prototype, 'send', send => function (request) {
-    if (!isKnownTestsEnabled && !isQuarantinedTestsEnabled) {
+    if (!isKnownTestsEnabled && !isTestManagementTestsEnabled) {
       return send.apply(this, arguments)
     }
     const [type] = request
@@ -1068,14 +1076,21 @@ addHook({
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
       const suiteKnownTests = knownTests?.jest?.[testSuite] || []
 
-      const suiteQuarantinedTests = quarantinedTests.jest?.suites?.[testSuite]?.tests || {}
+      // TODO - ADD ATTEMPT_TO_FIX tests
+      const suiteDisabledTests = testManagementTests.disabled.jest?.suites?.[testSuite]?.tests || {}
+      const suiteQuarantinedTests = testManagementTests.quarantined.jest?.suites?.[testSuite]?.tests || {}
+
+      const flattenedTestManagementTests = [
+        ...Object.keys(suiteDisabledTests),
+        ...Object.keys(suiteQuarantinedTests)
+      ]
 
       args[0].config = {
         ...config,
         testEnvironmentOptions: {
           ...config.testEnvironmentOptions,
           _ddKnownTests: suiteKnownTests,
-          _ddQuarantinedTests: suiteQuarantinedTests
+          _ddTestManagementTests: flattenedTestManagementTests
         }
       }
     }
