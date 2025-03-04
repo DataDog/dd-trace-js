@@ -82,7 +82,7 @@ try {
 
   try {
     // Pull latest changes in case the release was started by someone else.
-    run(`git remote show origin | grep v${newVersion} && git pull --ff-only`, false)
+    run(`git remote show origin | grep v${newVersion} && git pull --ff-only`)
   } catch (e) {
     // Either there is no remote to pull from or the local and remote branches
     // have diverged. In both cases we ignore the error and will just use our
@@ -113,7 +113,7 @@ try {
 
     // Cherry pick all new commits to the proposal branch.
     try {
-      run(`echo "${proposalDiff}" | xargs git cherry-pick`, false)
+      run(`echo "${proposalDiff}" | xargs git cherry-pick`)
 
       pass()
     } catch (err) {
@@ -147,7 +147,7 @@ try {
 
   // Create or edit the PR. This will also automatically output a link to the PR.
   try {
-    run(`gh pr create -d -B v${releaseLine}.x -t "v${newVersion} proposal" -F ${notesFile}`, false)
+    run(`gh pr create -d -B v${releaseLine}.x -t "v${newVersion} proposal" -F ${notesFile}`)
   } catch (e) {
     // PR already exists so update instead.
     // TODO: Keep existing non-release-notes PR description if there is one.

@@ -23,8 +23,8 @@ let timer
 let current
 
 // Output a command to the terminal and execute it.
-function run (cmd, treatStderrAsFailure = true) {
-  capture(cmd, treatStderrAsFailure)
+function run (cmd) {
+  capture(cmd)
 }
 
 // Ask a question in terminal and return the response.
@@ -55,7 +55,7 @@ function checkpoint (question) {
 }
 
 // Run a command and capture its output to return it to the caller.
-function capture (cmd, treatStderrAsFailure = true) {
+function capture (cmd) {
   if (flags.debug) {
     log(`${GRAY}> ${cmd}${RESET}`)
   }
@@ -76,25 +76,11 @@ function capture (cmd, treatStderrAsFailure = true) {
 
   if (flags.debug) {
     log(stdout)
-    if (stderr) {
-      if (flags['no-abort-on-error']) {
-        log(`${RED}${stderr}${RESET}`)
-      } else {
-        fatal(
-          stderr,
-          'Aborting due to error! Use --no-abort-on-error to ignore and continue.'
-        )
-      }
-    }
-  } else if (treatStderrAsFailure && stderr) {
-    if (flags['no-abort-on-error']) {
-      log(`${RED}${stderr}${RESET}`)
-    } else {
-      fatal(
-        stderr,
-        'Aborting due to error! Use --no-abort-on-error to ignore and continue.'
-      )
-    }
+    log(`${RED}${stderr}${RESET}`)
+  }
+
+  if (result.status) {
+    throw new Error(stderr)
   }
 
   return stdout
