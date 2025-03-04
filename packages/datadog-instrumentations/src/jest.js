@@ -55,7 +55,7 @@ const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 const CHILD_MESSAGE_CALL = 1
 // Maximum time we'll wait for the tracer to flush
 const FLUSH_TIMEOUT = 10000
-// eslint-disable-next-line
+
 // https://github.com/jestjs/jest/blob/41f842a46bb2691f828c3a5f27fc1d6290495b82/packages/jest-circus/src/types.ts#L9C8-L9C54
 const RETRY_TIMES = Symbol.for('RETRY_TIMES')
 
@@ -1192,7 +1192,7 @@ addHook({
       return send.apply(this, arguments)
     }
     const [type] = request
-    // eslint-disable-next-line
+
     // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/workers/ChildProcessWorker.ts#L424
     if (type === CHILD_MESSAGE_CALL) {
       // This is the message that the main process sends to the worker to run a test suite (=test file).

@@ -61,7 +61,7 @@ function createBuffer (value) {
 
   const size = Math.ceil(value.length / 16) * 16
   const bytes = size / 2
-  const buffer = new Array(bytes)
+  const buffer = []
 
   value = value.padStart(size, '0')
 

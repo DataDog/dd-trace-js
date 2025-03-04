@@ -429,8 +429,7 @@ class Config {
     )
     const defaultPropagationStyle = ['datadog', 'tracecontext']
     if (isTrue(DD_TRACE_B3_ENABLED)) {
-      defaultPropagationStyle.push('b3')
-      defaultPropagationStyle.push('b3 single header')
+      defaultPropagationStyle.push('b3', 'b3 single header')
     }
     return defaultPropagationStyle
   }
@@ -529,7 +528,7 @@ class Config {
     this._setValue(defaults, 'isIntelligentTestRunnerEnabled', false)
     this._setValue(defaults, 'isManualApiEnabled', false)
     this._setValue(defaults, 'langchain.spanCharLimit', 128)
-    this._setValue(defaults, 'langchain.spanPromptCompletionSampleRate', 1.0)
+    this._setValue(defaults, 'langchain.spanPromptCompletionSampleRate', 1)
     this._setValue(defaults, 'llmobs.agentlessEnabled', undefined)
     this._setValue(defaults, 'llmobs.enabled', false)
     this._setValue(defaults, 'llmobs.mlApp', undefined)
@@ -1458,7 +1457,7 @@ class Config {
   // TODO: Deeply merge configurations.
   // TODO: Move change tracking to telemetry.
   // for telemetry reporting, `name`s in `containers` need to be keys from:
-  // eslint-disable-next-line @stylistic/js/max-len
+
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
   _merge () {
     const containers = [
