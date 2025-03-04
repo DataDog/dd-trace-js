@@ -37,7 +37,7 @@ class LLMObsPlugin extends TracingPlugin {
     // register options may not be set for operations we do not trace with llmobs
     // ie OpenAI fine tuning jobs, file jobs, etc.
     if (registerOptions) {
-      telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: true, kind: registerOptions.kind })
+      telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: true, integration: this.constructor.id })
 
       ctx.llmobs = {} // initialize context-based namespace
       llmobsStorage.enterWith({ span })
