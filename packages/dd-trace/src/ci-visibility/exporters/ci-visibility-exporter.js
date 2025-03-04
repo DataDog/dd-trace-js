@@ -6,7 +6,8 @@ const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata'
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
-const { getTestManagementTests: getTestManagementTestsRequest } = require('../test-management/get-test-management-tests')
+const { getTestManagementTests: getTestManagementTestsRequest } =
+  require('../test-management/get-test-management-tests')
 const log = require('../../log')
 const AgentInfoExporter = require('../../exporters/common/agent-info-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')

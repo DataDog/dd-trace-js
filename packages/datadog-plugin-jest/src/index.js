@@ -26,8 +26,7 @@ const {
   getFormattedError,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
-  TEST_MANAGEMENT_IS_QUARANTINED,
-  TEST_MANAGEMENT_IS_DISABLED
+  TEST_MANAGEMENT_IS_QUARANTINED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
