@@ -517,8 +517,7 @@ class Config {
     this._setValue(defaults, 'logInjection', false)
     this._setValue(defaults, 'lookup', undefined)
     this._setValue(defaults, 'inferredProxyServicesEnabled', false)
-    this._setValue(defaults, 'traceLevel', 'debug')
-    this._setValue(defaults, 'spanFilters', '')
+    this._setValue(defaults, 'experimental.traceLevel', 'debug')
     this._setValue(defaults, 'memcachedCommandEnabled', false)
     this._setValue(defaults, 'openAiLogsEnabled', false)
     this._setValue(defaults, 'openaiSpanCharLimit', 128)
@@ -690,8 +689,7 @@ class Config {
       DD_TRACING_ENABLED,
       DD_VERSION,
       DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED,
-      DD_TRACE_LEVEL,
-      DD_SPAN_FILTERS,
+      DD_EXPERIMENTAL_TRACE_LEVEL,
       OTEL_METRICS_EXPORTER,
       OTEL_PROPAGATORS,
       OTEL_RESOURCE_ATTRIBUTES,
@@ -885,8 +883,7 @@ class Config {
     this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
     this._setString(env, 'version', DD_VERSION || tags.version)
     this._setBoolean(env, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
-    this._setString(env, 'traceLevel', DD_TRACE_LEVEL)
-    this._setString(env, 'spanFilters', DD_SPAN_FILTERS)
+    this._setString(env, 'experimental.traceLevel', DD_EXPERIMENTAL_TRACE_LEVEL)
     this._setString(env, 'aws.dynamoDb.tablePrimaryKeys', DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS)
   }
 
@@ -1002,8 +999,7 @@ class Config {
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
     this._setString(opts, 'version', options.version || tags.version)
     this._setBoolean(opts, 'inferredProxyServicesEnabled', options.inferredProxyServicesEnabled)
-    this._setString(opts, 'traceLevel', options.traceLevel)
-    this._setString(opts, 'spanFilters', options.spanFilters)
+    this._setString(opts, 'experimental.traceLevel', options.experimental.traceLevel)
 
     // For LLMObs, we want the environment variable to take precedence over the options.
     // This is reliant on environment config being set before options.
