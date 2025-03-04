@@ -47,7 +47,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
   }
 
   setLLMObsTags ({ request, span, response, modelProvider, modelName }) {
-    telemetry.incrementLLMObsSpanStartCount({ autoinstrumentation: true, kind: 'llm' })
+    telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: true, kind: 'llm' })
 
     const parent = llmobsStore.getStore()?.span
     this._tagger.registerLLMObsSpan(span, {
