@@ -2,6 +2,7 @@ const { URL, format } = require('url')
 
 const { incrementCountMetric, TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION } = require('../../ci-visibility/telemetry')
 const { fetchAgentInfo } = require('./util')
+const DataDogAgentDiscovery = require('../../agent_discovery/agent_discovery')
 
 /**
  * Exporter that exposes a way to query /info endpoint from the agent and gives you the response.
@@ -18,10 +19,12 @@ class AgentInfoExporter {
     }))
     this._traceBuffer = []
     this._isInitialized = false
+
+    this._ddAgentDiscovery = DataDogAgentDiscovery.getInstance(this._config)
   }
 
-  getAgentInfo (onReceivedInfo) {
-    fetchAgentInfo(this._url, onReceivedInfo)
+  getAgentInfo (onReceivedInfoCallback) {
+    this._ddAgentDiscovery.getData(onReceivedInfoCallback)
   }
 
   export (trace) {

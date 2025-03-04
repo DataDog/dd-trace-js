@@ -36,7 +36,7 @@ function format (span, exporter) {
   const formatted = formatSpan(span)
 
   extractSpanLinks(formatted, span)
-  extractSpanEvents(formatted, span, encoder, exporter?._agentSupportsTopLevelSpanEvents)
+  extractSpanEvents(formatted, span, encoder, exporter?.agentSupportsTopLevelSpanEvents)
   extractRootTags(formatted, span)
   extractChunkTags(formatted, span)
   extractTags(formatted, span)

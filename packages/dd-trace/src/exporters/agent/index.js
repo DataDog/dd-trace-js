@@ -3,7 +3,7 @@
 const { URL, format } = require('url')
 const log = require('../../log')
 const Writer = require('./writer')
-const { fetchAgentInfo } = require('../common/util')
+const DataDogAgentDiscovery = require('../../agent_discovery/agent_discovery')
 
 class AgentExporter {
   constructor (config, prioritySampler) {
@@ -15,20 +15,17 @@ class AgentExporter {
       port
     }))
 
-    this._agentSupportsTopLevelSpanEvents = false
-    if (this._config.fetchAgentInfo) {
-      try {
-        fetchAgentInfo(this._url, (err, agentInfo) => {
-          if (err) {
-            this._agentSupportsTopLevelSpanEvents = false
-          } else {
-            this._agentSupportsTopLevelSpanEvents = agentInfo?.span_events === true
-          }
-        })
-      } catch {
-      // pass
-      }
-    }
+    this.agentSupportsTopLevelSpanEvents = false
+
+    const ddAgentDiscovery = DataDogAgentDiscovery.getInstance(this._config)
+    ddAgentDiscovery.registerCallback(
+      (err, agentInfo) => {
+        if (err) {
+          this.agentSupportsTopLevelSpanEvents = false
+        } else {
+          this.agentSupportsTopLevelSpanEvents = agentInfo?.span_events === true
+        }
+    })
 
     const headers = {}
     if (stats.enabled || apmTracingEnabled === false) {

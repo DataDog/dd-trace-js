@@ -10,6 +10,7 @@ const HttpPropagator = require('./propagation/http')
 const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
 const formats = require('../../../../ext/formats')
+const DataDogAgentDiscovery = require('../agent_discovery/agent_discovery')
 
 const log = require('../log')
 const runtimeMetrics = require('../runtime_metrics')
@@ -21,6 +22,7 @@ const REFERENCE_FOLLOWS_FROM = 'follows_from'
 
 class DatadogTracer {
   constructor (config, prioritySampler) {
+    DataDogAgentDiscovery.getInstance(config)
     const Exporter = getExporter(config.experimental.exporter)
 
     this._config = config

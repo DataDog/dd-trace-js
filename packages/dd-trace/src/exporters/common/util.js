@@ -8,21 +8,4 @@ function safeJSONStringify (value) {
   )
 }
 
-function fetchAgentInfo (url, callback) {
-  request('', {
-    path: '/info',
-    url
-  }, (err, res) => {
-    if (err) {
-      return callback(err)
-    }
-    try {
-      const response = JSON.parse(res)
-      return callback(null, response)
-    } catch (e) {
-      return callback(e)
-    }
-  })
-}
-
-module.exports = { safeJSONStringify, fetchAgentInfo }
+module.exports = { safeJSONStringify }
