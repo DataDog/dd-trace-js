@@ -64,6 +64,7 @@ describe('RASP - command_injection - integration', () => {
       assert.strictEqual(e.response.status, 403)
 
       let appsecTelemetryReceived = false
+      let appsecTelemetryDistributionsReceived = false
 
       const checkMessages = agent.assertMessageReceived(({ headers, payload }) => {
         assert.property(payload[0][0].meta, '_dd.appsec.json')
@@ -93,8 +94,26 @@ describe('RASP - command_injection - integration', () => {
         }
       }, 30_000, 'generate-metrics', 2)
 
-      return Promise.all([checkMessages, checkTelemetry]).then(() => {
+
+      const checkTelemetryDistributions = agent.assertTelemetryReceived(({ payload }) => {
+        const namespace = payload.payload.namespace
+
+        if (namespace === 'appsec') {
+          appsecTelemetryDistributionsReceived = true
+          const series = payload.payload.series
+          const raspRuleDuration = series.filter(s => s.metric === 'rasp.rule.duration')
+          const raspDuration = series.filter(s => s.metric === 'rasp.duration')
+          const raspDurationExt = series.filter(s => s.metric === 'rasp.duration_ext')
+
+          assert.exists(raspRuleDuration, 'rasp rule duration serie should exist')
+          assert.exists(raspDuration, 'rasp duration serie should exist')
+          assert.exists(raspDurationExt, 'rasp ext duration serie should exist')
+        }
+      }, 30_000, 'distributions', 1)
+
+      return Promise.all([checkMessages, checkTelemetry, checkTelemetryDistributions]).then(() => {
         assert.equal(appsecTelemetryReceived, true)
+        assert.equal(appsecTelemetryDistributionsReceived, true)
 
         return true
       })
