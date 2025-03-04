@@ -15,7 +15,7 @@ class AgentExporter {
       port
     }))
 
-    this.agentSupportsTopLevelSpanEvents = false
+    this.agentSupportsTopLevelSpanEvents = null
 
     const ddAgentDiscovery = DataDogAgentDiscovery.getInstance(this._config)
     ddAgentDiscovery.registerCallback(
