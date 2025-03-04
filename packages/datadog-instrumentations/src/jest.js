@@ -1076,21 +1076,14 @@ addHook({
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
       const suiteKnownTests = knownTests?.jest?.[testSuite] || []
 
-      // TODO - ADD ATTEMPT_TO_FIX tests
-      const suiteDisabledTests = testManagementTests.disabled.jest?.suites?.[testSuite]?.tests || {}
-      const suiteQuarantinedTests = testManagementTests.quarantined.jest?.suites?.[testSuite]?.tests || {}
-
-      const flattenedTestManagementTests = [
-        ...Object.keys(suiteDisabledTests),
-        ...Object.keys(suiteQuarantinedTests)
-      ]
+      const suiteTestManagementTests = testManagementTests.jest?.suites?.[testSuite]?.tests || {}
 
       args[0].config = {
         ...config,
         testEnvironmentOptions: {
           ...config.testEnvironmentOptions,
           _ddKnownTests: suiteKnownTests,
-          _ddTestManagementTests: flattenedTestManagementTests
+          _ddTestManagementTests: suiteTestManagementTests
         }
       }
     }
