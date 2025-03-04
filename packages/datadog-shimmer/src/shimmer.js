@@ -262,7 +262,7 @@ function assertMethod (target, name) {
   }
 
   if (typeof target !== 'object' && typeof target !== 'function') {
-    throw new Error('Invalid target.')
+    throw new TypeError('Invalid target.')
   }
 
   if (!target[name]) {
@@ -270,7 +270,7 @@ function assertMethod (target, name) {
   }
 
   if (typeof target[name] !== 'function') {
-    throw new Error(`Original method ${name} is not a function.`)
+    throw new TypeError(`Original method ${name} is not a function.`)
   }
 }
 
@@ -280,7 +280,7 @@ function assertFunction (target) {
   }
 
   if (typeof target !== 'function') {
-    throw new Error('Target is not a function.')
+    throw new TypeError('Target is not a function.')
   }
 }
 
