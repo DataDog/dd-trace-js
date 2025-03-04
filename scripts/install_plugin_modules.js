@@ -106,19 +106,111 @@ function assertFolder (name, version) {
   }
 }
 
-async function assertPackage (name, version, dependencyVersionRange, external) {
-  // Apply version cap from latests.json if available
-  // TODO: pinned versions?
-  let cappedVersionRange = dependencyVersionRange
-  if (latests.latests[name]) {
-    const latestVersion = latests.latests[name]
-    // If the range would allow versions beyond what we've tested, cap it
-    if (semver.validRange(dependencyVersionRange) &&
-        !semver.subset(`<=${latestVersion}`, dependencyVersionRange)) {
-      cappedVersionRange = `${dependencyVersionRange} <=${latestVersion}`
+// Helper function to apply version caps in a more readable way
+function applyCap (versionRange, latestVersion) {
+  // Handle hyphen ranges (e.g., "24.8.0 - 24.9.0")
+  const hyphenRangeMatch = versionRange.match(/^(\d+\.\d+\.\d+)\s*-\s*(\d+\.\d+\.\d+)(.*)$/)
+  if (hyphenRangeMatch) {
+    return handleHyphenRange(hyphenRangeMatch, latestVersion)
+  }
+
+  // Handle exact versions (e.g., "24.8.0")
+  if (semver.valid(versionRange)) {
+    return handleExactVersion(versionRange, latestVersion)
+  }
+
+  // Handle other valid semver ranges
+  if (semver.validRange(versionRange)) {
+    return handleValidRange(versionRange, latestVersion)
+  }
+
+  // If nothing else matched, return the original range
+  return versionRange
+}
+
+// Handle hyphen ranges like "24.8.0 - 24.9.0"
+function handleHyphenRange (match, latestVersion) {
+  const [, lowerBound, upperBound, extraConstraints] = match
+
+  // Cap at the lower of: original upper bound or latest version
+  const effectiveUpper = semver.lt(upperBound, latestVersion) ? upperBound : latestVersion
+
+  // Create properly formatted range
+  let result = `>=${lowerBound} <=${effectiveUpper}`
+
+  // Add any extra constraints if they exist and would create a valid range
+  if (extraConstraints && extraConstraints.trim()) {
+    const combinedRange = `${result} ${extraConstraints.trim()}`
+    if (semver.validRange(combinedRange)) {
+      result = combinedRange
     }
   }
-  
+
+  return result
+}
+
+// Handle exact versions like "24.8.0"
+function handleExactVersion (version, latestVersion) {
+  const exactVersion = semver.clean(version)
+
+  // If exact version is too high, cap it
+  if (semver.gt(exactVersion, latestVersion)) {
+    return latestVersion
+  }
+
+  // Otherwise keep exact version with cap
+  return `${exactVersion} <=${latestVersion}`
+}
+
+// Handle general semver ranges
+function handleValidRange (range, latestVersion) {
+  // Only apply cap if necessary
+  if (semver.subset(`<=${latestVersion}`, range)) {
+    return range
+  }
+
+  // Extract lower bound from the range if possible
+  const lowerBound = extractLowerBound(range)
+
+  if (lowerBound) {
+    return `>=${lowerBound.version} <=${latestVersion}`
+  } else {
+    return `<=${latestVersion}`
+  }
+}
+
+// Extract the lower bound from a semver range
+function extractLowerBound (range) {
+  const parsedRange = new semver.Range(range)
+  let lowerBound = null
+
+  if (parsedRange.set && parsedRange.set.length > 0) {
+    for (const comparators of parsedRange.set) {
+      for (const comparator of comparators) {
+        if (comparator.operator === '>=' || comparator.operator === '>') {
+          if (!lowerBound || semver.gt(comparator.semver, lowerBound)) {
+            lowerBound = comparator.semver
+          }
+        }
+      }
+    }
+  }
+
+  return lowerBound
+}
+
+async function assertPackage (name, version, dependencyVersionRange, external) {
+  // Apply version cap from latests.json if available
+  let cappedVersionRange = dependencyVersionRange
+
+  if (latests.latests[name]) {
+    const latestVersion = latests.latests[name]
+
+    // Only process string version ranges
+    if (dependencyVersionRange && typeof dependencyVersionRange === 'string') {
+      cappedVersionRange = applyCap(dependencyVersionRange, latestVersion)
+    }
+  }
   const dependencies = { [name]: cappedVersionRange }
   if (deps[name]) {
     await addDependencies(dependencies, name, cappedVersionRange)
