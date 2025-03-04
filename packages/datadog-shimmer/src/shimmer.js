@@ -100,7 +100,7 @@ function wrapFunction (original, wrapper) {
  */
 function wrap (target, name, wrapper, options) {
   if (typeof wrapper !== 'function') {
-    throw new Error(wrapper ? 'Target is not a function' : 'No function provided')
+    throw new TypeError(wrapper ? 'Target is not a function' : 'No function provided')
   }
 
   // No descriptor means original was on the prototype. This is not totally
@@ -252,7 +252,7 @@ function assertMethod (target, name, method) {
       }
     }
 
-    throw new Error(message)
+    throw new TypeError(message)
   }
 }
 
@@ -264,7 +264,7 @@ function assertMethod (target, name, method) {
  */
 function assertNotClass (target) {
   if (Function.prototype.toString.call(target).startsWith('class')) {
-    throw new Error('Target is a native class constructor and cannot be wrapped.')
+    throw new TypeError('Target is a native class constructor and cannot be wrapped.')
   }
 }
 
