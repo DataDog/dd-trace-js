@@ -15,7 +15,7 @@ const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const SpanContext = require('../../src/opentelemetry/span_context')
 const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
 
-const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, ERROR_OTEL } = require('../../src/constants')
+const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, IGNORE_OTEL_ERROR } = require('../../src/constants')
 const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 const format = require('../../src/format')
@@ -363,11 +363,13 @@ describe('OTel Span', () => {
     const okCtx = ok._ddSpan.context()
     ok.setStatus({ code: 1, message: 'ok' })
     expect(okCtx._tags).to.not.have.property(ERROR_MESSAGE)
+    expect(okCtx._tags).to.not.have.property(IGNORE_OTEL_ERROR)
 
     const error = makeSpan('name')
     const errorCtx = error._ddSpan.context()
     error.setStatus({ code: 2, message: 'error' })
     expect(errorCtx._tags).to.have.property(ERROR_MESSAGE, 'error')
+    expect(errorCtx._tags).to.have.property(IGNORE_OTEL_ERROR, false)
   })
 
   it('should record exceptions', () => {
@@ -383,7 +385,7 @@ describe('OTel Span', () => {
     expect(_tags).to.have.property(ERROR_TYPE, error.name)
     expect(_tags).to.have.property(ERROR_MESSAGE, error.message)
     expect(_tags).to.have.property(ERROR_STACK, error.stack)
-    expect(_tags).to.have.property(ERROR_OTEL, true)
+    expect(_tags).to.have.property(IGNORE_OTEL_ERROR, true)
 
     const events = span._ddSpan._events
     expect(events).to.have.lengthOf(1)
@@ -396,9 +398,23 @@ describe('OTel Span', () => {
       startTime: datenow
     }])
 
-    const formatted = format(span._ddSpan)
+    let formatted = format(span._ddSpan)
     expect(formatted).to.have.property('error', 0)
     expect(formatted.meta).to.not.have.property('doNotSetTraceError')
+
+    // Set error code
+    span.setStatus({ code: 2, message: 'error' })
+
+    formatted = format(span._ddSpan)
+    expect(formatted).to.have.property('error', 1)
+
+    span.recordException(new Error('foobar'), Date.now())
+
+    // Keep the error set to 1
+    formatted = format(span._ddSpan)
+    expect(formatted).to.have.property('error', 1)
+    expect(formatted).to.have.property('meta')
+    expect(formatted.meta).to.have.property('error.message', 'foobar')
   })
 
   it('should record exception without passing in time', () => {

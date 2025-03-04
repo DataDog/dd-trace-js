@@ -84,7 +84,7 @@ describe('tagger', () => {
     expect(carrier).to.have.property(ERROR_TYPE, 'foo')
     expect(carrier).to.have.property(ERROR_MESSAGE, 'foo')
     expect(carrier).to.have.property(ERROR_STACK, 'foo')
-    expect(carrier).to.have.property('doNotSetTraceError')
+    expect(carrier).to.have.property('doNotSetTraceError', true)
     expect(carrier).to.not.have.property('setTraceError')
 
     tagger.add(carrier, {
@@ -96,6 +96,6 @@ describe('tagger', () => {
     expect(carrier).to.have.property(ERROR_TYPE, 'foo')
     expect(carrier).to.have.property(ERROR_MESSAGE, 'foo')
     expect(carrier).to.have.property(ERROR_STACK, 'foo')
-    expect(carrier).to.not.have.property('setTraceError', true)
+    expect(carrier).to.not.have.property('setTraceError')
   })
 })

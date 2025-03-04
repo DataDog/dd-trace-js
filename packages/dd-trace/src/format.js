@@ -22,7 +22,7 @@ const PROCESS_ID = constants.PROCESS_ID
 const ERROR_MESSAGE = constants.ERROR_MESSAGE
 const ERROR_STACK = constants.ERROR_STACK
 const ERROR_TYPE = constants.ERROR_TYPE
-const { ERROR_OTEL } = constants
+const { IGNORE_OTEL_ERROR } = constants
 
 // TODO(BridgeAR)[31.03.2025]: Should these land in the constants file?
 const map = {
@@ -166,7 +166,7 @@ function extractTags (trace, span) {
           break
         }
         // otel.recordException should not influence trace.error
-        if (!tags[ERROR_OTEL]) {
+        if (!tags[IGNORE_OTEL_ERROR]) {
           trace.error = 1
         }
       default: // eslint-disable-line no-fallthrough
