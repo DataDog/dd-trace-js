@@ -1,6 +1,7 @@
 const BaseLLMObsPlugin = require('./base')
 const { storage } = require('../../../../datadog-core')
 const llmobsStore = storage('llmobs')
+const telemetry = require('../telemetry')
 
 const {
   extractRequestParams,
@@ -46,6 +47,8 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
   }
 
   setLLMObsTags ({ request, span, response, modelProvider, modelName }) {
+    telemetry.incrementLLMObsSpanStartCount({ autoinstrumentation: true, kind: 'llm' })
+
     const parent = llmobsStore.getStore()?.span
     this._tagger.registerLLMObsSpan(span, {
       parent,
