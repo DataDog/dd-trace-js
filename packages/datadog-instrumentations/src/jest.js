@@ -233,10 +233,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
 
       Object.entries(testManagementTestsForSuite).forEach(([testName, { properties }]) => {
-        // if (properties?.disabled) {
-        //   result.disabled.push(testName)
-        // } else
-        if (properties?.quarantined) {
+        if (properties?.disabled) {
+          result.disabled.push(testName)
+        } else if (properties?.quarantined) {
           result.quarantined.push(testName)
         }
       })
@@ -289,6 +288,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             retriedTestsToNumAttempts.set(originalTestName, numEfdRetry + 1)
           }
         }
+
+        let isDisabled = false
+
+        if (this.isTestManagementTestsEnabled) {
+          event.test.mode = 'skip'
+          isDisabled = this.testManagementTestsForThisSuite?.disabled?.includes(testName)
+        }
         const isJestRetry = event.test?.invocations > 1
         asyncResource.runInAsyncScope(() => {
           testStartCh.publish({
@@ -301,7 +307,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             isNew: isNewTest,
             isEfdRetry: numEfdRetry > 0,
             isJestRetry
-          })
+          }, isDisabled)
           originalTestFns.set(event.test, event.test.fn)
           event.test.fn = asyncResource.bind(event.test.fn)
         })

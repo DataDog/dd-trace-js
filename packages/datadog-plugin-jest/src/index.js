@@ -26,7 +26,8 @@ const {
   getFormattedError,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
-  TEST_MANAGEMENT_IS_QUARANTINED
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_IS_DISABLED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -324,9 +325,13 @@ class JestPlugin extends CiPlugin {
       this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, files.length)
     })
 
-    this.addSub('ci:jest:test:start', (test) => {
+    this.addSub('ci:jest:test:start', (test, isDisabled) => {
       const store = storage('legacy').getStore()
       const span = this.startTestSpan(test)
+
+      if (isDisabled) {
+        span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
+      }
 
       this.enter(span, store)
       this.activeTestSpan = span
