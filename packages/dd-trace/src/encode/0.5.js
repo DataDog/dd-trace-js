@@ -11,8 +11,8 @@ function formatSpan (span) {
 }
 
 class AgentEncoder extends BaseEncoder {
-  constructor (writer, limit = SOFT_LIMIT) {
-    super(writer, limit)
+  constructor () {
+    super(...arguments)
     this._format = 'v0.5'
   }
 
