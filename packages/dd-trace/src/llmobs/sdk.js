@@ -136,6 +136,8 @@ class LLMObs extends NoopLLMObs {
     const llmobs = this
 
     function wrapped () {
+      telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: false, kind })
+
       const span = llmobs._tracer.scope().active()
       const fnArgs = arguments
 
