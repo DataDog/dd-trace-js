@@ -15,9 +15,10 @@ const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const SpanContext = require('../../src/opentelemetry/span_context')
 const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
 
-const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../src/constants')
+const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, ERROR_OTEL } = require('../../src/constants')
 const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
+const format = require('../../src/format')
 
 const spanKindNames = {
   [api.SpanKind.INTERNAL]: kinds.INTERNAL,
@@ -372,13 +373,9 @@ describe('OTel Span', () => {
   it('should record exceptions', () => {
     const span = makeSpan('name')
 
-    class TestError extends Error {
-      constructor () {
-        super('test message')
-      }
-    }
+    class TestError extends Error {}
 
-    const error = new TestError()
+    const error = new TestError('test message')
     const datenow = Date.now()
     span.recordException(error, datenow)
 
@@ -386,6 +383,7 @@ describe('OTel Span', () => {
     expect(_tags).to.have.property(ERROR_TYPE, error.name)
     expect(_tags).to.have.property(ERROR_MESSAGE, error.message)
     expect(_tags).to.have.property(ERROR_STACK, error.stack)
+    expect(_tags).to.have.property(ERROR_OTEL, true)
 
     const events = span._ddSpan._events
     expect(events).to.have.lengthOf(1)
@@ -397,6 +395,10 @@ describe('OTel Span', () => {
       },
       startTime: datenow
     }])
+
+    const formatted = format(span._ddSpan)
+    expect(formatted).to.have.property('error', 0)
+    expect(formatted.meta).to.not.have.property('doNotSetTraceError')
   })
 
   it('should record exception without passing in time', () => {

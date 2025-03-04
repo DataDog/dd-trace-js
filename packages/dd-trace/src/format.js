@@ -22,7 +22,9 @@ const PROCESS_ID = constants.PROCESS_ID
 const ERROR_MESSAGE = constants.ERROR_MESSAGE
 const ERROR_STACK = constants.ERROR_STACK
 const ERROR_TYPE = constants.ERROR_TYPE
+const { ERROR_OTEL } = constants
 
+// TODO(BridgeAR)[31.03.2025]: Should these land in the constants file?
 const map = {
   'operation.name': 'name',
   'service.name': 'service',
@@ -69,46 +71,49 @@ function setSingleSpanIngestionTags (span, options) {
 }
 
 function extractSpanLinks (trace, span) {
-  const links = []
-  if (span._links) {
-    for (const link of span._links) {
-      const { context, attributes } = link
-      const formattedLink = {}
-
-      formattedLink.trace_id = context.toTraceId(true)
-      formattedLink.span_id = context.toSpanId(true)
-
-      if (attributes && Object.keys(attributes).length > 0) {
-        formattedLink.attributes = attributes
-      }
-      if (context?._sampling?.priority >= 0) formattedLink.flags = context._sampling.priority > 0 ? 1 : 0
-      if (context?._tracestate) formattedLink.tracestate = context._tracestate.toString()
-
-      links.push(formattedLink)
-    }
+  if (!span._links?.length) {
+    return
   }
-  if (links.length > 0) { trace.meta['_dd.span_links'] = JSON.stringify(links) }
+  const links = []
+  for (const link of span._links) {
+    const { context, attributes } = link
+    const formattedLink = {
+      trace_id: context.toTraceId(true),
+      span_id: context.toSpanId(true)
+    }
+
+    if (attributes && Object.keys(attributes).length > 0) {
+      formattedLink.attributes = attributes
+    }
+    if (context?._sampling?.priority >= 0) formattedLink.flags = context._sampling.priority > 0 ? 1 : 0
+    if (context?._tracestate) formattedLink.tracestate = context._tracestate.toString()
+
+    links.push(formattedLink)
+  }
+  trace.meta['_dd.span_links'] = JSON.stringify(links)
 }
 
 function extractSpanEvents (trace, span) {
-  const events = []
-  if (span._events) {
-    for (const event of span._events) {
-      const formattedEvent = {
-        name: event.name,
-        time_unix_nano: Math.round(event.startTime * 1e6),
-        attributes: event.attributes && Object.keys(event.attributes).length > 0 ? event.attributes : undefined
-      }
-
-      events.push(formattedEvent)
-    }
+  if (!span._events?.length) {
+    return
   }
-  if (events.length > 0) { trace.meta.events = JSON.stringify(events) }
+  const events = []
+  for (const event of span._events) {
+    const formattedEvent = {
+      name: event.name,
+      time_unix_nano: Math.round(event.startTime * 1e6),
+      attributes: event.attributes && Object.keys(event.attributes).length > 0 ? event.attributes : undefined
+    }
+
+    events.push(formattedEvent)
+  }
+  trace.meta.events = JSON.stringify(events)
 }
 
 function extractTags (trace, span) {
   const context = span.context()
   const origin = context._trace.origin
+  // TODO(BridgeAR)[31.03.2025]: Change the tags to a map. That is way more efficient
   const tags = context._tags
   const hostname = context._hostname
   const priority = context._sampling.priority
@@ -124,43 +129,48 @@ function extractTags (trace, span) {
     registerExtraService(tags['service.name'])
   }
 
-  for (const tag in tags) {
+  for (const [tag, value] of Object.entries(tags)) {
+    // TODO(BridgeAR)[31.03.2025]: Check how many tags are defined in average.
+    // In case there are more than 2 tags in average, check for all special
+    // cases up front and loop over the tags afterwards, skipping the already
+    // visited property names by checking a map with these keys.
     switch (tag) {
       case 'service.name':
       case 'span.type':
       case 'resource.name':
-        addTag(trace, {}, map[tag], tags[tag])
+        addTag(trace, {}, map[tag], value)
         break
       // HACK: remove when Datadog supports numeric status code
       case 'http.status_code':
-        addTag(trace.meta, {}, tag, tags[tag] && String(tags[tag]))
+        addTag(trace.meta, {}, tag, value && String(value))
         break
       case 'analytics.event':
-        addTag({}, trace.metrics, ANALYTICS, tags[tag] === undefined || tags[tag] ? 1 : 0)
+        addTag({}, trace.metrics, ANALYTICS, value === undefined || value ? 1 : 0)
         break
       case HOSTNAME_KEY:
       case MEASURED:
-        addTag({}, trace.metrics, tag, tags[tag] === undefined || tags[tag] ? 1 : 0)
+        addTag({}, trace.metrics, tag, value === undefined || value ? 1 : 0)
         break
+      // TODO(BridgeAR)[31.03.2025]: How come we use two different ways to pass
+      // through errors? Can we just unify the behavior to always use one way?
       case 'error':
         if (context._name !== 'fs.operation') {
-          extractError(trace, tags[tag])
+          extractError(trace, value)
         }
         break
       case ERROR_TYPE:
       case ERROR_MESSAGE:
       case ERROR_STACK:
         // HACK: remove when implemented in the backend
-        if (context._name !== 'fs.operation') {
-          // HACK: to ensure otel.recordException does not influence trace.error
-          if (tags.setTraceError) {
-            trace.error = 1
-          }
-        } else {
+        if (context._name === 'fs.operation') {
           break
         }
+        // otel.recordException should not influence trace.error
+        if (!tags[ERROR_OTEL]) {
+          trace.error = 1
+        }
       default: // eslint-disable-line no-fallthrough
-        addTag(trace.meta, trace.metrics, tag, tags[tag])
+        addTag(trace.meta, trace.metrics, tag, value)
     }
   }
   setSingleSpanIngestionTags(trace, context._spanSampling)
@@ -177,7 +187,7 @@ function extractRootTags (trace, span) {
   const isLocalRoot = span === context._trace.started[0]
   const parentId = context._parentId
 
-  if (!isLocalRoot || (parentId && parentId.toString(10) !== '0')) return
+  if (!isLocalRoot || (parentId && parentId !== '0')) return
 
   addTag({}, trace.metrics, SAMPLING_RULE_DECISION, context._trace[SAMPLING_RULE_DECISION])
   addTag({}, trace.metrics, SAMPLING_LIMIT_DECISION, context._trace[SAMPLING_LIMIT_DECISION])
@@ -191,8 +201,8 @@ function extractChunkTags (trace, span) {
 
   if (!isLocalRoot) return
 
-  for (const key in context._trace.tags) {
-    addTag(trace.meta, trace.metrics, key, context._trace.tags[key])
+  for (const [key, value] of Object.entries(context._trace.tags)) {
+    addTag(trace.meta, trace.metrics, key, value)
   }
 }
 
@@ -203,6 +213,8 @@ function extractError (trace, error) {
 
   if (isError(error)) {
     // AggregateError only has a code and no message.
+    // TODO(BridgeAR)[31.03.2025]: An AggregateError can have a message. Should
+    // the code just generally be added, if available?
     addTag(trace.meta, trace.metrics, ERROR_MESSAGE, error.message || error.code)
     addTag(trace.meta, trace.metrics, ERROR_TYPE, error.name)
     addTag(trace.meta, trace.metrics, ERROR_STACK, error.stack)
@@ -221,28 +233,19 @@ function addTag (meta, metrics, key, value, nested) {
     case 'boolean':
       metrics[key] = value ? 1 : 0
       break
-    case 'undefined':
-      break
-    case 'object':
-      if (value === null) break
+    default:
+      if (value == null) break
 
       // Special case for Node.js Buffer and URL
+      // TODO(BridgeAR)[31.03.2025]: Figure out if all typed arrays should be treated as buffers.
       if (isNodeBuffer(value) || isUrl(value)) {
         metrics[key] = value.toString()
       } else if (!Array.isArray(value) && !nested) {
-        for (const prop in value) {
-          if (!hasOwn(value, prop)) continue
-
-          addTag(meta, metrics, `${key}.${prop}`, value[prop], true)
+        for (const [prop, val] of Object.entries(value)) {
+          addTag(meta, metrics, `${key}.${prop}`, val, true)
         }
       }
-
-      break
   }
-}
-
-function hasOwn (object, prop) {
-  return Object.prototype.hasOwnProperty.call(object, prop)
 }
 
 function isNodeBuffer (obj) {
