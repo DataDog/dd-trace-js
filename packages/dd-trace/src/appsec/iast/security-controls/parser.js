@@ -81,7 +81,7 @@ function getParameters (parameters) {
 
       // discard the securityControl if there is an incorrect parameter
       if (isNaN(parsedParam)) {
-        throw new Error('Invalid non-numeric security control parameter')
+        throw new TypeError('Invalid non-numeric security control parameter')
       }
 
       return parsedParam
