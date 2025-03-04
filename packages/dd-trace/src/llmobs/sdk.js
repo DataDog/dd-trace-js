@@ -14,6 +14,7 @@ const Span = require('../opentracing/span')
 
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
+const telemetry = require('./telemetry')
 
 const LLMObsTagger = require('./tagger')
 
@@ -88,6 +89,8 @@ class LLMObs extends NoopLLMObs {
 
     const kind = validateKind(options.kind) // will throw if kind is undefined or not an expected kind
 
+    telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: false, kind })
+
     // name is required for spans generated with `trace`
     // while `kind` is required, this should never throw (as otherwise it would have thrown above)
     const name = options.name || kind
@@ -133,6 +136,8 @@ class LLMObs extends NoopLLMObs {
     const llmobs = this
 
     function wrapped () {
+      telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: false, kind })
+
       const span = llmobs._tracer.scope().active()
       const fnArgs = arguments
 
