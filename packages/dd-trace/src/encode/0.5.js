@@ -1,7 +1,7 @@
 'use strict'
 
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
-const { AgentEncoder: BaseEncoder, SOFT_LIMIT } = require('./0.4')
+const { AgentEncoder: BaseEncoder } = require('./0.4')
 
 const ARRAY_OF_TWO = 0x92
 const ARRAY_OF_TWELVE = 0x9c
