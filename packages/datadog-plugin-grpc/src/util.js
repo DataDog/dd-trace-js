@@ -49,7 +49,7 @@ module.exports = {
       return config[filter]
     }
 
-    if (config[filter] instanceof Array) {
+    if (Array.isArray(config[filter])) {
       return element => pick(element, config[filter])
     }
 

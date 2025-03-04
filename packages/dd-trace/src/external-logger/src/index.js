@@ -128,10 +128,10 @@ class ExternalLogger {
 }
 
 class NoopExternalLogger {
-  log () { }
-  enqueue () { }
-  shutdown () { }
-  flush () { }
+  log () {}
+  enqueue () {}
+  shutdown () {}
+  flush () {}
 }
 
 module.exports.ExternalLogger = ExternalLogger

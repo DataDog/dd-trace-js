@@ -64,7 +64,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
 
     // add metadata tags
     this._tagger.tagMetadata(span, {
-      temperature: parseFloat(requestParams.temperature) || 0.0,
+      temperature: parseFloat(requestParams.temperature) || 0,
       max_tokens: parseInt(requestParams.maxTokens) || 0
     })
 
