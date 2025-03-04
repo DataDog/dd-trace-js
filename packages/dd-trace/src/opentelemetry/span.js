@@ -9,7 +9,7 @@ const { timeInputToHrTime } = require('@opentelemetry/core')
 
 const tracer = require('../../')
 const DatadogSpan = require('../opentracing/span')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../constants')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, ERROR_OTEL } = require('../constants')
 const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 
@@ -278,12 +278,11 @@ class Span {
   }
 
   recordException (exception, timeInput) {
-    // HACK: identifier is added so that trace.error remains unchanged after a call to otel.recordException
     this._ddSpan.addTags({
       [ERROR_TYPE]: exception.name,
       [ERROR_MESSAGE]: exception.message,
       [ERROR_STACK]: exception.stack,
-      doNotSetTraceError: true
+      [ERROR_OTEL]: true
     })
     const attributes = {}
     if (exception.message) attributes['exception.message'] = exception.message
