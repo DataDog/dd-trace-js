@@ -20,7 +20,7 @@ class SchemaBuilder {
   static getSchemaDefinition (schema) {
     const noNones = convertToJsonCompatible(schema)
     const definition = jsonStringify(noNones)
-    const id = fnv64(Buffer.from(definition, 'utf-8')).toString()
+    const id = fnv64(Buffer.from(definition, 'utf8')).toString()
     return new Schema(definition, id)
   }
 

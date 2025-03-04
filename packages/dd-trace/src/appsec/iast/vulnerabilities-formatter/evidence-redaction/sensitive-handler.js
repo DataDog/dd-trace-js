@@ -252,7 +252,7 @@ class SensitiveHandler {
             _value.substring(_sourceRedactionContext.start - offset, _sourceRedactionContext.end - offset)
           const indexOfPartValueInPattern = source.value.indexOf(sensitive)
 
-          const pattern = indexOfPartValueInPattern > -1
+          const pattern = indexOfPartValueInPattern !== -1
             ? placeholder.substring(indexOfPartValueInPattern, indexOfPartValueInPattern + sensitive.length)
             : placeholder.substring(_sourceRedactionContext.start, _sourceRedactionContext.end)
 

@@ -70,7 +70,7 @@ function extractContext (args) {
   if (context === undefined || context.getRemainingTimeInMillis === undefined) {
     context = args.length > 2 ? args[2] : undefined
     if (context === undefined || context.getRemainingTimeInMillis === undefined) {
-      throw Error('Could not extract context')
+      throw new Error('Could not extract context')
     }
   }
   return context

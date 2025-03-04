@@ -12,7 +12,7 @@ function fnv (data, hvalInit, fnvPrime, fnvSize) {
 
 function fnv64 (data) {
   if (!Buffer.isBuffer(data)) {
-    data = Buffer.from(data, 'utf-8')
+    data = Buffer.from(data, 'utf8')
   }
   const byteArray = new Uint8Array(data)
   return fnv(byteArray, FNV1_64_INIT, FNV_64_PRIME, 2n ** 64n)

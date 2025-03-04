@@ -108,6 +108,7 @@ function getPagePath (maybePage) {
 
 function getPageFromPath (page, dynamicRoutes = []) {
   for (const dynamicRoute of dynamicRoutes) {
+    // eslint-disable-next-line unicorn/prefer-regexp-test
     if (dynamicRoute.page.startsWith('/api') && dynamicRoute.match(page)) {
       return getPagePath(dynamicRoute.page)
     }

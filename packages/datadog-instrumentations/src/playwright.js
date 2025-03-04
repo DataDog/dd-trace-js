@@ -411,7 +411,7 @@ function dispatcherRunWrapperNew (run) {
     if (!this._allTests) {
       // Removed in https://github.com/microsoft/playwright/commit/1e52c37b254a441cccf332520f60225a5acc14c7
       // Not available from >=1.44.0
-      this._ddAllTests = testGroups.map(g => g.tests).flat()
+      this._ddAllTests = testGroups.flatMap(g => g.tests)
     }
     remainingTestsByFile = getTestsBySuiteFromTestGroups(arguments[0])
     return run.apply(this, arguments)
