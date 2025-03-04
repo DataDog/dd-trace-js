@@ -1,6 +1,6 @@
 // DataDogAgent.js
 
-const format = require('../format')
+const { URL, format } = require('url')
 const log = require('../log')
 const request = require('../exporters/common/request')
 
@@ -34,14 +34,14 @@ class DataDogAgentDiscovery {
       throw new Error('Error getting Datadog Agent URL via config object for Datadog Agent Discovery service.')
     }
 
-    this.url = url
+    this.url = agent_url
     this.interval = interval
     this.data = {}
     this.error = null
     this.timer = null
     this.callbacks = []
 
-    if (config._fetchAgentInfo) {
+    if (config.fetchAgentInfo) {
       this._startFetching()
     }
 
@@ -114,11 +114,10 @@ class DataDogAgentDiscovery {
     const options = {
       url: this.url,
       path: '/info',
-      method: 'GET',
       timeout: 5000,
     }
 
-    request(options, (err, res) => {
+    request('', options, (err, res) => {
       if (err) {
         this.error = err
         log.error('Error fetching DataDog Agent info:', err.message)
