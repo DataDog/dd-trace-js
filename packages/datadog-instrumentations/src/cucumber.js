@@ -42,7 +42,7 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 
 const isMarkedAsUnskippable = (pickle) => {
-  return !!pickle.tags.find(tag => tag.name === '@datadog:unskippable')
+  return pickle.tags.some(tag => tag.name === '@datadog:unskippable')
 }
 
 // We'll preserve the original coverage here

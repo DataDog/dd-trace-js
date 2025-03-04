@@ -146,7 +146,7 @@ class TextMapPropagator {
         baggage += item
       }
 
-      baggage = baggage.slice(0, baggage.length - 1)
+      baggage = baggage.slice(0, -1)
       if (baggage) carrier.baggage = baggage
     }
   }

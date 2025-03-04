@@ -42,7 +42,7 @@ function sanitize (logEntry) {
 
   const firstIndex = stackLines.findIndex(l => l.match(STACK_FRAME_LINE_REGEX))
 
-  const isDDCode = firstIndex > -1 && stackLines[firstIndex].includes(ddBasePath)
+  const isDDCode = firstIndex !== -1 && stackLines[firstIndex].includes(ddBasePath)
   stackLines = stackLines
     .filter((line, index) => (isDDCode && index < firstIndex) || line.includes(ddBasePath))
     .map(line => line.replace(ddBasePath, ''))

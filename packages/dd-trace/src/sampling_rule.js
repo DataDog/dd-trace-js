@@ -112,7 +112,7 @@ class SamplingRule {
 
   match (span) {
     for (const matcher of this.matchers) {
-      if (!matcher.match(span)) {
+      if (!span.test(matcher)) {
         return false
       }
     }

@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url'
 import {
   load as origLoad,
   resolve as origResolve,
-  getFormat as origGetFormat,
+
   getSource as origGetSource
 } from 'import-in-the-middle/hook.mjs'
 
@@ -26,7 +26,7 @@ function insertInit (result) {
   if (!hasInsertedInit) {
     hasInsertedInit = true
     result.source = `
-import '${fileURLToPath(new URL('./init.js', import.meta.url))}';
+import '${fileURLToPath(new URL('init.js', import.meta.url))}';
 ${result.source}`
   }
   return result
@@ -45,8 +45,6 @@ export async function load (url, context, nextLoad) {
 
 export const resolve = brokenLoaders ? undefined : origResolve
 
-export const getFormat = origGetFormat
-
 export async function getSource (...args) {
   return insertInit(await origGetSource(...args))
 }
@@ -60,3 +58,4 @@ if (isMainThread) {
     })
   }
 }
+export { getFormat } from 'import-in-the-middle/hook.mjs'

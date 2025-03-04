@@ -19,7 +19,7 @@ function getLatestEvpProxyVersion (err, agentInfo) {
       if (isNaN(version)) {
         return acc
       }
-      return version > acc ? version : acc
+      return Math.max(version, acc)
     }
     return acc
   }, 0)

@@ -746,7 +746,7 @@ class CypressPlugin {
       },
       'dd:beforeEach': (test) => {
         const { testName, testSuite } = test
-        const shouldSkip = !!this.testsToSkip.find(test => {
+        const shouldSkip = this.testsToSkip.some(test => {
           return testName === test.name && testSuite === test.suite
         })
         const isUnskippable = this.unskippableSuites.includes(testSuite)
