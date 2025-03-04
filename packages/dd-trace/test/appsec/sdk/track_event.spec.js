@@ -15,7 +15,7 @@ describe('track_event', () => {
     let prioritySampler
     let rootSpan
     let getRootSpan
-    let setUserTags
+    let setUserTagsSdk
     let sample
     let waf
     let telemetryMetrics, count, inc
@@ -39,7 +39,7 @@ describe('track_event', () => {
 
       getRootSpan = sinon.stub().callsFake(() => rootSpan)
 
-      setUserTags = sinon.stub()
+      setUserTagsSdk = sinon.stub()
 
       sample = sinon.stub()
 
@@ -75,7 +75,7 @@ describe('track_event', () => {
           getRootSpan
         },
         './set_user': {
-          setUserTags
+          setUserTagsSdk
         },
         '../standalone': {
           sample
@@ -101,7 +101,7 @@ describe('track_event', () => {
           .to.have.been.calledWithExactly('[ASM] Invalid user provided to trackUserLoginSuccessEvent')
         expect(log.warn.secondCall)
           .to.have.been.calledWithExactly('[ASM] Invalid user provided to trackUserLoginSuccessEvent')
-        expect(setUserTags).to.not.have.been.called
+        expect(setUserTagsSdk).to.not.have.been.called
         expect(rootSpan.addTags).to.not.have.been.called
       })
 
@@ -112,7 +112,7 @@ describe('track_event', () => {
 
         expect(log.warn)
           .to.have.been.calledOnceWithExactly('[ASM] Root span not available in trackUserLoginSuccessEvent')
-        expect(setUserTags).to.not.have.been.called
+        expect(setUserTagsSdk).to.not.have.been.called
       })
 
       it('should call setUser and addTags with metadata', () => {
@@ -125,7 +125,7 @@ describe('track_event', () => {
         })
 
         expect(log.warn).to.not.have.been.called
-        expect(setUserTags).to.have.been.calledOnceWithExactly(user, rootSpan)
+        expect(setUserTagsSdk).to.have.been.calledOnceWithExactly(user, rootSpan)
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
           {
             'appsec.events.users.login.success.track': 'true',
@@ -153,7 +153,7 @@ describe('track_event', () => {
         trackUserLoginSuccessEvent(tracer, user)
 
         expect(log.warn).to.not.have.been.called
-        expect(setUserTags).to.have.been.calledOnceWithExactly(user, rootSpan)
+        expect(setUserTagsSdk).to.have.been.calledOnceWithExactly(user, rootSpan)
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.sdk': 'true',
@@ -177,7 +177,7 @@ describe('track_event', () => {
         trackUserLoginSuccessEvent(tracer, user)
 
         expect(log.warn).to.not.have.been.called
-        expect(setUserTags).to.have.been.calledOnceWithExactly(user, rootSpan)
+        expect(setUserTagsSdk).to.have.been.calledOnceWithExactly(user, rootSpan)
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.sdk': 'true',
@@ -218,7 +218,7 @@ describe('track_event', () => {
           .to.have.been.calledWithExactly('[ASM] Invalid userId provided to trackUserLoginFailureEvent')
         expect(log.warn.secondCall)
           .to.have.been.calledWithExactly('[ASM] Invalid userId provided to trackUserLoginFailureEvent')
-        expect(setUserTags).to.not.have.been.called
+        expect(setUserTagsSdk).to.not.have.been.called
         expect(rootSpan.addTags).to.not.have.been.called
       })
 
@@ -229,7 +229,7 @@ describe('track_event', () => {
 
         expect(log.warn)
           .to.have.been.calledOnceWithExactly('[ASM] Root span not available in %s', 'trackUserLoginFailureEvent')
-        expect(setUserTags).to.not.have.been.called
+        expect(setUserTagsSdk).to.not.have.been.called
       })
 
       it('should call addTags with metadata', () => {
@@ -240,7 +240,7 @@ describe('track_event', () => {
         })
 
         expect(log.warn).to.not.have.been.called
-        expect(setUserTags).to.not.have.been.called
+        expect(setUserTagsSdk).to.not.have.been.called
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.users.login.failure.track': 'true',
           '_dd.appsec.events.users.login.failure.sdk': 'true',
@@ -270,7 +270,7 @@ describe('track_event', () => {
         })
 
         expect(log.warn).to.not.have.been.called
-        expect(setUserTags).to.not.have.been.called
+        expect(setUserTagsSdk).to.not.have.been.called
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.users.login.failure.track': 'true',
           '_dd.appsec.events.users.login.failure.sdk': 'true',
@@ -296,7 +296,7 @@ describe('track_event', () => {
         trackUserLoginFailureEvent(tracer, 'user_id', true)
 
         expect(log.warn).to.not.have.been.called
-        expect(setUserTags).to.not.have.been.called
+        expect(setUserTagsSdk).to.not.have.been.called
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.users.login.failure.track': 'true',
           '_dd.appsec.events.users.login.failure.sdk': 'true',
@@ -336,7 +336,7 @@ describe('track_event', () => {
           .to.have.been.calledWithExactly('[ASM] Invalid eventName provided to trackCustomEvent')
         expect(log.warn.secondCall)
           .to.have.been.calledWithExactly('[ASM] Invalid eventName provided to trackCustomEvent')
-        expect(setUserTags).to.not.have.been.called
+        expect(setUserTagsSdk).to.not.have.been.called
         expect(rootSpan.addTags).to.not.have.been.called
       })
 
@@ -347,7 +347,7 @@ describe('track_event', () => {
 
         expect(log.warn)
           .to.have.been.calledOnceWithExactly('[ASM] Root span not available in %s', 'trackCustomEvent')
-        expect(setUserTags).to.not.have.been.called
+        expect(setUserTagsSdk).to.not.have.been.called
       })
 
       it('should call addTags with metadata', () => {
@@ -357,7 +357,7 @@ describe('track_event', () => {
         })
 
         expect(log.warn).to.not.have.been.called
-        expect(setUserTags).to.not.have.been.called
+        expect(setUserTagsSdk).to.not.have.been.called
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.custom_event.track': 'true',
           '_dd.appsec.events.custom_event.sdk': 'true',
@@ -374,7 +374,7 @@ describe('track_event', () => {
         trackCustomEvent(tracer, 'custom_event')
 
         expect(log.warn).to.not.have.been.called
-        expect(setUserTags).to.not.have.been.called
+        expect(setUserTagsSdk).to.not.have.been.called
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.custom_event.track': 'true',
           '_dd.appsec.events.custom_event.sdk': 'true'
@@ -425,7 +425,7 @@ describe('track_event', () => {
 
           expect(log.warn)
             .to.have.been.calledOnceWithExactly('[ASM] Root span not available in v2.trackUserLoginSuccess')
-          expect(setUserTags).to.not.have.been.called
+          expect(setUserTagsSdk).to.not.have.been.called
         })
 
         it('should log warning when passed invalid login', () => {
@@ -437,7 +437,7 @@ describe('track_event', () => {
             .to.have.been.calledWithExactly('[ASM] Invalid login provided to v2.trackUserLoginSuccess')
           expect(log.warn.secondCall)
             .to.have.been.calledWithExactly('[ASM] Invalid login provided to v2.trackUserLoginSuccess')
-          expect(setUserTags).to.not.have.been.called
+          expect(setUserTagsSdk).to.not.have.been.called
           expect(rootSpan.addTags).to.not.have.been.called
           expect(waf.run).to.not.have.been.called
         })
@@ -446,7 +446,7 @@ describe('track_event', () => {
           trackUserLoginSuccessV2(tracer, 'login')
 
           expect(log.warn).to.not.have.been.called
-          expect(setUserTags).to.not.have.been.called
+          expect(setUserTagsSdk).to.not.have.been.called
 
           expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
             {
@@ -467,7 +467,7 @@ describe('track_event', () => {
           trackUserLoginSuccessV2(tracer, 'login', 'userId')
 
           expect(log.warn).to.not.have.been.called
-          expect(setUserTags).to.have.been.calledOnceWithExactly({ id: 'userId' }, rootSpan)
+          expect(setUserTagsSdk).to.have.been.calledOnceWithExactly({ id: 'userId' }, rootSpan)
 
           expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
             {
@@ -495,7 +495,7 @@ describe('track_event', () => {
           trackUserLoginSuccessV2(tracer, 'login', user)
 
           expect(log.warn).to.not.have.been.called
-          expect(setUserTags).to.have.been.calledOnceWithExactly(user, rootSpan)
+          expect(setUserTagsSdk).to.have.been.calledOnceWithExactly(user, rootSpan)
 
           expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
             {
@@ -525,7 +525,7 @@ describe('track_event', () => {
           trackUserLoginSuccessV2(tracer, 'login', null, metadata)
 
           expect(log.warn).to.not.have.been.called
-          expect(setUserTags).to.not.have.been.called
+          expect(setUserTagsSdk).to.not.have.been.called
 
           expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
             {
@@ -555,7 +555,7 @@ describe('track_event', () => {
           trackUserLoginSuccessV2(tracer, 'login', 'userId', metadata)
 
           expect(log.warn).to.not.have.been.called
-          expect(setUserTags).to.have.been.calledOnceWithExactly({
+          expect(setUserTagsSdk).to.have.been.calledOnceWithExactly({
             id: 'userId'
           }, rootSpan)
 
@@ -674,7 +674,7 @@ describe('track_event', () => {
 
           expect(log.warn)
             .to.have.been.calledOnceWithExactly('[ASM] Root span not available in v2.trackUserLoginFailure')
-          expect(setUserTags).to.not.have.been.called
+          expect(setUserTagsSdk).to.not.have.been.called
         })
 
         it('should log warning when passed invalid login', () => {
@@ -686,7 +686,7 @@ describe('track_event', () => {
             .to.have.been.calledWithExactly('[ASM] Invalid login provided to v2.trackUserLoginFailure')
           expect(log.warn.secondCall)
             .to.have.been.calledWithExactly('[ASM] Invalid login provided to v2.trackUserLoginFailure')
-          expect(setUserTags).to.not.have.been.called
+          expect(setUserTagsSdk).to.not.have.been.called
           expect(rootSpan.addTags).to.not.have.been.called
           expect(waf.run).to.not.have.been.called
         })
@@ -695,7 +695,7 @@ describe('track_event', () => {
           trackUserLoginFailureV2(tracer, 'login')
 
           expect(log.warn).to.not.have.been.called
-          expect(setUserTags).to.not.have.been.called
+          expect(setUserTagsSdk).to.not.have.been.called
 
           expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
             {

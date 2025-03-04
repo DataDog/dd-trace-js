@@ -11,6 +11,12 @@ function setUserTags (user, rootSpan) {
   }
 }
 
+function setUserTagsSdk (user, rootSpan) {
+  setUserTags(user, rootSpan)
+
+  rootSpan.setTag('_dd.appsec.user.collection_mode', 'sdk')
+}
+
 function setUser (tracer, user) {
   if (!user || !user.id) {
     log.warn('[ASM] Invalid user provided to setUser')
@@ -23,8 +29,7 @@ function setUser (tracer, user) {
     return
   }
 
-  setUserTags(user, rootSpan)
-  rootSpan.setTag('_dd.appsec.user.collection_mode', 'sdk')
+  setUserTagsSdk(user, rootSpan)
 
   waf.run({
     persistent: {
@@ -34,6 +39,7 @@ function setUser (tracer, user) {
 }
 
 module.exports = {
+  setUserTagsSdk,
   setUserTags,
   setUser
 }
