@@ -1,7 +1,5 @@
 'use strict'
 
-/* eslint-disable @stylistic/js/max-len */
-
 const { capture, fatal, run } = require('./terminal')
 
 const requiredScopes = ['public_repo', 'read:org']
