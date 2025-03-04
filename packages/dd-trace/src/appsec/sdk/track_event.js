@@ -22,7 +22,7 @@ function increaseSdkEventMetric (eventType, version) {
 }
 
 /**
- * @deprecated in favour of trackUserLoginSuccessV2
+ * @deprecated in favor of trackUserLoginSuccessV2
  */
 function trackUserLoginSuccessEvent (tracer, user, metadata) {
   // TODO: better user check here and in _setUser() ?
@@ -48,6 +48,44 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
   runWaf('users.login.success', { id: user.id, login })
 
   increaseSdkEventMetric('login_success', 'v1')
+}
+
+/**
+ * @deprecated in favor of trackUserLoginFailureV2
+ */
+function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
+  if (!userId || typeof userId !== 'string') {
+    log.warn('[ASM] Invalid userId provided to trackUserLoginFailureEvent')
+    return
+  }
+
+  const fields = {
+    'usr.id': userId,
+    'usr.login': userId,
+    'usr.exists': exists ? 'true' : 'false',
+    ...metadata
+  }
+
+  trackEvent('users.login.failure', fields, 'trackUserLoginFailureEvent', getRootSpan(tracer))
+
+  runWaf('users.login.failure', { login: userId })
+
+  increaseSdkEventMetric('login_failure', 'v1')
+}
+
+function trackCustomEvent (tracer, eventName, metadata) {
+  if (!eventName || typeof eventName !== 'string') {
+    log.warn('[ASM] Invalid eventName provided to trackCustomEvent')
+    return
+  }
+
+  trackEvent(eventName, metadata, 'trackCustomEvent', getRootSpan(tracer))
+
+  increaseSdkEventMetric('custom', 'v1')
+
+  if (eventName === 'users.login.success' || eventName === 'users.login.failure') {
+    runWaf(eventName)
+  }
 }
 
 function trackUserLoginSuccessV2 (tracer, login, user, metadata) {
@@ -118,41 +156,6 @@ function trackUserLoginFailureV2 (tracer, login, exists, metadata) {
   runWaf('users.login.failure', wafData)
 
   increaseSdkEventMetric('login_failure', 'v2')
-}
-
-function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
-  if (!userId || typeof userId !== 'string') {
-    log.warn('[ASM] Invalid userId provided to trackUserLoginFailureEvent')
-    return
-  }
-
-  const fields = {
-    'usr.id': userId,
-    'usr.login': userId,
-    'usr.exists': exists ? 'true' : 'false',
-    ...metadata
-  }
-
-  trackEvent('users.login.failure', fields, 'trackUserLoginFailureEvent', getRootSpan(tracer))
-
-  runWaf('users.login.failure', { login: userId })
-
-  increaseSdkEventMetric('login_failure', 'v1')
-}
-
-function trackCustomEvent (tracer, eventName, metadata) {
-  if (!eventName || typeof eventName !== 'string') {
-    log.warn('[ASM] Invalid eventName provided to trackCustomEvent')
-    return
-  }
-
-  trackEvent(eventName, metadata, 'trackCustomEvent', getRootSpan(tracer))
-
-  increaseSdkEventMetric('custom', 'v1')
-
-  if (eventName === 'users.login.success' || eventName === 'users.login.failure') {
-    runWaf(eventName)
-  }
 }
 
 function flattenFields (fields, sdkMethodName, depth = 0) {

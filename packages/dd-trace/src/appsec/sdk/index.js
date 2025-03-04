@@ -31,6 +31,7 @@ class AppsecSdk {
     if (config) {
       setTemplates(config)
     }
+
     this.v2 = new AppsecSdkV2(tracer)
   }
 
