@@ -443,14 +443,14 @@ describe('format', () => {
       })
     })
 
-    it('should not set the error flag when there is an error-related tag without a set trace tag', () => {
+    it('should set the error flag when there is an error-related tag without a set trace tag', () => {
       spanContext._tags[ERROR_TYPE] = 'Error'
       spanContext._tags[ERROR_MESSAGE] = 'boom'
       spanContext._tags[ERROR_STACK] = ''
 
       trace = format(span)
 
-      expect(trace.error).to.equal(0)
+      expect(trace.error).to.equal(1)
     })
 
     it('should set the error flag when there is an error-related tag with should setTrace', () => {
