@@ -30,9 +30,6 @@ class WAFManager {
     } catch (err) {
       log.error('[ASM] AppSec could not load native package. In-app WAF features will not be available.')
 
-      Reporter.reportWafInit('v.0.0.0', 'v.0.0.0', {}, false)
-      Reporter.reportWafUpdate('v.0.0.0', 'v.0.0.0', false)
-
       throw err
     }
   }
