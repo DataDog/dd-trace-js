@@ -108,6 +108,12 @@ function assertFolder (name, version) {
 
 // Helper function to apply version caps in a more readable way
 function applyCap (versionRange, latestVersion) {
+  // Handle caret ranges (e.g., "^3.0.7")
+  const caretRangeMatch = versionRange.match(/^\^(\d+\.\d+\.\d+)(.*)$/)
+  if (caretRangeMatch) {
+    return handleCaretRange(caretRangeMatch, latestVersion)
+  }
+
   // Handle hyphen ranges (e.g., "24.8.0 - 24.9.0")
   const hyphenRangeMatch = versionRange.match(/^(\d+\.\d+\.\d+)\s*-\s*(\d+\.\d+\.\d+)(.*)$/)
   if (hyphenRangeMatch) {
@@ -126,6 +132,43 @@ function applyCap (versionRange, latestVersion) {
 
   // If nothing else matched, return the original range
   return versionRange
+}
+
+// Handle caret ranges like "^3.0.7"
+function handleCaretRange (match, latestVersion) {
+  const [, version, extraConstraints] = match
+  const parsed = semver.parse(version)
+
+  // Calculate the upper bound implied by caret notation
+  let upperBound
+  if (parsed.major === 0) {
+    if (parsed.minor === 0) {
+      // ^0.0.x -> <0.0.(x+1)
+      upperBound = `0.0.${parsed.patch + 1}`
+    } else {
+      // ^0.y.x -> <0.(y+1).0
+      upperBound = `0.${parsed.minor + 1}.0`
+    }
+  } else {
+    // ^x.y.z -> <(x+1).0.0
+    upperBound = `${parsed.major + 1}.0.0`
+  }
+
+  // Cap at the lower of: original caret upper bound or latest version
+  const effectiveLatest = semver.lt(upperBound, latestVersion) ? upperBound : latestVersion
+
+  // Create properly formatted range that preserves caret semantics
+  let result = `>=${version} <${effectiveLatest}`
+
+  // Add any extra constraints if they exist and would create a valid range
+  if (extraConstraints && extraConstraints.trim()) {
+    const combinedRange = `${result} ${extraConstraints.trim()}`
+    if (semver.validRange(combinedRange)) {
+      result = combinedRange
+    }
+  }
+
+  return result
 }
 
 // Handle hyphen ranges like "24.8.0 - 24.9.0"
