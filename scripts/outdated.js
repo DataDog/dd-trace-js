@@ -5,6 +5,7 @@ const {
 } = require('./helpers/versioning')
 const path = require('path')
 const fs = require('fs')
+const semver = require('semver')
 
 const latestsPath = path.join(
   __dirname,
@@ -20,15 +21,58 @@ const latestsPath = path.join(
 const internalsNames = Array.from(new Set(getInternals().map(n => n.name)))
   .filter(x => typeof x === 'string' && x !== 'child_process' && !x.startsWith('node:'))
 
-// Initial structure with placeholder for pinned packages
+// Initial structure with placeholder for configuration
 const initialStructure = {
   pinned: ['ENTER_PACKAGE_NAME_HERE'],
+  onlyUseLatestTag: ['ENTER_PACKAGE_NAME_HERE'],
   latests: {}
 }
 
 /**
-     * Updates latests.json with the current latest versions from npm
-     */
+ * Gets the highest version that's compatible with our instrumentation
+ * This handles cases where a package has newer versions that might break compatibility
+ */
+async function getHighestCompatibleVersion (name, config = {}) {
+  try {
+    // Get all distribution tags (including 'latest')
+    const distTags = await npmView(name + ' dist-tags')
+
+    // Get the latest tagged version
+    const latestTagged = distTags.latest
+
+    if (!latestTagged) {
+      console.log(`Warning: Could not fetch latest version for "${name}"`)
+      return null
+    }
+
+    // If package is in the onlyUseLatestTag list, always use the 'latest' tag
+    if (config.onlyUseLatestTag && config.onlyUseLatestTag.includes(name)) {
+      return latestTagged
+    }
+
+    // Get all available versions
+    const allVersions = await npmView(name + ' versions')
+
+    // Find the highest non-prerelease version available
+    const stableVersions = allVersions.filter(v => !semver.prerelease(v))
+    const highestStableVersion = stableVersions.sort(semver.compare).pop()
+
+    // Use the highest stable version if it's greater than the latest tag
+    if (highestStableVersion && semver.gt(highestStableVersion, latestTagged)) {
+      process.stdout.write(` found version ${highestStableVersion} (higher than 'latest' tag ${latestTagged})`)
+      return highestStableVersion
+    }
+
+    return latestTagged
+  } catch (error) {
+    console.error(`Error fetching version for "${name}":`, error.message)
+    return null
+  }
+}
+
+/**
+ * Updates latests.json with the current latest versions from npm
+ */
 async function fix () {
   console.log('Starting fix operation...')
   console.log(`Found ${internalsNames.length} packages to process`)
@@ -48,11 +92,10 @@ async function fix () {
     process.stdout.write(`Processing package ${processed}/${total}: ${name}...`)
 
     try {
-      const distTags = await npmView(name + ' dist-tags')
-      const latest = distTags.latest
-      if (latest) {
-        latests[name] = latest
-        process.stdout.write(` found version ${latest}\n`)
+      const latestVersion = await getHighestCompatibleVersion(name, outputData)
+      if (latestVersion) {
+        latests[name] = latestVersion
+        process.stdout.write(` found version ${latestVersion}\n`)
       } else {
         process.stdout.write(' WARNING: no version found\n')
         console.log(`Warning: Could not fetch latest version for "${name}"`)
@@ -71,8 +114,8 @@ async function fix () {
 }
 
 /**
-     * Checks if latests.json matches current npm versions
-     */
+ * Checks if latests.json matches current npm versions
+ */
 async function check () {
   console.log('Starting version check...')
 
@@ -102,11 +145,16 @@ async function check () {
     }
 
     try {
-      const distTags = await npmView(name + ' dist-tags')
-      const npmLatest = distTags.latest
-      if (npmLatest !== latest) {
+      const latestVersion = await getHighestCompatibleVersion(name, currentData)
+      if (!latestVersion) {
+        process.stdout.write(' ERROR\n')
+        console.error(`Error fetching latest version for "${name}"`)
+        continue
+      }
+
+      if (latestVersion !== latest) {
         process.stdout.write(' MISMATCH\n')
-        console.log(`"latests.json: is not up to date for "${name}": expected "${npmLatest}", got "${latest}"`)
+        console.log(`"latests.json: is not up to date for "${name}": expected "${latestVersion}", got "${latest}"`)
         process.exitCode = 1
         mismatches++
       } else {
