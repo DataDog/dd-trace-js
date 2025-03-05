@@ -93,7 +93,7 @@ class AgentEncoder {
     this._encodeArrayPrefix(bytes, trace)
 
     for (let span of trace) {
-      span = formatSpan(span)
+      span = formatSpan(span, this)
       bytes.reserve(1)
 
       // this is the original size of the fixed map for span attributes that always exist
