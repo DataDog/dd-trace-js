@@ -86,7 +86,7 @@ describe('blocking', () => {
       const blocked = block(req, res, rootSpan)
 
       expect(blocked).to.be.true
-      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true' )
+      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
       expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
         'Content-Type': 'application/json',
         'Content-Length': 8
@@ -126,7 +126,7 @@ describe('blocking', () => {
       const blocked = block(req, res, rootSpan)
 
       expect(blocked).to.be.true
-      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly({ 'appsec.blocked': 'true' })
+      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
       expect(res.removeHeader).to.have.been.calledTwice
       expect(res.removeHeader.firstCall).to.have.been.calledWithExactly('header1')
       expect(res.removeHeader.secondCall).to.have.been.calledWithExactly('header2')
