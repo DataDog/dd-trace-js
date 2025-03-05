@@ -30,23 +30,9 @@ onboarding_tests_k8s_injection:
         SCENARIO: [K8S_LIB_INJECTION]
         K8S_CLUSTER_VERSION: ['7.59.0']
     
-compute_ssi_tests_pipeline:
-  extends: .compute_ssi_tests_pipeline
+configure_system_tests:
   variables:
     SYSTEM_SCENARIO_GROUPS: "simple_onboarding,docker-ssi,lib-injection"
-    #TEST7
-
-execute_ssi_tests_pipeline:
-  stage: shared-pipeline
-  needs: ["compute_ssi_tests_pipeline"]
-  allow_failure: true
-  variables:
-    PARENT_PIPELINE_SOURCE: $CI_PIPELINE_SOURCE
-  trigger:
-    include:
-      - artifact: ssi_tests_pipeline.yml
-        job: compute_ssi_tests_pipeline
-    strategy: depend
 
 requirements_json_test:
   rules:
