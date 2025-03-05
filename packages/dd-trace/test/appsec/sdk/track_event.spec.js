@@ -1,7 +1,6 @@
 'use strict'
 
-// proxyquire is conflicting with the tests in "Integration with the tracer", noPreserveCache fix that
-const proxyquire = require('proxyquire').noPreserveCache()
+const proxyquire = require('proxyquire')
 const agent = require('../../plugins/agent')
 const axios = require('axios')
 const tracer = require('../../../../../index')
