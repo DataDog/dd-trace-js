@@ -232,12 +232,12 @@ function finishRequest (req, res) {
     rootSpan.setTag('_dd.appsec.rasp.duration_ext', metrics.raspDurationExt)
   }
 
-  if (metrics?.raspTimeouts) {
-    rootSpan.setTag('_dd.appsec.rasp.timeout', metrics.raspTimeouts)
-  }
-
   if (metrics?.raspErrorCode) {
     rootSpan.setTag('_dd.appsec.rasp.error', metrics.raspErrorCode)
+  }
+
+  if (metrics?.raspTimeouts) {
+    rootSpan.setTag('_dd.appsec.rasp.timeout', metrics.raspTimeouts)
   }
 
   if (metrics?.raspEvalCount) {
