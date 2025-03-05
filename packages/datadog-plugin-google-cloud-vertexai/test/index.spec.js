@@ -2,6 +2,8 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const sinon = require('sinon')
+const fs = require('node:fs')
+const path = require('node:path')
 
 /**
  * @google-cloud/vertexai uses `fetch` to call against their API, which cannot
@@ -17,16 +19,15 @@ function useScenario ({ scenario, statusCode = 200, stream = false }) {
   beforeEach(() => {
     originalFetch = global.fetch
     global.fetch = function () {
-      const contents = require(`./resources/${scenario}.json`)
-      let body = JSON.stringify(contents)
+      let body
 
-      if (stream) {
-        body = new ReadableStream({
-          start (controller) {
-            controller.enqueue(new TextEncoder().encode(body))
-            controller.close()
-          }
-        })
+      if (statusCode !== 200) {
+        body = '{}'
+      } if (stream) {
+        body = fs.createReadStream(path.join(__dirname, 'resources', `${scenario}.txt`))
+      } else {
+        const contents = require(`./resources/${scenario}.json`)
+        body = JSON.stringify(contents)
       }
 
       return new Response(body, {
@@ -41,6 +42,12 @@ function useScenario ({ scenario, statusCode = 200, stream = false }) {
   afterEach(() => {
     global.fetch = originalFetch
   })
+}
+
+function promiseState (p) {
+  const t = {}
+  return Promise.race([p, t])
+    .then(v => (v === t) ? 'pending' : 'fulfilled', () => 'rejected')
 }
 
 describe('Plugin', () => {
@@ -135,22 +142,62 @@ describe('Plugin', () => {
         })
       })
 
-      describe.skip('generateContentStream', () => {
-        useScenario({ scenario: 'generate-content-single-response', statusCode: 200, stream: true })
+      describe('generateContentStream', () => {
+        useScenario({ scenario: 'generate-content-stream-single-response', statusCode: 200, stream: true })
 
         it('makes a successful call', async () => {
-          const { stream } = await model.generateContentStream('Hello, how are you?')
+          const checkTraces = agent.use(traces => {
+            const span = traces[0][0]
+
+            expect(span).to.have.property('name', 'vertexai.request')
+            expect(span).to.have.property('resource', 'GenerativeModel.generateContentStream')
+            expect(span.meta).to.have.property('span.kind', 'client')
+
+            expect(span.meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
+            expect(span.meta).to.have.property('vertexai.request.contents.0.text', 'Hello, how are you?')
+            expect(span.meta).to.have.property('vertexai.response.candidates.0.finish_reason', 'STOP')
+            expect(span.meta).to.have.property('vertexai.response.candidates.0.content.parts.0.text',
+              'Hi, how are you doing today my friend?\n')
+            expect(span.meta).to.have.property('vertexai.response.candidates.0.content.role', 'model')
+
+            expect(span.metrics).to.have.property('vertexai.response.usage.prompt_tokens', 5)
+            expect(span.metrics).to.have.property('vertexai.response.usage.completion_tokens', 10)
+            expect(span.metrics).to.have.property('vertexai.response.usage.total_tokens', 15)
+
+            if (model.systemInstruction) {
+              expect(span.meta).to.have.property('vertexai.request.system_instruction.0.text',
+                'Please provide an answer')
+            }
+            expect(span.meta).to.have.property('vertexai.request.generation_config.max_output_tokens', '50')
+            expect(span.meta).to.have.property('vertexai.request.generation_config.temperature', '1')
+
+            expect(span.metrics).to.have.property('vertexai.request.stream', 1)
+          })
+
+          const { stream, response } = await model.generateContentStream('Hello, how are you?')
+
+          // check that response is a promise
+          expect(response).to.be.a('promise')
+
+          const promState = await promiseState(response)
+          expect(promState).to.equal('pending') // we shouldn't have consumed the promise
+
           for await (const chunk of stream) {
-            console.log(chunk)
+            expect(chunk).to.have.property('candidates')
           }
+
+          const result = await response
+          expect(result).to.have.property('candidates')
+
+          await checkTraces
         })
       })
 
       describe('chatSession', () => {
-        describe('generateContent', () => {
+        describe('sendMessage', () => {
           useScenario({ scenario: 'generate-content-single-response' })
 
-          it.skip('makes a successful call', async () => {
+          it('makes a successful call', async () => {
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
 
@@ -159,7 +206,6 @@ describe('Plugin', () => {
               expect(span.meta).to.have.property('span.kind', 'client')
 
               expect(span.meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
-              expect(span.meta).to.have.property('vertexai.request.contents.0.role', 'user')
               expect(span.meta).to.have.property('vertexai.request.contents.0.parts.0.text', 'Hello, how are you?')
               expect(span.meta).to.have.property('vertexai.response.candidates.0.finish_reason', 'STOP')
               expect(span.meta).to.have.property('vertexai.response.candidates.0.content.parts.0.text',
@@ -178,11 +224,38 @@ describe('Plugin', () => {
               expect(span.meta).to.have.property('vertexai.request.generation_config.temperature', '1')
             })
 
-            // add some history?
-            const chat = model.startChat({ history: [] })
-            const { response } = await chat.sendMessage({
-              contents: [{ role: 'user', parts: [{ text: 'Hello, how are you?' }] }]
+            const chat = model.startChat({})
+            const { response } = await chat.sendMessage([{ text: 'Hello, how are you?' }])
+
+            expect(response).to.have.property('candidates')
+
+            await checkTraces
+          })
+
+          it('tags a string input', async () => {
+            const checkTraces = agent.use(traces => {
+              expect(traces[0][0].meta).to.have.property('vertexai.request.contents.0.text',
+                'Hello, how are you?')
             })
+
+            const chat = model.startChat({})
+            const { response } = await chat.sendMessage('Hello, how are you?')
+
+            expect(response).to.have.property('candidates')
+
+            await checkTraces
+          })
+
+          it('tags an array of string inputs', async () => {
+            const checkTraces = agent.use(traces => {
+              expect(traces[0][0].meta).to.have.property('vertexai.request.contents.0.text',
+                'Hello, how are you?')
+              expect(traces[0][0].meta).to.have.property('vertexai.request.contents.1.text',
+                'What should I do today?')
+            })
+
+            const chat = model.startChat({})
+            const { response } = await chat.sendMessage(['Hello, how are you?', 'What should I do today?'])
 
             expect(response).to.have.property('candidates')
 
@@ -190,11 +263,61 @@ describe('Plugin', () => {
           })
         })
 
-        describe('generateContentStream', () => {})
+        describe('sendMessageStream', () => {
+          useScenario({ scenario: 'generate-content-stream-single-response', statusCode: 200, stream: true })
+
+          it('makes a successful call', async () => {
+            const checkTraces = agent.use(traces => {
+              const span = traces[0][0]
+
+              expect(span).to.have.property('name', 'vertexai.request')
+              expect(span).to.have.property('resource', 'ChatSession.sendMessageStream')
+              expect(span.meta).to.have.property('span.kind', 'client')
+
+              expect(span.meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
+              expect(span.meta).to.have.property('vertexai.request.contents.0.text', 'Hello, how are you?')
+              expect(span.meta).to.have.property('vertexai.response.candidates.0.finish_reason', 'STOP')
+              expect(span.meta).to.have.property('vertexai.response.candidates.0.content.parts.0.text',
+                'Hi, how are you doing today my friend?\n')
+              expect(span.meta).to.have.property('vertexai.response.candidates.0.content.role', 'model')
+
+              expect(span.metrics).to.have.property('vertexai.response.usage.prompt_tokens', 5)
+              expect(span.metrics).to.have.property('vertexai.response.usage.completion_tokens', 10)
+              expect(span.metrics).to.have.property('vertexai.response.usage.total_tokens', 15)
+
+              if (model.systemInstruction) {
+                expect(span.meta).to.have.property('vertexai.request.system_instruction.0.text',
+                  'Please provide an answer')
+              }
+              expect(span.meta).to.have.property('vertexai.request.generation_config.max_output_tokens', '50')
+              expect(span.meta).to.have.property('vertexai.request.generation_config.temperature', '1')
+
+              expect(span.metrics).to.have.property('vertexai.request.stream', 1)
+            })
+
+            const chat = model.startChat({})
+            const { stream, response } = await chat.sendMessageStream('Hello, how are you?')
+
+            // check that response is a promise
+            expect(response).to.be.a('promise')
+
+            const promState = await promiseState(response)
+            expect(promState).to.equal('pending') // we shouldn't have consumed the promise
+
+            for await (const chunk of stream) {
+              expect(chunk).to.have.property('candidates')
+            }
+
+            const result = await response
+            expect(result).to.have.property('candidates')
+
+            await checkTraces
+          })
+        })
       })
 
       describe('errors', () => {
-        useScenario({ scenario: 'generate-content-error', statusCode: 404 })
+        useScenario({ statusCode: 404 })
 
         it('tags the error', async () => {
           const checkTraces = agent.use(traces => {

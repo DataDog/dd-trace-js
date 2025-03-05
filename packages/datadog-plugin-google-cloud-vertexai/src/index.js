@@ -54,20 +54,15 @@ class GoogleCloudVertexAIPlugin extends TracingPlugin {
   }
 
   tagRequest (request, instance, stream) {
-    // request is either a string or an object with a `contents` property
     const model = extractModel(instance)
     const tags = {
       'vertexai.request.model': model
     }
 
     const history = instance.historyInternal
-    let contents = typeof request === 'string' ? request : request.contents
+    let contents = typeof request === 'string' || Array.isArray(request) ? request : request.contents
     if (history) {
-      if (Array.isArray(contents)) {
-        contents = [history, ...contents]
-      } else if (typeof request === 'object') {
-        contents = [history, contents]
-      }
+      contents = [...history, ...(Array.isArray(contents) ? contents : [contents])]
     }
 
     const generationConfig = instance.generationConfig || {}
@@ -90,39 +85,57 @@ class GoogleCloudVertexAIPlugin extends TracingPlugin {
 
     if (typeof contents === 'string') {
       tags['vertexai.request.contents.0.text'] = contents
-
       return tags
     }
 
     for (const contentIdx in contents) {
       const content = contents[contentIdx]
-
-      const role = content?.role
-      const parts = content?.parts
-
-      tags[`vertexai.request.contents.${contentIdx}.role`] = role
-      for (const partIdx in parts) {
-        const part = parts[partIdx]
-        tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.text`] = part.text
-
-        const functionCall = part.functionCall
-        const functionResponse = part.functionResponse
-
-        if (functionCall) {
-          tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_call.name`] = functionCall.name
-          tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_call.args`] =
-              JSON.stringify(functionCall.args)
-        }
-        if (functionResponse) {
-          tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_response.name`] =
-              functionResponse.name
-          tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_response.response`] =
-              JSON.stringify(functionResponse.response)
-        }
-      }
+      this.tagRequestContent(tags, content, contentIdx)
     }
 
     return tags
+  }
+
+  tagRequestPart (part, tags, partIdx, contentIdx) {
+    tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.text`] = this.utilities.normalize(part.text)
+
+    const functionCall = part.functionCall
+    const functionResponse = part.functionResponse
+
+    if (functionCall) {
+      tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_call.name`] = functionCall.name
+      tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_call.args`] =
+              this.utilities.normalize(JSON.stringify(functionCall.args))
+    }
+    if (functionResponse) {
+      tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_response.name`] =
+              functionResponse.name
+      tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_response.response`] =
+              this.utilities.normalize(JSON.stringify(functionResponse.response))
+    }
+  }
+
+  tagRequestContent (tags, content, contentIdx) {
+    if (typeof content === 'string') {
+      tags[`vertexai.request.contents.${contentIdx}.text`] = this.utilities.normalize(content)
+      return
+    }
+
+    if (content.text || content.functionCall || content.functionResponse) {
+      this.tagRequestPart(content, tags, 0, contentIdx)
+      return
+    }
+
+    const { role, parts } = content
+    if (role) {
+      tags[`vertexai.request.contents.${contentIdx}.role`] = role
+    }
+
+    for (const partIdx in parts) {
+      const part = parts[partIdx]
+
+      this.tagRequestPart(part, tags, partIdx, contentIdx)
+    }
   }
 
   tagResponse (response) {
@@ -170,7 +183,7 @@ class GoogleCloudVertexAIPlugin extends TracingPlugin {
 }
 
 function extractModel (instance) {
-  const model = instance.model || instance.resourcePath
+  const model = instance.model || instance.resourcePath || instance.publisherModelEndpoint
   return model?.split('/').pop()
 }
 
