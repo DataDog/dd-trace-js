@@ -188,7 +188,7 @@ class LLMObsTagger {
 
         if (document == null || typeof document !== 'object') {
           this._handleFailure('Documents must be a string, object, or list of objects.')
-          return undefined
+          return
         }
 
         const { text, name, id, score } = document
@@ -227,7 +227,7 @@ class LLMObsTagger {
 
         if (message == null || typeof message !== 'object') {
           this._handleFailure('Messages must be a string, object, or list of objects')
-          return undefined
+          return
         }
 
         let validMessage = true
@@ -251,7 +251,7 @@ class LLMObsTagger {
           const filteredToolCalls = toolCalls.map(toolCall => {
             if (typeof toolCall !== 'object') {
               this._handleFailure('Tool call must be an object.')
-              return undefined
+              return
             }
 
             let validTool = true

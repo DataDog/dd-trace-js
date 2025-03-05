@@ -5,7 +5,7 @@ const libdatadog = require('@datadog/libdatadog')
 const binding = libdatadog.load('crashtracker')
 
 const log = require('../log')
-const { URL } = require('url')
+const { URL } = require('node:url')
 const pkg = require('../../../../package.json')
 
 class Crashtracker {

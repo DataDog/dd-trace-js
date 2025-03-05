@@ -4,7 +4,7 @@ const types = require('./types')
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
-const nodeMajor = parseInt(process.versions.node.split('.')[0])
+const nodeMajor = Number.parseInt(process.versions.node.split('.')[0])
 
 const patched = new WeakSet()
 const instances = new WeakMap()

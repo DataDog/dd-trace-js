@@ -1,7 +1,7 @@
 'use strict'
 
 const coalesce = require('koalas')
-const { inspect } = require('util')
+const { inspect } = require('node:util')
 const { isTrue } = require('../util')
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
@@ -95,7 +95,7 @@ const log = {
     return this._deprecate(code, message)
   },
 
-  isEnabled (fleetStableConfigValue = undefined, localStableConfigValue = undefined) {
+  isEnabled (fleetStableConfigValue, localStableConfigValue) {
     return isTrue(coalesce(
       fleetStableConfigValue,
       process.env?.DD_TRACE_DEBUG,
@@ -106,9 +106,9 @@ const log = {
   },
 
   getLogLevel (
-    optionsValue = undefined,
-    fleetStableConfigValue = undefined,
-    localStableConfigValue = undefined
+    optionsValue,
+    fleetStableConfigValue,
+    localStableConfigValue
   ) {
     return coalesce(
       optionsValue,

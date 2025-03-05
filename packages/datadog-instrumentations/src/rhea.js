@@ -167,7 +167,7 @@ function wrapDeliveryUpdate (obj, update) {
 function patchCircularBuffer (proto, Session) {
   Object.defineProperty(proto, 'outgoing', {
     configurable: true,
-    get () { return undefined },
+    get () {},
     set (outgoing) {
       delete proto.outgoing // removes the setter on the prototype
       this.outgoing = outgoing // assigns on the instance, like normal

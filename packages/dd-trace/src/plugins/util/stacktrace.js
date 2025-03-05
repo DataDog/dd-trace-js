@@ -1,6 +1,6 @@
 'use strict'
 
-const { relative, sep, isAbsolute } = require('path')
+const { relative, sep, isAbsolute } = require('node:path')
 
 const cwd = process.cwd()
 
@@ -72,7 +72,7 @@ function getUserLandFrames (constructorOpt, limit = Infinity) {
     // However, the tests in `packages/dd-trace/test/plugins/util/stacktrace.spec.js` will fail on my machine
     // because I have the source code in a parent folder called `node_modules`. So the code below thinks that
     // it's not in user-land
-    const relativePath = relative(cwd, containsFileProtocol ? filename.substring(7) : filename)
+    const relativePath = relative(cwd, containsFileProtocol ? filename.slice(7) : filename)
     if (relativePath.startsWith('node_modules' + sep) || relativePath.includes(sep + 'node_modules' + sep)) {
       continue
     }

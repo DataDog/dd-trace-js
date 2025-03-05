@@ -1,11 +1,11 @@
 'use strict'
 
-const path = require('path')
+const path = require('node:path')
 const parse = require('module-details-from-path')
 const requirePackageJson = require('../require-package-json')
 const { sendData } = require('./send-data')
 const dc = require('dc-polyfill')
-const { fileURLToPath } = require('url')
+const { fileURLToPath } = require('node:url')
 const { isTrue } = require('../../src/util')
 
 const savedDependenciesToSend = new Set()
@@ -94,7 +94,7 @@ function onModuleLoad (data) {
     if (filename && filename.startsWith(FILE_URI_START)) {
       try {
         filename = fileURLToPath(filename)
-      } catch (e) {
+      } catch {
         // cannot transform url to path
       }
     }
@@ -118,7 +118,7 @@ function onModuleLoad (data) {
 
               waitAndSend(config, application, host)
             }
-          } catch (e) {
+          } catch {
             // can not read the package.json, do nothing
           }
         }

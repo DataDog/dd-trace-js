@@ -14,7 +14,7 @@ const {
   updateRateLimitedMetric,
   getRequestMetrics
 } = require('./telemetry')
-const zlib = require('zlib')
+const zlib = require('node:zlib')
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
 
@@ -163,11 +163,7 @@ function reportAttack (attackData) {
   const currentJson = currentTags['_dd.appsec.json']
 
   // merge JSON arrays without parsing them
-  if (currentJson) {
-    newTags['_dd.appsec.json'] = currentJson.slice(0, -2) + ',' + attackData.slice(1) + '}'
-  } else {
-    newTags['_dd.appsec.json'] = '{"triggers":' + attackData + '}'
-  }
+  newTags['_dd.appsec.json'] = currentJson ? currentJson.slice(0, -2) + ',' + attackData.slice(1) + '}' : '{"triggers":' + attackData + '}'
 
   if (req.socket) {
     newTags['network.client.ip'] = req.socket.remoteAddress

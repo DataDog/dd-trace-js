@@ -18,7 +18,7 @@ function copyProperties (original, wrapped) {
   for (const key of keys) {
     try {
       Object.defineProperty(wrapped, key, props[key])
-    } catch (e) {
+    } catch {
       // TODO: figure out how to handle this without a try/catch
     }
   }

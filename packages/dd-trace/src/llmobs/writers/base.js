@@ -1,7 +1,7 @@
 'use strict'
 
 const request = require('../../exporters/common/request')
-const { URL, format } = require('url')
+const { URL, format } = require('node:url')
 
 const logger = require('../../log')
 

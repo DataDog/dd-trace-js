@@ -3,7 +3,7 @@
 const dc = require('dc-polyfill')
 const satisfies = require('semifies')
 const instrumentations = require('./instrumentations')
-const { AsyncResource } = require('async_hooks')
+const { AsyncResource } = require('node:async_hooks')
 
 const channelMap = {}
 exports.channel = function (name) {
@@ -36,10 +36,9 @@ exports.addHook = function addHook ({ name, versions, file, filePattern }, hook)
 
 // AsyncResource.bind exists and binds `this` properly only from 17.8.0 and up.
 // https://nodejs.org/api/async_context.html#asyncresourcebindfn-thisarg
-if (satisfies(process.versions.node, '>=17.8.0')) {
-  exports.AsyncResource = AsyncResource
-} else {
-  exports.AsyncResource = class extends AsyncResource {
+exports.AsyncResource = satisfies(process.versions.node, '>=17.8.0')
+  ? AsyncResource
+  : class extends AsyncResource {
     static bind (fn, type, thisArg) {
       type = type || fn.name
       return (new exports.AsyncResource(type || 'bound-anonymous-fn')).bind(fn, thisArg)
@@ -73,4 +72,3 @@ if (satisfies(process.versions.node, '>=17.8.0')) {
       return bound
     }
   }
-}

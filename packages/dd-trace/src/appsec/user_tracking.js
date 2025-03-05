@@ -1,6 +1,6 @@
 'use strict'
 
-const crypto = require('crypto')
+const crypto = require('node:crypto')
 const log = require('../log')
 const telemetry = require('./telemetry')
 const addresses = require('./addresses')

@@ -62,7 +62,7 @@ class PrioritySampler {
    * @param opts {SamplingConfig}
    */
   configure (env, opts = {}) {
-    const { sampleRate, provenance = undefined, rateLimit = 100, rules = [] } = opts
+    const { sampleRate, provenance, rateLimit = 100, rules = [] } = opts
     this._env = env
     this._rules = this.#_normalizeRules(rules, sampleRate, rateLimit, provenance)
     this._limiter = new RateLimiter(rateLimit)
@@ -213,7 +213,7 @@ class PrioritySampler {
     } else if (hasOwn(tags, MANUAL_DROP) && tags[MANUAL_DROP] !== false) {
       return USER_REJECT
     } else {
-      const priority = parseInt(tags[SAMPLING_PRIORITY], 10)
+      const priority = Number.parseInt(tags[SAMPLING_PRIORITY], 10)
 
       if (priority === 1 || priority === 2) {
         return USER_KEEP
@@ -266,11 +266,7 @@ class PrioritySampler {
 
     context._trace[SAMPLING_AGENT_DECISION] = sampler.rate()
 
-    if (sampler === defaultSampler) {
-      context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
-    } else {
-      context._sampling.mechanism = SAMPLING_MECHANISM_AGENT
-    }
+    context._sampling.mechanism = sampler === defaultSampler ? SAMPLING_MECHANISM_DEFAULT : SAMPLING_MECHANISM_AGENT
 
     return sampler.isSampled(context) ? AUTO_KEEP : AUTO_REJECT
   }
@@ -310,8 +306,8 @@ class PrioritySampler {
 
     return rules
       .concat({ sampleRate, maxPerSecond: rateLimit, provenance })
-      .map(rule => ({ ...rule, sampleRate: parseFloat(rule.sampleRate) }))
-      .filter(rule => !isNaN(rule.sampleRate))
+      .map(rule => ({ ...rule, sampleRate: Number.parseFloat(rule.sampleRate) }))
+      .filter(rule => !Number.isNaN(rule.sampleRate))
       .map(SamplingRule.from)
   }
 

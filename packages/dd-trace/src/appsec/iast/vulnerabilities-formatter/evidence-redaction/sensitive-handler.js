@@ -113,15 +113,13 @@ class SensitiveHandler {
           nextSensitive = entries.length > 0 ? entries[0] : null
         }
 
-        if (this.isSensibleSource(sources[sourceIndex])) {
-          if (!sources[sourceIndex].redacted) {
-            redactedSources.push(sourceIndex)
-            sources[sourceIndex].pattern = ''.padEnd(sources[sourceIndex].value.length, REDACTED_SOURCE_BUFFER)
-            sources[sourceIndex].redacted = true
-          }
+        if (this.isSensibleSource(sources[sourceIndex]) && !sources[sourceIndex].redacted) {
+          redactedSources.push(sourceIndex)
+          sources[sourceIndex].pattern = ''.padEnd(sources[sourceIndex].value.length, REDACTED_SOURCE_BUFFER)
+          sources[sourceIndex].redacted = true
         }
 
-        if (redactedSources.indexOf(sourceIndex) > -1) {
+        if (redactedSources.includes(sourceIndex)) {
           const partValue = value.substring(i, i + (nextTainted.end - nextTainted.start))
           this.writeRedactedValuePart(
             valueParts,
@@ -171,7 +169,7 @@ class SensitiveHandler {
     }
 
     if (start < value.length) {
-      this.writeValuePart(valueParts, value.substring(start))
+      this.writeValuePart(valueParts, value.slice(Math.max(0, start)))
     }
 
     return { redactedValueParts: valueParts, redactedSources }
@@ -241,10 +239,10 @@ class SensitiveHandler {
           if (_sourceRedactionContext.start > 0) {
             valueParts.push({
               source: sourceIndex,
-              value: _value.substring(0, _sourceRedactionContext.start - offset)
+              value: _value.slice(0, Math.max(0, _sourceRedactionContext.start - offset))
             })
 
-            _value = _value.substring(_sourceRedactionContext.start - offset)
+            _value = _value.slice(Math.max(0, _sourceRedactionContext.start - offset))
             offset = _sourceRedactionContext.start
           }
 
@@ -262,7 +260,7 @@ class SensitiveHandler {
             pattern
           })
 
-          _value = _value.substring(pattern.length)
+          _value = _value.slice(pattern.length)
           offset += pattern.length
         })
 
@@ -282,7 +280,7 @@ class SensitiveHandler {
     if (redactionNamePattern) {
       try {
         this._namePattern = new RegExp(redactionNamePattern, 'gmi')
-      } catch (e) {
+      } catch {
         log.warn('[ASM] Redaction name pattern is not valid')
       }
     }
@@ -290,7 +288,7 @@ class SensitiveHandler {
     if (redactionValuePattern) {
       try {
         this._valuePattern = new RegExp(redactionValuePattern, 'gmi')
-      } catch (e) {
+      } catch {
         log.warn('[ASM] Redaction value pattern is not valid')
       }
     }

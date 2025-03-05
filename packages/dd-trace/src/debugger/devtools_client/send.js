@@ -1,7 +1,7 @@
 'use strict'
 
-const { hostname: getHostname } = require('os')
-const { stringify } = require('querystring')
+const { hostname: getHostname } = require('node:os')
+const { stringify } = require('node:querystring')
 
 const config = require('./config')
 const JSONBuffer = require('./json-buffer')

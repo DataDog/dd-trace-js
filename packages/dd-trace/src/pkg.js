@@ -1,7 +1,7 @@
 'use strict'
 
-const fs = require('fs')
-const path = require('path')
+const fs = require('node:fs')
+const path = require('node:path')
 
 function findRoot () {
   return require.main && require.main.filename
@@ -22,7 +22,7 @@ function findPkg () {
 
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf8'))
-  } catch (e) {
+  } catch {
     return {}
   }
 }
