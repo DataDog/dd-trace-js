@@ -58,12 +58,9 @@ describe('blocking', () => {
 
     it('should log warn and not send blocking response when headers have already been sent', () => {
       res.headersSent = true
-      try {
-        block(req, res)
-      } catch (error) {
-        expect(error.message).to.equal('Headers have already been sent')
-      }
+      const blocked = block(req, res)
 
+      expect(blocked).to.be.false
       expect(log.warn).to.have.been
         .calledOnceWithExactly('[ASM] Cannot send blocking response when headers have already been sent')
       expect(rootSpan.addTags).to.not.have.been.called
@@ -73,8 +70,9 @@ describe('blocking', () => {
 
     it('should send blocking response with html type if present in the headers', () => {
       req.headers.accept = 'text/html'
-      block(req, res, rootSpan)
+      const blocked = block(req, res, rootSpan)
 
+      expect(blocked).to.be.true
       expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({ 'appsec.blocked': 'true' })
       expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
         'Content-Type': 'text/html; charset=utf-8',
@@ -85,8 +83,9 @@ describe('blocking', () => {
 
     it('should send blocking response with json type if present in the headers in priority', () => {
       req.headers.accept = 'text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8, application/json'
-      block(req, res, rootSpan)
+      const blocked = block(req, res, rootSpan)
 
+      expect(blocked).to.be.true
       expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({ 'appsec.blocked': 'true' })
       expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
         'Content-Type': 'application/json',
@@ -96,8 +95,9 @@ describe('blocking', () => {
     })
 
     it('should send blocking response with json type if neither html or json is present in the headers', () => {
-      block(req, res, rootSpan)
+      const blocked = block(req, res, rootSpan)
 
+      expect(blocked).to.be.true
       expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({ 'appsec.blocked': 'true' })
       expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
         'Content-Type': 'application/json',
@@ -108,8 +108,9 @@ describe('blocking', () => {
 
     it('should send blocking response and call abortController if passed in arguments', () => {
       const abortController = new AbortController()
-      block(req, res, rootSpan, abortController)
+      const blocked = block(req, res, rootSpan, abortController)
 
+      expect(blocked).to.be.true
       expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({ 'appsec.blocked': 'true' })
       expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
         'Content-Type': 'application/json',
@@ -122,8 +123,9 @@ describe('blocking', () => {
     it('should remove all headers before sending blocking response', () => {
       res.getHeaderNames.returns(['header1', 'header2'])
 
-      block(req, res, rootSpan)
+      const blocked = block(req, res, rootSpan)
 
+      expect(blocked).to.be.true
       expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({ 'appsec.blocked': 'true' })
       expect(res.removeHeader).to.have.been.calledTwice
       expect(res.removeHeader.firstCall).to.have.been.calledWithExactly('header1')
@@ -148,16 +150,18 @@ describe('blocking', () => {
       req.headers.accept = 'text/html'
       setTemplates(config)
 
-      block(req, res, rootSpan)
+      const blocked = block(req, res, rootSpan)
 
+      expect(blocked).to.be.true
       expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
     })
 
     it('should block with default json template', () => {
       setTemplates(config)
 
-      block(req, res, rootSpan)
+      const blocked = block(req, res, rootSpan)
 
+      expect(blocked).to.be.true
       expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
     })
   })
@@ -178,8 +182,9 @@ describe('blocking', () => {
       req.headers.accept = 'text/html'
       setTemplates(config)
 
-      block(req, res, rootSpan, null, actionParameters)
+      const blocked = block(req, res, rootSpan, null, actionParameters)
 
+      expect(blocked).to.be.true
       expect(res.writeHead).to.have.been.calledOnceWith(401)
       expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
     })
@@ -193,8 +198,9 @@ describe('blocking', () => {
         req.headers.accept = 'text/html'
         setTemplates(config)
 
-        block(req, res, rootSpan, null, actionParameters)
+        const blocked = block(req, res, rootSpan, null, actionParameters)
 
+        expect(blocked).to.be.true  
         expect(res.writeHead).to.have.been.calledOnceWith(401)
         expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
       })
@@ -208,8 +214,9 @@ describe('blocking', () => {
         req.headers.accept = 'text/html'
         setTemplates(config)
 
-        block(req, res, rootSpan, null, actionParameters)
+        const blocked = block(req, res, rootSpan, null, actionParameters)
 
+        expect(blocked).to.be.true  
         expect(res.writeHead).to.have.been.calledOnceWith(401)
         expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
       })
@@ -221,8 +228,9 @@ describe('blocking', () => {
       }
       setTemplates(config)
 
-      block(req, res, rootSpan, null, actionParameters)
+      const blocked = block(req, res, rootSpan, null, actionParameters)
 
+      expect(blocked).to.be.true
       expect(res.writeHead).to.have.been.calledOnceWith(401)
       expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
     })
@@ -235,8 +243,9 @@ describe('blocking', () => {
         }
         setTemplates(config)
 
-        block(req, res, rootSpan, null, actionParameters)
+        const blocked = block(req, res, rootSpan, null, actionParameters)
 
+        expect(blocked).to.be.true  
         expect(res.writeHead).to.have.been.calledOnceWith(401)
         expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
       })
@@ -249,8 +258,9 @@ describe('blocking', () => {
         }
         setTemplates(config)
 
-        block(req, res, rootSpan, null, actionParameters)
+        const blocked = block(req, res, rootSpan, null, actionParameters)
 
+        expect(blocked).to.be.true  
         expect(res.writeHead).to.have.been.calledOnceWith(401)
         expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
       })
@@ -262,8 +272,9 @@ describe('blocking', () => {
       }
       setTemplates(config)
 
-      block(req, res, rootSpan, null, actionParameters)
+      const blocked = block(req, res, rootSpan, null, actionParameters)
 
+      expect(blocked).to.be.true
       expect(res.writeHead).to.have.been.calledOnceWithExactly(301, {
         Location: '/you-have-been-blocked'
       })

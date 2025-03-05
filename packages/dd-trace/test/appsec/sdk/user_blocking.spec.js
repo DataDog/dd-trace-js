@@ -12,14 +12,11 @@ const { USER_ID } = require('../../../src/appsec/addresses')
 const blocking = require('../../../src/appsec/blocking')
 
 const resultActions = {
-  actions: {
-    block_request: {
-      status_code: '401',
-      type: 'auto',
-      grpc_status_code: '10'
-    }
-  },
-  metrics: {}
+  block_request: {
+    status_code: '401',
+    type: 'auto',
+    grpc_status_code: '10'
+  }
 }
 
 describe('user_blocking', () => {
@@ -45,7 +42,7 @@ describe('user_blocking', () => {
       }
       getRootSpan = sinon.stub().returns(rootSpan)
 
-      block = sinon.stub()
+      block = sinon.stub().returns(true)
 
       legacyStorage = {
         getStore: sinon.stub().returns({ req, res })
@@ -118,7 +115,7 @@ describe('user_blocking', () => {
         const ret = userBlocking.blockRequest(tracer)
         expect(ret).to.be.true
         expect(legacyStorage.getStore).to.have.been.calledOnce
-        expect(block).to.be.calledOnceWithExactly(req, res)
+        expect(block).to.be.calledOnceWithExactly(req, res, rootSpan)
       })
 
       it('should log warning when req or res is not available', () => {
@@ -147,7 +144,7 @@ describe('user_blocking', () => {
         const ret = userBlocking.blockRequest(tracer, req, res)
         expect(ret).to.be.true
         expect(log.warn).to.not.have.been.called
-        expect(block).to.have.been.calledOnceWithExactly(req, res)
+        expect(block).to.have.been.calledOnceWithExactly(req, res, rootSpan)
       })
     })
   })
@@ -294,7 +291,7 @@ describe('user_blocking', () => {
         agent.use(traces => {
           expect(traces[0][0].meta).to.not.have.property('appsec.blocked', 'true')
           expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-          expect(traces[0][0].metrics).to.not.have.property('_dd.appsec.block.failed', 1)
+          expect(traces[0][0].metrics).to.have.property('_dd.appsec.block.failed', 1)
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
