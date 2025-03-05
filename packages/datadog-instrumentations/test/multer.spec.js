@@ -86,7 +86,7 @@ withVersions('multer', 'multer', version => {
       let payload
 
       function handler (data) {
-        store = storage.getStore()
+        store = storage('legacy').getStore()
         payload = data
       }
       multerReadCh.subscribe(handler)

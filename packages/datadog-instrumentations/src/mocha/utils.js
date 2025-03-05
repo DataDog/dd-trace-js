@@ -19,12 +19,34 @@ const skipCh = channel('ci:mocha:test:skip')
 // suite channels
 const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
 
+const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const testToAr = new WeakMap()
 const originalFns = new WeakMap()
 const testToStartLine = new WeakMap()
 const testFileToSuiteAr = new Map()
 const wrappedFunctions = new WeakSet()
 const newTests = {}
+const testsQuarantined = new Set()
+
+function isQuarantinedTest (test, testsToQuarantine) {
+  const testSuite = getTestSuitePath(test.file, process.cwd())
+  const testName = test.fullTitle()
+
+  const isQuarantined = (testsToQuarantine
+    .mocha
+    ?.suites
+    ?.[testSuite]
+    ?.tests
+    ?.[testName]
+    ?.properties
+    ?.quarantined) ?? false
+
+  if (isQuarantined) {
+    testsQuarantined.add(test)
+  }
+
+  return isQuarantined
+}
 
 function isNewTest (test, knownTests) {
   const testSuite = getTestSuitePath(test.file, process.cwd())
@@ -73,7 +95,7 @@ function isMochaRetry (test) {
   return test._currentRetry !== undefined && test._currentRetry !== 0
 }
 
-function isLastRetry (test) {
+function getIsLastRetry (test) {
   return test._currentRetry === test._retries
 }
 
@@ -170,7 +192,8 @@ function getOnTestHandler (isMain) {
       file: testSuiteAbsolutePath,
       title,
       _ddIsNew: isNew,
-      _ddIsEfdRetry: isEfdRetry
+      _ddIsEfdRetry: isEfdRetry,
+      _ddIsQuarantined: isQuarantined
     } = test
 
     const testInfo = {
@@ -186,6 +209,7 @@ function getOnTestHandler (isMain) {
 
     testInfo.isNew = isNew
     testInfo.isEfdRetry = isEfdRetry
+    testInfo.isQuarantined = isQuarantined
     // We want to store the result of the new tests
     if (isNew) {
       const testFullName = getTestFullName(test)
@@ -203,14 +227,28 @@ function getOnTestHandler (isMain) {
 }
 
 function getOnTestEndHandler () {
-  return function (test) {
+  return async function (test) {
     const asyncResource = getTestAsyncResource(test)
     const status = getTestStatus(test)
+
+    // After finishing it might take a bit for the snapshot to be handled.
+    // This means that tests retried with DI are BREAKPOINT_HIT_GRACE_PERIOD_MS slower at least.
+    if (test._ddShouldWaitForHitProbe || test._retriedTest?._ddShouldWaitForHitProbe) {
+      await new Promise((resolve) => {
+        setTimeout(() => {
+          resolve()
+        }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
+      })
+    }
 
     // if there are afterEach to be run, we don't finish the test yet
     if (asyncResource && !test.parent._afterEach.length) {
       asyncResource.runInAsyncScope(() => {
-        testFinishCh.publish({ status, hasBeenRetried: isMochaRetry(test) })
+        testFinishCh.publish({
+          status,
+          hasBeenRetried: isMochaRetry(test),
+          isLastRetry: getIsLastRetry(test)
+        })
       })
     }
   }
@@ -220,16 +258,17 @@ function getOnHookEndHandler () {
   return function (hook) {
     const test = hook.ctx.currentTest
     if (test && hook.parent._afterEach.includes(hook)) { // only if it's an afterEach
-      const isLastAfterEach = hook.parent._afterEach.indexOf(hook) === hook.parent._afterEach.length - 1
-      if (test._retries > 0 && !isLastRetry(test)) {
+      const isLastRetry = getIsLastRetry(test)
+      if (test._retries > 0 && !isLastRetry) {
         return
       }
+      const isLastAfterEach = hook.parent._afterEach.indexOf(hook) === hook.parent._afterEach.length - 1
       if (isLastAfterEach) {
         const status = getTestStatus(test)
         const asyncResource = getTestAsyncResource(test)
         if (asyncResource) {
           asyncResource.runInAsyncScope(() => {
-            testFinishCh.publish({ status, hasBeenRetried: isMochaRetry(test) })
+            testFinishCh.publish({ status, hasBeenRetried: isMochaRetry(test), isLastRetry })
           })
         }
       }
@@ -286,7 +325,7 @@ function getOnTestRetryHandler () {
       const isFirstAttempt = test._currentRetry === 0
       const willBeRetried = test._currentRetry < test._retries
       asyncResource.runInAsyncScope(() => {
-        testRetryCh.publish({ isFirstAttempt, err, willBeRetried })
+        testRetryCh.publish({ isFirstAttempt, err, willBeRetried, test })
       })
     }
     const key = getTestToArKey(test)
@@ -333,15 +372,26 @@ function getOnPendingHandler () {
 // Hook to add retries to tests if EFD is enabled
 function getRunTestsWrapper (runTests, config) {
   return function (suite, fn) {
-    if (config.isEarlyFlakeDetectionEnabled) {
+    if (config.isKnownTestsEnabled) {
       // by the time we reach `this.on('test')`, it is too late. We need to add retries here
       suite.tests.forEach(test => {
         if (!test.isPending() && isNewTest(test, config.knownTests)) {
           test._ddIsNew = true
-          retryTest(test, config.earlyFlakeDetectionNumRetries)
+          if (config.isEarlyFlakeDetectionEnabled) {
+            retryTest(test, config.earlyFlakeDetectionNumRetries)
+          }
         }
       })
     }
+
+    if (config.isQuarantinedTestsEnabled) {
+      suite.tests.forEach(test => {
+        if (isQuarantinedTest(test, config.quarantinedTests)) {
+          test._ddIsQuarantined = true
+        }
+      })
+    }
+
     return runTests.apply(this, arguments)
   }
 }
@@ -366,5 +416,6 @@ module.exports = {
   getOnPendingHandler,
   testFileToSuiteAr,
   getRunTestsWrapper,
-  newTests
+  newTests,
+  testsQuarantined
 }

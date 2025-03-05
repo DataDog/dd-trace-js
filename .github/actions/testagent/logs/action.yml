@@ -4,24 +4,38 @@ inputs:
   container-id:
     description: "ID of the Docker Container to get logs from (optional)"
     required: false
+  suffix:
+    description: "suffix of the artifact file name"
+    required: false
 runs:
   using: composite
   steps:
     - uses: actions/checkout@v2
-    - run: |
+    - name: Create Artifacts Directories
+      run: |
+        mkdir -p "./artifacts/logs"
+        mkdir -p "./artifacts/supported-integrations"
+      shell: bash
+    - name: Save Test Agent Logs
+      id: save_logs
+      if:  runner.debug == '1' # only create test agent log artifacts if the github action has been re-run with debug mode
+      run: |
         if [ -n "${{inputs.container-id}}" ]; then
-          docker logs ${{inputs.container-id}}
+          docker logs "${{inputs.container-id}}" > "artifacts/logs/test_agent_logs_${{ inputs.suffix }}.txt"
         else
-          docker compose logs testagent
+          docker compose logs testagent > "artifacts/logs/test_agent_logs_${{ inputs.suffix }}.txt"
         fi
       shell: bash
+    - name: Archive Test Agent Logs
+      if:  runner.debug == '1' # only create test agent log artifacts if the github action has been re-run with debug mode
+      uses: actions/upload-artifact@v4
+      with:
+        name: "test_agent_logs_${{ inputs.suffix }}"
+        path: "./artifacts/logs"
     - name: Get Tested Integrations from Test Agent
       run: |
         # make temporary files to save response data to
         response=$(mktemp) && headers=$(mktemp)
-
-        # create artifacts directory if it doesn't exist
-        mkdir -p "./artifacts"
 
         # get tested integrations
         curl -o "$response" -D "$headers" http://127.0.0.1:9126/test/integrations/tested_versions
@@ -30,11 +44,11 @@ runs:
         filename=$(awk -F': ' '/file-name/{print $2}' "$headers" | tr -d '\r\n')
 
         # copy data to final file and remove temp files
-        mv "$response" "artifacts/${filename}_supported_versions.csv"
+        mv "$response" "artifacts/supported-integrations/${filename}_supported_versions.csv"
         rm "$headers"
       shell: bash
-    - name: Archive Test Agent Artifacts
-      uses: actions/upload-artifact@v3
+    - name: Archive Test Agent Tested Versions Artifacts
+      uses: actions/upload-artifact@v4
       with:
-        name: supported-integrations
+        name: supported-integrations-${{ inputs.suffix }}
         path: ./artifacts

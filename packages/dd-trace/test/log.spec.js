@@ -119,7 +119,7 @@ describe('log', () => {
 
     it('should call the logger in a noop context', () => {
       logger.debug = () => {
-        expect(storage.getStore()).to.have.property('noop', true)
+        expect(storage('legacy').getStore()).to.have.property('noop', true)
       }
 
       log.use(logger).debug('debug')
@@ -147,14 +147,18 @@ describe('log', () => {
       })
 
       it('should log to console after setting log level to trace', function foo () {
+        class Foo {
+          constructor () {
+            this.bar = 'baz'
+          }
+        }
+
         log.toggle(true, 'trace')
-        log.trace('argument', { hello: 'world' }, {
-          toString: () => 'string'
-        }, { foo: 'bar' })
+        log.trace('argument', { hello: 'world' }, new Foo())
 
         expect(console.debug).to.have.been.calledOnce
         expect(console.debug.firstCall.args[0]).to.match(
-          /^Trace: Test.foo\('argument', { hello: 'world' }, string, { foo: 'bar' }\)/
+          /^Trace: Test.foo\('argument', { hello: 'world' }, Foo { bar: 'baz' }\)/
         )
         expect(console.debug.firstCall.args[0].split('\n').length).to.be.gte(3)
       })

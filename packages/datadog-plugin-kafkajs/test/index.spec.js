@@ -8,7 +8,7 @@ const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/he
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
+const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 
@@ -73,7 +73,9 @@ describe('Plugin', () => {
             const meta = {
               'span.kind': 'producer',
               component: 'kafkajs',
-              'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString()
+              'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString(),
+              'messaging.destination.name': 'test-topic',
+              'messaging.kafka.bootstrap.servers': '127.0.0.1:9092'
             }
             if (clusterIdAvailable) meta['kafka.cluster_id'] = testKafkaClusterId
 
@@ -182,7 +184,8 @@ describe('Plugin', () => {
               meta: {
                 'span.kind': 'consumer',
                 component: 'kafkajs',
-                'pathway.hash': expectedConsumerHash.readBigUInt64BE(0).toString()
+                'pathway.hash': expectedConsumerHash.readBigUInt64BE(0).toString(),
+                'messaging.destination.name': 'test-topic'
               },
               resource: testTopic,
               error: 0,

@@ -14,6 +14,7 @@ const {
   DECISION_MAKER_KEY,
   SAMPLING_MECHANISM_APPSEC
 } = require('../src/constants')
+const { ASM } = require('../src/standalone/product')
 
 const SERVICE_NAME = ext.tags.SERVICE_NAME
 const SAMPLING_PRIORITY = ext.tags.SAMPLING_PRIORITY
@@ -462,7 +463,7 @@ describe('PrioritySampler', () => {
     })
 
     it('should set sampling priority and mechanism', () => {
-      prioritySampler.setPriority(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+      prioritySampler.setPriority(span, USER_KEEP, ASM)
 
       expect(context._sampling.priority).to.equal(USER_KEEP)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_APPSEC)
@@ -476,19 +477,36 @@ describe('PrioritySampler', () => {
     })
 
     it('should add decision maker tag if not set before', () => {
-      prioritySampler.setPriority(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+      prioritySampler.setPriority(span, USER_KEEP, ASM)
 
       expect(context._trace.tags[DECISION_MAKER_KEY]).to.equal('-5')
+    })
+
+    it('should set sampling priority if no product is provided', () => {
+      prioritySampler.setPriority(span, USER_KEEP)
+
+      expect(context._sampling.priority).to.equal(USER_KEEP)
+      expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_MANUAL)
     })
 
     it('should override previous priority but mantain previous decision maker tag', () => {
       prioritySampler.sample(span)
 
-      prioritySampler.setPriority(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+      prioritySampler.setPriority(span, USER_KEEP, ASM)
 
       expect(context._sampling.priority).to.equal(USER_KEEP)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_APPSEC)
       expect(context._trace.tags[DECISION_MAKER_KEY]).to.equal('-0')
+    })
+
+    it('should ignore noop spans', () => {
+      context._trace.started[0] = undefined // noop
+
+      prioritySampler.setPriority(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+
+      expect(context._sampling.priority).to.undefined
+      expect(context._sampling.mechanism).to.undefined
+      expect(context._trace.tags[DECISION_MAKER_KEY]).to.undefined
     })
   })
 

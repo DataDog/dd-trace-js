@@ -31,7 +31,11 @@ const {
   TEST_EARLY_FLAKE_ENABLED,
   getTestSessionName,
   TEST_SESSION_NAME,
-  TEST_LEVEL_EVENT_TYPES
+  TEST_LEVEL_EVENT_TYPES,
+  TEST_RETRY_REASON,
+  DD_TEST_IS_USER_PROVIDED_SERVICE,
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_ENABLED
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -112,7 +116,7 @@ function getCypressCommand (details) {
 function getLibraryConfiguration (tracer, testConfiguration) {
   return new Promise(resolve => {
     if (!tracer._tracer._exporter?.getLibraryConfiguration) {
-      return resolve({ err: new Error('CI Visibility was not initialized correctly') })
+      return resolve({ err: new Error('Test Optimization was not initialized correctly') })
     }
 
     tracer._tracer._exporter.getLibraryConfiguration(testConfiguration, (err, libraryConfig) => {
@@ -124,7 +128,7 @@ function getLibraryConfiguration (tracer, testConfiguration) {
 function getSkippableTests (tracer, testConfiguration) {
   return new Promise(resolve => {
     if (!tracer._tracer._exporter?.getSkippableSuites) {
-      return resolve({ err: new Error('CI Visibility was not initialized correctly') })
+      return resolve({ err: new Error('Test Optimization was not initialized correctly') })
     }
     tracer._tracer._exporter.getSkippableSuites(testConfiguration, (err, skippableTests, correlationId) => {
       resolve({
@@ -139,12 +143,26 @@ function getSkippableTests (tracer, testConfiguration) {
 function getKnownTests (tracer, testConfiguration) {
   return new Promise(resolve => {
     if (!tracer._tracer._exporter?.getKnownTests) {
-      return resolve({ err: new Error('CI Visibility was not initialized correctly') })
+      return resolve({ err: new Error('Test Optimization was not initialized correctly') })
     }
     tracer._tracer._exporter.getKnownTests(testConfiguration, (err, knownTests) => {
       resolve({
         err,
         knownTests
+      })
+    })
+  })
+}
+
+function getQuarantinedTests (tracer, testConfiguration) {
+  return new Promise(resolve => {
+    if (!tracer._tracer._exporter?.getQuarantinedTests) {
+      return resolve({ err: new Error('Test Optimization was not initialized correctly') })
+    }
+    tracer._tracer._exporter.getQuarantinedTests(testConfiguration, (err, quarantinedTests) => {
+      resolve({
+        err,
+        quarantinedTests
       })
     })
   })
@@ -203,6 +221,7 @@ class CypressPlugin {
     this.isSuitesSkippingEnabled = false
     this.isCodeCoverageEnabled = false
     this.isEarlyFlakeDetectionEnabled = false
+    this.isKnownTestsEnabled = false
     this.earlyFlakeDetectionNumRetries = 0
     this.testsToSkip = []
     this.skippedTests = []
@@ -220,6 +239,10 @@ class CypressPlugin {
     this.tracer = tracer
     this.cypressConfig = cypressConfig
 
+    // we have to do it here because the tracer is not initialized in the constructor
+    this.testEnvironmentMetadata[DD_TEST_IS_USER_PROVIDED_SERVICE] =
+      tracer._tracer._config.isServiceUserProvided ? 'true' : 'false'
+
     this.libraryConfigurationPromise = getLibraryConfiguration(this.tracer, this.testConfiguration)
       .then((libraryConfigurationResponse) => {
         if (libraryConfigurationResponse.err) {
@@ -232,20 +255,35 @@ class CypressPlugin {
               isEarlyFlakeDetectionEnabled,
               earlyFlakeDetectionNumRetries,
               isFlakyTestRetriesEnabled,
-              flakyTestRetriesCount
+              flakyTestRetriesCount,
+              isKnownTestsEnabled,
+              isQuarantinedTestsEnabled
             }
           } = libraryConfigurationResponse
           this.isSuitesSkippingEnabled = isSuitesSkippingEnabled
           this.isCodeCoverageEnabled = isCodeCoverageEnabled
           this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
           this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+          this.isKnownTestsEnabled = isKnownTestsEnabled
           if (isFlakyTestRetriesEnabled) {
             this.cypressConfig.retries.runMode = flakyTestRetriesCount
           }
+          this.isQuarantinedTestsEnabled = isQuarantinedTestsEnabled
         }
         return this.cypressConfig
       })
     return this.libraryConfigurationPromise
+  }
+
+  getIsQuarantinedTest (testSuite, testName) {
+    return this.quarantinedTests
+      ?.cypress
+      ?.suites
+      ?.[testSuite]
+      ?.tests
+      ?.[testName]
+      ?.properties
+      ?.quarantined
   }
 
   getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
@@ -342,10 +380,6 @@ class CypressPlugin {
     })
   }
 
-  isNewTest (testName, testSuite) {
-    return !this.knownTestsByTestSuite?.[testSuite]?.includes(testName)
-  }
-
   async beforeRun (details) {
     // We need to make sure that the plugin is initialized before running the tests
     // This is for the case where the user has not returned the promise from the init function
@@ -354,7 +388,7 @@ class CypressPlugin {
     this.frameworkVersion = getCypressVersion(details)
     this.rootDir = getRootDir(details)
 
-    if (this.isEarlyFlakeDetectionEnabled) {
+    if (this.isKnownTestsEnabled) {
       const knownTestsResponse = await getKnownTests(
         this.tracer,
         this.testConfiguration
@@ -362,6 +396,7 @@ class CypressPlugin {
       if (knownTestsResponse.err) {
         log.error('Cypress known tests response error', knownTestsResponse.err)
         this.isEarlyFlakeDetectionEnabled = false
+        this.isKnownTestsEnabled = false
       } else {
         // We use TEST_FRAMEWORK_NAME for the name of the module
         this.knownTestsByTestSuite = knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]
@@ -380,6 +415,19 @@ class CypressPlugin {
         this.testsToSkip = skippableTests || []
         this.itrCorrelationId = correlationId
         incrementCountMetric(TELEMETRY_ITR_SKIPPED, { testLevel: 'test' }, this.testsToSkip.length)
+      }
+    }
+
+    if (this.isQuarantinedTestsEnabled) {
+      const quarantinedTestsResponse = await getQuarantinedTests(
+        this.tracer,
+        this.testConfiguration
+      )
+      if (quarantinedTestsResponse.err) {
+        log.error('Cypress quarantined tests response error', quarantinedTestsResponse.err)
+        this.isQuarantinedTestsEnabled = false
+      } else {
+        this.quarantinedTests = quarantinedTestsResponse.quarantinedTests
       }
     }
 
@@ -461,6 +509,10 @@ class CypressPlugin {
         }
       )
 
+      if (this.isQuarantinedTestsEnabled) {
+        this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
+      }
+
       this.testModuleSpan.finish()
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
@@ -535,6 +587,13 @@ class CypressPlugin {
       if (this.itrCorrelationId) {
         skippedTestSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
       }
+
+      const isQuarantined = this.getIsQuarantinedTest(spec.relative, cypressTestName)
+
+      if (isQuarantined) {
+        skippedTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+      }
+
       skippedTestSpan.finish()
     })
 
@@ -567,6 +626,9 @@ class CypressPlugin {
           cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.attempts[attemptIndex].state]
           if (attemptIndex > 0) {
             finishedTest.testSpan.setTag(TEST_IS_RETRY, 'true')
+            if (finishedTest.isEfdRetry) {
+              finishedTest.testSpan.setTag(TEST_RETRY_REASON, 'efd')
+            }
           }
         }
         if (cypressTest.displayError) {
@@ -618,7 +680,8 @@ class CypressPlugin {
         const suitePayload = {
           isEarlyFlakeDetectionEnabled: this.isEarlyFlakeDetectionEnabled,
           knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
-          earlyFlakeDetectionNumRetries: this.earlyFlakeDetectionNumRetries
+          earlyFlakeDetectionNumRetries: this.earlyFlakeDetectionNumRetries,
+          isKnownTestsEnabled: this.isKnownTestsEnabled
         }
 
         if (this.testSuiteSpan) {
@@ -634,11 +697,18 @@ class CypressPlugin {
         })
         const isUnskippable = this.unskippableSuites.includes(testSuite)
         const isForcedToRun = shouldSkip && isUnskippable
+        const isQuarantined = this.getIsQuarantinedTest(testSuite, testName)
 
         // skip test
         if (shouldSkip && !isUnskippable) {
           this.skippedTests.push(test)
           this.isTestsSkipped = true
+          return { shouldSkip: true }
+        }
+
+        // TODO: I haven't found a way to trick cypress into ignoring a test
+        // The way we'll implement quarantine in cypress is by skipping the test altogether
+        if (isQuarantined) {
           return { shouldSkip: true }
         }
 
@@ -667,7 +737,8 @@ class CypressPlugin {
           testSuiteAbsolutePath,
           testName,
           isNew,
-          isEfdRetry
+          isEfdRetry,
+          isQuarantined
         } = test
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
@@ -703,13 +774,18 @@ class CypressPlugin {
           this.activeTestSpan.setTag(TEST_IS_NEW, 'true')
           if (isEfdRetry) {
             this.activeTestSpan.setTag(TEST_IS_RETRY, 'true')
+            this.activeTestSpan.setTag(TEST_RETRY_REASON, 'efd')
           }
+        }
+        if (isQuarantined) {
+          this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
         }
         const finishedTest = {
           testName,
           testStatus,
           finishTime: this.activeTestSpan._getTime(), // we store the finish time here
-          testSpan: this.activeTestSpan
+          testSpan: this.activeTestSpan,
+          isEfdRetry
         }
         if (this.finishedTestsByFile[testSuite]) {
           this.finishedTestsByFile[testSuite].push(finishedTest)

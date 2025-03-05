@@ -5,13 +5,11 @@ const addresses = require('../../../src/appsec/addresses')
 const proxyquire = require('proxyquire')
 
 describe('RASP - sql_injection', () => {
-  let waf, datadogCore, sqli
+  let waf, legacyStorage, sqli
 
   beforeEach(() => {
-    datadogCore = {
-      storage: {
-        getStore: sinon.stub()
-      }
+    legacyStorage = {
+      getStore: sinon.stub()
     }
 
     waf = {
@@ -19,7 +17,7 @@ describe('RASP - sql_injection', () => {
     }
 
     sqli = proxyquire('../../../src/appsec/rasp/sql_injection', {
-      '../../../../datadog-core': datadogCore,
+      '../../../../datadog-core': { storage: () => legacyStorage },
       '../waf': waf
     })
 
@@ -49,15 +47,15 @@ describe('RASP - sql_injection', () => {
         }
       }
       const req = {}
-      datadogCore.storage.getStore.returns({ req })
+      legacyStorage.getStore.returns({ req })
 
       pgQueryStart.publish(ctx)
 
-      const persistent = {
+      const ephemeral = {
         [addresses.DB_STATEMENT]: 'SELECT 1',
         [addresses.DB_SYSTEM]: 'postgresql'
       }
-      sinon.assert.calledOnceWithExactly(waf.run, { persistent }, req, { type: 'sql_injection' })
+      sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req, { type: 'sql_injection' })
     })
 
     it('should not analyze sql injection if rasp is disabled', () => {
@@ -69,7 +67,7 @@ describe('RASP - sql_injection', () => {
         }
       }
       const req = {}
-      datadogCore.storage.getStore.returns({ req })
+      legacyStorage.getStore.returns({ req })
 
       pgQueryStart.publish(ctx)
 
@@ -82,7 +80,7 @@ describe('RASP - sql_injection', () => {
           text: 'SELECT 1'
         }
       }
-      datadogCore.storage.getStore.returns(undefined)
+      legacyStorage.getStore.returns(undefined)
 
       pgQueryStart.publish(ctx)
 
@@ -95,7 +93,7 @@ describe('RASP - sql_injection', () => {
           text: 'SELECT 1'
         }
       }
-      datadogCore.storage.getStore.returns({})
+      legacyStorage.getStore.returns({})
 
       pgQueryStart.publish(ctx)
 
@@ -106,7 +104,7 @@ describe('RASP - sql_injection', () => {
       const ctx = {
         query: {}
       }
-      datadogCore.storage.getStore.returns({})
+      legacyStorage.getStore.returns({})
 
       pgQueryStart.publish(ctx)
 
@@ -120,15 +118,15 @@ describe('RASP - sql_injection', () => {
         sql: 'SELECT 1'
       }
       const req = {}
-      datadogCore.storage.getStore.returns({ req })
+      legacyStorage.getStore.returns({ req })
 
       mysql2OuterQueryStart.publish(ctx)
 
-      const persistent = {
+      const ephemeral = {
         [addresses.DB_STATEMENT]: 'SELECT 1',
         [addresses.DB_SYSTEM]: 'mysql'
       }
-      sinon.assert.calledOnceWithExactly(waf.run, { persistent }, req, { type: 'sql_injection' })
+      sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req, { type: 'sql_injection' })
     })
 
     it('should not analyze sql injection if rasp is disabled', () => {
@@ -138,7 +136,7 @@ describe('RASP - sql_injection', () => {
         sql: 'SELECT 1'
       }
       const req = {}
-      datadogCore.storage.getStore.returns({ req })
+      legacyStorage.getStore.returns({ req })
 
       mysql2OuterQueryStart.publish(ctx)
 
@@ -149,7 +147,7 @@ describe('RASP - sql_injection', () => {
       const ctx = {
         sql: 'SELECT 1'
       }
-      datadogCore.storage.getStore.returns(undefined)
+      legacyStorage.getStore.returns(undefined)
 
       mysql2OuterQueryStart.publish(ctx)
 
@@ -160,7 +158,7 @@ describe('RASP - sql_injection', () => {
       const ctx = {
         sql: 'SELECT 1'
       }
-      datadogCore.storage.getStore.returns({})
+      legacyStorage.getStore.returns({})
 
       mysql2OuterQueryStart.publish(ctx)
 
@@ -171,7 +169,7 @@ describe('RASP - sql_injection', () => {
       const ctx = {
         sql: 'SELECT 1'
       }
-      datadogCore.storage.getStore.returns({})
+      legacyStorage.getStore.returns({})
 
       mysql2OuterQueryStart.publish(ctx)
 

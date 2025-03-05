@@ -60,7 +60,7 @@ describe('format', () => {
         _service: 'test'
       }),
       setTag: sinon.stub(),
-      _startTime: 1500000000000.123456,
+      _startTime: 1500000000000.123,
       _duration: 100
     }
 
@@ -292,6 +292,23 @@ describe('format', () => {
 
       expect(trace.meta).to.include({
         chunk: 'test'
+      })
+
+      expect(trace.metrics).to.include({
+        count: 1
+      })
+    })
+
+    it('should extract empty tags', () => {
+      spanContext._trace.tags = {
+        foo: '',
+        count: 1
+      }
+
+      trace = format(span)
+
+      expect(trace.meta).to.include({
+        foo: ''
       })
 
       expect(trace.metrics).to.include({

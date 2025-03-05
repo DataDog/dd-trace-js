@@ -2,42 +2,48 @@
 
 const assert = require('assert')
 
-const log = require('../../src/log')
 const telemetry = require('../../src/appsec/telemetry')
-const { SAMPLING_MECHANISM_APPSEC } = require('../../src/constants')
-const standalone = require('../../src/appsec/standalone')
 const waf = require('../../src/appsec/waf')
+const { ASM } = require('../../src/standalone/product')
 
 describe('User Tracking', () => {
   let currentTags
   let rootSpan
+  let log
   let keepTrace
 
   let setCollectionMode
   let trackLogin
+  let trackUser
 
   beforeEach(() => {
-    sinon.stub(log, 'warn')
-    sinon.stub(log, 'error')
     sinon.stub(telemetry, 'incrementMissingUserLoginMetric')
-    sinon.stub(standalone, 'sample')
+    sinon.stub(telemetry, 'incrementMissingUserIdMetric')
     sinon.stub(waf, 'run').returns(['action1'])
 
     currentTags = {}
 
     rootSpan = {
       context: () => ({ _tags: currentTags }),
-      addTags: sinon.stub()
+      addTags: sinon.stub(),
+      setTag: sinon.stub()
+    }
+
+    log = {
+      warn: sinon.stub(),
+      error: sinon.stub()
     }
 
     keepTrace = sinon.stub()
 
     const UserTracking = proxyquire('../src/appsec/user_tracking', {
+      '../log': log,
       '../priority_sampler': { keepTrace }
     })
 
     setCollectionMode = UserTracking.setCollectionMode
     trackLogin = UserTracking.trackLogin
+    trackUser = UserTracking.trackUser
   })
 
   afterEach(() => {
@@ -63,8 +69,7 @@ describe('User Tracking', () => {
       sinon.assert.notCalled(log.error)
       sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-      sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-      sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+      sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
       sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
         'appsec.events.users.login.success.track': 'true',
         '_dd.appsec.events.users.login.success.auto.mode': 'identification',
@@ -96,8 +101,7 @@ describe('User Tracking', () => {
       sinon.assert.notCalled(log.error)
       sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-      sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-      sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+      sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
       sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
         'appsec.events.users.login.success.track': 'true',
         '_dd.appsec.events.users.login.success.auto.mode': 'identification',
@@ -135,8 +139,7 @@ describe('User Tracking', () => {
       sinon.assert.notCalled(log.error)
       sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-      sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-      sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+      sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
       sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
         'appsec.events.users.login.success.track': 'true',
         '_dd.appsec.events.users.login.success.auto.mode': 'identification',
@@ -166,22 +169,6 @@ describe('User Tracking', () => {
       sinon.assert.notCalled(log.error)
       sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
       sinon.assert.notCalled(keepTrace)
-      sinon.assert.notCalled(standalone.sample)
-      sinon.assert.notCalled(rootSpan.addTags)
-      sinon.assert.notCalled(waf.run)
-    })
-
-    it('should log error when rootSpan is not found', () => {
-      setCollectionMode('identification')
-
-      const results = trackLogin('passport-local', 'login', { id: '123', email: 'a@b.c' }, true)
-
-      assert.deepStrictEqual(results, undefined)
-
-      sinon.assert.calledOnceWithExactly(log.error, '[ASM] No rootSpan found in AppSec trackLogin')
-      sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
-      sinon.assert.notCalled(keepTrace)
-      sinon.assert.notCalled(standalone.sample)
       sinon.assert.notCalled(rootSpan.addTags)
       sinon.assert.notCalled(waf.run)
     })
@@ -196,7 +183,6 @@ describe('User Tracking', () => {
       sinon.assert.calledOnceWithExactly(log.error, '[ASM] Invalid login provided to AppSec trackLogin')
       sinon.assert.calledOnceWithExactly(telemetry.incrementMissingUserLoginMetric, 'passport-local', 'login_success')
       sinon.assert.notCalled(keepTrace)
-      sinon.assert.notCalled(standalone.sample)
       sinon.assert.notCalled(rootSpan.addTags)
       sinon.assert.notCalled(waf.run)
     })
@@ -211,7 +197,6 @@ describe('User Tracking', () => {
       sinon.assert.calledOnceWithExactly(log.error, '[ASM] Invalid login provided to AppSec trackLogin')
       sinon.assert.calledOnceWithExactly(telemetry.incrementMissingUserLoginMetric, 'passport-local', 'login_failure')
       sinon.assert.notCalled(keepTrace)
-      sinon.assert.notCalled(standalone.sample)
       sinon.assert.notCalled(rootSpan.addTags)
       sinon.assert.notCalled(waf.run)
     })
@@ -229,8 +214,7 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-        sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.auto.mode': 'identification',
@@ -256,8 +240,7 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-        sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
           'appsec.events.users.login.failure.track': 'true',
           '_dd.appsec.events.users.login.failure.auto.mode': 'identification',
@@ -288,8 +271,7 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-        sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.auto.mode': 'identification',
@@ -318,8 +300,7 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-        sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
           'appsec.events.users.login.failure.track': 'true',
           '_dd.appsec.events.users.login.failure.auto.mode': 'identification',
@@ -342,8 +323,7 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-        sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.auto.mode': 'identification',
@@ -366,8 +346,7 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-        sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
           'appsec.events.users.login.failure.track': 'true',
           '_dd.appsec.events.users.login.failure.auto.mode': 'identification',
@@ -396,8 +375,7 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-        sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.auto.mode': 'anonymization',
@@ -423,8 +401,7 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-        sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
           'appsec.events.users.login.failure.track': 'true',
           '_dd.appsec.events.users.login.failure.auto.mode': 'anonymization',
@@ -455,8 +432,7 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-        sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.auto.mode': 'anonymization',
@@ -485,8 +461,7 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-        sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
           'appsec.events.users.login.failure.track': 'true',
           '_dd.appsec.events.users.login.failure.auto.mode': 'anonymization',
@@ -509,8 +484,7 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-        sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.auto.mode': 'anonymization',
@@ -533,8 +507,7 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-        sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
           'appsec.events.users.login.failure.track': 'true',
           '_dd.appsec.events.users.login.failure.auto.mode': 'anonymization',
@@ -566,8 +539,7 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-        sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.auto.mode': 'anonymization',
@@ -595,8 +567,7 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-        sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.auto.mode': 'anonymization',
@@ -629,8 +600,7 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-        sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.auto.mode': 'identification',
@@ -658,8 +628,7 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
 
-        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, SAMPLING_MECHANISM_APPSEC)
-        sinon.assert.calledOnceWithExactly(standalone.sample, rootSpan)
+        sinon.assert.calledOnceWithExactly(keepTrace, rootSpan, ASM)
         sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.auto.mode': 'identification',
@@ -687,7 +656,134 @@ describe('User Tracking', () => {
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(telemetry.incrementMissingUserLoginMetric)
         sinon.assert.notCalled(keepTrace)
-        sinon.assert.notCalled(standalone.sample)
+        sinon.assert.notCalled(rootSpan.addTags)
+        sinon.assert.notCalled(waf.run)
+      })
+    })
+  })
+
+  describe('trackUser', () => {
+    it('should not do anything if collectionMode is empty or disabled', () => {
+      setCollectionMode('disabled')
+
+      const results = trackUser({ id: '123', email: 'a@b.c' }, rootSpan)
+
+      assert.deepStrictEqual(results, undefined)
+
+      sinon.assert.notCalled(log.error)
+      sinon.assert.notCalled(telemetry.incrementMissingUserIdMetric)
+      sinon.assert.notCalled(rootSpan.setTag)
+      sinon.assert.notCalled(rootSpan.addTags)
+      sinon.assert.notCalled(waf.run)
+    })
+
+    it('should log error and send telemetry when user ID is not found', () => {
+      setCollectionMode('identification')
+
+      const results = trackUser({ notAnId: 'bonjour' }, rootSpan)
+
+      assert.deepStrictEqual(results, undefined)
+
+      sinon.assert.calledOnceWithExactly(log.error, '[ASM] No valid user ID found in AppSec trackUser')
+      sinon.assert.calledOnceWithExactly(telemetry.incrementMissingUserIdMetric, 'passport', 'authenticated_request')
+      sinon.assert.notCalled(rootSpan.setTag)
+      sinon.assert.notCalled(rootSpan.addTags)
+      sinon.assert.notCalled(waf.run)
+    })
+
+    describe('when collectionMode is indentification', () => {
+      beforeEach(() => {
+        setCollectionMode('identification')
+      })
+
+      it('should write tags and call waf', () => {
+        const results = trackUser({ id: '123', email: 'a@b.c' }, rootSpan)
+
+        assert.deepStrictEqual(results, ['action1'])
+
+        sinon.assert.notCalled(log.error)
+        sinon.assert.notCalled(telemetry.incrementMissingUserIdMetric)
+
+        sinon.assert.calledOnceWithExactly(rootSpan.setTag, '_dd.appsec.usr.id', '123')
+        sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
+          'usr.id': '123',
+          '_dd.appsec.user.collection_mode': 'identification'
+        })
+        sinon.assert.calledOnceWithExactly(waf.run, {
+          persistent: {
+            'usr.id': '123'
+          }
+        })
+      })
+
+      it('should not overwrite tags set by SDK', () => {
+        currentTags = {
+          'usr.id': 'sdk_id',
+          '_dd.appsec.user.collection_mode': 'sdk'
+        }
+
+        const results = trackUser({ id: '123', email: 'a@b.c' }, rootSpan)
+
+        assert.deepStrictEqual(results, undefined)
+
+        sinon.assert.notCalled(log.error)
+        sinon.assert.notCalled(telemetry.incrementMissingUserIdMetric)
+
+        sinon.assert.calledOnceWithExactly(rootSpan.setTag, '_dd.appsec.usr.id', '123')
+
+        sinon.assert.notCalled(rootSpan.addTags)
+        sinon.assert.notCalled(waf.run)
+      })
+    })
+
+    describe('when collectionMode is anonymization', () => {
+      beforeEach(() => {
+        setCollectionMode('anonymization')
+      })
+
+      it('should write tags and call waf', () => {
+        const results = trackUser({ id: '123', email: 'a@b.c' }, rootSpan)
+
+        assert.deepStrictEqual(results, ['action1'])
+
+        sinon.assert.notCalled(log.error)
+        sinon.assert.notCalled(telemetry.incrementMissingUserIdMetric)
+
+        sinon.assert.calledOnceWithExactly(
+          rootSpan.setTag,
+          '_dd.appsec.usr.id',
+          'anon_a665a45920422f9d417e4867efdc4fb8'
+        )
+        sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
+          'usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8',
+          '_dd.appsec.user.collection_mode': 'anonymization'
+        })
+        sinon.assert.calledOnceWithExactly(waf.run, {
+          persistent: {
+            'usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8'
+          }
+        })
+      })
+
+      it('should not overwrite tags set by SDK', () => {
+        currentTags = {
+          'usr.id': 'sdk_id',
+          '_dd.appsec.user.collection_mode': 'sdk'
+        }
+
+        const results = trackUser({ id: '123', email: 'a@b.c' }, rootSpan)
+
+        assert.deepStrictEqual(results, undefined)
+
+        sinon.assert.notCalled(log.error)
+        sinon.assert.notCalled(telemetry.incrementMissingUserIdMetric)
+
+        sinon.assert.calledOnceWithExactly(
+          rootSpan.setTag,
+          '_dd.appsec.usr.id',
+          'anon_a665a45920422f9d417e4867efdc4fb8'
+        )
+
         sinon.assert.notCalled(rootSpan.addTags)
         sinon.assert.notCalled(waf.run)
       })

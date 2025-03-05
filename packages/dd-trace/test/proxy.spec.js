@@ -75,6 +75,7 @@ describe('TracerProxy', () => {
 
     noopDogStatsDClient = {
       increment: sinon.spy(),
+      decrement: sinon.spy(),
       gauge: sinon.spy(),
       distribution: sinon.spy(),
       histogram: sinon.spy(),
@@ -126,9 +127,11 @@ describe('TracerProxy', () => {
       logger: 'logger',
       debug: true,
       profiling: {},
+      apmTracingEnabled: false,
       appsec: {},
       iast: {},
       crashtracking: {},
+      dynamicInstrumentation: {},
       remoteConfig: {
         enabled: true
       },
@@ -196,7 +199,7 @@ describe('TracerProxy', () => {
       './appsec': appsec,
       './appsec/iast': iast,
       './telemetry': telemetry,
-      './appsec/remote_config': remoteConfig,
+      './remote_config': remoteConfig,
       './appsec/sdk': AppsecSdk,
       './dogstatsd': dogStatsD,
       './noop/dogstatsd': NoopDogStatsDClient,
@@ -321,12 +324,13 @@ describe('TracerProxy', () => {
           './tracer': DatadogTracer,
           './appsec': appsec,
           './appsec/iast': iast,
-          './appsec/remote_config': remoteConfig,
+          './remote_config': remoteConfig,
           './appsec/sdk': AppsecSdk
         })
 
         const remoteConfigProxy = new RemoteConfigProxy()
         remoteConfigProxy.init()
+        remoteConfigProxy.appsec // Eagerly trigger lazy loading.
         expect(DatadogTracer).to.have.been.calledOnce
         expect(AppsecSdk).to.have.been.calledOnce
         expect(appsec.enable).to.not.have.been.called
@@ -351,7 +355,7 @@ describe('TracerProxy', () => {
           './config': Config,
           './appsec': appsec,
           './appsec/iast': iast,
-          './appsec/remote_config': remoteConfig,
+          './remote_config': remoteConfig,
           './appsec/sdk': AppsecSdk
         })
 
@@ -401,28 +405,6 @@ describe('TracerProxy', () => {
         proxy.dogstatsd.increment('foo')
       })
 
-      it('should call custom metrics flush via interval', () => {
-        const clock = sinon.useFakeTimers()
-
-        config.dogstatsd = {
-          hostname: 'localhost',
-          port: 9876
-        }
-        config.tags = {
-          service: 'photos',
-          env: 'prod',
-          version: '1.2.3'
-        }
-
-        proxy.init()
-
-        expect(dogStatsD._flushes()).to.equal(0)
-
-        clock.tick(10000)
-
-        expect(dogStatsD._flushes()).to.equal(1)
-      })
-
       it('should expose real metrics methods after init when configured', () => {
         config.dogstatsd = {
           hostname: 'localhost',
@@ -435,11 +417,11 @@ describe('TracerProxy', () => {
         }
 
         proxy.init()
+        proxy.dogstatsd.increment('foo', 10, { alpha: 'bravo' })
+
+        const incs = dogStatsD._increments()
 
         expect(dogStatsD._config().dogstatsd.hostname).to.equal('localhost')
-
-        proxy.dogstatsd.increment('foo', 10, { alpha: 'bravo' })
-        const incs = dogStatsD._increments()
         expect(incs.length).to.equal(1)
         expect(incs[0][0]).to.equal('foo')
         expect(incs[0][1]).to.equal(10)
@@ -514,7 +496,7 @@ describe('TracerProxy', () => {
           './profiler': null, // this will cause the import failure error
           './appsec': appsec,
           './telemetry': telemetry,
-          './appsec/remote_config': remoteConfig
+          './remote_config': remoteConfig
         })
 
         const profilerImportFailureProxy = new ProfilerImportFailureProxy()
@@ -531,7 +513,7 @@ describe('TracerProxy', () => {
         expect(telemetry.start).to.have.been.called
       })
 
-      it('should configure appsec standalone', () => {
+      it('should configure standalone', () => {
         const standalone = {
           configure: sinon.stub()
         }
@@ -542,14 +524,15 @@ describe('TracerProxy', () => {
           './config': Config,
           './appsec': appsec,
           './appsec/iast': iast,
-          './appsec/remote_config': remoteConfig,
+          './remote_config': remoteConfig,
           './appsec/sdk': AppsecSdk,
-          './appsec/standalone': standalone,
+          './standalone': standalone,
           './telemetry': telemetry
         })
 
         const proxy = new DatadogProxy()
         proxy.init(options)
+        proxy.appsec // Eagerly trigger lazy loading.
 
         const config = AppsecSdk.firstCall.args[1]
         expect(standalone.configure).to.have.been.calledOnceWithExactly(config)
@@ -675,6 +658,8 @@ describe('TracerProxy', () => {
       it('should not throw when calling noop methods', () => {
         proxy.dogstatsd.increment('inc')
         expect(noopDogStatsDClient.increment).to.have.been.calledWith('inc')
+        proxy.dogstatsd.decrement('dec')
+        expect(noopDogStatsDClient.decrement).to.have.been.calledWith('dec')
         proxy.dogstatsd.distribution('dist')
         expect(noopDogStatsDClient.distribution).to.have.been.calledWith('dist')
         proxy.dogstatsd.histogram('hist')

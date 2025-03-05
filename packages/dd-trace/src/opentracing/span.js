@@ -4,7 +4,7 @@
 const { performance } = require('perf_hooks')
 const now = performance.now.bind(performance)
 const dateNow = Date.now
-const semver = require('semver')
+const satisfies = require('semifies')
 const SpanContext = require('./span_context')
 const id = require('../id')
 const tagger = require('../tagger')
@@ -13,7 +13,7 @@ const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
-const spanleak = require('../spanleak')
+const util = require('util')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -64,7 +64,7 @@ class DatadogSpan {
     this._debug = debug
     this._processor = processor
     this._prioritySampler = prioritySampler
-    this._store = storage.getStore()
+    this._store = storage('legacy').getHandle()
     this._duration = undefined
 
     this._events = []
@@ -98,10 +98,30 @@ class DatadogSpan {
 
       unfinishedRegistry.register(this, operationName, this)
     }
-    spanleak.addSpan(this, operationName)
+
+    // Nullish operator is used here because both `tracer` and `tracer._config`
+    // can be null and there are tests passing invalid values to the `Span`
+    // constructor which still succeed today. Part of the problem is that `Span`
+    // stores only the tracer and not the config, so anything that needs the
+    // config has to read it from the tracer stored on the span, including
+    // even `Span` itself in this case.
+    //
+    // TODO: Refactor Tracer/Span + tests to avoid having to do nullish checks.
+    if (tracer?._config?.spanLeakDebug > 0) {
+      require('../spanleak').addSpan(this, operationName)
+    }
 
     if (startCh.hasSubscribers) {
       startCh.publish({ span: this, fields })
+    }
+  }
+
+  [util.inspect.custom] () {
+    return {
+      ...this,
+      _parentTracer: `[${this._parentTracer.constructor.name}]`,
+      _prioritySampler: `[${this._prioritySampler.constructor.name}]`,
+      _processor: `[${this._processor.constructor.name}]`
     }
   }
 
@@ -355,7 +375,7 @@ class DatadogSpan {
 }
 
 function createRegistry (type) {
-  if (!semver.satisfies(process.version, '>=14.6')) return
+  if (!satisfies(process.version, '>=14.6')) return
 
   return new global.FinalizationRegistry(name => {
     runtimeMetrics.decrement(`runtime.node.spans.${type}`)

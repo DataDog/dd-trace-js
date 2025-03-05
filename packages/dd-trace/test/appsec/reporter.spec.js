@@ -3,7 +3,7 @@
 const proxyquire = require('proxyquire')
 const { storage } = require('../../../datadog-core')
 const zlib = require('zlib')
-const { SAMPLING_MECHANISM_APPSEC } = require('../../src/constants')
+const { ASM } = require('../../src/standalone/product')
 const { USER_KEEP } = require('../../../../ext/priority')
 
 describe('reporter', () => {
@@ -11,7 +11,6 @@ describe('reporter', () => {
   let span
   let web
   let telemetry
-  let sample
   let prioritySampler
 
   beforeEach(() => {
@@ -42,14 +41,9 @@ describe('reporter', () => {
       getRequestMetrics: sinon.stub()
     }
 
-    sample = sinon.stub()
-
     Reporter = proxyquire('../../src/appsec/reporter', {
       '../plugins/util/web': web,
-      './telemetry': telemetry,
-      './standalone': {
-        sample
-      }
+      './telemetry': telemetry
     })
   })
 
@@ -141,11 +135,11 @@ describe('reporter', () => {
 
     beforeEach(() => {
       req = {}
-      storage.enterWith({ req })
+      storage('legacy').enterWith({ req })
     })
 
     afterEach(() => {
-      storage.disable()
+      storage('legacy').disable()
     })
 
     it('should do nothing when passed incomplete objects', () => {
@@ -184,7 +178,7 @@ describe('reporter', () => {
 
     it('should call updateWafRequestsMetricTags', () => {
       const metrics = { rulesVersion: '1.2.3' }
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
 
       Reporter.reportMetrics(metrics)
 
@@ -194,7 +188,7 @@ describe('reporter', () => {
 
     it('should call updateRaspRequestsMetricTags when raspRule is provided', () => {
       const metrics = { rulesVersion: '1.2.3' }
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
 
       const raspRule = { type: 'rule_type', variant: 'rule_variant' }
 
@@ -218,11 +212,11 @@ describe('reporter', () => {
           'user-agent': 'arachni'
         }
       }
-      storage.enterWith({ req })
+      storage('legacy').enterWith({ req })
     })
 
     afterEach(() => {
-      storage.disable()
+      storage('legacy').disable()
     })
 
     it('should add tags to request span when socket is not there', () => {
@@ -238,7 +232,7 @@ describe('reporter', () => {
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}'
       })
-      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
     })
 
     it('should add tags to request span', () => {
@@ -252,7 +246,7 @@ describe('reporter', () => {
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}',
         'network.client.ip': '8.8.8.8'
       })
-      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
     })
 
     it('should not add manual.keep when rate limit is reached', (done) => {
@@ -293,7 +287,7 @@ describe('reporter', () => {
         '_dd.appsec.json': '{"triggers":[]}',
         'network.client.ip': '8.8.8.8'
       })
-      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
     })
 
     it('should merge attacks json', () => {
@@ -309,7 +303,7 @@ describe('reporter', () => {
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
         'network.client.ip': '8.8.8.8'
       })
-      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
     })
 
     it('should call standalone sample', () => {
@@ -326,9 +320,7 @@ describe('reporter', () => {
         'network.client.ip': '8.8.8.8'
       })
 
-      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
-
-      expect(sample).to.have.been.calledOnceWithExactly(span)
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
     })
   })
 
@@ -677,7 +669,7 @@ describe('reporter', () => {
 
       Reporter.finishRequest(req, wafContext, {})
 
-      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
     })
   })
 })

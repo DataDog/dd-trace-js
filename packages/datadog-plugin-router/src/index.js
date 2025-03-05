@@ -30,7 +30,7 @@ class RouterPlugin extends WebPlugin {
       }
 
       if (span.constructor.name !== 'NoopSpan') {
-        const store = storage.getStore()
+        const store = storage('legacy').getStore()
         this._storeStack.push(store)
         this.enter(span, store)
       }
@@ -99,7 +99,7 @@ class RouterPlugin extends WebPlugin {
   }
 
   _getStoreSpan () {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
 
     return store && store.span
   }

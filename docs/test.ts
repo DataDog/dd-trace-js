@@ -39,6 +39,7 @@ let promise: Promise<void>;
 
 ddTrace.init();
 tracer.init({
+  apmTracingEnabled: false,
   logInjection: true,
   startupLogs: false,
   env: 'test',
@@ -136,7 +137,10 @@ tracer.init({
     redactionEnabled: true,
     redactionNamePattern: 'password',
     redactionValuePattern: 'bearer',
-    telemetryVerbosity: 'OFF'
+    telemetryVerbosity: 'OFF',
+    stackTrace: {
+      enabled: true
+    }
   }
 });
 

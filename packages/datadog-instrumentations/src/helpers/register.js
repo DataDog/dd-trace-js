@@ -2,7 +2,7 @@
 
 const { channel } = require('dc-polyfill')
 const path = require('path')
-const semver = require('semver')
+const satisfies = require('semifies')
 const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
@@ -155,7 +155,7 @@ for (const packageName of names) {
 }
 
 function matchVersion (version, ranges) {
-  return !version || (ranges && ranges.some(range => semver.satisfies(semver.coerce(version), range)))
+  return !version || (ranges && ranges.some(range => satisfies(version, range)))
 }
 
 function getVersion (moduleBaseDir) {

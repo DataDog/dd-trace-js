@@ -63,15 +63,14 @@ const log = {
 
       Error.captureStackTrace(logRecord, this.trace)
 
-      const fn = logRecord.stack.split('\n')[1].replace(/^\s+at ([^\s]+) .+/, '$1')
-      const params = args.map(a => {
-        return a && a.hasOwnProperty('toString') && typeof a.toString === 'function'
-          ? a.toString()
-          : inspect(a, { depth: 3, breakLength: Infinity, compact: true })
-      }).join(', ')
-      const formatted = logRecord.stack.replace('Error: ', `Trace: ${fn}(${params})`)
+      const stack = logRecord.stack.split('\n')
+      const fn = stack[1].replace(/^\s+at ([^\s]+) .+/, '$1')
+      const options = { depth: 2, breakLength: Infinity, compact: true, maxArrayLength: Infinity }
+      const params = args.map(a => inspect(a, options)).join(', ')
 
-      traceChannel.publish(Log.parse(formatted))
+      stack[0] = `Trace: ${fn}(${params})`
+
+      traceChannel.publish(Log.parse(stack.join('\n')))
     }
     return this
   },
@@ -106,23 +105,36 @@ const log = {
 
   deprecate (code, message) {
     return this._deprecate(code, message)
+  },
+
+  isEnabled (fleetStableConfigValue = undefined, localStableConfigValue = undefined) {
+    return isTrue(coalesce(
+      fleetStableConfigValue,
+      process.env?.DD_TRACE_DEBUG,
+      process.env?.OTEL_LOG_LEVEL === 'debug' || undefined,
+      localStableConfigValue,
+      config.enabled
+    ))
+  },
+
+  getLogLevel (
+    optionsValue = undefined,
+    fleetStableConfigValue = undefined,
+    localStableConfigValue = undefined
+  ) {
+    return coalesce(
+      optionsValue,
+      fleetStableConfigValue,
+      process.env?.DD_TRACE_LOG_LEVEL,
+      process.env?.OTEL_LOG_LEVEL,
+      localStableConfigValue,
+      config.logLevel
+    )
   }
 }
 
 log.reset()
 
-const enabled = isTrue(coalesce(
-  process.env.DD_TRACE_DEBUG,
-  process.env.OTEL_LOG_LEVEL === 'debug',
-  config.enabled
-))
-
-const logLevel = coalesce(
-  process.env.DD_TRACE_LOG_LEVEL,
-  process.env.OTEL_LOG_LEVEL,
-  config.logLevel
-)
-
-log.toggle(enabled, logLevel)
+log.toggle(log.isEnabled(), log.getLogLevel())
 
 module.exports = log

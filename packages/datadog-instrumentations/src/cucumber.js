@@ -22,6 +22,7 @@ const knownTestsCh = channel('ci:cucumber:known-tests')
 const skippableSuitesCh = channel('ci:cucumber:test-suite:skippable')
 const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
+const quarantinedTestsCh = channel('ci:cucumber:quarantined-tests')
 
 const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
 
@@ -70,6 +71,9 @@ let earlyFlakeDetectionNumRetries = 0
 let earlyFlakeDetectionFaultyThreshold = 0
 let isEarlyFlakeDetectionFaulty = false
 let isFlakyTestRetriesEnabled = false
+let isKnownTestsEnabled = false
+let isQuarantinedTestsEnabled = false
+let quarantinedTests = {}
 let numTestRetries = 0
 let knownTests = []
 let skippedSuites = []
@@ -114,6 +118,17 @@ function getStatusFromResultLatest (result) {
 function isNewTest (testSuite, testName) {
   const testsForSuite = knownTests.cucumber?.[testSuite] || []
   return !testsForSuite.includes(testName)
+}
+
+function isQuarantinedTest (testSuite, testName) {
+  return quarantinedTests
+    ?.cucumber
+    ?.suites
+    ?.[testSuite]
+    ?.tests
+    ?.[testName]
+    ?.properties
+    ?.quarantined
 }
 
 function getTestStatusFromRetries (testStatuses) {
@@ -238,8 +253,9 @@ function wrapRun (pl, isLatestVersion) {
     asyncResource.runInAsyncScope(() => {
       testStartCh.publish(testStartPayload)
     })
+    const promises = {}
     try {
-      this.eventBroadcaster.on('envelope', shimmer.wrapFunction(null, () => (testCase) => {
+      this.eventBroadcaster.on('envelope', shimmer.wrapFunction(null, () => async (testCase) => {
         // Only supported from >=8.0.0
         if (testCase?.testCaseFinished) {
           const { testCaseFinished: { willBeRetried } } = testCase
@@ -253,17 +269,22 @@ function wrapRun (pl, isLatestVersion) {
             }
 
             const failedAttemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
-            const isRetry = numAttempt++ > 0
+            const isFirstAttempt = numAttempt++ === 0
+
+            if (promises.hitBreakpointPromise) {
+              await promises.hitBreakpointPromise
+            }
+
             failedAttemptAsyncResource.runInAsyncScope(() => {
               // the current span will be finished and a new one will be created
-              testRetryCh.publish({ isRetry, error })
+              testRetryCh.publish({ isFirstAttempt, error })
             })
 
             const newAsyncResource = new AsyncResource('bound-anonymous-fn')
             numAttemptToAsyncResource.set(numAttempt, newAsyncResource)
 
             newAsyncResource.runInAsyncScope(() => {
-              testStartCh.publish(testStartPayload) // a new span will be created
+              testStartCh.publish({ ...testStartPayload, promises }) // a new span will be created
             })
           }
         }
@@ -273,7 +294,7 @@ function wrapRun (pl, isLatestVersion) {
       asyncResource.runInAsyncScope(() => {
         promise = run.apply(this, arguments)
       })
-      promise.finally(() => {
+      promise.finally(async () => {
         const result = this.getWorstStepResult()
         const { status, skipReason } = isLatestVersion
           ? getStatusFromResultLatest(result)
@@ -286,18 +307,34 @@ function wrapRun (pl, isLatestVersion) {
         }
         let isNew = false
         let isEfdRetry = false
-        if (isEarlyFlakeDetectionEnabled && status !== 'skip') {
+        let isQuarantined = false
+        if (isKnownTestsEnabled && status !== 'skip') {
           const numRetries = numRetriesByPickleId.get(this.pickle.id)
 
           isNew = numRetries !== undefined
           isEfdRetry = numRetries > 0
         }
+        if (isQuarantinedTestsEnabled) {
+          const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
+          isQuarantined = isQuarantinedTest(testSuitePath, this.pickle.name)
+        }
         const attemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
 
         const error = getErrorFromCucumberResult(result)
 
+        if (promises.hitBreakpointPromise) {
+          await promises.hitBreakpointPromise
+        }
         attemptAsyncResource.runInAsyncScope(() => {
-          testFinishCh.publish({ status, skipReason, error, isNew, isEfdRetry, isFlakyRetry: numAttempt > 0 })
+          testFinishCh.publish({
+            status,
+            skipReason,
+            error,
+            isNew,
+            isEfdRetry,
+            isFlakyRetry: numAttempt > 0,
+            isQuarantined
+          })
         })
       })
       return promise
@@ -385,13 +422,16 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     isSuitesSkippingEnabled = configurationResponse.libraryConfig?.isSuitesSkippingEnabled
     isFlakyTestRetriesEnabled = configurationResponse.libraryConfig?.isFlakyTestRetriesEnabled
     numTestRetries = configurationResponse.libraryConfig?.flakyTestRetriesCount
+    isKnownTestsEnabled = configurationResponse.libraryConfig?.isKnownTestsEnabled
+    isQuarantinedTestsEnabled = configurationResponse.libraryConfig?.isQuarantinedTestsEnabled
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
       if (!knownTestsResponse.err) {
         knownTests = knownTestsResponse.knownTests
       } else {
         isEarlyFlakeDetectionEnabled = false
+        isKnownTestsEnabled = false
       }
     }
 
@@ -428,7 +468,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
     pickleByFile = isCoordinator ? getPickleByFileNew(this) : getPickleByFile(this)
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
       const isFaulty = getIsFaultyEarlyFlakeDetection(
         Object.keys(pickleByFile),
         knownTests.cucumber || {},
@@ -436,7 +476,17 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       )
       if (isFaulty) {
         isEarlyFlakeDetectionEnabled = false
+        isKnownTestsEnabled = false
         isEarlyFlakeDetectionFaulty = true
+      }
+    }
+
+    if (isQuarantinedTestsEnabled) {
+      const quarantinedTestsResponse = await getChannelPromise(quarantinedTestsCh)
+      if (!quarantinedTestsResponse.err) {
+        quarantinedTests = quarantinedTestsResponse.quarantinedTests
+      } else {
+        isQuarantinedTestsEnabled = false
       }
     }
 
@@ -487,6 +537,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
         hasForcedToRunSuites: isForcedToRun,
         isEarlyFlakeDetectionEnabled,
         isEarlyFlakeDetectionFaulty,
+        isQuarantinedTestsEnabled,
         isParallel
       })
     })
@@ -523,13 +574,18 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     }
 
     let isNew = false
+    let isQuarantined = false
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
       isNew = isNewTest(testSuitePath, pickle.name)
       if (isNew) {
         numRetriesByPickleId.set(pickle.id, 0)
       }
     }
+    if (isQuarantinedTestsEnabled) {
+      isQuarantined = isQuarantinedTest(testSuitePath, pickle.name)
+    }
+
     // TODO: for >=11 we could use `runTestCaseResult` instead of accumulating results in `lastStatusByPickleId`
     let runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
 
@@ -544,6 +600,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     }
     let testStatus = lastTestStatus
     let shouldBePassedByEFD = false
+    let shouldBePassedByQuarantine = false
     if (isNew && isEarlyFlakeDetectionEnabled) {
       /**
        * If Early Flake Detection (EFD) is enabled the logic is as follows:
@@ -558,6 +615,11 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
         shouldBePassedByEFD = true
         this.success = true
       }
+    }
+
+    if (isQuarantinedTestsEnabled && isQuarantined) {
+      this.success = true
+      shouldBePassedByQuarantine = true
     }
 
     if (!pickleResultByFile[testFileAbsolutePath]) {
@@ -589,6 +651,10 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
 
     if (isNewerCucumberVersion && isEarlyFlakeDetectionEnabled && isNew) {
       return shouldBePassedByEFD
+    }
+
+    if (isNewerCucumberVersion && isQuarantinedTestsEnabled && isQuarantined) {
+      return shouldBePassedByQuarantine
     }
 
     return runTestCaseResult
@@ -669,14 +735,14 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
       const { status } = getStatusFromResultLatest(worstTestStepResult)
       let isNew = false
 
-      if (isEarlyFlakeDetectionEnabled) {
+      if (isKnownTestsEnabled) {
         isNew = isNewTest(pickle.uri, pickle.name)
       }
 
       const testFileAbsolutePath = pickle.uri
       const finished = pickleResultByFile[testFileAbsolutePath]
 
-      if (isNew) {
+      if (isEarlyFlakeDetectionEnabled && isNew) {
         const testFullname = `${pickle.uri}:${pickle.name}`
         let testStatuses = newTestsByTestFullname.get(testFullname)
         if (!testStatuses) {
@@ -830,7 +896,8 @@ addHook({
   )
   // EFD in parallel mode only supported in >=11.0.0
   shimmer.wrap(adapterPackage.ChildProcessAdapter.prototype, 'startWorker', startWorker => function () {
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
+      this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
       this.options.worldParameters._ddKnownTests = knownTests
       this.options.worldParameters._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
     }
@@ -853,9 +920,12 @@ addHook({
     'initialize',
     initialize => async function () {
       await initialize.apply(this, arguments)
-      isEarlyFlakeDetectionEnabled = !!this.options.worldParameters._ddKnownTests
-      if (isEarlyFlakeDetectionEnabled) {
+      isKnownTestsEnabled = !!this.options.worldParameters._ddKnownTests
+      if (isKnownTestsEnabled) {
         knownTests = this.options.worldParameters._ddKnownTests
+      }
+      isEarlyFlakeDetectionEnabled = !!this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled
+      if (isEarlyFlakeDetectionEnabled) {
         earlyFlakeDetectionNumRetries = this.options.worldParameters._ddEarlyFlakeDetectionNumRetries
       }
     }

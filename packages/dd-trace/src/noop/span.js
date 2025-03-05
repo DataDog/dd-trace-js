@@ -7,7 +7,7 @@ const { storage } = require('../../../datadog-core') // TODO: noop storage?
 
 class NoopSpan {
   constructor (tracer, parent, options) {
-    this._store = storage.getStore()
+    this._store = storage('legacy').getHandle()
     this._noopTracer = tracer
     this._noopContext = this._createContext(parent, options)
     this._options = options

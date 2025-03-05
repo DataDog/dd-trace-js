@@ -1,10 +1,18 @@
 'use strict'
-const sourceMap = require('source-map')
-const path = require('path')
-const { workerData: { breakpointSetChannel, breakpointHitChannel } } = require('worker_threads')
+
+const {
+  workerData: {
+    breakpointSetChannel,
+    breakpointHitChannel,
+    breakpointRemoveChannel
+  }
+} = require('worker_threads')
+const { randomUUID } = require('crypto')
 
 // TODO: move debugger/devtools_client/session to common place
 const session = require('../../../debugger/devtools_client/session')
+// TODO: move debugger/devtools_client/source-maps to common place
+const { getGeneratedPosition } = require('../../../debugger/devtools_client/source-maps')
 // TODO: move debugger/devtools_client/snapshot to common place
 const { getLocalStateForCallFrame } = require('../../../debugger/devtools_client/snapshot')
 // TODO: move debugger/devtools_client/state to common place
@@ -16,8 +24,8 @@ const log = require('../../../log')
 
 let sessionStarted = false
 
-const breakpointIdToSnapshotId = new Map()
 const breakpointIdToProbe = new Map()
+const probeIdToBreakpointId = new Map()
 
 session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint], callFrames } }) => {
   const probe = breakpointIdToProbe.get(hitBreakpoint)
@@ -32,13 +40,11 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
 
   await session.post('Debugger.resume')
 
-  const snapshotId = breakpointIdToSnapshotId.get(hitBreakpoint)
-
   const snapshot = {
-    id: snapshotId,
+    id: randomUUID(),
     timestamp: Date.now(),
     probe: {
-      id: probe.probeId,
+      id: probe.id,
       version: '0',
       location: probe.location
     },
@@ -56,71 +62,80 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
   breakpointHitChannel.postMessage({ snapshot })
 })
 
-// TODO: add option to remove breakpoint
-breakpointSetChannel.on('message', async ({ snapshotId, probe: { id: probeId, file, line } }) => {
-  await addBreakpoint(snapshotId, { probeId, file, line })
-  breakpointSetChannel.postMessage({ probeId })
+breakpointRemoveChannel.on('message', async (probeId) => {
+  await removeBreakpoint(probeId)
+  breakpointRemoveChannel.postMessage(probeId)
 })
 
-async function addBreakpoint (snapshotId, probe) {
+breakpointSetChannel.on('message', async (probe) => {
+  await addBreakpoint(probe)
+  breakpointSetChannel.postMessage(probe.id)
+})
+
+async function removeBreakpoint (probeId) {
+  if (!sessionStarted) {
+    // We should not get in this state, but abort if we do, so the code doesn't fail unexpected
+    throw Error(`Cannot remove probe ${probeId}: Debugger not started`)
+  }
+
+  const breakpointId = probeIdToBreakpointId.get(probeId)
+  if (!breakpointId) {
+    throw Error(`Unknown probe id: ${probeId}`)
+  }
+  await session.post('Debugger.removeBreakpoint', { breakpointId })
+  probeIdToBreakpointId.delete(probeId)
+  breakpointIdToProbe.delete(breakpointId)
+}
+
+async function addBreakpoint (probe) {
   if (!sessionStarted) await start()
   const { file, line } = probe
 
   probe.location = { file, lines: [String(line)] }
 
   const script = findScriptFromPartialPath(file)
-  if (!script) throw new Error(`No loaded script found for ${file}`)
+  if (!script) {
+    log.error(`No loaded script found for ${file}`)
+    throw new Error(`No loaded script found for ${file}`)
+  }
 
-  const [path, scriptId, sourceMapURL] = script
+  const { url, scriptId, sourceMapURL, source } = script
 
-  log.debug(`Adding breakpoint at ${path}:${line}`)
+  log.warn(`Adding breakpoint at ${url}:${line}`)
 
   let lineNumber = line
+  let columnNumber = 0
 
-  if (sourceMapURL && sourceMapURL.startsWith('data:')) {
+  if (sourceMapURL) {
     try {
-      lineNumber = await processScriptWithInlineSourceMap({ file, line, sourceMapURL })
+      ({ line: lineNumber, column: columnNumber } = await getGeneratedPosition(url, source, line, sourceMapURL))
     } catch (err) {
-      log.error(err)
+      log.error('Error processing script with source map', err)
+    }
+    if (lineNumber === null) {
+      log.error('Could not find generated position for %s:%s', url, line)
+      lineNumber = line
+      columnNumber = 0
     }
   }
 
-  const { breakpointId } = await session.post('Debugger.setBreakpoint', {
-    location: {
-      scriptId,
-      lineNumber: lineNumber - 1
-    }
-  })
+  try {
+    const { breakpointId } = await session.post('Debugger.setBreakpoint', {
+      location: {
+        scriptId,
+        lineNumber: lineNumber - 1,
+        columnNumber
+      }
+    })
 
-  breakpointIdToProbe.set(breakpointId, probe)
-  breakpointIdToSnapshotId.set(breakpointId, snapshotId)
+    breakpointIdToProbe.set(breakpointId, probe)
+    probeIdToBreakpointId.set(probe.id, breakpointId)
+  } catch (e) {
+    log.error('Error setting breakpoint at %s:%s', url, line, e)
+  }
 }
 
 function start () {
   sessionStarted = true
   return session.post('Debugger.enable') // return instead of await to reduce number of promises created
-}
-
-async function processScriptWithInlineSourceMap (params) {
-  const { file, line, sourceMapURL } = params
-
-  // Extract the base64-encoded source map
-  const base64SourceMap = sourceMapURL.split('base64,')[1]
-
-  // Decode the base64 source map
-  const decodedSourceMap = Buffer.from(base64SourceMap, 'base64').toString('utf8')
-
-  // Parse the source map
-  const consumer = await new sourceMap.SourceMapConsumer(decodedSourceMap)
-
-  // Map to the generated position
-  const generatedPosition = consumer.generatedPositionFor({
-    source: path.basename(file), // this needs to be the file, not the filepath
-    line,
-    column: 0
-  })
-
-  consumer.destroy()
-
-  return generatedPosition.line
 }

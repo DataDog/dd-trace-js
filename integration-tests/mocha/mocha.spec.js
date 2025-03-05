@@ -37,9 +37,14 @@ const {
   TEST_LEVEL_EVENT_TYPES,
   TEST_EARLY_FLAKE_ABORT_REASON,
   DI_ERROR_DEBUG_INFO_CAPTURED,
-  DI_DEBUG_ERROR_FILE,
-  DI_DEBUG_ERROR_SNAPSHOT_ID,
-  DI_DEBUG_ERROR_LINE
+  DI_DEBUG_ERROR_PREFIX,
+  DI_DEBUG_ERROR_FILE_SUFFIX,
+  DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
+  DI_DEBUG_ERROR_LINE_SUFFIX,
+  TEST_RETRY_REASON,
+  DD_TEST_IS_USER_PROVIDED_SERVICE,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -172,6 +177,7 @@ describe('mocha CommonJS', function () {
         tests.forEach(testEvent => {
           assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
           assert.exists(testEvent.metrics[TEST_SOURCE_START])
+          assert.equal(testEvent.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
           // Can read DD_TAGS
           assert.propertyVal(testEvent.meta, 'test.customtag', 'customvalue')
           assert.propertyVal(testEvent.meta, 'test.customtag2', 'customvalue2')
@@ -192,7 +198,8 @@ describe('mocha CommonJS', function () {
         env: {
           ...envVars,
           DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-          DD_TEST_SESSION_NAME: 'my-test-session'
+          DD_TEST_SESSION_NAME: 'my-test-session',
+          DD_SERVICE: undefined
         },
         stdio: 'pipe'
       })
@@ -1140,16 +1147,14 @@ describe('mocha CommonJS', function () {
       })
       const NUM_RETRIES_EFD = 3
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': NUM_RETRIES_EFD
           },
           faulty_session_threshold: 100
-        }
+        },
+        known_tests_enabled: true
       })
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -1183,6 +1188,9 @@ describe('mocha CommonJS', function () {
             retriedTests.length
           )
           assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+          retriedTests.forEach(test => {
+            assert.propertyVal(test.meta, TEST_RETRY_REASON, 'efd')
+          })
           // Test name does not change
           newTests.forEach(test => {
             assert.equal(test.meta[TEST_NAME], 'ci visibility 2 can report tests 2')
@@ -1219,16 +1227,14 @@ describe('mocha CommonJS', function () {
         }
       })
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': 3
           },
           faulty_session_threshold: 100
-        }
+        },
+        known_tests_enabled: true
       })
 
       const eventsPromise = receiver
@@ -1297,16 +1303,14 @@ describe('mocha CommonJS', function () {
         }
       })
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': 3
           },
           faulty_session_threshold: 100
-        }
+        },
+        known_tests_enabled: true
       })
 
       const eventsPromise = receiver
@@ -1319,8 +1323,12 @@ describe('mocha CommonJS', function () {
           const newTests = tests.filter(test =>
             test.meta[TEST_IS_NEW] === 'true'
           )
-          // new tests are not detected
-          assert.equal(newTests.length, 0)
+          // new tests are detected but not retried
+          assert.equal(newTests.length, 1)
+          const retriedTests = tests.filter(test =>
+            test.meta[TEST_IS_RETRY] === 'true'
+          )
+          assert.equal(retriedTests.length, 0)
         })
 
       childProcess = exec(
@@ -1338,6 +1346,7 @@ describe('mocha CommonJS', function () {
           stdio: 'inherit'
         }
       )
+
       childProcess.on('exit', () => {
         eventsPromise.then(() => {
           done()
@@ -1351,16 +1360,14 @@ describe('mocha CommonJS', function () {
 
       const NUM_RETRIES_EFD = 5
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': NUM_RETRIES_EFD
           },
           faulty_session_threshold: 100
-        }
+        },
+        known_tests_enabled: true
       })
 
       const eventsPromise = receiver
@@ -1420,16 +1427,14 @@ describe('mocha CommonJS', function () {
 
       const NUM_RETRIES_EFD = 5
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': NUM_RETRIES_EFD
           },
           faulty_session_threshold: 100
-        }
+        },
+        known_tests_enabled: true
       })
 
       const eventsPromise = receiver
@@ -1471,16 +1476,14 @@ describe('mocha CommonJS', function () {
 
     it('handles spaces in test names', (done) => {
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': 3
           },
           faulty_session_threshold: 100
-        }
+        },
+        known_tests_enabled: true
       })
       // Tests from ci-visibility/test/skipped-and-todo-test will be considered new
       receiver.setKnownTests({
@@ -1540,16 +1543,14 @@ describe('mocha CommonJS', function () {
 
       const NUM_RETRIES_EFD = 5
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': NUM_RETRIES_EFD
           },
           faulty_session_threshold: 100
-        }
+        },
+        known_tests_enabled: true
       })
 
       const eventsPromise = receiver
@@ -1594,16 +1595,14 @@ describe('mocha CommonJS', function () {
 
       const NUM_RETRIES_EFD = 3
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': NUM_RETRIES_EFD
           },
           faulty_session_threshold: 100
-        }
+        },
+        known_tests_enabled: true
       })
 
       const eventsPromise = receiver
@@ -1667,16 +1666,14 @@ describe('mocha CommonJS', function () {
       const NUM_RETRIES_EFD = 5
 
       receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
             '5s': NUM_RETRIES_EFD
           },
           faulty_session_threshold: 0
-        }
+        },
+        known_tests_enabled: true
       })
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
@@ -1731,16 +1728,14 @@ describe('mocha CommonJS', function () {
 
         const NUM_RETRIES_EFD = 5
         receiver.setSettings({
-          itr_enabled: false,
-          code_coverage: false,
-          tests_skipping: false,
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
               '5s': NUM_RETRIES_EFD
             },
             faulty_session_threshold: 100
-          }
+          },
+          known_tests_enabled: true
         })
 
         const eventsPromise = receiver
@@ -1769,6 +1764,7 @@ describe('mocha CommonJS', function () {
             // Test name does not change
             retriedTests.forEach(test => {
               assert.equal(test.meta[TEST_NAME], 'fail occasionally fails')
+              assert.equal(test.meta[TEST_RETRY_REASON], 'efd')
             })
           })
 
@@ -1786,22 +1782,21 @@ describe('mocha CommonJS', function () {
           }).catch(done)
         })
       })
+
       it('retries new tests when using the programmatic API', (done) => {
         // Tests from ci-visibility/test/occasionally-failing-test will be considered new
         receiver.setKnownTests({})
 
         const NUM_RETRIES_EFD = 5
         receiver.setSettings({
-          itr_enabled: false,
-          code_coverage: false,
-          tests_skipping: false,
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
               '5s': NUM_RETRIES_EFD
             },
             faulty_session_threshold: 100
-          }
+          },
+          known_tests_enabled: true
         })
 
         const eventsPromise = receiver
@@ -1854,20 +1849,19 @@ describe('mocha CommonJS', function () {
           }).catch(done)
         })
       })
+
       it('bails out of EFD if the percentage of new tests is too high', (done) => {
         const NUM_RETRIES_EFD = 5
 
         receiver.setSettings({
-          itr_enabled: false,
-          code_coverage: false,
-          tests_skipping: false,
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
               '5s': NUM_RETRIES_EFD
             },
             faulty_session_threshold: 0
-          }
+          },
+          known_tests_enabled: true
         })
         // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
         receiver.setKnownTests({
@@ -1914,6 +1908,71 @@ describe('mocha CommonJS', function () {
             done()
           }).catch(done)
         })
+      })
+    })
+
+    it('disables early flake detection if known tests should not be requested', (done) => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 3
+          }
+        },
+        known_tests_enabled: false
+      })
+      // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
+      receiver.setKnownTests({
+        mocha: {
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const oldTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
+          )
+          oldTests.forEach(test => {
+            assert.notProperty(test.meta, TEST_IS_NEW)
+          })
+          assert.equal(oldTests.length, 1)
+          const newTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test-2.js'
+          )
+          newTests.forEach(test => {
+            assert.notProperty(test.meta, TEST_IS_NEW)
+          })
+          const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.equal(retriedTests.length, 0)
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test/ci-visibility-test.js',
+              './test/ci-visibility-test-2.js'
+            ])
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
       })
     })
   })
@@ -2150,7 +2209,7 @@ describe('mocha CommonJS', function () {
   })
 
   context('dynamic instrumentation', () => {
-    it('does not activate dynamic instrumentation if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
+    it('does not activate dynamic instrumentation if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -2166,10 +2225,10 @@ describe('mocha CommonJS', function () {
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
 
-          assert.notProperty(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
-          assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_FILE)
-          assert.notProperty(retriedTest.metrics, DI_DEBUG_ERROR_LINE)
-          assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_SNAPSHOT_ID)
+          const hasDebugTags = Object.keys(retriedTest.meta)
+            .some(property => property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED)
+
+          assert.isFalse(hasDebugTags)
         })
 
       const logsPromise = receiver
@@ -2187,7 +2246,9 @@ describe('mocha CommonJS', function () {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
               './dynamic-instrumentation/test-hit-breakpoint'
-            ])
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false'
           },
           stdio: 'inherit'
         }
@@ -2217,10 +2278,10 @@ describe('mocha CommonJS', function () {
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
 
-          assert.notProperty(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED)
-          assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_FILE)
-          assert.notProperty(retriedTest.metrics, DI_DEBUG_ERROR_LINE)
-          assert.notProperty(retriedTest.meta, DI_DEBUG_ERROR_SNAPSHOT_ID)
+          const hasDebugTags = Object.keys(retriedTest.meta)
+            .some(property => property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED)
+
+          assert.isFalse(hasDebugTags)
         })
 
       const logsPromise = receiver
@@ -2239,7 +2300,7 @@ describe('mocha CommonJS', function () {
             TESTS_TO_RUN: JSON.stringify([
               './dynamic-instrumentation/test-hit-breakpoint'
             ]),
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
         }
@@ -2273,15 +2334,17 @@ describe('mocha CommonJS', function () {
           const [retriedTest] = retriedTests
 
           assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-          assert.propertyVal(
-            retriedTest.meta,
-            DI_DEBUG_ERROR_FILE,
-            'ci-visibility/dynamic-instrumentation/dependency.js'
+          assert.isTrue(
+            retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
+              .endsWith('ci-visibility/dynamic-instrumentation/dependency.js')
           )
-          assert.equal(retriedTest.metrics[DI_DEBUG_ERROR_LINE], 4)
-          assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
+          assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
 
-          snapshotIdByTest = retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID]
+          const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
+
+          assert.exists(retriedTest.meta[snapshotIdKey])
+
+          snapshotIdByTest = retriedTest.meta[snapshotIdKey]
           spanIdByTest = retriedTest.span_id.toString()
           traceIdByTest = retriedTest.trace_id.toString()
 
@@ -2326,7 +2389,7 @@ describe('mocha CommonJS', function () {
             TESTS_TO_RUN: JSON.stringify([
               './dynamic-instrumentation/test-hit-breakpoint'
             ]),
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
         }
@@ -2358,14 +2421,10 @@ describe('mocha CommonJS', function () {
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
 
-          assert.propertyVal(retriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-          assert.propertyVal(
-            retriedTest.meta,
-            DI_DEBUG_ERROR_FILE,
-            'ci-visibility/dynamic-instrumentation/dependency.js'
-          )
-          assert.equal(retriedTest.metrics[DI_DEBUG_ERROR_LINE], 4)
-          assert.exists(retriedTest.meta[DI_DEBUG_ERROR_SNAPSHOT_ID])
+          const hasDebugTags = Object.keys(retriedTest.meta)
+            .some(property => property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED)
+
+          assert.isFalse(hasDebugTags)
         })
       const logsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
@@ -2383,7 +2442,7 @@ describe('mocha CommonJS', function () {
             TESTS_TO_RUN: JSON.stringify([
               './dynamic-instrumentation/test-not-hit-breakpoint'
             ]),
-            DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
           },
           stdio: 'inherit'
         }
@@ -2394,6 +2453,212 @@ describe('mocha CommonJS', function () {
           done()
         }).catch(done)
       })
+    })
+  })
+
+  context('known tests without early flake detection', () => {
+    it('detects new tests without retrying them', (done) => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: false
+        },
+        known_tests_enabled: true
+      })
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
+      receiver.setKnownTests({
+        mocha: {
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          // no other tests are considered new
+          const oldTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
+          )
+          oldTests.forEach(test => {
+            assert.notProperty(test.meta, TEST_IS_NEW)
+          })
+          assert.equal(oldTests.length, 1)
+
+          const newTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test-2.js'
+          )
+          newTests.forEach(test => {
+            assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+          })
+          const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          // no test has been retried
+          assert.equal(retriedTests.length, 0)
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test/ci-visibility-test.js',
+              './test/ci-visibility-test-2.js'
+            ])
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+  })
+
+  it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', (done) => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        tests.forEach(test => {
+          assert.equal(test.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'true')
+        })
+      })
+
+    childProcess = exec(
+      runTestsWithCoverageCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: JSON.stringify([
+            './test/ci-visibility-test.js',
+            './test/ci-visibility-test-2.js'
+          ]),
+          DD_SERVICE: 'my-service'
+        },
+        stdio: 'inherit'
+      }
+    )
+
+    childProcess.on('exit', () => {
+      eventsPromise.then(() => {
+        done()
+      }).catch(done)
+    })
+  })
+
+  context('quarantine', () => {
+    beforeEach(() => {
+      receiver.setQuarantinedTests({
+        mocha: {
+          suites: {
+            'ci-visibility/quarantine/test-quarantine-1.js': {
+              tests: {
+                'quarantine tests can quarantine a test': {
+                  properties: {
+                    quarantined: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      })
+    })
+
+    const getTestAssertions = (isQuarantining) =>
+      receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          if (isQuarantining) {
+            assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+          } else {
+            assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+          }
+
+          const resourceNames = tests.map(span => span.resource)
+
+          assert.includeMembers(resourceNames,
+            [
+              'ci-visibility/quarantine/test-quarantine-1.js.quarantine tests can quarantine a test',
+              'ci-visibility/quarantine/test-quarantine-1.js.quarantine tests can pass normally'
+            ]
+          )
+
+          const failedTest = tests.find(
+            test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
+          )
+          // The test fails but the exit code is 0 if it's quarantined
+          assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+
+          if (isQuarantining) {
+            assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+          } else {
+            assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+          }
+        })
+
+    const runQuarantineTest = (done, isQuarantining, extraEnvVars = {}) => {
+      const testAssertionsPromise = getTestAssertions(isQuarantining)
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './quarantine/test-quarantine-1.js'
+            ]),
+            SHOULD_CHECK_RESULTS: '1',
+            ...extraEnvVars
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', (exitCode) => {
+        testAssertionsPromise.then(() => {
+          if (isQuarantining) {
+            assert.equal(exitCode, 0)
+          } else {
+            assert.equal(exitCode, 1)
+          }
+          done()
+        }).catch(done)
+      })
+    }
+
+    it('can quarantine tests', (done) => {
+      receiver.setSettings({ test_management: { enabled: true } })
+
+      runQuarantineTest(done, true)
+    })
+
+    it('fails if quarantine is not enabled', (done) => {
+      receiver.setSettings({ test_management: { enabled: false } })
+
+      runQuarantineTest(done, false)
+    })
+
+    it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+      receiver.setSettings({ test_management: { enabled: true } })
+
+      runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
     })
   })
 })

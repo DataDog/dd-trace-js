@@ -40,6 +40,15 @@ class Crashtracker {
     }
   }
 
+  withProfilerSerializing (f) {
+    binding.beginProfilerSerializing()
+    try {
+      return f()
+    } finally {
+      binding.endProfilerSerializing()
+    }
+  }
+
   // TODO: Send only configured values when defaults are fixed.
   _getConfig (config) {
     const { hostname = '127.0.0.1', port = 8126 } = config

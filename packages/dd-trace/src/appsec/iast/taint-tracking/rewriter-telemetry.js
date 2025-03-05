@@ -12,10 +12,7 @@ const telemetryRewriter = {
   information (content, filename, rewriter) {
     const response = this.off(content, filename, rewriter)
 
-    const metrics = response.metrics
-    if (metrics && metrics.instrumentedPropagation) {
-      INSTRUMENTED_PROPAGATION.inc(undefined, metrics.instrumentedPropagation)
-    }
+    incrementTelemetry(response.metrics)
 
     return response
   }
@@ -30,4 +27,16 @@ function getRewriteFunction (rewriter) {
   }
 }
 
-module.exports = { getRewriteFunction }
+function incrementTelemetry (metrics) {
+  if (metrics?.instrumentedPropagation) {
+    INSTRUMENTED_PROPAGATION.inc(undefined, metrics.instrumentedPropagation)
+  }
+}
+
+function incrementTelemetryIfNeeded (metrics) {
+  if (iastTelemetry.verbosity !== Verbosity.OFF) {
+    incrementTelemetry(metrics)
+  }
+}
+
+module.exports = { getRewriteFunction, incrementTelemetryIfNeeded }

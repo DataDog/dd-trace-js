@@ -116,17 +116,24 @@ class PrioritySampler {
     }
   }
 
-  setPriority (span, samplingPriority, mechanism = SAMPLING_MECHANISM_MANUAL) {
+  setPriority (span, samplingPriority, product) {
     if (!span || !this.validate(samplingPriority)) return
 
     const context = this._getContext(span)
-
-    context._sampling.priority = samplingPriority
-    context._sampling.mechanism = mechanism
-
     const root = context._trace.started[0]
 
+    if (!root) {
+      log.error('Skipping the setPriority on noop span')
+      return // noop span
+    }
+
+    context._sampling.priority = samplingPriority
+
+    const mechanism = product?.mechanism ?? SAMPLING_MECHANISM_MANUAL
+    context._sampling.mechanism = mechanism
+
     log.trace(span, samplingPriority, mechanism)
+
     this._addDecisionMaker(root)
   }
 
@@ -224,8 +231,8 @@ class PrioritySampler {
     }
   }
 
-  static keepTrace (span, mechanism) {
-    span?._prioritySampler?.setPriority(span, USER_KEEP, mechanism)
+  static keepTrace (span, product) {
+    span?._prioritySampler?.setPriority(span, USER_KEEP, product)
   }
 }
 

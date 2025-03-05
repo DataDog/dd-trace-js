@@ -4,29 +4,13 @@ const InjectionAnalyzer = require('./injection-analyzer')
 const { NOSQL_MONGODB_INJECTION } = require('../vulnerabilities')
 const { getRanges, addSecureMark } = require('../taint-tracking/operations')
 const { getNodeModulesPaths } = require('../path-line')
-const { getNextSecureMark } = require('../taint-tracking/secure-marks-generator')
 const { storage } = require('../../../../../datadog-core')
 const { getIastContext } = require('../iast-context')
 const { HTTP_REQUEST_PARAMETER, HTTP_REQUEST_BODY } = require('../taint-tracking/source-types')
 
 const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb', 'mongoose', 'mquery')
-const MONGODB_NOSQL_SECURE_MARK = getNextSecureMark()
-
-function iterateObjectStrings (target, fn, levelKeys = [], depth = 20, visited = new Set()) {
-  if (target !== null && typeof target === 'object') {
-    Object.keys(target).forEach((key) => {
-      const nextLevelKeys = [...levelKeys, key]
-      const val = target[key]
-
-      if (typeof val === 'string') {
-        fn(val, nextLevelKeys, target, key)
-      } else if (depth > 0 && !visited.has(val)) {
-        iterateObjectStrings(val, fn, nextLevelKeys, depth - 1, visited)
-        visited.add(val)
-      }
-    })
-  }
-}
+const { NOSQL_MONGODB_INJECTION_MARK } = require('../taint-tracking/secure-marks')
+const { iterateObjectStrings } = require('../utils')
 
 class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
   constructor () {
@@ -38,7 +22,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     this.configureSanitizers()
 
     const onStart = ({ filters }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       if (store && !store.nosqlAnalyzed && filters?.length) {
         filters.forEach(filter => {
           this.analyze({ filter }, store)
@@ -51,14 +35,14 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     const onStartAndEnterWithStore = (message) => {
       const store = onStart(message || {})
       if (store) {
-        storage.enterWith({ ...store, nosqlAnalyzed: true, nosqlParentStore: store })
+        storage('legacy').enterWith({ ...store, nosqlAnalyzed: true, nosqlParentStore: store })
       }
     }
 
     const onFinish = () => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       if (store?.nosqlParentStore) {
-        storage.enterWith(store.nosqlParentStore)
+        storage('legacy').enterWith(store.nosqlParentStore)
       }
     }
 
@@ -74,7 +58,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
 
   configureSanitizers () {
     this.addNotSinkSub('datadog:express-mongo-sanitize:filter:finish', ({ sanitizedProperties, req }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const iastContext = getIastContext(store)
 
       if (iastContext) { // do nothing if we are not in an iast request
@@ -88,7 +72,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
                 const currentLevelKey = levelKeys[i]
 
                 if (i === levelsLength - 1) {
-                  parentObj[currentLevelKey] = addSecureMark(iastContext, value, MONGODB_NOSQL_SECURE_MARK)
+                  parentObj[currentLevelKey] = addSecureMark(iastContext, value, NOSQL_MONGODB_INJECTION_MARK)
                 } else {
                   parentObj = parentObj[currentLevelKey]
                 }
@@ -100,13 +84,13 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     })
 
     this.addNotSinkSub('datadog:express-mongo-sanitize:sanitize:finish', ({ sanitizedObject }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const iastContext = getIastContext(store)
 
       if (iastContext) { // do nothing if we are not in an iast request
         iterateObjectStrings(sanitizedObject, function (value, levelKeys, parent, lastKey) {
           try {
-            parent[lastKey] = addSecureMark(iastContext, value, MONGODB_NOSQL_SECURE_MARK)
+            parent[lastKey] = addSecureMark(iastContext, value, NOSQL_MONGODB_INJECTION_MARK)
           } catch {
             // if it is a readonly property, do nothing
           }
@@ -121,8 +105,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
 
   _isVulnerableRange (range) {
     const rangeType = range?.iinfo?.type
-    const isVulnerableType = rangeType === HTTP_REQUEST_PARAMETER || rangeType === HTTP_REQUEST_BODY
-    return isVulnerableType && (range.secureMarks & MONGODB_NOSQL_SECURE_MARK) !== MONGODB_NOSQL_SECURE_MARK
+    return rangeType === HTTP_REQUEST_PARAMETER || rangeType === HTTP_REQUEST_BODY
   }
 
   _isVulnerable (value, iastContext) {
@@ -137,9 +120,14 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       const allRanges = []
 
       iterateObjectStrings(value.filter, (val, nextLevelKeys) => {
-        const ranges = getRanges(iastContext, val)
+        let ranges = getRanges(iastContext, val)
         if (ranges?.length) {
           const filteredRanges = []
+
+          ranges = this._filterSecureRanges(ranges)
+          if (!ranges.length) {
+            this._incrementSuppressedMetric(iastContext)
+          }
 
           for (const range of ranges) {
             if (this._isVulnerableRange(range)) {
@@ -175,4 +163,3 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
 }
 
 module.exports = new NosqlInjectionMongodbAnalyzer()
-module.exports.MONGODB_NOSQL_SECURE_MARK = MONGODB_NOSQL_SECURE_MARK

@@ -1,20 +1,22 @@
-name: Plugin Tests
+name: Plugin and Upstream Tests
+description: Run plugin tests and upstream test suite
 runs:
   using: composite
   steps:
     - uses: ./.github/actions/testagent/start
-    - uses: ./.github/actions/node/setup
+    - uses: ./.github/actions/node/oldest-maintenance-lts
     - uses: ./.github/actions/install
-    - uses: ./.github/actions/node/oldest
     - run: yarn test:plugins:ci
       shell: bash
     - run: yarn test:plugins:upstream
       shell: bash
-    - uses: ./.github/actions/node/latest
+    - uses: ./.github/actions/node/active-lts
     - run: yarn test:plugins:ci
       shell: bash
     - run: yarn test:plugins:upstream
       shell: bash
-    - uses: codecov/codecov-action@v3
+    - uses: codecov/codecov-action@v5
     - if: always()
       uses: ./.github/actions/testagent/logs
+      with:
+        suffix: test-and-upstream-${{ github.job }}

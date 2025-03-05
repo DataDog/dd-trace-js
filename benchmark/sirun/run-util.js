@@ -18,10 +18,6 @@ function exec (...args) {
   })
 }
 
-function getStdio () {
-  return ['inherit', 'pipe', 'inherit']
-}
-
 function streamAddVersion (input) {
   input.rl = readline.createInterface({ input })
   input.rl.on('line', function (line) {
@@ -39,6 +35,6 @@ function streamAddVersion (input) {
 
 module.exports = {
   exec,
-  getStdio,
+  stdio: ['inherit', 'pipe', 'inherit'],
   streamAddVersion
 }

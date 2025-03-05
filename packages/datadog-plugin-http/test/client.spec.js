@@ -446,13 +446,24 @@ describe('Plugin', () => {
           })
         })
 
-        it('should skip injecting if the Authorization header contains an AWS signature', done => {
+        it('should inject tracing header into request without mutating the header', done => {
+          // ensures that the tracer clones request headers instead of mutating.
+          // Fixes aws-sdk InvalidSignatureException, more info:
+          // https://github.com/open-telemetry/opentelemetry-js-contrib/issues/1609#issuecomment-1826167348
+
           const app = express()
+
+          const originalHeaders = {
+            Authorization: 'AWS4-HMAC-SHA256 ...'
+          }
 
           app.get('/', (req, res) => {
             try {
-              expect(req.get('x-datadog-trace-id')).to.be.undefined
-              expect(req.get('x-datadog-parent-id')).to.be.undefined
+              expect(req.get('x-datadog-trace-id')).to.be.a('string')
+              expect(req.get('x-datadog-parent-id')).to.be.a('string')
+
+              expect(originalHeaders['x-datadog-trace-id']).to.be.undefined
+              expect(originalHeaders['x-datadog-parent-id']).to.be.undefined
 
               res.status(200).send()
 
@@ -465,91 +476,7 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             const req = http.request({
               port,
-              headers: {
-                Authorization: 'AWS4-HMAC-SHA256 ...'
-              }
-            })
-
-            req.end()
-          })
-        })
-
-        it('should skip injecting if one of the Authorization headers contains an AWS signature', done => {
-          const app = express()
-
-          app.get('/', (req, res) => {
-            try {
-              expect(req.get('x-datadog-trace-id')).to.be.undefined
-              expect(req.get('x-datadog-parent-id')).to.be.undefined
-
-              res.status(200).send()
-
-              done()
-            } catch (e) {
-              done(e)
-            }
-          })
-
-          appListener = server(app, port => {
-            const req = http.request({
-              port,
-              headers: {
-                Authorization: ['AWS4-HMAC-SHA256 ...']
-              }
-            })
-
-            req.end()
-          })
-        })
-
-        it('should skip injecting if the X-Amz-Signature header is set', done => {
-          const app = express()
-
-          app.get('/', (req, res) => {
-            try {
-              expect(req.get('x-datadog-trace-id')).to.be.undefined
-              expect(req.get('x-datadog-parent-id')).to.be.undefined
-
-              res.status(200).send()
-
-              done()
-            } catch (e) {
-              done(e)
-            }
-          })
-
-          appListener = server(app, port => {
-            const req = http.request({
-              port,
-              headers: {
-                'X-Amz-Signature': 'abc123'
-              }
-            })
-
-            req.end()
-          })
-        })
-
-        it('should skip injecting if the X-Amz-Signature query param is set', done => {
-          const app = express()
-
-          app.get('/', (req, res) => {
-            try {
-              expect(req.get('x-datadog-trace-id')).to.be.undefined
-              expect(req.get('x-datadog-parent-id')).to.be.undefined
-
-              res.status(200).send()
-
-              done()
-            } catch (e) {
-              done(e)
-            }
-          })
-
-          appListener = server(app, port => {
-            const req = http.request({
-              port,
-              path: '/?X-Amz-Signature=abc123'
+              headers: originalHeaders
             })
 
             req.end()
@@ -995,18 +922,36 @@ describe('Plugin', () => {
               })
 
             appListener = server(app, port => {
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
 
-              storage.enterWith({ noop: true })
+              storage('legacy').enterWith({ noop: true })
               const req = http.request(tracer._tracer._url.href)
 
               req.on('error', () => {})
               req.end()
 
-              storage.enterWith(store)
+              storage('legacy').enterWith(store)
             })
           })
         }
+
+        it('should record unfinished http requests as error spans', done => {
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('error', 1)
+              expect(traces[0][0].meta).to.not.have.property('http.status_code')
+            })
+            .then(done)
+            .catch(done)
+
+          try {
+            http.request('http://httpbin.org/get', { headers: { BadHeader: 'a\nb' } }, res => {
+              res.on('data', () => { })
+            })
+          } catch {
+            // expected to throw error
+          }
+        })
       })
 
       describe('with late plugin initialization and an external subscriber', () => {
@@ -1086,50 +1031,6 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             const req = http.request(`${protocol}://localhost:${port}/user`, res => {
               res.on('data', () => {})
-            })
-
-            req.end()
-          })
-        })
-      })
-
-      describe('with config enablePropagationWithAmazonHeaders enabled', () => {
-        let config
-
-        beforeEach(() => {
-          config = {
-            enablePropagationWithAmazonHeaders: true
-          }
-
-          return agent.load('http', config)
-            .then(() => {
-              http = require(pluginToBeLoaded)
-              express = require('express')
-            })
-        })
-
-        it('should inject tracing header into AWS signed request', done => {
-          const app = express()
-
-          app.get('/', (req, res) => {
-            try {
-              expect(req.get('x-datadog-trace-id')).to.be.a('string')
-              expect(req.get('x-datadog-parent-id')).to.be.a('string')
-
-              res.status(200).send()
-
-              done()
-            } catch (e) {
-              done(e)
-            }
-          })
-
-          appListener = server(app, port => {
-            const req = http.request({
-              port,
-              headers: {
-                Authorization: 'AWS4-HMAC-SHA256 ...'
-              }
             })
 
             req.end()
