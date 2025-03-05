@@ -31,11 +31,15 @@ function setUser (tracer, user) {
 
   setUserTagsSdk(user, rootSpan)
 
-  waf.run({
-    persistent: {
-      [addresses.USER_ID]: '' + user.id
-    }
-  })
+  const persistent = {
+    [addresses.USER_ID]: '' + user.id
+  }
+
+  if (user.session_id && typeof user.session_id === 'string') {
+    persistent[addresses.USER_SESSION_ID] = user.session_id
+  }
+
+  waf.run({ persistent })
 }
 
 module.exports = {

@@ -1350,9 +1350,7 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('http.status_code', '404')
               expect(spans[0].meta).to.have.property('component', 'express')
               expect(spans[0].meta).to.not.have.property('http.route')
-
-              done()
-            })
+            }).then(done).catch(done)
 
             axios
               .get(`http://localhost:${port}/does-not-exist`, {

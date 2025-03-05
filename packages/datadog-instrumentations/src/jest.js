@@ -147,10 +147,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       if (this.isKnownTestsEnabled) {
         try {
-          const hasKnownTests = !!knownTests.jest
+          const hasKnownTests = !!knownTests?.jest
           earlyFlakeDetectionNumRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionNumRetries
           this.knownTestsForThisSuite = hasKnownTests
-            ? (knownTests.jest[this.testSuite] || [])
+            ? (knownTests?.jest[this.testSuite] || [])
             : this.getKnownTestsForSuite(this.testEnvironmentOptions._ddKnownTests)
         } catch (e) {
           // If there has been an error parsing the tests, we'll disable Early Flake Deteciton
@@ -170,7 +170,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         try {
           const hasQuarantinedTests = !!quarantinedTests.jest
           this.quarantinedTestsForThisSuite = hasQuarantinedTests
-            ? this.getQuarantinedTestsForSuite(quarantinedTests.jest.suites[this.testSuite].tests)
+            ? this.getQuarantinedTestsForSuite(quarantinedTests.jest.suites?.[this.testSuite]?.tests)
             : this.getQuarantinedTestsForSuite(this.testEnvironmentOptions._ddQuarantinedTests)
         } catch (e) {
           log.error('Error parsing quarantined tests', e)
@@ -209,11 +209,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       return knownTestsForSuite
     }
 
-    getQuarantinedTestsForSuite (quaratinedTests) {
+    getQuarantinedTestsForSuite (quarantined) {
       if (this.quarantinedTestsForThisSuite) {
         return this.quarantinedTestsForThisSuite
       }
-      let quarantinedTestsForSuite = quaratinedTests
+      if (!quarantined) {
+        return []
+      }
+      let quarantinedTestsForSuite = quarantined
       // If jest is using workers, quarantined tests are serialized to json.
       // If jest runs in band, they are not.
       if (typeof quarantinedTestsForSuite === 'string') {
@@ -439,7 +442,8 @@ addHook({
 }, getTestEnvironment)
 
 function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
-  return async function (tests) {
+  // `scheduleTests` is an async function
+  return function (tests) {
     if (!isSuitesSkippingEnabled || hasFilteredSkippableSuites) {
       return scheduleTests.apply(this, arguments)
     }
@@ -741,7 +745,8 @@ function coverageReporterWrapper (coverageReporter) {
    * This calculation adds no value, so we'll skip it, as long as the user has not manually opted in to code coverage,
    * in which case we'll leave it.
    */
-  shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => async function () {
+  // `_addUntestedFiles` is an async function
+  shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function () {
     // If the user has added coverage manually, they're willing to pay the price of this execution, so
     // we will not skip it.
     if (isSuitesSkippingEnabled && !isUserCodeCoverageEnabled) {
@@ -898,7 +903,8 @@ addHook({
 }, transformPackage => {
   const originalCreateScriptTransformer = transformPackage.createScriptTransformer
 
-  transformPackage.createScriptTransformer = async function (config) {
+  // `createScriptTransformer` is an async function
+  transformPackage.createScriptTransformer = function (config) {
     const { testEnvironmentOptions, ...restOfConfig } = config
     const {
       _ddTestModuleId,
@@ -948,7 +954,7 @@ addHook({
     if (isKnownTestsEnabled) {
       const projectSuites = testPaths.tests.map(test => getTestSuitePath(test.path, test.context.config.rootDir))
       const isFaulty =
-        getIsFaultyEarlyFlakeDetection(projectSuites, knownTests.jest || {}, earlyFlakeDetectionFaultyThreshold)
+        getIsFaultyEarlyFlakeDetection(projectSuites, knownTests?.jest || {}, earlyFlakeDetectionFaultyThreshold)
       if (isFaulty) {
         log.error('Early flake detection is disabled because the number of new suites is too high.')
         isEarlyFlakeDetectionEnabled = false
@@ -1060,7 +1066,7 @@ addHook({
       }
       const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
-      const suiteKnownTests = knownTests.jest?.[testSuite] || []
+      const suiteKnownTests = knownTests?.jest?.[testSuite] || []
 
       const suiteQuarantinedTests = quarantinedTests.jest?.suites?.[testSuite]?.tests || {}
 
