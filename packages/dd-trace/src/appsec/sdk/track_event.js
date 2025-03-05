@@ -80,11 +80,11 @@ function trackCustomEvent (tracer, eventName, metadata) {
 
   trackEvent(eventName, metadata, 'trackCustomEvent', getRootSpan(tracer))
 
-  increaseSdkEventMetric('custom', 'v1')
-
   if (eventName === 'users.login.success' || eventName === 'users.login.failure') {
     runWaf(eventName)
   }
+
+  increaseSdkEventMetric('custom', 'v1')
 }
 
 function trackUserLoginSuccessV2 (tracer, login, user, metadata) {
@@ -163,6 +163,7 @@ function flattenFields (fields, sdkMethodName, depth = 0) {
       truncated: true
     }
   }
+
   const result = {}
   let truncated = false
   for (const key of Object.keys(fields)) {
@@ -171,6 +172,7 @@ function flattenFields (fields, sdkMethodName, depth = 0) {
     if (value && typeof value === 'object') {
       const { result: flatValue, truncated: inheritTruncated } = flattenFields(value, sdkMethodName, depth + 1)
       truncated = truncated || inheritTruncated
+
       if (flatValue) {
         for (const flatKey of Object.keys(flatValue)) {
           result[`${key}.${flatKey}`] = flatValue[flatKey]
