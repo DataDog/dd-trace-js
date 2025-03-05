@@ -609,5 +609,64 @@ describe('Plugin', function () {
         })
       })
     })
+
+    describe('in serverless', () => {
+      beforeEach(() => {
+        process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'agent'
+        process.env.AWS_LAMBDA_FUNCTION_NAME = 'test'
+      })
+
+      beforeEach(() => {
+        return agent.load('fetch')
+          .then(() => {
+            express = require('express')
+            fetch = globalThis.fetch
+          })
+      })
+
+      beforeEach(() => {
+        delete process.env.DD_TRACE_EXPERIMENTAL_EXPORTER
+        delete process.env.AWS_LAMBDA_FUNCTION_NAME
+      })
+
+      withNamingSchema(
+        () => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = server(app, port => {
+            fetch(`http://localhost:${port}/user`)
+          })
+        },
+        rawExpectedSchema.client
+      )
+
+      it('should do automatic instrumentation', done => {
+        const app = express()
+        app.get('/user', (req, res) => {
+          res.status(200).send()
+        })
+        appListener = server(app, port => {
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
+              expect(traces[0][0]).to.have.property('type', 'http')
+              expect(traces[0][0]).to.have.property('resource', 'GET')
+              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+              expect(traces[0][0].meta).to.have.property('http.method', 'GET')
+              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+              expect(traces[0][0].meta).to.have.property('component', 'fetch')
+              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+            })
+            .then(done)
+            .catch(done)
+
+          fetch(`http://localhost:${port}/user`)
+        })
+      })
+    })
   })
 })
