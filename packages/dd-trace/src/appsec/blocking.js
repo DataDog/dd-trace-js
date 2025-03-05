@@ -123,6 +123,9 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
       'appsec.blocked': 'true'
     })
 
+    responseBlockedSet.add(res)
+    abortController?.abort()
+
     blocked = true
   } catch (err) {
     rootSpan?.addTags({
@@ -131,12 +134,9 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
     log.error('[ASM] Blocking error', err)
 
     blocked = false
-  } finally {
-    responseBlockedSet.add(res)
-    abortController?.abort()
-
-    return blocked
   }
+
+  return blocked
 }
 
 function getBlockingAction (actions) {

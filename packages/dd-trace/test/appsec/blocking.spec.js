@@ -191,35 +191,35 @@ describe('blocking', () => {
 
     it('should block with default json template and custom status ' +
       'when type is forced to json and accept is html', () => {
-        const actionParameters = {
-          status_code: 401,
-          type: 'json'
-        }
-        req.headers.accept = 'text/html'
-        setTemplates(config)
+      const actionParameters = {
+        status_code: 401,
+        type: 'json'
+      }
+      req.headers.accept = 'text/html'
+      setTemplates(config)
 
-        const blocked = block(req, res, rootSpan, null, actionParameters)
+      const blocked = block(req, res, rootSpan, null, actionParameters)
 
-        expect(blocked).to.be.true
-        expect(res.writeHead).to.have.been.calledOnceWith(401)
-        expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
-      })
+      expect(blocked).to.be.true
+      expect(res.writeHead).to.have.been.calledOnceWith(401)
+      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
+    })
 
     it('should block with default html template and custom status ' +
       'when type is forced to html and accept is html', () => {
-        const actionParameters = {
-          status_code: 401,
-          type: 'html'
-        }
-        req.headers.accept = 'text/html'
-        setTemplates(config)
+      const actionParameters = {
+        status_code: 401,
+        type: 'html'
+      }
+      req.headers.accept = 'text/html'
+      setTemplates(config)
 
-        const blocked = block(req, res, rootSpan, null, actionParameters)
+      const blocked = block(req, res, rootSpan, null, actionParameters)
 
-        expect(blocked).to.be.true
-        expect(res.writeHead).to.have.been.calledOnceWith(401)
-        expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
-      })
+      expect(blocked).to.be.true
+      expect(res.writeHead).to.have.been.calledOnceWith(401)
+      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
+    })
 
     it('should block with default json template and custom status', () => {
       const actionParameters = {
@@ -237,33 +237,33 @@ describe('blocking', () => {
 
     it('should block with default json template and custom status ' +
       'when type is forced to json and accept is not defined', () => {
-        const actionParameters = {
-          status_code: 401,
-          type: 'json'
-        }
-        setTemplates(config)
+      const actionParameters = {
+        status_code: 401,
+        type: 'json'
+      }
+      setTemplates(config)
 
-        const blocked = block(req, res, rootSpan, null, actionParameters)
+      const blocked = block(req, res, rootSpan, null, actionParameters)
 
-        expect(blocked).to.be.true
-        expect(res.writeHead).to.have.been.calledOnceWith(401)
-        expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
-      })
+      expect(blocked).to.be.true
+      expect(res.writeHead).to.have.been.calledOnceWith(401)
+      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
+    })
 
     it('should block with default html template and custom status ' +
       'when type is forced to html and accept is not defined', () => {
-        const actionParameters = {
-          status_code: 401,
-          type: 'html'
-        }
-        setTemplates(config)
+      const actionParameters = {
+        status_code: 401,
+        type: 'html'
+      }
+      setTemplates(config)
 
-        const blocked = block(req, res, rootSpan, null, actionParameters)
+      const blocked = block(req, res, rootSpan, null, actionParameters)
 
-        expect(blocked).to.be.true
-        expect(res.writeHead).to.have.been.calledOnceWith(401)
-        expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
-      })
+      expect(blocked).to.be.true
+      expect(res.writeHead).to.have.been.calledOnceWith(401)
+      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
+    })
 
     it('should block with custom redirect', () => {
       const actionParameters = {
