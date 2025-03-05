@@ -593,7 +593,7 @@ class Config {
     this._setValue(defaults, 'instrumentation_config_id', undefined)
     this._setValue(defaults, 'trace.aws.addSpanPointers', true)
     this._setValue(defaults, 'trace.dynamoDb.tablePrimaryKeys', undefined)
-    this._setValue(defaults, 'fetchAgentInfo', true)
+    this._setValue(defaults, 'trace.nativeSpanEvents', false)
   }
 
   _applyLocalStableConfig () {
@@ -762,7 +762,7 @@ class Config {
       DD_TRACING_ENABLED,
       DD_VERSION,
       DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED,
-      DD_FETCH_AGENT_INFO,
+      DD_TRACE_NATIVE_SPAN_EVENTS,
       OTEL_METRICS_EXPORTER,
       OTEL_PROPAGATORS,
       OTEL_RESOURCE_ATTRIBUTES,
@@ -975,7 +975,7 @@ class Config {
     this._setBoolean(env, 'trace.aws.addSpanPointers', DD_TRACE_AWS_ADD_SPAN_POINTERS)
     this._setString(env, 'trace.dynamoDb.tablePrimaryKeys', DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS)
     this._setArray(env, 'graphqlErrorExtensions', DD_TRACE_GRAPHQL_ERROR_EXTENSIONS)
-    this._setBoolean(env, 'fetchAgentInfo', DD_FETCH_AGENT_INFO)
+    this._setBoolean(env, 'trace.nativeSpanEvents', DD_TRACE_NATIVE_SPAN_EVENTS)
   }
 
   _applyOptions (options) {
@@ -1107,7 +1107,7 @@ class Config {
     this._setString(opts, 'version', options.version || tags.version)
     this._setBoolean(opts, 'inferredProxyServicesEnabled', options.inferredProxyServicesEnabled)
     this._setBoolean(opts, 'graphqlErrorExtensions', options.graphqlErrorExtensions)
-    this._setBoolean(opts, 'fetchAgentInfo', options.fetchAgentInfo)
+    this._setBoolean(opts, 'trace.nativeSpanEvents', options.trace.nativeSpanEvents)
 
     // For LLMObs, we want the environment variable to take precedence over the options.
     // This is reliant on environment config being set before options.

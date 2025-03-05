@@ -5,7 +5,6 @@ const { Chunk, MsgpackEncoder } = require('../msgpack')
 const log = require('../log')
 const { isTrue } = require('../util')
 const coalesce = require('koalas')
-const DataDogAgentDiscovery = require('../agent_discovery/agent_discovery')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 
@@ -31,17 +30,7 @@ class AgentEncoder {
       false
     ))
 
-    this.topLevelSpanEventSupport = null
-
-    const ddAgentDiscovery = DataDogAgentDiscovery.instance
-    ddAgentDiscovery?.registerCallback(
-      (err, agentInfo) => {
-        if (err) {
-          this.topLevelSpanEventSupport = false
-        } else {
-          this.topLevelSpanEventSupport = agentInfo?.span_events === true
-        }
-      })
+    this.topLevelSpanEventSupport = this._writer?._config?.trace?.nativeSpanEvents === true
   }
 
   count () {
