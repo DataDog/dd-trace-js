@@ -613,11 +613,7 @@ class CypressPlugin {
       )
       let testSourceFile
 
-      if (spec.absolute && this.repositoryRoot) {
-        testSourceFile = getTestSuitePath(spec.absolute, this.repositoryRoot)
-      } else {
-        testSourceFile = spec.relative
-      }
+      testSourceFile = spec.absolute && this.repositoryRoot ? getTestSuitePath(spec.absolute, this.repositoryRoot) : spec.relative
 
       const skippedTestSpan = this.getTestSpan({ testName: cypressTestName, testSuite: spec.relative, testSourceFile })
 
@@ -694,11 +690,7 @@ class CypressPlugin {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
         }
         let testSourceFile
-        if (spec.absolute && this.repositoryRoot) {
-          testSourceFile = getTestSuitePath(spec.absolute, this.repositoryRoot)
-        } else {
-          testSourceFile = spec.relative
-        }
+        testSourceFile = spec.absolute && this.repositoryRoot ? getTestSuitePath(spec.absolute, this.repositoryRoot) : spec.relative
         if (testSourceFile) {
           finishedTest.testSpan.setTag(TEST_SOURCE_FILE, testSourceFile)
         }

@@ -1,6 +1,6 @@
 'use strict'
 
-const URL = require('url').URL
+const URL = require('node:url').URL
 const Writer = require('./writer')
 const CoverageWriter = require('./coverage-writer')
 const CiVisibilityExporter = require('../ci-visibility-exporter')

@@ -64,7 +64,7 @@ class VulnerabilityFormatter {
     })
 
     if (fromIndex < evidence.value.length) {
-      valueParts.push({ value: evidence.value.substring(fromIndex) })
+      valueParts.push({ value: evidence.value.slice(Math.max(0, fromIndex)) })
     }
 
     return { valueParts }
@@ -72,7 +72,7 @@ class VulnerabilityFormatter {
 
   formatEvidence (type, evidence, sourcesIndexes, sources) {
     if (evidence.value === undefined) {
-      return undefined
+      return
     }
 
     return this._redactVulnearbilities

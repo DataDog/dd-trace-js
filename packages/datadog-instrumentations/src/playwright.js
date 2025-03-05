@@ -102,11 +102,7 @@ function deepCloneSuite (suite, filterTest, tags = []) {
 
 function getTestsBySuiteFromTestGroups (testGroups) {
   return testGroups.reduce((acc, { requireFile, tests }) => {
-    if (acc[requireFile]) {
-      acc[requireFile] = acc[requireFile].concat(tests)
-    } else {
-      acc[requireFile] = tests
-    }
+    acc[requireFile] = acc[requireFile] ? acc[requireFile].concat(tests) : tests
     return acc
   }, {})
 }
@@ -130,10 +126,10 @@ function getTestsBySuiteFromTestsById (testsById) {
 function getPlaywrightConfig (playwrightRunner) {
   try {
     return playwrightRunner._configLoader.fullConfig()
-  } catch (e) {
+  } catch {
     try {
       return playwrightRunner._loader.fullConfig()
-    } catch (e) {
+    } catch {
       return playwrightRunner._config || {}
     }
   }
@@ -343,7 +339,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
 
   // this handles tests that do not go through the worker process (because they're skipped)
   if (isMainProcess) {
-    const testResult = results[results.length - 1]
+    const testResult = results.at(-1)
     const testCtx = testToCtx.get(test)
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
@@ -387,7 +383,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
   if (!remainingTestsByFile[testSuiteAbsolutePath].length) {
     const testStatuses = testSuiteToTestStatuses.get(testSuiteAbsolutePath)
     let testSuiteStatus = 'pass'
-    if (testStatuses.some(status => status === 'fail')) {
+    if (testStatuses.includes('fail')) {
       testSuiteStatus = 'fail'
     } else if (testStatuses.every(status => status === 'skip')) {
       testSuiteStatus = 'skip'
@@ -433,7 +429,7 @@ function dispatcherHook (dispatcherExport) {
         const { test } = dispatcher._testById.get(params.testId)
 
         const { results } = test
-        const testResult = results[results.length - 1]
+        const testResult = results.at(-1)
 
         const isTimeout = testResult.status === 'timedOut'
         testEndHandler(

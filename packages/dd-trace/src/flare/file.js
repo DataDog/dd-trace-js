@@ -1,6 +1,6 @@
 'use strict'
 
-const { Writable } = require('stream')
+const { Writable } = require('node:stream')
 
 const INITIAL_SIZE = 64 * 1024
 
@@ -22,11 +22,7 @@ class FlareFile extends Writable {
 
     this._reserve(length)
 
-    if (Buffer.isBuffer(chunk)) {
-      this.length += chunk.copy(this._buffer, this.length)
-    } else {
-      this.length += this._buffer.write(chunk, encoding)
-    }
+    this.length += Buffer.isBuffer(chunk) ? chunk.copy(this._buffer, this.length) : this._buffer.write(chunk, encoding)
 
     callback()
   }

@@ -1,6 +1,6 @@
 'use strict'
 
-const util = require('util')
+const util = require('node:util')
 const { AUTO_KEEP } = require('../../../../ext/priority')
 
 // the lowercase, hex encoded upper 64 bits of a 128-bit trace id, if present

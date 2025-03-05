@@ -2,12 +2,12 @@
 
 // TODO: capture every second and flush every 10 seconds
 
-const v8 = require('v8')
-const os = require('os')
+const v8 = require('node:v8')
+const os = require('node:os')
 const { DogStatsDClient, MetricsAggregationClient } = require('../dogstatsd')
 const log = require('../log')
 const Histogram = require('../histogram')
-const { performance, PerformanceObserver } = require('perf_hooks')
+const { performance, PerformanceObserver } = require('node:perf_hooks')
 
 const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
 const { DD_RUNTIME_METRICS_FLUSH_INTERVAL = '10000' } = process.env
@@ -141,7 +141,7 @@ function captureCpuUsage () {
   time = process.hrtime()
   cpuUsage = process.cpuUsage()
 
-  const elapsedMs = elapsedTime[0] * 1000 + elapsedTime[1] / 1000000
+  const elapsedMs = elapsedTime[0] * 1000 + elapsedTime[1] / 1_000_000
   const userPercent = 100 * elapsedUsage.user / 1000 / elapsedMs
   const systemPercent = 100 * elapsedUsage.system / 1000 / elapsedMs
   const totalPercent = userPercent + systemPercent

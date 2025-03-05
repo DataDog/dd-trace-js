@@ -114,7 +114,7 @@ function wrapQuery (query) {
       const queryQueue = this.queryQueue || this._queryQueue
       const activeQuery = this.activeQuery || this._activeQuery
 
-      const newQuery = queryQueue[queryQueue.length - 1] || activeQuery
+      const newQuery = queryQueue.at(-1) || activeQuery
 
       if (!newQuery) {
         return retval

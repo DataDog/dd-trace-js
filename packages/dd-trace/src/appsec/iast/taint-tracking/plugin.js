@@ -131,11 +131,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
         const iastContext = getIastContext(storage('legacy').getStore())
         let ranges
 
-        if (base) {
-          ranges = getRanges(iastContext, base)
-        } else {
-          ranges = getRanges(iastContext, input)
-        }
+        ranges = base ? getRanges(iastContext, base) : getRanges(iastContext, input)
 
         if (ranges?.length) {
           if (isURL) {

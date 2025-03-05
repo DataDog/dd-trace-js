@@ -6,7 +6,7 @@ const { enable: enableFsPlugin, disable: disableFsPlugin, RASP_MODULE } = requir
 const { FS_OPERATION_PATH } = require('../addresses')
 const waf = require('../waf')
 const { RULE_TYPES, handleResult } = require('./utils')
-const { isAbsolute } = require('path')
+const { isAbsolute } = require('node:path')
 
 let config
 let enabled
@@ -103,7 +103,7 @@ function shouldAnalyze (path, fs) {
 
 function shouldAnalyzeURLFile (path, fs) {
   if (path.startsWith('file://')) {
-    return shouldAnalyze(path.substring(7), fs)
+    return shouldAnalyze(path.slice(7), fs)
   }
 }
 

@@ -14,7 +14,7 @@ const {
   updateRateLimitedMetric,
   getRequestMetrics
 } = require('./telemetry')
-const zlib = require('zlib')
+const zlib = require('node:zlib')
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
 

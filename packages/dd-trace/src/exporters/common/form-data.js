@@ -1,6 +1,6 @@
 'use strict'
 
-const { Readable } = require('stream')
+const { Readable } = require('node:stream')
 const id = require('../../id')
 
 class FormData extends Readable {

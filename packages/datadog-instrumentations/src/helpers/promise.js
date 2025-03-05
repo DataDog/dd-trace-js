@@ -1,6 +1,6 @@
 'use strict'
 
-const { AsyncResource } = require('async_hooks')
+const { AsyncResource } = require('node:async_hooks')
 
 exports.wrapThen = function wrapThen (origThen) {
   return function then (onFulfilled, onRejected, onProgress) {

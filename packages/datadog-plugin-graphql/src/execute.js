@@ -70,12 +70,12 @@ function getSignature (document, operationName, operationType, calculate) {
       }
 
       return tools.defaultEngineReportingSignature(document, operationName)
-    } catch (e) {
+    } catch {
       // safety net
     }
   }
 
-  return [operationType, operationName].filter(val => val).join(' ')
+  return [operationType, operationName].filter(Boolean).join(' ')
 }
 
 module.exports = GraphQLExecutePlugin

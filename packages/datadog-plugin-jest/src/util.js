@@ -1,4 +1,4 @@
-const { readFileSync } = require('fs')
+const { readFileSync } = require('node:fs')
 const { parse, extract } = require('jest-docblock')
 
 const { getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')
@@ -32,7 +32,7 @@ function getFormattedJestTestParameters (testParameters) {
       formattedParameters.push({})
     }
     const parameterKey = parameterKeys[parameterIndex]
-    const lastFormattedParameter = formattedParameters[formattedParameters.length - 1]
+    const lastFormattedParameter = formattedParameters.at(-1)
     lastFormattedParameter[parameterKey] = parameterValue
   }
 
@@ -57,7 +57,7 @@ function isMarkedAsUnskippable (test) {
   try {
     const testSource = readFileSync(test.path, 'utf8')
     docblocks = parse(extract(testSource))
-  } catch (e) {
+  } catch {
     // If we have issues parsing the file, we'll assume no unskippable was passed
     return false
   }
@@ -69,7 +69,7 @@ function isMarkedAsUnskippable (test) {
 
   try {
     return JSON.parse(docblocks.datadog).unskippable
-  } catch (e) {
+  } catch {
     // If the @datadog block comment is present but malformed, we'll run the suite
     log.warn('@datadog block comment is malformed.')
     return true

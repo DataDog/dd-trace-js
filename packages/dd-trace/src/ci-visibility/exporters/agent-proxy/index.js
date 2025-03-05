@@ -26,7 +26,7 @@ function getLatestEvpProxyVersion (err, agentInfo) {
 }
 
 function getCanForwardDebuggerLogs (err, agentInfo) {
-  return !err && agentInfo.endpoints.some(endpoint => endpoint === AGENT_DEBUGGER_INPUT)
+  return !err && agentInfo.endpoints.includes(AGENT_DEBUGGER_INPUT)
 }
 
 class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {

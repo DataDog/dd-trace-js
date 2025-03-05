@@ -3,7 +3,7 @@
 const { storage } = require('../../datadog-core')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 
-const URL = require('url').URL
+const URL = require('node:url').URL
 const log = require('../../dd-trace/src/log')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
@@ -51,7 +51,7 @@ class Http2ClientPlugin extends ClientPlugin {
         'out.host': sessionDetails.host
       },
       metrics: {
-        [CLIENT_PORT_KEY]: parseInt(sessionDetails.port)
+        [CLIENT_PORT_KEY]: Number.parseInt(sessionDetails.port)
       }
     }, false)
 
@@ -153,7 +153,7 @@ function hasAmazonSignature (headers, path) {
     }
   }
 
-  return path && path.toLowerCase().indexOf('x-amz-signature=') !== -1
+  return path && path.toLowerCase().includes('x-amz-signature=')
 }
 
 function startsWith (searchString) {

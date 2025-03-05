@@ -1,7 +1,7 @@
 'use strict'
 
-import path from 'path'
-import { URL } from 'url'
+import path from 'node:path'
+import { URL } from 'node:url'
 import { getName } from '../telemetry/verbosity.js'
 import { isDdTrace, isPrivateModule } from './filter.js'
 import constants from './constants.js'

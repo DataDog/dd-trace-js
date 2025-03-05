@@ -71,7 +71,7 @@ class Tracer {
 
         // Update meta and samplingPriority based on extracted values
         Object.assign(meta, otherPropagatedTags)
-        samplingPriority = TextMapPropagator._getSamplingPriority(traceFlag, parseInt(samplingPriorityTs, 10), origin)
+        samplingPriority = TextMapPropagator._getSamplingPriority(traceFlag, Number.parseInt(samplingPriorityTs, 10), origin)
       } else {
         log.debug(`no dd list member in tracestate from incoming request: ${ts}`)
       }

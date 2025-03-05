@@ -1,6 +1,6 @@
 'use strict'
 
-const crypto = require('crypto')
+const crypto = require('node:crypto')
 const log = require('../../dd-trace/src/log')
 
 /**
@@ -13,7 +13,7 @@ function generatePointerHash (components) {
   // If passing S3's ETag as a component, make sure any quotes have already been removed!
   const dataToHash = components.join('|')
   const hash = crypto.createHash('sha256').update(dataToHash).digest('hex')
-  return hash.substring(0, 32)
+  return hash.slice(0, 32)
 }
 
 /**

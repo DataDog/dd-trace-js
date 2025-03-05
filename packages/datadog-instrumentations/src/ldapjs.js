@@ -62,10 +62,8 @@ addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
       let filter
       if (isString(options)) {
         filter = options
-      } else if (options !== null && typeof options === 'object' && options.filter) {
-        if (isString(options.filter)) {
-          filter = options.filter
-        }
+      } else if (options !== null && typeof options === 'object' && options.filter && isString(options.filter)) {
+        filter = options.filter
       }
       ldapSearchCh.publish({ base, filter })
     }

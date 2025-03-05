@@ -2,8 +2,8 @@
 
 const shellParser = require('shell-quote/parse')
 
-const ALLOWED_ENV_VARIABLES = ['LD_PRELOAD', 'LD_LIBRARY_PATH', 'PATH']
-const PROCESS_DENYLIST = ['md5']
+const ALLOWED_ENV_VARIABLES = new Set(['LD_PRELOAD', 'LD_LIBRARY_PATH', 'PATH'])
+const PROCESS_DENYLIST = new Set(['md5'])
 
 const VARNAMES_REGEX = /\$([\w\d_]*)(?:[^\w\d_]|$)/gmi
 // eslint-disable-next-line @stylistic/js/max-len
@@ -75,7 +75,7 @@ function scrubChildProcessCmd (expression) {
         if (envVarRegex.test(token)) {
           const envSplit = token.split('=')
 
-          if (!ALLOWED_ENV_VARIABLES.includes(envSplit[0])) {
+          if (!ALLOWED_ENV_VARIABLES.has(envSplit[0])) {
             envSplit[1] = REDACTED
 
             const newToken = envSplit.join('=')
@@ -89,7 +89,7 @@ function scrubChildProcessCmd (expression) {
           foundBinary = true
           result.push(token)
 
-          if (PROCESS_DENYLIST.includes(token)) {
+          if (PROCESS_DENYLIST.has(token)) {
             for (index++; index < expressionTokens.length; index++) {
               const token = expressionTokens[index]
 

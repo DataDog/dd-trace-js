@@ -1,5 +1,5 @@
-const fs = require('fs')
-const path = require('path')
+const fs = require('node:fs')
+const path = require('node:path')
 
 const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
@@ -50,7 +50,7 @@ function getCommonRequestOptions (url) {
     headers: {
       'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY
     },
-    timeout: 15000,
+    timeout: 15_000,
     url
   }
 }
@@ -148,7 +148,7 @@ function uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, re
       filename,
       contentType: 'application/octet-stream'
     })
-  } catch (e) {
+  } catch {
     callback(new Error(`Could not read "${packFileToUpload}"`))
     return
   }

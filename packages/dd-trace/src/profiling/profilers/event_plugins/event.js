@@ -1,5 +1,5 @@
 const TracingPlugin = require('../../../plugins/tracing')
-const { performance } = require('perf_hooks')
+const { performance } = require('node:perf_hooks')
 
 // We are leveraging the TracingPlugin class for its functionality to bind
 // start/error/finish methods to the appropriate diagnostic channels.

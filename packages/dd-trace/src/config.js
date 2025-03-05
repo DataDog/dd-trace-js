@@ -1,9 +1,9 @@
 'use strict'
 
-const fs = require('fs')
-const os = require('os')
+const fs = require('node:fs')
+const os = require('node:os')
 const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
-const { URL } = require('url')
+const { URL } = require('node:url')
 const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
@@ -105,7 +105,7 @@ function validateEnvVarType (envVar) {
     case 'OTEL_TRACES_SAMPLER':
       return getFromOtelSamplerMap(value, process.env.OTEL_TRACES_SAMPLER_ARG) !== undefined
     case 'OTEL_TRACES_SAMPLER_ARG':
-      return !isNaN(parseFloat(value))
+      return !isNaN(Number.parseFloat(value))
     case 'OTEL_SDK_DISABLED':
       return value.toLowerCase() === 'true' || value.toLowerCase() === 'false'
     case 'OTEL_TRACES_EXPORTER':
@@ -148,26 +148,23 @@ function maybeFile (filepath) {
     return fs.readFileSync(filepath, 'utf8')
   } catch (e) {
     log.error('Error reading file %s', filepath, e)
-    return undefined
   }
 }
 
 function safeJsonParse (input) {
   try {
     return JSON.parse(input)
-  } catch (err) {
-    return undefined
-  }
+  } catch {}
 }
 
-const namingVersions = ['v0', 'v1']
+const namingVersions = new Set(['v0', 'v1'])
 const defaultNamingVersion = 'v0'
 
 function validateNamingVersion (versionString) {
   if (!versionString) {
     return defaultNamingVersion
   }
-  if (!namingVersions.includes(versionString)) {
+  if (!namingVersions.has(versionString)) {
     log.warn(
       `Unexpected input for config.spanAttributeSchema, picked default ${defaultNamingVersion}`
     )
@@ -578,7 +575,7 @@ class Config {
     this._setValue(defaults, 'telemetry.debug', false)
     this._setValue(defaults, 'telemetry.dependencyCollection', true)
     this._setValue(defaults, 'telemetry.enabled', true)
-    this._setValue(defaults, 'telemetry.heartbeatInterval', 60000)
+    this._setValue(defaults, 'telemetry.heartbeatInterval', 60_000)
     this._setValue(defaults, 'telemetry.logCollection', true)
     this._setValue(defaults, 'telemetry.metrics', true)
     this._setValue(defaults, 'traceEnabled', true)
@@ -1372,7 +1369,7 @@ class Config {
       return this._setValue(obj, name, value)
     }
 
-    value = parseFloat(value)
+    value = Number.parseFloat(value)
 
     if (!isNaN(value)) {
       // TODO: Ignore out of range values instead of normalizing them.
@@ -1547,12 +1544,12 @@ function parseSpaceSeparatedTags (tagString) {
 }
 
 function maybeInt (number) {
-  const parsed = parseInt(number)
+  const parsed = Number.parseInt(number)
   return isNaN(parsed) ? undefined : parsed
 }
 
 function maybeFloat (number) {
-  const parsed = parseFloat(number)
+  const parsed = Number.parseFloat(number)
   return isNaN(parsed) ? undefined : parsed
 }
 

@@ -1,11 +1,11 @@
 const tracerLogger = require('../../log')// path to require tracer logger
 
-const https = require('https')
+const https = require('node:https')
 
 class ExternalLogger {
   // Note: these attribute names match the corresponding entry in the JSON payload.
   constructor ({
-    ddsource, hostname, service, apiKey, site = 'datadoghq.com', interval = 10000, timeout = 2000, limit = 1000
+    ddsource, hostname, service, apiKey, site = 'datadoghq.com', interval = 10_000, timeout = 2000, limit = 1000
   }) {
     this.enabled = !!apiKey
 

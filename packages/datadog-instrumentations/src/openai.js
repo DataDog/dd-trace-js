@@ -194,7 +194,7 @@ function convertBufferstoObjects (chunks = []) {
     .toString() // stringify
     .split(/(?=data:)/) // split on "data:"
     .map(chunk => chunk.split('\n').join('')) // remove newlines
-    .map(chunk => chunk.substring(6)) // remove 'data: ' from the front
+    .map(chunk => chunk.slice(6)) // remove 'data: ' from the front
     .slice(0, -1) // remove the last [DONE] message
     .map(JSON.parse) // parse all of the returned objects
 }

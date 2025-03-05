@@ -1,8 +1,8 @@
 'use strict'
 
-const { join } = require('path')
-const { Worker, threadId: parentThreadId } = require('worker_threads')
-const { randomUUID } = require('crypto')
+const { join } = require('node:path')
+const { Worker, threadId: parentThreadId } = require('node:worker_threads')
+const { randomUUID } = require('node:crypto')
 const log = require('../../log')
 
 const probeIdToResolveBreakpointSet = new Map()

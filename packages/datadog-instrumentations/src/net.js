@@ -22,7 +22,7 @@ addHook({ name: names }, (net, version, name) => {
   // explicitly require dns so that net gets an instrumented instance
   // so that we don't miss the dns calls
   if (name === 'net') {
-    require('dns')
+    require('node:dns')
   } else {
     require('node:dns')
   }
@@ -87,7 +87,7 @@ function getOptions (args) {
       if (Array.isArray(args[0])) return getOptions(args[0])
       return args[0]
     case 'string':
-      if (isNaN(parseFloat(args[0]))) {
+      if (isNaN(Number.parseFloat(args[0]))) {
         return {
           path: args[0]
         }

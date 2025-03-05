@@ -134,7 +134,7 @@ class Sqs extends BaseAwsSdkPlugin {
         if (body.Type === 'Notification') {
           message = body
         }
-      } catch (e) {
+      } catch {
         // SQS to SQS
       }
     }
@@ -186,7 +186,7 @@ class Sqs extends BaseAwsSdkPlugin {
             if (body.Type === 'Notification') {
               message = body
             }
-          } catch (e) {
+          } catch {
             // SQS to SQS
           }
         }

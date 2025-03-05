@@ -10,8 +10,8 @@ const SC_NOT_FOUND = 404
 const SC_GONE = 410
 const SC_INTERNAL_SERVER_ERROR = 500
 
-const IGNORED_RESPONSE_STATUS_LIST = [SC_MOVED_PERMANENTLY, SC_MOVED_TEMPORARILY, SC_NOT_MODIFIED,
-  SC_TEMPORARY_REDIRECT, SC_NOT_FOUND, SC_GONE, SC_INTERNAL_SERVER_ERROR]
+const IGNORED_RESPONSE_STATUS_LIST = new Set([SC_MOVED_PERMANENTLY, SC_MOVED_TEMPORARILY, SC_NOT_MODIFIED,
+  SC_TEMPORARY_REDIRECT, SC_NOT_FOUND, SC_GONE, SC_INTERNAL_SERVER_ERROR])
 const HTML_CONTENT_TYPES = ['text/html', 'application/xhtml+xml']
 
 class MissingHeaderAnalyzer extends Analyzer {
@@ -37,9 +37,7 @@ class MissingHeaderAnalyzer extends Analyzer {
     }
   }
 
-  _getLocation () {
-    return undefined
-  }
+  _getLocation () {}
 
   _checkOCE (context) {
     return true
@@ -61,7 +59,7 @@ class MissingHeaderAnalyzer extends Analyzer {
   }
 
   _isVulnerable ({ req, res }, context) {
-    if (!IGNORED_RESPONSE_STATUS_LIST.includes(res.statusCode) && this._isResponseHtml(res)) {
+    if (!IGNORED_RESPONSE_STATUS_LIST.has(res.statusCode) && this._isResponseHtml(res)) {
       return this._isVulnerableFromRequestAndResponse(req, res)
     }
     return false
