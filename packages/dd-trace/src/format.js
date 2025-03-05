@@ -113,7 +113,8 @@ function extractSpanEvents (trace, span) {
 function extractTags (trace, span) {
   const context = span.context()
   const origin = context._trace.origin
-  // TODO(BridgeAR)[31.03.2025]: Change the tags to a map. That is way more efficient
+  // TODO(BridgeAR)[31.03.2025]: Look into changing the way we store tags. Using
+  // a map is likely faster short term.
   const tags = context._tags
   const hostname = context._hostname
   const priority = context._sampling.priority

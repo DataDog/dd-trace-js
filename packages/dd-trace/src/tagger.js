@@ -1,6 +1,6 @@
 'use strict'
 
-let log
+const log = require('./log')
 
 function addNonEmpty (carrier, key, value) {
   if (key !== '') {
@@ -49,7 +49,6 @@ function add (carrier, keyValuePairs) {
       Object.assign(carrier, keyValuePairs)
     }
   } catch (error) {
-    log ??= require('./log')
     log.error('Error adding tags', error)
   }
 }
