@@ -18,7 +18,6 @@ function formatSpan (span, encoder) {
   }
 }
 
-
 class AgentEncoder {
   constructor (writer, limit = SOFT_LIMIT) {
     this._msgpack = new MsgpackEncoder()
@@ -42,7 +41,7 @@ class AgentEncoder {
         } else {
           this.topLevelSpanEventSupport = agentInfo?.span_events === true
         }
-    })
+      })
   }
 
   count () {

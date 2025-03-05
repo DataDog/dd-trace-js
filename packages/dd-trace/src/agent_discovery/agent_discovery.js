@@ -4,7 +4,6 @@ const { URL, format } = require('url')
 const log = require('../log')
 const request = require('../exporters/common/request')
 
-
 class DataDogAgentDiscovery {
   /**
    * Holds the single instance of the class.
@@ -111,7 +110,7 @@ class DataDogAgentDiscovery {
     const options = {
       url: this.url,
       path: '/info',
-      timeout: 5000,
+      timeout: 5000
     }
 
     request('', options, (err, res) => {
@@ -161,6 +160,5 @@ class DataDogAgentDiscovery {
     }
   }
 }
-
 
 module.exports = DataDogAgentDiscovery
