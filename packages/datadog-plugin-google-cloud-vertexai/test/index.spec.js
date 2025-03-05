@@ -206,7 +206,13 @@ describe('Plugin', () => {
               expect(span.meta).to.have.property('span.kind', 'client')
 
               expect(span.meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
-              expect(span.meta).to.have.property('vertexai.request.contents.0.parts.0.text', 'Hello, how are you?')
+
+              expect(span.meta).to.have.property('vertexai.request.contents.0.role', 'user')
+              expect(span.meta).to.have.property('vertexai.request.contents.0.parts.0.text', 'Foobar?')
+              expect(span.meta).to.have.property('vertexai.request.contents.1.role', 'model')
+              expect(span.meta).to.have.property('vertexai.request.contents.1.parts.0.text', 'Foobar!')
+              expect(span.meta).to.have.property('vertexai.request.contents.2.parts.0.text', 'Hello, how are you?')
+
               expect(span.meta).to.have.property('vertexai.response.candidates.0.finish_reason', 'STOP')
               expect(span.meta).to.have.property('vertexai.response.candidates.0.content.parts.0.text',
                 'Hello! How can I assist you today?')
@@ -224,7 +230,12 @@ describe('Plugin', () => {
               expect(span.meta).to.have.property('vertexai.request.generation_config.temperature', '1')
             })
 
-            const chat = model.startChat({})
+            const chat = model.startChat({
+              history: [
+                { role: 'user', parts: [{ text: 'Foobar?' }] },
+                { role: 'model', parts: [{ text: 'Foobar!' }] }
+              ]
+            })
             const { response } = await chat.sendMessage([{ text: 'Hello, how are you?' }])
 
             expect(response).to.have.property('candidates')
