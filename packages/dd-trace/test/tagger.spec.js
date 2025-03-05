@@ -26,7 +26,7 @@ describe('tagger', () => {
 
     expect(carrier).to.have.property('foo', 'bar')
     expect(carrier).to.have.property('baz', 'qux:quxx')
-    expect(carrier).to.not.have.property('invalid')
+    expect(carrier).to.have.property('invalid', '')
   })
 
   it('should add tags as an array', () => {
