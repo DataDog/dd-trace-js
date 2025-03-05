@@ -183,7 +183,6 @@ describe('reporter', () => {
 
     it('should set ext duration metrics if set', () => {
       const metrics = { durationExt: 42 }
-
       Reporter.reportMetrics(metrics)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
@@ -244,6 +243,7 @@ describe('reporter', () => {
     it('should call updateRaspRequestsMetricTags when raspRule is provided', () => {
       const metrics = { rulesVersion: '1.2.3' }
       const store = storage('legacy').getStore()
+
       const raspRule = { type: 'rule_type', variant: 'rule_variant' }
 
       Reporter.reportMetrics(metrics, raspRule)

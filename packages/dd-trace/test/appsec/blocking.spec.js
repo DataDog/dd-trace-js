@@ -58,12 +58,12 @@ describe('blocking', () => {
 
     it('should log warn and not send blocking response when headers have already been sent', () => {
       res.headersSent = true
-      const blocked = block(req, res)
+      const blocked = block(req, res, rootSpan)
 
       expect(blocked).to.be.false
       expect(log.warn).to.have.been
         .calledOnceWithExactly('[ASM] Cannot send blocking response when headers have already been sent')
-      expect(rootSpan.addTags).to.not.have.been.called
+      expect(rootSpan.addTags).to.have.been.called
       expect(res.setHeader).to.not.have.been.called
       expect(res.constructor.prototype.end).to.not.have.been.called
     })
