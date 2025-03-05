@@ -1,5 +1,3 @@
-const request = require('./request')
-
 function safeJSONStringify (value) {
   return JSON.stringify(
     value,

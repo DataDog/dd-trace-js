@@ -5,12 +5,19 @@ const { Chunk, MsgpackEncoder } = require('../msgpack')
 const log = require('../log')
 const { isTrue } = require('../util')
 const coalesce = require('koalas')
+const DataDogAgentDiscovery = require('../agent_discovery/agent_discovery')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 
-function formatSpan (span) {
-  return normalizeSpan(truncateSpan(span, false))
+function formatSpan (span, encoder) {
+  span = normalizeSpan(truncateSpan(span, false))
+  // ensure span events are encoded as tags if agent doesn't support top level encoding
+  if (span.span_events && !encoder.topLevelSpanEventSupport) {
+    span.meta.events = JSON.stringify(span.span_events)
+    delete span.span_events
+  }
 }
+
 
 class AgentEncoder {
   constructor (writer, limit = SOFT_LIMIT) {
@@ -24,7 +31,18 @@ class AgentEncoder {
       process.env.DD_TRACE_ENCODING_DEBUG,
       false
     ))
-    this._format = 'v0.4'
+
+    this.topLevelSpanEventSupport = null
+
+    const ddAgentDiscovery = DataDogAgentDiscovery.instance
+    ddAgentDiscovery?.registerCallback(
+      (err, agentInfo) => {
+        if (err) {
+          this.topLevelSpanEventSupport = false
+        } else {
+          this.topLevelSpanEventSupport = agentInfo?.span_events === true
+        }
+    })
   }
 
   count () {

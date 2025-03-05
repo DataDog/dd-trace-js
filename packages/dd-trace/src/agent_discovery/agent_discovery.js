@@ -17,24 +17,23 @@ class DataDogAgentDiscovery {
    * @param {object} config - The tracer config object.
    * @param {number} interval - The fetch interval in milliseconds.
    */
-  constructor(config, interval = 30000) {
+  constructor (config, interval = 30000) {
     if (DataDogAgentDiscovery.instance) {
-      // If an instance already exists, return it to enforce singleton
       return DataDogAgentDiscovery.instance
     }
 
     const { url, hostname, port } = config
-    const agent_url = url || new URL(format({
+    const agentUrl = url || new URL(format({
       protocol: 'http:',
       hostname: hostname || 'localhost',
       port
     }))
 
-    if (!agent_url) {
+    if (!agentUrl) {
       throw new Error('Error getting Datadog Agent URL via config object for Datadog Agent Discovery service.')
     }
 
-    this.url = agent_url
+    this.url = agentUrl
     this.interval = interval
     this.data = {}
     this.error = null
@@ -44,8 +43,6 @@ class DataDogAgentDiscovery {
     if (config.fetchAgentInfo) {
       this._startFetching()
     }
-
-    // Singleton pattern
     DataDogAgentDiscovery.instance = this
   }
 
@@ -55,7 +52,7 @@ class DataDogAgentDiscovery {
    * @param {number} interval - The fetch interval in milliseconds.
    * @returns {DataDogAgentDiscovery} The singleton instance.
    */
-  static getInstance(config, interval) {
+  static getInstance (config, interval) {
     if (!DataDogAgentDiscovery.instance) {
       DataDogAgentDiscovery.instance = new DataDogAgentDiscovery(config, interval)
     }
@@ -66,7 +63,7 @@ class DataDogAgentDiscovery {
    * Registers a callback to be invoked on data or error.
    * @param {function} callback - The callback function with signature (error, data).
    */
-  registerCallback(callback) {
+  registerCallback (callback) {
     if (typeof callback === 'function') {
       this.callbacks.push(callback)
       callback(this.error, this.data) // also invoke the callback initially so we don't have to wait
@@ -79,14 +76,14 @@ class DataDogAgentDiscovery {
    * Unregisters a previously registered callback.
    * @param {function} callback - The callback function to remove.
    */
-  unregisterCallback(callback) {
+  unregisterCallback (callback) {
     this.callbacks = this.callbacks.filter(cb => cb !== callback)
   }
 
   /**
    * Invokes all registered callbacks with the current error and data.
    */
-  _invokeCallbacks() {
+  _invokeCallbacks () {
     this.callbacks.forEach(callback => {
       try {
         callback(this.error, this.data)
@@ -99,7 +96,7 @@ class DataDogAgentDiscovery {
   /**
    * Starts the periodic fetching of DataDog Agent information.
    */
-  _startFetching() {
+  _startFetching () {
     // Initial fetch
     this._fetchAgentInfo()
 
@@ -110,7 +107,7 @@ class DataDogAgentDiscovery {
   /**
    * Fetches the DataDog Agent information and updates internal state.
    */
-  _fetchAgentInfo() {
+  _fetchAgentInfo () {
     const options = {
       url: this.url,
       path: '/info',
@@ -143,7 +140,7 @@ class DataDogAgentDiscovery {
    * @param {function|null} callback - Optional callback to run on returned data.
    * @returns {Object|null} The latest data or null if not available.
    */
-  getData(callback) {
+  getData (callback) {
     if (callback) {
       callback(this.error, this.data)
     }
@@ -157,7 +154,7 @@ class DataDogAgentDiscovery {
   /**
    * Stops the periodic fetching.
    */
-  stopFetching() {
+  stopFetching () {
     if (this.timer) {
       clearInterval(this.timer)
       this.timer = null

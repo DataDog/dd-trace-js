@@ -3,7 +3,6 @@
 const { URL, format } = require('url')
 const log = require('../../log')
 const Writer = require('./writer')
-const DataDogAgentDiscovery = require('../../agent_discovery/agent_discovery')
 
 class AgentExporter {
   constructor (config, prioritySampler) {
@@ -14,18 +13,6 @@ class AgentExporter {
       hostname: hostname || 'localhost',
       port
     }))
-
-    this.agentSupportsTopLevelSpanEvents = null
-
-    const ddAgentDiscovery = DataDogAgentDiscovery.getInstance(this._config)
-    ddAgentDiscovery.registerCallback(
-      (err, agentInfo) => {
-        if (err) {
-          this.agentSupportsTopLevelSpanEvents = false
-        } else {
-          this.agentSupportsTopLevelSpanEvents = agentInfo?.span_events === true
-        }
-    })
 
     const headers = {}
     if (stats.enabled || apmTracingEnabled === false) {

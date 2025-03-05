@@ -7,15 +7,15 @@ const ARRAY_OF_TWO = 0x92
 const ARRAY_OF_TWELVE = 0x9c
 
 function formatSpan (span) {
-  return normalizeSpan(truncateSpan(span, false))
+  span = normalizeSpan(truncateSpan(span, false))
+  // ensure span events are encoded as tags
+  if (span.span_events) {
+    span.meta.events = JSON.stringify(span.span_events)
+    delete span.span_events
+  }
 }
 
 class AgentEncoder extends BaseEncoder {
-  constructor () {
-    super(...arguments)
-    this._format = 'v0.5'
-  }
-
   makePayload () {
     const prefixSize = 1
     const stringSize = this._stringBytes.length + 5
