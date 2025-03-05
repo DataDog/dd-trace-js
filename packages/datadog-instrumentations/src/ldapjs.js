@@ -8,7 +8,6 @@ const {
 const shimmer = require('../../datadog-shimmer')
 
 function isString (value) {
-  // TODO: Is there are reason to check for a boxed string?
   // eslint-disable-next-line unicorn/no-instanceof-builtins
   return typeof value === 'string' || value instanceof String
 }
