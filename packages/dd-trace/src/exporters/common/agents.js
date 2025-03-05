@@ -1,7 +1,7 @@
 'use strict'
 
-const http = require('http')
-const https = require('https')
+const http = require('node:http')
+const https = require('node:https')
 const { storage } = require('../../../../datadog-core')
 
 const keepAlive = true

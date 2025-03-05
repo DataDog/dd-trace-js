@@ -1,4 +1,4 @@
-const { readFileSync } = require('fs')
+const { readFileSync } = require('node:fs')
 const {
   GIT_BRANCH,
   GIT_COMMIT_SHA,
@@ -128,7 +128,7 @@ module.exports = {
         try {
           nodeLabels = JSON.stringify(NODE_LABELS.split(' '))
           tags[CI_NODE_LABELS] = nodeLabels
-        } catch (e) {
+        } catch {
           // ignore errors
         }
       }
@@ -143,11 +143,7 @@ module.exports = {
       if (JOB_NAME) {
         // Job names can contain parameters, e.g. jobName/KEY1=VALUE1,KEY2=VALUE2/branchName
         const jobNameAndParams = JOB_NAME.split('/')
-        if (jobNameAndParams.length > 1 && jobNameAndParams[1].includes('=')) {
-          finalPipelineName = jobNameAndParams[0]
-        } else {
-          finalPipelineName = JOB_NAME.replace(`/${ref}`, '')
-        }
+        finalPipelineName = jobNameAndParams.length > 1 && jobNameAndParams[1].includes('=') ? jobNameAndParams[0] : JOB_NAME.replace(`/${ref}`, '')
         tags[CI_PIPELINE_NAME] = finalPipelineName
       }
     }
@@ -295,7 +291,7 @@ module.exports = {
           const eventContent = getGitHubEventPayload()
           tags[GIT_PULL_REQUEST_BASE_BRANCH_SHA] = eventContent.pull_request.base.sha
           tags[GIT_COMMIT_HEAD_SHA] = eventContent.pull_request.head.sha
-        } catch (e) {
+        } catch {
           // ignore malformed event content
         }
       }

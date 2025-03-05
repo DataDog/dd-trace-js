@@ -1,6 +1,6 @@
 'use strict'
 
-const path = require('path')
+const path = require('node:path')
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { storage } = require('../../datadog-core')
@@ -772,7 +772,7 @@ function commonCreateResponseExtraction (tags, body, openaiStore, methodName) {
     const choice = body.choices[choiceIdx]
 
     // logprobs can be null and we still want to tag it as 'returned' even when set to 'null'
-    const specifiesLogProb = Object.keys(choice).indexOf('logprobs') !== -1
+    const specifiesLogProb = Object.keys(choice).includes('logprobs')
 
     tags[`openai.response.choices.${choiceIdx}.finish_reason`] = choice.finish_reason
     tags[`openai.response.choices.${choiceIdx}.logprobs`] = specifiesLogProb ? 'returned' : undefined
@@ -837,7 +837,7 @@ function usageExtraction (tags, body, methodName, openaiStore) {
 }
 
 function truncateApiKey (apiKey) {
-  return apiKey && `sk-...${apiKey.substr(apiKey.length - 4)}`
+  return apiKey && `sk-...${apiKey.slice(-4)}`
 }
 
 function tagChatCompletionRequestContent (contents, messageIdx, tags) {
@@ -1041,8 +1041,6 @@ function defensiveArrayLength (maybeArray) {
       return 1
     }
   }
-
-  return undefined
 }
 
 module.exports = OpenAiTracingPlugin

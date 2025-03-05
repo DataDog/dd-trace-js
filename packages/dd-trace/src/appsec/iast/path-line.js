@@ -1,7 +1,7 @@
 'use strict'
 
-const path = require('path')
-const process = require('process')
+const path = require('node:path')
+const process = require('node:process')
 const { calculateDDBasePath } = require('../../util')
 const pathLine = {
   getNodeModulesPaths,
@@ -32,7 +32,7 @@ function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
 
   for (const callsite of callSiteFrames) {
     const filepath = callsite.file
-    if (!isExcluded(callsite, externallyExcludedPaths) && filepath.indexOf(pathLine.ddBasePath) === -1) {
+    if (!isExcluded(callsite, externallyExcludedPaths) && !filepath.includes(pathLine.ddBasePath)) {
       callsite.path = getRelativePath(filepath)
       callsite.isInternal = !path.isAbsolute(filepath)
 
@@ -59,7 +59,7 @@ function isExcluded (callsite, externallyExcludedPaths) {
   }
 
   for (let i = 0; i < excludedPaths.length; i++) {
-    if (filename.indexOf(excludedPaths[i]) > -1) {
+    if (filename.includes(excludedPaths[i])) {
       return true
     }
   }

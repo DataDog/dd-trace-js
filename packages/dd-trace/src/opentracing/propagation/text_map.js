@@ -442,7 +442,7 @@ class TextMapPropagator {
     let parsed
     try {
       parsed = JSON.parse(headerValue)
-    } catch (e) {
+    } catch {
       return null
     }
     return this._extractDatadogContext(parsed)
@@ -471,7 +471,7 @@ class TextMapPropagator {
         traceId: id(traceId, 16),
         spanId: id(spanId, 16),
         isRemote: true,
-        sampling: { priority: parseInt(flags, 10) & 1 ? 1 : 0 },
+        sampling: { priority: Number.parseInt(flags, 10) & 1 ? 1 : 0 },
         traceparent,
         tracestate
       })
@@ -486,7 +486,7 @@ class TextMapPropagator {
               break
             }
             case 's': {
-              const priority = parseInt(value, 10)
+              const priority = Number.parseInt(value, 10)
               if (!Number.isInteger(priority)) continue
               if (
                 (spanContext._sampling.priority === 1 && priority > 0) ||
@@ -500,7 +500,7 @@ class TextMapPropagator {
               spanContext._trace.origin = value
               break
             case 't.dm': {
-              const mechanism = Math.abs(parseInt(value, 10))
+              const mechanism = Math.abs(Number.parseInt(value, 10))
               if (Number.isInteger(mechanism)) {
                 spanContext._sampling.mechanism = mechanism
                 spanContext._trace.tags['_dd.p.dm'] = `-${mechanism}`
@@ -656,7 +656,7 @@ class TextMapPropagator {
   }
 
   _extractSamplingPriority (carrier, spanContext) {
-    const priority = parseInt(carrier[samplingKey], 10)
+    const priority = Number.parseInt(carrier[samplingKey], 10)
 
     if (Number.isInteger(priority)) {
       spanContext._sampling.priority = priority
@@ -703,7 +703,7 @@ class TextMapPropagator {
 
     if (buffer.length !== 16) return
 
-    const tid = traceId.substring(0, 16)
+    const tid = traceId.slice(0, 16)
 
     if (tid === zeroTraceId) return
 

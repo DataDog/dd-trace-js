@@ -10,11 +10,7 @@ class LangChainLLMObsChainHandler extends LangChainLLMObsHandler {
       input = this.formatIO(inputs)
     }
 
-    if (!results || spanHasError(span)) {
-      output = ''
-    } else {
-      output = this.formatIO(results)
-    }
+    output = !results || spanHasError(span) ? '' : this.formatIO(results)
 
     // chain spans will always be workflows
     this._tagger.tagTextIO(span, input, output)

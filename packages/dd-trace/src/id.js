@@ -1,8 +1,8 @@
 'use strict'
 
-const { randomFillSync } = require('crypto')
+const { randomFillSync } = require('node:crypto')
 
-const UINT_MAX = 4294967296
+const UINT_MAX = 4_294_967_296
 
 const data = new Uint8Array(8 * 8192)
 const zeroId = new Uint8Array(8)
@@ -66,7 +66,7 @@ function createBuffer (value) {
   value = value.padStart(size, '0')
 
   for (let i = 0; i < bytes; i++) {
-    buffer[i] = parseInt(value.substring(i * 2, i * 2 + 2), 16)
+    buffer[i] = Number.parseInt(value.substring(i * 2, i * 2 + 2), 16)
   }
 
   return buffer
@@ -86,7 +86,7 @@ function fromString (str, raddix) {
   const sign = pos
 
   while (pos < len) {
-    const chr = parseInt(str[pos++], raddix)
+    const chr = Number.parseInt(str[pos++], raddix)
 
     if (!(chr >= 0)) break // NaN
 
@@ -161,7 +161,7 @@ function pseudoRandom () {
 
 // Read a buffer to unsigned integer bytes.
 function readInt32 (buffer, offset) {
-  return (buffer[offset + 0] * 16777216) +
+  return (buffer[offset + 0] * 16_777_216) +
     (buffer[offset + 1] << 16) +
     (buffer[offset + 2] << 8) +
     buffer[offset + 3]

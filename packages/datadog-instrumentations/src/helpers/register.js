@@ -1,7 +1,7 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
-const path = require('path')
+const path = require('node:path')
 const satisfies = require('semifies')
 const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
@@ -190,7 +190,7 @@ function getVersion (moduleBaseDir) {
 }
 
 function filename (name, file) {
-  return [name, file].filter(val => val).join('/')
+  return [name, file].filter(Boolean).join('/')
 }
 
 // This function captures the instrumentation file name for a given package by parsing the hook require

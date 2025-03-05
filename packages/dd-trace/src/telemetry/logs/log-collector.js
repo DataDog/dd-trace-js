@@ -6,7 +6,7 @@ const { calculateDDBasePath } = require('../../util')
 const logs = new Map() // hash -> log
 
 // NOTE: Is this a reasonable number?
-let maxEntries = 10000
+let maxEntries = 10_000
 let overflowedCount = 0
 
 function hashCode (hashSource) {

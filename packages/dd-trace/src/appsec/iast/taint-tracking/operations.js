@@ -43,44 +43,28 @@ function removeTransaction (iastContext) {
 function newTaintedString (iastContext, string, name, type) {
   let result
   const transactionId = iastContext?.[IAST_TRANSACTION_ID]
-  if (transactionId) {
-    result = TaintedUtils.newTaintedString(transactionId, string, name, type)
-  } else {
-    result = string
-  }
+  result = transactionId ? TaintedUtils.newTaintedString(transactionId, string, name, type) : string
   return result
 }
 
 function newTaintedObject (iastContext, obj, name, type) {
   let result
   const transactionId = iastContext?.[IAST_TRANSACTION_ID]
-  if (transactionId) {
-    result = TaintedUtils.newTaintedObject(transactionId, obj, name, type)
-  } else {
-    result = obj
-  }
+  result = transactionId ? TaintedUtils.newTaintedObject(transactionId, obj, name, type) : obj
   return result
 }
 
 function isTainted (iastContext, string) {
   let result
   const transactionId = iastContext?.[IAST_TRANSACTION_ID]
-  if (transactionId) {
-    result = TaintedUtils.isTainted(transactionId, string)
-  } else {
-    result = false
-  }
+  result = transactionId ? TaintedUtils.isTainted(transactionId, string) : false
   return result
 }
 
 function getRanges (iastContext, string) {
   let result
   const transactionId = iastContext?.[IAST_TRANSACTION_ID]
-  if (transactionId) {
-    result = TaintedUtils.getRanges(transactionId, string)
-  } else {
-    result = []
-  }
+  result = transactionId ? TaintedUtils.getRanges(transactionId, string) : []
   return result
 }
 

@@ -54,7 +54,7 @@ class Stepfunctions extends BaseAwsSdkPlugin {
           const newInput = JSON.stringify(inputObj)
           request.params.input = newInput
         }
-      } catch (e) {
+      } catch {
         log.info('Unable to treat input as JSON')
       }
     }

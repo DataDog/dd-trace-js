@@ -175,7 +175,7 @@ function getOnEndHandler (isParallel) {
           originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
         }
         testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
-      } catch (e) {
+      } catch {
         // ignore errors
       }
       // restore the original coverage

@@ -1,6 +1,6 @@
 'use strict'
 
-const { EventEmitter } = require('events')
+const { EventEmitter } = require('node:events')
 const { Config } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')

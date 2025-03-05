@@ -49,16 +49,14 @@ function getOperation (document, operationName) {
     return
   }
 
-  const definitions = document.definitions.filter(def => def)
-  const types = ['query', 'mutation', 'subscription']
+  const definitions = document.definitions.filter(Boolean)
+  const types = new Set(['query', 'mutation', 'subscription'])
 
-  if (operationName) {
-    return definitions
-      .filter(def => types.indexOf(def.operation) !== -1)
+  return operationName
+    ? definitions
+      .filter(def => types.has(def.operation))
       .find(def => operationName === (def.name && def.name.value))
-  } else {
-    return definitions.find(def => types.indexOf(def.operation) !== -1)
-  }
+    : definitions.find(def => types.has(def.operation))
 }
 
 function normalizeArgs (args, defaultFieldResolver) {
