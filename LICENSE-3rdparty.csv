@@ -38,7 +38,6 @@ dev,@eslint/eslintrc,MIT,Copyright OpenJS Foundation and other contributors, <ww
 dev,@eslint/js,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,@msgpack/msgpack,ISC,Copyright 2019 The MessagePack Community
 dev,@stylistic/eslint-plugin-js,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
-dev,application-config-path,MIT,Copyright (c) 2015, 2023 Linus Unnebäck
 dev,autocannon,MIT,Copyright 2016 Matteo Collina
 dev,aws-sdk,Apache 2.0,Copyright 2012-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
