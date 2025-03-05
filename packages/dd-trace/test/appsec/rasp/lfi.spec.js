@@ -15,12 +15,7 @@ describe('RASP - lfi.js', () => {
     }
 
     waf = {
-      run: sinon.stub().returns({
-        metrics: {
-          totalRuntime: 30,
-          timeout: false
-        }
-      })
+      run: sinon.stub()
     }
 
     web = {
@@ -114,7 +109,7 @@ describe('RASP - lfi.js', () => {
       fsOperationStart.publish(ctx)
 
       const ephemeral = { [FS_OPERATION_PATH]: path }
-      sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req)
+      sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req, { type: 'lfi' })
     })
 
     it('should NOT analyze lfi for child fs operations', () => {

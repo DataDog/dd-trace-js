@@ -149,9 +149,9 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     persistent[addresses.HTTP_CLIENT_IP] = clientIp
   }
 
-  const results = waf.run({ persistent }, req)
+  const actions = waf.run({ persistent }, req)
 
-  handleResults(results, req, res, rootSpan, abortController)
+  handleResults(actions, req, res, rootSpan, abortController)
 }
 
 function incomingHttpEndTranslator ({ req, res }) {
@@ -179,9 +179,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   }
 
   if (Object.keys(persistent).length) {
-    const wafResults = waf.run({ persistent }, req)
-
-    Reporter.reportMetrics(wafResults?.metrics, null)
+    waf.run({ persistent }, req)
   }
 
   waf.disposeContext(req)
@@ -275,14 +273,12 @@ function onResponseBody ({ req, res, body }) {
   if (!body || typeof body !== 'object') return
   if (!apiSecuritySampler.sampleRequest(req, res)) return
 
-  // we don't support blocking at this point, so no results needed only reporting
-  const results = waf.run({
+  // we don't support blocking at this point, so no results needed
+  waf.run({
     persistent: {
       [addresses.HTTP_INCOMING_RESPONSE_BODY]: body
     }
   }, req)
-
-  Reporter.reportMetrics(results?.metrics, null)
 }
 
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
@@ -321,32 +317,13 @@ function onResponseSetHeader ({ res, abortController }) {
   }
 }
 
-function handleResults (wafResults, req, res, rootSpan, abortController) {
-  if (!wafResults) return
+function handleResults (actions, req, res, rootSpan, abortController) {
+  if (!actions || !req || !res || !rootSpan || !abortController) return
 
-  const { actions, metrics } = wafResults
-
-  const blockTriggered = getBlockingAction(actions)
-
-  const canBlock = actions && req && res && rootSpan && abortController
-
-  if (canBlock && blockTriggered) {
-    try {
-      block(req, res, abortController, blockTriggered)
-
-      rootSpan.addTags({
-        'appsec.blocked': 'true'
-      })
-    } catch (err) {
-      rootSpan.addTags({
-        '_dd.appsec.block.failed': 1
-      })
-
-      log.error('[ASM] Blocking error', err)
-    }
+  const blockingAction = getBlockingAction(actions)
+  if (blockingAction) {
+    block(req, res, rootSpan, abortController, blockingAction)
   }
-
-  Reporter.reportMetrics(metrics, null)
 }
 
 function disable () {

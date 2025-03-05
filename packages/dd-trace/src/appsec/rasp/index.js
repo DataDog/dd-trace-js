@@ -87,21 +87,7 @@ function blockOnDatadogRaspAbortError ({ error }) {
 
   const { req, res, blockingAction } = abortError
   if (!isBlocked(res)) {
-    const rootSpan = web.root(req)
-
-    try {
-      block(req, res, null, blockingAction)
-
-      rootSpan?.addTags({
-        'appsec.blocked': 'true'
-      })
-    } catch (err) {
-      rootSpan?.addTags({
-        '_dd.appsec.block.failed': 1
-      })
-
-      log.error('[ASM] Blocking error', err)
-    }
+    block(req, res, web.root(req), null, blockingAction)
   }
 
   return true

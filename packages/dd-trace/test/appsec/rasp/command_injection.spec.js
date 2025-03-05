@@ -106,7 +106,9 @@ describe('RASP - command_injection.js', () => {
         start.publish(ctx)
 
         const ephemeral = { [addresses.SHELL_COMMAND]: 'cmd' }
-        sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req)
+        sinon.assert.calledOnceWithExactly(
+          waf.run, { ephemeral }, req, { type: 'command_injection', variant: 'shell' }
+        )
       })
 
       it('should analyze command_injection with arguments', () => {
@@ -121,7 +123,9 @@ describe('RASP - command_injection.js', () => {
         start.publish(ctx)
 
         const ephemeral = { [addresses.SHELL_COMMAND]: ['cmd', 'arg0', 'arg1'] }
-        sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req)
+        sinon.assert.calledOnceWithExactly(
+          waf.run, { ephemeral }, req, { type: 'command_injection', variant: 'shell' }
+        )
       })
 
       it('should call handleResult', () => {
@@ -130,13 +134,12 @@ describe('RASP - command_injection.js', () => {
         const wafResult = { waf: 'waf' }
         const req = { req: 'req' }
         const res = { res: 'res' }
-        const rule = { type: 'command_injection', variant: 'shell' }
         waf.run.returns(wafResult)
         legacyStorage.getStore.returns({ req, res })
 
         start.publish(ctx)
 
-        sinon.assert.calledOnceWithExactly(utils.handleResult, wafResult, req, res, abortController, config, rule)
+        sinon.assert.calledOnceWithExactly(utils.handleResult, wafResult, req, res, abortController, config)
       })
     })
 
@@ -152,7 +155,9 @@ describe('RASP - command_injection.js', () => {
         start.publish(ctx)
 
         const ephemeral = { [addresses.EXEC_COMMAND]: ['ls'] }
-        sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req)
+        sinon.assert.calledOnceWithExactly(
+          waf.run, { ephemeral }, req, { type: 'command_injection', variant: 'exec' }
+        )
       })
 
       it('should analyze command injection with arguments', () => {
@@ -167,7 +172,9 @@ describe('RASP - command_injection.js', () => {
         start.publish(ctx)
 
         const ephemeral = { [addresses.EXEC_COMMAND]: ['ls', '-la', '/tmp'] }
-        sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req)
+        sinon.assert.calledOnceWithExactly(
+          waf.run, { ephemeral }, req, { type: 'command_injection', variant: 'exec' }
+        )
       })
 
       it('should call handleResult', () => {
@@ -176,13 +183,12 @@ describe('RASP - command_injection.js', () => {
         const wafResult = { waf: 'waf' }
         const req = { req: 'req' }
         const res = { res: 'res' }
-        const rule = { type: 'command_injection', variant: 'exec' }
         waf.run.returns(wafResult)
         legacyStorage.getStore.returns({ req, res })
 
         start.publish(ctx)
 
-        sinon.assert.calledOnceWithExactly(utils.handleResult, wafResult, req, res, abortController, config, rule)
+        sinon.assert.calledOnceWithExactly(utils.handleResult, wafResult, req, res, abortController, config)
       })
     })
   })

@@ -143,6 +143,8 @@ describe('reporter', () => {
     })
 
     it('should do nothing when passed incomplete objects', () => {
+      web.root.returns(null)
+
       Reporter.reportMetrics({})
 
       expect(span.setTag).not.to.have.been.called

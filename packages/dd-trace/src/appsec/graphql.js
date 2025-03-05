@@ -7,7 +7,6 @@ const {
   getBlockingData,
   getBlockingAction
 } = require('./blocking')
-const { reportMetrics } = require('./reporter')
 const log = require('../log')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -38,15 +37,13 @@ function onGraphqlStartResolve ({ context, resolverInfo }) {
 
   if (!resolverInfo || typeof resolverInfo !== 'object') return
 
-  const wafResults = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
-  const requestData = graphqlRequestData.get(req)
-
-  if (wafResults && requestData) {
-    requestData.wafResults = wafResults
-    const blockingAction = getBlockingAction(wafResults.actions)
-
-    if (blockingAction && requestData.isInGraphqlRequest) {
+  const actions = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
+  const blockingAction = getBlockingAction(actions)
+  if (blockingAction) {
+    const requestData = graphqlRequestData.get(req)
+    if (requestData?.isInGraphqlRequest) {
       requestData.blocked = true
+      requestData.wafAction = blockingAction
       context?.abortController?.abort()
     }
   }
@@ -99,15 +96,14 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
     if (!rootSpan) return
 
     try {
-      const blockingAction = getBlockingAction(requestData.wafResults.actions)
-      const blockingData = getBlockingData(req, specificBlockingTypes.GRAPHQL, blockingAction)
+      const blockingData = getBlockingData(req, specificBlockingTypes.GRAPHQL, requestData.wafAction)
       abortData.statusCode = blockingData.statusCode
       abortData.headers = blockingData.headers
       abortData.message = blockingData.body
 
-      abortController.abort()
-
       rootSpan.setTag('appsec.blocked', 'true')
+
+      abortController?.abort()
     } catch (err) {
       rootSpan.addTags({
         '_dd.appsec.block.failed': 1
@@ -116,8 +112,6 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
       log.error('[ASM] Blocking error', err)
     }
   }
-
-  reportMetrics(requestData.wafResults.metrics, null)
 
   graphqlRequestData.delete(req)
 }

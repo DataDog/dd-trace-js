@@ -1,5 +1,6 @@
 'use strict'
 
+const { BlockList } = require('net')
 const net = require('net')
 
 const ipHeaderList = [
@@ -27,23 +28,12 @@ const privateCIDRs = [
   'fd00::/8'
 ]
 
-let privateIPMatcher
+const privateIPMatcher = new BlockList()
 
-try {
-  const { BlockList } = require('net')
-  privateIPMatcher = new BlockList()
+for (const cidr of privateCIDRs) {
+  const [address, prefix] = cidr.split('/')
 
-  for (const cidr of privateCIDRs) {
-    const [address, prefix] = cidr.split('/')
-
-    privateIPMatcher.addSubnet(address, parseInt(prefix), net.isIPv6(address) ? 'ipv6' : 'ipv4')
-  }
-} catch (e) {
-  // Fallback for older Node.js versions without BlockList
-  privateIPMatcher = {
-    check: () => false,
-    addSubnet: () => {}
-  }
+  privateIPMatcher.addSubnet(address, parseInt(prefix), net.isIPv6(address) ? 'ipv6' : 'ipv4')
 }
 
 function extractIp (config, req) {

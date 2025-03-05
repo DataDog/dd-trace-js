@@ -22,7 +22,7 @@ class WAFContextWrapper {
     this.cachedUserIdActions = new Map()
   }
 
-  run ({ persistent, ephemeral }) {
+  run ({ persistent, ephemeral }, raspRule) {
     if (this.ddwafContext.disposed) {
       log.warn('[ASM] Calling run on a disposed context')
       return
@@ -34,9 +34,7 @@ class WAFContextWrapper {
     if (userId) {
       const cachedAction = this.cachedUserIdActions.get(userId)
       if (cachedAction) {
-        return {
-          actions: cachedAction
-        }
+        return cachedAction
       }
     }
 
@@ -101,10 +99,7 @@ class WAFContextWrapper {
       // Binding or other waf unexpected errors
       metrics.errorCode = -127
 
-      return {
-        actions: null,
-        metrics
-      }
+      return null
     } else {
       if (typeof result.errorCode === 'number' && result.errorCode < 0) {
         metrics.errorCode = result.errorCode
@@ -137,21 +132,20 @@ class WAFContextWrapper {
       wafRunFinished.publish({ payload })
     }
 
+    metrics.duration = result.totalRuntime / 1e3
+    metrics.blockTriggered = blockTriggered
+    metrics.ruleTriggered = ruleTriggered
+    metrics.wafTimeout = result.timeout
+
+    Reporter.reportMetrics(metrics, raspRule)
+
     if (ruleTriggered) {
       Reporter.reportAttack(JSON.stringify(result.events))
     }
 
     Reporter.reportDerivatives(result.derivatives)
 
-    metrics.duration = result.totalRuntime / 1e3
-    metrics.blockTriggered = blockTriggered
-    metrics.ruleTriggered = ruleTriggered
-    metrics.wafTimeout = result.timeout
-
-    return {
-      actions: result.actions,
-      metrics
-    }
+    return result.actions
   }
 
   runWaf (payload) {

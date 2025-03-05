@@ -6,7 +6,6 @@ const { setUserTags } = require('./set_user')
 const waf = require('../waf')
 const { keepTrace } = require('../../priority_sampler')
 const addresses = require('../addresses')
-const { reportMetrics } = require('../reporter')
 const { ASM } = require('../../standalone/product')
 
 function trackUserLoginSuccessEvent (tracer, user, metadata) {
@@ -95,11 +94,7 @@ function runWaf (eventName, user) {
     persistent[addresses.USER_LOGIN] = '' + user.login
   }
 
-  const wafResults = waf.run({ persistent })
-
-  if (!wafResults) return
-
-  reportMetrics(wafResults, null)
+  waf.run({ persistent })
 }
 
 module.exports = {

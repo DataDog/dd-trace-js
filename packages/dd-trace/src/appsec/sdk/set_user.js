@@ -4,7 +4,6 @@ const { getRootSpan } = require('./utils')
 const log = require('../../log')
 const waf = require('../waf')
 const addresses = require('../addresses')
-const { reportMetrics } = require('../reporter')
 
 function setUserTags (user, rootSpan) {
   for (const k of Object.keys(user)) {
@@ -35,10 +34,7 @@ function setUser (tracer, user) {
     persistent[addresses.USER_SESSION_ID] = user.session_id
   }
 
-  const wafResults = waf.run({ persistent })
-  if (!wafResults) return
-
-  reportMetrics(wafResults.metrics, null)
+  waf.run({ persistent })
 }
 
 module.exports = {

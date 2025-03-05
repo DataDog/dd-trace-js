@@ -3,7 +3,6 @@
 const web = require('../../plugins/util/web')
 const { getCallsiteFrames, reportStackTrace, canReportStackTrace } = require('../stack_trace')
 const { getBlockingAction } = require('../blocking')
-const { reportMetrics } = require('../reporter')
 const log = require('../../log')
 
 const abortOnUncaughtException = process.execArgv?.includes('--abort-on-uncaught-exception')
@@ -29,11 +28,7 @@ class DatadogRaspAbortError extends Error {
   }
 }
 
-function handleResult (wafResults, req, res, abortController, config, raspRule) {
-  if (!wafResults) return
-
-  const { actions, metrics } = wafResults
-
+function handleResult (actions, req, res, abortController, config) {
   const generateStackTraceAction = actions?.generate_stack
 
   const { enabled, maxDepth, maxStackTraces } = config.appsec.stackTrace
@@ -49,8 +44,6 @@ function handleResult (wafResults, req, res, abortController, config, raspRule) 
       frames
     )
   }
-
-  reportMetrics(metrics, raspRule)
 
   if (!abortController || abortOnUncaughtException) return
 

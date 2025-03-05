@@ -74,9 +74,9 @@ function analyzeSqlInjection (query, dbSystem, abortController) {
 
   const raspRule = { type: RULE_TYPES.SQL_INJECTION }
 
-  const result = waf.run({ ephemeral }, req)
+  const result = waf.run({ ephemeral }, req, raspRule)
 
-  handleResult(result, req, res, abortController, config, raspRule)
+  handleResult(result, req, res, abortController, config)
 }
 
 function hasInputAddress (payload) {

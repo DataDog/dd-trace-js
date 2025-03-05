@@ -35,21 +35,15 @@ describe('RASP - utils.js', () => {
       const req = {}
       const rootSpan = {}
       const stackId = 'test_stack_id'
-      const results = {
-        actions: {
-          generate_stack: {
-            stack_id: stackId
-          }
-        },
-        metrics: {
-          totalRuntime: 50,
-          timeout: true
+      const result = {
+        generate_stack: {
+          stack_id: stackId
         }
       }
 
       web.root.returns(rootSpan)
 
-      utils.handleResult(results, req, undefined, undefined, config, { type: 'type' })
+      utils.handleResult(result, req, undefined, undefined, config)
       sinon.assert.calledOnceWithExactly(stackTrace.reportStackTrace, rootSpan, stackId, sinon.match.array)
     })
 
@@ -62,71 +56,47 @@ describe('RASP - utils.js', () => {
           }
         }
       }
-      const results = {
-        actions: {
-          generate_stack: {
-            stack_id: 'stackId'
-          }
-        },
-        metrics: {
-          totalRuntime: 50,
-          timeout: true
+      const result = {
+        generate_stack: {
+          stack_id: 'stackId'
         }
       }
 
       web.root.returns(rootSpan)
 
-      utils.handleResult(results, req, undefined, undefined, config, { type: 'type' })
+      utils.handleResult(result, req, undefined, undefined, config)
       sinon.assert.notCalled(stackTrace.reportStackTrace)
     })
 
     it('should not report stack trace when rootSpan is null', () => {
       const req = {}
-      const results = {
-        actions: {
-          generate_stack: {
-            stack_id: 'stackId'
-          }
-        },
-        metrics: {
-          totalRuntime: 50,
-          timeout: true
+      const result = {
+        generate_stack: {
+          stack_id: 'stackId'
         }
       }
 
       web.root.returns(null)
 
-      utils.handleResult(results, req, undefined, undefined, config)
+      utils.handleResult(result, req, undefined, undefined, config)
       sinon.assert.notCalled(stackTrace.reportStackTrace)
     })
 
     it('should not report stack trace when no action is present in waf result', () => {
       const req = {}
-      const result = {
-        metrics: {
-          totalRuntime: 50,
-          timeout: true
-        }
-      }
+      const result = {}
 
-      utils.handleResult(result, req, undefined, undefined, config, { type: 'type' })
+      utils.handleResult(result, req, undefined, undefined, config)
       sinon.assert.notCalled(stackTrace.reportStackTrace)
     })
 
     it('should not report stack trace when stack trace reporting is disabled', () => {
       const req = {}
-      const results = {
-        actions: {
-          generate_stack: {
-            stack_id: 'stackId'
-          }
-        },
-        metrics: {
-          totalRuntime: 50,
-          timeout: true
+      const result = {
+        generate_stack: {
+          stack_id: 'stackId'
         }
       }
-
       const config = {
         appsec: {
           stackTrace: {
@@ -137,7 +107,7 @@ describe('RASP - utils.js', () => {
         }
       }
 
-      utils.handleResult(results, req, undefined, undefined, config, { type: 'type' })
+      utils.handleResult(result, req, undefined, undefined, config)
       sinon.assert.notCalled(stackTrace.reportStackTrace)
     })
   })
