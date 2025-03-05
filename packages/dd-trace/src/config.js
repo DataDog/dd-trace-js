@@ -1107,7 +1107,7 @@ class Config {
     this._setString(opts, 'version', options.version || tags.version)
     this._setBoolean(opts, 'inferredProxyServicesEnabled', options.inferredProxyServicesEnabled)
     this._setBoolean(opts, 'graphqlErrorExtensions', options.graphqlErrorExtensions)
-    this._setBoolean(opts, 'trace.nativeSpanEvents', options.trace.nativeSpanEvents)
+    this._setBoolean(opts, 'trace.nativeSpanEvents', options.trace?.nativeSpanEvents)
 
     // For LLMObs, we want the environment variable to take precedence over the options.
     // This is reliant on environment config being set before options.

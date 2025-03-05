@@ -13,6 +13,7 @@ function formatSpan (span) {
     span.meta.events = JSON.stringify(span.span_events)
     delete span.span_events
   }
+  return span
 }
 
 class AgentEncoder extends BaseEncoder {
