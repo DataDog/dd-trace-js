@@ -153,10 +153,7 @@ describe('reporter', () => {
     it('should do nothing when rootSpan is not available', () => {
       web.root.returns(null)
 
-      const metrics = {
-        durationExt: 42,
-        totalRuntime: 1337000
-      }
+      const metrics = { durationExt: 42, totalRuntime: 1337000 }
 
       Reporter.reportMetrics(metrics)
 
@@ -174,8 +171,18 @@ describe('reporter', () => {
       expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
     })
 
+    it('should call updateWafRequestsMetricTags', () => {
+      const metrics = { rulesVersion: '1.2.3' }
+      const store = storage('legacy').getStore()
+
+      Reporter.reportMetrics(metrics)
+
+      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req)
+      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
+    })
+
     it('should set ext duration metrics if set', () => {
-      const metrics = { durationExt: 42, totalRuntime: 0 }
+      const metrics = { durationExt: 42 }
 
       Reporter.reportMetrics(metrics)
 
@@ -185,24 +192,17 @@ describe('reporter', () => {
     })
 
     it('should set rulesVersion if set', () => {
-      const metrics = {
-        rulesVersion: '1.2.3',
-        durationExt: 0,
-        totalRuntime: 0
-      }
+      const metrics = { rulesVersion: '1.2.3' }
 
       Reporter.reportMetrics(metrics)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
       expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.event_rules.version', '1.2.3')
+      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
     })
 
     it('should set blockTriggered when provided', () => {
-      const metrics = {
-        durationExt: 0,
-        totalRuntime: 0,
-        blockTriggered: true
-      }
+      const metrics = { blockTriggered: true }
 
       Reporter.reportMetrics(metrics, null)
 
@@ -210,11 +210,7 @@ describe('reporter', () => {
     })
 
     it('should set wafTimeout when result has timeout', () => {
-      const metrics = {
-        durationExt: 0,
-        totalRuntime: 0,
-        timeout: true
-      }
+      const metrics = { timeout: true }
 
       Reporter.reportMetrics(metrics)
 
@@ -222,11 +218,7 @@ describe('reporter', () => {
     })
 
     it('should set max truncation string length metric if set', () => {
-      const metrics = {
-        maxTruncatedString: 300,
-        durationExt: 0,
-        totalRuntime: 0
-      }
+      const metrics = { maxTruncatedString: 300 }
 
       Reporter.reportMetrics(metrics)
 
@@ -234,11 +226,7 @@ describe('reporter', () => {
     })
 
     it('should set max truncation container size metric if set', () => {
-      const metrics = {
-        maxTruncatedContainerSize: 200,
-        durationExt: 0,
-        totalRuntime: 0
-      }
+      const metrics = { maxTruncatedContainerSize: 200 }
 
       Reporter.reportMetrics(metrics)
 
@@ -246,11 +234,7 @@ describe('reporter', () => {
     })
 
     it('should set max truncation container depth metric if set', () => {
-      const metrics = {
-        maxTruncatedContainerDepth: 100,
-        durationExt: 0,
-        totalRuntime: 0
-      }
+      const metrics = { maxTruncatedContainerDepth: 100 }
 
       Reporter.reportMetrics(metrics)
 
@@ -258,12 +242,7 @@ describe('reporter', () => {
     })
 
     it('should call updateRaspRequestsMetricTags when raspRule is provided', () => {
-      const metrics = {
-        rulesVersion: '1.2.3',
-        durationExt: 0,
-        totalRuntime: 0
-      }
-
+      const metrics = { rulesVersion: '1.2.3' }
       const store = storage('legacy').getStore()
       const raspRule = { type: 'rule_type', variant: 'rule_variant' }
 

@@ -7,7 +7,6 @@ const ssrf = require('./ssrf')
 const sqli = require('./sql_injection')
 const lfi = require('./lfi')
 const cmdi = require('./command_injection')
-const log = require('../../log')
 
 const { DatadogRaspAbortError } = require('./utils')
 

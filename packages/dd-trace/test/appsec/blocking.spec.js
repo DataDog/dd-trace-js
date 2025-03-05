@@ -200,7 +200,7 @@ describe('blocking', () => {
 
         const blocked = block(req, res, rootSpan, null, actionParameters)
 
-        expect(blocked).to.be.true  
+        expect(blocked).to.be.true
         expect(res.writeHead).to.have.been.calledOnceWith(401)
         expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
       })
@@ -216,7 +216,7 @@ describe('blocking', () => {
 
         const blocked = block(req, res, rootSpan, null, actionParameters)
 
-        expect(blocked).to.be.true  
+        expect(blocked).to.be.true
         expect(res.writeHead).to.have.been.calledOnceWith(401)
         expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
       })
@@ -245,7 +245,7 @@ describe('blocking', () => {
 
         const blocked = block(req, res, rootSpan, null, actionParameters)
 
-        expect(blocked).to.be.true  
+        expect(blocked).to.be.true
         expect(res.writeHead).to.have.been.calledOnceWith(401)
         expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
       })
@@ -260,7 +260,7 @@ describe('blocking', () => {
 
         const blocked = block(req, res, rootSpan, null, actionParameters)
 
-        expect(blocked).to.be.true  
+        expect(blocked).to.be.true
         expect(res.writeHead).to.have.been.calledOnceWith(401)
         expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
       })
