@@ -104,7 +104,7 @@ function extractSpanEvents (formattedSpan, span) {
     }
   }
   if (events.length > 0) {
-      formattedSpan.span_events = events
+    formattedSpan.span_events = events
   }
 }
 
