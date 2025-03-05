@@ -33,7 +33,7 @@ onboarding_tests_k8s_injection:
 configure_system_tests:
   variables:
     SYSTEM_SCENARIO_GROUPS: "simple_onboarding,docker-ssi,lib-injection"
-    #test1
+    #test2
 
 requirements_json_test:
   rules:
