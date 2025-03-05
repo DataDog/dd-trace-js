@@ -5,6 +5,7 @@ const baggageStorage = storage('baggage')
 
 function setBaggageItem (key, value) {
   storage('baggage').enterWith({ ...baggageStorage.getStore(), [key]: value })
+  return storage('baggage').getStore()
 }
 
 function getBaggageItem (key) {
@@ -15,12 +16,19 @@ function getAllBaggageItems () {
   return storage('baggage').getStore()
 }
 
-function removeBaggageItem (key) {
-  delete storage('baggage').getStore()?.[key]
+function removeBaggageItem (keyToRemove) {
+  const newBaggage = {}
+  const oldBaggage = storage('baggage').getStore()
+  for (const [key, value] of Object.entries(oldBaggage)) {
+    if (key !== keyToRemove) newBaggage.key = value
+  }
+  storage('baggage').enterWith(newBaggage)
+  return newBaggage
 }
 
 function removeAllBaggageItems () {
   storage('baggage').enterWith({})
+  return storage('baggage').getStore()
 }
 
 module.exports = {
