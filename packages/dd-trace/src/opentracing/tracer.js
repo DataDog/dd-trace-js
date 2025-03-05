@@ -66,7 +66,7 @@ class DatadogTracer {
 
     options.tags = tags
 
-    if (this._config.traceLevel !== 'debug') {
+    if (this._config.experimental.traceLevel !== 'debug') {
       const traceLevelSpan = this._useTraceLevel(parent, options)
       if (traceLevelSpan) {
         return traceLevelSpan
