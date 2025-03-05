@@ -186,11 +186,20 @@ describe('encode', () => {
     })
 
     it('should encode span events within tags as a fallback to encoding as a top level field', () => {
+      const topLevelEvents = [
+        { name: 'Something went so wrong', time_unix_nano: 1000000 },
+        {
+          name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
+          time_unix_nano: 1633023102000000,
+          attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false }
+        }
+      ]
+
       const encodedLink = '[{"name":"Something went so wrong","time_unix_nano":1000000},' +
       '{"name":"I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx","time_unix_nano":1633023102000000,' +
       '"attributes":{"emotion":"happy","rating":9.8,"other":[1,9.5,1],"idol":false}}]'
 
-      data[0].meta.events = encodedLink
+      data[0].span_events = topLevelEvents
 
       encoder.encode(data)
 
