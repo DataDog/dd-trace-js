@@ -1,4 +1,3 @@
-/* eslint-disable unicorn/prefer-math-trunc */
 'use strict'
 
 const log = require('../../log')
