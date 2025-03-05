@@ -79,8 +79,8 @@ class GoogleCloudVertexAIPlugin extends TracingPlugin {
 
     const systemInstructions = extractSystemInstructions(instance)
 
-    for (const idx in systemInstructions) {
-      tags[`vertexai.request.system_instruction.${idx}.text`] = systemInstructions[idx]
+    for (const [idx, systemInstruction] of systemInstructions.entries()) {
+      tags[`vertexai.request.system_instruction.${idx}.text`] = systemInstruction
     }
 
     if (typeof contents === 'string') {
@@ -88,8 +88,7 @@ class GoogleCloudVertexAIPlugin extends TracingPlugin {
       return tags
     }
 
-    for (const contentIdx in contents) {
-      const content = contents[contentIdx]
+    for (const [contentIdx, content] of contents.entries()) {
       this.tagRequestContent(tags, content, contentIdx)
     }
 
@@ -131,9 +130,7 @@ class GoogleCloudVertexAIPlugin extends TracingPlugin {
       tags[`vertexai.request.contents.${contentIdx}.role`] = role
     }
 
-    for (const partIdx in parts) {
-      const part = parts[partIdx]
-
+    for (const [partIdx, part] of parts.entries()) {
       this.tagRequestPart(part, tags, partIdx, contentIdx)
     }
   }
@@ -142,8 +139,7 @@ class GoogleCloudVertexAIPlugin extends TracingPlugin {
     const tags = {}
 
     const candidates = response.candidates
-    for (const candidateIdx in candidates) {
-      const candidate = candidates[candidateIdx]
+    for (const [candidateIdx, candidate] of candidates.entries()) {
       const finishReason = candidate.finishReason
       if (finishReason) {
         tags[`vertexai.response.candidates.${candidateIdx}.finish_reason`] = finishReason
@@ -155,9 +151,7 @@ class GoogleCloudVertexAIPlugin extends TracingPlugin {
       if (!this.utilities.isPromptCompletionSampled()) continue
 
       const parts = candidateContent.parts
-      for (const partIdx in parts) {
-        const part = parts[partIdx]
-
+      for (const [partIdx, part] of parts.entries()) {
         const text = part.text
         tags[`vertexai.response.candidates.${candidateIdx}.content.parts.${partIdx}.text`] = String(text)
 
