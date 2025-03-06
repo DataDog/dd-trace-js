@@ -2,7 +2,7 @@
 
 const LLMObsPlugin = require('./base')
 
-function isIterable(obj) {
+function isIterable (obj) {
   if (obj == null) {
     return false
   }
