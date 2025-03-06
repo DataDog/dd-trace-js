@@ -17,9 +17,9 @@ class Writer extends BaseWriter {
     this._prioritySampler = prioritySampler
     this._lookup = lookup
     this._protocolVersion = protocolVersion
-    this._encoder = new AgentEncoder(this)
     this._headers = headers
     this._config = config
+    this._encoder = new AgentEncoder(this)
   }
 
   _sendPayload (data, count, done) {
