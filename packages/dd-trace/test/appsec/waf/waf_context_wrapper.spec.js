@@ -12,14 +12,12 @@ describe('WAFContextWrapper', () => {
     addresses.HTTP_INCOMING_GRAPHQL_RESOLVER
   ])
 
-  let reportMetricsStub
-
-  before(() => {
-    reportMetricsStub = sinon.stub(Reporter, 'reportMetrics')
+  beforeEach(() => {
+    sinon.stub(Reporter, 'reportMetrics')
   })
 
   afterEach(() => {
-    reportMetricsStub.resetHistory()
+    sinon.restore()
   })
 
   it('Should send HTTP_INCOMING_QUERY only once', () => {
@@ -41,7 +39,7 @@ describe('WAFContextWrapper', () => {
     wafContextWrapper.run(payload)
 
     expect(ddwafContext.run).to.have.been.calledOnceWithExactly(payload, 1000)
-    expect(reportMetricsStub).to.have.been.calledOnce
+    expect(Reporter.reportMetrics).to.have.been.calledOnce
   })
 
   it('Should send HTTP_INCOMING_QUERY twice if waf run returns null', () => {
@@ -62,11 +60,11 @@ describe('WAFContextWrapper', () => {
     expect(ddwafContext.run).to.have.been.calledTwice
     expect(ddwafContext.run).to.have.been.calledWithExactly(payload, 1000)
 
-    const firstCall = reportMetricsStub.getCall(0).args[0]
+    const firstCall = Reporter.reportMetrics.getCall(0).args[0]
     expect(firstCall).to.have.property('errorCode')
     expect(firstCall.errorCode).to.equal(-127)
 
-    const secondCall = reportMetricsStub.getCall(1).args[0]
+    const secondCall = Reporter.reportMetrics.getCall(1).args[0]
     expect(secondCall).to.have.property('errorCode')
     expect(secondCall.errorCode).to.equal(-127)
   })
@@ -101,7 +99,7 @@ describe('WAFContextWrapper', () => {
         }
       }
     }, 1000)
-    expect(reportMetricsStub).to.have.been.calledTwice
+    expect(Reporter.reportMetrics).to.have.been.calledTwice
   })
 
   it('Should ignore run without known addresses', () => {
@@ -121,7 +119,7 @@ describe('WAFContextWrapper', () => {
 
     wafContextWrapper.run(payload)
 
-    expect(ddwafContext.run).to.have.not.been.called
+    expect(ddwafContext.run).to.not.have.been.called
   })
 
   it('should publish the payload in the dc channel', () => {
@@ -183,7 +181,7 @@ describe('WAFContextWrapper', () => {
       wafContextWrapper.run(payload)
 
       sinon.assert.calledOnce(ddwafContext.run)
-      expect(reportMetricsStub).to.have.been.calledOnce
+      expect(Reporter.reportMetrics).to.have.been.calledOnce
     })
 
     it('Should not call run and log a warn if context is disposed', () => {
@@ -199,7 +197,7 @@ describe('WAFContextWrapper', () => {
 
       sinon.assert.notCalled(ddwafContext.run)
       sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Calling run on a disposed context')
-      expect(reportMetricsStub).to.not.have.been.called
+      expect(Reporter.reportMetrics).to.not.have.been.called
     })
   })
 })
