@@ -11,9 +11,13 @@ const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 function formatSpan (span, encoder) {
   span = normalizeSpan(truncateSpan(span, false))
   // ensure span events are encoded as tags if agent doesn't support top level encoding
-  if (span.span_events && !encoder.topLevelSpanEventSupport) {
-    span.meta.events = JSON.stringify(span.span_events)
-    delete span.span_events
+  if (span.span_events) {
+    if (!encoder.topLevelSpanEventSupport) {
+      span.meta.events = JSON.stringify(span.span_events)
+      delete span.span_events
+    } else {
+      formatSpanEvents(span)
+    }
   }
   return span
 }
@@ -333,6 +337,74 @@ class AgentEncoder {
     offset += this._traceBytes.buffer.copy(buffer, offset, 0, this._traceBytes.length)
 
     return offset
+  }
+}
+
+function formatSpanEvents (span) {
+  for (const spanEvent of span.span_events) {
+    if (spanEvent.attributes) {
+      for (const [key, value] of Object.entries(spanEvent.attributes)) {
+        const newValue = convertSpanEventAttributeValues(key, value)
+        if (newValue !== undefined) spanEvent.attributes[key] = newValue
+        else delete spanEvent.attributes[key] // delete from attributes if undefined
+      }
+      if (Object.entries(spanEvent.attributes).length === 0) {
+        delete spanEvent.attributes
+      }
+    }
+  }
+}
+
+function convertSpanEventAttributeValues (key, value, depth = 0) {
+  if (typeof value === 'string') {
+    return {
+      type: 0,
+      string_value: value
+    }
+  } else if (typeof value === 'boolean') {
+    return {
+      type: 1,
+      bool_value: value
+    }
+  } else if (Number.isInteger(value)) {
+    return {
+      type: 2,
+      int_value: value
+    }
+  } else if (typeof value === 'number') {
+    return {
+      type: 3,
+      double_value: value
+    }
+  } else if (Array.isArray(value)) {
+    if (depth === 0) {
+      const convertedArray = value
+        .map((val) => convertSpanEventAttributeValues(key, val, 1))
+        .filter((convertedVal) => convertedVal !== undefined)
+
+      // Only include array_value if there are valid elements
+      if (convertedArray.length > 0) {
+        return {
+          type: 4,
+          array_value: convertedArray
+        }
+      } else {
+      // If all elements were unsupported, return undefined
+        return undefined
+      }
+    } else {
+      log.warn(
+        `Encountered nested array data type for span event v0.4 encoding. 
+        Skipping encoding key: ${key}: with value: ${typeof value}.`
+      )
+      return undefined
+    }
+  } else {
+    log.warn(
+      `Encountered unsupported data type for span event v0.4 encoding, key: ${key}: with value: ${typeof value}. 
+      Skipping encoding of pair.`
+    )
+    return undefined
   }
 }
 

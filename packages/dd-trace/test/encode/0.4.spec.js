@@ -488,7 +488,7 @@ describe('encode', () => {
         {
           name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
           time_unix_nano: 1633023102000000,
-          attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false }
+          attributes: { emotion: 'happy', happiness: 10, rating: 9.8, other: ['hi', false, 1, 1.2], idol: false }
         }
       ]
 
@@ -500,7 +500,70 @@ describe('encode', () => {
 
       const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
-      expect(trace[0].span_events).to.deep.equal(topLevelEvents)
+
+      const formattedTopLevelEvent = [
+        { name: 'Something went so wrong', time_unix_nano: 1000000 },
+        {
+          name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
+          time_unix_nano: 1633023102000000,
+          attributes: {
+            emotion: { type: 0, string_value: 'happy' },
+            idol: { type: 1, bool_value: false },
+            happiness: { type: 2, int_value: 10 },
+            rating: { type: 3, double_value: 9.8 },
+            other: {
+              type: 4,
+              array_value: [
+                { type: 0, string_value: 'hi' },
+                { type: 1, bool_value: false },
+                { type: 2, int_value: 1 },
+                { type: 3, double_value: 1.2 }
+              ]
+            }
+          }
+        }
+      ]
+
+      expect(trace[0].span_events).to.deep.equal(formattedTopLevelEvent)
+    })
+
+    it('should encode span events as a top-level field when agent supports it ' +
+      'but skips encoding unsupported field types', () => {
+      const topLevelEvents = [
+        {
+          name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
+          time_unix_nano: 1633023102000000,
+          attributes: { emotion: { unsupportedNestedObject: 'happiness' }, array: [['nested_array']] }
+        },
+        {
+          name: 'I can sing!!!',
+          time_unix_nano: 1633023102000000,
+          attributes: { emotion: { unsupportedNestedObject: 'happiness' }, array: [['nested_array'], 'valid_value'] }
+        }
+      ]
+
+      data[0].span_events = topLevelEvents
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+      const trace = decoded[0]
+
+      const formattedTopLevelEvent = [
+        {
+          name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
+          time_unix_nano: 1633023102000000
+        },
+        {
+          name: 'I can sing!!!',
+          time_unix_nano: 1633023102000000,
+          attributes: { array: { type: 4, array_value: [{ type: 0, string_value: 'valid_value' }] } }
+        }
+      ]
+
+      expect(trace[0].span_events).to.deep.equal(formattedTopLevelEvent)
     })
   })
 })
