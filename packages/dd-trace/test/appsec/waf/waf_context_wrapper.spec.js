@@ -6,15 +6,23 @@ const addresses = require('../../../src/appsec/addresses')
 const { wafRunFinished } = require('../../../src/appsec/channels')
 
 describe('WAFContextWrapper', () => {
+  let ddwafContext
+
+  beforeEach(() => {
+    ddwafContext = {
+      run: sinon.stub().returns({
+        events: {},
+        derivatives: {},
+      })
+    }
+  })
+
   const knownAddresses = new Set([
     addresses.HTTP_INCOMING_QUERY,
     addresses.HTTP_INCOMING_GRAPHQL_RESOLVER
   ])
 
   it('Should send HTTP_INCOMING_QUERY only once', () => {
-    const ddwafContext = {
-      run: sinon.stub()
-    }
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
@@ -30,9 +38,6 @@ describe('WAFContextWrapper', () => {
   })
 
   it('Should send ephemeral addresses every time', () => {
-    const ddwafContext = {
-      run: sinon.stub()
-    }
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
@@ -59,9 +64,6 @@ describe('WAFContextWrapper', () => {
   })
 
   it('Should ignore run without known addresses', () => {
-    const ddwafContext = {
-      run: sinon.stub()
-    }
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
@@ -79,9 +81,6 @@ describe('WAFContextWrapper', () => {
   })
 
   it('should publish the payload in the dc channel', () => {
-    const ddwafContext = {
-      run: sinon.stub().returns([])
-    }
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
     const payload = {
       persistent: {
@@ -111,7 +110,10 @@ describe('WAFContextWrapper', () => {
       }
 
       ddwafContext = {
-        run: sinon.stub()
+        run: sinon.stub().returns({
+          events: {},
+          derivatives: {},
+        })
       }
 
       const ProxiedWafContextWrapper = proxyquire('../../../src/appsec/waf/waf_context_wrapper', {
