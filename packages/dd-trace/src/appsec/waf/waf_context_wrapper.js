@@ -87,8 +87,8 @@ class WAFContextWrapper {
       ruleTriggered: false,
       errorCode: null,
       maxTruncatedString: null,
-      maxTruncatedString: null,
-      maxTruncatedString: null
+      maxTruncatedContainerSize: null,
+      maxTruncatedContainerDepth: null
     }
 
     const start = process.hrtime.bigint()
