@@ -12,7 +12,7 @@ describe('WAFContextWrapper', () => {
     ddwafContext = {
       run: sinon.stub().returns({
         events: {},
-        derivatives: {},
+        derivatives: {}
       })
     }
   })
@@ -112,7 +112,7 @@ describe('WAFContextWrapper', () => {
       ddwafContext = {
         run: sinon.stub().returns({
           events: {},
-          derivatives: {},
+          derivatives: {}
         })
       }
 

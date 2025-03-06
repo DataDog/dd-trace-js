@@ -15,10 +15,14 @@ function addRaspRequestMetrics (store, { duration, durationExt, wafTimeout, erro
   }
 
   if (errorCode) {
-    store[DD_TELEMETRY_REQUEST_METRICS].raspErrorCode = Math.max(
-      errorCode,
-      store[DD_TELEMETRY_REQUEST_METRICS].raspErrorCode ?? errorCode
-    )
+    if (store[DD_TELEMETRY_REQUEST_METRICS].raspErrorCode) {
+      store[DD_TELEMETRY_REQUEST_METRICS].raspErrorCode = Math.max(
+        errorCode,
+        store[DD_TELEMETRY_REQUEST_METRICS].raspErrorCode
+      )
+    } else {
+      store[DD_TELEMETRY_REQUEST_METRICS].raspErrorCode = errorCode
+    }
   }
 }
 
