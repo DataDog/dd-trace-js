@@ -76,14 +76,15 @@ class NativeWallProfiler {
     this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
     this._timelineEnabled = !!options.timelineEnabled
     this._cpuProfilingEnabled = !!options.cpuProfilingEnabled
+    this._asyncIdEnabled = !!options.asyncIdEnabled
     // We need to capture span data into the sample context for either code hotspots
     // or endpoint collection.
     this._captureSpanData = this._codeHotspotsEnabled || this._endpointCollectionEnabled
     // We need to run the pprof wall profiler with sample contexts if we're either
     // capturing span data or timeline is enabled (so we need sample timestamps, and for now
     // timestamps require the sample contexts feature in the pprof wall profiler), or
-    // cpu profiling is enabled.
-    this._withContexts = this._captureSpanData || this._timelineEnabled || this._cpuProfilingEnabled
+    // cpu profiling is enabled, or async ID tracking is enabled.
+    this._withContexts = this._captureSpanData || this._timelineEnabled || this._cpuProfilingEnabled || this._asyncIdEnabled
     this._v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
     this._mapper = undefined
     this._pprof = undefined
@@ -133,7 +134,8 @@ class NativeWallProfiler {
       withContexts: this._withContexts,
       lineNumbers: false,
       workaroundV8Bug: this._v8ProfilerBugWorkaroundEnabled,
-      collectCpuTime: this._cpuProfilingEnabled
+      collectCpuTime: this._cpuProfilingEnabled,
+      collectAsyncId: this._asyncIdEnabled
     })
 
     if (this._withContexts) {
