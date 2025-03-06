@@ -28,6 +28,8 @@ const extendedHeartbeatPayload = {}
 
 const sentIntegrations = new Set()
 
+let seq_id = 0
+
 function getRetryData () {
   return retryData
 }
@@ -334,14 +336,17 @@ function updateConfig (changes, config) {
   const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
 
   const configuration = []
-  const names = [] // list of config names whose values have been changed
+  // const names = [] // list of config names whose values have been changed
+  const updatedTuples = new Set()
 
   for (const change of changes) {
     const name = nameMapping[change.name] || change.name
 
-    names.push(name)
+    //names.push(name)
+    updatedTuples.add(`${name}|${change.origin}`)
     const { origin, value } = change
-    const entry = { name, value, origin }
+    const entry = { name, value, origin, seq_id }
+    seq_id++
 
     if (namesNeedFormatting.has(entry.name)) {
       entry.value = formatMapForTelemetry(entry.value)
@@ -357,8 +362,9 @@ function updateConfig (changes, config) {
     configuration.push(entry)
   }
 
-  function isNotModified (entry) {
-    return !names.includes(entry.name)
+  function isNotModified (oldEntry) {
+    // return !names.includes(entry.name)
+    return !updatedTuples.has(`${oldEntry.name}|${oldEntry.origin}`)
   }
 
   if (!configWithOrigin.length) {
