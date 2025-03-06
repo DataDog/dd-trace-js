@@ -1,4 +1,4 @@
-import { expect } from 'chai'
+const { expect } = require('chai')
 
 describe('disable tests', () => {
   it('can disable a test', () => {

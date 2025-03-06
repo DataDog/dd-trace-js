@@ -289,10 +289,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
 
-        let isDisabled = false
-
         if (this.isTestManagementTestsEnabled) {
-          isDisabled = this.testManagementTestsForThisSuite?.disabled?.includes(testName)
+          const isDisabled = this.testManagementTestsForThisSuite?.disabled?.includes(testName)
           if (isDisabled) {
             event.test.mode = 'skip'
           }
@@ -300,18 +298,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const isJestRetry = event.test?.invocations > 1
         asyncResource.runInAsyncScope(() => {
           testStartCh.publish({
-            test: {
-              name: removeEfdStringFromTestName(testName),
-              suite: this.testSuite,
-              testSourceFile: this.testSourceFile,
-              displayName: this.displayName,
-              testParameters,
-              frameworkVersion: jestVersion,
-              isNew: isNewTest,
-              isEfdRetry: numEfdRetry > 0,
-              isJestRetry
-            },
-            isDisabled
+            name: removeEfdStringFromTestName(testName),
+            suite: this.testSuite,
+            testSourceFile: this.testSourceFile,
+            displayName: this.displayName,
+            testParameters,
+            frameworkVersion: jestVersion,
+            isNew: isNewTest,
+            isEfdRetry: numEfdRetry > 0,
+            isJestRetry
           })
           originalTestFns.set(event.test, event.test.fn)
           event.test.fn = asyncResource.bind(event.test.fn)
@@ -416,12 +411,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const asyncResource = new AsyncResource('bound-anonymous-fn')
         asyncResource.runInAsyncScope(() => {
           testSkippedCh.publish({
-            name: getJestTestName(event.test),
-            suite: this.testSuite,
-            testSourceFile: this.testSourceFile,
-            displayName: this.displayName,
-            frameworkVersion: jestVersion,
-            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
+            test: {
+              name: getJestTestName(event.test),
+              suite: this.testSuite,
+              testSourceFile: this.testSourceFile,
+              displayName: this.displayName,
+              frameworkVersion: jestVersion,
+              testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
+            },
+            isDisabled: this.testManagementTestsForThisSuite?.disabled?.includes(getJestTestName(event.test))
           })
         })
       }

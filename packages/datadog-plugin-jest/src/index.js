@@ -325,16 +325,9 @@ class JestPlugin extends CiPlugin {
       this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, files.length)
     })
 
-    this.addSub('ci:jest:test:start', ({
-      test,
-      isDisabled
-    }) => {
+    this.addSub('ci:jest:test:start', (test) => {
       const store = storage('legacy').getStore()
       const span = this.startTestSpan(test)
-
-      if (isDisabled) {
-        span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
-      }
 
       this.enter(span, store)
       this.activeTestSpan = span
@@ -385,9 +378,17 @@ class JestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:jest:test:skip', (test) => {
+    this.addSub('ci:jest:test:skip', ({
+      test,
+      isDisabled
+    }) => {
       const span = this.startTestSpan(test)
       span.setTag(TEST_STATUS, 'skip')
+
+      if (isDisabled) {
+        span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
+      }
+
       span.finish()
     })
   }
