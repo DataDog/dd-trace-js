@@ -3347,7 +3347,7 @@ describe('Plugin', () => {
               messages: [{ role: 'user', content: 'Hello, OpenAI!', name: 'hunter2' }],
               temperature: 0.5,
               stream: true
-            })
+            }, { /* request-specific options */ })
 
             for await (const part of stream) {
               expect(part).to.have.property('choices')
