@@ -20,7 +20,8 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
-  TEST_MANAGEMENT_IS_QUARANTINED
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_IS_DISABLED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -50,9 +51,23 @@ class VitestPlugin extends CiPlugin {
       onDone(!testsForThisTestSuite.includes(testName))
     })
 
-    this.addSub('ci:vitest:test:is-quarantined', ({ quarantinedTests, testSuiteAbsolutePath, testName, onDone }) => {
+    this.addSub('ci:vitest:test:is-disabled', ({ testManagementTests, testSuiteAbsolutePath, testName, onDone }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const isQuarantined = quarantinedTests
+      const isDisabled = testManagementTests
+        ?.vitest
+        ?.suites
+        ?.[testSuite]
+        ?.tests
+        ?.[testName]
+        ?.properties
+        ?.disabled
+
+      onDone(isDisabled ?? false)
+    })
+
+    this.addSub('ci:vitest:test:is-quarantined', ({ testManagementTests, testSuiteAbsolutePath, testName, onDone }) => {
+      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const isQuarantined = testManagementTests
         ?.vitest
         ?.suites
         ?.[testSuite]
@@ -178,7 +193,7 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:test:skip', ({ testName, testSuiteAbsolutePath, isNew }) => {
+    this.addSub('ci:vitest:test:skip', ({ testName, testSuiteAbsolutePath, isNew, isDisabled }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const testSpan = this.startTestSpan(
         testName,
@@ -188,6 +203,7 @@ class VitestPlugin extends CiPlugin {
           [TEST_SOURCE_FILE]: testSuite,
           [TEST_SOURCE_START]: 1, // we can't get the proper start line in vitest
           [TEST_STATUS]: 'skip',
+          ...(isDisabled ? { [TEST_MANAGEMENT_IS_DISABLED]: 'true' } : {}),
           ...(isNew ? { [TEST_IS_NEW]: 'true' } : {})
         }
       )
@@ -277,7 +293,7 @@ class VitestPlugin extends CiPlugin {
       testCodeCoverageLinesTotal,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
-      isQuarantinedTestsEnabled,
+      isTestManagementTestsEnabled,
       onFinish
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -296,7 +312,7 @@ class VitestPlugin extends CiPlugin {
       if (isEarlyFlakeDetectionFaulty) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
       }
-      if (isQuarantinedTestsEnabled) {
+      if (isTestManagementTestsEnabled) {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
       this.testModuleSpan.finish()
