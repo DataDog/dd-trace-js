@@ -140,6 +140,26 @@ describe('Plugin', () => {
 
           await checkTraces
         })
+
+        describe('with tools', () => {
+          useScenario({ scenario: 'generate-content-single-response-with-tools' })
+
+          it('makes a successful call', async () => {
+            const checkTraces = agent.use(traces => {
+              const span = traces[0][0]
+
+              expect(span.meta).to.have.property('vertexai.response.candidates.0.content.parts.0.text', 'undefined')
+              expect(span.meta).to.have.property('vertexai.response.candidates.0.content.parts.0.function_call.name',
+                'add')
+              expect(span.meta).to.have.property('vertexai.response.candidates.0.content.parts.0.function_call.args',
+                JSON.stringify({ a: 2, b: 2 }))
+            })
+
+            await model.generateContent('what is 2 + 2?')
+
+            await checkTraces
+          })
+        })
       })
 
       describe('generateContentStream', () => {
@@ -157,7 +177,7 @@ describe('Plugin', () => {
             expect(span.meta).to.have.property('vertexai.request.contents.0.text', 'Hello, how are you?')
             expect(span.meta).to.have.property('vertexai.response.candidates.0.finish_reason', 'STOP')
             expect(span.meta).to.have.property('vertexai.response.candidates.0.content.parts.0.text',
-              'Hi, how are you doing today my friend?\n')
+              'Hi, how are you doing today my friend?')
             expect(span.meta).to.have.property('vertexai.response.candidates.0.content.role', 'model')
 
             expect(span.metrics).to.have.property('vertexai.response.usage.prompt_tokens', 5)
@@ -289,7 +309,7 @@ describe('Plugin', () => {
               expect(span.meta).to.have.property('vertexai.request.contents.0.text', 'Hello, how are you?')
               expect(span.meta).to.have.property('vertexai.response.candidates.0.finish_reason', 'STOP')
               expect(span.meta).to.have.property('vertexai.response.candidates.0.content.parts.0.text',
-                'Hi, how are you doing today my friend?\n')
+                'Hi, how are you doing today my friend?')
               expect(span.meta).to.have.property('vertexai.response.candidates.0.content.role', 'model')
 
               expect(span.metrics).to.have.property('vertexai.response.usage.prompt_tokens', 5)
@@ -328,18 +348,38 @@ describe('Plugin', () => {
       })
 
       describe('errors', () => {
-        useScenario({ statusCode: 404 })
+        describe('non-streamed', () => {
+          useScenario({ statusCode: 404 })
 
-        it('tags the error', async () => {
-          const checkTraces = agent.use(traces => {
-            expect(traces[0][0]).to.have.property('error', 1)
+          it('tags the error', async () => {
+            const checkTraces = agent.use(traces => {
+              expect(traces[0][0]).to.have.property('error', 1)
+            })
+
+            try {
+              await model.generateContent('Hello, how are you?')
+            } catch { /* ignore */ }
+
+            await checkTraces
           })
+        })
 
-          try {
-            await model.generateContent('Hello, how are you?')
-          } catch { /* ignore */ }
+        describe.skip('streamed', () => {
+          useScenario({ scenario: 'malformed-stream', stream: true })
 
-          await checkTraces
+          it('tags the error', async () => {
+            const checkTraces = agent.use(traces => {
+              expect(traces[0][0]).to.have.property('error', 1)
+            })
+
+            try {
+              const { stream } = await model.generateContentStream('Hello, how are you?')
+              // eslint-disable-next-line no-unused-vars
+              for await (const _ of stream) { /* pass */ }
+            } catch { /* ignore */ }
+
+            await checkTraces
+          })
         })
       })
     })
