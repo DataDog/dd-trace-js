@@ -244,7 +244,7 @@ function getSortWrapper (sort) {
     }
 
     if (isTestManagementTestsEnabled) {
-      const { err, receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
+      const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
       if (!err) {
         testManagementTests = receivedTestManagementTests
         try {
