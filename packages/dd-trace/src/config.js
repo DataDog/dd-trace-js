@@ -1438,22 +1438,23 @@ class Config {
 
   _getContainersAndOriginsOrdered () {
     const containers = [
-      this._remote,
-      this._options,
-      this._fleetStableConfig,
-      this._env,
-      this._localStableConfig,
+      this._defaults,
       this._calculated,
-      this._defaults
+      this._localStableConfig,
+      this._env,
+      this._fleetStableConfig,
+      this._options,
+      this._remote
     ]
+
     const origins = [
-      'remote_config',
-      'code',
-      'fleet_stable_config',
-      'env_var',
-      'local_stable_config',
+      'default',
       'calculated',
-      'default'
+      'local_stable_config',
+      'env_var',
+      'fleet_stable_config',
+      'code',
+      'remote_config'
     ]
 
     return { containers, origins }
@@ -1467,13 +1468,13 @@ class Config {
   _merge () {
     const { containers, origins } = this._getContainersAndOriginsOrdered()
     const unprocessedValues = [
-      this._remoteUnprocessed,
-      this._optsUnprocessed,
+      {},
+      {},
       {},
       this._envUnprocessed,
       {},
-      {},
-      {}
+      this._optsUnprocessed,
+      this._remoteUnprocessed
     ]
     const changes = []
 
@@ -1483,7 +1484,8 @@ class Config {
         const value = container[name]
 
         if ((value !== null && value !== undefined) || container === this._defaults) {
-          if (get(this, name) === value && has(this, name)) break
+          // report all sources
+          // if (get(this, name) === value && has(this, name)) break
 
           set(this, name, value)
 
@@ -1497,7 +1499,7 @@ class Config {
         }
       }
     }
-
+    console.log(this)
     this.sampler.sampleRate = this.sampleRate
     updateConfig(changes, this)
   }
