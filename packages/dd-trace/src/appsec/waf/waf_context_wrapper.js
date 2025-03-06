@@ -77,7 +77,6 @@ class WAFContextWrapper {
 
     if (!payloadHasData) return
 
-    const start = process.hrtime.bigint()
 
     const metrics = {
       rulesVersion: this.rulesVersion,
@@ -88,11 +87,12 @@ class WAFContextWrapper {
       ruleTriggered: false
     }
 
+    const start = process.hrtime.bigint()
+
     const result = this.runWaf(payload, this.wafTimeout)
 
-    this.addressesToSkip = newAddressesToSkip
-
     const end = process.hrtime.bigint()
+
     metrics.durationExt = parseInt(end - start) / 1e3
 
     if (!result) {
@@ -115,6 +115,8 @@ class WAFContextWrapper {
         metrics.maxTruncatedContainerDepth = result.metrics.maxTruncatedContainerDepth
       }
     }
+
+    this.addressesToSkip = newAddressesToSkip
 
     const ruleTriggered = !!result.events?.length
 
