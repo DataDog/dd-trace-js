@@ -143,7 +143,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.flakyTestRetriesCount = this.testEnvironmentOptions._ddFlakyTestRetriesCount
       this.isDiEnabled = this.testEnvironmentOptions._ddIsDiEnabled
       this.isKnownTestsEnabled = this.testEnvironmentOptions._ddIsKnownTestsEnabled
-      this.isTestManagementEnabled = this.testEnvironmentOptions._ddIsTestManagementTestsEnabled
+      this.isTestManagementTestsEnabled = this.testEnvironmentOptions._ddIsTestManagementTestsEnabled
 
       if (this.isKnownTestsEnabled) {
         try {
@@ -292,22 +292,27 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let isDisabled = false
 
         if (this.isTestManagementTestsEnabled) {
-          event.test.mode = 'skip'
           isDisabled = this.testManagementTestsForThisSuite?.disabled?.includes(testName)
+          if (isDisabled) {
+            event.test.mode = 'skip'
+          }
         }
         const isJestRetry = event.test?.invocations > 1
         asyncResource.runInAsyncScope(() => {
           testStartCh.publish({
-            name: removeEfdStringFromTestName(testName),
-            suite: this.testSuite,
-            testSourceFile: this.testSourceFile,
-            displayName: this.displayName,
-            testParameters,
-            frameworkVersion: jestVersion,
-            isNew: isNewTest,
-            isEfdRetry: numEfdRetry > 0,
-            isJestRetry
-          }, isDisabled)
+            test: {
+              name: removeEfdStringFromTestName(testName),
+              suite: this.testSuite,
+              testSourceFile: this.testSourceFile,
+              displayName: this.displayName,
+              testParameters,
+              frameworkVersion: jestVersion,
+              isNew: isNewTest,
+              isEfdRetry: numEfdRetry > 0,
+              isJestRetry
+            },
+            isDisabled
+          })
           originalTestFns.set(event.test, event.test.fn)
           event.test.fn = asyncResource.bind(event.test.fn)
         })
@@ -730,8 +735,14 @@ function cliWrapper (cli, jestVersion) {
 
       for (const { testName, testSuiteAbsolutePath } of failedTests) {
         const testSuite = getTestSuitePath(testSuiteAbsolutePath, result.globalConfig.rootDir)
-        const isQuarantined = testManagementTests.quarantined.includes(testSuite) &&
-          testManagementTests.quarantined.includes(testName)
+        const isQuarantined = testManagementTests
+          ?.jest
+          ?.suites
+          ?.[testSuite]
+          ?.tests
+          ?.[testName]
+          ?.properties
+          ?.quarantined
         if (isQuarantined) {
           numFailedQuarantinedTests++
         }

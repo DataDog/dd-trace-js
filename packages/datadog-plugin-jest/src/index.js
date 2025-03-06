@@ -109,7 +109,7 @@ class JestPlugin extends CiPlugin {
       error,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
-      isQuarantinedTestsEnabled,
+      isTestManagementTestsEnabled,
       onDone
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -141,7 +141,7 @@ class JestPlugin extends CiPlugin {
       if (isEarlyFlakeDetectionFaulty) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
       }
-      if (isQuarantinedTestsEnabled) {
+      if (isTestManagementTestsEnabled) {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
 
@@ -325,7 +325,10 @@ class JestPlugin extends CiPlugin {
       this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, files.length)
     })
 
-    this.addSub('ci:jest:test:start', (test, isDisabled) => {
+    this.addSub('ci:jest:test:start', ({
+      test,
+      isDisabled
+    }) => {
       const store = storage('legacy').getStore()
       const span = this.startTestSpan(test)
 
