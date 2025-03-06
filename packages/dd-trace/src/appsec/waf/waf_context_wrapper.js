@@ -98,8 +98,6 @@ class WAFContextWrapper {
     if (!result) {
       // Binding or other waf unexpected errors
       metrics.errorCode = -127
-
-      return null
     } else {
       if (typeof result.errorCode === 'number' && result.errorCode < 0) {
         metrics.errorCode = result.errorCode
