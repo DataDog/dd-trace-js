@@ -349,7 +349,8 @@ addHook({
   versions: ['>=5.2.0'],
   file: 'lib/cli/run-helpers.js'
 }, (run) => {
-  shimmer.wrap(run, 'runMocha', runMocha => async function () {
+  // `runMocha` is an async function
+  shimmer.wrap(run, 'runMocha', runMocha => function () {
     if (!testStartCh.hasSubscribers) {
       return runMocha.apply(this, arguments)
     }

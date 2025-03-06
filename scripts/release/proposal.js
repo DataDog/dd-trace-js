@@ -50,8 +50,8 @@ try {
   // Make sure the release branch is up to date to prepare for new proposal.
   // The main branch is not automatically pulled to avoid inconsistencies between
   // release lines if new commits are added to it during a release.
-  run(`git checkout v${releaseLine}.x`)
-  run('git pull --ff-only')
+  run(`git checkout --quiet v${releaseLine}.x`)
+  run('git pull --quiet --ff-only')
 
   pass(`v${releaseLine}.x`)
 
@@ -59,27 +59,26 @@ try {
     'branch-diff',
     '--user DataDog',
     '--repo dd-trace-js',
-  `--exclude-label=semver-major,dont-land-on-v${releaseLine}.x`
+    `--exclude-label=semver-major,dont-land-on-v${releaseLine}.x`
   ].join(' ')
 
   start('Determine version increment')
 
-  const lastVersion = require('../../package.json').version
-  const [, lastMinor, lastPatch] = lastVersion.split('.').map(Number)
+  const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
   const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x master`)
   const isMinor = flags.minor || (!flags.patch && lineDiff.includes('SEMVER-MINOR'))
   const newVersion = isMinor
-    ? `${releaseLine}.${lastMinor + 1}.0`
-    : `${releaseLine}.${lastMinor}.${lastPatch + 1}`
+    ? `${releaseLine}.${DD_MINOR + 1}.0`
+    : `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
   const notesDir = path.join(os.tmpdir(), 'release_notes')
   const notesFile = path.join(notesDir, `${newVersion}.md`)
 
-  pass(`${isMinor ? 'minor' : 'patch'} (${lastVersion} -> ${newVersion})`)
+  pass(`${isMinor ? 'minor' : 'patch'} (${DD_MAJOR}.${DD_MINOR}.${DD_PATCH} -> ${newVersion})`)
 
   start('Checkout release proposal branch')
 
   // Checkout new or existing branch.
-  run(`git checkout v${newVersion}-proposal || git checkout -b v${newVersion}-proposal`)
+  run(`git checkout --quiet v${newVersion}-proposal &> /dev/null || git checkout --quiet -b v${newVersion}-proposal`)
 
   try {
     // Pull latest changes in case the release was started by someone else.
@@ -95,7 +94,7 @@ try {
   start('Check for new changes')
 
   // Get the hashes of the last version and the commits to add.
-  const lastCommit = capture('git log -1 --pretty=%B').trim()
+  const lastCommit = capture('git log -1 --pretty=%B')
   const proposalDiff = capture(`${diffCmd} --format=sha --reverse v${newVersion}-proposal master`)
     .replace(/\n/g, ' ').trim()
 

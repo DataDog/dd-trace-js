@@ -48,7 +48,7 @@ describe('Plugin', () => {
   let collection
   let db
   let BSON
-  let injectDbmCommandSpy
+  let startSpy
 
   describe('mongodb-core', () => {
     withTopologies(createClient => {
@@ -375,11 +375,11 @@ describe('Plugin', () => {
           db = client.db('test')
           collection = db.collection(collectionName)
 
-          injectDbmCommandSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmCommand')
+          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
         })
 
         afterEach(() => {
-          injectDbmCommandSpy?.restore()
+          startSpy?.restore()
         })
 
         it('DBM propagation should inject service mode as comment', done => {
@@ -387,10 +387,9 @@ describe('Plugin', () => {
             .use(traces => {
               const span = traces[0][0]
 
-              expect(injectDbmCommandSpy.called).to.be.true
-              const instrumentedCommand = injectDbmCommandSpy.getCall(0).returnValue
-              expect(instrumentedCommand).to.have.property('comment')
-              expect(instrumentedCommand.comment).to.equal(
+              expect(startSpy.called).to.be.true
+              const { comment } = startSpy.getCall(0).args[0].ops
+              expect(comment).to.equal(
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
                 'dde=\'tester\',' +
@@ -425,11 +424,11 @@ describe('Plugin', () => {
           db = client.db('test')
           collection = db.collection(collectionName)
 
-          injectDbmCommandSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmCommand')
+          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
         })
 
         afterEach(() => {
-          injectDbmCommandSpy?.restore()
+          startSpy?.restore()
         })
 
         it('DBM propagation should inject full mode with traceparent as comment', done => {
@@ -439,10 +438,9 @@ describe('Plugin', () => {
               const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')
 
-              expect(injectDbmCommandSpy.called).to.be.true
-              const instrumentedCommand = injectDbmCommandSpy.getCall(0).returnValue
-              expect(instrumentedCommand).to.have.property('comment')
-              expect(instrumentedCommand.comment).to.equal(
+              expect(startSpy.called).to.be.true
+              const { comment } = startSpy.getCall(0).args[0].ops
+              expect(comment).to.equal(
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
                 'dde=\'tester\',' +

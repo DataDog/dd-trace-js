@@ -25,7 +25,10 @@ class MongodbCorePlugin extends DatabasePlugin {
         'out.port': options.port
       }
     })
-    ops = this.injectDbmCommand(span, ops, service)
+    const comment = this.injectDbmComment(span, ops.comment, service)
+    if (comment) {
+      ops.comment = comment
+    }
   }
 
   getPeerService (tags) {
@@ -37,28 +40,25 @@ class MongodbCorePlugin extends DatabasePlugin {
     return super.getPeerService(tags)
   }
 
-  injectDbmCommand (span, command, serviceName) {
+  injectDbmComment (span, comment, serviceName) {
     const dbmTraceComment = this.createDbmComment(span, serviceName)
 
     if (!dbmTraceComment) {
-      return command
+      return comment
     }
 
-    // create a copy of the command to avoid mutating the original
-    const dbmTracedCommand = { ...command }
-
-    if (dbmTracedCommand.comment) {
+    if (comment) {
       // if the command already has a comment, append the dbm trace comment
-      if (typeof dbmTracedCommand.comment === 'string') {
-        dbmTracedCommand.comment += `,${dbmTraceComment}`
-      } else if (Array.isArray(dbmTracedCommand.comment)) {
-        dbmTracedCommand.comment.push(dbmTraceComment)
+      if (typeof comment === 'string') {
+        comment += `,${dbmTraceComment}`
+      } else if (Array.isArray(comment)) {
+        comment.push(dbmTraceComment)
       } // do nothing if the comment is not a string or an array
     } else {
-      dbmTracedCommand.comment = dbmTraceComment
+      comment = dbmTraceComment
     }
 
-    return dbmTracedCommand
+    return comment
   }
 }
 

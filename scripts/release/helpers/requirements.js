@@ -2,14 +2,15 @@
 
 /* eslint-disable @stylistic/js/max-len */
 
+const { join } = require('path')
+const { existsSync, readFileSync } = require('fs')
+const { default: getApplicationConfigPath } = require('application-config-path')
 const { capture, fatal, run } = require('./terminal')
-
-const requiredScopes = ['public_repo', 'read:org']
 
 // Check that the `git` CLI is installed.
 function checkGit () {
   try {
-    run('git --version')
+    run('git --version', false)
   } catch (e) {
     fatal(
       'The "git" CLI could not be found.',
@@ -21,7 +22,7 @@ function checkGit () {
 // Check that the `branch-diff` CLI is installed.
 function checkBranchDiff () {
   try {
-    run('branch-diff --version')
+    run('branch-diff --version', false)
   } catch (e) {
     const link = [
       'https://datadoghq.atlassian.net/wiki/spaces/DL/pages/3125511269/Node.js+Tracer+Release+Process',
@@ -32,22 +33,40 @@ function checkBranchDiff () {
       `Please visit ${link} for instructions to install.`
     )
   }
+
+  const branchDiffConfigPath = join(getApplicationConfigPath('changelog-maker'), 'config.json')
+
+  if (!existsSync(branchDiffConfigPath)) {
+    const link = 'https://github.com/nodejs/changelog-maker?tab=readme-ov-file#development'
+    fatal(
+      'The "branch-diff" configuration file is missing.',
+      `Please visit ${link} for instructions to configure.`
+    )
+  }
+
+  const requiredScopes = ['public_repo']
+  const { token } = JSON.parse(readFileSync(branchDiffConfigPath, 'utf8'))
+
+  checkGitHubScopes(token, requiredScopes, 'branch-diff')
 }
 
 // Check that the `gh` CLI is installed and authenticated.
 function checkGitHub () {
-  if (!process.env.GITHUB_TOKEN && !process.env.GH_TOKEN) {
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN
+  const requiredScopes = ['public_repo', 'read:org']
+
+  if (!token) {
     const link = 'https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic'
 
     fatal(
-      'The GITHUB_TOKEN environment variable is missing.',
+      'The GITHUB_TOKEN | GH_TOKEN environment variable is missing.',
       `Please visit ${link} for instructions to generate a personal access token.`,
       `The following scopes are required when generating the token: ${requiredScopes.join(', ')}`
     )
   }
 
   try {
-    run('gh --version')
+    run('gh --version', false)
   } catch (e) {
     fatal(
       'The "gh" CLI could not be found.',
@@ -55,30 +74,31 @@ function checkGitHub () {
     )
   }
 
-  checkGitHubScopes()
+  checkGitHubScopes(token, requiredScopes, 'GITHUB_TOKEN | GH_TOKEN')
 }
 
-// Check that the active GITHUB_TOKEN has the required scopes.
-function checkGitHubScopes () {
+function checkGitHubScopes (token, requiredScopes, source) {
   const url = 'https://api.github.com'
   const headers = [
     'Accept: application/vnd.github.v3+json',
-    `Authorization: Bearer ${process.env.GITHUB_TOKEN || process.env.GH_TOKEN}`,
+    `Authorization: Bearer ${token}`,
     'X-GitHub-Api-Version: 2022-11-28'
   ].map(h => `-H "${h}"`).join(' ')
 
-  const lines = capture(`curl -sS -I ${headers} ${url}`).trim().split(/\r?\n/g)
+  const lines = capture(`curl -sS -I ${headers} ${url}`).split(/\r?\n/g)
   const scopeLine = lines.find(line => line.startsWith('x-oauth-scopes:')) || ''
   const scopes = scopeLine.replace('x-oauth-scopes:', '').trim().split(', ')
-  const link = 'https://github.com/settings/tokens'
+  const missingScopes = []
 
   for (const req of requiredScopes) {
-    if (!scopes.includes(req)) {
-      fatal(
-        `Missing "${req}" scope for GITHUB_TOKEN.`,
-        `Please visit ${link} and make sure the following scopes are enabled: ${requiredScopes.join(' ,')}.`
-      )
-    }
+    if (!scopes.includes(req)) missingScopes.push(req)
+  }
+
+  if (missingScopes.length !== 0) {
+    fatal(
+      `Missing scopes for ${source}: ${missingScopes.join(', ')}`,
+      'Please visit https://github.com/settings/tokens and make sure they are enabled!'
+    )
   }
 }
 
