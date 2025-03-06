@@ -13,8 +13,6 @@ class NoopSpan {
     this._options = options
   }
 
-  _getTime () {}
-
   context () { return this._noopContext }
   tracer () { return this._noopTracer }
   setOperationName (name) { return this }

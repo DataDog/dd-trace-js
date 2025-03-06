@@ -10,7 +10,6 @@ require('./setup/tap')
 describe('Trace Levels', () => {
   let express
   let appListener
-  let tracer
 
   describe('with express application ', () => {
     afterEach(() => {
@@ -24,7 +23,7 @@ describe('Trace Levels', () => {
       })
 
       before(() => {
-        tracer = require('../../dd-trace').init({})
+        require('../../dd-trace').init({})
       })
 
       after(() => {
@@ -80,7 +79,7 @@ describe('Trace Levels', () => {
       })
 
       before(() => {
-        tracer = require('../../dd-trace').init({ 'experimental.traceLevel': 'service' })
+        require('../../dd-trace').init({ 'experimental.traceLevel': 'service' })
       })
 
       after(() => {
