@@ -63,7 +63,7 @@ describe('blocking', () => {
       expect(blocked).to.be.false
       expect(log.warn).to.have.been
         .calledOnceWithExactly('[ASM] Cannot send blocking response when headers have already been sent')
-      expect(rootSpan.setTag).to.have.been.called
+      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.block.failed', 1)
       expect(res.setHeader).to.not.have.been.called
       expect(res.constructor.prototype.end).to.not.have.been.called
     })
