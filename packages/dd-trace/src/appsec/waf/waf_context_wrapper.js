@@ -77,14 +77,18 @@ class WAFContextWrapper {
 
     if (!payloadHasData) return
 
-
     const metrics = {
       rulesVersion: this.rulesVersion,
       wafVersion: this.wafVersion,
       wafTimeout: false,
       duration: 0,
+      durationExt: 0,
       blockTriggered: false,
-      ruleTriggered: false
+      ruleTriggered: false,
+      errorCode: null,
+      maxTruncatedString: null,
+      maxTruncatedString: null,
+      maxTruncatedString: null
     }
 
     const start = process.hrtime.bigint()
@@ -95,25 +99,23 @@ class WAFContextWrapper {
 
     metrics.durationExt = parseInt(end - start) / 1e3
 
-    if (!result) {
-      // Binding or other waf unexpected errors
-      metrics.errorCode = -127
-    } else {
-      if (typeof result.errorCode === 'number' && result.errorCode < 0) {
-        metrics.errorCode = result.errorCode
-      }
+    if (!result || (typeof result.errorCode === 'number' && result.errorCode < 0)) {
+      metrics.errorCode = result ? result.errorCode : -127
 
-      if (result.metrics?.maxTruncatedString) {
-        metrics.maxTruncatedString = result.metrics.maxTruncatedString
+      if (wafRunFinished.hasSubscribers) {
+        wafRunFinished.publish({ payload })
       }
+      Reporter.reportMetrics(metrics, raspRule)
 
-      if (result.metrics?.maxTruncatedContainerSize) {
-        metrics.maxTruncatedContainerSize = result.metrics.maxTruncatedContainerSize
-      }
+      return
+    }
 
-      if (result.metrics?.maxTruncatedContainerDepth) {
-        metrics.maxTruncatedContainerDepth = result.metrics.maxTruncatedContainerDepth
-      }
+    if (result.metrics) {
+      const { maxTruncatedString, maxTruncatedContainerSize, maxTruncatedContainerDepth } = result.metrics
+
+      if (maxTruncatedString) metrics.maxTruncatedString = maxTruncatedString
+      if (maxTruncatedContainerSize) metrics.maxTruncatedContainerSize = maxTruncatedContainerSize
+      if (maxTruncatedContainerDepth) metrics.maxTruncatedContainerDepth = maxTruncatedContainerDepth
     }
 
     this.addressesToSkip = newAddressesToSkip
