@@ -42,9 +42,9 @@ describe('WAFContextWrapper', () => {
     expect(Reporter.reportMetrics).to.have.been.calledOnce
   })
 
-  it('Should send HTTP_INCOMING_QUERY twice if waf run returns null', () => {
+  it('Should send HTTP_INCOMING_QUERY twice if waf run fails', () => {
     const ddwafContext = {
-      run: sinon.stub()
+      run: sinon.stub().throws(new Error('test'))
     }
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
