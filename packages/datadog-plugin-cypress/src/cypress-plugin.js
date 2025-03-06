@@ -35,7 +35,8 @@ const {
   TEST_RETRY_REASON,
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   TEST_MANAGEMENT_IS_QUARANTINED,
-  TEST_MANAGEMENT_ENABLED
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_DISABLED
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -154,15 +155,15 @@ function getKnownTests (tracer, testConfiguration) {
   })
 }
 
-function getQuarantinedTests (tracer, testConfiguration) {
+function getTestManagementTests (tracer, testConfiguration) {
   return new Promise(resolve => {
-    if (!tracer._tracer._exporter?.getQuarantinedTests) {
+    if (!tracer._tracer._exporter?.getTestManagementTests) {
       return resolve({ err: new Error('Test Optimization was not initialized correctly') })
     }
-    tracer._tracer._exporter.getQuarantinedTests(testConfiguration, (err, quarantinedTests) => {
+    tracer._tracer._exporter.getTestManagementTests(testConfiguration, (err, testManagementTests) => {
       resolve({
         err,
-        quarantinedTests
+        testManagementTests
       })
     })
   })
@@ -257,7 +258,7 @@ class CypressPlugin {
               isFlakyTestRetriesEnabled,
               flakyTestRetriesCount,
               isKnownTestsEnabled,
-              isQuarantinedTestsEnabled
+              isTestManagementEnabled
             }
           } = libraryConfigurationResponse
           this.isSuitesSkippingEnabled = isSuitesSkippingEnabled
@@ -268,15 +269,26 @@ class CypressPlugin {
           if (isFlakyTestRetriesEnabled) {
             this.cypressConfig.retries.runMode = flakyTestRetriesCount
           }
-          this.isQuarantinedTestsEnabled = isQuarantinedTestsEnabled
+          this.isTestManagementTestsEnabled = isTestManagementEnabled
         }
         return this.cypressConfig
       })
     return this.libraryConfigurationPromise
   }
 
+  getIsDisabledTest (testSuite, testName) {
+    return this.testManagementTests
+      ?.cypress
+      ?.suites
+      ?.[testSuite]
+      ?.tests
+      ?.[testName]
+      ?.properties
+      ?.disabled
+  }
+
   getIsQuarantinedTest (testSuite, testName) {
-    return this.quarantinedTests
+    return this.testManagementTests
       ?.cypress
       ?.suites
       ?.[testSuite]
@@ -418,16 +430,16 @@ class CypressPlugin {
       }
     }
 
-    if (this.isQuarantinedTestsEnabled) {
-      const quarantinedTestsResponse = await getQuarantinedTests(
+    if (this.isTestManagementTestsEnabled) {
+      const testManagementTestsResponse = await getTestManagementTests(
         this.tracer,
         this.testConfiguration
       )
-      if (quarantinedTestsResponse.err) {
-        log.error('Cypress quarantined tests response error', quarantinedTestsResponse.err)
-        this.isQuarantinedTestsEnabled = false
+      if (testManagementTestsResponse.err) {
+        log.error('Cypress test management tests response error', testManagementTestsResponse.err)
+        this.isTestManagementTestsEnabled = false
       } else {
-        this.quarantinedTests = quarantinedTestsResponse.quarantinedTests
+        this.testManagementTests = testManagementTestsResponse.testManagementTests
       }
     }
 
@@ -509,7 +521,7 @@ class CypressPlugin {
         }
       )
 
-      if (this.isQuarantinedTestsEnabled) {
+      if (this.isTestManagementTestsEnabled) {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
 
@@ -588,9 +600,12 @@ class CypressPlugin {
         skippedTestSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
       }
 
+      const isDisabled = this.getIsDisabledTest(spec.relative, cypressTestName)
       const isQuarantined = this.getIsQuarantinedTest(spec.relative, cypressTestName)
 
-      if (isQuarantined) {
+      if (isDisabled) {
+        skippedTestSpan.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
+      } else if (isQuarantined) {
         skippedTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
       }
 
@@ -697,6 +712,7 @@ class CypressPlugin {
         })
         const isUnskippable = this.unskippableSuites.includes(testSuite)
         const isForcedToRun = shouldSkip && isUnskippable
+        const isDisabled = this.getIsDisabledTest(testSuite, testName)
         const isQuarantined = this.getIsQuarantinedTest(testSuite, testName)
 
         // skip test
@@ -708,7 +724,9 @@ class CypressPlugin {
 
         // TODO: I haven't found a way to trick cypress into ignoring a test
         // The way we'll implement quarantine in cypress is by skipping the test altogether
-        if (isQuarantined) {
+        if (isDisabled) {
+          return { shouldSkip: true }
+        } else if (isQuarantined) {
           return { shouldSkip: true }
         }
 
@@ -738,6 +756,7 @@ class CypressPlugin {
           testName,
           isNew,
           isEfdRetry,
+          isDisabled,
           isQuarantined
         } = test
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
@@ -777,7 +796,9 @@ class CypressPlugin {
             this.activeTestSpan.setTag(TEST_RETRY_REASON, 'efd')
           }
         }
-        if (isQuarantined) {
+        if (isDisabled) {
+          this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
+        } else if (isQuarantined) {
           this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
         }
         const finishedTest = {
