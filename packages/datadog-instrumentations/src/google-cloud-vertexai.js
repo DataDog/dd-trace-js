@@ -48,7 +48,11 @@ function wrapGenerateStream (generateStream) {
       return streamingResult.then(stream => {
         stream.response.then(response => {
           finish(ctx, response, null)
+        }).catch(e => {
+          finish(ctx, null, e)
+          throw e
         })
+
         return stream
       }).catch(e => {
         finish(ctx, null, e)

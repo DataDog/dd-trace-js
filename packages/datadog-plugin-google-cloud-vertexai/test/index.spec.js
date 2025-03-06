@@ -356,15 +356,19 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('error', 1)
             })
 
+            let errorPropagated = false
+
             try {
               await model.generateContent('Hello, how are you?')
-            } catch { /* ignore */ }
+            } catch { errorPropagated = true }
+
+            expect(errorPropagated).to.be.true
 
             await checkTraces
           })
         })
 
-        describe.skip('streamed', () => {
+        describe('streamed', () => {
           useScenario({ scenario: 'malformed-stream', stream: true })
 
           it('tags the error', async () => {
@@ -372,11 +376,15 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('error', 1)
             })
 
+            let errorPropagated = false
+
             try {
               const { stream } = await model.generateContentStream('Hello, how are you?')
               // eslint-disable-next-line no-unused-vars
               for await (const _ of stream) { /* pass */ }
-            } catch { /* ignore */ }
+            } catch { errorPropagated = true }
+
+            expect(errorPropagated).to.be.true
 
             await checkTraces
           })
