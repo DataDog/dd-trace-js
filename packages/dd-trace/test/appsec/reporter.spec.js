@@ -153,7 +153,7 @@ describe('reporter', () => {
     it('should do nothing when rootSpan is not available', () => {
       web.root.returns(null)
 
-      const metrics = { durationExt: 42, totalRuntime: 1337000 }
+      const metrics = { durationExt: 42, duration: 1337000 }
 
       Reporter.reportMetrics(metrics)
 
@@ -161,8 +161,8 @@ describe('reporter', () => {
       expect(telemetry.updateRaspRequestsMetricTags).not.to.have.been.called
     })
 
-    it('should set duration metrics from result.totalRuntime', () => {
-      const metrics = { durationExt: 42, totalRuntime: 1337000 }
+    it('should set duration metric if set', () => {
+      const metrics = { duration: 1337000 }
 
       Reporter.reportMetrics(metrics)
 
