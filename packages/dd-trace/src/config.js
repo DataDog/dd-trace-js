@@ -576,6 +576,8 @@ class Config {
     this._setValue(defaults, 'version', pkg.version)
     this._setValue(defaults, 'instrumentation_config_id', undefined)
     this._setValue(defaults, 'aws.dynamoDb.tablePrimaryKeys', undefined)
+    this._setValue(defaults, 'vertexai.spanCharLimit', 128)
+    this._setValue(defaults, 'vertexai.spanPromptCompletionSampleRate', 1.0)
   }
 
   _applyEnvironment () {
@@ -702,6 +704,8 @@ class Config {
       DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       DD_TRACING_ENABLED,
       DD_VERSION,
+      DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,
+      DD_VERTEXAI_SPAN_CHAR_LIMIT,
       DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED,
       OTEL_METRICS_EXPORTER,
       OTEL_PROPAGATORS,
@@ -907,6 +911,12 @@ class Config {
     this._setBoolean(env, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
     this._setString(env, 'aws.dynamoDb.tablePrimaryKeys', DD_AWS_SDK_DYNAMODB_TABLE_PRIMARY_KEYS)
     this._setArray(env, 'graphqlErrorExtensions', DD_TRACE_GRAPHQL_ERROR_EXTENSIONS)
+    this._setValue(
+      env,
+      'vertexai.spanPromptCompletionSampleRate',
+      maybeFloat(DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
+    )
+    this._setValue(env, 'vertexai.spanCharLimit', maybeInt(DD_VERTEXAI_SPAN_CHAR_LIMIT))
   }
 
   _applyOptions (options) {

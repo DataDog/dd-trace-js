@@ -14,7 +14,7 @@ class GoogleCloudVertexAIPlugin extends TracingPlugin {
   constructor () {
     super(...arguments)
 
-    this.utilities = makeUtilities('vertexai', this._tracerConfig)
+    Object.assign(this, makeUtilities('vertexai', this._tracerConfig))
   }
 
   bindStart (ctx) {
@@ -75,7 +75,7 @@ class GoogleCloudVertexAIPlugin extends TracingPlugin {
       tags['vertexai.request.stream'] = true
     }
 
-    if (!this.utilities.isPromptCompletionSampled()) return tags
+    if (!this.isPromptCompletionSampled()) return tags
 
     const systemInstructions = extractSystemInstructions(instance)
 
@@ -96,7 +96,7 @@ class GoogleCloudVertexAIPlugin extends TracingPlugin {
   }
 
   tagRequestPart (part, tags, partIdx, contentIdx) {
-    tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.text`] = this.utilities.normalize(part.text)
+    tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.text`] = this.normalize(part.text)
 
     const functionCall = part.functionCall
     const functionResponse = part.functionResponse
@@ -104,19 +104,19 @@ class GoogleCloudVertexAIPlugin extends TracingPlugin {
     if (functionCall) {
       tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_call.name`] = functionCall.name
       tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_call.args`] =
-              this.utilities.normalize(JSON.stringify(functionCall.args))
+              this.normalize(JSON.stringify(functionCall.args))
     }
     if (functionResponse) {
       tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_response.name`] =
               functionResponse.name
       tags[`vertexai.request.contents.${contentIdx}.parts.${partIdx}.function_response.response`] =
-              this.utilities.normalize(JSON.stringify(functionResponse.response))
+              this.normalize(JSON.stringify(functionResponse.response))
     }
   }
 
   tagRequestContent (tags, content, contentIdx) {
     if (typeof content === 'string') {
-      tags[`vertexai.request.contents.${contentIdx}.text`] = this.utilities.normalize(content)
+      tags[`vertexai.request.contents.${contentIdx}.text`] = this.normalize(content)
       return
     }
 
@@ -148,12 +148,13 @@ class GoogleCloudVertexAIPlugin extends TracingPlugin {
       const role = candidateContent.role
       tags[`vertexai.response.candidates.${candidateIdx}.content.role`] = role
 
-      if (!this.utilities.isPromptCompletionSampled()) continue
+      if (!this.isPromptCompletionSampled()) continue
 
       const parts = candidateContent.parts
       for (const [partIdx, part] of parts.entries()) {
         const text = part.text
-        tags[`vertexai.response.candidates.${candidateIdx}.content.parts.${partIdx}.text`] = String(text)
+        tags[`vertexai.response.candidates.${candidateIdx}.content.parts.${partIdx}.text`] =
+          this.normalize(String(text))
 
         const functionCall = part.functionCall
         if (!functionCall) continue
@@ -161,7 +162,7 @@ class GoogleCloudVertexAIPlugin extends TracingPlugin {
         tags[`vertexai.response.candidates.${candidateIdx}.content.parts.${partIdx}.function_call.name`] =
           functionCall.name
         tags[`vertexai.response.candidates.${candidateIdx}.content.parts.${partIdx}.function_call.args`] =
-          JSON.stringify(functionCall.args)
+          this.normalize(JSON.stringify(functionCall.args))
       }
     }
 
