@@ -12,6 +12,7 @@ const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
 const formats = require('../../../../ext/formats')
 const { SPAN_KIND } = require('../../../../ext/tags')
+const { COMPONENT } = require('../constants')
 
 const log = require('../log')
 const runtimeMetrics = require('../runtime_metrics')
@@ -56,15 +57,8 @@ class DatadogTracer {
 
     // as per spec, allow the setting of service name through options
     const tags = {
-      'service.name': options?.tags?.service ? String(options.tags.service) : this._service,
-      ...options?.tags
+      'service.name': options?.tags?.service ? String(options.tags.service) : this._service
     }
-
-    if (options?.kind) {
-      tags['span.kind'] = options.kind
-    }
-
-    options.tags = tags
 
     if (this._config.experimental.traceLevel !== 'debug') {
       const traceLevelSpan = this._useTraceLevel(parent, options)
@@ -123,19 +117,21 @@ class DatadogTracer {
   }
 
   _useTraceLevel (parent, options) {
-    // service trace level indicates service exit / entry spans only
-    if (!(SPAN_KIND in options.tags)) {
-      return new NoopSpan(this, parent, { keepParent: true })
+    // This function is used to power the experimental Trace Levels functionality.
+    // Trace levels aims to eliminate any spans that are not considered 'service' level,
+    // where any operation representing entry and/or exit from the traced application
+    // is considered a service level span. The presence of `span.kind` is being used to determine if a
+    // span is service level. Additionally, the feature aims to only impact auto instrumentation
+    // spans, so we check for the presence of `component` tag since this tag is set by all instrumentations.
+    // This allows us to not impact customer manual tracing spans.
+    if (COMPONENT in options.tags && !(SPAN_KIND in options.tags)) {
+      return new NoopSpan(this, parent, { useParentContext: true })
     }
   }
 }
 
 function getContext (spanContext) {
-  if (spanContext instanceof Span) {
-    spanContext = spanContext.context()
-  }
-
-  if (spanContext instanceof NoopSpan) {
+  if (spanContext instanceof Span || spanContext instanceof NoopSpan) {
     spanContext = spanContext.context()
   }
 

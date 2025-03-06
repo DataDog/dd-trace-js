@@ -267,7 +267,7 @@ const web = {
       }
     }
 
-    const span = tracer.startSpan(name, { childOf, links: childOf?._links, kind: SERVER })
+    const span = tracer.startSpan(name, { childOf, links: childOf?._links, tags: { [SPAN_KIND]: SERVER } })
 
     return span
   },
@@ -454,7 +454,6 @@ function addRequestTags (context, spanType) {
   span.addTags({
     [HTTP_URL]: web.obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
-    [SPAN_KIND]: SERVER,
     [SPAN_TYPE]: spanType,
     [HTTP_USERAGENT]: req.headers['user-agent']
   })

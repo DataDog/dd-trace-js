@@ -35,7 +35,7 @@ class NoopSpan {
     if (parent) {
       // necessary for trace level configuration. This pattern returns the first valid span context that is not a
       // NoopSpanContext, aka the next parent span in the trace that will be kept.
-      if (options.keepParent && parent) {
+      if (options.useParentContext && parent) {
         return parent instanceof DatadogSpanContext ? parent : parent.context()
       }
 
