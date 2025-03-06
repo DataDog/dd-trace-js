@@ -703,6 +703,22 @@ describe('reporter', () => {
       expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.rasp.rule.eval')
     })
 
+    it('should set waf.timeouts tags if there are metrics stored', () => {
+      telemetry.getRequestMetrics.returns({ wafTimeouts: true })
+
+      Reporter.finishRequest({}, {})
+
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.timeouts', true)
+    })
+
+    it('should set waf error code tags if there are metrics stored', () => {
+      telemetry.getRequestMetrics.returns({ wafErrorCode: -1 })
+
+      Reporter.finishRequest({}, {})
+
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.error', -1)
+    })
+
     it('should set rasp.duration tags if there are metrics stored', () => {
       telemetry.getRequestMetrics.returns({ raspDuration: 123, raspDurationExt: 321, raspEvalCount: 3 })
 
@@ -713,6 +729,22 @@ describe('reporter', () => {
       expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.duration', 123)
       expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.duration_ext', 321)
       expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.rule.eval', 3)
+    })
+
+    it('should set rasp.timeout tags if there are metrics stored', () => {
+      telemetry.getRequestMetrics.returns({ raspTimeouts: true })
+
+      Reporter.finishRequest({}, {})
+
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.timeout', true)
+    })
+
+    it('should set rasp error code tags if there are metrics stored', () => {
+      telemetry.getRequestMetrics.returns({ raspErrorCode: -1 })
+
+      Reporter.finishRequest({}, {})
+
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.error', -1)
     })
 
     it('should keep span if there are metrics', () => {
