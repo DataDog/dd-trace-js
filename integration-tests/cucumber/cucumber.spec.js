@@ -2051,7 +2051,7 @@ versions.forEach(version => {
           receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
-              const failedTest = events.find(event => event.type === 'test').content
+              const tests = events.find(event => event.type === 'test').content
               const testSession = events.find(event => event.type === 'test_session_end').content
 
               if (isDisabling) {
@@ -2060,14 +2060,14 @@ versions.forEach(version => {
                 assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
               }
 
-              assert.equal(failedTest.resource, 'ci-visibility/features-test-management/disabled.feature.Say disabled')
+              assert.equal(tests.resource, 'ci-visibility/features-test-management/disabled.feature.Say disabled')
 
               if (isDisabling) {
-                assert.equal(failedTest.meta[TEST_STATUS], 'skip')
-                assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
+                assert.equal(tests.meta[TEST_STATUS], 'skip')
+                assert.propertyVal(tests.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
               } else {
-                assert.equal(failedTest.meta[TEST_STATUS], 'pass')
-                assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_DISABLED)
+                assert.equal(tests.meta[TEST_STATUS], 'pass')
+                assert.notProperty(tests.meta, TEST_MANAGEMENT_IS_DISABLED)
               }
             })
 
