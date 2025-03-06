@@ -17,23 +17,10 @@ variables:
   SYSTEM_TESTS_LIBRARY: nodejs
   REPO_NOTIFICATION_CHANNEL: "#notifications-apm-js"
 
-onboarding_tests_installer:
-  parallel:
-    matrix:
-      - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs]
-        SCENARIO: [ SIMPLE_INSTALLER_AUTO_INJECTION ]
-
-onboarding_tests_k8s_injection:
-  parallel:
-    matrix:
-      - WEBLOG_VARIANT: [sample-app]
-        SCENARIO: [K8S_LIB_INJECTION]
-        K8S_CLUSTER_VERSION: ['7.59.0']
-    
+   
 configure_system_tests:
   variables:
-    SYSTEM_TESTS_SCENARIOS_GROUPS: "simple_onboarding,docker-ssi,lib-injection"
-    #test3456789
+    SYSTEM_TESTS_SCENARIOS_GROUPS: "simple_onboarding,simple_onboarding_profiling,docker-ssi,lib-injection"
 
 requirements_json_test:
   rules:
