@@ -30,9 +30,9 @@ const {
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
-  TAG_TEST_IMPACT_ANALYSIS,
-  TAG_EARLY_FLAKE_DETECTION,
-  TAG_AUTO_TEST_RETRIES
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_AUTO_TEST_RETRIES
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -987,21 +987,27 @@ versions.forEach((version) => {
 
     context('libraries capabilities', () => {
       it('adds capabilities to tests', (done) => {
-        receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+        receiver.setSettings({
+          flaky_test_retries_enabled: true,
+          itr_enabled: false,
+          early_flake_detection: {
+            enabled: true
+          },
+          known_tests_enabled: true
+        })
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
-          assert.isNotEmpty(metadataDicts)
-          metadataDicts.forEach(metadata => {
-            for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-              if (testLevel === 'test') {
-                assert.equal(metadata[testLevel][TAG_TEST_IMPACT_ANALYSIS], undefined)
-                assert.equal(metadata[testLevel][TAG_EARLY_FLAKE_DETECTION], 'false')
-                assert.equal(metadata[testLevel][TAG_AUTO_TEST_RETRIES], 'false')
-              }
-              assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-            }
+            assert.isNotEmpty(metadataDicts)
+            metadataDicts.forEach(metadata => {
+              assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
+              assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], 'true')
+              assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], 'true')
+              // capabilities logic does not overwrite test session name
+              assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
+            })
           })
-        }).then(() => done()).catch(done)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -1010,12 +1016,16 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
-              DD_TEST_SESSION_NAME: 'my-test-session',
-              DD_SERVICE: undefined
+              DD_TEST_SESSION_NAME: 'my-test-session-name'
             },
             stdio: 'pipe'
           }
         )
+        childProcess.on('exit', (exitCode) => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
       })
     })
   })

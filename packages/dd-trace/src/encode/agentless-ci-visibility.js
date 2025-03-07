@@ -48,26 +48,15 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this.reset()
   }
 
-  setMetadataTags (tags) {
-    const stack = [{ target: this.metadataTags, source: tags }]
-    while (stack.length > 0) {
-      const { target, source } = stack.pop()
-
-      for (const key in source) {
-        if (source.hasOwnProperty(key)) {
-          if (typeof source[key] === 'object' &&
-          source[key] !== null &&
-          typeof target[key] === 'object' &&
-          target[key] !== null) {
-            // Keep iterating through the object
-            stack.push({ target: target[key], source: source[key] })
-          } else {
-            // Directly assign the value
-            target[key] = source[key]
-          }
+  addMetadataTags (tags) {
+    ALLOWED_CONTENT_TYPES.forEach(type => {
+      if (tags[type]) {
+        this.metadataTags[type] = {
+          ...this.metadataTags[type],
+          ...tags[type]
         }
       }
-    }
+    })
   }
 
   _encodeTestSuite (bytes, content) {

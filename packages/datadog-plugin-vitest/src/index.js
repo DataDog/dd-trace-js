@@ -21,8 +21,8 @@ const {
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
-  TAG_EARLY_FLAKE_DETECTION,
-  TAG_AUTO_TEST_RETRIES
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_AUTO_TEST_RETRIES
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -220,13 +220,13 @@ class VitestPlugin extends CiPlugin {
           [TEST_SESSION_NAME]: testSessionName
         }
       }
-      if (this.tracer._exporter.setMetadataTags) {
+      if (this.tracer._exporter.addMetadataTags) {
         metadataTags.test = {
           ...metadataTags.test,
-          [TAG_EARLY_FLAKE_DETECTION]: isEarlyFlakeDetectionEnabled ? 'true' : 'false',
-          [TAG_AUTO_TEST_RETRIES]: isFlakyTestRetriesEnabled ? 'true' : 'false'
+          [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: isEarlyFlakeDetectionEnabled ? 'true' : 'false',
+          [DD_CAPABILITIES_AUTO_TEST_RETRIES]: isFlakyTestRetriesEnabled ? 'true' : 'false'
         }
-        this.tracer._exporter.setMetadataTags(metadataTags)
+        this.tracer._exporter.addMetadataTags(metadataTags)
       }
 
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)

@@ -278,38 +278,39 @@ describe('agentless-ci-visibility-encode', () => {
     expect(spanEvent.version).to.equal(1)
   })
 
-  describe('setMetadataTags', () => {
-    it('should set simple metadata tags', () => {
-      const tags = { key1: 'value1', key2: 'value2' }
-      encoder.setMetadataTags(tags)
+  describe('addMetadataTags', () => {
+    afterEach(() => {
+      encoder.metadataTags = {}
+    })
+
+    it('should add simple metadata tags', () => {
+      const tags = {
+        test: { tag: 'value1' },
+        test_session_end: { tag: 'value2' }
+      }
+      encoder.addMetadataTags(tags)
       expect(encoder.metadataTags).to.eql(tags)
     })
 
-    it('should merge nested metadata tags', () => {
-      encoder.metadataTags = { key1: { subkey1: 'value1' } }
-      const tags = { key1: { subkey2: 'value2' } }
-      encoder.setMetadataTags(tags)
-      expect(encoder.metadataTags).to.eql({ key1: { subkey1: 'value1', subkey2: 'value2' } })
-    })
-
-    it('should overwrite non-object values', () => {
-      encoder.metadataTags = { key1: 'value1' }
-      const tags = { key1: { subkey1: 'value2' } }
-      encoder.setMetadataTags(tags)
-      expect(encoder.metadataTags).to.eql({ key1: { subkey1: 'value2' } })
+    it('should merge dictionaries if there are values already', () => {
+      encoder.metadataTags = {
+        test: { tag: 'value1' }
+      }
+      const tags = {
+        test: { other: 'value2' },
+        test_session_end: { tag: 'value3' }
+      }
+      encoder.addMetadataTags(tags)
+      expect(encoder.metadataTags).to.eql({
+        test: { tag: 'value1', other: 'value2' },
+        test_session_end: { tag: 'value3' }
+      })
     })
 
     it('should handle empty tags', () => {
-      encoder.metadataTags = { key1: 'value1' }
-      encoder.setMetadataTags({})
-      expect(encoder.metadataTags).to.eql({ key1: 'value1' })
-    })
-
-    it('should handle null values in tags', () => {
-      encoder.metadataTags = { key1: 'value1' }
-      const tags = { key2: null }
-      encoder.setMetadataTags(tags)
-      expect(encoder.metadataTags).to.eql({ key1: 'value1', key2: null })
+      encoder.metadataTags = { test: { tag: 'value1' } }
+      encoder.addMetadataTags({})
+      expect(encoder.metadataTags).to.eql({ test: { tag: 'value1' } })
     })
   })
 })

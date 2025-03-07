@@ -28,9 +28,9 @@ const {
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
-  TAG_EARLY_FLAKE_DETECTION,
-  TAG_AUTO_TEST_RETRIES,
-  TAG_TEST_IMPACT_ANALYSIS
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -44,6 +44,19 @@ const {
 const { CI_PROVIDER_NAME, GIT_REPOSITORY_URL, GIT_COMMIT_SHA, GIT_BRANCH, CI_WORKSPACE_PATH } = require('./util/tags')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
+
+const UNSUPPORTED_TIA_FRAMEWORKS = ['playwright', 'vitest']
+const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = ['cucumber', 'mocha']
+
+function isTiaSupported (testFramework, isParallel) {
+  if (UNSUPPORTED_TIA_FRAMEWORKS.includes(testFramework)) {
+    return false
+  }
+  if (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.includes(testFramework)) {
+    return false
+  }
+  return true
+}
 
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
@@ -62,19 +75,18 @@ module.exports = class CiPlugin extends Plugin {
         } else {
           this.libraryConfig = libraryConfig
         }
+        const { isItrEnabled, isEarlyFlakeDetectionEnabled, isFlakyTestRetriesEnabled } = this.libraryConfig || {}
         const metadataTags = {
           test: {
-            [TAG_TEST_IMPACT_ANALYSIS]: this.libraryConfig?.isItrEnabled ? 'true' : 'false',
-            [TAG_EARLY_FLAKE_DETECTION]: this.libraryConfig?.isEarlyFlakeDetectionEnabled ? 'true' : 'false',
-            [TAG_AUTO_TEST_RETRIES]: this.libraryConfig?.isFlakyTestRetriesEnabled ? 'true' : 'false'
+            [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isItrEnabled ? 'true' : 'false',
+            [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: isEarlyFlakeDetectionEnabled ? 'true' : 'false',
+            [DD_CAPABILITIES_AUTO_TEST_RETRIES]: isFlakyTestRetriesEnabled ? 'true' : 'false'
           }
         }
-        if (this.constructor.id === 'playwright' ||
-          this.constructor.id === 'vitest' ||
-          ((this.constructor.id === 'cucumber' || this.constructor.id === 'mocha') && isParallel)) {
-          metadataTags.test[TAG_TEST_IMPACT_ANALYSIS] = undefined
+        if (!isTiaSupported(this.constructor.id, isParallel)) {
+          metadataTags.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS] = undefined
         }
-        this.tracer._exporter.setMetadataTags(metadataTags)
+        this.tracer._exporter.addMetadataTags(metadataTags)
         onDone({ err, libraryConfig })
       })
     })
@@ -112,8 +124,8 @@ module.exports = class CiPlugin extends Plugin {
         }
       }
       // tracer might not be initialized correctly
-      if (this.tracer._exporter.setMetadataTags) {
-        this.tracer._exporter.setMetadataTags(metadataTags)
+      if (this.tracer._exporter.addMetadataTags) {
+        this.tracer._exporter.addMetadataTags(metadataTags)
       }
 
       this.testSessionSpan = this.tracer.startSpan(`${this.constructor.id}.test_session`, {

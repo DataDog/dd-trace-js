@@ -46,9 +46,9 @@ const {
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
-  TAG_TEST_IMPACT_ANALYSIS,
-  TAG_EARLY_FLAKE_DETECTION,
-  TAG_AUTO_TEST_RETRIES
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_AUTO_TEST_RETRIES
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
@@ -2127,6 +2127,14 @@ versions.forEach(version => {
 
       runModes.forEach((runMode) => {
         it(`(${runMode}) adds capabilities to tests`, (done) => {
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            itr_enabled: false,
+            early_flake_detection: {
+              enabled: true
+            },
+            known_tests_enabled: false
+          })
           const runCommand = runMode === 'parallel' ? parallelModeCommand : runTestsCommand
 
           const receiverPromise = receiver
@@ -2135,18 +2143,15 @@ versions.forEach(version => {
 
               assert.isNotEmpty(metadataDicts)
               metadataDicts.forEach(metadata => {
-                for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-                  if (testLevel === 'test') {
-                    if (runMode === 'parallel') {
-                      assert.equal(metadata[testLevel][TAG_TEST_IMPACT_ANALYSIS], undefined)
-                    } else {
-                      assert.equal(metadata[testLevel][TAG_TEST_IMPACT_ANALYSIS], 'true')
-                    }
-                    assert.equal(metadata[testLevel][TAG_EARLY_FLAKE_DETECTION], 'false')
-                    assert.equal(metadata[testLevel][TAG_AUTO_TEST_RETRIES], 'false')
-                  }
-                  assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+                if (runMode === 'parallel') {
+                  assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
+                } else {
+                  assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], 'false')
                 }
+                assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], 'false')
+                assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], 'true')
+                // capabilities logic does not overwrite test session name
+                assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
               })
             })
 
@@ -2156,8 +2161,7 @@ versions.forEach(version => {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
-                DD_TEST_SESSION_NAME: 'my-test-session',
-                DD_SERVICE: undefined
+                DD_TEST_SESSION_NAME: 'my-test-session-name'
               },
               stdio: 'pipe'
             }
