@@ -155,10 +155,10 @@ function getErrorFromCucumberResult (cucumberResult) {
   return error
 }
 
-function getChannelPromise (channelToPublishTo) {
+function getChannelPromise (channelToPublishTo, isParallel = false) {
   return new Promise(resolve => {
     sessionAsyncResource.runInAsyncScope(() => {
-      channelToPublishTo.publish({ onDone: resolve })
+      channelToPublishTo.publish({ onDone: resolve, isParallel })
     })
   })
 }
@@ -414,7 +414,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
     let errorSkippableRequest
 
-    const configurationResponse = await getChannelPromise(libraryConfigurationCh)
+    const configurationResponse = await getChannelPromise(libraryConfigurationCh, isParallel)
 
     isEarlyFlakeDetectionEnabled = configurationResponse.libraryConfig?.isEarlyFlakeDetectionEnabled
     earlyFlakeDetectionNumRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionNumRetries

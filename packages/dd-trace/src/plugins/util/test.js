@@ -99,6 +99,11 @@ const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
 const EFD_STRING = "Retried by Datadog's Early Flake Detection"
 const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
 
+// Library Capabilities Tagging
+const DD_CAPABILITIES_TEST_IMPACT_ANALYSIS = '_dd.library_capabilities.test_impact_analysis'
+const DD_CAPABILITIES_EARLY_FLAKE_DETECTION = '_dd.library_capabilities.early_flake_detection'
+const DD_CAPABILITIES_AUTO_TEST_RETRIES = '_dd.library_capabilities.auto_test_retries'
+
 const TEST_LEVEL_EVENT_TYPES = [
   'test',
   'test_suite_end',
@@ -193,6 +198,9 @@ module.exports = {
   TEST_BROWSER_NAME,
   TEST_BROWSER_VERSION,
   getTestSessionName,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
   TEST_LEVEL_EVENT_TYPES,
   getNumFromKnownTests,
   getFileAndLineNumberFromError,
