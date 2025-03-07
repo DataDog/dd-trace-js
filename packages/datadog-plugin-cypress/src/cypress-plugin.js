@@ -518,7 +518,8 @@ class CypressPlugin {
       this.testSessionSpan.finish()
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       incrementCountMetric(TELEMETRY_TEST_SESSION, {
-        provider: this.ciProviderName
+        provider: this.ciProviderName,
+        autoInjected: !!process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER
       })
 
       finishAllTraceSpans(this.testSessionSpan)
