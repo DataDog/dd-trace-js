@@ -23,6 +23,8 @@ function win32 (name) {
   return path.join(process.env.USERPROFILE, 'Local Settings', 'Application Data', name)
 }
 
+// Code vendored from https://github.com/LinusU/node-application-config-path but
+// without the ESM requirement.
 function applicationConfigPath (name) {
   if (typeof name !== 'string') {
     throw new TypeError('`name` must be string')
