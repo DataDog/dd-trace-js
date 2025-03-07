@@ -2,9 +2,17 @@ const assert = require('assert')
 const { When, Then } = require('@cucumber/cucumber')
 
 Then('I should have heard {string}', function (expectedResponse) {
-  assert.equal(this.whatIHeard, 'fail')
+  if (this.whatIHeard === 'quarantine') {
+    assert.equal(this.whatIHeard, 'fail')
+  } else {
+    assert.equal(this.whatIHeard, expectedResponse)
+  }
 })
 
 When('the greeter says quarantine', function () {
   this.whatIHeard = 'quarantine'
+})
+
+When('the greeter says disabled', function () {
+  this.whatIHeard = 'disabled'
 })

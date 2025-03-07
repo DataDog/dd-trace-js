@@ -40,7 +40,8 @@ const {
   TEST_RETRY_REASON,
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   TEST_MANAGEMENT_IS_QUARANTINED,
-  TEST_MANAGEMENT_ENABLED
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_DISABLED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -1734,102 +1735,198 @@ moduleTypes.forEach(({
       })
     })
 
-    context('quarantine', () => {
-      beforeEach(() => {
-        receiver.setQuarantinedTests({
-          cypress: {
-            suites: {
-              'cypress/e2e/quarantine.js': {
-                tests: {
-                  'quarantine is quarantined': {
-                    properties: {
-                      quarantined: true
+    context('test management', () => {
+      context('disabled', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            cypress: {
+              suites: {
+                'cypress/e2e/disabled.js': {
+                  tests: {
+                    'disable is disabled': {
+                      properties: {
+                        disabled: true
+                      }
                     }
                   }
                 }
               }
             }
-          }
+          })
+        })
+
+        const getTestAssertions = (isDisabling) =>
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const failedTest = events.find(event => event.type === 'test').content
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              if (isDisabling) {
+                assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+              } else {
+                assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+              }
+
+              assert.equal(failedTest.resource, 'cypress/e2e/disabled.js.disable is disabled')
+
+              if (isDisabling) {
+                assert.propertyVal(failedTest.meta, TEST_STATUS, 'skip')
+                assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
+              } else {
+                assert.propertyVal(failedTest.meta, TEST_STATUS, 'pass')
+                assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_DISABLED)
+              }
+            })
+
+        const runDisableTest = (done, isDisabling, extraEnvVars) => {
+          const testAssertionsPromise = getTestAssertions(isDisabling)
+
+          const {
+            NODE_OPTIONS,
+            ...restEnvVars
+          } = getCiVisEvpProxyConfig(receiver.port)
+
+          const specToRun = 'cypress/e2e/disabled.js'
+
+          childProcess = exec(
+            version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+            {
+              cwd,
+              env: {
+                ...restEnvVars,
+                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                SPEC_PATTERN: specToRun,
+                ...extraEnvVars
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', (exitCode) => {
+            testAssertionsPromise.then(() => {
+              assert.equal(exitCode, 0)
+              done()
+            }).catch(done)
+          })
+        }
+
+        it('can disable tests', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runDisableTest(done, true)
+        })
+
+        it('fails if disable is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false } })
+
+          runDisableTest(done, false)
+        })
+
+        it('does not disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runDisableTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
         })
       })
 
-      const getTestAssertions = (isQuarantining) =>
-        receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const failedTest = events.find(event => event.type === 'test').content
-            const testSession = events.find(event => event.type === 'test_session_end').content
-
-            if (isQuarantining) {
-              assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
-            } else {
-              assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
-            }
-
-            assert.equal(failedTest.resource, 'cypress/e2e/quarantine.js.quarantine is quarantined')
-
-            if (isQuarantining) {
-              // TODO: run instead of skipping, but ignore its result
-              assert.propertyVal(failedTest.meta, TEST_STATUS, 'skip')
-              assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
-            } else {
-              assert.propertyVal(failedTest.meta, TEST_STATUS, 'fail')
-              assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+      context('quarantine', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            cypress: {
+              suites: {
+                'cypress/e2e/quarantine.js': {
+                  tests: {
+                    'quarantine is quarantined': {
+                      properties: {
+                        quarantined: true
+                      }
+                    }
+                  }
+                }
+              }
             }
           })
-
-      const runQuarantineTest = (done, isQuarantining, extraEnvVars) => {
-        const testAssertionsPromise = getTestAssertions(isQuarantining)
-
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
-
-        const specToRun = 'cypress/e2e/quarantine.js'
-
-        childProcess = exec(
-          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
-          {
-            cwd,
-            env: {
-              ...restEnvVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: specToRun,
-              ...extraEnvVars
-            },
-            stdio: 'pipe'
-          }
-        )
-
-        childProcess.on('exit', (exitCode) => {
-          testAssertionsPromise.then(() => {
-            if (isQuarantining) {
-              assert.equal(exitCode, 0)
-            } else {
-              assert.equal(exitCode, 1)
-            }
-            done()
-          }).catch(done)
         })
-      }
 
-      it('can quarantine tests', (done) => {
-        receiver.setSettings({ test_management: { enabled: true } })
+        const getTestAssertions = (isQuarantining) =>
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const failedTest = events.find(event => event.type === 'test').content
+              const testSession = events.find(event => event.type === 'test_session_end').content
 
-        runQuarantineTest(done, true)
-      })
+              if (isQuarantining) {
+                assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+              } else {
+                assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+              }
 
-      it('fails if quarantine is not enabled', (done) => {
-        receiver.setSettings({ test_management: { enabled: false } })
+              assert.equal(failedTest.resource, 'cypress/e2e/quarantine.js.quarantine is quarantined')
 
-        runQuarantineTest(done, false)
-      })
+              if (isQuarantining) {
+                // TODO: run instead of skipping, but ignore its result
+                assert.propertyVal(failedTest.meta, TEST_STATUS, 'skip')
+                assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+              } else {
+                assert.propertyVal(failedTest.meta, TEST_STATUS, 'fail')
+                assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+              }
+            })
 
-      it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
-        receiver.setSettings({ test_management: { enabled: true } })
+        const runQuarantineTest = (done, isQuarantining, extraEnvVars) => {
+          const testAssertionsPromise = getTestAssertions(isQuarantining)
 
-        runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+          const {
+            NODE_OPTIONS,
+            ...restEnvVars
+          } = getCiVisEvpProxyConfig(receiver.port)
+
+          const specToRun = 'cypress/e2e/quarantine.js'
+
+          childProcess = exec(
+            version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+            {
+              cwd,
+              env: {
+                ...restEnvVars,
+                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                SPEC_PATTERN: specToRun,
+                ...extraEnvVars
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', (exitCode) => {
+            testAssertionsPromise.then(() => {
+              if (isQuarantining) {
+                assert.equal(exitCode, 0)
+              } else {
+                assert.equal(exitCode, 1)
+              }
+              done()
+            }).catch(done)
+          })
+        }
+
+        it('can quarantine tests', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runQuarantineTest(done, true)
+        })
+
+        it('fails if quarantine is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false } })
+
+          runQuarantineTest(done, false)
+        })
+
+        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+        })
       })
     })
   })

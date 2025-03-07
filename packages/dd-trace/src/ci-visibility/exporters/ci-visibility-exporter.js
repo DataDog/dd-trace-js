@@ -6,7 +6,8 @@ const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata'
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
-const { getQuarantinedTests: getQuarantinedTestsRequest } = require('../quarantined-tests/get-quarantined-tests')
+const { getTestManagementTests: getTestManagementTestsRequest } =
+  require('../test-management/get-test-management-tests')
 const log = require('../../log')
 const AgentInfoExporter = require('../../exporters/common/agent-info-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
@@ -93,11 +94,11 @@ class CiVisibilityExporter extends AgentInfoExporter {
     )
   }
 
-  shouldRequestQuarantinedTests () {
+  shouldRequestTestManagementTests () {
     return !!(
       this._canUseCiVisProtocol &&
       this._config.isTestManagementEnabled &&
-      this._libraryConfig?.isQuarantinedTestsEnabled
+      this._libraryConfig?.isTestManagementEnabled
     )
   }
 
@@ -147,11 +148,11 @@ class CiVisibilityExporter extends AgentInfoExporter {
     getKnownTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
   }
 
-  getQuarantinedTests (testConfiguration, callback) {
-    if (!this.shouldRequestQuarantinedTests()) {
+  getTestManagementTests (testConfiguration, callback) {
+    if (!this.shouldRequestTestManagementTests()) {
       return callback(null)
     }
-    getQuarantinedTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
+    getTestManagementTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
   }
 
   /**
@@ -214,7 +215,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
       isFlakyTestRetriesEnabled,
       isDiEnabled,
       isKnownTestsEnabled,
-      isQuarantinedTestsEnabled
+      isTestManagementEnabled
     } = remoteConfiguration
     return {
       isCodeCoverageEnabled,
@@ -228,7 +229,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
       flakyTestRetriesCount: this._config.flakyTestRetriesCount,
       isDiEnabled: isDiEnabled && this._config.isTestDynamicInstrumentationEnabled,
       isKnownTestsEnabled,
-      isQuarantinedTestsEnabled: isQuarantinedTestsEnabled && this._config.isTestManagementEnabled
+      isTestManagementEnabled: isTestManagementEnabled && this._config.isTestManagementEnabled
     }
   }
 
