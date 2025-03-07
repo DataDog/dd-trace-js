@@ -58,15 +58,13 @@ describe('WAFContextWrapper', () => {
     wafContextWrapper.run(payload)
 
     expect(ddwafContext.run).to.have.been.calledTwice
-    expect(ddwafContext.run).to.have.been.calledWithExactly(payload, 1000)
+    expect(ddwafContext.run).to.always.have.been.calledWithExactly(payload, 1000)
 
     const firstCall = Reporter.reportMetrics.getCall(0).args[0]
-    expect(firstCall).to.have.property('errorCode')
-    expect(firstCall.errorCode).to.equal(-127)
+    expect(firstCall).to.have.property('errorCode', -127)
 
     const secondCall = Reporter.reportMetrics.getCall(1).args[0]
-    expect(secondCall).to.have.property('errorCode')
-    expect(secondCall.errorCode).to.equal(-127)
+    expect(secondCall).to.have.property('errorCode', -127)
   })
 
   it('Should send ephemeral addresses every time', () => {
@@ -142,6 +140,83 @@ describe('WAFContextWrapper', () => {
     wafRunFinished.unsubscribe(finishedCallback)
 
     expect(finishedCallback).to.be.calledOnceWith({ payload })
+  })
+
+  it('should report error code when the waf run fails', () => {
+    const ddwafContext = {
+      run: sinon.stub().returns({ errorCode: -2 })
+    }
+
+    const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
+
+    const payload = {
+      persistent: {
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
+      }
+    }
+
+    wafContextWrapper.run(payload)
+
+    expect(Reporter.reportMetrics).to.have.been.calledOnce
+    const reportedMetrics = Reporter.reportMetrics.getCall(0).args[0]
+
+    expect(reportedMetrics).to.include({
+      rulesVersion: '1.8.0',
+      wafVersion: '1.14.0',
+      wafTimeout: false,
+      blockTriggered: false,
+      ruleTriggered: false,
+      errorCode: -2,
+      maxTruncatedString: null,
+      maxTruncatedContainerSize: null,
+      maxTruncatedContainerDepth: null
+    })
+  })
+
+  it('should report truncation metrics, blockTriggered, and ruleTriggered on successful waf run', () => {
+    const ddwafContext = {
+      run: sinon.stub().returns({
+        events: [{ rule_matches: [] }],
+        derivatives: [],
+        actions: {
+          redirect_request: {
+            status_code: 301
+          }
+        },
+        totalRuntime: 123456,
+        timeout: false,
+        metrics: {
+          maxTruncatedString: 5000,
+          maxTruncatedContainerSize: 300,
+          maxTruncatedContainerDepth: 20
+        }
+      })
+    }
+
+    const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
+
+    const payload = {
+      persistent: {
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
+      }
+    }
+
+    wafContextWrapper.run(payload)
+
+    expect(Reporter.reportMetrics).to.have.been.calledOnce
+    const reportedMetrics = Reporter.reportMetrics.getCall(0).args[0]
+
+    expect(reportedMetrics).to.include({
+      rulesVersion: '1.8.0',
+      wafVersion: '1.14.0',
+      wafTimeout: false,
+      blockTriggered: true,
+      ruleTriggered: true,
+      errorCode: null,
+      maxTruncatedString: 5000,
+      maxTruncatedContainerSize: 300,
+      maxTruncatedContainerDepth: 20
+    })
   })
 
   describe('Disposal context check', () => {
