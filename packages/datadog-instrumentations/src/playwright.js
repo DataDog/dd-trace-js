@@ -297,7 +297,13 @@ function testBeginHandler (test, browserName) {
   const testAsyncResource = new AsyncResource('bound-anonymous-fn')
   testToAr.set(test, testAsyncResource)
   testAsyncResource.runInAsyncScope(() => {
-    testStartCh.publish({ testName, testSuiteAbsolutePath, testSourceLine, browserName, isDisabled: test._ddIsDisabled })
+    testStartCh.publish({
+      testName,
+      testSuiteAbsolutePath,
+      testSourceLine,
+      browserName,
+      isDisabled: test._ddIsDisabled
+    })
   })
 }
 

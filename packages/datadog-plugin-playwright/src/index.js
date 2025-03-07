@@ -133,7 +133,13 @@ class PlaywrightPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
 
-    this.addSub('ci:playwright:test:start', ({ testName, testSuiteAbsolutePath, testSourceLine, browserName, isDisabled }) => {
+    this.addSub('ci:playwright:test:start', ({
+      testName,
+      testSuiteAbsolutePath,
+      testSourceLine,
+      browserName,
+      isDisabled
+    }) => {
       const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
       const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
