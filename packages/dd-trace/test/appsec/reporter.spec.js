@@ -150,12 +150,34 @@ describe('reporter', () => {
       expect(span.setTag).not.to.have.been.called
     })
 
-    it('should set duration metrics if set', () => {
-      const metrics = { duration: 1337 }
+    it('should do nothing when rootSpan is not available', () => {
+      web.root.returns(null)
+
+      const metrics = { durationExt: 42, duration: 1337000 }
+
+      Reporter.reportMetrics(metrics)
+
+      expect(telemetry.updateWafRequestsMetricTags).not.to.have.been.called
+      expect(telemetry.updateRaspRequestsMetricTags).not.to.have.been.called
+    })
+
+    it('should set duration metric if set', () => {
+      const metrics = { duration: 1337000 }
+
       Reporter.reportMetrics(metrics)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
       expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
+      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
+    })
+
+    it('should call updateWafRequestsMetricTags', () => {
+      const metrics = { rulesVersion: '1.2.3' }
+      const store = storage('legacy').getStore()
+
+      Reporter.reportMetrics(metrics)
+
+      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req)
       expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
     })
 
@@ -169,21 +191,53 @@ describe('reporter', () => {
     })
 
     it('should set rulesVersion if set', () => {
-      Reporter.reportMetrics({ rulesVersion: '1.2.3' })
+      const metrics = { rulesVersion: '1.2.3' }
+
+      Reporter.reportMetrics(metrics)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
       expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.event_rules.version', '1.2.3')
       expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
     })
 
-    it('should call updateWafRequestsMetricTags', () => {
-      const metrics = { rulesVersion: '1.2.3' }
-      const store = storage('legacy').getStore()
+    it('should set blockTriggered when provided', () => {
+      const metrics = { blockTriggered: true }
+
+      Reporter.reportMetrics(metrics, null)
+
+      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
+    })
+
+    it('should set wafTimeout when result has timeout', () => {
+      const metrics = { timeout: true }
 
       Reporter.reportMetrics(metrics)
 
-      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req)
-      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
+      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
+    })
+
+    it('should set max truncation string length metric if set', () => {
+      const metrics = { maxTruncatedString: 300 }
+
+      Reporter.reportMetrics(metrics)
+
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.truncated.string_length', 300)
+    })
+
+    it('should set max truncation container size metric if set', () => {
+      const metrics = { maxTruncatedContainerSize: 200 }
+
+      Reporter.reportMetrics(metrics)
+
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.truncated.container_size', 200)
+    })
+
+    it('should set max truncation container depth metric if set', () => {
+      const metrics = { maxTruncatedContainerDepth: 100 }
+
+      Reporter.reportMetrics(metrics)
+
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.truncated.container_depth', 100)
     })
 
     it('should call updateRaspRequestsMetricTags when raspRule is provided', () => {
@@ -649,6 +703,22 @@ describe('reporter', () => {
       expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.rasp.rule.eval')
     })
 
+    it('should set waf.timeouts tags if there are metrics stored', () => {
+      telemetry.getRequestMetrics.returns({ wafTimeouts: true })
+
+      Reporter.finishRequest({}, {})
+
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.timeouts', true)
+    })
+
+    it('should set waf error code tags if there are metrics stored', () => {
+      telemetry.getRequestMetrics.returns({ wafErrorCode: -1 })
+
+      Reporter.finishRequest({}, {})
+
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.error', -1)
+    })
+
     it('should set rasp.duration tags if there are metrics stored', () => {
       telemetry.getRequestMetrics.returns({ raspDuration: 123, raspDurationExt: 321, raspEvalCount: 3 })
 
@@ -659,6 +729,22 @@ describe('reporter', () => {
       expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.duration', 123)
       expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.duration_ext', 321)
       expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.rule.eval', 3)
+    })
+
+    it('should set rasp.timeout tags if there are metrics stored', () => {
+      telemetry.getRequestMetrics.returns({ raspTimeouts: true })
+
+      Reporter.finishRequest({}, {})
+
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.timeout', true)
+    })
+
+    it('should set rasp error code tags if there are metrics stored', () => {
+      telemetry.getRequestMetrics.returns({ raspErrorCode: -1 })
+
+      Reporter.finishRequest({}, {})
+
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.error', -1)
     })
 
     it('should keep span if there are metrics', () => {
