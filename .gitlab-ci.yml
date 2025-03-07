@@ -7,7 +7,7 @@ stages:
 
 include:
   #- remote: https://gitlab-templates.ddbuild.io/libdatadog/include/one-pipeline.yml
-  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include-wip/robertomonteromiguel/temp_system_tests_before_merge/single-step-instrumentation-tests.yml
+  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include-wip/robertomonteromiguel/temp_system_tests_before_merge//one-pipeline.yml
   - local: ".gitlab/benchmarks.yml"
   - local: ".gitlab/macrobenchmarks.yml"
 
