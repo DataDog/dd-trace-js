@@ -23,10 +23,13 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     const inputs = ctx.args[0] // completion, chat completion, and embeddings take one argument
     const operation = getOperation(methodName)
     const kind = operation === 'embedding' ? 'embedding' : 'llm'
-    const name = `openai.${methodName}`
+
+    const { modelProvider, prefix } = this._getModelProviderAndSpanNamePrefix(ctx.basePath)
+
+    const name = `${prefix}.${methodName}`
 
     return {
-      modelProvider: 'openai',
+      modelProvider,
       modelName: inputs.model,
       kind,
       name
@@ -56,6 +59,16 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     if (!error) {
       const metrics = this._extractMetrics(response)
       this._tagger.tagMetrics(span, metrics)
+    }
+  }
+
+  _getModelProviderAndSpanNamePrefix (baseUrl = '') {
+    if (baseUrl.includes('azure')) {
+      return { modelProvider: 'azure_openai', prefix: 'AzureOpenAI' }
+    } else if (baseUrl.includes('deepseek')) {
+      return { modelProvider: 'deepseek', prefix: 'DeepSeek' }
+    } else {
+      return { modelProvider: 'openai', prefix: 'OpenAI' }
     }
   }
 

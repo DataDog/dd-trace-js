@@ -92,7 +92,7 @@ describe('integrations', () => {
           const expected = expectedLLMObsLLMSpanEvent({
             span,
             spanKind: 'llm',
-            name: 'openai.createCompletion',
+            name: 'OpenAI.createCompletion',
             inputMessages: [
               { content: 'How are you?' }
             ],
@@ -147,7 +147,7 @@ describe('integrations', () => {
           const expected = expectedLLMObsLLMSpanEvent({
             span,
             spanKind: 'llm',
-            name: 'openai.createChatCompletion',
+            name: 'OpenAI.createChatCompletion',
             inputMessages: [
               { role: 'system', content: 'You are a helpful assistant' },
               { role: 'user', content: 'How are you?' }
@@ -200,7 +200,7 @@ describe('integrations', () => {
           const expected = expectedLLMObsLLMSpanEvent({
             span,
             spanKind: 'embedding',
-            name: 'openai.createEmbedding',
+            name: 'OpenAI.createEmbedding',
             inputDocuments: [
               { text: 'Hello, world!' }
             ],
@@ -264,7 +264,7 @@ describe('integrations', () => {
             const expected = expectedLLMObsLLMSpanEvent({
               span,
               spanKind: 'llm',
-              name: 'openai.createChatCompletion',
+              name: 'OpenAI.createChatCompletion',
               modelName: 'gpt-3.5-turbo-0301',
               modelProvider: 'openai',
               inputMessages: [{ role: 'user', content: 'What is SpongeBob SquarePants\'s origin?' }],
@@ -322,7 +322,7 @@ describe('integrations', () => {
             const expected = expectedLLMObsLLMSpanEvent({
               span,
               spanKind: 'llm',
-              name: 'openai.createCompletion',
+              name: 'OpenAI.createCompletion',
               inputMessages: [
                 { content: 'Can you say this is a test?' }
               ],
@@ -373,7 +373,7 @@ describe('integrations', () => {
             const expected = expectedLLMObsLLMSpanEvent({
               span,
               spanKind: 'llm',
-              name: 'openai.createChatCompletion',
+              name: 'OpenAI.createChatCompletion',
               inputMessages: [
                 { role: 'user', content: 'Hello' }
               ],
@@ -424,7 +424,7 @@ describe('integrations', () => {
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
                 spanKind: 'llm',
-                name: 'openai.createChatCompletion',
+                name: 'OpenAI.createChatCompletion',
                 modelName: 'gpt-3.5-turbo-0301',
                 modelProvider: 'openai',
                 inputMessages: [{ role: 'user', content: 'What function would you call to finish this?' }],
@@ -479,7 +479,7 @@ describe('integrations', () => {
           const expected = expectedLLMObsLLMSpanEvent({
             span,
             spanKind: 'llm',
-            name: 'openai.createCompletion',
+            name: 'OpenAI.createCompletion',
             inputMessages: [{ content: 'Hello' }],
             outputMessages: [{ content: '' }],
             modelName: 'gpt-3.5-turbo',
@@ -521,7 +521,7 @@ describe('integrations', () => {
           const expected = expectedLLMObsLLMSpanEvent({
             span,
             spanKind: 'llm',
-            name: 'openai.createChatCompletion',
+            name: 'OpenAI.createChatCompletion',
             inputMessages: [{ role: 'user', content: 'Hello' }],
             outputMessages: [{ content: '' }],
             modelName: 'gpt-3.5-turbo',
