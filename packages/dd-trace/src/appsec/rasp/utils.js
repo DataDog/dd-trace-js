@@ -49,7 +49,6 @@ function handleResult (actions, req, res, abortController, config) {
 
   const blockingAction = getBlockingAction(actions)
   if (blockingAction) {
-    const rootSpan = web.root(req)
     // Should block only in express
     if (rootSpan?.context()._name === 'express.request') {
       const abortError = new DatadogRaspAbortError(req, res, blockingAction)
