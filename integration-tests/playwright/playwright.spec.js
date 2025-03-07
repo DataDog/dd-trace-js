@@ -892,7 +892,7 @@ versions.forEach((version) => {
     if (version === 'latest') {
       context('quarantine', () => {
         beforeEach(() => {
-          receiver.setQuarantinedTests({
+          receiver.setTestManagementTests({
             playwright: {
               suites: {
                 'quarantine-test.js': {
