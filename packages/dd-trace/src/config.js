@@ -1486,7 +1486,9 @@ class Config {
         if ((value !== null && value !== undefined) || container === this._defaults) {
           // report all sources
           // if (get(this, name) === value && has(this, name)) break
-
+          // if (name === 'service') {
+          //   console.log(1000000, name, value, this._defaults['service'], this._env['service'], this._options['service'])
+          // }
           set(this, name, value)
 
           changes.push({
@@ -1495,11 +1497,11 @@ class Config {
             origin: origins[i]
           })
 
-          break
+          //break
         }
       }
     }
-    console.log(this)
+    // console.log(this)
     this.sampler.sampleRate = this.sampleRate
     updateConfig(changes, this)
   }
