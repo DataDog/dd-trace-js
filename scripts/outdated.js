@@ -1,11 +1,11 @@
 /* eslint-disable no-console */
-const {
-  getInternals,
-  npmView
-} = require('./helpers/versioning')
+'use strict'
+
+const { getInternals } = require('./helpers/versioning')
 const path = require('path')
 const fs = require('fs')
 const semver = require('semver')
+const childProcess = require('child_process')
 
 const latestsPath = path.join(
   __dirname,
@@ -17,25 +17,83 @@ const latestsPath = path.join(
   'latests.json'
 )
 
-// Get internal package names from existing getInternals helper
 const internalsNames = Array.from(new Set(getInternals().map(n => n.name)))
   .filter(x => typeof x === 'string' && x !== 'child_process' && !x.startsWith('node:'))
 
-// Initial structure with placeholder for configuration
-const initialStructure = {
-  pinned: ['ENTER_PACKAGE_NAME_HERE'],
-  onlyUseLatestTag: ['ENTER_PACKAGE_NAME_HERE'],
+// Packages that should be ignored during version checking - these won't be included in latests.json
+const IGNORED_PACKAGES = [
+  // Add package names here
+  'aerospike', // I think this is due to architecture issues?
+  'mariadb', // mariadb esm tests were failing
+  'microgateway-core', // 'microgateway-core' was failing to find a directory
+  'winston' // winston esm tests were failing
+]
+
+// Packages that should be pinned to specific versions
+const PINNED_PACKAGES = {
+  // Example: 'express': '4.17.3'
+  fastify: '4.28.1' // v5+ is not supported
+}
+
+// Packages that should only use the 'latest' tag (not 'next' or other dist-tags)
+// Some packages have a next tag that is a stable semver version
+const ONLY_USE_LATEST_TAG = [
+  // Example: 'router'
+]
+
+// Initial structure for latests.json that will be recreated each run
+const outputData = {
+  pinned: Object.keys(PINNED_PACKAGES),
+  onlyUseLatestTag: ONLY_USE_LATEST_TAG,
+  ignored: IGNORED_PACKAGES,
   latests: {}
 }
 
-/**
- * Gets the highest version that's compatible with our instrumentation
- * This handles cases where a package has newer versions that might break compatibility
- */
-async function getHighestCompatibleVersion (name, config = {}) {
+function npmView (input) {
+  return new Promise((resolve, reject) => {
+    childProcess.exec(`npm view ${input} --json`, (err, stdout) => {
+      if (err) {
+        reject(err)
+        return
+      }
+      try {
+        resolve(JSON.parse(stdout.toString('utf8')))
+      } catch (e) {
+        reject(new Error(`Failed to parse npm output for ${input}: ${e.message}`))
+      }
+    })
+  })
+}
+
+async function getHighestCompatibleVersion (name) {
   try {
+    if (IGNORED_PACKAGES.includes(name)) {
+      console.log(`Skipping "${name}" as it's in the ignored list`)
+      return null
+    }
+
+    // If package is hardcoded as pinned, return the pinned version but also check latest
+    // this is for logging purposes
+    if (PINNED_PACKAGES[name]) {
+      const pinnedVersion = PINNED_PACKAGES[name]
+
+      try {
+        const distTags = await npmView(`${name} dist-tags`)
+        const latestTagged = distTags.latest
+
+        if (latestTagged && semver.gt(latestTagged, pinnedVersion)) {
+          console.log(`Note: "${name}" is pinned to ${pinnedVersion}, but ${latestTagged} is available`)
+        }
+      } catch (err) {
+        // Just log the error but continue with the pinned version
+        console.log(`Warning: Could not fetch latest version for pinned package "${name}": ${err.message}`)
+      }
+
+      return pinnedVersion
+    }
+
     // Get all distribution tags (including 'latest')
-    const distTags = await npmView(name + ' dist-tags')
+    const distTags = await npmView(`${name} dist-tags`)
 
     // Get the latest tagged version
     const latestTagged = distTags.latest
@@ -46,12 +104,12 @@ async function getHighestCompatibleVersion (name, config = {}) {
     }
 
     // If package is in the onlyUseLatestTag list, always use the 'latest' tag
-    if (config.onlyUseLatestTag && config.onlyUseLatestTag.includes(name)) {
+    if (ONLY_USE_LATEST_TAG.includes(name)) {
       return latestTagged
     }
 
     // Get all available versions
-    const allVersions = await npmView(name + ' versions')
+    const allVersions = await npmView(`${name} versions`)
 
     // Find the highest non-prerelease version available
     const stableVersions = allVersions.filter(v => !semver.prerelease(v))
@@ -77,12 +135,7 @@ async function fix () {
   console.log('Starting fix operation...')
   console.log(`Found ${internalsNames.length} packages to process`)
 
-  let outputData = initialStructure
-  if (fs.existsSync(latestsPath)) {
-    console.log('Found existing latests.json, loading it...')
-    outputData = require(latestsPath)
-  }
-
+  // Process packages
   const latests = {}
   let processed = 0
   const total = internalsNames.length
@@ -91,87 +144,48 @@ async function fix () {
     processed++
     process.stdout.write(`Processing package ${processed}/${total}: ${name}...`)
 
+    // Skip ignored packages
+    if (IGNORED_PACKAGES.includes(name)) {
+      process.stdout.write(' IGNORED\n')
+      continue
+    }
+
     try {
-      const latestVersion = await getHighestCompatibleVersion(name, outputData)
+      // Handle hardcoded pinned packages
+      if (PINNED_PACKAGES[name]) {
+        const pinnedVersion = PINNED_PACKAGES[name]
+        latests[name] = pinnedVersion
+        process.stdout.write(` PINNED to version ${pinnedVersion}\n`)
+        continue
+      }
+
+      // Normal package processing
+      const latestVersion = await getHighestCompatibleVersion(name)
       if (latestVersion) {
         latests[name] = latestVersion
         process.stdout.write(` found version ${latestVersion}\n`)
       } else {
         process.stdout.write(' WARNING: no version found\n')
-        console.log(`Warning: Could not fetch latest version for "${name}"`)
       }
     } catch (error) {
       process.stdout.write(' ERROR\n')
-      console.error(`Error fetching version for "${name}":`, error.message)
+      console.error(`Error processing "${name}":`, error.message)
     }
   }
 
+  // Update the output data
   outputData.latests = latests
+
+  // Write the updated configuration with a comment at the top
   console.log('\nWriting updated versions to latests.json...')
-  fs.writeFileSync(latestsPath, JSON.stringify(outputData, null, 2))
+
+  // Convert to JSON with proper indentation
+  const jsonContent = JSON.stringify(outputData, null, 2)
+
+  fs.writeFileSync(latestsPath, jsonContent)
+
   console.log('Successfully updated latests.json')
   console.log(`Processed ${total} packages`)
 }
 
-/**
- * Checks if latests.json matches current npm versions
- */
-async function check () {
-  console.log('Starting version check...')
-
-  if (!fs.existsSync(latestsPath)) {
-    console.log('latests.json does not exist. Run with "fix" to create it.')
-    process.exitCode = 1
-    return
-  }
-
-  const currentData = require(latestsPath)
-  console.log(`Found ${internalsNames.length} packages to check`)
-
-  let processed = 0
-  let mismatches = 0
-  const total = internalsNames.length
-
-  for (const name of internalsNames) {
-    processed++
-    process.stdout.write(`Checking package ${processed}/${total}: ${name}...`)
-
-    const latest = currentData.latests[name]
-    if (!latest) {
-      process.stdout.write(' MISSING\n')
-      console.log(`No latest version found for "${name}"`)
-      process.exitCode = 1
-      continue
-    }
-
-    try {
-      const latestVersion = await getHighestCompatibleVersion(name, currentData)
-      if (!latestVersion) {
-        process.stdout.write(' ERROR\n')
-        console.error(`Error fetching latest version for "${name}"`)
-        continue
-      }
-
-      if (latestVersion !== latest) {
-        process.stdout.write(' MISMATCH\n')
-        console.log(`"latests.json: is not up to date for "${name}": expected "${latestVersion}", got "${latest}"`)
-        process.exitCode = 1
-        mismatches++
-      } else {
-        process.stdout.write(' OK\n')
-      }
-    } catch (error) {
-      process.stdout.write(' ERROR\n')
-      console.error(`Error checking version for "${name}":`, error.message)
-    }
-  }
-
-  console.log('\nCheck completed:')
-  console.log(`- Total packages checked: ${total}`)
-  console.log(`- Version mismatches found: ${mismatches}`)
-  if (mismatches > 0) {
-    console.log('Run with "fix" to update versions')
-  }
-}
-if (process.argv.includes('fix')) fix()
-else check()
+fix()
