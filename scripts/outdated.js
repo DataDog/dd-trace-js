@@ -92,7 +92,7 @@ async function getHighestCompatibleVersion (name) {
       return pinnedVersion
     }
 
-    // Get all distribution tags (including 'latest')
+    // ideally we can just use `latest` tag, but a few use `next`
     const distTags = await npmView(`${name} dist-tags`)
 
     // Get the latest tagged version
@@ -128,14 +128,10 @@ async function getHighestCompatibleVersion (name) {
   }
 }
 
-/**
- * Updates latests.json with the current latest versions from npm
- */
 async function fix () {
   console.log('Starting fix operation...')
   console.log(`Found ${internalsNames.length} packages to process`)
 
-  // Process packages
   const latests = {}
   let processed = 0
   const total = internalsNames.length
