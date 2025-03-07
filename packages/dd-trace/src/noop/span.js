@@ -1,14 +1,16 @@
 'use strict'
 
 const NoopSpanContext = require('./span_context')
+const DatadogSpanContext = require('../opentracing/span_context')
 const id = require('../id')
 const { storage } = require('../../../datadog-core') // TODO: noop storage?
 
 class NoopSpan {
-  constructor (tracer, parent) {
+  constructor (tracer, parent, options) {
     this._store = storage('legacy').getHandle()
     this._noopTracer = tracer
-    this._noopContext = this._createContext(parent)
+    this._noopContext = this._createContext(parent, options)
+    this._options = options
   }
 
   context () { return this._noopContext }
@@ -27,10 +29,16 @@ class NoopSpan {
   logEvent () {}
   finish (finishTime) {}
 
-  _createContext (parent) {
+  _createContext (parent, options) {
     const spanId = id()
 
     if (parent) {
+      // necessary for trace level configuration. This pattern returns the first valid span context that is not a
+      // NoopSpanContext, aka the next parent span in the trace that will be kept.
+      if (options.useParentContext && parent) {
+        return parent instanceof DatadogSpanContext ? parent : parent.context()
+      }
+
       return new NoopSpanContext({
         noop: this,
         traceId: parent._traceId,
