@@ -764,6 +764,7 @@ describe('Config', () => {
     process.env.DD_TAGS = 'env:test,aKey:aVal bKey:bVal cKey:'
 
     config = new Config()
+
     expect(config.tags).to.have.property('env', 'test')
     expect(config.tags).to.have.property('aKey', 'aVal bKey:bVal cKey:')
 
