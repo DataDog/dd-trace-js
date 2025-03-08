@@ -7,6 +7,12 @@ const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
 const DD_TELEMETRY_WAF_RESULT_TAGS = Symbol('_dd.appsec.telemetry.waf.result.tags')
 
+const TRUNCATION_FLAGS = {
+  LONG_STRING: 1,
+  LARGE_CONTAINER: 2,
+  DEEP_CONTAINER: 4
+}
+
 function addWafRequestMetrics (store, { duration, durationExt, wafTimeout, errorCode }) {
   store[DD_TELEMETRY_REQUEST_METRICS].duration += duration || 0
   store[DD_TELEMETRY_REQUEST_METRICS].durationExt += durationExt || 0
@@ -58,6 +64,11 @@ function trackWafMetrics (store, metrics) {
     metricTags[tags.WAF_TIMEOUT] = true
   }
 
+  const truncationReason = getTruncationReason(metrics)
+  if (truncationReason > 0) {
+    incrementTruncatedMetrics(metrics, truncationReason)
+  }
+
   return metricTags
 }
 
@@ -96,6 +107,39 @@ function incrementWafRequests (store) {
   if (metricTags) {
     appsecMetrics.count('waf.requests', metricTags).inc()
   }
+}
+
+function incrementTruncatedMetrics (metrics, truncationReason) {
+  const truncationTags = { truncation_reason: truncationReason }
+  appsecMetrics.count('waf.input_truncated', truncationTags).inc(1)
+
+  if (metrics?.maxTruncatedString) {
+    appsecMetrics.distribution('waf.truncated_value_size',
+      { truncation_reason: TRUNCATION_FLAGS.LONG_STRING })
+      .track(metrics.maxTruncatedString)
+  }
+
+  if (metrics?.maxTruncatedContainerSize) {
+    appsecMetrics.distribution('waf.truncated_value_size',
+      { truncation_reason: TRUNCATION_FLAGS.LARGE_CONTAINER })
+      .track(metrics.maxTruncatedContainerSize)
+  }
+
+  if (metrics?.maxTruncatedContainerDepth) {
+    appsecMetrics.distribution('waf.truncated_value_size',
+      { truncation_reason: TRUNCATION_FLAGS.DEEP_CONTAINER })
+      .track(metrics.maxTruncatedContainerDepth)
+  }
+}
+
+function getTruncationReason ({ maxTruncatedString, maxTruncatedContainerSize, maxTruncatedContainerDepth }) {
+  let reason = 0
+
+  if (maxTruncatedString) reason |= TRUNCATION_FLAGS.LONG_STRING
+  if (maxTruncatedContainerSize) reason |= TRUNCATION_FLAGS.LARGE_CONTAINER
+  if (maxTruncatedContainerDepth) reason |= TRUNCATION_FLAGS.DEEP_CONTAINER
+
+  return reason
 }
 
 module.exports = {
