@@ -477,6 +477,7 @@ class Config {
     this._setValue(defaults, 'appsec.stackTrace.maxDepth', 32)
     this._setValue(defaults, 'appsec.stackTrace.maxStackTraces', 2)
     this._setValue(defaults, 'appsec.wafTimeout', 5e3) // µs
+    this._setValue(defaults, 'appendComment', false)
     this._setValue(defaults, 'baggageMaxBytes', 8192)
     this._setValue(defaults, 'baggageMaxItems', 64)
     this._setValue(defaults, 'ciVisibilityTestSessionName', '')
@@ -1015,6 +1016,7 @@ class Config {
     this._setValue(opts, 'baggageMaxItems', options.baggageMaxItems)
     this._setBoolean(opts, 'codeOriginForSpans.enabled', options.codeOriginForSpans?.enabled)
     this._setString(opts, 'dbmPropagationMode', options.dbmPropagationMode)
+    this._setBoolean(opts, 'appendComment', options.appendComment)
     if (options.dogstatsd) {
       this._setString(opts, 'dogstatsd.hostname', options.dogstatsd.hostname)
       this._setString(opts, 'dogstatsd.port', options.dogstatsd.port)
