@@ -2,6 +2,7 @@ import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from 
 import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import * as otel from "@opentelemetry/api";
+import * as otelSDKtraceBase from "@opentelemetry/sdk-trace-base";
 
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
@@ -1925,6 +1926,17 @@ declare namespace tracer {
        * Register this tracer provider with @opentelemetry/api
        */
       register(): void;
+
+      /**
+       * Add a new SpanProcessor to this TracerProvider
+       * @param processor OpenTelemetry SpanProcessor
+       */
+      addSpanProcessor(processor: otelSDKtraceBase.SpanProcessor): void;
+
+      /**
+       * Returns the active SpanProcessor
+       */
+      getActiveSpanProcessor(): otelSDKtraceBase.SpanProcessor | undefined;
     }
 
     /**
