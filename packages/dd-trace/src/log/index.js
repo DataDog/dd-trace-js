@@ -34,6 +34,11 @@ const log = {
     return { ...config }
   },
 
+  addMiddleware (fn) {
+    logWriter.addMiddleware(fn)
+    return this
+  },
+
   use (logger) {
     config.logger = logger
     logWriter.use(logger)
