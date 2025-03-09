@@ -24,6 +24,8 @@ const satisfiesStream = version => semver.intersects('>4.1.0', version)
 
 describe('integrations', () => {
   let openai
+  let azureOpenai
+  let deepseekOpenai
 
   describe('openai', () => {
     before(() => {
@@ -67,6 +69,26 @@ describe('integrations', () => {
         const OpenAI = module
 
         openai = new OpenAI({
+          apiKey: 'test'
+        })
+
+        const AzureOpenAI = OpenAI.AzureOpenAI ?? OpenAI
+        if (OpenAI.AzureOpenAI) {
+          azureOpenai = new AzureOpenAI({
+            endpoint: 'https://dd.openai.azure.com/',
+            apiKey: 'test',
+            apiVersion: '2024-05-01-preview'
+          })
+        } else {
+          azureOpenai = new OpenAI({
+            baseURL: 'https://dd.openai.azure.com/',
+            apiKey: 'test',
+            apiVersion: '2024-05-01-preview'
+          })
+        }
+
+        deepseekOpenai = new OpenAI({
+          baseURL: 'https://api.deepseek.com/',
           apiKey: 'test'
         })
       })
@@ -546,6 +568,55 @@ describe('integrations', () => {
         } catch (e) {
           error = e
         }
+
+        await checkSpan
+      })
+
+      it('submits an AzureOpenAI completion', async () => {
+        const isFromAzureOpenAIClass = azureOpenai.constructor.name === 'AzureOpenAI'
+        const postEndpoint = isFromAzureOpenAIClass
+          ? '//openai/deployments/some-model/chat/completions'
+          : '/chat/completions'
+        const query = isFromAzureOpenAIClass
+          ? { 'api-version': '2024-05-01-preview' }
+          : {}
+
+        nock('https://dd.openai.azure.com:443')
+          .post(postEndpoint)
+          .query(query)
+          .reply(200, {})
+
+        const checkSpan = agent.use(traces => {
+          const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+
+          expect(spanEvent).to.have.property('name', 'AzureOpenAI.createChatCompletion')
+          expect(spanEvent.meta).to.have.property('model_provider', 'azure_openai')
+        })
+
+        await azureOpenai.chat.completions.create({
+          model: 'some-model',
+          messages: []
+        })
+
+        await checkSpan
+      })
+
+      it('submits an DeepSeek completion', async () => {
+        nock('https://api.deepseek.com:443')
+          .post('/chat/completions')
+          .reply(200, {})
+
+        const checkSpan = agent.use(traces => {
+          const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+
+          expect(spanEvent).to.have.property('name', 'DeepSeek.createChatCompletion')
+          expect(spanEvent.meta).to.have.property('model_provider', 'deepseek')
+        })
+
+        await deepseekOpenai.chat.completions.create({
+          model: 'some-model',
+          messages: []
+        })
 
         await checkSpan
       })

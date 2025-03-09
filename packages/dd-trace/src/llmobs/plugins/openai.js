@@ -24,9 +24,9 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     const operation = getOperation(methodName)
     const kind = operation === 'embedding' ? 'embedding' : 'llm'
 
-    const { modelProvider, prefix } = this._getModelProviderAndSpanNamePrefix(ctx.basePath)
+    const { modelProvider, client } = this._getModelProviderAndClient(ctx.basePath)
 
-    const name = `${prefix}.${methodName}`
+    const name = `${client}.${methodName}`
 
     return {
       modelProvider,
@@ -62,13 +62,13 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
   }
 
-  _getModelProviderAndSpanNamePrefix (baseUrl = '') {
+  _getModelProviderAndClient (baseUrl = '') {
     if (baseUrl.includes('azure')) {
-      return { modelProvider: 'azure_openai', prefix: 'AzureOpenAI' }
+      return { modelProvider: 'azure_openai', client: 'AzureOpenAI' }
     } else if (baseUrl.includes('deepseek')) {
-      return { modelProvider: 'deepseek', prefix: 'DeepSeek' }
+      return { modelProvider: 'deepseek', client: 'DeepSeek' }
     } else {
-      return { modelProvider: 'openai', prefix: 'OpenAI' }
+      return { modelProvider: 'openai', client: 'OpenAI' }
     }
   }
 
