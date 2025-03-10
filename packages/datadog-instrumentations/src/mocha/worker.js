@@ -24,8 +24,7 @@ addHook({
   file: 'lib/mocha.js'
 }, (Mocha) => {
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
-    if (this.options._ddKnownTests) {
-      // If there are known tests, it means isKnownTestsEnabled should be true
+    if (this.options._ddIsKnownTestsEnabled) {
       config.isKnownTestsEnabled = true
       config.isEarlyFlakeDetectionEnabled = this.options._ddIsEfdEnabled
       config.knownTests = this.options._ddKnownTests
@@ -33,12 +32,12 @@ addHook({
       delete this.options._ddIsEfdEnabled
       delete this.options._ddKnownTests
       delete this.options._ddEfdNumRetries
-      delete this.options._ddTestManagementTests
+      delete this.options._ddIsKnownTestsEnabled
     }
-    if (this.options._ddIsTestManagementEnabled) {
+    if (this.options._ddIsTestManagementTestsEnabled) {
       config.isTestManagementTestsEnabled = true
       config.testManagementTests = this.options._ddTestManagementTests
-      delete this.options._ddIsTestManagementEnabled
+      delete this.options._ddIsTestManagementTestsEnabled
       delete this.options._ddTestManagementTests
     }
     return run.apply(this, arguments)

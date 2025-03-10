@@ -17,6 +17,7 @@ const {
 
 const {
   isNewTest,
+  getTestProperties,
   getSuitesByTestFile,
   runnableWrapper,
   getOnTestHandler,
@@ -76,7 +77,7 @@ function isTestFailed (test) {
     return test.isFailed()
   }
   if (test.isPending) {
-    return !test.isPending() && test.state !== 'failed'
+    return !test.isPending() && test.state === 'failed'
   }
   return false
 }
@@ -258,11 +259,11 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
     config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
     config.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
     config.isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
-    // ITR, auto test retries and test management are not supported in parallel mode yet
+    config.isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
+    // ITR and auto test retries are not supported in parallel mode yet
     config.isSuitesSkippingEnabled = !isParallel && libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = !isParallel && libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = !isParallel && libraryConfig.flakyTestRetriesCount
-    config.isTestManagementTestsEnabled = !isParallel && libraryConfig.isTestManagementEnabled
 
     if (config.isKnownTestsEnabled) {
       knownTestsCh.publish({
@@ -614,41 +615,54 @@ addHook({
   const { BufferedWorkerPool } = BufferedWorkerPoolPackage
 
   shimmer.wrap(BufferedWorkerPool.prototype, 'run', run => async function (testSuiteAbsolutePath, workerArgs) {
-    if (!testStartCh.hasSubscribers || !config.isKnownTestsEnabled) {
+    if (!testStartCh.hasSubscribers || (!config.isKnownTestsEnabled && !config.isTestManagementTestsEnabled)) {
       return run.apply(this, arguments)
     }
 
     const testPath = getTestSuitePath(testSuiteAbsolutePath, process.cwd())
-    const testSuiteKnownTests = config.knownTests.mocha?.[testPath] || []
-    const testSuiteTestManagementTests = config.testManagementTests?.modules?.mocha?.suites?.[testPath] || []
+
+    const newWorkerArgs = { ...workerArgs }
+
+    if (config.isKnownTestsEnabled) {
+      const testSuiteKnownTests = config.knownTests.mocha?.[testPath] || []
+      newWorkerArgs._ddEfdNumRetries = config.earlyFlakeDetectionNumRetries
+      newWorkerArgs._ddIsEfdEnabled = config.isEarlyFlakeDetectionEnabled
+      newWorkerArgs._ddIsKnownTestsEnabled = true
+      newWorkerArgs._ddKnownTests = {
+        mocha: {
+          [testPath]: testSuiteKnownTests
+        }
+      }
+    }
+    if (config.isTestManagementTestsEnabled) {
+      const testSuiteTestManagementTests = config.testManagementTests?.mocha?.suites?.[testPath] || {}
+      newWorkerArgs._ddIsTestManagementTestsEnabled = true
+      newWorkerArgs._ddTestManagementTests = {
+        mocha: {
+          suites: {
+            [testPath]: testSuiteTestManagementTests
+          }
+        }
+      }
+    }
 
     // We pass the known tests for the test file to the worker
     const testFileResult = await run.apply(
       this,
       [
         testSuiteAbsolutePath,
-        {
-          ...workerArgs,
-          _ddEfdNumRetries: config.earlyFlakeDetectionNumRetries,
-          _ddIsEfdEnabled: config.isEarlyFlakeDetectionEnabled,
-          _ddIsTestManagementEnabled: config.isTestManagementTestsEnabled,
-          _ddTestManagementTests: testSuiteTestManagementTests,
-          _ddKnownTests: {
-            mocha: {
-              [testPath]: testSuiteKnownTests
-            }
-          }
-        }
+        newWorkerArgs
       ]
     )
+
     const tests = testFileResult
       .events
       .filter(event => event.eventName === 'test end')
       .map(event => event.data)
 
-    // `newTests` is filled in the worker process, so we need to use the test results to fill it here too.
     for (const test of tests) {
-      if (isNewTest(test, config.knownTests)) {
+      // `newTests` is filled in the worker process, so we need to use the test results to fill it here too.
+      if (config.isKnownTestsEnabled && isNewTest(test, config.knownTests)) {
         const testFullName = getTestFullName(test)
         const tests = newTests[testFullName]
 
@@ -657,6 +671,10 @@ addHook({
         } else {
           tests.push(test)
         }
+      }
+      // `testsQuarantined` is filled in the worker process, so we need to use the test results to fill it here too.
+      if (config.isTestManagementTestsEnabled && getTestProperties(test, config.testManagementTests).isQuarantined) {
+        testsQuarantined.add(test)
       }
     }
     return testFileResult

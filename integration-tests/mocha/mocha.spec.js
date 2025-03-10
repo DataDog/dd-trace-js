@@ -1730,7 +1730,10 @@ describe('mocha CommonJS', function () {
         // Tests from ci-visibility/test/occasionally-failing-test will be considered new
         receiver.setKnownTests({})
 
-        const NUM_RETRIES_EFD = 5
+        // The total number of executions need to be an odd number, so that we
+        // check that the EFD logic of ignoring failed executions is working.
+        // Otherwise, a bug could slip in where we ignore the passed executions (like it was happening)
+        const NUM_RETRIES_EFD = 4
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -1759,12 +1762,12 @@ describe('mocha CommonJS', function () {
               retriedTests.length
             )
             assert.equal(retriedTests.length, NUM_RETRIES_EFD)
-            // Out of NUM_RETRIES_EFD + 1 total runs, half will be passing and half will be failing,
+            // Out of NUM_RETRIES_EFD + 1 (5) total runs, 3 will be passing and 2 will be failing,
             // based on the global counter in the test file
             const passingTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
             const failingTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-            assert.equal(passingTests.length, (NUM_RETRIES_EFD + 1) / 2)
-            assert.equal(failingTests.length, (NUM_RETRIES_EFD + 1) / 2)
+            assert.equal(passingTests.length, 3)
+            assert.equal(failingTests.length, 2)
             // Test name does not change
             retriedTests.forEach(test => {
               assert.equal(test.meta[TEST_NAME], 'fail occasionally fails')
@@ -2660,6 +2663,20 @@ describe('mocha CommonJS', function () {
         runDisableTest(done, true)
       })
 
+      it('can disable tests in parallel mode', (done) => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        runDisableTest(done, true,
+          {
+            RUN_IN_PARALLEL: '1',
+            TESTS_TO_RUN: JSON.stringify([
+              './test-management/test-disabled-1.js',
+              './test-management/test-disabled-2.js'
+            ])
+          }
+        )
+      })
+
       it('fails if disable is not enabled', (done) => {
         receiver.setSettings({ test_management: { enabled: false } })
 
@@ -2769,6 +2786,20 @@ describe('mocha CommonJS', function () {
         receiver.setSettings({ test_management: { enabled: true } })
 
         runQuarantineTest(done, true)
+      })
+
+      it('can disable tests in parallel mode', (done) => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        runQuarantineTest(done, true,
+          {
+            RUN_IN_PARALLEL: '1',
+            TESTS_TO_RUN: JSON.stringify([
+              './test-management/test-quarantine-1.js',
+              './test-management/test-quarantine-2.js'
+            ])
+          }
+        )
       })
 
       it('fails if quarantine is not enabled', (done) => {

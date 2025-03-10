@@ -26,47 +26,16 @@ const testToStartLine = new WeakMap()
 const testFileToSuiteAr = new Map()
 const wrappedFunctions = new WeakSet()
 const newTests = {}
-const testsDisabled = new Set()
 const testsQuarantined = new Set()
 
-function isDisabledTest (test, testsToDisable) {
+function getTestProperties (test, testManagementTests) {
   const testSuite = getTestSuitePath(test.file, process.cwd())
   const testName = test.fullTitle()
 
-  const isDisabled = (testsToDisable
-    .mocha
-    ?.suites
-    ?.[testSuite]
-    ?.tests
-    ?.[testName]
-    ?.properties
-    ?.disabled) ?? false
+  const { disabled: isDisabled, quarantined: isQuarantined } =
+    testManagementTests?.mocha?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
 
-  if (isDisabled) {
-    testsDisabled.add(test)
-  }
-
-  return isDisabled
-}
-
-function isQuarantinedTest (test, testsToQuarantine) {
-  const testSuite = getTestSuitePath(test.file, process.cwd())
-  const testName = test.fullTitle()
-
-  const isQuarantined = (testsToQuarantine
-    .mocha
-    ?.suites
-    ?.[testSuite]
-    ?.tests
-    ?.[testName]
-    ?.properties
-    ?.quarantined) ?? false
-
-  if (isQuarantined) {
-    testsQuarantined.add(test)
-  }
-
-  return isQuarantined
+  return { isDisabled, isQuarantined }
 }
 
 function isNewTest (test, knownTests) {
@@ -413,9 +382,11 @@ function getRunTestsWrapper (runTests, config) {
 
     if (config.isTestManagementTestsEnabled) {
       suite.tests.forEach(test => {
-        if (isDisabledTest(test, config.testManagementTests)) {
+        const { isDisabled, isQuarantined } = getTestProperties(test, config.testManagementTests)
+        if (isDisabled) {
           test._ddIsDisabled = true
-        } else if (isQuarantinedTest(test, config.testManagementTests)) {
+        } else if (isQuarantined) {
+          testsQuarantined.add(test)
           test._ddIsQuarantined = true
         }
       })
@@ -427,6 +398,7 @@ function getRunTestsWrapper (runTests, config) {
 
 module.exports = {
   isNewTest,
+  getTestProperties,
   retryTest,
   getSuitesByTestFile,
   isMochaRetry,
@@ -446,6 +418,5 @@ module.exports = {
   testFileToSuiteAr,
   getRunTestsWrapper,
   newTests,
-  testsDisabled,
   testsQuarantined
 }
