@@ -2991,20 +2991,21 @@ describe('jest CommonJS', () => {
               ])
             }
 
-            const skippedTests = tests.find(
+            const skippedTest = tests.find(
               test => test.meta[TEST_NAME] === 'disable tests can disable a test'
             )
 
             if (isDisabling) {
-              assert.equal(skippedTests.meta[TEST_STATUS], 'skip')
-              assert.propertyVal(skippedTests.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
+              assert.equal(skippedTest.meta[TEST_STATUS], 'skip')
+              assert.propertyVal(skippedTest.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
             } else {
-              assert.equal(skippedTests.meta[TEST_STATUS], 'pass')
-              assert.notProperty(skippedTests.meta, TEST_MANAGEMENT_IS_DISABLED)
+              assert.equal(skippedTest.meta[TEST_STATUS], 'fail')
+              assert.notProperty(skippedTest.meta, TEST_MANAGEMENT_IS_DISABLED)
             }
           })
 
       const runDisableTest = (done, isDisabling, extraEnvVars = {}, isParallel = false) => {
+        let stdout = ''
         const testAssertionsPromise = getTestAssertions(isDisabling, isParallel)
 
         childProcess = exec(
@@ -3021,9 +3022,21 @@ describe('jest CommonJS', () => {
           }
         )
 
+        // jest uses stderr to output logs
+        childProcess.stderr.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
         childProcess.on('exit', exitCode => {
           testAssertionsPromise.then(() => {
-            assert.equal(exitCode, 0)
+            if (isDisabling) {
+              assert.notInclude(stdout, 'I am running')
+              // even though a test fails, the exit code is 0 because the test is disabled
+              assert.equal(exitCode, 0)
+            } else {
+              assert.include(stdout, 'I am running')
+              assert.equal(exitCode, 1)
+            }
             done()
           }).catch(done)
         })
@@ -3127,6 +3140,7 @@ describe('jest CommonJS', () => {
           })
 
       const runQuarantineTest = (done, isQuarantining, extraEnvVars = {}, isParallel = false) => {
+        let stdout = ''
         const testAssertionsPromise = getTestAssertions(isQuarantining, isParallel)
 
         childProcess = exec(
@@ -3143,10 +3157,17 @@ describe('jest CommonJS', () => {
           }
         )
 
+        // jest uses stderr to output logs
+        childProcess.stderr.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
         childProcess.on('exit', exitCode => {
           testAssertionsPromise.then(() => {
+            // it runs regardless of quarantine status
+            assert.include(stdout, 'I am running when quarantined')
             if (isQuarantining) {
-              // even though a test fails, the exit code is 1 because the test is quarantined
+              // even though a test fails, the exit code is 0 because the test is quarantined
               assert.equal(exitCode, 0)
             } else {
               assert.equal(exitCode, 1)
