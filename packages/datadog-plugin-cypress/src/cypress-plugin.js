@@ -279,26 +279,11 @@ class CypressPlugin {
     return this.libraryConfigurationPromise
   }
 
-  getIsDisabledTest (testSuite, testName) {
-    return this.testManagementTests
-      ?.cypress
-      ?.suites
-      ?.[testSuite]
-      ?.tests
-      ?.[testName]
-      ?.properties
-      ?.disabled
-  }
+  getTestProperties (testSuite, testName) {
+    const { disabled: isDisabled, quarantined: isQuarantined } =
+      this.testManagementTests?.cypress?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
 
-  getIsQuarantinedTest (testSuite, testName) {
-    return this.testManagementTests
-      ?.cypress
-      ?.suites
-      ?.[testSuite]
-      ?.tests
-      ?.[testName]
-      ?.properties
-      ?.quarantined
+    return { isDisabled, isQuarantined }
   }
 
   getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
@@ -611,8 +596,7 @@ class CypressPlugin {
         skippedTestSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
       }
 
-      const isDisabled = this.getIsDisabledTest(spec.relative, cypressTestName)
-      const isQuarantined = this.getIsQuarantinedTest(spec.relative, cypressTestName)
+      const { isDisabled, isQuarantined } = this.getTestProperties(spec.relative, cypressTestName)
 
       if (isDisabled) {
         skippedTestSpan.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
@@ -723,8 +707,7 @@ class CypressPlugin {
         })
         const isUnskippable = this.unskippableSuites.includes(testSuite)
         const isForcedToRun = shouldSkip && isUnskippable
-        const isDisabled = this.getIsDisabledTest(testSuite, testName)
-        const isQuarantined = this.getIsQuarantinedTest(testSuite, testName)
+        const { isDisabled, isQuarantined } = this.getTestProperties(testSuite, testName)
 
         // skip test
         if (shouldSkip && !isUnskippable) {
@@ -735,9 +718,7 @@ class CypressPlugin {
 
         // TODO: I haven't found a way to trick cypress into ignoring a test
         // The way we'll implement quarantine in cypress is by skipping the test altogether
-        if (isDisabled) {
-          return { shouldSkip: true }
-        } else if (isQuarantined) {
+        if (isDisabled || isQuarantined) {
           return { shouldSkip: true }
         }
 
@@ -766,9 +747,7 @@ class CypressPlugin {
           testSuiteAbsolutePath,
           testName,
           isNew,
-          isEfdRetry,
-          isDisabled,
-          isQuarantined
+          isEfdRetry
         } = test
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
@@ -806,11 +785,6 @@ class CypressPlugin {
             this.activeTestSpan.setTag(TEST_IS_RETRY, 'true')
             this.activeTestSpan.setTag(TEST_RETRY_REASON, 'efd')
           }
-        }
-        if (isDisabled) {
-          this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
-        } else if (isQuarantined) {
-          this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
         }
         const finishedTest = {
           testName,

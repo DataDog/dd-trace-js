@@ -1744,7 +1744,7 @@ moduleTypes.forEach(({
           receiver.setTestManagementTests({
             cypress: {
               suites: {
-                'cypress/e2e/disabled.js': {
+                'cypress/e2e/disable.js': {
                   tests: {
                     'disable is disabled': {
                       properties: {
@@ -1771,13 +1771,13 @@ moduleTypes.forEach(({
                 assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
               }
 
-              assert.equal(failedTest.resource, 'cypress/e2e/disabled.js.disable is disabled')
+              assert.equal(failedTest.resource, 'cypress/e2e/disable.js.disable is disabled')
 
               if (isDisabling) {
                 assert.propertyVal(failedTest.meta, TEST_STATUS, 'skip')
                 assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
               } else {
-                assert.propertyVal(failedTest.meta, TEST_STATUS, 'pass')
+                assert.propertyVal(failedTest.meta, TEST_STATUS, 'fail')
                 assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_DISABLED)
               }
             })
@@ -1790,7 +1790,7 @@ moduleTypes.forEach(({
             ...restEnvVars
           } = getCiVisEvpProxyConfig(receiver.port)
 
-          const specToRun = 'cypress/e2e/disabled.js'
+          const specToRun = 'cypress/e2e/disable.js'
 
           childProcess = exec(
             version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
@@ -1808,7 +1808,11 @@ moduleTypes.forEach(({
 
           childProcess.on('exit', (exitCode) => {
             testAssertionsPromise.then(() => {
-              assert.equal(exitCode, 0)
+              if (isDisabling) {
+                assert.equal(exitCode, 0)
+              } else {
+                assert.equal(exitCode, 1)
+              }
               done()
             }).catch(done)
           })
