@@ -932,7 +932,7 @@ versions.forEach((version) => {
                   assert.equal(skippedTest.meta[TEST_STATUS], 'skip')
                   assert.propertyVal(skippedTest.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
                 } else {
-                  assert.equal(skippedTest.meta[TEST_STATUS], 'pass')
+                  assert.equal(skippedTest.meta[TEST_STATUS], 'fail')
                   assert.notProperty(skippedTest.meta, TEST_MANAGEMENT_IS_DISABLED)
                 }
               })
@@ -956,7 +956,11 @@ versions.forEach((version) => {
 
             childProcess.on('exit', (exitCode) => {
               testAssertionsPromise.then(() => {
-                assert.equal(exitCode, 0)
+                if (isDisabling) {
+                  assert.equal(exitCode, 0)
+                } else {
+                  assert.equal(exitCode, 1)
+                }
                 done()
               }).catch(done)
             })

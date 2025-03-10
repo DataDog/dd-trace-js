@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
 test.describe('disable', () => {
   test('should disable test', async ({ page }) => {
     await expect(page.locator('.hello-world')).toHaveText([
-      'Hello World'
+      'Hello Warld'
     ])
   })
 })

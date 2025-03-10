@@ -47,32 +47,14 @@ let testManagementTests = {}
 let rootDir = ''
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0'
 
-function isDisabledTest (test) {
+function getTestProperties (test) {
   const testName = getTestFullname(test)
   const testSuite = getTestSuitePath(test._requireFile, rootDir)
 
-  return testManagementTests
-    ?.playwright
-    ?.suites
-    ?.[testSuite]
-    ?.tests
-    ?.[testName]
-    ?.properties
-    ?.disabled
-}
+  const { disabled, quarantined } =
+    testManagementTests?.playwright?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
 
-function isQuarantineTest (test) {
-  const testName = getTestFullname(test)
-  const testSuite = getTestSuitePath(test._requireFile, rootDir)
-
-  return testManagementTests
-    ?.playwright
-    ?.suites
-    ?.[testSuite]
-    ?.tests
-    ?.[testName]
-    ?.properties
-    ?.quarantined
+  return { disabled, quarantined }
 }
 
 function isNewTest (test) {
@@ -623,10 +605,11 @@ addHook({
 
     if (isTestManagementTestsEnabled) {
       for (const test of allTests) {
-        if (isDisabledTest(test)) {
+        const testProperties = getTestProperties(test)
+        if (testProperties.disabled) {
           test._ddIsDisabled = true
           test.expectedStatus = 'skipped'
-        } else if (isQuarantineTest(test)) {
+        } else if (testProperties.quarantined) {
           test._ddIsQuarantined = true
           test.expectedStatus = 'skipped'
         }
