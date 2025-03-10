@@ -39,12 +39,28 @@ const DEFAULT_KEY = 'service:,env:'
 
 const defaultSampler = new Sampler(AUTO_KEEP)
 
+/**
+ * from config.js
+ * @typedef { sampleRate: number, provenance: string, rateLimit: number, rules: SamplingRule[] } SamplingConfig
+ *
+ * empirically defined
+ * @typedef {2|-1|1|0} SamplingPriority
+ */
 class PrioritySampler {
+  /**
+   * @param env {string}
+   * @param config {SamplingConfig}
+   */
   constructor (env, config) {
     this.configure(env, config)
     this.update({})
   }
 
+  /**
+   *
+   * @param env {string}
+   * @param opts {SamplingConfig}
+   */
   configure (env, opts = {}) {
     const { sampleRate, provenance = undefined, rateLimit = 100, rules = [] } = opts
     this._env = env
@@ -55,12 +71,22 @@ class PrioritySampler {
     setSamplingRules(this._rules)
   }
 
+  /**
+   * @param span {DatadogSpan}
+   * @returns {boolean}
+   */
   isSampled (span) {
     const priority = this._getPriorityFromAuto(span)
     log.trace(span)
     return priority === USER_KEEP || priority === AUTO_KEEP
   }
 
+  /**
+   *
+   * @param span {DatadogSpan}
+   * @param auto {boolean}
+   * @returns {void}
+   */
   sample (span, auto = true) {
     if (!span) return
 
@@ -73,7 +99,7 @@ class PrioritySampler {
 
     log.trace(span, auto)
 
-    const tag = this._getPriorityFromTags(context._tags, context)
+    const tag = this._getPriorityFromTags(context._tags)
 
     if (this.validate(tag)) {
       context._sampling.priority = tag
@@ -87,14 +113,17 @@ class PrioritySampler {
     this._addDecisionMaker(root)
   }
 
+  /**
+   *
+   * @param rates {Object<string, number>}
+   * @returns {void}
+   */
   update (rates) {
     const samplers = {}
 
     for (const key in rates) {
       const rate = rates[key]
-      const sampler = new Sampler(rate)
-
-      samplers[key] = sampler
+      samplers[key] = new Sampler(rate)
     }
 
     samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || defaultSampler
@@ -104,6 +133,11 @@ class PrioritySampler {
     log.trace(rates)
   }
 
+  /**
+   *
+   * @param samplingPriority {SamplingPriority}
+   * @returns {boolean}
+   */
   validate (samplingPriority) {
     switch (samplingPriority) {
       case USER_REJECT:
@@ -116,6 +150,12 @@ class PrioritySampler {
     }
   }
 
+  /**
+   *
+   * @param span {DatadogSpan}
+   * @param samplingPriority {SamplingPriority}
+   * @param product {import('./standalone/product').PRODUCTS}
+   */
   setPriority (span, samplingPriority, product) {
     if (!span || !this.validate(samplingPriority)) return
 
@@ -137,10 +177,22 @@ class PrioritySampler {
     this._addDecisionMaker(root)
   }
 
+  /**
+   *
+   * @param span {DatadogSpan}
+   * @returns {DatadogSpanContext}
+   * @private
+   */
   _getContext (span) {
     return typeof span.context === 'function' ? span.context() : span
   }
 
+  /**
+   *
+   * @param span {DatadogSpan}
+   * @returns {SamplingPriority}
+   * @private
+   */
   _getPriorityFromAuto (span) {
     const context = this._getContext(span)
     const rule = this._findRule(span)
@@ -150,6 +202,12 @@ class PrioritySampler {
       : this._getPriorityByAgent(context)
   }
 
+  /**
+   *
+   * @param tags {Map<string, Object>}
+   * @returns {SamplingPriority}
+   * @private
+   */
   _getPriorityFromTags (tags) {
     if (hasOwn(tags, MANUAL_KEEP) && tags[MANUAL_KEEP] !== false) {
       return USER_KEEP
@@ -166,6 +224,13 @@ class PrioritySampler {
     }
   }
 
+  /**
+   *
+   * @param context {DatadogSpanContext}
+   * @param rule {SamplingRule}
+   * @returns {SamplingPriority}
+   * @private
+   */
   _getPriorityByRule (context, rule) {
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
     context._sampling.mechanism = SAMPLING_MECHANISM_RULE
@@ -177,6 +242,12 @@ class PrioritySampler {
       : USER_REJECT
   }
 
+  /**
+   *
+   * @param context {DatadogSpanContext}
+   * @returns {boolean}
+   * @private
+   */
   _isSampledByRateLimit (context) {
     const allowed = this._limiter.isAllowed()
 
@@ -185,6 +256,12 @@ class PrioritySampler {
     return allowed
   }
 
+  /**
+   *
+   * @param context {DatadogSpanContext}
+   * @returns {SamplingPriority}
+   * @private
+   */
   _getPriorityByAgent (context) {
     const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
@@ -200,6 +277,12 @@ class PrioritySampler {
     return sampler.isSampled(context) ? AUTO_KEEP : AUTO_REJECT
   }
 
+  /**
+   *
+   * @param span {DatadogSpan}
+   * @private
+   * @returns {void}
+   */
   _addDecisionMaker (span) {
     const context = span.context()
     const trace = context._trace
@@ -215,6 +298,15 @@ class PrioritySampler {
     }
   }
 
+  /**
+   *
+   * @param rules {SamplingRule[]}
+   * @param sampleRate {number}
+   * @param rateLimit {number}
+   * @param provenance {string}
+   * @returns {SamplingRule[]}
+   * @private
+   */
   _normalizeRules (rules, sampleRate, rateLimit, provenance) {
     rules = [].concat(rules || [])
 
@@ -225,12 +317,23 @@ class PrioritySampler {
       .map(SamplingRule.from)
   }
 
+  /**
+   *
+   * @param span {DatadogSpan}
+   * @returns {SamplingRule}
+   * @private
+   */
   _findRule (span) {
     for (const rule of this._rules) {
       if (rule.match(span)) return rule
     }
   }
 
+  /**
+   *
+   * @param span {DatadogSpan}
+   * @param product {import('./standalone/product').PRODUCTS}
+   */
   static keepTrace (span, product) {
     span?._prioritySampler?.setPriority(span, USER_KEEP, product)
   }
