@@ -120,26 +120,11 @@ function isNewTest (testSuite, testName) {
   return !testsForSuite.includes(testName)
 }
 
-function isDisabledTest (testSuite, testName) {
-  return testManagementTests
-    ?.cucumber
-    ?.suites
-    ?.[testSuite]
-    ?.tests
-    ?.[testName]
-    ?.properties
-    ?.disabled
-}
+function getTestProperties (testSuite, testName) {
+  const { disabled, quarantined } =
+    testManagementTests?.cucumber?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
 
-function isQuarantinedTest (testSuite, testName) {
-  return testManagementTests
-    ?.cucumber
-    ?.suites
-    ?.[testSuite]
-    ?.tests
-    ?.[testName]
-    ?.properties
-    ?.quarantined
+  return { disabled, quarantined }
 }
 
 function getTestStatusFromRetries (testStatuses) {
@@ -328,9 +313,10 @@ function wrapRun (pl, isLatestVersion) {
         }
         if (isTestManagementTestsEnabled) {
           const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
-          isDisabled = isDisabledTest(testSuitePath, this.pickle.name)
+          const testProperties = getTestProperties(testSuitePath, this.pickle.name)
+          isDisabled = testProperties.disabled
           if (!isDisabled) {
-            isQuarantined = isQuarantinedTest(testSuitePath, this.pickle.name)
+            isQuarantined = testProperties.quarantined
           }
         }
         const attemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
@@ -600,11 +586,12 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       }
     }
     if (isTestManagementTestsEnabled) {
-      isDisabled = isDisabledTest(testSuitePath, pickle.name)
+      const testProperties = getTestProperties(testSuitePath, pickle.name)
+      isDisabled = testProperties.disabled
       if (isDisabled) {
         this.options.dryRun = true
       } else {
-        isQuarantined = isQuarantinedTest(testSuitePath, pickle.name)
+        isQuarantined = testProperties.quarantined
       }
     }
     // TODO: for >=11 we could use `runTestCaseResult` instead of accumulating results in `lastStatusByPickleId`

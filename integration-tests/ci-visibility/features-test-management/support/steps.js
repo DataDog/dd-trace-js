@@ -10,9 +10,14 @@ Then('I should have heard {string}', function (expectedResponse) {
 })
 
 When('the greeter says quarantine', function () {
+  // eslint-disable-next-line no-console
+  console.log('I am running as quarantine') // just to assert whether this is running
   this.whatIHeard = 'quarantine'
 })
 
 When('the greeter says disabled', function () {
-  this.whatIHeard = 'disabled'
+  // eslint-disable-next-line no-console
+  console.log('I am running') // just to assert whether this is running
+  // expected to fail if not disabled
+  this.whatIHeard = 'disabld'
 })

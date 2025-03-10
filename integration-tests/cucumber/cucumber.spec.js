@@ -2059,8 +2059,10 @@ versions.forEach(version => {
 
               if (isDisabling) {
                 assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+                assert.propertyVal(testSession.meta, TEST_STATUS, 'pass')
               } else {
                 assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+                assert.propertyVal(testSession.meta, TEST_STATUS, 'fail')
               }
 
               assert.equal(tests.resource, 'ci-visibility/features-test-management/disabled.feature.Say disabled')
@@ -2069,13 +2071,14 @@ versions.forEach(version => {
                 assert.equal(tests.meta[TEST_STATUS], 'skip')
                 assert.propertyVal(tests.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
               } else {
-                assert.equal(tests.meta[TEST_STATUS], 'pass')
+                assert.equal(tests.meta[TEST_STATUS], 'fail')
                 assert.notProperty(tests.meta, TEST_MANAGEMENT_IS_DISABLED)
               }
             })
 
         const runTest = (done, isDisabling, extraEnvVars) => {
           const testAssertionsPromise = getTestAssertions(isDisabling)
+          let stdout = ''
 
           childProcess = exec(
             './node_modules/.bin/cucumber-js ci-visibility/features-test-management/disabled.feature',
@@ -2089,9 +2092,19 @@ versions.forEach(version => {
             }
           )
 
+          childProcess.stdout.on('data', (data) => {
+            stdout += data.toString()
+          })
+
           childProcess.on('exit', exitCode => {
             testAssertionsPromise.then(() => {
-              assert.equal(exitCode, 0)
+              if (isDisabling) {
+                assert.notInclude(stdout, 'I am running')
+                assert.equal(exitCode, 0)
+              } else {
+                assert.include(stdout, 'I am running')
+                assert.equal(exitCode, 1)
+              }
               done()
             }).catch(done)
           })
@@ -2161,7 +2174,7 @@ versions.forEach(version => {
 
         const runTest = (done, isQuarantining, extraEnvVars) => {
           const testAssertionsPromise = getTestAssertions(isQuarantining)
-
+          let stdout = ''
           childProcess = exec(
             './node_modules/.bin/cucumber-js ci-visibility/features-test-management/quarantine.feature',
             {
@@ -2174,8 +2187,14 @@ versions.forEach(version => {
             }
           )
 
+          childProcess.stdout.on('data', (data) => {
+            stdout += data.toString()
+          })
+
           childProcess.on('exit', exitCode => {
             testAssertionsPromise.then(() => {
+              // Regardless of whether the test is quarantined or not, it will be run
+              assert.include(stdout, 'I am running as quarantine')
               if (isQuarantining) {
                 // even though a test fails, the exit code is 1 because the test is quarantined
                 assert.equal(exitCode, 0)
