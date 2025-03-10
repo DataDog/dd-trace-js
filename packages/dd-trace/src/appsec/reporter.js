@@ -10,7 +10,8 @@ const {
   updateRaspRequestsMetricTags,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,
-  getRequestMetrics
+  getRequestMetrics,
+  updateWafRateLimitedMetric
 } = require('./telemetry')
 const zlib = require('zlib')
 const { keepTrace } = require('../priority_sampler')
@@ -147,6 +148,7 @@ function reportAttack (attackData) {
 
   if (limiter.isAllowed()) {
     keepTrace(rootSpan, ASM)
+    updateWafRateLimitedMetric(req)
   }
 
   // TODO: maybe add this to format.js later (to take decision as late as possible)
@@ -202,6 +204,7 @@ function finishRequest (req, res) {
     rootSpan.addTags(Object.fromEntries(metricsQueue))
 
     keepTrace(rootSpan, ASM)
+    updateWafRateLimitedMetric(req)
 
     metricsQueue.clear()
   }

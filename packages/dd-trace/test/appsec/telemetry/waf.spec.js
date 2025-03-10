@@ -53,11 +53,15 @@ describe('Appsec Waf Telemetry metrics', () => {
         const result = appsecTelemetry.updateWafRequestsMetricTags(metrics, req)
 
         expect(result).to.be.deep.eq({
-          waf_version: wafVersion,
+          block_failure: false,
           event_rules_version: rulesVersion,
+          input_truncated: false,
+          rate_limited: false,
           request_blocked: false,
           rule_triggered: false,
-          waf_timeout: false
+          waf_error: false,
+          waf_timeout: false,
+          waf_version: wafVersion
         })
       })
 
@@ -66,15 +70,22 @@ describe('Appsec Waf Telemetry metrics', () => {
           blockTriggered: true,
           ruleTriggered: true,
           wafTimeout: true,
+          rateLimited: true,
+          errorCode: -1,
+          maxTruncatedString: 5000,
           ...metrics
         }, req)
 
         expect(result).to.be.deep.eq({
-          waf_version: wafVersion,
+          block_failure: false,
           event_rules_version: rulesVersion,
+          input_truncated: true,
+          rate_limited: true,
           request_blocked: true,
           rule_triggered: true,
-          waf_timeout: true
+          waf_error: true,
+          waf_timeout: true,
+          waf_version: wafVersion
         })
       })
 
@@ -83,17 +94,22 @@ describe('Appsec Waf Telemetry metrics', () => {
 
         const result2 = appsecTelemetry.updateWafRequestsMetricTags({
           ruleTriggered: true,
+          rateLimited: true,
           ...metrics
         }, req)
 
         expect(result).to.be.eq(result2)
 
         expect(result).to.be.deep.eq({
-          waf_version: wafVersion,
+          block_failure: false,
           event_rules_version: rulesVersion,
+          input_truncated: false,
+          rate_limited: true,
           request_blocked: false,
           rule_triggered: true,
-          waf_timeout: false
+          waf_error: false,
+          waf_timeout: false,
+          waf_version: wafVersion
         })
       })
 
@@ -102,6 +118,7 @@ describe('Appsec Waf Telemetry metrics', () => {
           blockTriggered: true,
           ruleTriggered: true,
           wafTimeout: true,
+          rateLimited: true,
           ...metrics
         }, req)
 
@@ -110,17 +127,22 @@ describe('Appsec Waf Telemetry metrics', () => {
           blockTriggered: false,
           ruleTriggered: false,
           wafTimeout: false,
+          rateLimited: false,
           ...metrics
         }, req2)
 
         expect(result).to.be.not.eq(result2)
 
         expect(result).to.be.deep.eq({
-          waf_version: wafVersion,
+          block_failure: false,
           event_rules_version: rulesVersion,
+          input_truncated: false,
+          rate_limited: true,
           request_blocked: true,
           rule_triggered: true,
-          waf_timeout: true
+          waf_error: false,
+          waf_timeout: true,
+          waf_version: wafVersion
         })
       })
 
@@ -236,9 +258,13 @@ describe('Appsec Waf Telemetry metrics', () => {
     describe('incWafRequestsMetric', () => {
       it('should increment waf.requests metric', () => {
         appsecTelemetry.updateWafRequestsMetricTags({
-          blockTriggered: false,
-          ruleTriggered: false,
+          blockTriggered: true,
+          blockFailed: true,
+          ruleTriggered: true,
           wafTimeout: true,
+          errorCode: -3,
+          rateLimited: true,
+          maxTruncatedString: 5000,
           wafVersion,
           rulesVersion
         }, req)
@@ -246,11 +272,27 @@ describe('Appsec Waf Telemetry metrics', () => {
         appsecTelemetry.incrementWafRequestsMetric(req)
 
         expect(count).to.have.been.calledOnceWithExactly('waf.requests', {
-          request_blocked: false,
-          rule_triggered: false,
+          request_blocked: true,
+          block_failure: true,
+          rule_triggered: true,
           waf_timeout: true,
+          waf_error: true,
+          rate_limited: true,
+          input_truncated: true,
           waf_version: wafVersion,
           event_rules_version: rulesVersion
+        })
+        expect(count).to.have.been.calledOnce
+        expect(count.firstCall.args[1]).to.deep.equal({
+          block_failure: true,
+          input_truncated: true,
+          request_blocked: true,
+          rate_limited: true,
+          rule_triggered: true,
+          waf_error: true,
+          waf_timeout: true,
+          waf_version: '0.0.1',
+          event_rules_version: '0.0.2'
         })
       })
 
