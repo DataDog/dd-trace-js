@@ -37,6 +37,10 @@ const {
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_DISABLED
+  TEST_MANAGEMENT_ENABLED,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -464,14 +468,21 @@ class CypressPlugin {
 
     const testSessionName = getTestSessionName(this.tracer._tracer._config, this.command, this.testEnvironmentMetadata)
 
-    if (this.tracer._tracer._exporter?.setMetadataTags) {
+    if (this.tracer._tracer._exporter?.addMetadataTags) {
       const metadataTags = {}
       for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
         metadataTags[testLevel] = {
           [TEST_SESSION_NAME]: testSessionName
         }
       }
-      this.tracer._tracer._exporter.setMetadataTags(metadataTags)
+      metadataTags.test = {
+        ...metadataTags.test,
+        [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: this.isSuitesSkippingEnabled ? 'true' : 'false',
+        [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: this.isEarlyFlakeDetectionEnabled ? 'true' : 'false',
+        [DD_CAPABILITIES_AUTO_TEST_RETRIES]: this.isFlakyTestRetriesEnabled ? 'true' : 'false'
+      }
+
+      this.tracer._tracer._exporter.addMetadataTags(metadataTags)
     }
 
     this.testSessionSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
@@ -530,7 +541,8 @@ class CypressPlugin {
       this.testSessionSpan.finish()
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       incrementCountMetric(TELEMETRY_TEST_SESSION, {
-        provider: this.ciProviderName
+        provider: this.ciProviderName,
+        autoInjected: !!process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER
       })
 
       finishAllTraceSpans(this.testSessionSpan)

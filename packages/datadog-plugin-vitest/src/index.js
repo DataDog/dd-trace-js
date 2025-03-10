@@ -22,6 +22,9 @@ const {
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_IS_DISABLED
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_AUTO_TEST_RETRIES
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -213,7 +216,12 @@ class VitestPlugin extends CiPlugin {
       testSpan.finish()
     })
 
-    this.addSub('ci:vitest:test-suite:start', ({ testSuiteAbsolutePath, frameworkVersion }) => {
+    this.addSub('ci:vitest:test-suite:start', ({
+      testSuiteAbsolutePath,
+      frameworkVersion,
+      isFlakyTestRetriesEnabled,
+      isEarlyFlakeDetectionEnabled
+    }) => {
       this.command = process.env.DD_CIVISIBILITY_TEST_COMMAND
       this.frameworkVersion = frameworkVersion
       const testSessionSpanContext = this.tracer.extract('text_map', {
@@ -229,8 +237,13 @@ class VitestPlugin extends CiPlugin {
           [TEST_SESSION_NAME]: testSessionName
         }
       }
-      if (this.tracer._exporter.setMetadataTags) {
-        this.tracer._exporter.setMetadataTags(metadataTags)
+      if (this.tracer._exporter.addMetadataTags) {
+        metadataTags.test = {
+          ...metadataTags.test,
+          [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: isEarlyFlakeDetectionEnabled ? 'true' : 'false',
+          [DD_CAPABILITIES_AUTO_TEST_RETRIES]: isFlakyTestRetriesEnabled ? 'true' : 'false'
+        }
+        this.tracer._exporter.addMetadataTags(metadataTags)
       }
 
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
@@ -320,7 +333,10 @@ class VitestPlugin extends CiPlugin {
       this.testSessionSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
-      this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
+      this.telemetry.count(TELEMETRY_TEST_SESSION, {
+        provider: this.ciProviderName,
+        autoInjected: !!process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER
+      })
       this.tracer._exporter.flush(onFinish)
     })
   }

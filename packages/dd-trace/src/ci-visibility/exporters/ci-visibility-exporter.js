@@ -375,14 +375,14 @@ class CiVisibilityExporter extends AgentInfoExporter {
     return this._url
   }
 
-  // By the time setMetadataTags is called, the agent info request might not have finished
-  setMetadataTags (tags) {
-    if (this._writer?.setMetadataTags) {
-      this._writer.setMetadataTags(tags)
+  // By the time addMetadataTags is called, the agent info request might not have finished
+  addMetadataTags (tags) {
+    if (this._writer?.addMetadataTags) {
+      this._writer.addMetadataTags(tags)
     } else {
       this._canUseCiVisProtocolPromise.then(() => {
-        if (this._writer?.setMetadataTags) {
-          this._writer.setMetadataTags(tags)
+        if (this._writer?.addMetadataTags) {
+          this._writer.addMetadataTags(tags)
         }
       })
     }

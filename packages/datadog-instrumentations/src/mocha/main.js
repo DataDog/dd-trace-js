@@ -282,7 +282,8 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
   }
 
   libraryConfigurationCh.publish({
-    onDone: mochaRunAsyncResource.bind(onReceivedConfiguration)
+    onDone: mochaRunAsyncResource.bind(onReceivedConfiguration),
+    isParallel
   })
 }
 

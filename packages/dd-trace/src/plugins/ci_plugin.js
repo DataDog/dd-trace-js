@@ -27,7 +27,10 @@ const {
   DI_DEBUG_ERROR_PREFIX,
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_FILE_SUFFIX,
-  DI_DEBUG_ERROR_LINE_SUFFIX
+  DI_DEBUG_ERROR_LINE_SUFFIX,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -42,6 +45,19 @@ const { CI_PROVIDER_NAME, GIT_REPOSITORY_URL, GIT_COMMIT_SHA, GIT_BRANCH, CI_WOR
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
 
+const UNSUPPORTED_TIA_FRAMEWORKS = ['playwright', 'vitest']
+const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = ['cucumber', 'mocha']
+
+function isTiaSupported (testFramework, isParallel) {
+  if (UNSUPPORTED_TIA_FRAMEWORKS.includes(testFramework)) {
+    return false
+  }
+  if (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.includes(testFramework)) {
+    return false
+  }
+  return true
+}
+
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
     super(...args)
@@ -49,7 +65,7 @@ module.exports = class CiPlugin extends Plugin {
     this.fileLineToProbeId = new Map()
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
 
-    this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone }) => {
+    this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone, isParallel }) => {
       if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
@@ -59,6 +75,18 @@ module.exports = class CiPlugin extends Plugin {
         } else {
           this.libraryConfig = libraryConfig
         }
+        const { isItrEnabled, isEarlyFlakeDetectionEnabled, isFlakyTestRetriesEnabled } = this.libraryConfig || {}
+        const metadataTags = {
+          test: {
+            [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isItrEnabled ? 'true' : 'false',
+            [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: isEarlyFlakeDetectionEnabled ? 'true' : 'false',
+            [DD_CAPABILITIES_AUTO_TEST_RETRIES]: isFlakyTestRetriesEnabled ? 'true' : 'false'
+          }
+        }
+        if (!isTiaSupported(this.constructor.id, isParallel)) {
+          metadataTags.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS] = undefined
+        }
+        this.tracer._exporter.addMetadataTags(metadataTags)
         onDone({ err, libraryConfig })
       })
     })
@@ -96,8 +124,8 @@ module.exports = class CiPlugin extends Plugin {
         }
       }
       // tracer might not be initialized correctly
-      if (this.tracer._exporter.setMetadataTags) {
-        this.tracer._exporter.setMetadataTags(metadataTags)
+      if (this.tracer._exporter.addMetadataTags) {
+        this.tracer._exporter.addMetadataTags(metadataTags)
       }
 
       this.testSessionSpan = this.tracer.startSpan(`${this.constructor.id}.test_session`, {

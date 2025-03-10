@@ -125,7 +125,10 @@ class CucumberPlugin extends CiPlugin {
       this.testSessionSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
-      this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
+      this.telemetry.count(TELEMETRY_TEST_SESSION, {
+        provider: this.ciProviderName,
+        autoInjected: !!process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER
+      })
 
       this.libraryConfig = null
       this.tracer._exporter.flush()

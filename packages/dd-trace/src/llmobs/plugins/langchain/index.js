@@ -21,6 +21,7 @@ const LlmHandler = require('./handlers/llm')
 const EmbeddingHandler = require('./handlers/embedding')
 
 class LangChainLLMObsPlugin extends LLMObsPlugin {
+  static get id () { return 'langchain' }
   static get prefix () {
     return 'tracing:apm:langchain:invoke'
   }

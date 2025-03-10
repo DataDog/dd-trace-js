@@ -53,7 +53,8 @@ function getProvidedContext () {
       _ddEarlyFlakeDetectionNumRetries: numRepeats,
       _ddIsKnownTestsEnabled: isKnownTestsEnabled,
       _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
-      _ddTestManagementTests: testManagementTests
+      _ddTestManagementTests: testManagementTests,
+      _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -63,7 +64,8 @@ function getProvidedContext () {
       numRepeats,
       isKnownTestsEnabled,
       isTestManagementTestsEnabled,
-      testManagementTests
+      testManagementTests,
+      isFlakyTestRetriesEnabled
     }
   } catch (e) {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -194,6 +196,12 @@ function getSortWrapper (sort) {
 
     if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
       this.ctx.config.retry = flakyTestRetriesCount
+      try {
+        const workspaceProject = this.ctx.getCoreWorkspaceProject()
+        workspaceProject._provided._ddIsFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
+      } catch (e) {
+        log.warn('Could not send library configuration to workers.')
+      }
     }
 
     if (isKnownTestsEnabled) {
@@ -647,9 +655,16 @@ addHook({
     // From >=3.0.1, the first arguments changes from a string to an object containing the filepath
     const testSuiteAbsolutePath = testPaths[0]?.filepath || testPaths[0]
 
+    const { isEarlyFlakeDetectionEnabled, isFlakyTestRetriesEnabled } = getProvidedContext()
+
     const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
     testSuiteAsyncResource.runInAsyncScope(() => {
-      testSuiteStartCh.publish({ testSuiteAbsolutePath, frameworkVersion })
+      testSuiteStartCh.publish({
+        testSuiteAbsolutePath,
+        frameworkVersion,
+        isFlakyTestRetriesEnabled,
+        isEarlyFlakeDetectionEnabled
+      })
     })
     const startTestsResponse = await startTests.apply(this, arguments)
 
