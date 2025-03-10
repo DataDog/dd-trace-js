@@ -12,8 +12,7 @@ const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
 
-const LLMObsAgentlessSpanWriter = require('./writers/spans/agentless')
-const LLMObsAgentProxySpanWriter = require('./writers/spans/agentProxy')
+const LLMObsSpanWriter = require('./writers/spans')
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
 
 /**
@@ -32,7 +31,7 @@ function enable (config) {
   // create writers and eval writer append and flush channels
   // span writer append is handled by the span processor
   evalWriter = new LLMObsEvalMetricsWriter(config)
-  spanWriter = createSpanWriter(config)
+  spanWriter = new LLMObsSpanWriter(config)
 
   evalMetricAppendCh.subscribe(handleEvalMetricAppend)
   flushCh.subscribe(handleFlush)
@@ -69,11 +68,6 @@ function handleLLMObsParentIdInjection ({ carrier }) {
   const parentId = parent?.context().toSpanId()
 
   carrier['x-datadog-tags'] += `,${PROPAGATED_PARENT_ID_KEY}=${parentId}`
-}
-
-function createSpanWriter (config) {
-  const SpanWriter = config.llmobs.agentlessEnabled ? LLMObsAgentlessSpanWriter : LLMObsAgentProxySpanWriter
-  return new SpanWriter(config)
 }
 
 function handleFlush () {

@@ -1,17 +1,16 @@
 'use strict'
 
-const { AGENTLESS_EVALULATIONS_ENDPOINT } = require('../constants/writers')
-const BaseWriter = require('./base')
+const { EVALULATIONS_ENDPOINT } = require('../constants/writers')
+const LLMObsWriter = require('./base')
 
-class LLMObsEvalMetricsWriter extends BaseWriter {
-  constructor (config) {
+class LLMObsEvalMetricsWriter extends LLMObsWriter {
+  constructor (tracerConfig) {
     super({
-      endpoint: AGENTLESS_EVALULATIONS_ENDPOINT,
-      intake: `api.${config.site}`,
-      eventType: 'evaluation_metric'
-    })
-
-    this._headers['DD-API-KEY'] = config.apiKey
+      endpoint: EVALULATIONS_ENDPOINT,
+      agentlessIntake: `api.${tracerConfig.site}`,
+      eventType: 'evaluation_metric',
+      tracerConfig
+    }, true)
   }
 
   makePayload (events) {

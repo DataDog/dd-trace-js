@@ -1,19 +1,21 @@
 'use strict'
 
-const { EVP_EVENT_SIZE_LIMIT, EVP_PAYLOAD_SIZE_LIMIT } = require('../../constants/writers')
-const { DROPPED_VALUE_TEXT } = require('../../constants/text')
-const { DROPPED_IO_COLLECTION_ERROR } = require('../../constants/tags')
-const BaseWriter = require('../base')
-const logger = require('../../../log')
+const { EVP_EVENT_SIZE_LIMIT, EVP_PAYLOAD_SIZE_LIMIT, SPANS_ENDPOINT } = require('../constants/writers')
+const { DROPPED_VALUE_TEXT } = require('../constants/text')
+const { DROPPED_IO_COLLECTION_ERROR } = require('../constants/tags')
+const LLMObsWriter = require('./base')
+const logger = require('../../log')
 
-const tracerVersion = require('../../../../../../package.json').version
+const tracerVersion = require('../../../../../package.json').version
 
-class LLMObsSpanWriter extends BaseWriter {
-  constructor (options) {
+class LLMObsSpanWriter extends LLMObsWriter {
+  constructor (tracerConfig) {
     super({
-      ...options,
-      eventType: 'span'
-    })
+      eventType: 'span',
+      agentlessIntake: `llmobs-intake.${tracerConfig.site}`,
+      endpoint: SPANS_ENDPOINT,
+      tracerConfig
+    }, tracerConfig.llmobs.agentlessEnabled)
   }
 
   append (event) {
@@ -24,7 +26,7 @@ class LLMObsSpanWriter extends BaseWriter {
     }
 
     if (this._bufferSize + eventSizeBytes > EVP_PAYLOAD_SIZE_LIMIT) {
-      logger.debug('Flusing queue because queing next event will exceed EvP payload limit')
+      logger.debug('Flushing queue because queuing next event will exceed EvP payload limit')
       this.flush()
     }
 

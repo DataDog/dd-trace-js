@@ -5,7 +5,7 @@ const {
   EVP_SUBDOMAIN_HEADER_VALUE,
   EVP_PROXY_AGENT_ENDPOINT
 } = require('../../constants/writers')
-const LLMObsBaseSpanWriter = require('./base')
+const LLMObsBaseSpanWriter = require('../spans')
 
 class LLMObsAgentProxySpanWriter extends LLMObsBaseSpanWriter {
   constructor (config) {
