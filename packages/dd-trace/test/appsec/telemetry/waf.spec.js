@@ -302,6 +302,22 @@ describe('Appsec Waf Telemetry metrics', () => {
         expect(count).to.not.have.been.called
       })
     })
+
+    describe('updateWafRateLimitedMetric', () => {
+      it('should set rate_limited to true on the request tags', () => {
+        appsecTelemetry.updateWafRateLimitedMetric(req)
+        const result = appsecTelemetry.updateWafRequestsMetricTags({ wafVersion, rulesVersion }, req)
+        expect(result.rate_limited).to.be.true
+      })
+    })
+
+    describe('updateWafBlockFailureMetric', () => {
+      it('should set block_failure to true on the request tags', () => {
+        appsecTelemetry.updateWafBlockFailureMetric(req)
+        const result = appsecTelemetry.updateWafRequestsMetricTags({ wafVersion, rulesVersion }, req)
+        expect(result.block_failure).to.be.true
+      })
+    })
   })
 
   describe('if disabled', () => {
@@ -327,6 +343,18 @@ describe('Appsec Waf Telemetry metrics', () => {
 
       expect(count).to.not.have.been.called
       expect(inc).to.not.have.been.called
+    })
+
+    it('should not set rate_limited if telemetry is disabled', () => {
+      appsecTelemetry.updateWafRateLimitedMetric(req)
+      const result = appsecTelemetry.updateWafRequestsMetricTags({ wafVersion, rulesVersion }, req)
+      expect(result).to.be.undefined
+    })
+
+    it('should not set block_failure if telemetry is disabled', () => {
+      appsecTelemetry.updateWafBlockFailureMetric(req)
+      const result = appsecTelemetry.updateWafRequestsMetricTags({ wafVersion, rulesVersion }, req)
+      expect(result).to.be.undefined
     })
 
     describe('updateWafRequestMetricTags', () => {
