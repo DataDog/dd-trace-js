@@ -1391,12 +1391,13 @@ versions.forEach((version) => {
                   assert.equal(skippedTest.meta[TEST_STATUS], 'skip')
                   assert.propertyVal(skippedTest.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
                 } else {
-                  assert.equal(skippedTest.meta[TEST_STATUS], 'pass')
+                  assert.equal(skippedTest.meta[TEST_STATUS], 'fail')
                   assert.notProperty(skippedTest.meta, TEST_MANAGEMENT_IS_DISABLED)
                 }
               })
 
           const runDisableTest = (done, isDisabling, extraEnvVars = {}) => {
+            let stdout = ''
             const testAssertionsPromise = getTestAssertions(isDisabling)
 
             childProcess = exec(
@@ -1413,9 +1414,19 @@ versions.forEach((version) => {
               }
             )
 
+            childProcess.stdout.on('data', (data) => {
+              stdout += data
+            })
+
             childProcess.on('exit', (exitCode) => {
               testAssertionsPromise.then(() => {
-                assert.equal(exitCode, 0)
+                if (isDisabling) {
+                  assert.notInclude(stdout, 'I am running')
+                  assert.equal(exitCode, 0)
+                } else {
+                  assert.include(stdout, 'I am running')
+                  assert.equal(exitCode, 1)
+                }
                 done()
               })
             })
@@ -1498,6 +1509,7 @@ versions.forEach((version) => {
               })
 
           const runQuarantineTest = (done, isQuarantining, extraEnvVars = {}) => {
+            let stdout = ''
             const testAssertionsPromise = getTestAssertions(isQuarantining)
 
             childProcess = exec(
@@ -1514,8 +1526,14 @@ versions.forEach((version) => {
               }
             )
 
+            childProcess.stdout.on('data', (data) => {
+              stdout += data
+            })
+
             childProcess.on('exit', (exitCode) => {
               testAssertionsPromise.then(() => {
+                // it runs regardless of the quarantine status
+                assert.include(stdout, 'I am running when quarantined')
                 if (isQuarantining) {
                   // exit code 0 even though one of the tests failed
                   assert.equal(exitCode, 0)

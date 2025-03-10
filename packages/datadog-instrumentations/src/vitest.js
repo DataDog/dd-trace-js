@@ -352,23 +352,18 @@ addHook({
       testManagementTests
     } = getProvidedContext()
 
-    let isDisabled = false
-
     if (isTestManagementTestsEnabled) {
       isDisabledCh.publish({
         testManagementTests,
         testSuiteAbsolutePath: task.file.filepath,
         testName,
         onDone: (isTestDisabled) => {
-          isDisabled = isTestDisabled
           if (isTestDisabled) {
             disabledTasks.add(task)
+            task.mode = 'skip'
           }
         }
       })
-      if (isDisabled) {
-        task.mode = 'skip'
-      }
     }
 
     if (isKnownTestsEnabled) {

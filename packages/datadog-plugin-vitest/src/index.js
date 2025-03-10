@@ -55,28 +55,14 @@ class VitestPlugin extends CiPlugin {
 
     this.addSub('ci:vitest:test:is-disabled', ({ testManagementTests, testSuiteAbsolutePath, testName, onDone }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const isDisabled = testManagementTests
-        ?.vitest
-        ?.suites
-        ?.[testSuite]
-        ?.tests
-        ?.[testName]
-        ?.properties
-        ?.disabled
+      const { isDisabled } = this.getTestProperties(testManagementTests, testSuite, testName)
 
       onDone(isDisabled ?? false)
     })
 
     this.addSub('ci:vitest:test:is-quarantined', ({ testManagementTests, testSuiteAbsolutePath, testName, onDone }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const isQuarantined = testManagementTests
-        ?.vitest
-        ?.suites
-        ?.[testSuite]
-        ?.tests
-        ?.[testName]
-        ?.properties
-        ?.quarantined
+      const { isQuarantined } = this.getTestProperties(testManagementTests, testSuite, testName)
 
       onDone(isQuarantined ?? false)
     })
@@ -338,6 +324,13 @@ class VitestPlugin extends CiPlugin {
       })
       this.tracer._exporter.flush(onFinish)
     })
+  }
+
+  getTestProperties (testManagementTests, testSuite, testName) {
+    const { disabled: isDisabled, quarantined: isQuarantined } =
+      testManagementTests?.vitest?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
+
+    return { isDisabled, isQuarantined }
   }
 }
 
