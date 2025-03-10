@@ -2611,13 +2611,14 @@ describe('mocha CommonJS', function () {
               assert.equal(skippedTests.meta[TEST_STATUS], 'skip')
               assert.propertyVal(skippedTests.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
             } else {
-              assert.equal(skippedTests.meta[TEST_STATUS], 'pass')
+              assert.equal(skippedTests.meta[TEST_STATUS], 'fail')
               assert.notProperty(skippedTests.meta, TEST_MANAGEMENT_IS_DISABLED)
             }
           })
 
-      const runDisableTest = (done, isQuarantining, extraEnvVars = {}) => {
-        const testAssertionsPromise = getTestAssertions(isQuarantining)
+      const runDisableTest = (done, isDisabling, extraEnvVars = {}) => {
+        let stdout = ''
+        const testAssertionsPromise = getTestAssertions(isDisabling)
 
         childProcess = exec(
           runTestsWithCoverageCommand,
@@ -2635,9 +2636,19 @@ describe('mocha CommonJS', function () {
           }
         )
 
+        childProcess.stdout.on('data', (data) => {
+          stdout += data
+        })
+
         childProcess.on('exit', (exitCode) => {
           testAssertionsPromise.then(() => {
-            assert.equal(exitCode, 0)
+            if (isDisabling) {
+              assert.notInclude(stdout, 'I am running')
+              assert.equal(exitCode, 0)
+            } else {
+              assert.include(stdout, 'I am running')
+              assert.equal(exitCode, 1)
+            }
             done()
           }).catch(done)
         })
@@ -2717,6 +2728,7 @@ describe('mocha CommonJS', function () {
           })
 
       const runQuarantineTest = (done, isQuarantining, extraEnvVars = {}) => {
+        let stdout = ''
         const testAssertionsPromise = getTestAssertions(isQuarantining)
 
         childProcess = exec(
@@ -2735,8 +2747,14 @@ describe('mocha CommonJS', function () {
           }
         )
 
+        childProcess.stdout.on('data', (data) => {
+          stdout += data
+        })
+
         childProcess.on('exit', (exitCode) => {
           testAssertionsPromise.then(() => {
+            // it runs regardless of the quarantine status
+            assert.include(stdout, 'I am running when quarantined')
             if (isQuarantining) {
               assert.equal(exitCode, 0)
             } else {
