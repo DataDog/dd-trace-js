@@ -412,19 +412,23 @@ class Config {
 
     // TODO: test
     this._applyCalculated()
-    this._merge([
-      'calculated',
-      'code',
-      'remote_config'
-    ], [
-      this._calculated,
-      this._options,
-      this._remote
-    ], [
-      {},
-      this._optsUnprocessed,
-      this._remoteUnprocessed
-    ])
+    // this._merge([
+    //   'default',
+    //   'calculated',
+    //   'code',
+    //   'remote_config'
+    // ], [
+    //   this._defaults,
+    //   this._calculated,
+    //   this._options,
+    //   this._remote
+    // ], [
+    //   {},
+    //   {},
+    //   this._optsUnprocessed,
+    //   this._remoteUnprocessed
+    // ])
+    this._merge(false)
   }
 
   _getDefaultPropagationStyle (options) {
@@ -1455,9 +1459,9 @@ class Config {
   // TODO: Move change tracking to telemetry.
   // for telemetry reporting, `name`s in `containers` need to be keys from:
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
-  _merge (origins = [], containers = [], unprocessedValues = []) {
-    if (containers.length === 0) {
-      containers = [
+  _merge (reportStartup = true) {
+
+    const containers = [
         this._defaults,
         this._calculated,
         this._localStableConfig,
@@ -1466,7 +1470,7 @@ class Config {
         this._options,
         this._remote
       ]
-      origins = [
+   const  origins = [
         'default',
         'calculated',
         'local_stable_config',
@@ -1475,7 +1479,7 @@ class Config {
         'code',
         'remote_config'
       ]
-      unprocessedValues = [
+    const unprocessedValues = [
         {},
         {},
         {},
@@ -1484,7 +1488,7 @@ class Config {
         this._optsUnprocessed,
         this._remoteUnprocessed
       ]
-    }
+
 
     const changes = []
 
@@ -1494,10 +1498,10 @@ class Config {
         const value = container[name]
 
         if ((value !== null && value !== undefined) || container === this._defaults) {
-          if (get(this, name) === value && has(this, name) && origins[i] === get(originTracker, name)) continue
+          if (get(this, name) === value && has(this, name) && !reportStartup) continue
 
           set(this, name, value)
-          set(originTracker, name, origins[i])
+          // set(originTracker, name, origins[i])
 
           changes.push({
             name,
