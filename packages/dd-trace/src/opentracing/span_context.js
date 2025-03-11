@@ -52,10 +52,6 @@ class DatadogSpanContext {
     return this._traceId.toString(10)
   }
 
-  toTraceIdNumber (get128BitId = false) {
-    return parseInt(this.toTraceId(get128BitId), 16)
-  }
-
   toSpanId (get128bitId = false) {
     if (get128bitId) {
       return this._spanId.toString(16).padStart(16, '0')
