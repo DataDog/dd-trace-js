@@ -28,24 +28,14 @@ const wrappedFunctions = new WeakSet()
 const newTests = {}
 const testsQuarantined = new Set()
 
-function isQuarantinedTest (test, testsToQuarantine) {
+function getTestProperties (test, testManagementTests) {
   const testSuite = getTestSuitePath(test.file, process.cwd())
   const testName = test.fullTitle()
 
-  const isQuarantined = (testsToQuarantine
-    .mocha
-    ?.suites
-    ?.[testSuite]
-    ?.tests
-    ?.[testName]
-    ?.properties
-    ?.quarantined) ?? false
+  const { disabled: isDisabled, quarantined: isQuarantined } =
+    testManagementTests?.mocha?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
 
-  if (isQuarantined) {
-    testsQuarantined.add(test)
-  }
-
-  return isQuarantined
+  return { isDisabled, isQuarantined }
 }
 
 function isNewTest (test, knownTests) {
@@ -193,6 +183,7 @@ function getOnTestHandler (isMain) {
       title,
       _ddIsNew: isNew,
       _ddIsEfdRetry: isEfdRetry,
+      _ddIsDisabled: isDisabled,
       _ddIsQuarantined: isQuarantined
     } = test
 
@@ -209,6 +200,7 @@ function getOnTestHandler (isMain) {
 
     testInfo.isNew = isNew
     testInfo.isEfdRetry = isEfdRetry
+    testInfo.isDisabled = isDisabled
     testInfo.isQuarantined = isQuarantined
     // We want to store the result of the new tests
     if (isNew) {
@@ -218,6 +210,10 @@ function getOnTestHandler (isMain) {
       } else {
         newTests[testFullName] = [test]
       }
+    }
+
+    if (isDisabled) {
+      test.pending = true
     }
 
     asyncResource.runInAsyncScope(() => {
@@ -384,9 +380,13 @@ function getRunTestsWrapper (runTests, config) {
       })
     }
 
-    if (config.isQuarantinedTestsEnabled) {
+    if (config.isTestManagementTestsEnabled) {
       suite.tests.forEach(test => {
-        if (isQuarantinedTest(test, config.quarantinedTests)) {
+        const { isDisabled, isQuarantined } = getTestProperties(test, config.testManagementTests)
+        if (isDisabled) {
+          test._ddIsDisabled = true
+        } else if (isQuarantined) {
+          testsQuarantined.add(test)
           test._ddIsQuarantined = true
         }
       })
@@ -398,6 +398,7 @@ function getRunTestsWrapper (runTests, config) {
 
 module.exports = {
   isNewTest,
+  getTestProperties,
   retryTest,
   getSuitesByTestFile,
   isMochaRetry,
