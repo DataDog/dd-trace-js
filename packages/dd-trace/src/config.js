@@ -420,6 +420,10 @@ class Config {
       this._calculated,
       this._options,
       this._remote
+    ], [
+      {},
+      this._optsUnprocessed,
+      this._remoteUnprocessed
     ])
   }
 
@@ -1451,7 +1455,7 @@ class Config {
   // TODO: Move change tracking to telemetry.
   // for telemetry reporting, `name`s in `containers` need to be keys from:
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
-  _merge (origins = [], containers = []) {
+  _merge (origins = [], containers = [], unprocessedValues = []) {
     if (containers.length === 0) {
       containers = [
         this._defaults,
@@ -1471,17 +1475,17 @@ class Config {
         'code',
         'remote_config'
       ]
+      unprocessedValues = [
+        {},
+        {},
+        {},
+        this._envUnprocessed,
+        {},
+        this._optsUnprocessed,
+        this._remoteUnprocessed
+      ]
     }
 
-    const unprocessedValues = [
-      {},
-      {},
-      {},
-      this._envUnprocessed,
-      {},
-      this._optsUnprocessed,
-      this._remoteUnprocessed
-    ]
     const changes = []
 
     for (const name in this._defaults) {
