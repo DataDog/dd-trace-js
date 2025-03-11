@@ -330,7 +330,7 @@ function getGitMetadata (ciMetadata) {
 
   const tags = {
     [GIT_COMMIT_MESSAGE]:
-      commitMessage || sanitizedExec('git', ['show', '-s', '--format=%s']),
+      commitMessage || cp.execFileSync('git', ['show', '-s', '--format=%B']).toString(),
     [GIT_BRANCH]: branch || sanitizedExec('git', ['rev-parse', '--abbrev-ref', 'HEAD']),
     [GIT_COMMIT_SHA]: commitSHA || sanitizedExec('git', ['rev-parse', 'HEAD']),
     [CI_WORKSPACE_PATH]: ciWorkspacePath || sanitizedExec('git', ['rev-parse', '--show-toplevel'])
