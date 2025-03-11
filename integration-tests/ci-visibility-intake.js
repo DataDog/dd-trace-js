@@ -36,8 +36,8 @@ const DEFAULT_INFO_RESPONSE = {
 const DEFAULT_CORRELATION_ID = '1234'
 const DEFAULT_KNOWN_TESTS = ['test-suite1.js.test-name1', 'test-suite2.js.test-name2']
 
-const DEFAULT_QUARANTINED_TESTS = {}
-const DEFAULT_QUARANTINED_TESTS_RESPONSE_STATUS = 200
+const DEFAULT_TEST_MANAGEMENT_TESTS = {}
+const DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS = 200
 
 let settings = DEFAULT_SETTINGS
 let suitesToSkip = DEFAULT_SUITES_TO_SKIP
@@ -47,8 +47,8 @@ let correlationId = DEFAULT_CORRELATION_ID
 let knownTests = DEFAULT_KNOWN_TESTS
 let knownTestsStatusCode = DEFAULT_KNOWN_TESTS_RESPONSE_STATUS
 let waitingTime = 0
-let quarantineResponse = DEFAULT_QUARANTINED_TESTS
-let quarantineResponseStatusCode = DEFAULT_QUARANTINED_TESTS_RESPONSE_STATUS
+let testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
+let testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
 
 class FakeCiVisIntake extends FakeAgent {
   setKnownTestsResponseCode (statusCode) {
@@ -83,12 +83,12 @@ class FakeCiVisIntake extends FakeAgent {
     waitingTime = newWaitingTime
   }
 
-  setQuarantinedTests (newQuarantinedTests) {
-    quarantineResponse = newQuarantinedTests
+  setTestManagementTests (newTestManagementTests) {
+    testManagementResponse = newTestManagementTests
   }
 
-  setQuarantinedTestsResponseCode (newStatusCode) {
-    quarantineResponseStatusCode = newStatusCode
+  setTestManagementTestsResponseCode (newStatusCode) {
+    testManagementResponseStatusCode = newStatusCode
   }
 
   async start () {
@@ -247,11 +247,11 @@ class FakeCiVisIntake extends FakeAgent {
       const data = JSON.stringify({
         data: {
           attributes: {
-            modules: quarantineResponse
+            modules: testManagementResponse
           }
         }
       })
-      res.status(quarantineResponseStatusCode).send(data)
+      res.status(testManagementResponseStatusCode).send(data)
       this.emit('message', {
         headers: req.headers,
         url: req.url
@@ -278,8 +278,8 @@ class FakeCiVisIntake extends FakeAgent {
     gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
     knownTestsStatusCode = DEFAULT_KNOWN_TESTS_RESPONSE_STATUS
     infoResponse = DEFAULT_INFO_RESPONSE
-    quarantineResponseStatusCode = DEFAULT_QUARANTINED_TESTS_RESPONSE_STATUS
-    quarantineResponse = DEFAULT_QUARANTINED_TESTS
+    testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
+    testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
     this.removeAllListeners()
     if (this.waitingTimeoutId) {
       clearTimeout(this.waitingTimeoutId)
