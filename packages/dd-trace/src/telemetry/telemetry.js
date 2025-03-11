@@ -28,7 +28,7 @@ const extendedHeartbeatPayload = {}
 
 const sentIntegrations = new Set()
 
-let seq_id = 0
+let seqId = 0
 
 function getRetryData () {
   return retryData
@@ -344,11 +344,10 @@ function updateConfig (changes, config) {
   for (const change of changes) {
     const name = nameMapping[change.name] || change.name
 
-    //names.push(name)
     updatedTuples.add(`${name}|${change.origin}`)
     const { origin, value } = change
-    const entry = { name, value, origin, seq_id }
-    seq_id++
+    const entry = { name, value, origin, seq_id: seqId }
+    seqId++
 
     if (namesNeedFormatting.has(entry.name)) {
       entry.value = formatMapForTelemetry(entry.value)
