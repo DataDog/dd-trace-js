@@ -41,18 +41,18 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
 
       prioritySampler.sample(span, false)
 
-      sinon.assert.calledWithExactly(_getPriorityFromTags, context._tags)
+      sinon.assert.calledWithExactly(_getPriorityFromTags, context._tags, context)
     })
   })
 
   describe('_getPriorityFromTags', () => {
     it('should keep the trace if manual.keep and _dd.p.ts are present', () => {
       context._trace.tags[TRACE_SOURCE_PROPAGATION_KEY] = '02'
-      assert.strictEqual(prioritySampler._getPriorityFromTags(tags), USER_KEEP)
+      assert.strictEqual(prioritySampler._getPriorityFromTags(tags, context), USER_KEEP)
     })
 
     it('should return undefined if manual.keep or _dd.p.ts are not present', () => {
-      assert.isUndefined(prioritySampler._getPriorityFromTags(tags))
+      assert.isUndefined(prioritySampler._getPriorityFromTags(tags, context))
     })
   })
 

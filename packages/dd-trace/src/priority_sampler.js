@@ -99,7 +99,7 @@ class PrioritySampler {
 
     log.trace(span, auto)
 
-    const tag = this._getPriorityFromTags(context._tags)
+    const tag = this._getPriorityFromTags(context._tags, context)
 
     if (this.validate(tag)) {
       context._sampling.priority = tag
@@ -205,10 +205,12 @@ class PrioritySampler {
   /**
    *
    * @param tags {Map<string, Object>}
+   * Included for compatibility with {@link import('./standalone/tracesource_priority_sampler')._getPriorityFromTags}
+   * @param _context {DatadogSpanContext}
    * @returns {SamplingPriority}
    * @private
    */
-  _getPriorityFromTags (tags) {
+  _getPriorityFromTags (tags, _context) {
     if (hasOwn(tags, MANUAL_KEEP) && tags[MANUAL_KEEP] !== false) {
       return USER_KEEP
     } else if (hasOwn(tags, MANUAL_DROP) && tags[MANUAL_DROP] !== false) {
