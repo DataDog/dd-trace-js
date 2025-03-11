@@ -52,7 +52,7 @@ function sampleRequest (req, res, force = false) {
   }
 
   if (force) {
-    sampledRequests.set(key, true)
+    sampledRequests.set(key, undefined)
   }
 
   return true
