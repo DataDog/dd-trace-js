@@ -70,7 +70,7 @@ withVersions('express', 'express', expressVersion => {
       await agent.use((traces) => {
         const span = traces[0][0]
         assert.property(span.meta, '_dd.appsec.fp.http.header')
-        assert.equal(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-6431a3e6-5-55682ec1')
+        assert.equal(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-24b31d51-5-55682ec1')
         assert.property(span.meta, '_dd.appsec.fp.http.network')
         assert.equal(span.meta['_dd.appsec.fp.http.network'], 'net-1-0100000000')
         assert.property(span.meta, '_dd.appsec.fp.http.endpoint')
