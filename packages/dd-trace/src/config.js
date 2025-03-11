@@ -22,6 +22,8 @@ const { appendRules } = require('./payload-tagging/config')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
+const originTracker = {}
+
 const telemetryCounters = {
   'otel.env.hiding': {},
   'otel.env.invalid': {}
@@ -419,7 +421,20 @@ class Config {
 
     // TODO: test
     this._applyCalculated()
-    this._merge()
+    console.log(55, [
+      this._calculated,
+      this._options,
+      this._remote
+    ])
+    this._merge([
+      'calculated',
+      'code',
+      'remote_config'
+    ],[
+      this._calculated,
+      this._options,
+      this._remote
+    ])
   }
 
   _getDefaultPropagationStyle (options) {
@@ -1401,26 +1416,29 @@ class Config {
   // for telemetry reporting, `name`s in `containers` need to be keys from:
   // eslint-disable-next-line @stylistic/js/max-len
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
-  _merge () {
-    const containers = [
-      this._defaults,
-      this._calculated,
-      this._localStableConfig,
-      this._env,
-      this._fleetStableConfig,
-      this._options,
-      this._remote
-    ]
+  _merge (origins=[], containers = []) {
+    if (containers.length === 0) {
+      containers = [
+        this._defaults,
+        this._calculated,
+        this._localStableConfig,
+        this._env,
+        this._fleetStableConfig,
+        this._options,
+        this._remote
+      ]
+      origins = [
+        'default',
+        'calculated',
+        'local_stable_config',
+        'env_var',
+        'fleet_stable_config',
+        'code',
+        'remote_config'
+      ]
+    }
 
-    const origins = [
-      'default',
-      'calculated',
-      'local_stable_config',
-      'env_var',
-      'fleet_stable_config',
-      'code',
-      'remote_config'
-    ]
+
     const unprocessedValues = [
       {},
       {},
@@ -1435,15 +1453,21 @@ class Config {
     for (const name in this._defaults) {
       for (let i = 0; i < containers.length; i++) {
         const container = containers[i]
+        // console.log(name)
         const value = container[name]
 
         if ((value !== null && value !== undefined) || container === this._defaults) {
-          // report all sources
-          // if (get(this, name) === value && has(this, name)) break
-          // if (name === 'service') {
-          //   console.log(1000000, name, value, this._defaults['service'], this._env['service'], this._options['service'])
-          // }
+          // report all sources on startup & then only if value changes
+          //console.log(55, name, value)
+          if (name === 'runtimeMetrics') {
+            console.log(1000000, name, value, get(this, name), this._localStableConfig, this._fleetStableConfig)
+          }
+          if (get(this, name) === value && has(this, name) && origins[i] === get(originTracker, name)) continue
+
           set(this, name, value)
+          set(originTracker, name, origins[i])
+
+          //console.log(55, get(this, name), value, origins[i], )
 
           changes.push({
             name,
