@@ -22,7 +22,7 @@ const knownTestsCh = channel('ci:cucumber:known-tests')
 const skippableSuitesCh = channel('ci:cucumber:test-suite:skippable')
 const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
-const quarantinedTestsCh = channel('ci:cucumber:quarantined-tests')
+const testManagementTestsCh = channel('ci:cucumber:test-management-tests')
 
 const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
 
@@ -72,8 +72,8 @@ let earlyFlakeDetectionFaultyThreshold = 0
 let isEarlyFlakeDetectionFaulty = false
 let isFlakyTestRetriesEnabled = false
 let isKnownTestsEnabled = false
-let isQuarantinedTestsEnabled = false
-let quarantinedTests = {}
+let isTestManagementTestsEnabled = false
+let testManagementTests = {}
 let numTestRetries = 0
 let knownTests = []
 let skippedSuites = []
@@ -120,15 +120,11 @@ function isNewTest (testSuite, testName) {
   return !testsForSuite.includes(testName)
 }
 
-function isQuarantinedTest (testSuite, testName) {
-  return quarantinedTests
-    ?.cucumber
-    ?.suites
-    ?.[testSuite]
-    ?.tests
-    ?.[testName]
-    ?.properties
-    ?.quarantined
+function getTestProperties (testSuite, testName) {
+  const { disabled, quarantined } =
+    testManagementTests?.cucumber?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
+
+  return { disabled, quarantined }
 }
 
 function getTestStatusFromRetries (testStatuses) {
@@ -307,6 +303,7 @@ function wrapRun (pl, isLatestVersion) {
         }
         let isNew = false
         let isEfdRetry = false
+        let isDisabled = false
         let isQuarantined = false
         if (isKnownTestsEnabled && status !== 'skip') {
           const numRetries = numRetriesByPickleId.get(this.pickle.id)
@@ -314,9 +311,13 @@ function wrapRun (pl, isLatestVersion) {
           isNew = numRetries !== undefined
           isEfdRetry = numRetries > 0
         }
-        if (isQuarantinedTestsEnabled) {
+        if (isTestManagementTestsEnabled) {
           const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
-          isQuarantined = isQuarantinedTest(testSuitePath, this.pickle.name)
+          const testProperties = getTestProperties(testSuitePath, this.pickle.name)
+          isDisabled = testProperties.disabled
+          if (!isDisabled) {
+            isQuarantined = testProperties.quarantined
+          }
         }
         const attemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
 
@@ -333,6 +334,7 @@ function wrapRun (pl, isLatestVersion) {
             isNew,
             isEfdRetry,
             isFlakyRetry: numAttempt > 0,
+            isDisabled,
             isQuarantined
           })
         })
@@ -423,7 +425,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     isFlakyTestRetriesEnabled = configurationResponse.libraryConfig?.isFlakyTestRetriesEnabled
     numTestRetries = configurationResponse.libraryConfig?.flakyTestRetriesCount
     isKnownTestsEnabled = configurationResponse.libraryConfig?.isKnownTestsEnabled
-    isQuarantinedTestsEnabled = configurationResponse.libraryConfig?.isQuarantinedTestsEnabled
+    isTestManagementTestsEnabled = configurationResponse.libraryConfig?.isTestManagementEnabled
 
     if (isKnownTestsEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
@@ -481,12 +483,12 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       }
     }
 
-    if (isQuarantinedTestsEnabled) {
-      const quarantinedTestsResponse = await getChannelPromise(quarantinedTestsCh)
-      if (!quarantinedTestsResponse.err) {
-        quarantinedTests = quarantinedTestsResponse.quarantinedTests
+    if (isTestManagementTestsEnabled) {
+      const testManagementTestsResponse = await getChannelPromise(testManagementTestsCh)
+      if (!testManagementTestsResponse.err) {
+        testManagementTests = testManagementTestsResponse.testManagementTests
       } else {
-        isQuarantinedTestsEnabled = false
+        isTestManagementTestsEnabled = false
       }
     }
 
@@ -537,7 +539,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
         hasForcedToRunSuites: isForcedToRun,
         isEarlyFlakeDetectionEnabled,
         isEarlyFlakeDetectionFaulty,
-        isQuarantinedTestsEnabled,
+        isTestManagementTestsEnabled,
         isParallel
       })
     })
@@ -574,6 +576,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     }
 
     let isNew = false
+    let isDisabled = false
     let isQuarantined = false
 
     if (isKnownTestsEnabled) {
@@ -582,10 +585,15 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
         numRetriesByPickleId.set(pickle.id, 0)
       }
     }
-    if (isQuarantinedTestsEnabled) {
-      isQuarantined = isQuarantinedTest(testSuitePath, pickle.name)
+    if (isTestManagementTestsEnabled) {
+      const testProperties = getTestProperties(testSuitePath, pickle.name)
+      isDisabled = testProperties.disabled
+      if (isDisabled) {
+        this.options.dryRun = true
+      } else {
+        isQuarantined = testProperties.quarantined
+      }
     }
-
     // TODO: for >=11 we could use `runTestCaseResult` instead of accumulating results in `lastStatusByPickleId`
     let runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
 
@@ -617,7 +625,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       }
     }
 
-    if (isQuarantinedTestsEnabled && isQuarantined) {
+    if (isTestManagementTestsEnabled && isQuarantined) {
       this.success = true
       shouldBePassedByQuarantine = true
     }
@@ -653,7 +661,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       return shouldBePassedByEFD
     }
 
-    if (isNewerCucumberVersion && isQuarantinedTestsEnabled && isQuarantined) {
+    if (isNewerCucumberVersion && isTestManagementTestsEnabled && isQuarantined) {
       return shouldBePassedByQuarantine
     }
 
