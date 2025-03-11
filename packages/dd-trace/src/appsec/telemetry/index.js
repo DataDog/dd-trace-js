@@ -80,10 +80,10 @@ function incrementWafInitMetric (wafVersion, rulesVersion) {
   incrementWafInit(wafVersion, rulesVersion)
 }
 
-function incrementWafUpdatesMetric (wafVersion, rulesVersion) {
+function incrementWafUpdatesMetric (wafVersion, rulesVersion, success) {
   if (!enabled) return
 
-  incrementWafUpdates(wafVersion, rulesVersion)
+  incrementWafUpdates(wafVersion, rulesVersion, success)
 }
 
 function incrementWafRequestsMetric (req) {

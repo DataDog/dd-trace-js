@@ -179,10 +179,10 @@ describe('WAF Manager', () => {
       waf.update(rules)
 
       expect(DDWAF.prototype.update).to.be.calledOnceWithExactly(rules)
-      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '1.0.0')
+      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '1.0.0', true)
     })
 
-    it('should call Reporter.reportWafUpdate', () => {
+    it('should call Reporter.reportWafUpdate on successful update', () => {
       const rules = {
         metadata: {
           rules_version: '4.2.0'
@@ -203,7 +203,23 @@ describe('WAF Manager', () => {
 
       waf.update(rules)
 
-      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '4.2.0')
+      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '4.2.0', true)
+    })
+
+    it('should call Reporter.reportWafUpdate on failed update', () => {
+      const rules = {
+        metadata: {
+          rules_version: '4.2.0'
+        }
+      }
+
+      DDWAF.prototype.update = sinon.stub().throws(new Error('test'))
+
+      try {
+        waf.update(rules)
+      } catch {
+        expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '1.0.0', false)
+      }
     })
   })
 

@@ -49,13 +49,20 @@ class WAFManager {
   }
 
   update (newRules) {
-    this.ddwaf.update(newRules)
+    let status = true
+    try {
+      this.ddwaf.update(newRules)
+    } catch (error) {
+      status = false
 
-    if (this.ddwaf.diagnostics.ruleset_version) {
-      this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
+      throw error
+    } finally {
+      if (this.ddwaf.diagnostics.ruleset_version) {
+        this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
+      }
+
+      Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion, status)
     }
-
-    Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion)
   }
 
   destroy () {

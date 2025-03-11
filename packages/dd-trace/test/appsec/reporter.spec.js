@@ -380,9 +380,9 @@ describe('reporter', () => {
 
   describe('reportWafUpdate', () => {
     it('should call incrementWafUpdatesMetric', () => {
-      Reporter.reportWafUpdate('0.0.1', '0.0.2')
+      Reporter.reportWafUpdate('0.0.1', '0.0.2', true)
 
-      expect(telemetry.incrementWafUpdatesMetric).to.have.been.calledOnceWithExactly('0.0.1', '0.0.2')
+      expect(telemetry.incrementWafUpdatesMetric).to.have.been.calledOnceWithExactly('0.0.1', '0.0.2', true)
     })
   })
 
