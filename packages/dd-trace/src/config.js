@@ -1433,7 +1433,6 @@ class Config {
       ]
     }
 
-
     const unprocessedValues = [
       {},
       {},
