@@ -466,7 +466,9 @@ describe('Telemetry extended heartbeat', () => {
     const expectedConfigListWithSamplingRules = expectedConfigList.concat([
       {
         name: 'DD_TRACE_SAMPLING_RULES',
-        value: '[{"service":"*","sampling_rate":1},{"service":"svc*","resource":"*abc","name":"op-??","tags":{"tag-a":"ta-v*","tag-b":"tb-v?","tag-c":"tc-v"},"sample_rate":0.5}]',
+        value: '[{"service":"*","sampling_rate":1},' +
+        '{"service":"svc*","resource":"*abc","name":"op-??",' +
+        '"tags":{"tag-a":"ta-v*","tag-b":"tb-v?","tag-c":"tc-v"},"sample_rate":0.5}]',
         origin: 'code',
         seq_id: 3
       }
@@ -476,14 +478,14 @@ describe('Telemetry extended heartbeat', () => {
     expect(configuration).to.deep.equal(expectedConfigListWithSamplingRules)
 
     // Chained changes
-    let chainedChanges = expectedConfigListWithSamplingRules.concat([
+    const chainedChanges = expectedConfigListWithSamplingRules.concat([
       { name: 'test', value: true, origin: 'env', seq_id: 4 },
       { name: 'test', value: false, origin: 'remote_config', seq_id: 5 }
     ])
     // samplingRule2 includes the sampler.rules item again, plus the new changes
     const samplingRule2 = [
-      { name: 'test', value: true, origin: 'env'},
-      { name: 'test', value: false, origin: 'remote_config'}
+      { name: 'test', value: true, origin: 'env' },
+      { name: 'test', value: false, origin: 'remote_config' }
     ]
 
     // Update config

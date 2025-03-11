@@ -1939,7 +1939,6 @@ describe('Config', () => {
     config.configure({}, true)
 
     expect(updateConfig).to.be.calledTwice
-    //console.log(updateConfig.getCall(1).args[0])
     expect(updateConfig.getCall(1).args[0]).to.deep.equal([])
   })
 
