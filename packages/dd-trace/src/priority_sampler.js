@@ -64,7 +64,7 @@ class PrioritySampler {
   configure (env, opts = {}) {
     const { sampleRate, provenance = undefined, rateLimit = 100, rules = [] } = opts
     this._env = env
-    this._rules = this._normalizeRules(rules, sampleRate, rateLimit, provenance)
+    this._rules = this.#_normalizeRules(rules, sampleRate, rateLimit, provenance)
     this._limiter = new RateLimiter(rateLimit)
 
     log.trace(env, opts)
@@ -110,12 +110,12 @@ class PrioritySampler {
       return
     }
 
-    this._addDecisionMaker(root)
+    this.#_addDecisionMaker(root)
   }
 
   /**
    *
-   * @param rates {Object<string, number>}
+   * @param rates {Record<string, number>}
    * @returns {void}
    */
   update (rates) {
@@ -174,14 +174,13 @@ class PrioritySampler {
 
     log.trace(span, samplingPriority, mechanism)
 
-    this._addDecisionMaker(root)
+    this.#_addDecisionMaker(root)
   }
 
   /**
    *
    * @param span {DatadogSpan}
    * @returns {DatadogSpanContext}
-   * @private
    */
   _getContext (span) {
     return typeof span.context === 'function' ? span.context() : span
@@ -191,24 +190,22 @@ class PrioritySampler {
    *
    * @param span {DatadogSpan}
    * @returns {SamplingPriority}
-   * @private
    */
   _getPriorityFromAuto (span) {
     const context = this._getContext(span)
-    const rule = this._findRule(span)
+    const rule = this.#_findRule(span)
 
     return rule
-      ? this._getPriorityByRule(context, rule)
-      : this._getPriorityByAgent(context)
+      ? this.#_getPriorityByRule(context, rule)
+      : this.#_getPriorityByAgent(context)
   }
 
   /**
    *
-   * @param tags {Map<string, Object>}
+   * @param tags {Record<string, symbol | unknown>}
    * Included for compatibility with {@link import('./standalone/tracesource_priority_sampler')._getPriorityFromTags}
    * @param _context {DatadogSpanContext}
    * @returns {SamplingPriority}
-   * @private
    */
   _getPriorityFromTags (tags, _context) {
     if (hasOwn(tags, MANUAL_KEEP) && tags[MANUAL_KEEP] !== false) {
@@ -231,9 +228,8 @@ class PrioritySampler {
    * @param context {DatadogSpanContext}
    * @param rule {SamplingRule}
    * @returns {SamplingPriority}
-   * @private
    */
-  _getPriorityByRule (context, rule) {
+  #_getPriorityByRule (context, rule) {
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
     context._sampling.mechanism = SAMPLING_MECHANISM_RULE
     if (rule.provenance === 'customer') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_USER
@@ -264,7 +260,7 @@ class PrioritySampler {
    * @returns {SamplingPriority}
    * @private
    */
-  _getPriorityByAgent (context) {
+  #_getPriorityByAgent (context) {
     const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
@@ -285,7 +281,7 @@ class PrioritySampler {
    * @private
    * @returns {void}
    */
-  _addDecisionMaker (span) {
+  #_addDecisionMaker (span) {
     const context = span.context()
     const trace = context._trace
     const priority = context._sampling.priority
@@ -309,7 +305,7 @@ class PrioritySampler {
    * @returns {SamplingRule[]}
    * @private
    */
-  _normalizeRules (rules, sampleRate, rateLimit, provenance) {
+  #_normalizeRules (rules, sampleRate, rateLimit, provenance) {
     rules = [].concat(rules || [])
 
     return rules
@@ -325,7 +321,7 @@ class PrioritySampler {
    * @returns {SamplingRule}
    * @private
    */
-  _findRule (span) {
+  #_findRule (span) {
     for (const rule of this._rules) {
       if (rule.match(span)) return rule
     }
