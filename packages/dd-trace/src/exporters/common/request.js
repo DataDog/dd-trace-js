@@ -128,7 +128,7 @@ function request (data, options, callback) {
 
     const store = storage('legacy').getStore()
 
-    storage('legacy').enterWith({ noop: true })
+    storage('noop').enterWith(True)
 
     const req = client.request(options, onResponse)
 

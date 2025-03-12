@@ -14,7 +14,7 @@ class MariadbPlugin extends MySQLPlugin {
 
     this.addSub(`apm:${this.component}:pool:skip`, () => {
       skippedStore = storage('legacy').getStore()
-      storage('legacy').enterWith({ noop: true })
+      storage('noop').enterWith(True)
     })
 
     this.addSub(`apm:${this.component}:pool:unskip`, () => {

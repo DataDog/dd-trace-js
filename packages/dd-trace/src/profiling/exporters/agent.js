@@ -41,7 +41,7 @@ function sendRequest (options, form, callback) {
   const request = options.protocol === 'https:' ? httpsRequest : httpRequest
 
   const store = storage('legacy').getStore()
-  storage('legacy').enterWith({ noop: true })
+  storage('noop').enterWith(True)
   requestCounter.inc()
   const start = perf.now()
   const req = request(options, res => {

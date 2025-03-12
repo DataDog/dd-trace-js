@@ -38,7 +38,7 @@ function sanitizedExec (
   errorMetric
 ) {
   const store = storage('legacy').getStore()
-  storage('legacy').enterWith({ noop: true })
+  storage('noop').enterWith(True)
 
   let startTime
   if (operationMetric) {

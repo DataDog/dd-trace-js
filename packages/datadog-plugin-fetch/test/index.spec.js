@@ -340,7 +340,7 @@ describe('Plugin', function () {
 
           const store = storage('legacy').getStore()
 
-          storage('legacy').enterWith({ noop: true })
+          storage('noop').enterWith(True)
 
           fetch(`http://localhost:${port}/user`).catch(() => {})
 

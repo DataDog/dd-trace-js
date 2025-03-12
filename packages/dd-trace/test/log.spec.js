@@ -119,7 +119,7 @@ describe('log', () => {
 
     it('should call the logger in a noop context', () => {
       logger.debug = () => {
-        expect(storage('legacy').getStore()).to.have.property('noop', true)
+        expect(storage('noop').getStore()).to.be.true
       }
 
       log.use(logger).debug('debug')
