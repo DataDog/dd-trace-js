@@ -48,7 +48,8 @@ class Tracer extends NoopProxy {
     this._modules = {
       appsec: new LazyModule(() => require('./appsec')),
       iast: new LazyModule(() => require('./appsec/iast')),
-      llmobs: new LazyModule(() => require('./llmobs'))
+      llmobs: new LazyModule(() => require('./llmobs')),
+      rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter')),
     }
   }
 
@@ -211,6 +212,7 @@ class Tracer extends NoopProxy {
 
   _enableOrDisableTracing (config) {
     if (config.tracing !== false) {
+      this._modules.rewriter.enable(config)
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)
       }
@@ -232,6 +234,7 @@ class Tracer extends NoopProxy {
       this._modules.appsec.disable()
       this._modules.iast.disable()
       this._modules.llmobs.disable()
+      this._modules.rewriter.disable()
     }
 
     if (this._tracingInitialized) {

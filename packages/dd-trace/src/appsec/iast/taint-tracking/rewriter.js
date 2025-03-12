@@ -42,7 +42,7 @@ function setGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, { getOr
     } : getOriginalPathAndLineFromSourceMap
 }
 
-function getRewriter (telemetryVerbosity) {
+function getRewriter (telemetryVerbosity, orchestrion) {
   if (!rewriter) {
     try {
       const iastRewriter = require('@datadog/wasm-js-rewriter')
@@ -57,10 +57,11 @@ function getRewriter (telemetryVerbosity) {
       rewriter = new Rewriter({
         csiMethods,
         telemetryVerbosity: getName(telemetryVerbosity),
-        chainSourceMap
+        chainSourceMap,
+        orchestrion
       })
     } catch (e) {
-      log.error('[ASM] Unable to initialize TaintTracking Rewriter', e)
+      log.error('Unable to initialize Rewriter', e)
     }
   }
   return rewriter
@@ -99,7 +100,7 @@ function getCompileMethodFn (compileMethod) {
         }
       }
     } catch (e) {
-      log.error('[ASM] Error rewriting file %s', filename, e)
+      log.error('Error rewriting file %s', filename, e)
     }
     return compileMethod.apply(this, [content, filename])
   }
@@ -123,9 +124,9 @@ function esmRewritePostProcess (rewritten, filename) {
   }
 }
 
-function enableRewriter (telemetryVerbosity) {
+function enableRewriter (telemetryVerbosity, orchestrion) {
   try {
-    const rewriter = getRewriter(telemetryVerbosity)
+    const rewriter = getRewriter(telemetryVerbosity, orchestrion)
     if (rewriter) {
       const pstDescriptor = Object.getOwnPropertyDescriptor(global.Error, 'prepareStackTrace')
       if (!pstDescriptor || pstDescriptor.configurable) {
@@ -136,7 +137,7 @@ function enableRewriter (telemetryVerbosity) {
 
     enableEsmRewriter(telemetryVerbosity)
   } catch (e) {
-    log.error('[ASM] Error enabling TaintTracking Rewriter', e)
+    log.error('Error enabling Rewriter', e)
   }
 }
 
@@ -182,14 +183,14 @@ function enableEsmRewriter (telemetryVerbosity) {
         }
       })
     } catch (e) {
-      log.error('[ASM] Error enabling ESM Rewriter', e)
+      log.error('Error enabling ESM Rewriter', e)
       port1.close()
       port2.close()
     }
   }
 }
 
-function disableRewriter () {
+function disable () {
   shimmer.unwrap(Module.prototype, '_compile')
 
   if (!Error.prepareStackTrace?.[kSymbolPrepareStackTrace]) return
@@ -199,7 +200,7 @@ function disableRewriter () {
 
     Error.prepareStackTrace = originalPrepareStackTrace
   } catch (e) {
-    log.warn('[ASM] Error disabling TaintTracking rewriter', e)
+    log.warn('Error disabling Rewriter', e)
   }
 }
 
@@ -207,6 +208,11 @@ function getOriginalPathAndLineFromSourceMap ({ path, line, column }) {
   return getRewriterOriginalPathAndLineFromSourceMap(path, line, column)
 }
 
+function enable (config) {
+  // TODO these aren't the real arguments, yet!
+  enableRewriter(config.telemetryVerbosity, config.orchestrion)
+}
+
 module.exports = {
-  enableRewriter, disableRewriter, getOriginalPathAndLineFromSourceMap
+  enable, disable, getOriginalPathAndLineFromSourceMap
 }
