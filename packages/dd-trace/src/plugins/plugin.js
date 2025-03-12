@@ -10,9 +10,8 @@ class Subscription {
   constructor (event, handler) {
     this._channel = dc.channel(event)
     this._handler = (message, name) => {
-      const store = storage('legacy').getStore()
       const noop = storage('noop').getStore()
-      if (!store || !noop) {
+      if (!noop) {
         handler(message, name)
       }
     }
