@@ -87,7 +87,7 @@ describe('telemetry', () => {
     // If we don't no-op the server inside it, it will trace it, which will
     // screw up this test file entirely. -- bengl
 
-    storage('noop').run(True, () => {
+    storage('noop').run(true, () => {
       traceAgent = http.createServer(async (req, res) => {
         const chunks = []
         for await (const chunk of req) {
@@ -895,7 +895,7 @@ describe('AVM OSS', () => {
         before((done) => {
           clock = sinon.useFakeTimers()
 
-          storage('noop').run(True, () => {
+          storage('noop').run(true, () => {
             traceAgent = http.createServer(async (req, res) => {
               const chunks = []
               for await (const chunk of req) {

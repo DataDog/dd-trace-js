@@ -924,7 +924,7 @@ describe('Plugin', () => {
             appListener = server(app, port => {
               const store = storage('legacy').getStore()
 
-              storage('noop').enterWith(True)
+              storage('noop').enterWith(true)
               const req = http.request(tracer._tracer._url.href)
 
               req.on('error', () => {})

@@ -26,7 +26,7 @@ function createAgentClass (BaseAgent) {
     }
 
     _noop (callback) {
-      return storage('noop').run(True, callback)
+      return storage('noop').run(true, callback)
     }
   }
 

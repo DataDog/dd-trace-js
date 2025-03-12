@@ -17,7 +17,7 @@ let logChannel = new LogChannel()
 function withNoop (fn) {
   const store = storage('legacy').getStore()
 
-  storage('noop').enterWith(True)
+  storage('noop').enterWith(true)
   fn()
   storage('legacy').enterWith(store)
 }

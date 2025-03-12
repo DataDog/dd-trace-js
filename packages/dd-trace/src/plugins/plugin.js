@@ -71,7 +71,7 @@ module.exports = class Plugin {
   // TODO: Implement filters on resource name for all plugins.
   /** Prevents creation of spans here and for all async descendants. */
   skip () {
-    storage('noop').enterWith(True)
+    storage('noop').enterWith(true)
   }
 
   addSub (channelName, handler) {

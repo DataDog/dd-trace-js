@@ -325,7 +325,7 @@ module.exports = {
     const emit = server.emit
 
     server.emit = function () {
-      storage('noop').enterWith(True)
+      storage('noop').enterWith(true)
       return emit.apply(this, arguments)
     }
 
