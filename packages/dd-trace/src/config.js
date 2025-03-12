@@ -8,8 +8,6 @@ const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
-const get = require('../../datadog-core/src/utils/src/get')
-const has = require('../../datadog-core/src/utils/src/has')
 const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
@@ -23,7 +21,7 @@ const { getEnvironmentVariable, getEnvironmentVariables } = require('./config-he
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
-const originTracker = {}
+const changeTracker = {}
 
 const telemetryCounters = {
   'otel.env.hiding': {},
@@ -412,23 +410,7 @@ class Config {
 
     // TODO: test
     this._applyCalculated()
-    // this._merge([
-    //   'default',
-    //   'calculated',
-    //   'code',
-    //   'remote_config'
-    // ], [
-    //   this._defaults,
-    //   this._calculated,
-    //   this._options,
-    //   this._remote
-    // ], [
-    //   {},
-    //   {},
-    //   this._optsUnprocessed,
-    //   this._remoteUnprocessed
-    // ])
-    this._merge(false)
+    this._merge()
   }
 
   _getDefaultPropagationStyle (options) {
@@ -1459,36 +1441,34 @@ class Config {
   // TODO: Move change tracking to telemetry.
   // for telemetry reporting, `name`s in `containers` need to be keys from:
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
-  _merge (reportStartup = true) {
-
+  _merge () {
     const containers = [
-        this._defaults,
-        this._calculated,
-        this._localStableConfig,
-        this._env,
-        this._fleetStableConfig,
-        this._options,
-        this._remote
-      ]
-   const  origins = [
-        'default',
-        'calculated',
-        'local_stable_config',
-        'env_var',
-        'fleet_stable_config',
-        'code',
-        'remote_config'
-      ]
+      this._defaults,
+      this._calculated,
+      this._localStableConfig,
+      this._env,
+      this._fleetStableConfig,
+      this._options,
+      this._remote
+    ]
+    const origins = [
+      'default',
+      'calculated',
+      'local_stable_config',
+      'env_var',
+      'fleet_stable_config',
+      'code',
+      'remote_config'
+    ]
     const unprocessedValues = [
-        {},
-        {},
-        {},
-        this._envUnprocessed,
-        {},
-        this._optsUnprocessed,
-        this._remoteUnprocessed
-      ]
-
+      {},
+      {},
+      {},
+      this._envUnprocessed,
+      {},
+      this._optsUnprocessed,
+      this._remoteUnprocessed
+    ]
 
     const changes = []
 
@@ -1498,16 +1478,27 @@ class Config {
         const value = container[name]
 
         if ((value !== null && value !== undefined) || container === this._defaults) {
-          if (get(this, name) === value && has(this, name) && !reportStartup) continue
-
           set(this, name, value)
-          // set(originTracker, name, origins[i])
+          const origin = origins[i]
+          if (name in changeTracker) {
+            if (!(origin in changeTracker[name]) || changeTracker[name][origin] !== value) {
+              changeTracker[name][origin] = value
+              changes.push({
+                name,
+                value: unprocessedValues[i][name] || value,
+                origin
+              })
+            }
+          } else {
+            changeTracker[name] = {}
+            changeTracker[name][origin] = value
 
-          changes.push({
-            name,
-            value: unprocessedValues[i][name] || value,
-            origin: origins[i]
-          })
+            changes.push({
+              name,
+              value: unprocessedValues[i][name] || value,
+              origin
+            })
+          }
         }
       }
     }
