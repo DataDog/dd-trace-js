@@ -42,6 +42,12 @@ class BaseLLMObsWriter {
     logger.debug(`Started ${this.constructor.name} to ${this._url}`)
   }
 
+  /**
+   * Appends the event to the buffer, dropping the event if adding it would exceed the buffer limit.
+   * @param {*} event - either a span event or evaluation metric event
+   * @param {*} byteLength - the pre-computed byte length of the event (from a subclass)
+   * @returns {void}
+   */
   append (event, byteLength) {
     if (this._buffer.length >= this._bufferLimit) {
       logger.warn(`${this.constructor.name} event buffer full (limit is ${this._bufferLimit}), dropping event`)
@@ -52,6 +58,11 @@ class BaseLLMObsWriter {
     this._buffer.push(event)
   }
 
+  /**
+   * Flushes the writer's buffer by sending a request to its configured URL,
+   * with the buffer's encoded and formatted content as the payload.
+   * @returns {void}
+   */
   flush () {
     if (this._buffer.length === 0) {
       return
@@ -86,8 +97,16 @@ class BaseLLMObsWriter {
     })
   }
 
+  /**
+   * Creates the payload for the writer to send to the configured URL.
+   * Must be implemented by subclasses.
+   * @param {unknown[]} events - events from the buffer
+   */
   makePayload (events) {}
 
+  /**
+   * Destroys the writer by clearing its interval and flushing its buffer.
+   */
   destroy () {
     if (!this._destroyed) {
       logger.debug(`Stopping ${this.constructor.name}`)
@@ -98,6 +117,11 @@ class BaseLLMObsWriter {
     }
   }
 
+  /**
+   * Stringifies the payload by encoding unicode values and removing double escaping.
+   * @param {Record<string, unknown>} payload
+   * @returns {string} the encoded payload
+   */
   _encode (payload) {
     return JSON.stringify(payload, (key, value) => {
       if (typeof value === 'string') {

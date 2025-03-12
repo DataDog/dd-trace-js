@@ -25,9 +25,36 @@ const {
   TOTAL_TOKENS_METRIC_KEY
 } = require('./constants/tags')
 
-// global registry of LLMObs spans
-// maps LLMObs spans to their annotations
+/** @typedef {import('../opentracing/span')} Span */
+
+/**
+ * global registry of LLMObs spans
+ * maps LLMObs spans to their annotations
+ * @type {WeakMap<Span, Record<string, any>>}
+ */
 const registry = new WeakMap()
+
+/**
+ * @typedef {{
+ *   content: string,
+ *   role?: string,
+ *   toolCalls?: {
+ *     name: string,
+ *     arguments: { [key: string]: any },
+ *     toolId: string,
+ *     type: string
+ *   }[]
+ * }} Message
+ */
+
+/**
+ * @typedef {{
+ *  text: string,
+ *  name?: string,
+ *  id?: string,
+ *  score?: number
+ * }} Document
+ */
 
 class LLMObsTagger {
   constructor (config, softFail = false) {
@@ -40,10 +67,30 @@ class LLMObsTagger {
     return registry
   }
 
+  /**
+   * Get the LLMObs span kind associated with an APM span
+   * @param {Span} span - span to get the llmobs span kind from
+   * @returns {string} - the llmobs span kind
+   */
   static getSpanKind (span) {
     return registry.get(span)?.[SPAN_KIND]
   }
 
+  /**
+   * Registers an APM span to our mapping of spans to LLMObs attributes.
+   * This marks an APM span as an LLMObs span.
+   * @param {Span} span
+   * @param {Object} options - the set of attributes associated with the LLMObs span on register
+   * @param {string} [options.modelName] - the model name associated with the span
+   * @param {string} [options.modelProvider] - the model provider associated with the span
+   * @param {string} [options.sessionId] - the session ID associated with the span
+   * @param {string} [options.mlApp] - the mlApp associated with the span (overrides global mlApp)
+   * @param {Span} [options.parent] - the parent span
+   * @param {'llm' | 'retrieval' | 'embedding' | 'agent' | 'workflow' | 'tool' | 'task'} options.kind
+   * - the llmobs span kind
+   * @param {string} [options.name] - optional name to override the default (span) name
+   * @returns {void}
+   */
   registerLLMObsSpan (span, {
     modelName,
     modelProvider,
@@ -77,28 +124,55 @@ class LLMObsTagger {
     this._setTag(span, PARENT_ID_KEY, parentId)
   }
 
-  // TODO: similarly for the following `tag` methods,
-  // how can we transition from a span weakmap to core API functionality
+  /**
+   * Associates input and output messages with the current span
+   * @param {Span} span APM span
+   * @param { string | string[] | Message | Message[] } [inputData] - the input messages
+   * @param { string | string[] | Message | Message[]} [outputData] - the output messages
+   */
   tagLLMIO (span, inputData, outputData) {
     this._tagMessages(span, inputData, INPUT_MESSAGES)
     this._tagMessages(span, outputData, OUTPUT_MESSAGES)
   }
 
+  /**
+   * Associates input documents and output values with the current span
+   * @param {Span} span APM span
+   * @param {string | string[] | Document | Document[]} [inputData] input documents
+   * @param {string | Record<string, any>} [outputData] output value
+   */
   tagEmbeddingIO (span, inputData, outputData) {
     this._tagDocuments(span, inputData, INPUT_DOCUMENTS)
     this._tagText(span, outputData, OUTPUT_VALUE)
   }
 
+  /**
+   * Associates input value and output documents with the current span
+   * @param {Span} span APM span
+   * @param {string | Record<string, any>} [inputData] input value
+   * @param {string | string[] | Document | Document[]} [outputData] output documents
+   */
   tagRetrievalIO (span, inputData, outputData) {
     this._tagText(span, inputData, INPUT_VALUE)
     this._tagDocuments(span, outputData, OUTPUT_DOCUMENTS)
   }
 
+  /**
+   * Associates input and output values with the current span
+   * @param {Span} span APM span
+   * @param {string | Record<string, any>} [inputData] - the input value
+   * @param {string | Record<string, any>} [outputData] - the output value
+   */
   tagTextIO (span, inputData, outputData) {
     this._tagText(span, inputData, INPUT_VALUE)
     this._tagText(span, outputData, OUTPUT_VALUE)
   }
 
+  /**
+   * Associates metadata with the current span. New metadata will be merged with existing metadata.
+   * @param {Span} span APM span
+   * @param {Record<string, any>} metadata metadata object to associate with the span.
+   */
   tagMetadata (span, metadata) {
     const existingMetadata = registry.get(span)?.[METADATA]
     if (existingMetadata) {
@@ -108,6 +182,12 @@ class LLMObsTagger {
     }
   }
 
+  /**
+   * Associates metrics with the current span. New metrics will be merged with existing metrics.
+   * Handles the error of non-numeric values for metrics.
+   * @param {Span} span APM span
+   * @param {Record<string, number>} metrics metrics object to associate with the span
+   */
   tagMetrics (span, metrics) {
     const filterdMetrics = {}
     for (const [key, value] of Object.entries(metrics)) {
@@ -141,8 +221,12 @@ class LLMObsTagger {
     }
   }
 
+  /**
+   * Associates tags with the current span. New tags will be merged with existing tags.
+   * @param {Span} span APM span
+   * @param {Record<string, string>} tags tags to associate with the span
+   */
   tagSpanTags (span, tags) {
-    // new tags will be merged with existing tags
     const currentTags = registry.get(span)?.[TAGS]
     if (currentTags) {
       Object.assign(tags, currentTags)
@@ -150,10 +234,21 @@ class LLMObsTagger {
     this._setTag(span, TAGS, tags)
   }
 
+  /**
+   * Changes the span kind of an LLMObs span associated with the given APM span
+   * @param {Span} span - APM span
+   * @param {'llm'|'workflow'|'agent'|'tool'|'task'|'embedding'|'retrieval'} newKind - the new span kind
+   */
   changeKind (span, newKind) {
     this._setTag(span, SPAN_KIND, newKind)
   }
 
+  /**
+   * Assigns text to the given key in the annotations associated with the span
+   * @param {Span} span APM span
+   * @param {string | Record<string, any>} [data] data to tag as a string
+   * @param {string} key key to tag the data with
+   */
   _tagText (span, data, key) {
     if (data) {
       if (typeof data === 'string') {
@@ -169,13 +264,17 @@ class LLMObsTagger {
     }
   }
 
+  /**
+   * Assigns documents to the given key in the annotations associated with the span.
+   * @param {Span} span APM span
+   * @param {string | string[] | Document | Document[]} [data] data to tag as document(s)
+   * @param {*} key key to tag the data with
+   */
   _tagDocuments (span, data, key) {
     if (data) {
-      if (!Array.isArray(data)) {
-        data = [data]
-      }
+      const dataArr = Array.isArray(data) ? data : [data]
 
-      const documents = data.map(document => {
+      const documents = dataArr.map(document => {
         if (typeof document === 'string') {
           return { text: document }
         }
@@ -208,13 +307,17 @@ class LLMObsTagger {
     }
   }
 
+  /**
+   * Assigns messages to the given key in the annotations associated with the span.
+   * @param {Span} span APM span
+   * @param {string | string[] | Message | Message[]} [data] data to tag as message(s)
+   * @param {string} key key to tag the data with
+   */
   _tagMessages (span, data, key) {
     if (data) {
-      if (!Array.isArray(data)) {
-        data = [data]
-      }
+      const dataArr = Array.isArray(data) ? data : [data]
 
-      const messages = data.map(message => {
+      const messages = dataArr.map(message => {
         if (typeof message === 'string') {
           return { content: message }
         }
@@ -275,6 +378,16 @@ class LLMObsTagger {
     }
   }
 
+  /**
+   * Conditionally tags a string on the carrier with the given key.
+   * If the string is not present, the carrier is not modified.
+   * If the string is not a string, an error is handled.
+   * @param {string} [data] data to tag as a string
+   * @param {*} type type of data
+   * @param {*} carrier object to tag
+   * @param {*} key key to tag the data with
+   * @returns {boolean} false if the data exists and is not a string, true otherwise
+   */
   _tagConditionalString (data, type, carrier, key) {
     if (!data) return true
     if (typeof data !== 'string') {
@@ -285,6 +398,16 @@ class LLMObsTagger {
     return true
   }
 
+  /**
+   * Conditionally tags a number on the carrier with the given key.
+   * If the number is not present, the carrier is not modified.
+   * If the number is not a number, an error is handled.
+   * @param {number} [data] data to tag as a string
+   * @param {*} type type of data
+   * @param {*} carrier object to tag
+   * @param {*} key key to tag the data with
+   * @returns {boolean} false if the data exists and is not a number, true otherwise
+   */
   _tagConditionalNumber (data, type, carrier, key) {
     if (!data) return true
     if (typeof data !== 'number') {
@@ -295,6 +418,16 @@ class LLMObsTagger {
     return true
   }
 
+  /**
+   * Conditionally tags an object on the carrier with the given key.
+   * If the object is not present, the carrier is not modified.
+   * If the object is not an object, an error is handled.
+   * @param {Record<unknown, string>} [data] data to tag as a object
+   * @param {*} type type of data
+   * @param {*} carrier object to tag
+   * @param {*} key key to tag the data with
+   * @returns {boolean} false if the data exists and is not an object, true otherwise
+   */
   _tagConditionalObject (data, type, carrier, key) {
     if (!data) return true
     if (typeof data !== 'object') {
@@ -305,8 +438,13 @@ class LLMObsTagger {
     return true
   }
 
-  // any public-facing LLMObs APIs using this tagger should not soft fail
-  // auto-instrumentation should soft fail
+  /**
+   * Handles a failure in the LLMObs tagger according to this instance's softFail setting.
+   * Any public-facing LLMObs APIs using this tagger should not soft fail, throwing an Error.
+   * Auto-instrumentation should soft fail, just logging the message.
+   * @param {string} msg - the error message
+   * @throws if the tagger is not set to soft fail
+   */
   _handleFailure (msg) {
     if (this.softFail) {
       log.warn(msg)
@@ -315,6 +453,11 @@ class LLMObsTagger {
     }
   }
 
+  /**
+   * Registers an APM span as an LLMObs span.
+   * Fails if the span is already registered.
+   * @param {Span} span APM span to register
+   */
   _register (span) {
     if (!this._config.llmobs.enabled) return
     if (registry.has(span)) {
@@ -325,6 +468,13 @@ class LLMObsTagger {
     registry.set(span, {})
   }
 
+  /**
+   * Sets a tag associated with an APM span, which is a property of an LLM Observability span event.
+   * If the APM span is not an LLMObs span, fails.
+   * @param {Span} span APM span to associate the tag with
+   * @param {*} key tag key
+   * @param {*} value tag value
+   */
   _setTag (span, key, value) {
     if (!this._config.llmobs.enabled) return
     if (!registry.has(span)) {

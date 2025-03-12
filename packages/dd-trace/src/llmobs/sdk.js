@@ -335,8 +335,7 @@ class LLMObs extends NoopLLMObs {
     }
 
     if (tags) {
-      for (const key in tags) {
-        const tag = tags[key]
+      for (const [key, tag] of Object.entries(tags)) {
         if (typeof tag === 'string') {
           evaluationTags[key] = tag
         } else if (typeof tag.toString === 'function') {
@@ -372,6 +371,15 @@ class LLMObs extends NoopLLMObs {
     flushCh.publish()
   }
 
+  /**
+   * Sets annotations based on available inputs, outputs, and span kinds from function arguments.
+   * We ignore auto-annotating inputs from arguments if the span kind is 'llm' or 'embedding'.
+   * We ignore auto-annotating outputs from arguments if the span kind is 'llm' or 'retrieval'.
+   * @param {import('../opentracing/span')} span - the span to annotate
+   * @param {'llm' | 'embedding' | 'retrieval' | 'agent' | 'tool' | 'task' | 'workflow'} kind
+   * @param {string | Record<string, any>} input
+   * @param {string | Record<string, any>} output
+   */
   _autoAnnotate (span, kind, input, output) {
     const annotations = {}
     if (input && !['llm', 'embedding'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[INPUT_VALUE]) {
@@ -385,11 +393,22 @@ class LLMObs extends NoopLLMObs {
     this.annotate(span, annotations)
   }
 
+  /**
+   * Gets the active LLM Observability span
+   * @returns the active LLM Observability span on our storage
+   */
   _active () {
     const store = storage.getStore()
     return store?.span
   }
 
+  /**
+   * Activates a span representing an LLM Observability span in our storage over the execution scope of a function
+   * @param {import('../opentracing/span')} span - span to activate over a function scope
+   * @param {Record<string, any>} [options] - options to pass to the tagger to register the span as an LLMObs span
+   * @param {Function} fn - function to execute within the scope of the activated span
+   * @returns {*} the result of the function
+   */
   _activate (span, options, fn) {
     const parent = this._active()
     if (this.enabled) storage.enterWith({ span })
@@ -408,7 +427,13 @@ class LLMObs extends NoopLLMObs {
     }
   }
 
-  // bind function to active LLMObs span
+  /**
+   * Binds the function to the scope of the current active span.
+   * This ensures that when the callback runs, any spans in it will have the bound
+   * span as their parent.
+   * @param {Function} fn - the function to bind
+   * @returns {Function} the bound function
+   */
   _bind (fn) {
     if (typeof fn !== 'function') return fn
 
@@ -424,6 +449,12 @@ class LLMObs extends NoopLLMObs {
     return bound
   }
 
+  /**
+   * Extracts the options relevant to LLM Observability from a set of options,
+   * separate from the APM span options
+   * @param {Record<string, any>} options - LLM Observability & APM span options
+   * @returns {Record<string, any>} the LLM Observability options, with the APM span options on a unified key name.
+   */
   _extractOptions (options) {
     const {
       modelName,
