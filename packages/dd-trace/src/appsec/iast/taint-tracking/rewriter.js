@@ -7,7 +7,7 @@ const shimmer = require('../../../../../datadog-shimmer')
 const { isPrivateModule, isNotLibraryFile } = require('./filter')
 const { csiMethods } = require('./csi-methods')
 const { getName } = require('../telemetry/verbosity')
-const { getRewriteFunction, incrementTelemetryIfNeeded } = require('./rewriter-telemetry')
+const { incrementTelemetryIfNeeded } = require('./rewriter-telemetry')
 const dc = require('dc-polyfill')
 const log = require('../../../log')
 const { isMainThread } = require('worker_threads')
@@ -90,12 +90,12 @@ function getPrepareStackTraceAccessor () {
 }
 
 function getCompileMethodFn (compileMethod) {
-  const rewriteFn = getRewriteFunction(rewriter)
-
   let delegate = function (content, filename) {
     try {
       if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
-        const rewritten = rewriteFn(content, filename)
+        const rewritten = rewriter.rewrite(content, filename, ['iast'])
+
+        incrementTelemetryIfNeeded(rewritten.metrics)
 
         if (rewritten?.literalsResult && hardcodedSecretCh.hasSubscribers) {
           hardcodedSecretCh.publish(rewritten.literalsResult)
