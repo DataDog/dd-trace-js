@@ -48,7 +48,6 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
-const { NODE_MAJOR } = require('../../version')
 
 const version = process.env.CYPRESS_VERSION
 const hookFile = 'dd-trace/loader-hook.mjs'
@@ -57,10 +56,7 @@ const NUM_RETRIES_EFD = 3
 const moduleTypes = [
   {
     type: 'commonJS',
-    testCommand: function commandWithSuffic (version) {
-      const commandSuffix = version === '6.7.0' ? '--config-file cypress-config.json --spec "cypress/e2e/*.cy.js"' : ''
-      return `./node_modules/.bin/cypress run ${commandSuffix}`
-    }
+    testCommand: './node_modules/.bin/cypress run'
   },
   {
     type: 'esm',
@@ -72,21 +68,10 @@ moduleTypes.forEach(({
   type,
   testCommand
 }) => {
-  // cypress only supports esm on versions >= 10.0.0
-  if (type === 'esm' && version === '6.7.0') {
-    return
-  }
-  if (version === '6.7.0' && NODE_MAJOR > 16) {
-    return
-  }
   describe(`cypress@${version} ${type}`, function () {
     this.retries(2)
     this.timeout(60000)
     let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer
-
-    if (type === 'commonJS') {
-      testCommand = testCommand(version)
-    }
 
     before(async () => {
       // cypress-fail-fast is required as an incompatible plugin
@@ -231,6 +216,9 @@ moduleTypes.forEach(({
           stdio: 'pipe'
         }
       )
+      childProcess.stdout.pipe(process.stdout)
+      childProcess.stderr.pipe(process.stderr)
+
       childProcess.on('exit', () => {
         receiverPromise.then(() => {
           done()
@@ -861,10 +849,7 @@ moduleTypes.forEach(({
         let command
 
         if (type === 'commonJS') {
-          const commandSuffix = version === '6.7.0'
-            ? '--config-file cypress-config.json --spec "cypress/e2e/*.cy.js"'
-            : ''
-          command = `../../node_modules/.bin/cypress run ${commandSuffix}`
+          command = '../../node_modules/.bin/cypress run'
         } else {
           command = `node --loader=${hookFile} ../../cypress-esm-config.mjs`
         }
@@ -901,6 +886,9 @@ moduleTypes.forEach(({
             stdio: 'inherit'
           }
         )
+
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         childProcess.on('exit', () => {
           eventsPromise.then(() => {
@@ -1084,16 +1072,14 @@ moduleTypes.forEach(({
           ...restEnvVars
         } = getCiVisEvpProxyConfig(receiver.port)
 
-        const specToRun = 'cypress/e2e/spec.cy.js'
-
         childProcess = exec(
-          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          testCommand,
           {
             cwd,
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: specToRun
+              SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
             },
             stdio: 'pipe'
           }
@@ -1150,7 +1136,7 @@ moduleTypes.forEach(({
 
         const specToRun = 'cypress/e2e/spec.cy.js'
         childProcess = exec(
-          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          testCommand,
           {
             cwd,
             env: {
@@ -1203,10 +1189,8 @@ moduleTypes.forEach(({
             assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
           })
 
-        const specToRun = 'cypress/e2e/skipped-test.js'
-
         childProcess = exec(
-          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          testCommand,
           {
             cwd,
             env: {
@@ -1257,16 +1241,14 @@ moduleTypes.forEach(({
             assert.equal(newTests.length, 0)
           })
 
-        const specToRun = 'cypress/e2e/spec.cy.js'
-
         childProcess = exec(
-          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          testCommand,
           {
             cwd,
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: specToRun
+              SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
             },
             stdio: 'pipe'
           }
@@ -1321,15 +1303,14 @@ moduleTypes.forEach(({
             assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
           })
 
-        const specToRun = 'cypress/e2e/spec.cy.js'
         childProcess = exec(
-          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          testCommand,
           {
             cwd,
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: specToRun,
+              SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
               DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
             },
             stdio: 'pipe'
@@ -1397,27 +1378,27 @@ moduleTypes.forEach(({
             assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 6)
             assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 0)
             assert.equal(neverPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 5)
-          })
+          }, 25000)
 
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
           ...restEnvVars
         } = getCiVisEvpProxyConfig(receiver.port)
 
-        const specToRun = 'cypress/e2e/flaky-test-retries.js'
-
         childProcess = exec(
-          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          testCommand,
           {
             cwd,
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: specToRun
+              SPEC_PATTERN: 'cypress/e2e/flaky-test-retries.js'
             },
             stdio: 'pipe'
           }
         )
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         childProcess.on('exit', () => {
           receiverPromise.then(() => {
@@ -1460,17 +1441,15 @@ moduleTypes.forEach(({
           ...restEnvVars
         } = getCiVisEvpProxyConfig(receiver.port)
 
-        const specToRun = 'cypress/e2e/flaky-test-retries.js'
-
         childProcess = exec(
-          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          testCommand,
           {
             cwd,
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
-              SPEC_PATTERN: specToRun
+              SPEC_PATTERN: 'cypress/e2e/flaky-test-retries.js'
             },
             stdio: 'pipe'
           }
@@ -1518,17 +1497,15 @@ moduleTypes.forEach(({
           ...restEnvVars
         } = getCiVisEvpProxyConfig(receiver.port)
 
-        const specToRun = 'cypress/e2e/flaky-test-retries.js'
-
         childProcess = exec(
-          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          testCommand,
           {
             cwd,
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1,
-              SPEC_PATTERN: specToRun
+              SPEC_PATTERN: 'cypress/e2e/flaky-test-retries.js'
             },
             stdio: 'pipe'
           }
@@ -1546,10 +1523,7 @@ moduleTypes.forEach(({
       let command
 
       if (type === 'commonJS') {
-        const commandSuffix = version === '6.7.0'
-          ? '--config-file cypress-config.json --spec "cypress/e2e/*.cy.js"'
-          : ''
-        command = `../../node_modules/.bin/cypress run ${commandSuffix}`
+        command = '../../node_modules/.bin/cypress run'
       } else {
         command = `node --loader=${hookFile} ../../cypress-esm-config.mjs`
       }
@@ -1627,15 +1601,14 @@ moduleTypes.forEach(({
             assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
           })
 
-        const specToRun = 'cypress/e2e/spec.cy.js'
         childProcess = exec(
-          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          testCommand,
           {
             cwd,
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: specToRun,
+              SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
               DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
             },
             stdio: 'pipe'
@@ -1650,7 +1623,7 @@ moduleTypes.forEach(({
       })
     })
 
-    // cy.origin is not available in old versions of Cypress
+    // cy.origin is added in cypress 12.0.0
     if (version === 'latest') {
       it('does not crash for multi origin tests', async () => {
         const {
@@ -1673,17 +1646,15 @@ moduleTypes.forEach(({
 
         secondWebAppServer.listen(secondWebAppPort)
 
-        const specToRun = 'cypress/e2e/multi-origin.js'
-
         childProcess = exec(
-          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          testCommand,
           {
             cwd,
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               CYPRESS_BASE_URL_SECOND: `http://localhost:${secondWebAppPort}`,
-              SPEC_PATTERN: specToRun
+              SPEC_PATTERN: 'cypress/e2e/multi-origin.js'
             },
             stdio: 'pipe'
           }
@@ -1790,16 +1761,14 @@ moduleTypes.forEach(({
             ...restEnvVars
           } = getCiVisEvpProxyConfig(receiver.port)
 
-          const specToRun = 'cypress/e2e/disable.js'
-
           childProcess = exec(
-            version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+            testCommand,
             {
               cwd,
               env: {
                 ...restEnvVars,
                 CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-                SPEC_PATTERN: specToRun,
+                SPEC_PATTERN: 'cypress/e2e/disable.js',
                 ...extraEnvVars
               },
               stdio: 'pipe'
@@ -1889,16 +1858,14 @@ moduleTypes.forEach(({
             ...restEnvVars
           } = getCiVisEvpProxyConfig(receiver.port)
 
-          const specToRun = 'cypress/e2e/quarantine.js'
-
           childProcess = exec(
-            version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+            testCommand,
             {
               cwd,
               env: {
                 ...restEnvVars,
                 CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-                SPEC_PATTERN: specToRun,
+                SPEC_PATTERN: 'cypress/e2e/quarantine.js',
                 ...extraEnvVars
               },
               stdio: 'pipe'
