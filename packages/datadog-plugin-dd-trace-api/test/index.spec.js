@@ -22,6 +22,9 @@ describe('Plugin', () => {
 
       tracer = require('../../dd-trace')
 
+      // TODO: Use the real module when it's released.
+      dc.channel('dd-trace:instrumentation:load').publish({ name: 'dd-trace-api' })
+
       sinon.spy(tracer)
       sinon.spy(tracer.appsec)
       sinon.spy(tracer.dogstatsd)
