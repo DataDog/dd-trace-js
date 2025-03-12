@@ -6,14 +6,9 @@ const { DogStatsDClient } = require('../../../../src/dogstatsd')
 const { NoopExternalLogger } = require('../../../../src/external-logger/src')
 
 const nock = require('nock')
-const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues } = require('../../util')
-const chai = require('chai')
+const { expectedLLMObsLLMSpanEvent } = require('../../util')
 const semver = require('semver')
-const LLMObsAgentProxySpanWriter = require('../../../../src/llmobs/writers/spans/agentProxy')
-
-const { expect } = chai
-
-chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
+const llmobsMocks = require('../../mocks')
 
 const satisfiesChatCompletion = version => semver.intersects('>=3.2.0', version)
 
@@ -22,16 +17,9 @@ describe('integrations', () => {
 
   describe('openai', () => {
     before(() => {
-      sinon.stub(LLMObsAgentProxySpanWriter.prototype, 'append')
-
-      // reduce errors related to too many listeners
-      process.removeAllListeners('beforeExit')
-
       sinon.stub(DogStatsDClient.prototype, '_add')
       sinon.stub(NoopExternalLogger.prototype, 'log')
       sinon.stub(Sampler.prototype, 'isSampled').returns(true)
-
-      LLMObsAgentProxySpanWriter.prototype.append.reset()
 
       return agent.load('openai', {}, {
         llmobs: {
@@ -40,9 +28,10 @@ describe('integrations', () => {
       })
     })
 
+    const { getSpanEvents } = llmobsMocks.setup()
+
     afterEach(() => {
       nock.cleanAll()
-      LLMObsAgentProxySpanWriter.prototype.append.reset()
     })
 
     after(() => {
@@ -83,7 +72,7 @@ describe('integrations', () => {
 
         const checkSpan = agent.use(traces => {
           const span = traces[0][0]
-          const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+          const spanEvent = getSpanEvents()[0]
 
           const expected = expectedLLMObsLLMSpanEvent({
             span,
@@ -139,7 +128,7 @@ describe('integrations', () => {
 
           const checkSpan = agent.use(traces => {
             const span = traces[0][0]
-            const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+            const spanEvent = getSpanEvents()[0]
 
             const expected = expectedLLMObsLLMSpanEvent({
               span,
@@ -193,7 +182,7 @@ describe('integrations', () => {
 
         const checkSpan = agent.use(traces => {
           const span = traces[0][0]
-          const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+          const spanEvent = getSpanEvents()[0]
 
           const expected = expectedLLMObsLLMSpanEvent({
             span,
@@ -251,7 +240,7 @@ describe('integrations', () => {
 
           const checkSpan = agent.use(traces => {
             const span = traces[0][0]
-            const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+            const spanEvent = getSpanEvents()[0]
 
             const expected = expectedLLMObsLLMSpanEvent({
               span,
@@ -300,7 +289,7 @@ describe('integrations', () => {
         let error
         const checkSpan = agent.use(traces => {
           const span = traces[0][0]
-          const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+          const spanEvent = getSpanEvents()[0]
 
           const expected = expectedLLMObsLLMSpanEvent({
             span,
@@ -343,7 +332,7 @@ describe('integrations', () => {
           let error
           const checkSpan = agent.use(traces => {
             const span = traces[0][0]
-            const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+            const spanEvent = getSpanEvents()[0]
 
             const expected = expectedLLMObsLLMSpanEvent({
               span,

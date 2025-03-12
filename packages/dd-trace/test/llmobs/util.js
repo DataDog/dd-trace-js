@@ -1,34 +1,10 @@
 'use strict'
 
-const chai = require('chai')
-
 const tracerVersion = require('../../../../package.json').version
 
-const MOCK_STRING = Symbol('string')
-const MOCK_NUMBER = Symbol('number')
-const MOCK_ANY = Symbol('any')
-
-function deepEqualWithMockValues (expected) {
-  const actual = this._obj
-
-  for (const key in actual) {
-    if (expected[key] === MOCK_STRING) {
-      new chai.Assertion(typeof actual[key], `key ${key}`).to.equal('string')
-    } else if (expected[key] === MOCK_NUMBER) {
-      new chai.Assertion(typeof actual[key], `key ${key}`).to.equal('number')
-    } else if (expected[key] === MOCK_ANY) {
-      new chai.Assertion(actual[key], `key ${key}`).to.exist
-    } else if (Array.isArray(expected[key])) {
-      const sortedExpected = [...expected[key].sort()]
-      const sortedActual = [...actual[key].sort()]
-      new chai.Assertion(sortedActual, `key: ${key}`).to.deep.equal(sortedExpected)
-    } else if (typeof expected[key] === 'object') {
-      new chai.Assertion(actual[key], `key: ${key}`).to.deepEqualWithMockValues(expected[key])
-    } else {
-      new chai.Assertion(actual[key], `key: ${key}`).to.equal(expected[key])
-    }
-  }
-}
+const {
+  MOCK_STRING
+} = require('./mocks')
 
 function expectedLLMObsLLMSpanEvent (options) {
   const spanEvent = expectedLLMObsBaseEvent(options)
@@ -192,9 +168,5 @@ function fromBuffer (spanProperty, isNumber = false) {
 
 module.exports = {
   expectedLLMObsLLMSpanEvent,
-  expectedLLMObsNonLLMSpanEvent,
-  deepEqualWithMockValues,
-  MOCK_ANY,
-  MOCK_NUMBER,
-  MOCK_STRING
+  expectedLLMObsNonLLMSpanEvent
 }

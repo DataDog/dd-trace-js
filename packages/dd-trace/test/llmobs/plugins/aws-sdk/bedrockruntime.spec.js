@@ -3,25 +3,18 @@
 const agent = require('../../../plugins/agent')
 
 const nock = require('nock')
-const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues } = require('../../util')
+const { useEnv } = require('../../../../../../integration-tests/helpers')
+const { expectedLLMObsLLMSpanEvent } = require('../../util')
 const { models, modelConfig } = require('../../../../../datadog-plugin-aws-sdk/test/fixtures/bedrockruntime')
-const chai = require('chai')
-const LLMObsAgentProxySpanWriter = require('../../../../src/llmobs/writers/spans/agentProxy')
-
-chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
+const llmobsMocks = require('../../mocks')
 
 const serviceName = 'bedrock-service-name-test'
 
 describe('Plugin', () => {
   describe('aws-sdk (bedrockruntime)', function () {
-    before(() => {
-      process.env.AWS_SECRET_ACCESS_KEY = '0000000000/00000000000000000000000000000'
-      process.env.AWS_ACCESS_KEY_ID = '00000000000000000000'
-    })
-
-    after(() => {
-      delete process.env.AWS_SECRET_ACCESS_KEY
-      delete process.env.AWS_ACCESS_KEY_ID
+    useEnv({
+      AWS_SECRET_ACCESS_KEY: '0000000000/00000000000000000000000000000',
+      AWS_ACCESS_KEY_ID: '00000000000000000000'
     })
 
     withVersions('aws-sdk', ['@aws-sdk/smithy-client', 'aws-sdk'], '>=3', (version, moduleName) => {
@@ -33,18 +26,14 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          sinon.stub(LLMObsAgentProxySpanWriter.prototype, 'append')
-
-          // reduce errors related to too many listeners
-          process.removeAllListeners('beforeExit')
-          LLMObsAgentProxySpanWriter.prototype.append.reset()
-
           return agent.load('aws-sdk', {}, {
             llmobs: {
               mlApp: 'test'
             }
           })
         })
+
+        const { getSpanEvents } = llmobsMocks.setup()
 
         before(done => {
           const requireVersion = version === '3.0.0' ? '3.422.0' : '>=3.422.0'
@@ -57,7 +46,6 @@ describe('Plugin', () => {
 
         afterEach(() => {
           nock.cleanAll()
-          LLMObsAgentProxySpanWriter.prototype.append.reset()
         })
 
         after(() => {
@@ -91,7 +79,7 @@ describe('Plugin', () => {
 
             agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = getSpanEvents()[0]
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
                 spanKind: 'llm',
