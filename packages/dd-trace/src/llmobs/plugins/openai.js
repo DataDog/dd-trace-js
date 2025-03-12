@@ -2,7 +2,15 @@
 
 const LLMObsPlugin = require('./base')
 
+function isIterable (obj) {
+  if (obj == null) {
+    return false
+  }
+  return typeof obj[Symbol.iterator] === 'function'
+}
+
 class OpenAiLLMObsPlugin extends LLMObsPlugin {
+  static get id () { return 'openai' }
   static get prefix () {
     return 'tracing:apm:openai:request'
   }
@@ -15,10 +23,13 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     const inputs = ctx.args[0] // completion, chat completion, and embeddings take one argument
     const operation = getOperation(methodName)
     const kind = operation === 'embedding' ? 'embedding' : 'llm'
-    const name = `openai.${methodName}`
+
+    const { modelProvider, client } = this._getModelProviderAndClient(ctx.basePath)
+
+    const name = `${client}.${methodName}`
 
     return {
-      modelProvider: 'openai',
+      modelProvider,
       modelName: inputs.model,
       kind,
       name
@@ -48,6 +59,16 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     if (!error) {
       const metrics = this._extractMetrics(response)
       this._tagger.tagMetrics(span, metrics)
+    }
+  }
+
+  _getModelProviderAndClient (baseUrl = '') {
+    if (baseUrl.includes('azure')) {
+      return { modelProvider: 'azure_openai', client: 'AzureOpenAI' }
+    } else if (baseUrl.includes('deepseek')) {
+      return { modelProvider: 'deepseek', client: 'DeepSeek' }
+    } else {
+      return { modelProvider: 'openai', client: 'OpenAI' }
     }
   }
 
@@ -121,6 +142,11 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     const outputMessages = []
     const { choices } = response
+    if (!isIterable(choices)) {
+      this._tagger.tagLLMIO(span, messages, [{ content: '' }])
+      return
+    }
+
     for (const choice of choices) {
       const message = choice.message || choice.delta
       const content = message.content || ''

@@ -4,6 +4,7 @@ require('./setup/tap')
 
 const os = require('os')
 const tracerVersion = require('../../../package.json').version
+const Config = require('../src/config')
 
 describe('startup logging', () => {
   let firstStderrCall
@@ -89,5 +90,34 @@ describe('startup logging', () => {
     expect(integrationsLoaded).to.include('fs')
     expect(integrationsLoaded).to.include('http')
     expect(integrationsLoaded).to.include('semver')
+  })
+})
+
+describe('profiling_enabled', () => {
+  it('should be correctly logged', () => {
+    [
+      [undefined, false],
+      ['false', false],
+      ['FileNotFound', false],
+      ['auto', true],
+      ['true', true]
+    ].forEach(([envVar, expected]) => {
+      sinon.stub(console, 'info')
+      delete require.cache[require.resolve('../src/startup-log')]
+      const {
+        setStartupLogConfig,
+        setStartupLogPluginManager,
+        startupLog
+      } = require('../src/startup-log')
+      process.env.DD_PROFILING_ENABLED = envVar
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
+      setStartupLogConfig(new Config())
+      setStartupLogPluginManager({ _pluginsByName: {} })
+      startupLog()
+      /* eslint-disable-next-line no-console */
+      const logObj = JSON.parse(console.info.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+      console.info.restore() /* eslint-disable-line no-console */
+      expect(logObj.profiling_enabled).to.equal(expected)
+    })
   })
 })

@@ -13,7 +13,8 @@ const formattedTags = {
   isUnsupportedCIProvider: 'is_unsupported_ci',
   isNew: 'is_new',
   isRum: 'is_rum',
-  browserDriver: 'browser_driver'
+  browserDriver: 'browser_driver',
+  autoInjected: 'auto_injected'
 }
 
 // Transform tags dictionary to array of strings.
