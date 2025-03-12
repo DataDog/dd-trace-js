@@ -16,7 +16,6 @@ const kafkaContextPlugin = require('../context/kafka-ctx-plugin')
 
 module.exports = {
   enableTaintTracking (config, telemetryVerbosity) {
-    enableRewriter(telemetryVerbosity)
     enableTaintOperations(telemetryVerbosity)
     taintTrackingPlugin.enable(config)
 
@@ -26,7 +25,6 @@ module.exports = {
     setMaxTransactions(config.maxConcurrentRequests)
   },
   disableTaintTracking () {
-    disableRewriter()
     disableTaintOperations()
     taintTrackingPlugin.disable()
 
