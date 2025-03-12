@@ -35,7 +35,8 @@ function sanitizedExec (
   flags,
   operationMetric,
   durationMetric,
-  errorMetric
+  errorMetric,
+  shouldTrim = true
 ) {
   const store = storage('legacy').getStore()
   storage('legacy').enterWith({ noop: true })
@@ -48,7 +49,10 @@ function sanitizedExec (
     startTime = Date.now()
   }
   try {
-    const result = cp.execFileSync(cmd, flags, { stdio: 'pipe' }).toString().replace(/(\r\n|\n|\r)/gm, '')
+    let result = cp.execFileSync(cmd, flags, { stdio: 'pipe' }).toString()
+    if (shouldTrim) {
+      result = result.replace(/(\r\n|\n|\r)/gm, '')
+    }
     if (durationMetric) {
       distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)
     }
@@ -330,7 +334,7 @@ function getGitMetadata (ciMetadata) {
 
   const tags = {
     [GIT_COMMIT_MESSAGE]:
-      commitMessage || cp.execFileSync('git', ['show', '-s', '--format=%B']).toString(),
+      commitMessage || sanitizedExec('git', ['show', '-s', '--format=%B'], null, null, null, false),
     [GIT_BRANCH]: branch || sanitizedExec('git', ['rev-parse', '--abbrev-ref', 'HEAD']),
     [GIT_COMMIT_SHA]: commitSHA || sanitizedExec('git', ['rev-parse', 'HEAD']),
     [CI_WORKSPACE_PATH]: ciWorkspacePath || sanitizedExec('git', ['rev-parse', '--show-toplevel'])
