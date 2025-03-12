@@ -252,5 +252,6 @@ exports.mochaHooks = {
     agent.reset()
     runtimeMetrics.stop()
     storage('legacy').enterWith(undefined)
+    storage('noop').enterWith(undefined)
   }
 }
