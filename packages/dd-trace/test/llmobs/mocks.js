@@ -12,8 +12,32 @@ const MOCK_ANY = Symbol('any')
 /**
  * Sets up the test environment by adding custom chai assertions and stubbing methods.
  *
+ *
  * @returns {{ getSpanEvents: () => any[], getEvalMetrics: () => any[] }}
  * An object with methods to get span events and evaluation metrics.
+ *
+ * @example
+ * const llmobsMocks = require('./mocks)
+ *
+ * describe('some llmobs test', () => {
+ *  before(() => {
+ *    // maybe some test agent setup
+ *  })
+ *
+ *  const { getSpanEvents, getEvalMetrics } = llmobsMocks.setup()
+ *
+ *  // any more setup hooks
+ *
+ *  it('should test something', () => {
+ *    agent.use(traces => {
+ *     const spanEvents = getSpanEvents()
+ *
+ *     // assert span events
+ *    })
+ *
+ *    // some operation that would generate span events (or eval metrics)
+ *  })
+ * })
  */
 function setup () {
   chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
@@ -45,6 +69,11 @@ function setup () {
   }
 }
 
+/**
+ * Asserts that the actual object is deeply equal to the expected object, with the ability to mock values.
+ * This mainly exists for us to set `MOCK_STRING`, `MOCK_NUMBER`, and `MOCK_ANY` values in the expected object.
+ * @param {*} expected the expected object.
+ */
 function deepEqualWithMockValues (expected) {
   const actual = this._obj // "this" here refers to the chai instance
 
@@ -74,6 +103,7 @@ function deepEqualWithMockValues (expected) {
 
 module.exports = {
   setup,
+  deepEqualWithMockValues,
   MOCK_STRING,
   MOCK_NUMBER,
   MOCK_ANY

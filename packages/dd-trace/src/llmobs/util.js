@@ -190,7 +190,7 @@ function getFunctionArguments (fn, args = []) {
 
     const argsObject = {}
 
-    for (const [argIdx, arg] of args.entries()) {
+    for (const [argIdx, arg] of Array.from(args).entries()) {
       const name = names[argIdx]
 
       const spread = name?.startsWith('...')
