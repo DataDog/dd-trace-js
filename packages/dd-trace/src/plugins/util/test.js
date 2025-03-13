@@ -644,14 +644,14 @@ function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faulty
   )
 }
 
-function getTestSessionName (config, testCommand, envTags) {
+function getTestSessionName (config, trimmedCommand, envTags) {
   if (config.ciVisibilityTestSessionName) {
     return config.ciVisibilityTestSessionName
   }
   if (envTags[CI_JOB_NAME]) {
-    return `${envTags[CI_JOB_NAME]}-${testCommand}`
+    return `${envTags[CI_JOB_NAME]}-${trimmedCommand}`
   }
-  return testCommand
+  return trimmedCommand
 }
 
 // Calculate the number of a tests from the known tests response, which has a shape like:

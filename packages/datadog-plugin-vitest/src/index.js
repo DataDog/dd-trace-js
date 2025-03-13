@@ -215,7 +215,7 @@ class VitestPlugin extends CiPlugin {
       })
 
       // test suites run in a different process, so they also need to init the metadata dictionary
-      const testSessionName = getTestSessionName(this.config, this.command, this.testEnvironmentMetadata)
+      const testSessionName = getTestSessionName(this.config, 'vitest run', this.testEnvironmentMetadata)
       const metadataTags = {}
       for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
         metadataTags[testLevel] = {
