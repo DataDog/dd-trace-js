@@ -12,6 +12,9 @@ const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb', 'mongoose', 'mq
 const { NOSQL_MONGODB_INJECTION_MARK } = require('../taint-tracking/secure-marks')
 const { iterateObjectStrings } = require('../utils')
 
+const SAFE_OPERATORS = new Set(['$eq', '$gt', '$gte', '$in', '$lt', '$lte', '$ne', '$nin',
+  '$exists', '$type', '$mod', '$bitsAllClear', '$bitsAllSet', '$bitsAnyClear', '$bitsAnySet'])
+
 class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
   constructor () {
     super(NOSQL_MONGODB_INJECTION)
@@ -119,7 +122,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       const rangesByKey = {}
       const allRanges = []
 
-      iterateObjectStrings(value.filter, (val, nextLevelKeys) => {
+      iterateMongodbQueryStrings(value.filter, (val, nextLevelKeys) => {
         let ranges = getRanges(iastContext, val)
         if (ranges?.length) {
           const filteredRanges = []
@@ -159,6 +162,27 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
 
   _getExcludedPaths () {
     return EXCLUDED_PATHS_FROM_STACK
+  }
+}
+
+function iterateMongodbQueryStrings (target, fn, levelKeys = [], depth = 10, visited = new Set()) {
+  if (target !== null && typeof target === 'object') {
+    if (visited.has(target)) return
+
+    visited.add(target)
+
+    Object.keys(target).forEach((key) => {
+      if (SAFE_OPERATORS.has(key)) return
+
+      const nextLevelKeys = [...levelKeys, key]
+      const val = target[key]
+
+      if (typeof val === 'string') {
+        fn(val, nextLevelKeys, target, key)
+      } else if (depth > 0) {
+        iterateMongodbQueryStrings(val, fn, nextLevelKeys, depth - 1, visited)
+      }
+    })
   }
 }
 
