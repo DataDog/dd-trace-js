@@ -382,7 +382,7 @@ describe('dogstatsd', () => {
       client.flush()
 
       expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:20|g\n')
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:20|c\n')
     })
 
     it('.increment() with default', () => {
@@ -393,7 +393,7 @@ describe('dogstatsd', () => {
       client.flush()
 
       expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:2|g\n')
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:2|c\n')
     })
 
     it('.decrement()', () => {
@@ -404,7 +404,7 @@ describe('dogstatsd', () => {
       client.flush()
 
       expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:-20|g\n')
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:-20|c\n')
     })
 
     it('.decrement() with default', () => {
@@ -415,7 +415,7 @@ describe('dogstatsd', () => {
       client.flush()
 
       expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:-2|g\n')
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:-2|c\n')
     })
 
     it('.distribution()', () => {
