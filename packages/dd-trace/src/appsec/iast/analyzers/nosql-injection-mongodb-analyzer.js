@@ -106,9 +106,11 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     })
   }
 
-  _isVulnerableRange (range) {
+  _isVulnerableRange (range, value) {
     const rangeType = range?.iinfo?.type
-    return rangeType === HTTP_REQUEST_PARAMETER || rangeType === HTTP_REQUEST_BODY
+    const rangeIsWholeValue = range.start === 0 && range.end === value?.length
+    const isVulnerableType = rangeType === HTTP_REQUEST_PARAMETER || rangeType === HTTP_REQUEST_BODY
+    return rangeIsWholeValue && isVulnerableType
   }
 
   _isVulnerable (value, iastContext) {
@@ -124,25 +126,21 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
 
       iterateMongodbQueryStrings(value.filter, (val, nextLevelKeys) => {
         let ranges = getRanges(iastContext, val)
-        if (ranges?.length) {
-          const filteredRanges = []
-
+        if (ranges?.length === 1) {
           ranges = this._filterSecureRanges(ranges)
           if (!ranges.length) {
             this._incrementSuppressedMetric(iastContext)
+            return
           }
 
-          for (const range of ranges) {
-            if (this._isVulnerableRange(range)) {
-              isVulnerable = true
-              filteredRanges.push(range)
-            }
+          const range = ranges[0]
+          if (!this._isVulnerableRange(range, val)) {
+            return
           }
+          isVulnerable = true
 
-          if (filteredRanges.length > 0) {
-            rangesByKey[nextLevelKeys.join('.')] = filteredRanges
-            allRanges.push(...filteredRanges)
-          }
+          rangesByKey[nextLevelKeys.join('.')] = ranges
+          allRanges.push(range)
         }
       }, [], 4)
 
