@@ -376,7 +376,6 @@ describe('Telemetry extended heartbeat', () => {
   it('be sent with up-to-date configuration values', (done) => {
     let configuration
 
-    // Set up a custom "sendData" so we can capture the payload
     const sendDataRequest = {
       sendData: (config, application, host, reqType, payload, cb = () => {}) => {
         if (reqType === 'app-extended-heartbeat') {
@@ -385,7 +384,6 @@ describe('Telemetry extended heartbeat', () => {
       }
     }
 
-    // Proxyquire telemetry so we can intercept sendData
     telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
@@ -395,7 +393,6 @@ describe('Telemetry extended heartbeat', () => {
       './send-data': sendDataRequest
     })
 
-    // Minimal config
     const config = {
       telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
       hostname: 'localhost',
@@ -410,14 +407,11 @@ describe('Telemetry extended heartbeat', () => {
       }
     }
 
-    // Start telemetry
     telemetry.start(config, { _pluginsByName: pluginsByName })
 
-    // Heartbeat #1
     clock.tick(86400000)
     expect(configuration).to.deep.equal([])
 
-    // First update
     const changes = [
       { name: 'test', value: true, origin: 'code', seq_id: 0 }
     ]
@@ -425,7 +419,6 @@ describe('Telemetry extended heartbeat', () => {
     clock.tick(86400000)
     expect(configuration).to.deep.equal(changes)
 
-    // Second update
     const updatedChanges = [
       { name: 'test', value: false, origin: 'code', seq_id: 1 }
     ]
@@ -433,7 +426,6 @@ describe('Telemetry extended heartbeat', () => {
     clock.tick(86400000)
     expect(configuration).to.deep.equal(updatedChanges)
 
-    // Change needing remap
     const changeNeedingNameRemapping = [
       { name: 'sampleRate', value: 0, origin: 'code', seq_id: 2 }
     ]
@@ -445,7 +437,6 @@ describe('Telemetry extended heartbeat', () => {
     clock.tick(86400000)
     expect(configuration).to.deep.equal(expectedConfigList)
 
-    // Sampler rules
     const samplingRule = [
       {
         name: 'sampler.rules',
@@ -477,18 +468,15 @@ describe('Telemetry extended heartbeat', () => {
     clock.tick(86400000)
     expect(configuration).to.deep.equal(expectedConfigListWithSamplingRules)
 
-    // Chained changes
     const chainedChanges = expectedConfigListWithSamplingRules.concat([
       { name: 'test', value: true, origin: 'env', seq_id: 4 },
       { name: 'test', value: false, origin: 'remote_config', seq_id: 5 }
     ])
-    // samplingRule2 includes the sampler.rules item again, plus the new changes
     const samplingRule2 = [
       { name: 'test', value: true, origin: 'env' },
       { name: 'test', value: false, origin: 'remote_config' }
     ]
 
-    // Update config
     telemetry.updateConfig(samplingRule2, config)
     clock.tick(86400000)
     expect(configuration).to.deep.equal(chainedChanges)
