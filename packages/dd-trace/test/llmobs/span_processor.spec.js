@@ -42,7 +42,8 @@ describe('span processor', () => {
     it('should do nothing if the span is not an llm obs span', () => {
       span = { context: () => ({ _tags: {} }) }
 
-      expect(processor._writer.append).to.not.have.been.called
+      processor.process({ span })
+      expect(processor.writer.append).to.not.have.been.called
     })
 
     it('should format the span event for the writer', () => {
