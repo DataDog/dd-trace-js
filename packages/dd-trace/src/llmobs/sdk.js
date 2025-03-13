@@ -25,6 +25,11 @@ const flushCh = channel('llmobs:writers:flush')
 const NoopLLMObs = require('./noop')
 
 class LLMObs extends NoopLLMObs {
+  /**
+   * @param {import('../tracer')} tracer - global tracer
+   * @param {import('.')} llmobsModule - llmobs event listeners, handlers, and writers
+   * @param {import('../config')} config - tracer configuration
+   */
   constructor (tracer, llmobsModule, config) {
     super(tracer)
 
