@@ -20,18 +20,19 @@ let getPrepareStackTrace, cacheRewrittenSourceMap
 let kSymbolPrepareStackTrace
 let esmRewriterEnabled = false
 
-let getRewriterOriginalPathAndLineFromSourceMap = function (path, line, column) {
-  return { path, line, column }
-}
-
 function isFlagPresent (flag) {
   return process.env.NODE_OPTIONS?.includes(flag) ||
     process.execArgv?.some(arg => arg.includes(flag))
 }
 
-function getGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, getOriginalPathAndLineFromSourceMap) {
-  if (chainSourceMap) {
-    return function (path, line, column) {
+let getRewriterOriginalPathAndLineFromSourceMap = function (path, line, column) {
+  return { path, line, column }
+}
+
+function setGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, { getOriginalPathAndLineFromSourceMap }) {
+  if (!getOriginalPathAndLineFromSourceMap) return
+
+  getRewriterOriginalPathAndLineFromSourceMap = chainSourceMap ? (path, line, column) => {
       // if --enable-source-maps is present stacktraces of the rewritten files contain the original path, file and
       // column because the sourcemap chaining is done during the rewriting process so we can skip it
       if (isPrivateModule(path) && isNotLibraryFile(path)) {
@@ -39,10 +40,7 @@ function getGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, getOrig
       } else {
         return getOriginalPathAndLineFromSourceMap(path, line, column)
       }
-    }
-  } else {
-    return getOriginalPathAndLineFromSourceMap
-  }
+    } : getOriginalPathAndLineFromSourceMap
 }
 
 function getRewriter (telemetryVerbosity) {
@@ -55,11 +53,7 @@ function getRewriter (telemetryVerbosity) {
       cacheRewrittenSourceMap = iastRewriter.cacheRewrittenSourceMap
 
       const chainSourceMap = isFlagPresent('--enable-source-maps')
-      const getOriginalPathAndLineFromSourceMap = iastRewriter.getOriginalPathAndLineFromSourceMap
-      if (getOriginalPathAndLineFromSourceMap) {
-        getRewriterOriginalPathAndLineFromSourceMap =
-          getGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, getOriginalPathAndLineFromSourceMap)
-      }
+      setGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, iastRewriter)
 
       rewriter = new Rewriter({
         csiMethods,
@@ -187,19 +181,16 @@ function enableEsmRewriter (telemetryVerbosity) {
     port1.unref()
     port2.unref()
 
-    const chainSourceMap = isFlagPresent('--enable-source-maps')
-    const data = {
-      port: port2,
-      csiMethods,
-      telemetryVerbosity,
-      chainSourceMap
-    }
-
     try {
       Module.register('./rewriter-esm.mjs', {
         parentURL: pathToFileURL(__filename),
         transferList: [port2],
-        data
+        data: {
+          port: port2,
+          csiMethods,
+          telemetryVerbosity,
+          chainSourceMap: isFlagPresent('--enable-source-maps')
+        }
       })
     } catch (e) {
       log.error('[ASM] Error enabling ESM Rewriter', e)
