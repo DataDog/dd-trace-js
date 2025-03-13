@@ -357,7 +357,6 @@ function updateConfig (changes, config) {
   const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
 
   const configuration = []
-  // const names = [] // list of config names whose values have been changed
   const updatedTuples = new Set()
 
   for (const change of changes) {
@@ -383,7 +382,6 @@ function updateConfig (changes, config) {
   }
 
   function isNotModified (oldEntry) {
-    // return !names.includes(entry.name)
     return !updatedTuples.has(`${oldEntry.name}|${oldEntry.origin}`)
   }
 

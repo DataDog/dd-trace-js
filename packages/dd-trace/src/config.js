@@ -1436,69 +1436,55 @@ class Config {
     obj[name] = value
   }
 
+  _setAndTrackChange ({ name, value, origin, unprocessedValue, changes }) {
+    set(this, name, value)
+
+    if (!changeTracker[name]) {
+      changeTracker[name] = {}
+    }
+
+    const originExists = origin in changeTracker[name]
+    const oldValue = changeTracker[name][origin]
+
+    if (!originExists || oldValue !== value) {
+      changeTracker[name][origin] = value
+      changes.push({
+        name,
+        value: unprocessedValue || value,
+        origin
+      })
+    }
+  }
+
   // TODO: Report origin changes and errors to telemetry.
   // TODO: Deeply merge configurations.
   // TODO: Move change tracking to telemetry.
   // for telemetry reporting, `name`s in `containers` need to be keys from:
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
   _merge () {
-    const containers = [
-      this._defaults,
-      this._calculated,
-      this._localStableConfig,
-      this._env,
-      this._fleetStableConfig,
-      this._options,
-      this._remote
-    ]
-    const origins = [
-      'default',
-      'calculated',
-      'local_stable_config',
-      'env_var',
-      'fleet_stable_config',
-      'code',
-      'remote_config'
-    ]
-    const unprocessedValues = [
-      {},
-      {},
-      {},
-      this._envUnprocessed,
-      {},
-      this._optsUnprocessed,
-      this._remoteUnprocessed
+    const sources = [
+      { container: this._defaults,          origin: 'default',             unprocessed: {} },
+      { container: this._calculated,        origin: 'calculated',          unprocessed: {} },
+      { container: this._localStableConfig, origin: 'local_stable_config', unprocessed: {} },
+      { container: this._env,               origin: 'env_var',             unprocessed: this._envUnprocessed },
+      { container: this._fleetStableConfig, origin: 'fleet_stable_config', unprocessed: {} },
+      { container: this._options,           origin: 'code',                unprocessed: this._optsUnprocessed },
+      { container: this._remote,            origin: 'remote_config',       unprocessed: this._remoteUnprocessed }
     ]
 
     const changes = []
 
     for (const name in this._defaults) {
-      for (let i = 0; i < containers.length; i++) {
-        const container = containers[i]
+      for (const { container, origin, unprocessed } of sources) {
         const value = container[name]
-
         if ((value !== null && value !== undefined) || container === this._defaults) {
-          set(this, name, value)
-          const origin = origins[i]
-          if (name in changeTracker) {
-            if (!(origin in changeTracker[name]) || changeTracker[name][origin] !== value) {
-              changeTracker[name][origin] = value
-              changes.push({
-                name,
-                value: unprocessedValues[i][name] || value,
-                origin
-              })
-            }
-          } else {
-            changeTracker[name] = {}
-            changeTracker[name][origin] = value
-
-            changes.push({
-              name,
-              value: unprocessedValues[i][name] || value,
-              origin
-            })
-          }
+          this._setAndTrackChange({
+            name,
+            value,
+            origin,
+            unprocessedValue: unprocessed[name],
+            changes
+          })
         }
       }
     }
