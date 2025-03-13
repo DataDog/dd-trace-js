@@ -335,6 +335,25 @@ function updateConfig (changes, config) {
   const application = createAppObject(config)
   const host = createHostObject()
 
+  const nameMapping = {
+    sampleRate: 'DD_TRACE_SAMPLE_RATE',
+    logInjection: 'DD_LOGS_INJECTION',
+    headerTags: 'DD_TRACE_HEADER_TAGS',
+    tags: 'DD_TAGS',
+    'sampler.rules': 'DD_TRACE_SAMPLING_RULES',
+    traceEnabled: 'DD_TRACE_ENABLED',
+    url: 'DD_TRACE_AGENT_URL',
+    'sampler.rateLimit': 'DD_TRACE_RATE_LIMIT',
+    queryStringObfuscation: 'DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP',
+    version: 'DD_VERSION',
+    env: 'DD_ENV',
+    service: 'DD_SERVICE',
+    clientIpHeader: 'DD_TRACE_CLIENT_IP_HEADER',
+    'grpc.client.error.statuses': 'DD_GRPC_CLIENT_ERROR_STATUSES',
+    'grpc.server.error.statuses': 'DD_GRPC_SERVER_ERROR_STATUSES',
+    traceId128BitLoggingEnabled: 'DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED'
+  }
+
   const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
 
   const configuration = []
