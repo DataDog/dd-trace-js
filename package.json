@@ -117,6 +117,7 @@
   },
   "devDependencies": {
     "@apollo/server": "^4.11.0",
+    "@babel/helpers": "^7.26.10",
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.19.0",
     "@msgpack/msgpack": "^3.0.0-beta3",
