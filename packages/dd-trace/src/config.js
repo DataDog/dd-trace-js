@@ -1463,13 +1463,13 @@ class Config {
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
   _merge () {
     const sources = [
-      { container: this._defaults,          origin: 'default',             unprocessed: {} },
-      { container: this._calculated,        origin: 'calculated',          unprocessed: {} },
+      { container: this._defaults, origin: 'default', unprocessed: {} },
+      { container: this._calculated, origin: 'calculated', unprocessed: {} },
       { container: this._localStableConfig, origin: 'local_stable_config', unprocessed: {} },
-      { container: this._env,               origin: 'env_var',             unprocessed: this._envUnprocessed },
+      { container: this._env, origin: 'env_var', unprocessed: this._envUnprocessed },
       { container: this._fleetStableConfig, origin: 'fleet_stable_config', unprocessed: {} },
-      { container: this._options,           origin: 'code',                unprocessed: this._optsUnprocessed },
-      { container: this._remote,            origin: 'remote_config',       unprocessed: this._remoteUnprocessed }
+      { container: this._options, origin: 'code', unprocessed: this._optsUnprocessed },
+      { container: this._remote, origin: 'remote_config', unprocessed: this._remoteUnprocessed }
     ]
 
     const changes = []
