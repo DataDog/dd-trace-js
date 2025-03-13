@@ -8,6 +8,7 @@ const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
 const checkRequireCache = require('../check_require_cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
+const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
 
 const {
   DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
@@ -60,6 +61,8 @@ for (const packageName of names) {
   let hook = hooks[packageName]
 
   if (typeof hook === 'object') {
+    if (hook.serverless === false && isInServerlessEnvironment()) continue
+
     hookOptions.internals = hook.esmFirst
     hook = hook.fn
   }
