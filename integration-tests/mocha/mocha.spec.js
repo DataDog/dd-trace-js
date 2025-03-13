@@ -2858,4 +2858,110 @@ describe('mocha CommonJS', function () {
       })
     })
   })
+
+  context('retry and hooks', () => {
+    it('works when tests are not retried', (done) => {
+      let stdout = ''
+      const eventsPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+        assert.equal(tests.length, 2)
+
+        assert.includeMembers(tests.map(test => test.meta[TEST_STATUS]), [
+          'pass',
+          'pass'
+        ])
+
+        assert.includeMembers(tests.map(test => test.resource), [
+          'ci-visibility/test-nested-hooks/test-nested-hooks.js.describe context nested test with retries',
+          'ci-visibility/test-nested-hooks/test-nested-hooks.js.describe is not nested'
+        ])
+      })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-nested-hooks/test-nested-hooks.js'
+            ])
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.stdout.on('data', (data) => {
+        stdout += data
+      })
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          assert.include(stdout, 'beforeEach')
+          assert.include(stdout, 'beforeEach in context')
+          assert.include(stdout, 'test')
+          assert.include(stdout, 'afterEach')
+          assert.include(stdout, 'afterEach in context')
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('works when tests are retried', (done) => {
+      let stdout = ''
+      const eventsPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+        assert.equal(tests.length, 3)
+
+        assert.includeMembers(tests.map(test => test.meta[TEST_STATUS]), [
+          'fail',
+          'pass',
+          'pass'
+        ])
+
+        assert.includeMembers(tests.map(test => test.resource), [
+          'ci-visibility/test-nested-hooks/test-nested-hooks.js.describe context nested test with retries',
+          'ci-visibility/test-nested-hooks/test-nested-hooks.js.describe is not nested'
+        ])
+
+        const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+        assert.equal(retriedTests.length, 1)
+        assert.equal(retriedTests[0].meta[TEST_STATUS], 'pass')
+      })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-nested-hooks/test-nested-hooks.js'
+            ]),
+            SHOULD_FAIL: '1'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.stdout.on('data', (data) => {
+        stdout += data
+      })
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          assert.include(stdout, 'beforeEach')
+          assert.include(stdout, 'beforeEach in context')
+          assert.include(stdout, 'test')
+          assert.include(stdout, 'afterEach')
+          assert.include(stdout, 'afterEach in context')
+          done()
+        }).catch(done)
+      })
+    })
+  })
 })
