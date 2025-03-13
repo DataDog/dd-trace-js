@@ -30,8 +30,7 @@ const {
   newTests,
   testsQuarantined,
   getTestFullName,
-  getRunTestsWrapper,
-  isTestFailed
+  getRunTestsWrapper
 } = require('./utils')
 
 require('./common')
@@ -71,6 +70,17 @@ const testSessionFinishCh = channel('ci:mocha:session:finish')
 const itrSkippedSuitesCh = channel('ci:mocha:itr:skipped-suites')
 
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
+
+// Tests from workers do not come with `isFailed` method
+function isTestFailed (test) {
+  if (test.isFailed) {
+    return test.isFailed()
+  }
+  if (test.isPending) {
+    return !test.isPending() && test.state === 'failed'
+  }
+  return false
+}
 
 function getFilteredSuites (originalSuites) {
   return originalSuites.reduce((acc, suite) => {

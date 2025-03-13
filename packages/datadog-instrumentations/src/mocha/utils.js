@@ -405,17 +405,6 @@ function getRunTestsWrapper (runTests, config) {
   }
 }
 
-// Tests from workers do not come with `isFailed` method
-function isTestFailed (test) {
-  if (test.isFailed) {
-    return test.isFailed()
-  }
-  if (test.isPending) {
-    return !test.isPending() && test.state === 'failed'
-  }
-  return false
-}
-
 module.exports = {
   isNewTest,
   getTestProperties,
@@ -438,6 +427,5 @@ module.exports = {
   testFileToSuiteAr,
   getRunTestsWrapper,
   newTests,
-  testsQuarantined,
-  isTestFailed
+  testsQuarantined
 }
