@@ -64,20 +64,19 @@ describe('telemetry', () => {
 
     it('Assert configuration chaining data is sent', (done) => {
       agent.assertTelemetryReceived(msg => {
-        const { payload } = msg
+        if (msg.payload.request_type !== 'app-started') return
 
-        if (payload.request_type === 'app-started') {
-          const configurations = payload.payload.configuration
-          const logInjectionEntries = configurations.filter(entry => entry.name === 'DD_LOGS_INJECTION')
-          if (logInjectionEntries.length === 3 &&
-            logInjectionEntries[0].value === false && logInjectionEntries[0].origin === 'default' &&
-            logInjectionEntries[1].value === true && logInjectionEntries[1].origin === 'env_var' && logInjectionEntries[1].seq_id > logInjectionEntries[0].seq_id &&
-            logInjectionEntries[2].value === false && logInjectionEntries[2].origin === 'code' && logInjectionEntries[2].seq_id > logInjectionEntries[1].seq_id
-          ) {
-            done()
-          }
+        const { configuration } = msg.payload.payload
+        const logInjectionEntries = configuration.filter(entry => entry.name === 'DD_LOGS_INJECTION')
 
-        }
+        if (logInjectionEntries.length !== 3) return
+
+        const [first, second, third] = logInjectionEntries
+
+        if (first.value !== false || first.origin !== 'default') return
+        if (second.value !== true || second.origin !== 'env_var' || second.seq_id <= first.seq_id) return
+        if (third.value !== false || third.origin !== 'code' || third.seq_id <= second.seq_id) return
+        done()
       }, null, 'app-started', 1)
     })
   })
