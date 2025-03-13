@@ -7,12 +7,15 @@ const shimmer = require('../../../../../datadog-shimmer')
 const { isPrivateModule, isNotLibraryFile } = require('./filter')
 const { csiMethods } = require('./csi-methods')
 const { getName } = require('../telemetry/verbosity')
+const telemetry = require('../telemetry')
 const { incrementTelemetryIfNeeded } = require('./rewriter-telemetry')
 const dc = require('dc-polyfill')
 const log = require('../../../log')
 const { isMainThread } = require('worker_threads')
 const { LOG_MESSAGE, REWRITTEN_MESSAGE } = require('./constants')
+const orchestrion = require('../../../../../datadog-instrumentations/src/orchestrion-config')
 
+let config
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')
 let rewriter
 let unwrapCompile = () => {}
@@ -43,7 +46,7 @@ function setGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, { getOr
     } : getOriginalPathAndLineFromSourceMap
 }
 
-function getRewriter (telemetryVerbosity, orchestrion) {
+function getRewriter (telemetryVerbosity) {
   if (!rewriter) {
     try {
       const iastRewriter = require('@datadog/wasm-js-rewriter')
@@ -87,18 +90,26 @@ function getPrepareStackTraceAccessor () {
 function getCompileMethodFn (compileMethod) {
   let delegate = function (content, filename) {
     try {
+      let passes
       if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
-        const rewritten = rewriter.rewrite(content, filename, ['iast'])
-
-        incrementTelemetryIfNeeded(rewritten.metrics)
-
-        if (rewritten?.literalsResult && hardcodedSecretCh.hasSubscribers) {
-          hardcodedSecretCh.publish(rewritten.literalsResult)
+        // TODO error tracking needs to be added based on config
+        passes = ['error_tracking']
+        if (config.iast?.enabled) {
+          passes.push('iast')
         }
+      } else {
+        passes = ['orchestrion']
+      }
+      const rewritten = rewriter.rewrite(content, filename, passes)
 
-        if (rewritten?.content) {
-          return compileMethod.apply(this, [rewritten.content, filename])
-        }
+      incrementTelemetryIfNeeded(rewritten.metrics)
+
+      if (rewritten?.literalsResult && hardcodedSecretCh.hasSubscribers) {
+        hardcodedSecretCh.publish(rewritten.literalsResult)
+      }
+
+      if (rewritten?.content) {
+        return compileMethod.apply(this, [rewritten.content, filename])
       }
     } catch (e) {
       log.error('Error rewriting file %s', filename, e)
@@ -135,9 +146,9 @@ function esmRewritePostProcess (rewritten, filename) {
   }
 }
 
-function enableRewriter (telemetryVerbosity, orchestrion) {
+function enableRewriter (telemetryVerbosity) {
   try {
-    const rewriter = getRewriter(telemetryVerbosity, orchestrion)
+    const rewriter = getRewriter(telemetryVerbosity)
     if (rewriter) {
       const pstDescriptor = Object.getOwnPropertyDescriptor(global.Error, 'prepareStackTrace')
       if (!pstDescriptor || pstDescriptor.configurable) {
@@ -219,9 +230,9 @@ function getOriginalPathAndLineFromSourceMap ({ path, line, column }) {
   return getRewriterOriginalPathAndLineFromSourceMap(path, line, column)
 }
 
-function enable (config) {
-  // TODO these aren't the real arguments, yet!
-  enableRewriter(config.telemetryVerbosity, config.orchestrion)
+function enable (configArg) {
+  config = configArg
+  enableRewriter(telemetry.verbosity || 'OFF')
 }
 
 module.exports = {
