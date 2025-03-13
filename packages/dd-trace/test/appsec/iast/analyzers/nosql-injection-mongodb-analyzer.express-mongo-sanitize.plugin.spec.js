@@ -10,8 +10,8 @@ const agent = require('../../../plugins/agent')
 
 describe('nosql injection detection in mongodb - whole feature', () => {
   // https://github.com/fiznool/express-mongo-sanitize/issues/200
-  withVersions('mongodb', 'express', '>4.18.0 <5.0.0', expressVersion => {
-    withVersions('mongodb', 'mongodb', mongodbVersion => {
+  withVersions('express-mongo-sanitize', 'express', '>4.18.0 <5.0.0', expressVersion => {
+    withVersions('express-mongo-sanitize', 'mongodb', mongodbVersion => {
       const mongodb = require(`../../../../../../versions/mongodb@${mongodbVersion}`)
 
       const satisfiesNodeVersionForMongo3and4 =
@@ -79,6 +79,49 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               })
 
               expect(someRedacted).to.be.true
+            }
+          })
+
+          testThatRequestHasVulnerability({
+            testDescription: 'should have NOSQL_MONGODB_INJECTION vulnerability in $or clause',
+            fn: async (req, res) => {
+              await collection.find({
+                key: {
+                  $or: [req.query.key, 'test']
+                }
+              })
+              res.end()
+            },
+            vulnerability: 'NOSQL_MONGODB_INJECTION',
+            makeRequest: (done, config) => {
+              axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+            },
+            cb: function (vulnerabilities) {
+              const vulnerability = vulnerabilities[0]
+              let someRedacted = false
+              vulnerability.evidence.valueParts.forEach(valuePart => {
+                if (valuePart.redacted) {
+                  someRedacted = true
+                }
+              })
+
+              expect(someRedacted).to.be.true
+            }
+          })
+
+          testThatRequestHasNoVulnerability({
+            testDescription: 'should not have NOSQL_MONGODB_INJECTION vulnerability using $eq',
+            fn: async (req, res) => {
+              await collection.find({
+                key: {
+                  $eq: req.query.key
+                }
+              })
+              res.end()
+            },
+            vulnerability: 'NOSQL_MONGODB_INJECTION',
+            makeRequest: (done, config) => {
+              axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
             }
           })
 
