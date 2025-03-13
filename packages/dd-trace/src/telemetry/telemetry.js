@@ -316,7 +316,7 @@ function updateConfig (changes, config) {
 
   const nameMapping = {
     sampleRate: 'DD_TRACE_SAMPLE_RATE',
-    logInjection: 'DD_LOG_INJECTION',
+    logInjection: 'DD_LOGS_INJECTION',
     headerTags: 'DD_TRACE_HEADER_TAGS',
     tags: 'DD_TAGS',
     'sampler.rules': 'DD_TRACE_SAMPLING_RULES',

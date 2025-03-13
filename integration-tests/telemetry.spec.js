@@ -26,7 +26,8 @@ describe('telemetry', () => {
       proc = await spawnProc(startupTestFile, {
         cwd,
         env: {
-          AGENT_PORT: agent.port
+          AGENT_PORT: agent.port,
+          DD_LOGS_INJECTION: true
         }
       })
     })
@@ -59,6 +60,25 @@ describe('telemetry', () => {
           }
         }
       }, null, 'app-dependencies-loaded', 1)
+    })
+
+    it('Assert configuration chaining data is sent', (done) => {
+      agent.assertTelemetryReceived(msg => {
+        const { payload } = msg
+
+        if (payload.request_type === 'app-started') {
+          const configurations = payload.payload.configuration
+          const logInjectionEntries = configurations.filter(entry => entry.name === 'DD_LOGS_INJECTION')
+          if (logInjectionEntries.length === 3 &&
+            logInjectionEntries[0].value === false && logInjectionEntries[0].origin === 'default' &&
+            logInjectionEntries[1].value === true && logInjectionEntries[1].origin === 'env_var' && logInjectionEntries[1].seq_id > logInjectionEntries[0].seq_id &&
+            logInjectionEntries[2].value === false && logInjectionEntries[2].origin === 'code' && logInjectionEntries[2].seq_id > logInjectionEntries[1].seq_id
+          ) {
+            done()
+          }
+
+        }
+      }, null, 'app-started', 1)
     })
   })
 })
