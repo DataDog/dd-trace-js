@@ -43,7 +43,7 @@ describe('span processor', () => {
       span = { context: () => ({ _tags: {} }) }
 
       processor.process({ span })
-      expect(processor.writer.append).to.not.have.been.called
+      expect(processor._writer.append).to.not.have.been.called
     })
 
     it('should format the span event for the writer', () => {
