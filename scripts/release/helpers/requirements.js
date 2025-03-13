@@ -4,7 +4,7 @@
 
 const { join } = require('path')
 const { existsSync, readFileSync } = require('fs')
-const { applicationConfigPath } = require('./paths')
+const getApplicationConfigPath = require('application-config-path')
 const { capture, fatal, run } = require('./terminal')
 
 // Check that the `git` CLI is installed.
@@ -34,7 +34,7 @@ function checkBranchDiff () {
     )
   }
 
-  const branchDiffConfigPath = join(applicationConfigPath('changelog-maker'), 'config.json')
+  const branchDiffConfigPath = join(getApplicationConfigPath('changelog-maker'), 'config.json')
 
   if (!existsSync(branchDiffConfigPath)) {
     const link = 'https://github.com/nodejs/changelog-maker?tab=readme-ov-file#development'

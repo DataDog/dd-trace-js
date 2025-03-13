@@ -92,6 +92,7 @@
     "@isaacs/ttlcache": "^1.4.1",
     "@opentelemetry/api": ">=1.0.0 <1.9.0",
     "@opentelemetry/core": "^1.14.0",
+    "application-config-path": "^0.1.1",
     "crypto-randomuuid": "^1.0.0",
     "dc-polyfill": "^0.1.4",
     "ignore": "^5.2.4",
