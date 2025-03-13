@@ -56,7 +56,7 @@ describe('Attacker fingerprinting', () => {
 
       agent.use(traces => {
         assert.property(traces[0][0].meta, '_dd.appsec.fp.http.header')
-        assert.equal(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000010-6431a3e6-3-98425651')
+        assert.equal(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000010-24b31d51-3-98425651')
         assert.property(traces[0][0].meta, '_dd.appsec.fp.http.network')
         assert.equal(traces[0][0].meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
       }).then(done).catch(done)
@@ -72,7 +72,7 @@ describe('Attacker fingerprinting', () => {
 
       agent.use(traces => {
         assert.property(traces[0][0].meta, '_dd.appsec.fp.http.header')
-        assert.equal(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000010-6431a3e6-3-98425651')
+        assert.equal(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000010-24b31d51-3-98425651')
         assert.property(traces[0][0].meta, '_dd.appsec.fp.http.network')
         assert.equal(traces[0][0].meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
       }).then(done).catch(done)

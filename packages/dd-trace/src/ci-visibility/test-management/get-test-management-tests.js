@@ -1,7 +1,7 @@
 const request = require('../../exporters/common/request')
 const id = require('../../id')
 
-function getQuarantinedTests ({
+function getTestManagementTests ({
   url,
   isEvpProxy,
   evpProxyPrefix,
@@ -28,7 +28,7 @@ function getQuarantinedTests ({
   } else {
     const apiKey = process.env.DATADOG_API_KEY || process.env.DD_API_KEY
     if (!apiKey) {
-      return done(new Error('Quarantined tests were not fetched because Datadog API key is not defined.'))
+      return done(new Error('Test management tests were not fetched because Datadog API key is not defined.'))
     }
 
     options.headers['dd-api-key'] = apiKey
@@ -49,9 +49,9 @@ function getQuarantinedTests ({
       done(err)
     } else {
       try {
-        const { data: { attributes: { modules: quarantinedTests } } } = JSON.parse(res)
+        const { data: { attributes: { modules: testManagementTests } } } = JSON.parse(res)
 
-        done(null, quarantinedTests)
+        done(null, testManagementTests)
       } catch (err) {
         done(err)
       }
@@ -59,4 +59,4 @@ function getQuarantinedTests ({
   })
 }
 
-module.exports = { getQuarantinedTests }
+module.exports = { getTestManagementTests }

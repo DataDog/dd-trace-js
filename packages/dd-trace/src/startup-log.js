@@ -86,7 +86,8 @@ function tracerInfo () {
 
   out.log_injection_enabled = !!config.logInjection
   out.runtime_metrics_enabled = !!config.runtimeMetrics
-  out.profiling_enabled = !!(config.profiling || {}).enabled
+  const profilingEnabled = config.profiling?.enabled
+  out.profiling_enabled = profilingEnabled === 'true' || profilingEnabled === 'auto'
   Object.assign(out, getIntegrationsAndAnalytics())
 
   out.appsec_enabled = !!config.appsec.enabled

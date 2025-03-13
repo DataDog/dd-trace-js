@@ -19,6 +19,7 @@ const openAiBaseEmbeddingInfo = { base: 'https://api.openai.com', path: '/v1/emb
 describe('Plugin', () => {
   let langchainOpenai
   let langchainAnthropic
+  let langchainGoogleGenAI
 
   let langchainMessages
   let langchainOutputParsers
@@ -28,7 +29,8 @@ describe('Plugin', () => {
   // so we can verify it gets tagged properly
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
-    ANTHROPIC_API_KEY: '<not-a-real-key>'
+    ANTHROPIC_API_KEY: '<not-a-real-key>',
+    GOOGLE_API_KEY: '<not-a-real-key>'
   })
 
   describe('langchain', () => {
@@ -45,6 +47,11 @@ describe('Plugin', () => {
       beforeEach(() => {
         langchainOpenai = require(`../../../versions/@langchain/openai@${version}`).get()
         langchainAnthropic = require(`../../../versions/@langchain/anthropic@${version}`).get()
+        if (version !== '0.1.0') {
+          // version mismatching otherwise
+          // can probably scaffold `withVersions` better to make this a bit cleaner
+          langchainGoogleGenAI = require(`../../../versions/@langchain/google-genai@${version}`).get()
+        }
 
         // need to specify specific import in `get(...)`
         langchainMessages = require(`../../../versions/@langchain/core@${version}`).get('@langchain/core/messages')
@@ -976,6 +983,70 @@ describe('Plugin', () => {
             expect(result).to.have.length(2)
             expect(result[0]).to.deep.equal([-0.0034387498, -0.026400521])
             expect(result[1]).to.deep.equal([-0.026400521, -0.0034387498])
+
+            await checkTraces
+          })
+        })
+
+        describe('@langchain/google-genai', () => {
+          let response
+          let originalFetch
+
+          beforeEach(() => {
+            // we don't have a good way to `nock` the requests
+            // they utilize `fetch`, so we'll temporarily patch it instead
+            originalFetch = global.fetch
+            global.fetch = async function () {
+              return Promise.resolve(response)
+            }
+          })
+
+          afterEach(() => {
+            global.fetch = originalFetch
+          })
+
+          // version compatibility issues on lower versions
+          it('instruments a langchain google-genai embedQuery call', async function () {
+            if (!langchainGoogleGenAI) this.skip()
+            response = {
+              json () {
+                return {
+                  embedding: {
+                    values: [-0.0034387498, -0.026400521]
+                  }
+                }
+              },
+              ok: true
+            }
+
+            const embeddings = new langchainGoogleGenAI.GoogleGenerativeAIEmbeddings({
+              model: 'text-embedding-004',
+              taskType: 'RETRIEVAL_DOCUMENT',
+              title: 'Document title'
+            })
+
+            const checkTraces = agent
+              .use(traces => {
+                expect(traces[0].length).to.equal(1)
+
+                const span = traces[0][0]
+                expect(span).to.have.property('name', 'langchain.request')
+                expect(span).to.have.property('resource', 'langchain.embeddings.GoogleGenerativeAIEmbeddings')
+
+                expect(span.meta).to.have.property('langchain.request.api_key', '...key>')
+                expect(span.meta).to.have.property('langchain.request.provider', 'googlegenerativeai')
+                expect(span.meta).to.have.property('langchain.request.model', 'text-embedding-004')
+                expect(span.meta).to.have.property('langchain.request.type', 'embedding')
+
+                expect(span.meta).to.have.property('langchain.request.inputs.0.text', 'Hello, world!')
+                expect(span.metrics).to.have.property('langchain.request.input_counts', 1)
+                expect(span.metrics).to.have.property('langchain.response.outputs.embedding_length', 2)
+              })
+
+            const query = 'Hello, world!'
+            const result = await embeddings.embedQuery(query)
+            expect(result).to.have.length(2)
+            expect(result).to.deep.equal([-0.0034387498, -0.026400521])
 
             await checkTraces
           })

@@ -13,7 +13,7 @@ const testSessionFinishCh = channel('ci:playwright:session:finish')
 
 const libraryConfigurationCh = channel('ci:playwright:library-configuration')
 const knownTestsCh = channel('ci:playwright:known-tests')
-const quarantinedTestsCh = channel('ci:playwright:quarantined-tests')
+const testManagementTestsCh = channel('ci:playwright:test-management-tests')
 
 const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
@@ -42,23 +42,19 @@ let earlyFlakeDetectionNumRetries = 0
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let knownTests = {}
-let isQuarantinedTestsEnabled = false
-let quarantinedTests = {}
+let isTestManagementTestsEnabled = false
+let testManagementTests = {}
 let rootDir = ''
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0'
 
-function isQuarantineTest (test) {
+function getTestProperties (test) {
   const testName = getTestFullname(test)
   const testSuite = getTestSuitePath(test._requireFile, rootDir)
 
-  return quarantinedTests
-    ?.playwright
-    ?.suites
-    ?.[testSuite]
-    ?.tests
-    ?.[testName]
-    ?.properties
-    ?.quarantined
+  const { disabled, quarantined } =
+    testManagementTests?.playwright?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
+
+  return { disabled, quarantined }
 }
 
 function isNewTest (test) {
@@ -283,7 +279,13 @@ function testBeginHandler (test, browserName) {
   const testAsyncResource = new AsyncResource('bound-anonymous-fn')
   testToAr.set(test, testAsyncResource)
   testAsyncResource.runInAsyncScope(() => {
-    testStartCh.publish({ testName, testSuiteAbsolutePath, testSourceLine, browserName })
+    testStartCh.publish({
+      testName,
+      testSuiteAbsolutePath,
+      testSourceLine,
+      browserName,
+      isDisabled: test._ddIsDisabled
+    })
   })
 }
 
@@ -442,12 +444,12 @@ function runnerHook (runnerExport, playwrightVersion) {
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
-        isQuarantinedTestsEnabled = libraryConfig.isQuarantinedTestsEnabled
+        isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
       }
     } catch (e) {
       isEarlyFlakeDetectionEnabled = false
       isKnownTestsEnabled = false
-      isQuarantinedTestsEnabled = false
+      isTestManagementTestsEnabled = false
       log.error('Playwright session start error', e)
     }
 
@@ -467,17 +469,17 @@ function runnerHook (runnerExport, playwrightVersion) {
       }
     }
 
-    if (isQuarantinedTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
+    if (isTestManagementTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
       try {
-        const { err, quarantinedTests: receivedQuarantinedTests } = await getChannelPromise(quarantinedTestsCh)
+        const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
         if (!err) {
-          quarantinedTests = receivedQuarantinedTests
+          testManagementTests = receivedTestManagementTests
         } else {
-          isQuarantinedTestsEnabled = false
+          isTestManagementTestsEnabled = false
         }
       } catch (err) {
-        isQuarantinedTestsEnabled = false
-        log.error('Playwright quarantined tests error', err)
+        isTestManagementTestsEnabled = false
+        log.error('Playwright test management tests error', err)
       }
     }
 
@@ -513,7 +515,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       testSessionFinishCh.publish({
         status: STATUS_TO_TEST_STATUS[sessionStatus],
         isEarlyFlakeDetectionEnabled,
-        isQuarantinedTestsEnabled,
+        isTestManagementTestsEnabled,
         onDone
       })
     })
@@ -523,7 +525,7 @@ function runnerHook (runnerExport, playwrightVersion) {
     remainingTestsByFile = {}
 
     // TODO: we can trick playwright into thinking the session passed by returning
-    // 'passed' here. We might be able to use this for both EFD and Quarantined tests.
+    // 'passed' here. We might be able to use this for both EFD and Test Management tests.
     return runAllTestsReturn
   })
 
@@ -594,19 +596,24 @@ addHook({
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 
   async function newCreateRootSuite () {
-    if (!isKnownTestsEnabled && !isQuarantinedTestsEnabled) {
+    if (!isKnownTestsEnabled && !isTestManagementTestsEnabled) {
       return oldCreateRootSuite.apply(this, arguments)
     }
     const rootSuite = await oldCreateRootSuite.apply(this, arguments)
 
     const allTests = rootSuite.allTests()
 
-    if (isQuarantinedTestsEnabled) {
-      const testsToBeIgnored = allTests.filter(isQuarantineTest)
-      testsToBeIgnored.forEach(test => {
-        test._ddIsQuarantined = true
-        test.expectedStatus = 'skipped'
-      })
+    if (isTestManagementTestsEnabled) {
+      for (const test of allTests) {
+        const testProperties = getTestProperties(test)
+        if (testProperties.disabled) {
+          test._ddIsDisabled = true
+          test.expectedStatus = 'skipped'
+        } else if (testProperties.quarantined) {
+          test._ddIsQuarantined = true
+          test.expectedStatus = 'skipped'
+        }
+      }
     }
 
     if (isKnownTestsEnabled) {

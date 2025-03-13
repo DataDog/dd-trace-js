@@ -27,19 +27,11 @@ function hasPoints (metric) {
   return metric.points.length > 0
 }
 
-let versionTag
-
 class Metric {
   constructor (namespace, metric, common, tags) {
     this.namespace = namespace.toString()
     this.metric = common ? metric : `nodejs.${metric}`
     this.tags = tagArray(tags)
-    if (common) {
-      if (versionTag === undefined) {
-        versionTag = `version:${process.version}`
-      }
-      this.tags.push(versionTag)
-    }
     this.common = common
 
     this.points = []
