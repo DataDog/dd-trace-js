@@ -16,7 +16,7 @@ addHook({ name: 'tedious', versions: ['>=1.0.0'] }, tedious => {
       return makeRequest.apply(this, arguments)
     }
 
-    const queryOrProcedure = getQueryOrProcedure(request)
+    const [queryOrProcedure, queryParent, queryField] = getQueryOrProcedure(request)
 
     if (!queryOrProcedure) {
       return makeRequest.apply(this, arguments)
@@ -28,7 +28,9 @@ addHook({ name: 'tedious', versions: ['>=1.0.0'] }, tedious => {
     const connectionConfig = this.config
 
     return asyncResource.runInAsyncScope(() => {
-      startCh.publish({ queryOrProcedure, connectionConfig })
+      const payload = { queryOrProcedure, connectionConfig }
+      startCh.publish(payload)
+      queryParent[queryField] = payload.sql
 
       const cb = callbackResource.bind(request.callback, request)
       request.callback = asyncResource.bind(function (error) {
@@ -53,14 +55,15 @@ addHook({ name: 'tedious', versions: ['>=1.0.0'] }, tedious => {
   return tedious
 })
 
+// returns [queryOrProcedure, parentObjectToSet, propertyNameToSet]
 function getQueryOrProcedure (request) {
-  if (!request.parameters) return
+  if (!request.parameters) return [null]
 
-  const statement = request.parametersByName.statement || request.parametersByName.stmt
-
-  if (!statement) {
-    return request.sqlTextOrProcedure
+  if (request.parametersByName.statement) {
+    return [request.parametersByName.statement.value, request.parametersByName.statement, 'value']
+  } else if (request.parametersByName.stmt) {
+    return [request.parametersByName.stmt.value, request.parametersByName.stmt, 'value']
+  } else {
+    return [request.sqlTextOrProcedure, request, 'sqlTextOrProcedure']
   }
-
-  return statement.value
 }
