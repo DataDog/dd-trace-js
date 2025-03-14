@@ -188,7 +188,7 @@ function extractRootTags (trace, span) {
   const isLocalRoot = span === context._trace.started[0]
   const parentId = context._parentId
 
-  if (!isLocalRoot || (parentId && parentId !== '0')) return
+  if (!isLocalRoot || (parentId && parentId.toString() !== '0')) return
 
   addTag({}, trace.metrics, SAMPLING_RULE_DECISION, context._trace[SAMPLING_RULE_DECISION])
   addTag({}, trace.metrics, SAMPLING_LIMIT_DECISION, context._trace[SAMPLING_LIMIT_DECISION])
