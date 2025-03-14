@@ -24,11 +24,9 @@ variables:
   SYSTEM_TESTS_LIBRARY: nodejs
   REPO_NOTIFICATION_CHANNEL: "#notifications-apm-js"
 
-   
 configure_system_tests:
   variables:
     SYSTEM_TESTS_SCENARIOS_GROUPS: "simple_onboarding,simple_onboarding_profiling,docker-ssi,lib-injection"
-    #lauch again 01
 
 requirements_json_test:
   rules:
