@@ -78,18 +78,18 @@ function getOrCreateMetricTags (store, versionsTags) {
   return metricTags
 }
 
-function incrementWafInit (wafVersion, rulesVersion) {
+function incrementWafInit (wafVersion, rulesVersion, success) {
   const versionsTags = getVersionsTags(wafVersion, rulesVersion)
-  const initTags = { ...versionsTags, success: true }
+  appsecMetrics.count('waf.init', { ...versionsTags, success }).inc()
 
-  appsecMetrics.count('waf.init', initTags).inc()
+  if (!success) {
+    appsecMetrics.count('waf.config_errors', versionsTags).inc()
+  }
 }
 
 function incrementWafUpdates (wafVersion, rulesVersion, success) {
   const versionsTags = getVersionsTags(wafVersion, rulesVersion)
-  const updateTags = { ...versionsTags, success }
-
-  appsecMetrics.count('waf.updates', updateTags).inc()
+  appsecMetrics.count('waf.updates', { ...versionsTags, success }).inc()
 
   if (!success) {
     appsecMetrics.count('waf.config_errors', versionsTags).inc()
