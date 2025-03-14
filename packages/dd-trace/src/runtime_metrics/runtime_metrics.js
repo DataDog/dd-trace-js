@@ -111,11 +111,11 @@ const runtimeMetrics = module.exports = {
   },
 
   increment (name, tag, monotonic) {
-    client && client.increment(name, 1, tag, monotonic)
+    this.count(name, 1, tag, monotonic)
   },
 
   decrement (name, tag) {
-    client && client.decrement(name, 1, tag)
+    this.count(name, -1, tag)
   }
 }
 
@@ -282,12 +282,19 @@ function captureNativeMetrics () {
 function histogram (name, stats, tags) {
   tags = tags ? [].concat(tags) : []
 
-  if (tags.length > 0) {
-    for (const tag of tags) {
-      client.histogram(name, stats, tag)
-    }
-  } else {
-    client.histogram(name, stats)
+  if (tags.length === 0) {
+    tags.push(undefined)
+  }
+
+  for (const tag of tags) {
+    client.gauge(`${name}.min`, stats.min, tag)
+    client.gauge(`${name}.max`, stats.max, tag)
+    client.increment(`${name}.sum`, stats.sum, tag)
+    client.increment(`${name}.total`, stats.sum, tag)
+    client.gauge(`${name}.avg`, stats.avg, tag)
+    client.increment(`${name}.count`, stats.count, tag)
+    client.gauge(`${name}.median`, stats.median, tag)
+    client.gauge(`${name}.95percentile`, stats.p95, tag)
   }
 }
 
