@@ -31,6 +31,8 @@ const LLMObsTagger = require('./tagger')
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 
+/** @typedef {import('../opentracing/span')} Span */
+
 class LLMObsSpanProcessor {
   constructor (config) {
     this._config = config
@@ -41,6 +43,12 @@ class LLMObsSpanProcessor {
   }
 
   // TODO: instead of relying on the tagger's weakmap registry, can we use some namespaced storage correlation?
+  /**
+   * Possibly enqueues an LLM Observability span event for writing.
+   * If the span is not an LLM Observability span, it is ignored.
+   * If there is an error appending the span event, it is logged and ignored.
+   * @param {{ span: Span }} data
+   */
   process ({ span }) {
     if (!this._config.llmobs.enabled) return
     // if the span is not in our private tagger map, it is not an llmobs span
@@ -60,6 +68,11 @@ class LLMObsSpanProcessor {
     }
   }
 
+  /**
+   * Formats an LLM Observability span event from an APM span.
+   * @param {Span} span APM span
+   * @returns {*} formatted LLM Observability span event
+   */
   format (span) {
     const spanTags = span.context()._tags
     const mlObsTags = LLMObsTagger.tagMap.get(span)
@@ -136,10 +149,16 @@ class LLMObsSpanProcessor {
     return llmObsSpanEvent
   }
 
-  // For now, this only applies to metadata, as we let users annotate this field with any object
-  // However, we want to protect against circular references or BigInts (unserializable)
-  // This function can be reused for other fields if needed
-  // Messages, Documents, and Metrics are safeguarded in `llmobs/tagger.js`
+  /**
+   * Adds objects to the carrier. If the object is not JSON-serializable, it is marked as unserializable.
+   *
+   * For now, this only applies to metadata, as we let users annotate this field with any object.
+   * However, we want to protect against circular references or BigInts (unserializable).
+   * This function can be reused for other fields if needed.
+   * Messages, Documents, and metrics are safeguarded in `llmobs/tagger.js`
+   * @param {*} obj
+   * @param {*} carrier
+   */
   _addObject (obj, carrier) {
     const seenObjects = new WeakSet()
     seenObjects.add(obj) // capture root object
@@ -152,8 +171,7 @@ class LLMObsSpanProcessor {
     }
 
     const add = (obj, carrier) => {
-      for (const key in obj) {
-        const value = obj[key]
+      for (const [key, value] of Object.entries(obj)) {
         if (!Object.prototype.hasOwnProperty.call(obj, key)) continue
         if (typeof value === 'bigint' || isCircular(value)) {
           // mark as unserializable instead of dropping
@@ -172,6 +190,15 @@ class LLMObsSpanProcessor {
     add(obj, carrier)
   }
 
+  /**
+   * Processes default tags for an LLM Observability span event, and
+   * merges them with any existing tags on the span.
+   * @param {Span} span APM span
+   * @param {string} mlApp ML application
+   * @param {string} sessionId session ID
+   * @param {*} [error] error object
+   * @returns {string[]} Array of tag strings
+   */
   _processTags (span, mlApp, sessionId, error) {
     let tags = {
       version: this._config.version,

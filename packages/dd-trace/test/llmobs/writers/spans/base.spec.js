@@ -79,7 +79,7 @@ describe('LLMObsSpanWriter', () => {
 
     expect(writer.flush).to.have.been.calledOnce
     expect(logger.debug).to.have.been.calledWith(
-      'Flusing queue because queing next event will exceed EvP payload limit'
+      'Flushing queue because queuing next event will exceed EvP payload limit'
     )
   })
 
