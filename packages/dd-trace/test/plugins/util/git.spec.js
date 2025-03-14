@@ -79,7 +79,7 @@ describe('git', () => {
     expect(metadata[GIT_REPOSITORY_URL]).not.to.equal('ciRepositoryUrl')
     expect(execFileSyncStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
     expect(execFileSyncStub).to.have.been.calledWith('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
-    expect(execFileSyncStub).not.to.have.been.calledWith('git', ['show', '-s', '--format=%s'])
+    expect(execFileSyncStub).not.to.have.been.calledWith('git', ['show', '-s', '--format=%B'])
     expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
     expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
     expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
@@ -100,12 +100,15 @@ describe('git', () => {
   })
 
   it('returns all git metadata is git is available', () => {
+    const commitMessage = `multi line
+      commit message`
+
     execFileSyncStub
       .onCall(0).returns(
         'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
         'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
       )
-      .onCall(1).returns('this is a commit message')
+      .onCall(1).returns(commitMessage)
       .onCall(2).returns('gitBranch')
       .onCall(3).returns('gitCommitSHA')
       .onCall(4).returns('ciWorkspacePath')
@@ -116,7 +119,7 @@ describe('git', () => {
     expect(metadata).to.eql({
       [GIT_BRANCH]: 'gitBranch',
       [GIT_TAG]: 'ciTag',
-      [GIT_COMMIT_MESSAGE]: 'this is a commit message',
+      [GIT_COMMIT_MESSAGE]: commitMessage,
       [GIT_COMMIT_SHA]: 'gitCommitSHA',
       [GIT_REPOSITORY_URL]: 'https://github.com/datadog/safe-repository.git',
       [GIT_COMMIT_AUTHOR_EMAIL]: 'git.author@email.com',
@@ -128,7 +131,7 @@ describe('git', () => {
       [CI_WORKSPACE_PATH]: 'ciWorkspacePath'
     })
 
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['show', '-s', '--format=%s'])
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['show', '-s', '--format=%B'])
     expect(execFileSyncStub).to.have.been.calledWith('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
     expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
     expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
