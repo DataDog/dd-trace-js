@@ -1,6 +1,5 @@
 'use strict'
 
-const { enableRewriter, disableRewriter } = require('./rewriter')
 const {
   createTransaction,
   removeTransaction,

@@ -100,11 +100,11 @@ describe('IAST Rewriter', () => {
     })
 
     it('Should wrap module compile method on taint tracking enable', () => {
-      rewriter.enableRewriter()
+      rewriter.enable()
       expect(shimmer.wrap).to.be.calledOnce
       expect(shimmer.wrap.getCall(0).args[1]).eq('_compile')
 
-      rewriter.disableRewriter()
+      rewriter.disable()
     })
 
     // TODO: This cannot be tested with mocking.
@@ -113,14 +113,14 @@ describe('IAST Rewriter', () => {
     it('Should keep original prepareStackTrace fn when calling enable and then disable', () => {
       const orig = Error.prepareStackTrace
 
-      rewriter.enableRewriter()
+      rewriter.enable()
 
       const testPrepareStackTrace = (_, callsites) => {
         // do nothing
       }
       Error.prepareStackTrace = testPrepareStackTrace
 
-      rewriter.disableRewriter()
+      rewriter.disable()
 
       expect(Error.prepareStackTrace).to.be.eq(testPrepareStackTrace)
 
@@ -135,7 +135,7 @@ describe('IAST Rewriter', () => {
       }
       Error.prepareStackTrace = testPrepareStackTrace
 
-      rewriter.disableRewriter()
+      rewriter.disable()
 
       expect(Error.prepareStackTrace).to.be.eq(testPrepareStackTrace)
 
@@ -145,7 +145,7 @@ describe('IAST Rewriter', () => {
     it('Should keep original prepareStackTrace fn when calling disable if not marked with the Symbol', () => {
       const orig = Error.prepareStackTrace
 
-      rewriter.enableRewriter()
+      rewriter.enable()
 
       // remove iast property to avoid wrapping the new testPrepareStackTrace fn
       delete Error.prepareStackTrace
@@ -155,7 +155,7 @@ describe('IAST Rewriter', () => {
       }
       Error.prepareStackTrace = testPrepareStackTrace
 
-      rewriter.disableRewriter()
+      rewriter.disable()
 
       expect(Error.prepareStackTrace).to.be.eq(testPrepareStackTrace)
 
@@ -175,11 +175,11 @@ describe('IAST Rewriter', () => {
       afterEach(() => {
         process.env.NODE_OPTIONS = originalNodeOptions
         process.execArgv = originalExecArgv
-        rewriter.disableRewriter()
+        rewriter.disable()
       })
 
       it('Should not enable esm rewriter when ESM is not instrumented', () => {
-        rewriter.enableRewriter()
+        rewriter.enable()
 
         expect(Module.register).not.to.be.called
       })
@@ -187,7 +187,7 @@ describe('IAST Rewriter', () => {
       it('Should enable esm rewriter when ESM is configured with --loader exec arg', () => {
         process.execArgv = ['--loader', 'dd-trace/initialize.mjs']
 
-        rewriter.enableRewriter()
+        rewriter.enable()
         delete Error.prepareStackTrace
 
         expect(Module.register).to.be.calledOnce
@@ -196,7 +196,7 @@ describe('IAST Rewriter', () => {
       it('Should enable esm rewriter when ESM is configured with --experimental-loader exec arg', () => {
         process.execArgv = ['--experimental-loader', 'dd-trace/initialize.mjs']
 
-        rewriter.enableRewriter()
+        rewriter.enable()
 
         expect(Module.register).to.be.calledOnce
       })
@@ -204,7 +204,7 @@ describe('IAST Rewriter', () => {
       it('Should enable esm rewriter when ESM is configured with --loader in NODE_OPTIONS', () => {
         process.env.NODE_OPTIONS = '--loader dd-trace/initialize.mjs'
 
-        rewriter.enableRewriter()
+        rewriter.enable()
 
         expect(Module.register).to.be.calledOnce
       })
@@ -212,7 +212,7 @@ describe('IAST Rewriter', () => {
       it('Should enable esm rewriter when ESM is configured with --experimental-loader in NODE_OPTIONS', () => {
         process.env.NODE_OPTIONS = '--experimental-loader dd-trace/initialize.mjs'
 
-        rewriter.enableRewriter()
+        rewriter.enable()
 
         expect(Module.register).to.be.calledOnce
       })
@@ -237,7 +237,7 @@ describe('IAST Rewriter', () => {
 
         beforeEach(() => {
           process.execArgv = ['--loader', 'dd-trace/initialize.mjs']
-          rewriter.enableRewriter()
+          rewriter.enable()
           port = Module.register.args[0][1].data.port
         })
 
@@ -343,13 +343,13 @@ describe('IAST Rewriter', () => {
 
     afterEach(() => {
       sinon.restore()
-      rewriter.disableRewriter()
+      rewriter.disable()
     })
 
     it('should call native getOriginalPathAndLineFromSourceMap if --enable-source-maps is not present', () => {
       sinon.stub(process, 'execArgv').value(argvs)
 
-      rewriter.enableRewriter()
+      rewriter.enable()
 
       const location = { path: 'test', line: 42, column: 4 }
       rewriter.getOriginalPathAndLineFromSourceMap(location)
@@ -360,7 +360,7 @@ describe('IAST Rewriter', () => {
     it('should not call native getOriginalPathAndLineFromSourceMap if --enable-source-maps is present', () => {
       sinon.stub(process, 'execArgv').value([...argvs, '--enable-source-maps'])
 
-      rewriter.enableRewriter()
+      rewriter.enable()
 
       const location = { path: 'test', line: 42, column: 4 }
       rewriter.getOriginalPathAndLineFromSourceMap(location)
@@ -377,7 +377,7 @@ describe('IAST Rewriter', () => {
         ? process.env.NODE_OPTIONS + ' --enable-source-maps'
         : '--enable-source-maps'
 
-      rewriter.enableRewriter()
+      rewriter.enable()
 
       const location = { path: 'test', line: 42, column: 4 }
       rewriter.getOriginalPathAndLineFromSourceMap(location)
