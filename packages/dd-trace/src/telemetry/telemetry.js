@@ -28,6 +28,8 @@ const extendedHeartbeatPayload = {}
 
 const sentIntegrations = new Set()
 
+let seqId = 0
+
 function getRetryData () {
   return retryData
 }
@@ -314,7 +316,7 @@ function updateConfig (changes, config) {
 
   const nameMapping = {
     sampleRate: 'DD_TRACE_SAMPLE_RATE',
-    logInjection: 'DD_LOG_INJECTION',
+    logInjection: 'DD_LOGS_INJECTION',
     headerTags: 'DD_TRACE_HEADER_TAGS',
     tags: 'DD_TAGS',
     'sampler.rules': 'DD_TRACE_SAMPLING_RULES',
@@ -334,14 +336,15 @@ function updateConfig (changes, config) {
   const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
 
   const configuration = []
-  const names = [] // list of config names whose values have been changed
+  const updatedTuples = new Set()
 
   for (const change of changes) {
     const name = nameMapping[change.name] || change.name
 
-    names.push(name)
+    updatedTuples.add(`${name}|${change.origin}`)
     const { origin, value } = change
-    const entry = { name, value, origin }
+    const entry = { name, value, origin, seq_id: seqId }
+    seqId++
 
     if (namesNeedFormatting.has(entry.name)) {
       entry.value = formatMapForTelemetry(entry.value)
@@ -357,8 +360,8 @@ function updateConfig (changes, config) {
     configuration.push(entry)
   }
 
-  function isNotModified (entry) {
-    return !names.includes(entry.name)
+  function isNotModified (oldEntry) {
+    return !updatedTuples.has(`${oldEntry.name}|${oldEntry.origin}`)
   }
 
   if (!configWithOrigin.length) {
