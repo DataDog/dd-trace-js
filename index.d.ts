@@ -2347,7 +2347,7 @@ declare namespace tracer {
        * ```javascript
        * llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'gpt-4o', modelProvider: 'openai' }, () => {
        *  llmobs.annotate({
-       *    inputData: [{ content: 'system prompt, role: 'system' }, { content: 'user prompt', role: 'user' }],
+       *    inputData: [{ content: 'system prompt', role: 'system' }, { content: 'user prompt', role: 'user' }],
        *    outputData: { content: 'response', role: 'ai' },
        *    metadata: { temperature: 0.7 },
        *    tags: { host: 'localhost' },
