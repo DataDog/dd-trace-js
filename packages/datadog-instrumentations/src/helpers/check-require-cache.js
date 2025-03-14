@@ -26,7 +26,7 @@ const potentialConflicts = new Set([
   'sqreen'
 ])
 
-const extractPackageAndModulePath = require('./utils/src/extract-package-and-module-path')
+const extractPackageAndModulePath = require('./extract-package-and-module-path')
 
 /**
  * The lowest hanging fruit to debug an app that isn't tracing
@@ -45,7 +45,7 @@ const extractPackageAndModulePath = require('./utils/src/extract-package-and-mod
  * This is OK as the tracer should be loaded earlier anyway.
  */
 module.exports.checkForRequiredModules = function () {
-  const packages = require('../../datadog-instrumentations/src/helpers/hooks')
+  const packages = require('./hooks')
   const naughties = new Set()
   let didWarn = false
 
