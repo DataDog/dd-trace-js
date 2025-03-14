@@ -126,6 +126,32 @@ describe('nosql injection detection in mongodb - whole feature', () => {
           })
 
           testThatRequestHasNoVulnerability({
+            testDescription: 'should not have NOSQL_MONGODB_INJECTION vulnerability in too deep property',
+            fn: async (req, res) => {
+              const deep = 11
+              const obj = {}
+              let next = obj
+
+              for (let i = 0; i <= deep; i++) {
+                if (i === deep) {
+                  next.key = req.query.key
+                  break
+                }
+
+                next.key = {}
+                next = next.key
+              }
+
+              await collection.find(obj)
+              res.end()
+            },
+            vulnerability: 'NOSQL_MONGODB_INJECTION',
+            makeRequest: (done, config) => {
+              axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+            }
+          })
+
+          testThatRequestHasNoVulnerability({
             testDescription: 'should not have NOSQL_MONGODB_INJECTION vulnerability with path params',
             fn: function noop () {},
             vulnerability: 'NOSQL_MONGODB_INJECTION',
