@@ -111,9 +111,9 @@ describe('reporter', () => {
     })
 
     it('should call incrementWafInitMetric', () => {
-      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules)
+      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules, true)
 
-      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion)
+      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion, true)
     })
 
     it('should not fail with undefined arguments', () => {
@@ -121,12 +121,12 @@ describe('reporter', () => {
       const rulesVersion = undefined
       const diagnosticsRules = undefined
 
-      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules)
+      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules, true)
 
       expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.loaded')).to.be.eq(0)
       expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.error_count')).to.be.eq(0)
 
-      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion)
+      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion, true)
     })
   })
 
@@ -380,9 +380,9 @@ describe('reporter', () => {
 
   describe('reportWafUpdate', () => {
     it('should call incrementWafUpdatesMetric', () => {
-      Reporter.reportWafUpdate('0.0.1', '0.0.2')
+      Reporter.reportWafUpdate('0.0.1', '0.0.2', true)
 
-      expect(telemetry.incrementWafUpdatesMetric).to.have.been.calledOnceWithExactly('0.0.1', '0.0.2')
+      expect(telemetry.incrementWafUpdatesMetric).to.have.been.calledOnceWithExactly('0.0.1', '0.0.2', true)
     })
   })
 

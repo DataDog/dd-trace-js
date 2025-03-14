@@ -88,7 +88,7 @@ function formatHeaderName (name) {
     .toLowerCase()
 }
 
-function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
+function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}, success) {
   metricsQueue.set('_dd.appsec.waf.version', wafVersion)
 
   metricsQueue.set('_dd.appsec.event_rules.loaded', diagnosticsRules.loaded?.length || 0)
@@ -97,7 +97,7 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
     metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(diagnosticsRules.errors))
   }
 
-  incrementWafInitMetric(wafVersion, rulesVersion)
+  incrementWafInitMetric(wafVersion, rulesVersion, success)
 }
 
 function reportMetrics (metrics, raspRule) {
