@@ -107,10 +107,12 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
   }
 
   _isVulnerableRange (range, value) {
-    const rangeType = range?.iinfo?.type
     const rangeIsWholeValue = range.start === 0 && range.end === value?.length
-    const isVulnerableType = rangeType === HTTP_REQUEST_PARAMETER || rangeType === HTTP_REQUEST_BODY
-    return rangeIsWholeValue && isVulnerableType
+
+    if (!rangeIsWholeValue) return false
+
+    const rangeType = range?.iinfo?.type
+    return rangeType === HTTP_REQUEST_PARAMETER || rangeType === HTTP_REQUEST_BODY
   }
 
   _isVulnerable (value, iastContext) {
@@ -142,7 +144,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
           rangesByKey[nextLevelKeys.join('.')] = ranges
           allRanges.push(range)
         }
-      }, [], 4)
+      })
 
       if (isVulnerable) {
         value.rangesToApply = rangesByKey
