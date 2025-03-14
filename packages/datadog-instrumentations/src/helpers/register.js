@@ -6,7 +6,7 @@ const satisfies = require('semifies')
 const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
-const checkRequireCache = require('../check_require_cache')
+const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
 
