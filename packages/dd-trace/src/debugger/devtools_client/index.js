@@ -35,13 +35,13 @@ session.on('Debugger.paused', async ({ params }) => {
 
   let maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength
 
-  // V8 doesn't allow seting more than one breakpoint at a specific location, however, it's possible to set two
-  // breakpoints just next to eachother that will "snap" to the same logical location, which in turn will be hit at the
+  // V8 doesn't allow setting more than one breakpoint at a specific location, however, it's possible to set two
+  // breakpoints just next to each other that will "snap" to the same logical location, which in turn will be hit at the
   // same time. E.g. index.js:1:1 and index.js:1:2.
   // TODO: Investigate if it will improve performance to create a fast-path for when there's only a single breakpoint
   let sampled = false
   const length = params.hitBreakpoints.length
-  let probes = new Array(length)
+  const probes = []
   // TODO: Consider reusing this array between pauses and only recreating it if it needs to grow
   const snapshotProbeIndex = new Uint8Array(length) // TODO: Is a limit of 256 probes ever going to be a problem?
   let numberOfProbesWithSnapshots = 0
@@ -65,7 +65,7 @@ session.on('Debugger.paused', async ({ params }) => {
         snapshotsSampledWithinTheLastSecond++
       }
 
-      snapshotProbeIndex[numberOfProbesWithSnapshots++] = i
+      snapshotProbeIndex[numberOfProbesWithSnapshots++] = probes.length
       maxReferenceDepth = highestOrUndefined(probe.capture.maxReferenceDepth, maxReferenceDepth)
       maxCollectionSize = highestOrUndefined(probe.capture.maxCollectionSize, maxCollectionSize)
       maxFieldCount = highestOrUndefined(probe.capture.maxFieldCount, maxFieldCount)
@@ -75,7 +75,7 @@ session.on('Debugger.paused', async ({ params }) => {
     sampled = true
     probe.lastCaptureNs = start
 
-    probes[i] = probe
+    probes.push(probe)
   }
 
   if (sampled === false) {
@@ -107,9 +107,6 @@ session.on('Debugger.paused', async ({ params }) => {
     '[debugger:devtools_client] Finished processing breakpoints - main thread paused for: %d ms',
     Number(diff) / 1000000
   )
-
-  // Due to the highly optimized algorithm above, the `probes` array might have gaps
-  probes = probes.filter((probe) => !!probe)
 
   const logger = {
     // We can safely use `location.file` from the first probe in the array, since all probes hit by `hitBreakpoints`
