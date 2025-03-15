@@ -1694,7 +1694,7 @@ JSONPath.prototype._handleCallback = function (fullRetObj, callback, type) {
  * @param {string} parentPropName
  * @param {JSONPathCallback} callback
  * @param {boolean} hasArrExpr
- * @param {boolean} literalPriority
+ * @param {boolean} [literalPriority]
  * @returns {ReturnObject|ReturnObject[]}
  */
 JSONPath.prototype._trace = function (expr, val, path, parent, parentPropName, callback, hasArrExpr, literalPriority) {
