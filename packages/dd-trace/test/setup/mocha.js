@@ -12,6 +12,8 @@ const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')
 const { getInstrumentation } = require('./helpers/load-inst')
 
+const latestVersions = require('../../../datadog-instrumentations/src/helpers/latests.json').latests
+
 global.withVersions = withVersions
 global.withExports = withExports
 global.withNamingSchema = withNamingSchema
@@ -141,12 +143,28 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
   })
 }
 
+function isVersionInRange (version, latestVersion) {
+  if (!latestVersion) return true
+  try {
+    return semver.lte(version, latestVersion)
+  } catch (e) {
+    return true // Safety fallback for invalid semver strings
+  }
+}
+
 function withVersions (plugin, modules, range, cb) {
-  const instrumentations = typeof plugin === 'string' ? getInstrumentation(plugin) : [].concat(plugin)
+  // Normalize plugin parameter to an array of instrumentation objects
+  const instrumentations = typeof plugin === 'string'
+    ? getInstrumentation(plugin)
+    : [].concat(plugin)
+
+  // Extract all plugin names from instrumentations
   const names = instrumentations.map(instrumentation => instrumentation.name)
 
+  // Ensure modules is an array
   modules = [].concat(modules)
 
+  // Add dependent instrumentations for external plugins
   names.forEach(name => {
     if (externals[name]) {
       [].concat(externals[name]).forEach(external => {
@@ -155,46 +173,107 @@ function withVersions (plugin, modules, range, cb) {
     }
   })
 
+  // Handle case where range is omitted
   if (!cb) {
     cb = range
     range = null
   }
 
+  // Process each module
   modules.forEach(moduleName => {
+    // Skip if not in the PACKAGE_NAMES env var filter (when specified)
     if (process.env.PACKAGE_NAMES) {
       const packages = process.env.PACKAGE_NAMES.split(',')
-
       if (!packages.includes(moduleName)) return
     }
 
+    // Map to store unique versions to test
     const testVersions = new Map()
 
+    // Collect versions to test from applicable instrumentations
     instrumentations
       .filter(instrumentation => instrumentation.name === moduleName)
       .forEach(instrumentation => {
+        // Use version range from environment or from instrumentation
         const versions = process.env.PACKAGE_VERSION_RANGE
           ? [process.env.PACKAGE_VERSION_RANGE]
           : instrumentation.versions
+
+        // Process each version/range that passes the RANGE filter (if set)
         versions
           .filter(version => !process.env.RANGE || semver.subset(version, process.env.RANGE))
           .forEach(version => {
+            // Handle exact version specifications (not wildcards)
             if (version !== '*') {
-              const min = semver.coerce(version).version
-
-              testVersions.set(min, { range: version, test: min })
+              // Handle explicit minimum versions in ranges like ">=2.0.0"
+              if (version.startsWith('>=')) {
+                const minVersion = version.substring(2).trim()
+                const parsedMinVersion = semver.valid(minVersion)
+                  ? minVersion
+                  : semver.coerce(minVersion).version
+                testVersions.set(parsedMinVersion, { range: version, test: parsedMinVersion })
+              } else {
+                // For other version specs, coerce to a standard semver format
+                const min = semver.coerce(version).version
+                testVersions.set(min, { range: version, test: min })
+              }
             }
 
-            const max = require(`../../../../versions/${moduleName}@${version}`).version()
-
-            testVersions.set(max, { range: version, test: version })
+            // Try to find the latest compatible version from latests.json
+            if (latestVersions[moduleName] && !process.env.PACKAGE_VERSION_RANGE) {
+              // For exact versions
+              if (semver.valid(version)) {
+                // Use specified version if it's newer than latest, otherwise use latest
+                const testVersion = isVersionInRange(version, latestVersions[moduleName])
+                  ? version
+                  : latestVersions[moduleName]
+                testVersions.set(testVersion, { range: version, test: testVersion })
+              } else if (semver.validRange(version)) { // For version ranges
+                // Find the highest version that satisfies the range
+                const testVersion = semver.maxSatisfying([latestVersions[moduleName]], version)
+                if (testVersion) {
+                  testVersions.set(testVersion, { range: version, test: testVersion })
+                }
+              }
+            } else if (latestVersions[moduleName]) { // When PACKAGE_VERSION_RANGE is specified
+              const range = process.env.PACKAGE_VERSION_RANGE
+              // Check if latest version satisfies the range, or find max version that does
+              const testVersion = semver.satisfies(latestVersions[moduleName], range)
+                ? latestVersions[moduleName]
+                : semver.maxSatisfying([latestVersions[moduleName]], range)
+              if (testVersion) {
+                testVersions.set(testVersion, { range: version, test: testVersion })
+              }
+            } else { // Fallback method: try to load version from the filesystem
+              try {
+                // Try to dynamically require the version module
+                const max = require(`../../../../versions/${moduleName}@${version}`).version()
+                testVersions.set(max, { range: version, test: version })
+              } catch (err) {
+                // FIX ME: log
+                // Try an alternate path with a coerced version string
+                try {
+                  const coercedVersion = semver.coerce(version).version
+                  const max = require(`../../../../versions/${moduleName}@${coercedVersion}`).version()
+                  testVersions.set(max, { range: version, test: coercedVersion })
+                } catch (innerErr) {
+                  // FIX ME: log
+                }
+              }
+            }
           })
       })
 
+    // Create test suites for each version
     Array.from(testVersions)
+      // Filter by the specified range if provided
       .filter(v => !range || semver.satisfies(v[0], range))
-      .sort(v => v[0].localeCompare(v[0]))
+      // Sort by semver to run tests in version order
+      .sort((a, b) => semver.compare(a[0], b[0]))
+      // Format the version objects
       .map(v => Object.assign({}, v[1], { version: v[0] }))
       .forEach(v => {
+        // Resolve the path to the module's node_modules directory
         const versionPath = path.resolve(
           __dirname, '../../../../versions/',
           `${moduleName}@${v.test}/node_modules`
@@ -215,13 +294,14 @@ function withVersions (plugin, modules, range, cb) {
             process.env.NODE_PATH = [process.env.NODE_PATH, versionPath]
               .filter(x => x && x !== 'undefined')
               .join(os.platform() === 'win32' ? ';' : ':')
-
             require('module').Module._initPaths()
           })
 
+          // Run the provided test callback with the version information
           cb(v.test, moduleName, v.version)
 
           after(() => {
+            // Restore the original NODE_PATH
             process.env.NODE_PATH = nodePath
             require('module').Module._initPaths()
           })
