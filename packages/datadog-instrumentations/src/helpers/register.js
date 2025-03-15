@@ -158,7 +158,7 @@ for (const packageName of names) {
 }
 
 function matchVersion (version, ranges) {
-  return !version || (ranges && ranges.some(range => satisfies(version, range)))
+  return !version || !ranges || ranges.some(range => satisfies(version, range))
 }
 
 function getVersion (moduleBaseDir) {
