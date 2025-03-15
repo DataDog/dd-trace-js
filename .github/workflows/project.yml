@@ -20,7 +20,7 @@ jobs:
       # setting fail-fast to false in an attempt to prevent this from happening
       fail-fast: false
       matrix:
-        version: [18, 20, 22, latest]
+        version: [vars.OLDEST_MAINTENANCE_LTS, vars.NEWEST_MAINTENANCE_LTS, vars.ACTIVE_LTS, latest]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -64,7 +64,7 @@ jobs:
   integration-ci:
     strategy:
       matrix:
-        version: [18, latest]
+        version: [vars.OLDEST_MAINTENANCE_LTS, latest]
         framework: [cucumber, playwright, selenium, jest, mocha]
     runs-on: ubuntu-latest
     env:
