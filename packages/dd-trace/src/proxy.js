@@ -10,6 +10,15 @@ const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
+const { storage } = require('../../datadog-core')
+
+log.addMiddleware((fn) => {
+  const store = storage('legacy').getStore()
+
+  storage('legacy').enterWith({ noop: true })
+  fn()
+  storage('legacy').enterWith(store)
+})
 
 class LazyModule {
   constructor (provider) {
