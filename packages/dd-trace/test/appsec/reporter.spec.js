@@ -38,6 +38,7 @@ describe('reporter', () => {
       updateRaspRequestsMetricTags: sinon.stub(),
       incrementWafUpdatesMetric: sinon.stub(),
       incrementWafRequestsMetric: sinon.stub(),
+      updateWafRateLimitedMetric: sinon.stub(),
       getRequestMetrics: sinon.stub()
     }
 
@@ -287,6 +288,7 @@ describe('reporter', () => {
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}'
       })
       expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
+      expect(telemetry.updateWafRateLimitedMetric).to.be.calledOnceWithExactly(req)
     })
 
     it('should add tags to request span', () => {
@@ -301,30 +303,35 @@ describe('reporter', () => {
         'network.client.ip': '8.8.8.8'
       })
       expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
+      expect(telemetry.updateWafRateLimitedMetric).to.be.calledOnceWithExactly(req)
     })
 
     it('should not add manual.keep when rate limit is reached', (done) => {
       const addTags = span.addTags
-      const params = {}
 
-      expect(Reporter.reportAttack('', params)).to.not.be.false
-      expect(Reporter.reportAttack('', params)).to.not.be.false
-      expect(Reporter.reportAttack('', params)).to.not.be.false
+      expect(Reporter.reportAttack('')).to.not.be.false
+      expect(Reporter.reportAttack('')).to.not.be.false
+      expect(Reporter.reportAttack('')).to.not.be.false
 
       expect(prioritySampler.setPriority).to.have.callCount(3)
+      expect(telemetry.updateWafRateLimitedMetric).to.be.callCount(3)
 
       Reporter.setRateLimit(1)
 
-      expect(Reporter.reportAttack('', params)).to.not.be.false
+      expect(Reporter.reportAttack('')).to.not.be.false
       expect(addTags.getCall(3).firstArg).to.have.property('appsec.event').that.equals('true')
       expect(prioritySampler.setPriority).to.have.callCount(4)
-      expect(Reporter.reportAttack('', params)).to.not.be.false
+      expect(telemetry.updateWafRateLimitedMetric).to.be.callCount(4)
+
+      expect(Reporter.reportAttack('')).to.not.be.false
       expect(addTags.getCall(4).firstArg).to.have.property('appsec.event').that.equals('true')
       expect(prioritySampler.setPriority).to.have.callCount(4)
+      expect(telemetry.updateWafRateLimitedMetric).to.be.callCount(4)
 
       setTimeout(() => {
-        expect(Reporter.reportAttack('', params)).to.not.be.false
+        expect(Reporter.reportAttack('')).to.not.be.false
         expect(prioritySampler.setPriority).to.have.callCount(5)
+        expect(telemetry.updateWafRateLimitedMetric).to.be.callCount(5)
         done()
       }, 1020)
     })
@@ -332,7 +339,7 @@ describe('reporter', () => {
     it('should not overwrite origin tag', () => {
       span.context()._tags = { '_dd.origin': 'tracer' }
 
-      const result = Reporter.reportAttack('[]', {})
+      const result = Reporter.reportAttack('[]')
       expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
 
@@ -342,6 +349,7 @@ describe('reporter', () => {
         'network.client.ip': '8.8.8.8'
       })
       expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
+      expect(telemetry.updateWafRateLimitedMetric).to.be.calledOnceWithExactly(req)
     })
 
     it('should merge attacks json', () => {
@@ -358,9 +366,10 @@ describe('reporter', () => {
         'network.client.ip': '8.8.8.8'
       })
       expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
+      expect(telemetry.updateWafRateLimitedMetric).to.be.calledOnceWithExactly(req)
     })
 
-    it('should call standalone sample', () => {
+    it('should call standalone sample and updateWafRateLimitedMetric', () => {
       span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
 
       const result = Reporter.reportAttack('[{"rule":{}},{"rule":{},"rule_matches":[{}]}]')
@@ -375,6 +384,7 @@ describe('reporter', () => {
       })
 
       expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
+      expect(telemetry.updateWafRateLimitedMetric).to.be.calledOnceWithExactly(req)
     })
   })
 
@@ -747,7 +757,7 @@ describe('reporter', () => {
       expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.error', -1)
     })
 
-    it('should keep span if there are metrics', () => {
+    it('should keep span and call updateWafRateLimitedMetric if there are metrics', () => {
       const req = {}
 
       Reporter.metricsQueue.set('a', 1)
@@ -756,6 +766,7 @@ describe('reporter', () => {
       Reporter.finishRequest(req, wafContext, {})
 
       expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
+      expect(telemetry.updateWafRateLimitedMetric).to.be.calledOnceWithExactly(req)
     })
   })
 })
