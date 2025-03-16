@@ -1,7 +1,7 @@
 'use strict'
 
 const METHODS = require('http').METHODS.map(v => v.toLowerCase()).concat('all')
-const pathToRegExp = require('path-to-regexp')
+const { pathToRegExp } = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 
