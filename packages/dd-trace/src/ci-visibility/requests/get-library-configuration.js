@@ -12,6 +12,7 @@ const {
 
 const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES = 2
 const DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD = 30
+const DEFAULT_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES = 20
 
 function getLibraryConfiguration ({
   url,
@@ -113,7 +114,9 @@ function getLibraryConfiguration ({
           isFlakyTestRetriesEnabled,
           isDiEnabled: isDiEnabled && isFlakyTestRetriesEnabled,
           isKnownTestsEnabled,
-          isTestManagementEnabled: (testManagementConfig?.enabled ?? false)
+          isTestManagementEnabled: (testManagementConfig?.enabled ?? false),
+          testManagementAttemptToFixRetries:
+            testManagementConfig?.attempt_to_fix_retries ?? DEFAULT_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES
         }
 
         log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)
