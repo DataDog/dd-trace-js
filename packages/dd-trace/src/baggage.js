@@ -1,6 +1,6 @@
 'use strict'
 
-const { storage } = require('../../../datadog-core')
+const { storage } = require('../../datadog-core')
 const baggageStorage = storage('baggage')
 
 function setBaggageItem (key, value) {
@@ -17,11 +17,7 @@ function getAllBaggageItems () {
 }
 
 function removeBaggageItem (keyToRemove) {
-  const newBaggage = {}
-  const oldBaggage = storage('baggage').getStore()
-  for (const [key, value] of Object.entries(oldBaggage)) {
-    if (key !== keyToRemove) newBaggage.key = value
-  }
+  const { [keyToRemove]: _, ...newBaggage } = storage('baggage').getStore()
   storage('baggage').enterWith(newBaggage)
   return newBaggage
 }
