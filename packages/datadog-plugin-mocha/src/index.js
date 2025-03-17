@@ -33,7 +33,8 @@ const {
   TEST_BROWSER_DRIVER,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
-  TEST_MANAGEMENT_IS_QUARANTINED
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_IS_DISABLED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -311,7 +312,7 @@ class MochaPlugin extends CiPlugin {
       error,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
-      isQuarantinedTestsEnabled,
+      isTestManagementEnabled,
       isParallel
     }) => {
       if (this.testSessionSpan) {
@@ -328,7 +329,7 @@ class MochaPlugin extends CiPlugin {
           this.testSessionSpan.setTag(MOCHA_IS_PARALLEL, 'true')
         }
 
-        if (isQuarantinedTestsEnabled) {
+        if (isTestManagementEnabled) {
           this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
         }
 
@@ -359,7 +360,10 @@ class MochaPlugin extends CiPlugin {
         this.testSessionSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
         finishAllTraceSpans(this.testSessionSpan)
-        this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
+        this.telemetry.count(TELEMETRY_TEST_SESSION, {
+          provider: this.ciProviderName,
+          autoInjected: !!process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER
+        })
       }
       this.libraryConfig = null
       this.tracer._exporter.flush()
@@ -405,6 +409,7 @@ class MochaPlugin extends CiPlugin {
       isEfdRetry,
       testStartLine,
       isParallel,
+      isDisabled,
       isQuarantined
     } = testInfo
 
@@ -422,6 +427,10 @@ class MochaPlugin extends CiPlugin {
 
     if (isParallel) {
       extraTags[MOCHA_IS_PARALLEL] = 'true'
+    }
+
+    if (isDisabled) {
+      extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
     }
 
     if (isQuarantined) {

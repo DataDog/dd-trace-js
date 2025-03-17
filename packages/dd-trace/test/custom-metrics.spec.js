@@ -53,7 +53,7 @@ describe('Custom Metrics', () => {
       if (stdout) console.log(stdout)
       if (stderr) console.error(stderr)
 
-      expect(metricsData.split('#')[0]).to.equal('page.views.data:1|c|')
+      expect(metricsData.split('#')[0]).to.equal('page.views.data:1|g|')
 
       done()
     })

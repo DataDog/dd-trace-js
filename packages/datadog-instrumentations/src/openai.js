@@ -391,5 +391,5 @@ function finish (ctx, response, error) {
 }
 
 function getOption (args, option, defaultValue) {
-  return args[args.length - 1]?.[option] || defaultValue
+  return args[0]?.[option] || defaultValue
 }

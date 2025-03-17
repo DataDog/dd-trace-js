@@ -52,9 +52,7 @@ function blockRequest (tracer, req, res) {
     return false
   }
 
-  block(req, res, rootSpan)
-
-  return true
+  return block(req, res, rootSpan)
 }
 
 module.exports = {

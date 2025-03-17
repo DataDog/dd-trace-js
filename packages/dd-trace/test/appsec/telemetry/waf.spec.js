@@ -159,6 +159,22 @@ describe('Appsec Waf Telemetry metrics', () => {
         expect(duration).to.be.eq(66)
         expect(durationExt).to.be.eq(77)
       })
+
+      it('should increment wafTimeouts if wafTimeout is true', () => {
+        appsecTelemetry.updateWafRequestsMetricTags({ wafTimeout: true }, req)
+        appsecTelemetry.updateWafRequestsMetricTags({ wafTimeout: true }, req)
+
+        const { wafTimeouts } = appsecTelemetry.getRequestMetrics(req)
+        expect(wafTimeouts).to.equal(2)
+      })
+
+      it('should keep the maximum wafErrorCode', () => {
+        appsecTelemetry.updateWafRequestsMetricTags({ errorCode: -1 }, req)
+        appsecTelemetry.updateWafRequestsMetricTags({ errorCode: -3 }, req)
+
+        const { wafErrorCode } = appsecTelemetry.getRequestMetrics(req)
+        expect(wafErrorCode).to.equal(-1)
+      })
     })
 
     describe('incWafInitMetric', () => {

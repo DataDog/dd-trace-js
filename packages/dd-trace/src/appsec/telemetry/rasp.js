@@ -5,10 +5,25 @@ const { DD_TELEMETRY_REQUEST_METRICS } = require('./common')
 
 const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
-function addRaspRequestMetrics (store, { duration, durationExt }) {
+function addRaspRequestMetrics (store, { duration, durationExt, wafTimeout, errorCode }) {
   store[DD_TELEMETRY_REQUEST_METRICS].raspDuration += duration || 0
   store[DD_TELEMETRY_REQUEST_METRICS].raspDurationExt += durationExt || 0
   store[DD_TELEMETRY_REQUEST_METRICS].raspEvalCount++
+
+  if (wafTimeout) {
+    store[DD_TELEMETRY_REQUEST_METRICS].raspTimeouts++
+  }
+
+  if (errorCode) {
+    if (store[DD_TELEMETRY_REQUEST_METRICS].raspErrorCode) {
+      store[DD_TELEMETRY_REQUEST_METRICS].raspErrorCode = Math.max(
+        errorCode,
+        store[DD_TELEMETRY_REQUEST_METRICS].raspErrorCode
+      )
+    } else {
+      store[DD_TELEMETRY_REQUEST_METRICS].raspErrorCode = errorCode
+    }
+  }
 }
 
 function trackRaspMetrics (metrics, raspRule) {
