@@ -12,6 +12,7 @@ function createWrapRouterMethod (name) {
   const finishChannel = channel(`apm:${name}:middleware:finish`)
   const errorChannel = channel(`apm:${name}:middleware:error`)
   const nextChannel = channel(`apm:${name}:middleware:next`)
+  const routeAddedChannel = channel(`apm:${name}:route:added`)
 
   const layerMatchers = new WeakMap()
   const regexpCache = Object.create(null)
@@ -45,7 +46,7 @@ function createWrapRouterMethod (name) {
         }
       }
 
-      enterChannel.publish({ name, req, route })
+      enterChannel.publish({ name, req, route, layer })
 
       try {
         return original.apply(this, arguments)
@@ -151,6 +152,10 @@ function createWrapRouterMethod (name) {
 
       if (typeof this.stack === 'function') {
         this.stack = [{ handle: this.stack }]
+      }
+
+      if (routeAddedChannel.hasSubscribers) {
+        routeAddedChannel.publish({ topOfStackFunc: methodWithTrace, layer: this.stack[0] })
       }
 
       wrapStack(this.stack, offset, extractMatchers(fn))
