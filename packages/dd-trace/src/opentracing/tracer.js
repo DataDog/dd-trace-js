@@ -124,7 +124,7 @@ class DatadogTracer {
     // span is service level. Additionally, the feature aims to only impact auto instrumentation
     // spans, so we check for the presence of `component` tag since this tag is set by all instrumentations.
     // This allows us to not impact customer manual tracing spans.
-    if (COMPONENT in options.tags && !(SPAN_KIND in options.tags)) {
+    if (options?.tags && COMPONENT in options.tags && !(SPAN_KIND in options.tags)) {
       return new NoopSpan(this, parent, { useParentContext: true })
     }
   }
