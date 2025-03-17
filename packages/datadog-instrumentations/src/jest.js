@@ -626,13 +626,15 @@ function cliWrapper (cli, jestVersion) {
     const result = await runCLI.apply(this, arguments)
 
     const {
+      globalConfig: { rootDir },
       results: {
         success,
         coverageMap,
         numFailedTestSuites,
         numFailedTests,
         numTotalTests,
-        numTotalTestSuites
+        numTotalTestSuites,
+        testResults
       }
     } = result
 
@@ -646,6 +648,20 @@ function cliWrapper (cli, jestVersion) {
         // ignore errors
       }
     }
+
+    let errorMessage = ''
+
+    for (const testResult of testResults) {
+      const { failureMessage, testFilePath, numFailingTests, testExecError } = testResult
+      const status = numFailingTests > 0 || testExecError ? 'FAIL' : 'PASS'
+      const testPath = getTestSuitePath(testFilePath, rootDir)
+
+      if (failureMessage) {
+        errorMessage += `${status} ${testPath}\n${failureMessage}\n`
+      }
+    }
+
+    // console.log('errorMessage', errorMessage)
     let status, error
 
     if (success) {
@@ -656,7 +672,10 @@ function cliWrapper (cli, jestVersion) {
       }
     } else {
       status = 'fail'
-      error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
+      error = new Error(
+        `Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}: \n${errorMessage}`
+      )
+      error.stack = null // stack trace is useless in this case, as we're showing multiple errors
     }
     let timeoutId
 
