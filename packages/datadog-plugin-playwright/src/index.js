@@ -227,6 +227,7 @@ class PlaywrightPlugin extends CiPlugin {
       span.finish()
 
       finishAllTraceSpans(span)
+      this.tracer._exporter.flush()
     })
   }
 

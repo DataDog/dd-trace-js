@@ -276,17 +276,17 @@ function testBeginHandler (test, browserName) {
     })
   }
 
-  const testAsyncResource = new AsyncResource('bound-anonymous-fn')
-  testToAr.set(test, testAsyncResource)
-  testAsyncResource.runInAsyncScope(() => {
-    testStartCh.publish({
-      testName,
-      testSuiteAbsolutePath,
-      testSourceLine,
-      browserName,
-      isDisabled: test._ddIsDisabled
-    })
-  })
+  // const testAsyncResource = new AsyncResource('bound-anonymous-fn')
+  // testToAr.set(test, testAsyncResource)
+  // testAsyncResource.runInAsyncScope(() => {
+  //   testStartCh.publish({
+  //     testName,
+  //     testSuiteAbsolutePath,
+  //     testSourceLine,
+  //     browserName,
+  //     isDisabled: test._ddIsDisabled
+  //   })
+  // })
 }
 
 function testEndHandler (test, annotations, testStatus, error, isTimeout) {
@@ -305,20 +305,20 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
     return
   }
 
-  const testResult = results[results.length - 1]
-  const testAsyncResource = testToAr.get(test)
-  testAsyncResource.runInAsyncScope(() => {
-    testFinishCh.publish({
-      testStatus,
-      steps: testResult?.steps || [],
-      isRetry: testResult?.retry > 0,
-      error,
-      extraTags: annotationTags,
-      isNew: test._ddIsNew,
-      isQuarantined: test._ddIsQuarantined,
-      isEfdRetry: test._ddIsEfdRetry
-    })
-  })
+  // const testResult = results[results.length - 1]
+  // const testAsyncResource = testToAr.get(test)
+  // testAsyncResource.runInAsyncScope(() => {
+  //   testFinishCh.publish({
+  //     testStatus,
+  //     steps: testResult?.steps || [],
+  //     isRetry: testResult?.retry > 0,
+  //     error,
+  //     extraTags: annotationTags,
+  //     isNew: test._ddIsNew,
+  //     isQuarantined: test._ddIsQuarantined,
+  //     isEfdRetry: test._ddIsEfdRetry
+  //   })
+  // })
 
   if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
     testSuiteToTestStatuses.get(testSuiteAbsolutePath).push(testStatus)
@@ -641,6 +641,40 @@ addHook({
   return loadUtilsPackage
 })
 
+addHook({
+  name: 'playwright',
+  file: 'lib/runner/processHost.js',
+  versions: ['>=1.38.0']
+}, (processHostPackage) => {
+  shimmer.wrap(processHostPackage.ProcessHost.prototype, 'startRunner', startRunner => async function () {
+    this._extraEnv = {
+      ...this._extraEnv,
+      DD_PLAYWRIGHT_WORKER: '1'
+    }
+
+    // hijack this.process.on('message')
+    //  maybe we don't need that, simply use a different `message.method` in processHost
+    // const oldOnMessage = this.process.on('message')
+    // this.process.on('message', (message) => {
+    //   console.log('processHostPackage.startRunner!! message', message)
+    //   oldOnMessage(message)
+    // })
+
+    const res = await startRunner.apply(this, arguments)
+
+    // // we're not flushing so it might not work
+    // this.process.on('message', (message) => {
+    //   if (Array.isArray(message) && message[0] === 90) {
+    //     console.log('MESSAGE FROM WORKER!!!!')
+    //   }
+    // })
+
+    return res
+  })
+
+  return processHostPackage
+})
+
 // Only in worker
 addHook({
   name: 'playwright',
@@ -662,16 +696,48 @@ addHook({
     // it's probably hard to tell that's a playwright worker though, as I don't think there is a specific env variable
     const testAsyncResource = new AsyncResource('bound-anonymous-fn')
     testAsyncResource.runInAsyncScope(() => {
-      // TODO: clear browserName
-      testStartCh.publish({ testName, testSuiteAbsolutePath, testSourceLine, browserName: 'chromium' })
+      testStartCh.publish({
+        testName,
+        testSuiteAbsolutePath,
+        testSourceLine,
+        browserName: 'chromium' // TODO: get browser name from projects
+      })
+
       res = _runTest.apply(this, arguments)
+
+      console.log('res _runTest', res)
+      // call test end here??
     })
+    await res
+
+    console.log('waited res')
+
+    console.log('waiting flush')
+
+    testAsyncResource.runInAsyncScope(() => {
+      testFinishCh.publish({
+        testStatus: 'pass',
+        steps: [],
+        error: null,
+        extraTags: {},
+        isNew: false,
+        isEfdRetry: false,
+        isRetry: false,
+        isQuarantined: false
+        // onDone
+      })
+    })
+
+    // await flushPromise
+
+    console.log('flushed')
+
     return res
   })
 
-  shimmer.wrap(workerPackage.WorkerMain.prototype, 'dispatchEvent', dispatchEvent => function (event) {
-    // Do I augment the testBegin event to include the test span id? Or do I create the test events in the worker process?
-    return dispatchEvent.apply(this, arguments)
-  })
+  // shimmer.wrap(workerPackage.WorkerMain.prototype, 'dispatchEvent', dispatchEvent => function (event) {
+  //   // Do I augment the testBegin event to include the test span id? Or do I create the test events in the worker process?
+  //   return dispatchEvent.apply(this, arguments)
+  // })
   return workerPackage
 })
