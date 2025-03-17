@@ -662,7 +662,7 @@ describe('AppSec Index', function () {
       sinon.stub(waf, 'run')
 
       rootSpan = {
-        addTags: sinon.stub(),
+        setTag: sinon.stub(),
         _tags: {},
         context: () => ({ _tags: rootSpan._tags })
       }

@@ -103,15 +103,33 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
 function reportMetrics (metrics, raspRule) {
   const store = storage('legacy').getStore()
   const rootSpan = store?.req && web.root(store.req)
+
   if (!rootSpan) return
 
   if (metrics.rulesVersion) {
     rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
   }
+
   if (raspRule) {
     updateRaspRequestsMetricTags(metrics, store.req, raspRule)
   } else {
     updateWafRequestsMetricTags(metrics, store.req)
+  }
+
+  reportTruncationMetrics(rootSpan, metrics)
+}
+
+function reportTruncationMetrics (rootSpan, metrics) {
+  if (metrics.maxTruncatedString) {
+    rootSpan.setTag('_dd.appsec.truncated.string_length', metrics.maxTruncatedString)
+  }
+
+  if (metrics.maxTruncatedContainerSize) {
+    rootSpan.setTag('_dd.appsec.truncated.container_size', metrics.maxTruncatedContainerSize)
+  }
+
+  if (metrics.maxTruncatedContainerDepth) {
+    rootSpan.setTag('_dd.appsec.truncated.container_depth', metrics.maxTruncatedContainerDepth)
   }
 }
 
@@ -189,6 +207,7 @@ function finishRequest (req, res) {
   }
 
   const metrics = getRequestMetrics(req)
+
   if (metrics?.duration) {
     rootSpan.setTag('_dd.appsec.waf.duration', metrics.duration)
   }
@@ -197,12 +216,28 @@ function finishRequest (req, res) {
     rootSpan.setTag('_dd.appsec.waf.duration_ext', metrics.durationExt)
   }
 
+  if (metrics?.wafErrorCode) {
+    rootSpan.setTag('_dd.appsec.waf.error', metrics.wafErrorCode)
+  }
+
+  if (metrics?.wafTimeouts) {
+    rootSpan.setTag('_dd.appsec.waf.timeouts', metrics.wafTimeouts)
+  }
+
   if (metrics?.raspDuration) {
     rootSpan.setTag('_dd.appsec.rasp.duration', metrics.raspDuration)
   }
 
   if (metrics?.raspDurationExt) {
     rootSpan.setTag('_dd.appsec.rasp.duration_ext', metrics.raspDurationExt)
+  }
+
+  if (metrics?.raspErrorCode) {
+    rootSpan.setTag('_dd.appsec.rasp.error', metrics.raspErrorCode)
+  }
+
+  if (metrics?.raspTimeouts) {
+    rootSpan.setTag('_dd.appsec.rasp.timeout', metrics.raspTimeouts)
   }
 
   if (metrics?.raspEvalCount) {

@@ -42,7 +42,7 @@ describe('user_blocking', () => {
       }
       getRootSpan = sinon.stub().returns(rootSpan)
 
-      block = sinon.stub()
+      block = sinon.stub().returns(true)
 
       legacyStorage = {
         getStore: sinon.stub().returns({ req, res })
@@ -286,11 +286,12 @@ describe('user_blocking', () => {
         controller = (req, res) => {
           res.end()
           const ret = tracer.appsec.blockRequest()
-          expect(ret).to.be.true
+          expect(ret).to.be.false
         }
         agent.use(traces => {
           expect(traces[0][0].meta).to.not.have.property('appsec.blocked', 'true')
           expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+          expect(traces[0][0].metrics).to.have.property('_dd.appsec.block.failed', 1)
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
