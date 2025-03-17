@@ -8,11 +8,11 @@ const coalesce = require('koalas')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 
-function formatSpan (span, encoder) {
+function formatSpan (span, config) {
   span = normalizeSpan(truncateSpan(span, false))
-  // ensure span events are encoded as tags if agent doesn't support top level encoding
   if (span.span_events) {
-    if (!encoder.topLevelSpanEventSupport) {
+    // ensure span events are encoded as tags if agent doesn't support native top level span events
+    if (!config?.trace?.nativeSpanEvents) {
       span.meta.events = JSON.stringify(span.span_events)
       delete span.span_events
     } else {
@@ -34,8 +34,7 @@ class AgentEncoder {
       process.env.DD_TRACE_ENCODING_DEBUG,
       false
     ))
-
-    this.topLevelSpanEventSupport = this._writer?._config?.trace?.nativeSpanEvents === true
+    this._config = this._writer?._config
   }
 
   count () {
@@ -86,7 +85,7 @@ class AgentEncoder {
     this._encodeArrayPrefix(bytes, trace)
 
     for (let span of trace) {
-      span = formatSpan(span, this)
+      span = formatSpan(span, this._config)
       bytes.reserve(1)
 
       // this is the original size of the fixed map for span attributes that always exist
