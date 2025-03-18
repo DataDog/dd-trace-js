@@ -5,6 +5,7 @@ const { Chunk, MsgpackEncoder } = require('../msgpack')
 const log = require('../log')
 const { isTrue } = require('../util')
 const coalesce = require('koalas')
+const { memoize } = require('../log/utils')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 
@@ -339,13 +340,22 @@ class AgentEncoder {
   }
 }
 
+const memoizedLogDebug = memoize((key, message) => {
+  log.debug(message)
+  // return something to store in memoize cache
+  return true
+})
+
 function formatSpanEvents (span) {
   for (const spanEvent of span.span_events) {
     if (spanEvent.attributes) {
       for (const [key, value] of Object.entries(spanEvent.attributes)) {
         const newValue = convertSpanEventAttributeValues(key, value)
-        if (newValue !== undefined) spanEvent.attributes[key] = newValue
-        else delete spanEvent.attributes[key] // delete from attributes if undefined
+        if (newValue !== undefined) {
+          spanEvent.attributes[key] = newValue
+        } else {
+          delete spanEvent.attributes[key] // delete from attributes if undefined
+        }
       }
       if (Object.entries(spanEvent.attributes).length === 0) {
         delete spanEvent.attributes
@@ -388,20 +398,18 @@ function convertSpanEventAttributeValues (key, value, depth = 0) {
           array_value: convertedArray
         }
       } else {
-      // If all elements were unsupported, return undefined
+        // If all elements were unsupported, return undefined
         return undefined
       }
     } else {
-      log.warn(
-        `Encountered nested array data type for span event v0.4 encoding. 
-        Skipping encoding key: ${key}: with value: ${typeof value}.`
+      memoizedLogDebug(key, 'Encountered nested array data type for span event v0.4 encoding. ' +
+        `Skipping encoding key: ${key}: with value: ${typeof value}.`
       )
       return undefined
     }
   } else {
-    log.warn(
-      `Encountered unsupported data type for span event v0.4 encoding, key: ${key}: with value: ${typeof value}. 
-      Skipping encoding of pair.`
+    memoizedLogDebug(key, 'Encountered unsupported data type for span event v0.4 encoding, key: ' +
+       `${key}: with value: ${typeof value}. Skipping encoding of pair.`
     )
     return undefined
   }

@@ -5,6 +5,8 @@ require('../setup/tap')
 const { expect } = require('chai')
 const msgpack = require('@msgpack/msgpack')
 const id = require('../../src/id')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 function randString (length) {
   return Array.from({ length }, () => {
@@ -23,7 +25,7 @@ describe('encode', () => {
       logger = {
         debug: sinon.stub()
       }
-      const { AgentEncoder } = proxyquire('../src/encode/0.4', {
+      const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
         '../log': logger
       })
       writer = { flush: sinon.spy() }
@@ -474,8 +476,15 @@ describe('encode', () => {
   })
 
   describe('with configuration', () => {
+    let logger
+
     beforeEach(() => {
-      const { AgentEncoder } = proxyquire('../src/encode/0.4', {
+      // Create a sinon spy for log.debug
+      logger = {
+        debug: sinon.spy()
+      }
+
+      const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
         '../log': logger
       })
       writer = { flush: sinon.spy(), _config: { trace: { nativeSpanEvents: true } } }
@@ -564,6 +573,72 @@ describe('encode', () => {
       ]
 
       expect(trace[0].span_events).to.deep.equal(formattedTopLevelEvent)
+    })
+
+    it('should call log.debug only once for the same unsupported key', () => {
+      const topLevelEvents = [
+        {
+          name: 'Event 1',
+          time_unix_nano: 1000000,
+          attributes: { unsupported_key: { some: 'object' }, other_key: 'valid' }
+        },
+        {
+          name: 'Event 2',
+          time_unix_nano: 2000000,
+          attributes: { unsupported_key: { another: 'object' } }
+        },
+        {
+          name: 'Event 3',
+          time_unix_nano: 3000000,
+          attributes: { unsupported_key: { yet: 'another object' } }
+        },
+        {
+          name: 'Event 4',
+          time_unix_nano: 4000000,
+          attributes: { unsupported_key: { different: 'structure' } }
+        }
+      ]
+
+      data[0].span_events = topLevelEvents
+
+      encoder.encode(data)
+
+      // Assert that log.debug was called only once for 'unsupported_key'
+      sinon.assert.calledOnce(logger.debug)
+      sinon.assert.calledWith(
+        logger.debug,
+        sinon.match(/Encountered unsupported data type for span event v0\.4 encoding, key: unsupported_key/)
+      )
+    })
+
+    it('should call log.debug once per unique unsupported key', () => {
+      const topLevelEvents = [
+        {
+          name: 'Event 1',
+          time_unix_nano: 1000000,
+          attributes: { unsupported_key1: { some: 'object' }, unsupported_key2: { another: 'object' } }
+        },
+        {
+          name: 'Event 2',
+          time_unix_nano: 2000000,
+          attributes: { unsupported_key1: { different: 'structure' }, unsupported_key3: { more: 'objects' } }
+        },
+        {
+          name: 'Event 3',
+          time_unix_nano: 3000000,
+          attributes: { unsupported_key2: { yet: 'another object' }, unsupported_key3: { extra: 'data' } }
+        }
+      ]
+
+      data[0].span_events = topLevelEvents
+
+      encoder.encode(data)
+
+      // Assert that log.debug was called once for each unique unsupported key
+      expect(logger.debug.callCount).to.equal(3)
+      expect(logger.debug.getCall(0).args[0]).to.match(/unsupported_key1/)
+      expect(logger.debug.getCall(1).args[0]).to.match(/unsupported_key2/)
+      expect(logger.debug.getCall(2).args[0]).to.match(/unsupported_key3/)
     })
   })
 })
