@@ -60,10 +60,10 @@ class DatadogTracer {
       'service.name': options?.tags?.service ? String(options.tags.service) : this._service
     }
 
-    if (this._config.experimental.traceLevel !== 'debug') {
-      const traceLevelSpan = this._useTraceLevel(parent, options)
-      if (traceLevelSpan) {
-        return traceLevelSpan
+    if (this._config.experimental.removeInternalSpans === true) {
+      const internalNoopSpan = this._getInternalNoopSpan(parent, options)
+      if (internalNoopSpan) {
+        return internalNoopSpan
       }
     }
 
@@ -116,9 +116,9 @@ class DatadogTracer {
     }
   }
 
-  _useTraceLevel (parent, options) {
-    // This function is used to power the experimental Trace Levels functionality.
-    // Trace levels aims to eliminate any spans that are not considered 'service' level,
+  _getInternalNoopSpan (parent, options) {
+    // This function is used to power the experimental option to remove span.kind 'internal' spans.
+    // This feature aims to eliminate any spans that are not considered 'service' level,
     // where any operation representing entry and/or exit from the traced application
     // is considered a service level span. The presence of `span.kind` is being used to determine if a
     // span is service level. Additionally, the feature aims to only impact auto instrumentation

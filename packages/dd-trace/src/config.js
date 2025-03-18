@@ -541,7 +541,7 @@ class Config {
     this._setValue(defaults, 'logInjection', false)
     this._setValue(defaults, 'lookup', undefined)
     this._setValue(defaults, 'inferredProxyServicesEnabled', false)
-    this._setValue(defaults, 'experimental.traceLevel', 'debug')
+    this._setValue(defaults, 'experimental.removeInternalSpans', false)
     this._setValue(defaults, 'memcachedCommandEnabled', false)
     this._setValue(defaults, 'middlewareTracingEnabled', true)
     this._setValue(defaults, 'openAiLogsEnabled', false)
@@ -762,7 +762,7 @@ class Config {
       DD_TRACING_ENABLED,
       DD_VERSION,
       DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED,
-      DD_EXPERIMENTAL_TRACE_LEVEL,
+      DD_EXPERIMENTAL_REMOVE_INTERNAL_SPANS,
       OTEL_METRICS_EXPORTER,
       OTEL_PROPAGATORS,
       OTEL_RESOURCE_ATTRIBUTES,
@@ -972,7 +972,7 @@ class Config {
     this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
     this._setString(env, 'version', DD_VERSION || tags.version)
     this._setBoolean(env, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
-    this._setString(env, 'experimental.traceLevel', DD_EXPERIMENTAL_TRACE_LEVEL)
+    this._setBoolean(env, 'experimental.removeInternalSpans', DD_EXPERIMENTAL_REMOVE_INTERNAL_SPANS)
     this._setBoolean(env, 'trace.aws.addSpanPointers', DD_TRACE_AWS_ADD_SPAN_POINTERS)
     this._setString(env, 'trace.dynamoDb.tablePrimaryKeys', DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS)
     this._setArray(env, 'graphqlErrorExtensions', DD_TRACE_GRAPHQL_ERROR_EXTENSIONS)
@@ -1106,7 +1106,7 @@ class Config {
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
     this._setString(opts, 'version', options.version || tags.version)
     this._setBoolean(opts, 'inferredProxyServicesEnabled', options.inferredProxyServicesEnabled)
-    this._setString(opts, 'experimental.traceLevel', options.experimental?.traceLevel)
+    this._setBoolean(opts, 'experimental.removeInternalSpans', options.experimental?.removeInternalSpans)
     this._setBoolean(opts, 'graphqlErrorExtensions', options.graphqlErrorExtensions)
 
     // For LLMObs, we want the environment variable to take precedence over the options.

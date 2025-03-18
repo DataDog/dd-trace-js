@@ -7,7 +7,7 @@ const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toStrin
 
 require('./setup/tap')
 
-describe('Trace Levels', () => {
+describe('Remove Span.kind Internal Spans', () => {
   let express
   let appListener
 
@@ -34,7 +34,7 @@ describe('Trace Levels', () => {
         express = require('../../../versions/express').get()
       })
 
-      it('should not skip the creation of any spans when trace levels is configured with level "debug"', done => {
+      it('should not skip the creation of any span.kind internal spans when the configuration is disabled', done => {
         const app = express()
 
         app.get('/user', (req, res) => {
@@ -75,11 +75,11 @@ describe('Trace Levels', () => {
 
     describe('with configuration', () => {
       before(() => {
-        return agent.load(['express', 'http'], [{}, {}], { 'experimental.traceLevel': 'service' })
+        return agent.load(['express', 'http'], [{}, {}], { 'experimental.removeInternalSpans': true })
       })
 
       before(() => {
-        require('../../dd-trace').init({ 'experimental.traceLevel': 'service' })
+        require('../../dd-trace').init({ 'experimental.removeInternalSpans': true })
       })
 
       after(() => {
@@ -90,7 +90,7 @@ describe('Trace Levels', () => {
         express = require('../../../versions/express').get()
       })
 
-      it('should skip the creation of middleware spans when trace levels is configured with level "service"', done => {
+      it('should skip the creation of span.kind internal (middleware) spans when the config is enabled', done => {
         const app = express()
 
         app.get('/user', (req, res) => {
