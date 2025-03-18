@@ -17,6 +17,7 @@ const {
 
 const {
   isNewTest,
+  getTestProperties,
   getSuitesByTestFile,
   runnableWrapper,
   getOnTestHandler,
@@ -62,7 +63,7 @@ const testSuiteCodeCoverageCh = channel('ci:mocha:test-suite:code-coverage')
 const libraryConfigurationCh = channel('ci:mocha:library-configuration')
 const knownTestsCh = channel('ci:mocha:known-tests')
 const skippableSuitesCh = channel('ci:mocha:test-suite:skippable')
-const quarantinedTestsCh = channel('ci:mocha:quarantined-tests')
+const testManagementTestsCh = channel('ci:mocha:test-management-tests')
 const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
@@ -76,7 +77,7 @@ function isTestFailed (test) {
     return test.isFailed()
   }
   if (test.isPending) {
-    return !test.isPending() && test.state !== 'failed'
+    return !test.isPending() && test.state === 'failed'
   }
   return false
 }
@@ -138,7 +139,7 @@ function getOnEndHandler (isParallel) {
     }
 
     // We subtract the errors from quarantined tests from the total number of failures
-    if (config.isQuarantinedTestsEnabled) {
+    if (config.isTestManagementTestsEnabled) {
       let numFailedQuarantinedTests = 0
       for (const test of testsQuarantined) {
         if (isTestFailed(test)) {
@@ -179,7 +180,7 @@ function getOnEndHandler (isParallel) {
       error,
       isEarlyFlakeDetectionEnabled: config.isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty: config.isEarlyFlakeDetectionFaulty,
-      isQuarantinedTestsEnabled: config.isQuarantinedTestsEnabled,
+      isTestManagementEnabled: config.isTestManagementTestsEnabled,
       isParallel
     })
   })
@@ -188,12 +189,12 @@ function getOnEndHandler (isParallel) {
 function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
   const mochaRunAsyncResource = new AsyncResource('bound-anonymous-fn')
 
-  const onReceivedQuarantinedTests = ({ err, quarantinedTests: receivedQuarantinedTests }) => {
+  const onReceivedTestManagementTests = ({ err, testManagementTests: receivedTestManagementTests }) => {
     if (err) {
-      config.quarantinedTests = {}
-      config.isQuarantinedTestsEnabled = false
+      config.testManagementTests = {}
+      config.isTestManagementTestsEnabled = false
     } else {
-      config.quarantinedTests = receivedQuarantinedTests
+      config.testManagementTests = receivedTestManagementTests
     }
     if (config.isSuitesSkippingEnabled) {
       skippableSuitesCh.publish({
@@ -236,9 +237,9 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
     } else {
       config.knownTests = knownTests
     }
-    if (config.isQuarantinedTestsEnabled) {
-      quarantinedTestsCh.publish({
-        onDone: mochaRunAsyncResource.bind(onReceivedQuarantinedTests)
+    if (config.isTestManagementTestsEnabled) {
+      testManagementTestsCh.publish({
+        onDone: mochaRunAsyncResource.bind(onReceivedTestManagementTests)
       })
     } else if (config.isSuitesSkippingEnabled) {
       skippableSuitesCh.publish({
@@ -258,19 +259,19 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
     config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
     config.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
     config.isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
-    // ITR, auto test retries and quarantine are not supported in parallel mode yet
+    config.isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
+    // ITR and auto test retries are not supported in parallel mode yet
     config.isSuitesSkippingEnabled = !isParallel && libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = !isParallel && libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = !isParallel && libraryConfig.flakyTestRetriesCount
-    config.isQuarantinedTestsEnabled = !isParallel && libraryConfig.isQuarantinedTestsEnabled
 
     if (config.isKnownTestsEnabled) {
       knownTestsCh.publish({
         onDone: mochaRunAsyncResource.bind(onReceivedKnownTests)
       })
-    } else if (config.isQuarantinedTestsEnabled) {
-      quarantinedTestsCh.publish({
-        onDone: mochaRunAsyncResource.bind(onReceivedQuarantinedTests)
+    } else if (config.isTestManagementTestsEnabled) {
+      testManagementTestsCh.publish({
+        onDone: mochaRunAsyncResource.bind(onReceivedTestManagementTests)
       })
     } else if (config.isSuitesSkippingEnabled) {
       skippableSuitesCh.publish({
@@ -282,7 +283,8 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
   }
 
   libraryConfigurationCh.publish({
-    onDone: mochaRunAsyncResource.bind(onReceivedConfiguration)
+    onDone: mochaRunAsyncResource.bind(onReceivedConfiguration),
+    isParallel
   })
 }
 
@@ -613,41 +615,54 @@ addHook({
   const { BufferedWorkerPool } = BufferedWorkerPoolPackage
 
   shimmer.wrap(BufferedWorkerPool.prototype, 'run', run => async function (testSuiteAbsolutePath, workerArgs) {
-    if (!testStartCh.hasSubscribers || !config.isKnownTestsEnabled) {
+    if (!testStartCh.hasSubscribers || (!config.isKnownTestsEnabled && !config.isTestManagementTestsEnabled)) {
       return run.apply(this, arguments)
     }
 
     const testPath = getTestSuitePath(testSuiteAbsolutePath, process.cwd())
-    const testSuiteKnownTests = config.knownTests.mocha?.[testPath] || []
-    const testSuiteQuarantinedTests = config.quarantinedTests?.modules?.mocha?.suites?.[testPath] || []
+
+    const newWorkerArgs = { ...workerArgs }
+
+    if (config.isKnownTestsEnabled) {
+      const testSuiteKnownTests = config.knownTests.mocha?.[testPath] || []
+      newWorkerArgs._ddEfdNumRetries = config.earlyFlakeDetectionNumRetries
+      newWorkerArgs._ddIsEfdEnabled = config.isEarlyFlakeDetectionEnabled
+      newWorkerArgs._ddIsKnownTestsEnabled = true
+      newWorkerArgs._ddKnownTests = {
+        mocha: {
+          [testPath]: testSuiteKnownTests
+        }
+      }
+    }
+    if (config.isTestManagementTestsEnabled) {
+      const testSuiteTestManagementTests = config.testManagementTests?.mocha?.suites?.[testPath] || {}
+      newWorkerArgs._ddIsTestManagementTestsEnabled = true
+      newWorkerArgs._ddTestManagementTests = {
+        mocha: {
+          suites: {
+            [testPath]: testSuiteTestManagementTests
+          }
+        }
+      }
+    }
 
     // We pass the known tests for the test file to the worker
     const testFileResult = await run.apply(
       this,
       [
         testSuiteAbsolutePath,
-        {
-          ...workerArgs,
-          _ddEfdNumRetries: config.earlyFlakeDetectionNumRetries,
-          _ddIsEfdEnabled: config.isEarlyFlakeDetectionEnabled,
-          _ddIsQuarantinedEnabled: config.isQuarantinedTestsEnabled,
-          _ddQuarantinedTests: testSuiteQuarantinedTests,
-          _ddKnownTests: {
-            mocha: {
-              [testPath]: testSuiteKnownTests
-            }
-          }
-        }
+        newWorkerArgs
       ]
     )
+
     const tests = testFileResult
       .events
       .filter(event => event.eventName === 'test end')
       .map(event => event.data)
 
-    // `newTests` is filled in the worker process, so we need to use the test results to fill it here too.
     for (const test of tests) {
-      if (isNewTest(test, config.knownTests)) {
+      // `newTests` is filled in the worker process, so we need to use the test results to fill it here too.
+      if (config.isKnownTestsEnabled && isNewTest(test, config.knownTests)) {
         const testFullName = getTestFullName(test)
         const tests = newTests[testFullName]
 
@@ -656,6 +671,10 @@ addHook({
         } else {
           tests.push(test)
         }
+      }
+      // `testsQuarantined` is filled in the worker process, so we need to use the test results to fill it here too.
+      if (config.isTestManagementTestsEnabled && getTestProperties(test, config.testManagementTests).isQuarantined) {
+        testsQuarantined.add(test)
       }
     }
     return testFileResult

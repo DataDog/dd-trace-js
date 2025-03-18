@@ -396,7 +396,9 @@ describe('Config', () => {
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'default' },
       { name: 'tracing', value: true, origin: 'default' },
       { name: 'url', value: undefined, origin: 'default' },
-      { name: 'version', value: '', origin: 'default' }
+      { name: 'version', value: '', origin: 'default' },
+      { name: 'vertexai.spanCharLimit', value: 128, origin: 'default' },
+      { name: 'vertexai.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' }
     ])
   })
 
@@ -534,6 +536,8 @@ describe('Config', () => {
     process.env.DD_TRACE_ENABLED = 'true'
     process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '3,13,400-403'
     process.env.DD_GRPC_SERVER_ERROR_STATUSES = '3,13,400-403'
+    process.env.DD_VERTEXAI_SPAN_CHAR_LIMIT = 50
+    process.env.DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE = 0.5
 
     // required if we want to check updates to config.debug and config.logLevel which is fetched from logger
     reloadLoggerAndConfig()
@@ -723,7 +727,9 @@ describe('Config', () => {
       { name: 'llmobs.mlApp', value: 'myMlApp', origin: 'env_var' },
       { name: 'llmobs.agentlessEnabled', value: true, origin: 'env_var' },
       { name: 'langchain.spanCharLimit', value: 50, origin: 'env_var' },
-      { name: 'langchain.spanPromptCompletionSampleRate', value: 0.5, origin: 'env_var' }
+      { name: 'langchain.spanPromptCompletionSampleRate', value: 0.5, origin: 'env_var' },
+      { name: 'vertexai.spanCharLimit', value: 50, origin: 'env_var' },
+      { name: 'vertexai.spanPromptCompletionSampleRate', value: 0.5, origin: 'env_var' }
     ])
   })
 

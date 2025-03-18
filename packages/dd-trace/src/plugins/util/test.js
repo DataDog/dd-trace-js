@@ -99,6 +99,11 @@ const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
 const EFD_STRING = "Retried by Datadog's Early Flake Detection"
 const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
 
+// Library Capabilities Tagging
+const DD_CAPABILITIES_TEST_IMPACT_ANALYSIS = '_dd.library_capabilities.test_impact_analysis'
+const DD_CAPABILITIES_EARLY_FLAKE_DETECTION = '_dd.library_capabilities.early_flake_detection'
+const DD_CAPABILITIES_AUTO_TEST_RETRIES = '_dd.library_capabilities.auto_test_retries'
+
 const TEST_LEVEL_EVENT_TYPES = [
   'test',
   'test_suite_end',
@@ -115,6 +120,7 @@ const DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX = 'snapshot_id'
 const DI_DEBUG_ERROR_FILE_SUFFIX = 'file'
 const DI_DEBUG_ERROR_LINE_SUFFIX = 'line'
 
+const TEST_MANAGEMENT_IS_DISABLED = 'test.test_management.is_test_disabled'
 const TEST_MANAGEMENT_IS_QUARANTINED = 'test.test_management.is_quarantined'
 const TEST_MANAGEMENT_ENABLED = 'test.test_management.enabled'
 
@@ -193,6 +199,9 @@ module.exports = {
   TEST_BROWSER_NAME,
   TEST_BROWSER_VERSION,
   getTestSessionName,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
   TEST_LEVEL_EVENT_TYPES,
   getNumFromKnownTests,
   getFileAndLineNumberFromError,
@@ -203,6 +212,7 @@ module.exports = {
   DI_DEBUG_ERROR_LINE_SUFFIX,
   getFormattedError,
   DD_TEST_IS_USER_PROVIDED_SERVICE,
+  TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_ENABLED
 }

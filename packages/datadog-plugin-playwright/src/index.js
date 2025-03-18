@@ -19,7 +19,8 @@ const {
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_ENABLED,
-  TEST_BROWSER_NAME
+  TEST_BROWSER_NAME,
+  TEST_MANAGEMENT_IS_DISABLED
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -44,7 +45,7 @@ class PlaywrightPlugin extends CiPlugin {
     this.addSub('ci:playwright:session:finish', ({
       status,
       isEarlyFlakeDetectionEnabled,
-      isQuarantinedTestsEnabled,
+      isTestManagementTestsEnabled,
       onDone
     }) => {
       this.testModuleSpan.setTag(TEST_STATUS, status)
@@ -64,7 +65,7 @@ class PlaywrightPlugin extends CiPlugin {
         this.testSessionSpan.setTag('error', error)
       }
 
-      if (isQuarantinedTestsEnabled) {
+      if (isTestManagementTestsEnabled) {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
 
@@ -135,11 +136,21 @@ class PlaywrightPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
 
-    this.addSub('ci:playwright:test:start', ({ testName, testSuiteAbsolutePath, testSourceLine, browserName }) => {
+    this.addSub('ci:playwright:test:start', ({
+      testName,
+      testSuiteAbsolutePath,
+      testSourceLine,
+      browserName,
+      isDisabled
+    }) => {
       const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
       const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const span = this.startTestSpan(testName, testSuite, testSourceFile, testSourceLine, browserName)
+
+      if (isDisabled) {
+        span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
+      }
 
       this.enter(span, store)
     })

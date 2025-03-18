@@ -64,8 +64,7 @@ describe('metrics', () => {
                 interval: undefined,
                 type: 'count',
                 tags: [
-                  'bar:baz',
-                  `version:${process.version}`
+                  'bar:baz'
                 ],
                 common: true
               }
@@ -83,8 +82,7 @@ describe('metrics', () => {
                 interval: undefined,
                 type: 'count',
                 tags: [
-                  'bux:bax',
-                  `version:${process.version}`
+                  'bux:bax'
                 ],
                 common: true
               }
@@ -128,8 +126,7 @@ describe('metrics', () => {
               interval: undefined,
               type: 'count',
               tags: [
-                'bar:baz',
-                `version:${process.version}`
+                'bar:baz'
               ],
               common: true
             }
@@ -145,8 +142,7 @@ describe('metrics', () => {
               interval: undefined,
               type: 'count',
               tags: [
-                'bux:bax',
-                `version:${process.version}`
+                'bux:bax'
               ],
               common: true
             }
@@ -250,8 +246,7 @@ describe('metrics', () => {
               interval: undefined,
               type: 'count',
               tags: [
-                'bar:baz',
-                `version:${process.version}`
+                'bar:baz'
               ],
               common: true
             },
@@ -261,8 +256,7 @@ describe('metrics', () => {
               interval: undefined,
               type: 'count',
               tags: [
-                'bux:bax',
-                `version:${process.version}`
+                'bux:bax'
               ],
               common: true
             }
@@ -298,8 +292,7 @@ describe('metrics', () => {
         metric: 'name',
         tags: [
           'foo:bar',
-          'baz:buz',
-          `version:${process.version}`
+          'baz:buz'
         ],
         common: true,
         points: []
@@ -405,8 +398,7 @@ describe('metrics', () => {
         type: 'count',
         tags: [
           'foo:bar',
-          'baz:buz',
-          `version:${process.version}`
+          'baz:buz'
         ],
         common: true
       })
@@ -427,8 +419,7 @@ describe('metrics', () => {
         metric: 'name',
         tags: [
           'foo:bar',
-          'baz:buz',
-          `version:${process.version}`
+          'baz:buz'
         ],
         common: true,
         points: []
@@ -477,8 +468,7 @@ describe('metrics', () => {
         common: true,
         tags: [
           'foo:bar',
-          'baz:buz',
-          `version:${process.version}`
+          'baz:buz'
         ]
       })
     })
@@ -498,8 +488,7 @@ describe('metrics', () => {
         metric: 'name',
         tags: [
           'foo:bar',
-          'baz:buz',
-          `version:${process.version}`
+          'baz:buz'
         ],
         common: true,
         points: []
@@ -567,8 +556,7 @@ describe('metrics', () => {
         type: 'gauge',
         tags: [
           'foo:bar',
-          'baz:buz',
-          `version:${process.version}`
+          'baz:buz'
         ],
         common: true
       })
@@ -589,8 +577,7 @@ describe('metrics', () => {
         metric: 'name',
         tags: [
           'foo:bar',
-          'baz:buz',
-          `version:${process.version}`
+          'baz:buz'
         ],
         common: true,
         points: [],
@@ -638,8 +625,7 @@ describe('metrics', () => {
         type: 'rate',
         tags: [
           'foo:bar',
-          'baz:buz',
-          `version:${process.version}`
+          'baz:buz'
         ],
         common: true
       })

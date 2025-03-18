@@ -35,7 +35,11 @@ const {
   TEST_RETRY_REASON,
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   TEST_MANAGEMENT_IS_QUARANTINED,
-  TEST_MANAGEMENT_ENABLED
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_DISABLED,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -154,15 +158,15 @@ function getKnownTests (tracer, testConfiguration) {
   })
 }
 
-function getQuarantinedTests (tracer, testConfiguration) {
+function getTestManagementTests (tracer, testConfiguration) {
   return new Promise(resolve => {
-    if (!tracer._tracer._exporter?.getQuarantinedTests) {
+    if (!tracer._tracer._exporter?.getTestManagementTests) {
       return resolve({ err: new Error('Test Optimization was not initialized correctly') })
     }
-    tracer._tracer._exporter.getQuarantinedTests(testConfiguration, (err, quarantinedTests) => {
+    tracer._tracer._exporter.getTestManagementTests(testConfiguration, (err, testManagementTests) => {
       resolve({
         err,
-        quarantinedTests
+        testManagementTests
       })
     })
   })
@@ -257,7 +261,7 @@ class CypressPlugin {
               isFlakyTestRetriesEnabled,
               flakyTestRetriesCount,
               isKnownTestsEnabled,
-              isQuarantinedTestsEnabled
+              isTestManagementEnabled
             }
           } = libraryConfigurationResponse
           this.isSuitesSkippingEnabled = isSuitesSkippingEnabled
@@ -268,22 +272,18 @@ class CypressPlugin {
           if (isFlakyTestRetriesEnabled) {
             this.cypressConfig.retries.runMode = flakyTestRetriesCount
           }
-          this.isQuarantinedTestsEnabled = isQuarantinedTestsEnabled
+          this.isTestManagementTestsEnabled = isTestManagementEnabled
         }
         return this.cypressConfig
       })
     return this.libraryConfigurationPromise
   }
 
-  getIsQuarantinedTest (testSuite, testName) {
-    return this.quarantinedTests
-      ?.cypress
-      ?.suites
-      ?.[testSuite]
-      ?.tests
-      ?.[testName]
-      ?.properties
-      ?.quarantined
+  getTestProperties (testSuite, testName) {
+    const { disabled: isDisabled, quarantined: isQuarantined } =
+      this.testManagementTests?.cypress?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
+
+    return { isDisabled, isQuarantined }
   }
 
   getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
@@ -418,16 +418,16 @@ class CypressPlugin {
       }
     }
 
-    if (this.isQuarantinedTestsEnabled) {
-      const quarantinedTestsResponse = await getQuarantinedTests(
+    if (this.isTestManagementTestsEnabled) {
+      const testManagementTestsResponse = await getTestManagementTests(
         this.tracer,
         this.testConfiguration
       )
-      if (quarantinedTestsResponse.err) {
-        log.error('Cypress quarantined tests response error', quarantinedTestsResponse.err)
-        this.isQuarantinedTestsEnabled = false
+      if (testManagementTestsResponse.err) {
+        log.error('Cypress test management tests response error', testManagementTestsResponse.err)
+        this.isTestManagementTestsEnabled = false
       } else {
-        this.quarantinedTests = quarantinedTestsResponse.quarantinedTests
+        this.testManagementTests = testManagementTestsResponse.testManagementTests
       }
     }
 
@@ -452,14 +452,21 @@ class CypressPlugin {
 
     const testSessionName = getTestSessionName(this.tracer._tracer._config, this.command, this.testEnvironmentMetadata)
 
-    if (this.tracer._tracer._exporter?.setMetadataTags) {
+    if (this.tracer._tracer._exporter?.addMetadataTags) {
       const metadataTags = {}
       for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
         metadataTags[testLevel] = {
           [TEST_SESSION_NAME]: testSessionName
         }
       }
-      this.tracer._tracer._exporter.setMetadataTags(metadataTags)
+      metadataTags.test = {
+        ...metadataTags.test,
+        [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: this.isSuitesSkippingEnabled ? 'true' : 'false',
+        [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: this.isEarlyFlakeDetectionEnabled ? 'true' : 'false',
+        [DD_CAPABILITIES_AUTO_TEST_RETRIES]: this.isFlakyTestRetriesEnabled ? 'true' : 'false'
+      }
+
+      this.tracer._tracer._exporter.addMetadataTags(metadataTags)
     }
 
     this.testSessionSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
@@ -509,7 +516,7 @@ class CypressPlugin {
         }
       )
 
-      if (this.isQuarantinedTestsEnabled) {
+      if (this.isTestManagementTestsEnabled) {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
 
@@ -589,9 +596,11 @@ class CypressPlugin {
         skippedTestSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
       }
 
-      const isQuarantined = this.getIsQuarantinedTest(spec.relative, cypressTestName)
+      const { isDisabled, isQuarantined } = this.getTestProperties(spec.relative, cypressTestName)
 
-      if (isQuarantined) {
+      if (isDisabled) {
+        skippedTestSpan.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
+      } else if (isQuarantined) {
         skippedTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
       }
 
@@ -698,7 +707,7 @@ class CypressPlugin {
         })
         const isUnskippable = this.unskippableSuites.includes(testSuite)
         const isForcedToRun = shouldSkip && isUnskippable
-        const isQuarantined = this.getIsQuarantinedTest(testSuite, testName)
+        const { isDisabled, isQuarantined } = this.getTestProperties(testSuite, testName)
 
         // skip test
         if (shouldSkip && !isUnskippable) {
@@ -709,7 +718,7 @@ class CypressPlugin {
 
         // TODO: I haven't found a way to trick cypress into ignoring a test
         // The way we'll implement quarantine in cypress is by skipping the test altogether
-        if (isQuarantined) {
+        if (isDisabled || isQuarantined) {
           return { shouldSkip: true }
         }
 
@@ -738,8 +747,7 @@ class CypressPlugin {
           testSuiteAbsolutePath,
           testName,
           isNew,
-          isEfdRetry,
-          isQuarantined
+          isEfdRetry
         } = test
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
@@ -777,9 +785,6 @@ class CypressPlugin {
             this.activeTestSpan.setTag(TEST_IS_RETRY, 'true')
             this.activeTestSpan.setTag(TEST_RETRY_REASON, 'efd')
           }
-        }
-        if (isQuarantined) {
-          this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
         }
         const finishedTest = {
           testName,
