@@ -21,3 +21,10 @@ When('the greeter says disabled', function () {
   // expected to fail if not disabled
   this.whatIHeard = 'disabld'
 })
+
+When('the greeter says attempt to fix', function () {
+  // eslint-disable-next-line no-console
+  console.log('I am running') // just to assert whether this is running
+  // expected to fail
+  this.whatIHeard = 'attempt to fx'
+})
