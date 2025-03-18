@@ -58,6 +58,7 @@ const TEST_IS_RETRY = 'test.is_retry'
 const TEST_EARLY_FLAKE_ENABLED = 'test.early_flake.enabled'
 const TEST_EARLY_FLAKE_ABORT_REASON = 'test.early_flake.abort_reason'
 const TEST_RETRY_REASON = 'test.retry_reason'
+const TEST_HAS_FAILED_ALL_RETRIES = 'test.has_failed_all_retries'
 
 const CI_APP_ORIGIN = 'ciapp-test'
 
@@ -120,10 +121,16 @@ const DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX = 'snapshot_id'
 const DI_DEBUG_ERROR_FILE_SUFFIX = 'file'
 const DI_DEBUG_ERROR_LINE_SUFFIX = 'line'
 
+// Test Management tags
 const TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX = 'test.test_management.is_attempt_to_fix'
 const TEST_MANAGEMENT_IS_DISABLED = 'test.test_management.is_test_disabled'
 const TEST_MANAGEMENT_IS_QUARANTINED = 'test.test_management.is_quarantined'
 const TEST_MANAGEMENT_ENABLED = 'test.test_management.enabled'
+const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_fix_passed'
+
+// Test Management utils strings
+const ATTEMPT_TO_FIX_STRING = "Retried by Datadog's Test Management"
+const ATTEMPT_TEST_NAME_REGEX = new RegExp(ATTEMPT_TO_FIX_STRING + ' \\(#\\d+\\): ', 'g')
 
 module.exports = {
   TEST_CODE_OWNERS,
@@ -156,6 +163,7 @@ module.exports = {
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_RETRY_REASON,
+  TEST_HAS_FAILED_ALL_RETRIES,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -193,7 +201,9 @@ module.exports = {
   EFD_STRING,
   EFD_TEST_NAME_REGEX,
   removeEfdStringFromTestName,
+  removeAttemptToFixStringFromTestName,
   addEfdStringToTestName,
+  addAttemptToFixStringToTestName,
   getIsFaultyEarlyFlakeDetection,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
@@ -216,7 +226,8 @@ module.exports = {
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
-  TEST_MANAGEMENT_ENABLED
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -624,8 +635,16 @@ function addEfdStringToTestName (testName, numAttempt) {
   return `${EFD_STRING} (#${numAttempt}): ${testName}`
 }
 
+function addAttemptToFixStringToTestName (testName, numAttempt) {
+  return `${ATTEMPT_TO_FIX_STRING} (#${numAttempt}): ${testName}`
+}
+
 function removeEfdStringFromTestName (testName) {
   return testName.replace(EFD_TEST_NAME_REGEX, '')
+}
+
+function removeAttemptToFixStringFromTestName (testName) {
+  return testName.replace(ATTEMPT_TEST_NAME_REGEX, '')
 }
 
 function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {

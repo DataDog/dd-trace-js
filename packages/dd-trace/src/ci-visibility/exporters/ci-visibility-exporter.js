@@ -231,7 +231,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       isDiEnabled: isDiEnabled && this._config.isTestDynamicInstrumentationEnabled,
       isKnownTestsEnabled,
       isTestManagementEnabled: isTestManagementEnabled && this._config.isTestManagementEnabled,
-      testManagementAttemptToFixRetries
+      testManagementAttemptToFixRetries:
+        testManagementAttemptToFixRetries ?? this._config.testManagementAttemptToFixRetries
     }
   }
 
