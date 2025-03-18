@@ -270,7 +270,8 @@ describe('Appsec Waf Telemetry metrics', () => {
 
     describe('WAF Truncation metrics', () => {
       it('should report truncated string metrics', () => {
-        appsecTelemetry.updateWafRequestsMetricTags({ maxTruncatedString: 5000 }, req)
+        const result = appsecTelemetry.updateWafRequestsMetricTags({ maxTruncatedString: 5000 }, req)
+        expect(result).to.have.property('input_truncated', true)
 
         expect(count).to.have.been.calledWith('waf.input_truncated', { truncation_reason: 1 })
         expect(inc).to.have.been.calledWith(1)
@@ -280,7 +281,8 @@ describe('Appsec Waf Telemetry metrics', () => {
       })
 
       it('should report truncated container size metrics', () => {
-        appsecTelemetry.updateWafRequestsMetricTags({ maxTruncatedContainerSize: 300 }, req)
+        const result = appsecTelemetry.updateWafRequestsMetricTags({ maxTruncatedContainerSize: 300 }, req)
+        expect(result).to.have.property('input_truncated', true)
 
         expect(count).to.have.been.calledWith('waf.input_truncated', { truncation_reason: 2 })
         expect(inc).to.have.been.calledWith(1)
@@ -290,7 +292,8 @@ describe('Appsec Waf Telemetry metrics', () => {
       })
 
       it('should report truncated container depth metrics', () => {
-        appsecTelemetry.updateWafRequestsMetricTags({ maxTruncatedContainerDepth: 20 }, req)
+        const result = appsecTelemetry.updateWafRequestsMetricTags({ maxTruncatedContainerDepth: 20 }, req)
+        expect(result).to.have.property('input_truncated', true)
 
         expect(count).to.have.been.calledWith('waf.input_truncated', { truncation_reason: 4 })
         expect(inc).to.have.been.calledWith(1)
@@ -300,11 +303,12 @@ describe('Appsec Waf Telemetry metrics', () => {
       })
 
       it('should combine truncation reasons when multiple truncations occur', () => {
-        appsecTelemetry.updateWafRequestsMetricTags({
+        const result = appsecTelemetry.updateWafRequestsMetricTags({
           maxTruncatedString: 5000,
           maxTruncatedContainerSize: 300,
           maxTruncatedContainerDepth: 20
         }, req)
+        expect(result).to.have.property('input_truncated', true)
 
         expect(count).to.have.been.calledWith('waf.input_truncated', { truncation_reason: 7 })
         expect(distribution).to.have.been.calledWith('waf.truncated_value_size', { truncation_reason: 1 })
@@ -313,7 +317,8 @@ describe('Appsec Waf Telemetry metrics', () => {
       })
 
       it('should not report truncation metrics when no truncation occurs', () => {
-        appsecTelemetry.updateWafRequestsMetricTags(metrics, req)
+        const result = appsecTelemetry.updateWafRequestsMetricTags(metrics, req)
+        expect(result).to.have.property('input_truncated', false)
 
         expect(count).to.not.have.been.calledWith('waf.input_truncated')
         expect(distribution).to.not.have.been.calledWith('waf.truncated_value_size')
