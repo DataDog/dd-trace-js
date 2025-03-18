@@ -89,12 +89,7 @@ describe('WAF Manager', () => {
         expect.fail('waf init should have thrown an error')
       } catch (err) {
         expect(err).to.equal(error)
-        expect(Reporter.reportWafInit).to.have.been.calledWith(
-          '1.2.3',
-          'unknown',
-          {},
-          false
-        )
+        expect(Reporter.reportWafInit).to.have.been.calledWith('1.2.3', 'unknown')
       }
     })
 
