@@ -27,7 +27,10 @@ const {
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
-  TEST_MANAGEMENT_IS_DISABLED
+  TEST_MANAGEMENT_IS_DISABLED,
+  getTestSuitePath,
+  TEST_SESSION_SUMMARY,
+  getJestTestSessionSummary
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -106,19 +109,41 @@ class JestPlugin extends CiPlugin {
       numSkippedSuites,
       hasUnskippableSuites,
       hasForcedToRunSuites,
-      error,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      executionStats,
       onDone
     }) => {
+      const summaryMessage = getJestTestSessionSummary(executionStats)
+
+      const { testResults } = executionStats
+
+      if (status === 'fail') {
+        let errorMessage = ''
+        for (const testResult of testResults) {
+          const { failureMessage, testFilePath, numFailingTests, testExecError } = testResult
+          const status = numFailingTests > 0 || testExecError ? 'FAIL' : 'PASS'
+          const testPath = getTestSuitePath(testFilePath, this.repositoryRoot)
+
+          if (failureMessage) {
+            errorMessage += `${status} ${testPath}\n${failureMessage}\n`
+          }
+        }
+        if (errorMessage) {
+          const error = new Error(errorMessage)
+          error.stack = null
+          this.testSessionSpan.setTag('error', error)
+          this.testModuleSpan.setTag('error', error)
+        }
+      }
+
+      if (summaryMessage) {
+        this.testSessionSpan.setTag(TEST_SESSION_SUMMARY, summaryMessage)
+      }
+
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
-
-      if (error) {
-        this.testSessionSpan.setTag('error', error)
-        this.testModuleSpan.setTag('error', error)
-      }
 
       addIntelligentTestRunnerSpanTags(
         this.testSessionSpan,

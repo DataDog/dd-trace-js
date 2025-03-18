@@ -626,7 +626,6 @@ function cliWrapper (cli, jestVersion) {
     const result = await runCLI.apply(this, arguments)
 
     const {
-      globalConfig: { rootDir },
       results: {
         success,
         coverageMap,
@@ -634,7 +633,17 @@ function cliWrapper (cli, jestVersion) {
         numFailedTests,
         numTotalTests,
         numTotalTestSuites,
-        testResults
+        numPendingTestSuites,
+        numPendingTests,
+        numTodoTests,
+        numPassedTestSuites,
+        numPassedTests,
+        testResults,
+        snapshot: {
+          unmatched: failedSnapshots,
+          matched: passedSnapshots,
+          total: totalSnapshots
+        }
       }
     } = result
 
@@ -649,20 +658,7 @@ function cliWrapper (cli, jestVersion) {
       }
     }
 
-    let errorMessage = ''
-
-    for (const testResult of testResults) {
-      const { failureMessage, testFilePath, numFailingTests, testExecError } = testResult
-      const status = numFailingTests > 0 || testExecError ? 'FAIL' : 'PASS'
-      const testPath = getTestSuitePath(testFilePath, rootDir)
-
-      if (failureMessage) {
-        errorMessage += `${status} ${testPath}\n${failureMessage}\n`
-      }
-    }
-
-    // console.log('errorMessage', errorMessage)
-    let status, error
+    let status
 
     if (success) {
       if (numTotalTests === 0 && numTotalTestSuites === 0) {
@@ -672,10 +668,6 @@ function cliWrapper (cli, jestVersion) {
       }
     } else {
       status = 'fail'
-      error = new Error(
-        `Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}: \n${errorMessage}`
-      )
-      error.stack = null // stack trace is useless in this case, as we're showing multiple errors
     }
     let timeoutId
 
@@ -693,6 +685,24 @@ function cliWrapper (cli, jestVersion) {
       }, FLUSH_TIMEOUT).unref()
     })
 
+    const executionStats = {
+      numFailedTestSuites,
+      numFailedTests,
+      numTotalTests,
+      numTotalTestSuites,
+      numPendingTestSuites,
+      numPendingTests,
+      numTodoTests,
+      numPassedTestSuites,
+      numPassedTests,
+      snapshot: {
+        failed: failedSnapshots,
+        passed: passedSnapshots,
+        total: totalSnapshots
+      },
+      testResults
+    }
+
     sessionAsyncResource.runInAsyncScope(() => {
       testSessionFinishCh.publish({
         status,
@@ -703,10 +713,10 @@ function cliWrapper (cli, jestVersion) {
         numSkippedSuites,
         hasUnskippableSuites,
         hasForcedToRunSuites,
-        error,
         isEarlyFlakeDetectionEnabled,
         isEarlyFlakeDetectionFaulty,
         isTestManagementTestsEnabled,
+        executionStats,
         onDone
       })
     })
