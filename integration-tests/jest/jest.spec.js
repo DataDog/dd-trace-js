@@ -3000,7 +3000,6 @@ describe('jest CommonJS', () => {
             for (let i = 0; i < retriedTests.length; i++) {
               const test = retriedTests[i]
               if (isAttemptToFix && i !== 0) {
-                // assert.equal(skippedTest.meta[TEST_STATUS], 'pass')
                 assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
                 assert.propertyVal(test.meta, TEST_IS_RETRY, 'true')
                 assert.propertyVal(test.meta, TEST_RETRY_REASON, 'attempt_to_fix')
@@ -3060,19 +3059,19 @@ describe('jest CommonJS', () => {
       })
 
       it('does not attempt to fix tests if test management is not enabled', (done) => {
-        receiver.setSettings({ test_management: { enabled: false } })
+        receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
 
         runAttemptToFixTest(done, false, false)
       })
 
       it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
-        receiver.setSettings({ test_management: { enabled: true } })
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
         runAttemptToFixTest(done, false, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
       })
 
       it('does not fail retry if a test is quarantined', (done) => {
-        receiver.setSettings({ test_management: { enabled: true } })
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
         receiver.setTestManagementTests({
           jest: {
             suites: {
@@ -3094,7 +3093,7 @@ describe('jest CommonJS', () => {
       })
 
       it('can attempt to fix in parallel mode', (done) => {
-        receiver.setSettings({ test_management: { enabled: true } })
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
         runAttemptToFixTest(
           done,

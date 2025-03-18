@@ -148,7 +148,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.isDiEnabled = this.testEnvironmentOptions._ddIsDiEnabled
       this.isKnownTestsEnabled = this.testEnvironmentOptions._ddIsKnownTestsEnabled
       this.isTestManagementTestsEnabled = this.testEnvironmentOptions._ddIsTestManagementTestsEnabled
-      this.testManagementAttemptToFixRetries = this.testEnvironmentOptions._ddTestManagementAttemptToFixRetries
 
       if (this.isKnownTestsEnabled) {
         try {
@@ -174,6 +173,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (this.isTestManagementTestsEnabled) {
         try {
           const hasTestManagementTests = !!testManagementTests.jest
+          testManagementAttemptToFixRetries = this.testEnvironmentOptions._ddTestManagementAttemptToFixRetries
           this.testManagementTestsForThisSuite = hasTestManagementTests
             ? this.getTestManagementTestsForSuite(testManagementTests.jest.suites?.[this.testSuite]?.tests)
             : this.getTestManagementTestsForSuite(this.testEnvironmentOptions._ddTestManagementTests)
@@ -409,14 +409,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             // Check if this is the last attempt to fix.
             // If it is, we'll set the failedAllTests flag to true if all the tests failed
             // If all tests passed, we'll set the attemptToFixPassed flag to true
-            // The +1 is because the first attempt is not counted as a retry
-            const numAttempts = testManagementAttemptToFixRetries + 1
-            if (attemptToFixRetriedTestsStatuses.get(originalTestName).length === numAttempts) {
-              const { pass, fail } = getTestStats(attemptToFixRetriedTestsStatuses.get(originalTestName))
+            if (attemptToFixRetriedTestsStatuses.get(originalTestName).length ===
+                testManagementAttemptToFixRetries + 1) {
+              // The slice is because the first attempt is not counted as a retry
+              const { pass, fail } = getTestStats(attemptToFixRetriedTestsStatuses.get(originalTestName).slice(1))
 
-              if (pass === numAttempts) {
+              if (pass === testManagementAttemptToFixRetries) {
                 attemptToFixPassed = true
-              } else if (fail === numAttempts) {
+              } else if (fail === testManagementAttemptToFixRetries) {
                 failedAllTests = true
               }
             }
