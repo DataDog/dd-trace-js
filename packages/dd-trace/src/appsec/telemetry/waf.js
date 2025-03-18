@@ -66,6 +66,7 @@ function trackWafMetrics (store, metrics) {
 
   const truncationReason = getTruncationReason(metrics)
   if (truncationReason > 0) {
+    metricTags[tags.INPUT_TRUNCATED] = true
     incrementTruncatedMetrics(metrics, truncationReason)
   }
 
@@ -80,6 +81,7 @@ function getOrCreateMetricTags (store, versionsTags) {
       [tags.REQUEST_BLOCKED]: false,
       [tags.RULE_TRIGGERED]: false,
       [tags.WAF_TIMEOUT]: false,
+      [tags.INPUT_TRUNCATED]: false,
 
       ...versionsTags
     }

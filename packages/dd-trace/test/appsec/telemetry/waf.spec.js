@@ -57,7 +57,8 @@ describe('Appsec Waf Telemetry metrics', () => {
           event_rules_version: rulesVersion,
           request_blocked: false,
           rule_triggered: false,
-          waf_timeout: false
+          waf_timeout: false,
+          input_truncated: false
         })
       })
 
@@ -66,6 +67,7 @@ describe('Appsec Waf Telemetry metrics', () => {
           blockTriggered: true,
           ruleTriggered: true,
           wafTimeout: true,
+          maxTruncatedString: 5000,
           ...metrics
         }, req)
 
@@ -74,7 +76,8 @@ describe('Appsec Waf Telemetry metrics', () => {
           event_rules_version: rulesVersion,
           request_blocked: true,
           rule_triggered: true,
-          waf_timeout: true
+          waf_timeout: true,
+          input_truncated: true
         })
       })
 
@@ -93,7 +96,8 @@ describe('Appsec Waf Telemetry metrics', () => {
           event_rules_version: rulesVersion,
           request_blocked: false,
           rule_triggered: true,
-          waf_timeout: false
+          waf_timeout: false,
+          input_truncated: false
         })
       })
 
@@ -102,6 +106,7 @@ describe('Appsec Waf Telemetry metrics', () => {
           blockTriggered: true,
           ruleTriggered: true,
           wafTimeout: true,
+          maxTruncatedContainerSize: 300,
           ...metrics
         }, req)
 
@@ -120,7 +125,8 @@ describe('Appsec Waf Telemetry metrics', () => {
           event_rules_version: rulesVersion,
           request_blocked: true,
           rule_triggered: true,
-          waf_timeout: true
+          waf_timeout: true,
+          input_truncated: true
         })
       })
 
@@ -250,7 +256,8 @@ describe('Appsec Waf Telemetry metrics', () => {
           rule_triggered: false,
           waf_timeout: true,
           waf_version: wafVersion,
-          event_rules_version: rulesVersion
+          event_rules_version: rulesVersion,
+          input_truncated: false
         })
       })
 

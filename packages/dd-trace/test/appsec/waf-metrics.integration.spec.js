@@ -86,6 +86,10 @@ describe('WAF truncation metrics', () => {
         assert.exists(inputTruncated, 'input truncated serie should exist')
         assert.strictEqual(inputTruncated.type, 'count')
         assert.include(inputTruncated.tags, 'truncation_reason:7')
+
+        const wafRequests = series.find(s => s.metric === 'waf.requests')
+        assert.exists(wafRequests, 'waf requests serie should exist')
+        assert.include(wafRequests.tags, 'input_truncated:true')
       }
     }, 30_000, 'generate-metrics', 2)
 
