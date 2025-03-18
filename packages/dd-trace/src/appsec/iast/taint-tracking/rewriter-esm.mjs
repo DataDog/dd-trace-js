@@ -11,10 +11,12 @@ const ddTraceDir = path.join(currentUrl.pathname, '..', '..', '..', '..', '..', 
 
 let port, rewriter
 
+let orchestrionConfig
+
 export async function initialize (data) {
   if (rewriter) return Promise.reject(new Error('ALREADY INITIALIZED'))
 
-  const { csiMethods, telemetryVerbosity, chainSourceMap } = data
+  const { csiMethods, telemetryVerbosity, chainSourceMap, orchestrion } = data
   port = data.port
 
   const iastRewriter = await import('@datadog/wasm-js-rewriter')
@@ -24,8 +26,10 @@ export async function initialize (data) {
   rewriter = new NonCacheRewriter({
     csiMethods,
     telemetryVerbosity: getName(telemetryVerbosity),
-    chainSourceMap
+    chainSourceMap,
+    orchestrion
   })
+  orchestrionConfig = orchestrion
 }
 
 export async function load (url, context, nextLoad) {
@@ -35,15 +39,23 @@ export async function load (url, context, nextLoad) {
   if (!result.source) return result
   if (url.includes(ddTraceDir) || url.includes('iitm=true')) return result
 
+  let passes
   try {
     if (isPrivateModule(url) && isNotLibraryFile(url)) {
-      const rewritten = rewriter.rewrite(result.source.toString(), url)
+      // TODO error tracking needs to be added based on config
+      passes = ['error_tracking']
+      // if (config.iast?.enabled) { // TODO add config so we can actually do this
+      //   passes.push('iast')
+      // }
+    } else {
+      passes = ['orchestrion']
+    }
+    const rewritten = rewriter.rewrite(result.source.toString(), url, passes)
 
-      if (rewritten?.content) {
-        result.source = rewritten.content || result.source
-        const data = { url, rewritten }
-        port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
-      }
+    if (rewritten?.content) {
+      result.source = rewritten.content || result.source
+      const data = { url, rewritten }
+      port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
     }
   } catch (e) {
     const newErrObject = {

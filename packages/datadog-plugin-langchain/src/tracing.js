@@ -3,6 +3,7 @@
 const { MEASURED } = require('../../../ext/tags')
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const tracingChannel = require('dc-polyfill').tracingChannel
 
 const API_KEY = 'langchain.request.api_key'
 const MODEL = 'langchain.request.model'
@@ -35,7 +36,7 @@ class LangChainTracingPlugin extends TracingPlugin {
     }
   }
 
-  bindStart (ctx) {
+  start (ctx) {
     const { resource, type } = ctx
     const handler = this.handlers[type]
 

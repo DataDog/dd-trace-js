@@ -7,6 +7,7 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
+const { execSync } = require('child_process')
 
 describe('esm', () => {
   let agent
@@ -23,6 +24,8 @@ describe('esm', () => {
       ], false, [
         './packages/datadog-plugin-langchain/test/integration-test/*'
       ])
+      // TODO - remove this once the branch is merged/published
+      execSync('yarn link @datadog/wasm-js-rewriter', { cwd: sandbox.folder })
     })
 
     after(async () => {
@@ -45,8 +48,8 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'langchain.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, null, {
-        NODE_OPTIONS: '--import dd-trace/register.js'
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, x => console.log(x.toString()), {
+        NODE_OPTIONS: '--import dd-trace/initialize.mjs'
       })
 
       await res
