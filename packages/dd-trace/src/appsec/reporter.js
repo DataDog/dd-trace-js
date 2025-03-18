@@ -88,7 +88,7 @@ function formatHeaderName (name) {
     .toLowerCase()
 }
 
-function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}, success) {
+function reportWafInit (wafVersion, rulesVersion, diagnosticsRules, success) {
   if (success) {
     metricsQueue.set('_dd.appsec.waf.version', wafVersion)
 
