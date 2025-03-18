@@ -201,7 +201,8 @@ function enableEsmRewriter (telemetryVerbosity) {
           port: port2,
           csiMethods,
           telemetryVerbosity,
-          chainSourceMap: isFlagPresent('--enable-source-maps')
+          chainSourceMap: isFlagPresent('--enable-source-maps'),
+          orchestrion
         }
       })
     } catch (e) {
