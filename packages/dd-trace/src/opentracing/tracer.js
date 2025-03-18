@@ -2,6 +2,7 @@
 
 const os = require('os')
 const Span = require('./span')
+const NoopSpan = require('../noop/span')
 const SpanProcessor = require('../span_processor')
 const PrioritySampler = require('../priority_sampler')
 const TextMapPropagator = require('./propagation/text_map')
@@ -10,6 +11,8 @@ const HttpPropagator = require('./propagation/http')
 const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
 const formats = require('../../../../ext/formats')
+const { SPAN_KIND } = require('../../../../ext/tags')
+const { COMPONENT } = require('../constants')
 
 const log = require('../log')
 const runtimeMetrics = require('../runtime_metrics')
@@ -57,6 +60,13 @@ class DatadogTracer {
       'service.name': options?.tags?.service ? String(options.tags.service) : this._service
     }
 
+    if (this._config.experimental.traceLevel !== 'debug') {
+      const traceLevelSpan = this._useTraceLevel(parent, options)
+      if (traceLevelSpan) {
+        return traceLevelSpan
+      }
+    }
+
     // As per unified service tagging spec if a span is created with a service name different from the global
     // service name it will not inherit the global version value
     if (options?.tags?.service && options.tags.service !== this._service) {
@@ -81,7 +91,7 @@ class DatadogTracer {
   }
 
   inject (context, format, carrier) {
-    if (context instanceof Span) {
+    if (context instanceof Span || context instanceof NoopSpan) {
       context = context.context()
     }
 
@@ -105,10 +115,23 @@ class DatadogTracer {
       return null
     }
   }
+
+  _useTraceLevel (parent, options) {
+    // This function is used to power the experimental Trace Levels functionality.
+    // Trace levels aims to eliminate any spans that are not considered 'service' level,
+    // where any operation representing entry and/or exit from the traced application
+    // is considered a service level span. The presence of `span.kind` is being used to determine if a
+    // span is service level. Additionally, the feature aims to only impact auto instrumentation
+    // spans, so we check for the presence of `component` tag since this tag is set by all instrumentations.
+    // This allows us to not impact customer manual tracing spans.
+    if (options?.tags && COMPONENT in options.tags && !(SPAN_KIND in options.tags)) {
+      return new NoopSpan(this, parent, { useParentContext: true })
+    }
+  }
 }
 
 function getContext (spanContext) {
-  if (spanContext instanceof Span) {
+  if (spanContext instanceof Span || spanContext instanceof NoopSpan) {
     spanContext = spanContext.context()
   }
 
