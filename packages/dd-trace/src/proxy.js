@@ -103,7 +103,7 @@ class Tracer extends NoopProxy {
         spanleak.startScrubber()
       }
 
-      if (config.remoteConfig.enabled && !config.isCiVisibility) {
+      if (config.remoteConfig.enabled && !config.isCiVisibility && !config.llmobs.enabled) {
         const rc = require('./remote_config').enable(config, this._modules.appsec)
 
         rc.setProductHandler('APM_TRACING', (action, conf) => {
@@ -178,10 +178,12 @@ class Tracer extends NoopProxy {
 
       this._enableOrDisableTracing(config)
 
+      // if this isn't in the block below, then when tracing is enabled but llm obs isn't, usage of the llmobs sdk
+      // will not create apm spans under the hood.
+      lazyProxy(this, 'llmobs', config, () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
       if (config.llmobs.enabled) {
         this._modules.llmobs.enable(config)
       }
-      lazyProxy(this, 'llmobs', config, () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
 
       if (config.tracing) {
         if (config.isManualApiEnabled) {
@@ -236,9 +238,6 @@ class Tracer extends NoopProxy {
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)
       }
-      // if (config.llmobs.enabled) {
-      //   this._modules.llmobs.enable(config)
-      // }
       if (!this._tracingInitialized) {
         const prioritySampler = config.apmTracingEnabled === false
           ? require('./standalone').configure(config)
@@ -255,7 +254,6 @@ class Tracer extends NoopProxy {
     } else if (this._tracingInitialized) {
       this._modules.appsec.disable()
       this._modules.iast.disable()
-      this._modules.llmobs.disable()
     }
 
     if (this._tracingInitialized) {

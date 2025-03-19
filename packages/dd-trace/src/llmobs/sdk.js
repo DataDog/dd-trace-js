@@ -34,7 +34,7 @@ class LLMObs extends NoopLLMObs {
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
 
-    if (this._tracer instanceof NoopTracer) {
+    if (this.enabled && this._tracer instanceof NoopTracer) {
       this._tracer = new DatadogTracer(config)
     }
   }
@@ -93,21 +93,26 @@ class LLMObs extends NoopLLMObs {
       options = {}
     }
 
+    let name = options.name
+    const {
+      spanOptions,
+      ...llmobsOptions
+    } = this._extractOptions(options)
+
+    if (!this.enabled) {
+      return this._tracer.trace(name, spanOptions, fn)
+    }
+
     const kind = validateKind(options.kind) // will throw if kind is undefined or not an expected kind
 
     telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: false, kind })
 
     // name is required for spans generated with `trace`
     // while `kind` is required, this should never throw (as otherwise it would have thrown above)
-    const name = options.name || kind
+    name ||= kind
     if (!name) {
       throw new Error('No span name provided for `trace`.')
     }
-
-    const {
-      spanOptions,
-      ...llmobsOptions
-    } = this._extractOptions(options)
 
     if (fn.length > 1) {
       return this._tracer.trace(name, spanOptions, (span, cb) =>
@@ -126,18 +131,23 @@ class LLMObs extends NoopLLMObs {
       options = {}
     }
 
+    let name = options.name || (fn?.name ? fn.name : undefined)
+    const {
+      spanOptions,
+      ...llmobsOptions
+    } = this._extractOptions(options)
+
+    if (!this.enabled) {
+      return this._tracer.wrap(name, spanOptions, fn)
+    }
+
     const kind = validateKind(options.kind) // will throw if kind is undefined or not an expected kind
-    let name = options.name || (fn?.name ? fn.name : undefined) || kind
+    name ||= kind
 
     if (!name) {
       logger.warn('No span name provided for `wrap`. Defaulting to "unnamed-anonymous-function".')
       name = 'unnamed-anonymous-function'
     }
-
-    const {
-      spanOptions,
-      ...llmobsOptions
-    } = this._extractOptions(options)
 
     const llmobs = this
 
