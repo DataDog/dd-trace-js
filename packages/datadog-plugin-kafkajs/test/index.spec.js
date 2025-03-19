@@ -530,7 +530,7 @@ function expectSpanWithDefaults (expected) {
     service,
     meta: expected.meta
   }, expected)
-  return expectSomeSpan(agent, expected, 10000)
+  return expectSomeSpan(agent, expected)
 }
 
 async function sendMessages (kafka, topic, messages) {
