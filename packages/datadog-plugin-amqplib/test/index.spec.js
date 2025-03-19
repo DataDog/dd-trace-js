@@ -3,10 +3,10 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 
 describe('Plugin', () => {
   let tracer
