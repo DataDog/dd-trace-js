@@ -5,6 +5,7 @@ const {
   MODEL_PROVIDER,
   PARENT_ID_KEY,
   SESSION_ID,
+  ROOT_PARENT_ID,
   INTEGRATION,
   DECORATOR
 } = require('./constants/tags')
@@ -23,10 +24,10 @@ function incrementLLMObsSpanFinishedCount (span, value = 1) {
   const mlObsTags = LLMObsTagger.tagMap.get(span)
 
   const isRootSpan = mlObsTags[PARENT_ID_KEY] !== ROOT_PARENT_ID
-  const hasSessionId = mlObsTags[SESSION_ID] !== null
+  const hasSessionId = mlObsTags[SESSION_ID] != null
   const integration = mlObsTags[INTEGRATION]
-  const autoInstrumented = integration !== null
-  const decorator = mlObsTags[DECORATOR] !== null
+  const autoInstrumented = integration != null
+  const decorator = mlObsTags[DECORATOR] != null
   const spanKind = mlObsTags[SPAN_KIND]
   const modelProvider = mlObsTags[MODEL_PROVIDER]
 
@@ -35,7 +36,7 @@ function incrementLLMObsSpanFinishedCount (span, value = 1) {
     has_session_id: Number(hasSessionId),
     is_root_span: Number(isRootSpan),
     span_kind: spanKind,
-    integration: integration || "N/A",
+    integration: integration || 'N/A'
   }
   if (!autoInstrumented) {
     tags.decorator = Number(decorator)
