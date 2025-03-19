@@ -272,7 +272,8 @@ describe('Appsec Waf Telemetry metrics', () => {
 
         appsecTelemetry.incrementWafRequestsMetric(req)
 
-        expect(count).to.have.been.calledOnceWithExactly('waf.requests', {
+        expect(count).to.have.been.calledWithExactly('waf.input_truncated', { truncation_reason: 1 })
+        expect(count).to.have.been.calledWithExactly('waf.requests', {
           request_blocked: true,
           block_failure: true,
           rule_triggered: true,
@@ -282,18 +283,6 @@ describe('Appsec Waf Telemetry metrics', () => {
           input_truncated: true,
           waf_version: wafVersion,
           event_rules_version: rulesVersion
-        })
-        expect(count).to.have.been.calledOnce
-        expect(count.firstCall.args[1]).to.deep.equal({
-          block_failure: true,
-          input_truncated: true,
-          request_blocked: true,
-          rate_limited: true,
-          rule_triggered: true,
-          waf_error: true,
-          waf_timeout: true,
-          waf_version: '0.0.1',
-          event_rules_version: '0.0.2'
         })
       })
 
