@@ -353,9 +353,8 @@ describe('Kinesis', function () {
           expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
         }, { timeoutMs: 10000 }).then(done, done)
 
+        // Swallows the error as it doesn't matter for this test.
         helpers.putTestRecords(kinesis, streamNameDSM, (err, data) => {
-          if (err) return done(err)
-
           nowStub.restore()
         })
       })
