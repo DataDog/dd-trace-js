@@ -30,8 +30,9 @@ let evalWriter
 function enable (config) {
   // create writers and eval writer append and flush channels
   // span writer append is handled by the span processor
-  evalWriter = new LLMObsEvalMetricsWriter(config, false) // TODO: remove agentless false flag??
-  spanWriter = createSpanWriter(config)
+  const agentlessEnabled = getAgentlessEnabled(config)
+  evalWriter = new LLMObsEvalMetricsWriter(config, agentlessEnabled)
+  spanWriter = new LLMObsSpanWriter(config, agentlessEnabled)
 
   evalMetricAppendCh.subscribe(handleEvalMetricAppend)
   flushCh.subscribe(handleFlush)
@@ -70,20 +71,24 @@ function handleLLMObsParentIdInjection ({ carrier }) {
   carrier['x-datadog-tags'] += `,${PROPAGATED_PARENT_ID_KEY}=${parentId}`
 }
 
-function createSpanWriter (config) {
-  let agentlessEnabled = config.llmobs.agentlessEnabled
-  const apiKey = config.apiKey
+function getAgentlessEnabled (config) {
+  const { llmobs: { agentlessEnabled }, apiKey } = config
 
-  if (agentlessEnabled && !apiKey) {
+  // Explicitly disabled
+  if (agentlessEnabled === false) {
+    return false
+  }
+
+  // Explicitly enabled but missing API key
+  if (agentlessEnabled === true && !apiKey) {
     throw new Error(
       'DD_API_KEY is required for sending LLMObs data when agentless mode is enabled. ' +
       'Ensure this configuration is set before running your application.'
     )
   }
 
-  if (apiKey && agentlessEnabled !== false) agentlessEnabled = true
-
-  return new LLMObsSpanWriter(config, agentlessEnabled)
+  // Enable if API key present and not explicitly disabled
+  return !!apiKey
 }
 
 function handleFlush () {

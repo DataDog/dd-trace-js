@@ -49,6 +49,12 @@ class BaseLLMObsWriter {
     this._destroyed = false
     this._agentless = agentless
 
+    Object.defineProperty(this, '_url', {
+      get () {
+        return this._getUrl()
+      }
+    })
+
     logger.debug(`Started ${this.constructor.name} to ${this._getUrl().href}`)
   }
 
@@ -102,7 +108,7 @@ class BaseLLMObsWriter {
         if (!this._agentless) {
           this._agentless = true
           logger.debug(
-            'Retrying LLM Observability with agentless enabled. ' +
+            'Retrying LLM Observability with agentless enabled.\n' +
             `Restarting ${this.constructor.name} to ${this._getUrl().href}`
           )
 
@@ -132,7 +138,7 @@ class BaseLLMObsWriter {
     }
 
     if (this._agentless) {
-      options.headers['DD-API-KEY'] = this._config.apiKey
+      options.headers['DD-API-KEY'] = this._config.apiKey || ''
     } else {
       options.headers[EVP_SUBDOMAIN_HEADER_NAME] = this._intake
     }
