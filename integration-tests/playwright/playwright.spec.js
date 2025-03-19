@@ -47,12 +47,14 @@ versions.forEach((version) => {
     let sandbox, cwd, receiver, childProcess, webAppPort
 
     before(async function () {
-      // bump from 60 to 90 seconds because we also need to download chromium
+      // bump from 60 to 90 seconds because we also need to install dependencies and download chromium
       this.timeout(90000)
       sandbox = await createSandbox([`@playwright/test@${version}`, 'typescript'], true)
       cwd = sandbox.folder
-      // Install chromium (configured in integration-tests/playwright.config.js)
       const { NODE_OPTIONS, ...restOfEnv } = process.env
+      // Install system dependencies
+      execSync('npx playwright install-deps', { cwd, env: restOfEnv })
+      // Install chromium (configured in integration-tests/playwright.config.js)
       execSync('npx playwright install', { cwd, env: restOfEnv })
       webAppPort = await getPort()
       webAppServer.listen(webAppPort)
