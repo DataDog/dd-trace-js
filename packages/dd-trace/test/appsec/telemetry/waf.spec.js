@@ -192,8 +192,19 @@ describe('Appsec Waf Telemetry metrics', () => {
       })
 
       it('should keep the maximum wafErrorCode', () => {
-        appsecTelemetry.updateWafRequestsMetricTags({ errorCode: -1 }, req)
-        appsecTelemetry.updateWafRequestsMetricTags({ errorCode: -3 }, req)
+        appsecTelemetry.updateWafRequestsMetricTags({ wafVersion, rulesVersion, errorCode: -1 }, req)
+        expect(count).to.have.been.calledWithExactly('waf.error', {
+          waf_version: wafVersion,
+          event_rules_version: rulesVersion,
+          waf_error: -1
+        })
+
+        appsecTelemetry.updateWafRequestsMetricTags({ wafVersion, rulesVersion, errorCode: -3 }, req)
+        expect(count).to.have.been.calledWithExactly('waf.error', {
+          waf_version: wafVersion,
+          event_rules_version: rulesVersion,
+          waf_error: -3
+        })
 
         const { wafErrorCode } = appsecTelemetry.getRequestMetrics(req)
         expect(wafErrorCode).to.equal(-1)

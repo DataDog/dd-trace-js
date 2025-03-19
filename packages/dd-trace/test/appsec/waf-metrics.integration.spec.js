@@ -80,6 +80,11 @@ describe('WAF Metrics', () => {
           assert.strictEqual(wafRequests.type, 'count')
           assert.include(wafRequests.tags, 'waf_error:true')
           assert.include(wafRequests.tags, 'rate_limited:false')
+
+          const wafError = series.find(s => s.metric === 'waf.error')
+          assert.exists(wafError, 'Waf error serie should exist')
+          assert.strictEqual(wafError.type, 'count')
+          assert.include(wafError.tags, 'waf_error:-127')
         }
       }, 30_000, 'generate-metrics', 2)
 
