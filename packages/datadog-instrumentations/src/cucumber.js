@@ -338,13 +338,11 @@ function wrapRun (pl, isLatestVersion) {
           }
         }
 
-        if (isKnownTestsEnabled && status !== 'skip') {
+        if (isKnownTestsEnabled && status !== 'skip' && !isAttemptToFix) {
           const numRetries = numRetriesByPickleId.get(this.pickle.id)
 
           isNew = numRetries !== undefined
-          if (!isAttemptToFix) {
-            isEfdRetry = numRetries > 0
-          }
+          isEfdRetry = numRetries > 0
         }
         const attemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
 
