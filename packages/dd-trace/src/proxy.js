@@ -178,6 +178,11 @@ class Tracer extends NoopProxy {
 
       this._enableOrDisableTracing(config)
 
+      if (config.llmobs.enabled) {
+        this._modules.llmobs.enable(config)
+      }
+      lazyProxy(this, 'llmobs', config, () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
+
       if (config.tracing) {
         if (config.isManualApiEnabled) {
           const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
@@ -231,9 +236,9 @@ class Tracer extends NoopProxy {
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)
       }
-      if (config.llmobs.enabled) {
-        this._modules.llmobs.enable(config)
-      }
+      // if (config.llmobs.enabled) {
+      //   this._modules.llmobs.enable(config)
+      // }
       if (!this._tracingInitialized) {
         const prioritySampler = config.apmTracingEnabled === false
           ? require('./standalone').configure(config)
@@ -241,7 +246,7 @@ class Tracer extends NoopProxy {
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', config, () => require('./appsec/sdk'), this._tracer, config)
-        lazyProxy(this, 'llmobs', config, () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
+        // lazyProxy(this, 'llmobs', config, () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {

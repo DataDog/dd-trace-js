@@ -23,6 +23,8 @@ const { channel } = require('dc-polyfill')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const NoopLLMObs = require('./noop')
+const DatadogTracer = require('../tracer')
+const NoopTracer = require('../noop/tracer')
 
 class LLMObs extends NoopLLMObs {
   constructor (tracer, llmobsModule, config) {
@@ -31,6 +33,10 @@ class LLMObs extends NoopLLMObs {
     this._config = config
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
+
+    if (this._tracer instanceof NoopTracer) {
+      this._tracer = new DatadogTracer(config)
+    }
   }
 
   get enabled () {
