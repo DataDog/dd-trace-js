@@ -146,8 +146,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
           waf_error: false,
           waf_timeout: false,
           waf_version: wafVersion,
-          event_rules_version: rulesVersion,
-          input_truncated: false
+          event_rules_version: rulesVersion
         })
       })
     })
