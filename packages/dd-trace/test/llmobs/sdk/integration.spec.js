@@ -15,7 +15,7 @@ const EvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
 
 const tracerVersion = require('../../../../../package.json').version
 
-describe('end to end sdk integration tests', () => {
+describe.only('end to end sdk integration tests', () => {
   let tracer
   let llmobs
   let payloadGenerator
@@ -24,7 +24,7 @@ describe('end to end sdk integration tests', () => {
     payloadGenerator()
     return {
       spans: tracer._tracer._processor.process.args.map(args => args[0]).reverse(), // spans finish in reverse order
-      llmobsSpans: AgentProxyWriter.prototype.append.args?.map(args => args[0]),
+      llmobsSpans: AgentProxyWriter.prototype.append.args?.map(args => args[0]).reverse(),
       evaluationMetrics: EvalMetricsWriter.prototype.append.args?.map(args => args[0])
     }
   }

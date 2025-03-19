@@ -555,7 +555,7 @@ describe('integrations', () => {
                     text: 'LangSmith can help with testing in several ways.'
                   }
                 ],
-                usage: { prompt_tokens: 8, completion_tokens: 12, otal_tokens: 20 }
+                usage: { prompt_tokens: 8, completion_tokens: 12, total_tokens: 20 }
               }
             })
 
@@ -573,8 +573,8 @@ describe('integrations', () => {
               const workflowSpan = spans[0]
               const llmSpan = spans[1]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const llmSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
+              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
+              const llmSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
@@ -622,7 +622,7 @@ describe('integrations', () => {
 
               const workflowSpan = spans[0]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
@@ -709,11 +709,11 @@ describe('integrations', () => {
               const secondSubWorkflow = spans[3]
               const secondLLM = spans[4]
 
-              const topLevelWorkflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const topLevelWorkflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(4).args[0]
               const firstSubWorkflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
-              const firstLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(2).args[0]
+              const firstLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
               const secondSubWorkflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(3).args[0]
-              const secondLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(4).args[0]
+              const secondLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(2).args[0]
 
               const expectedTopLevelWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: topLevelWorkflow,
@@ -846,9 +846,9 @@ describe('integrations', () => {
               const firstLLMSpan = spans[1]
               const secondLLMSpan = spans[2]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const firstLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
-              const secondLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(2).args[0]
+              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(2).args[0]
+              const firstLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const secondLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
@@ -937,8 +937,8 @@ describe('integrations', () => {
               const workflowSpan = spans[0]
               const llmSpan = spans[1]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const llmSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
+              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
+              const llmSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
@@ -1054,9 +1054,9 @@ describe('integrations', () => {
               const taskSpan = spans[1]
               const llmSpan = spans[2]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const taskSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
-              const llmSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(2).args[0]
+              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(2).args[0]
+              const taskSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const llmSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
