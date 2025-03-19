@@ -148,6 +148,7 @@ function reportAttack (attackData) {
 
   if (limiter.isAllowed()) {
     keepTrace(rootSpan, ASM)
+  } else {
     updateWafRateLimitedMetric(req)
   }
 
@@ -204,8 +205,6 @@ function finishRequest (req, res) {
     rootSpan.addTags(Object.fromEntries(metricsQueue))
 
     keepTrace(rootSpan, ASM)
-    updateWafRateLimitedMetric(req)
-
     metricsQueue.clear()
   }
 

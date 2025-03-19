@@ -757,7 +757,7 @@ describe('reporter', () => {
       expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.error', -1)
     })
 
-    it('should keep span and call updateWafRateLimitedMetric if there are metrics', () => {
+    it('should keep span if there are metrics', () => {
       const req = {}
 
       Reporter.metricsQueue.set('a', 1)
@@ -766,7 +766,6 @@ describe('reporter', () => {
       Reporter.finishRequest(req, wafContext, {})
 
       expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
-      expect(telemetry.updateWafRateLimitedMetric).to.be.calledOnceWithExactly(req)
     })
   })
 })
