@@ -15,6 +15,7 @@ function resolveNaming (namingSchema) {
 
 function expectSomeSpan (agent, expected, timeout) {
   return agent.use(traces => {
+    const replacer = (k, v) => typeof v === 'bigint' ? Number(v) : v
     const scoredErrors = []
     for (const trace of traces) {
       for (const span of trace) {
@@ -33,7 +34,7 @@ function expectSomeSpan (agent, expected, timeout) {
     const error = scoredErrors.sort((a, b) => a.score - b.score)[0].err
     // We'll append all the spans to this error message so it's visible in test
     // output.
-    error.message += '\n\nCandidate Traces:\n' + JSON.stringify(traces, null, 2)
+    error.message += '\n\nCandidate Traces:\n' + JSON.stringify(traces, replacer, 2)
     throw error
   }, timeout)
 }
