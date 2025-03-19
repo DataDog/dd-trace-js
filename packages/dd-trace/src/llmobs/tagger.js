@@ -22,7 +22,8 @@ const {
   ROOT_PARENT_ID,
   INPUT_TOKENS_METRIC_KEY,
   OUTPUT_TOKENS_METRIC_KEY,
-  TOTAL_TOKENS_METRIC_KEY
+  TOTAL_TOKENS_METRIC_KEY,
+  INTEGRATION
 } = require('./constants/tags')
 
 // global registry of LLMObs spans
@@ -51,7 +52,8 @@ class LLMObsTagger {
     mlApp,
     parent,
     kind,
-    name
+    name,
+    integration
   } = {}) {
     if (!this._config.llmobs.enabled) return
     if (!kind) return // do not register it in the map if it doesn't have an llmobs span kind
@@ -66,6 +68,7 @@ class LLMObsTagger {
 
     sessionId = sessionId || registry.get(parent)?.[SESSION_ID]
     if (sessionId) this._setTag(span, SESSION_ID, sessionId)
+    if (integration) this._setTag(span, INTEGRATION, integration)
 
     if (!mlApp) mlApp = registry.get(parent)?.[ML_APP] || this._config.llmobs.mlApp
     this._setTag(span, ML_APP, mlApp)

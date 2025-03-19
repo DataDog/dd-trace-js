@@ -26,6 +26,8 @@ const {
   ERROR_STACK
 } = require('../constants')
 
+const telemetry = require('./telemetry')
+
 const LLMObsTagger = require('./tagger')
 
 const tracerVersion = require('../../../../package.json').version
@@ -48,6 +50,7 @@ class LLMObsSpanProcessor {
 
     try {
       const formattedEvent = this.format(span)
+      telemetry.incrementLLMObsSpanFinishedCount(span)
       this._writer.append(formattedEvent)
     } catch (e) {
       // this should be a rare case
