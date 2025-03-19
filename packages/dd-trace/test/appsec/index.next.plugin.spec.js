@@ -23,7 +23,7 @@ describe('test suite', () => {
       const appDir = path.join(__dirname, 'next', appName)
 
       before(async function () {
-        this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
+        this.timeout(300 * 1000) // Webpack is very slow and builds on every test run
 
         const cwd = appDir
 
