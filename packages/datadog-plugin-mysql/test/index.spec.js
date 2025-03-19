@@ -460,7 +460,7 @@ describe('Plugin', () => {
         it('query text should contain traceparent', done => {
           let queryText = ''
           agent.use(traces => {
-            const expectedTimePrefix = Math.floor(clock.now / 1000).toString(16).padStart(8, '0').padEnd(16, '0')
+            const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
@@ -542,7 +542,7 @@ describe('Plugin', () => {
         it('query text should contain traceparent', done => {
           let queryText = ''
           agent.use(traces => {
-            const expectedTimePrefix = Math.floor(clock.now / 1000).toString(16).padStart(8, '0').padEnd(16, '0')
+            const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
