@@ -5,7 +5,7 @@ const Config = require('../../../src/config')
 
 const LLMObsTagger = require('../../../src/llmobs/tagger')
 const LLMObsEvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
-const LLMObsAgentProxySpanWriter = require('../../../src/llmobs/writers/spans/agentProxy')
+const LLMObsSpanWriter = require('../../../src/llmobs/writers/spans')
 const LLMObsSpanProcessor = require('../../../src/llmobs/span_processor')
 
 const tracerVersion = require('../../../../../package.json').version
@@ -37,8 +37,8 @@ describe('sdk', () => {
     // stub writer functionality
     sinon.stub(LLMObsEvalMetricsWriter.prototype, 'append')
     sinon.stub(LLMObsEvalMetricsWriter.prototype, 'flush')
-    sinon.stub(LLMObsAgentProxySpanWriter.prototype, 'append')
-    sinon.stub(LLMObsAgentProxySpanWriter.prototype, 'flush')
+    sinon.stub(LLMObsSpanWriter.prototype, 'append')
+    sinon.stub(LLMObsSpanWriter.prototype, 'flush')
 
     LLMObsSDK = require('../../../src/llmobs/sdk')
 
@@ -56,8 +56,8 @@ describe('sdk', () => {
     LLMObsEvalMetricsWriter.prototype.append.resetHistory()
     LLMObsEvalMetricsWriter.prototype.flush.resetHistory()
 
-    LLMObsAgentProxySpanWriter.prototype.append.resetHistory()
-    LLMObsAgentProxySpanWriter.prototype.flush.resetHistory()
+    LLMObsSpanWriter.prototype.append.resetHistory()
+    LLMObsSpanWriter.prototype.flush.resetHistory()
 
     process.removeAllListeners('beforeExit')
   })
@@ -1217,7 +1217,7 @@ describe('sdk', () => {
       llmobs.flush()
 
       expect(LLMObsEvalMetricsWriter.prototype.flush).to.not.have.been.called
-      expect(LLMObsAgentProxySpanWriter.prototype.flush).to.not.have.been.called
+      expect(LLMObsSpanWriter.prototype.flush).to.not.have.been.called
       tracer._tracer._config.llmobs.enabled = true
     })
 
@@ -1225,7 +1225,7 @@ describe('sdk', () => {
       llmobs.flush()
 
       expect(LLMObsEvalMetricsWriter.prototype.flush).to.have.been.called
-      expect(LLMObsAgentProxySpanWriter.prototype.flush).to.have.been.called
+      expect(LLMObsSpanWriter.prototype.flush).to.have.been.called
     })
 
     it('logs if there was an error flushing', () => {

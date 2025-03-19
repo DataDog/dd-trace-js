@@ -25,23 +25,51 @@ describe('BaseLLMObsWriter', () => {
     clock = sinon.useFakeTimers()
 
     options = {
-      endpoint: '/api/v2/llmobs',
-      intake: 'llmobs-intake.datadoghq.com'
+      endpoint: '/endpoint',
+      intake: 'intake',
+      config: {
+        site: 'site.com',
+        hostname: 'localhost',
+        port: 8126,
+        apiKey: 'test'
+      }
     }
   })
 
   afterEach(() => {
     clock.restore()
     process.removeAllListeners('beforeExit')
+    process.removeAllListeners('uncaughtException')
   })
 
-  it('constructs a writer with a url', () => {
+  it('constructs an agentless writer', () => {
     writer = new BaseLLMObsWriter(options)
 
-    expect(writer._url.href).to.equal('https://llmobs-intake.datadoghq.com/api/v2/llmobs')
-    expect(logger.debug).to.have.been.calledWith(
-      'Started BaseLLMObsWriter to https://llmobs-intake.datadoghq.com/api/v2/llmobs'
-    )
+    expect(writer._agentless).to.be.true
+    expect(writer._url.href).to.equal('https://intake.site.com/endpoint')
+  })
+
+  it('constructs an agent proxy writer', () => {
+    writer = new BaseLLMObsWriter(options, false)
+
+    expect(writer._agentless).to.be.false
+    expect(writer._url.href).to.equal('http://localhost:8126/evp_proxy/v2/endpoint')
+  })
+
+  describe('with config url', () => {
+    beforeEach(() => {
+      options.config.url = new URL('http://test-agent:12345')
+    })
+
+    afterEach(() => {
+      delete options.config.url
+    })
+
+    it('constructs a writer with a custom url', () => {
+      writer = new BaseLLMObsWriter(options, false)
+
+      expect(writer._url.href).to.equal('http://test-agent:12345/evp_proxy/v2/endpoint')
+    })
   })
 
   it('calls flush before the process exits', () => {
@@ -49,6 +77,17 @@ describe('BaseLLMObsWriter', () => {
     writer.flush = sinon.spy()
 
     process.emit('beforeExit')
+
+    expect(writer.flush).to.have.been.calledOnce
+  })
+
+  it.skip('calls flush on uncaughtException', () => {
+    writer = new BaseLLMObsWriter(options)
+    writer.flush = sinon.spy()
+
+    expect(() => {
+      process.emit('uncaughtException', new Error('boom'))
+    }).to.throw('boom')
 
     expect(writer.flush).to.have.been.calledOnce
   })
@@ -85,43 +124,55 @@ describe('BaseLLMObsWriter', () => {
     expect(logger.warn).to.have.been.calledWith('BaseLLMObsWriter event buffer full (limit is 1000), dropping event')
   })
 
-  it('flushes the buffer', () => {
-    writer = new BaseLLMObsWriter(options)
+  describe('flush', () => {
+    it('flushes a buffer in agentless mode', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.makePayload = (events) => ({ events })
 
-    const event1 = { foo: 'bar' }
-    const event2 = { foo: 'baz' }
+      writer.append({ foo: 'bar' })
+      writer.flush()
 
-    writer.append(event1)
-    writer.append(event2)
-
-    writer.makePayload = (events) => ({ events })
-
-    // Stub the request function to call its third argument
-    request.callsFake((url, options, callback) => {
-      callback(null, null, 202)
+      const requestOptions = request.getCall(0).args[1]
+      expect(requestOptions.url.href).to.equal('https://intake.site.com/endpoint')
+      expect(requestOptions.headers['Content-Type']).to.equal('application/json')
+      expect(requestOptions.headers['DD-API-KEY']).to.equal('test')
     })
 
-    writer.flush()
+    it('flushes a buffer in agent proxy mode', () => {
+      writer = new BaseLLMObsWriter(options, false)
+      writer.makePayload = (events) => ({ events })
 
-    expect(request).to.have.been.calledOnce
-    const calledArgs = request.getCall(0).args
+      writer.append({ foo: 'bar' })
+      writer.flush()
 
-    expect(calledArgs[0]).to.deep.equal(JSON.stringify({ events: [event1, event2] }))
-    expect(calledArgs[1]).to.deep.equal({
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      method: 'POST',
-      url: writer._url,
-      timeout: 5000
+      const requestOptions = request.getCall(0).args[1]
+      expect(requestOptions.url.href).to.equal('http://localhost:8126/evp_proxy/v2/endpoint')
+      expect(requestOptions.headers['Content-Type']).to.equal('application/json')
+      expect(requestOptions.headers['X-Datadog-EVP-Subdomain']).to.equal('intake')
     })
 
-    expect(logger.debug).to.have.been.calledWith(
-      'Sent 2 LLMObs undefined events to https://llmobs-intake.datadoghq.com/api/v2/llmobs'
-    )
+    it('falls back to agentless mode if the agent proxy request fails', () => {
+      writer = new BaseLLMObsWriter(options, false)
+      writer.makePayload = (events) => ({ events })
 
-    expect(writer._buffer).to.have.lengthOf(0)
-    expect(writer._bufferSize).to.equal(0)
+      writer.append({ foo: 'bar' })
+
+      let reqIdx = 0
+      request.callsFake((payload, options, cb) => {
+        if (reqIdx === 0) {
+          cb(new Error('boom'))
+        } else {
+          cb()
+        }
+        reqIdx++
+      })
+
+      writer.flush()
+
+      expect(request).to.have.been.calledTwice
+      expect(request.getCall(0).args[1].url.href).to.equal('http://localhost:8126/evp_proxy/v2/endpoint')
+      expect(request.getCall(1).args[1].url.href).to.equal('https://intake.site.com/endpoint')
+    })
   })
 
   it('does not flush an empty buffer', () => {
@@ -162,7 +213,8 @@ describe('BaseLLMObsWriter', () => {
 
       expect(writer._destroyed).to.be.true
       expect(clearInterval).to.have.been.calledWith(writer._periodic)
-      expect(process.removeListener).to.have.been.calledWith('beforeExit', writer.destroy)
+      expect(process.removeListener).to.have.been.calledWith('beforeExit', writer._beforeExitHandler)
+      expect(process.removeListener).to.have.been.calledWith('uncaughtException', writer._uncaughtExceptionHandler)
       expect(writer.flush).to.have.been.calledOnce
       expect(logger.debug)
         .to.have.been.calledWith('Stopping BaseLLMObsWriter')

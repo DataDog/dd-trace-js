@@ -155,7 +155,7 @@ class BaseLLMObsWriter {
       }))
     } else {
       const { hostname, port } = this._config
-      const base = this._config._url || new URL(format({
+      const base = this._config.url || new URL(format({
         protocol: 'http:',
         hostname,
         port

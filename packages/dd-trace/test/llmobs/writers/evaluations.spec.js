@@ -14,17 +14,24 @@ describe('LLMObsEvalMetricsWriter', () => {
     process.removeAllListeners('beforeExit')
   })
 
-  it('constructs the writer with the correct values', () => {
+  it('constructs the url with the correct values', () => {
     writer = new LLMObsEvalMetricsWriter({
-      site: 'datadoghq.com',
-      llmobs: {},
-      apiKey: '1234'
+      site: 'datadoghq.com'
     })
 
     writer.flush = flush // just to stop the beforeExit flush call
 
     expect(writer._url.href).to.equal('https://api.datadoghq.com/api/intake/llm-obs/v1/eval-metric')
-    expect(writer._headers['DD-API-KEY']).to.equal('1234')
+    expect(writer._eventType).to.equal('evaluation_metric')
+  })
+
+  it('constructs the writer with the correct agent proxy values', () => {
+    writer = new LLMObsEvalMetricsWriter({
+      port: 8126,
+      hostname: 'localhost'
+    }, false)
+
+    expect(writer._url.href).to.equal('http://localhost:8126/evp_proxy/v2/api/intake/llm-obs/v1/eval-metric')
     expect(writer._eventType).to.equal('evaluation_metric')
   })
 
