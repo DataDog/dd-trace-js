@@ -18,6 +18,8 @@ const testManagementTestsCh = channel('ci:playwright:test-management-tests')
 const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 
+const workerReportCh = channel('ci:playwright:worker:report')
+
 const testToAr = new WeakMap()
 const testSuiteToAr = new Map()
 const testSuiteToTestStatuses = new Map()
@@ -652,22 +654,13 @@ addHook({
       DD_PLAYWRIGHT_WORKER: '1'
     }
 
-    // hijack this.process.on('message')
-    //  maybe we don't need that, simply use a different `message.method` in processHost
-    // const oldOnMessage = this.process.on('message')
-    // this.process.on('message', (message) => {
-    //   console.log('processHostPackage.startRunner!! message', message)
-    //   oldOnMessage(message)
-    // })
-
     const res = await startRunner.apply(this, arguments)
 
-    // // we're not flushing so it might not work
-    // this.process.on('message', (message) => {
-    //   if (Array.isArray(message) && message[0] === 90) {
-    //     console.log('MESSAGE FROM WORKER!!!!')
-    //   }
-    // })
+    this.process.on('message', (message) => {
+      if (Array.isArray(message) && message[0] === 90) {
+        workerReportCh.publish(message[1])
+      }
+    })
 
     return res
   })
@@ -710,10 +703,6 @@ addHook({
     })
     await res
 
-    console.log('waited res')
-
-    console.log('waiting flush')
-
     testAsyncResource.runInAsyncScope(() => {
       testFinishCh.publish({
         testStatus: 'pass',
@@ -727,10 +716,6 @@ addHook({
         // onDone
       })
     })
-
-    // await flushPromise
-
-    console.log('flushed')
 
     return res
   })
