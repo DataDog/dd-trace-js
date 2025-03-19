@@ -7,6 +7,12 @@ const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
 const DD_TELEMETRY_WAF_RESULT_TAGS = Symbol('_dd.appsec.telemetry.waf.result.tags')
 
+const TRUNCATION_FLAGS = {
+  STRING: 1,
+  CONTAINER_SIZE: 2,
+  CONTAINER_DEPTH: 4
+}
+
 function addWafRequestMetrics (store, { duration, durationExt, wafTimeout, errorCode }) {
   store[DD_TELEMETRY_REQUEST_METRICS].duration += duration || 0
   store[DD_TELEMETRY_REQUEST_METRICS].durationExt += durationExt || 0
@@ -58,6 +64,12 @@ function trackWafMetrics (store, metrics) {
     metricTags[tags.WAF_TIMEOUT] = true
   }
 
+  const truncationReason = getTruncationReason(metrics)
+  if (truncationReason > 0) {
+    metricTags[tags.INPUT_TRUNCATED] = true
+    incrementTruncatedMetrics(metrics, truncationReason)
+  }
+
   return metricTags
 }
 
@@ -69,6 +81,7 @@ function getOrCreateMetricTags (store, versionsTags) {
       [tags.REQUEST_BLOCKED]: false,
       [tags.RULE_TRIGGERED]: false,
       [tags.WAF_TIMEOUT]: false,
+      [tags.INPUT_TRUNCATED]: false,
 
       ...versionsTags
     }
@@ -96,6 +109,39 @@ function incrementWafRequests (store) {
   if (metricTags) {
     appsecMetrics.count('waf.requests', metricTags).inc()
   }
+}
+
+function incrementTruncatedMetrics (metrics, truncationReason) {
+  const truncationTags = { truncation_reason: truncationReason }
+  appsecMetrics.count('waf.input_truncated', truncationTags).inc(1)
+
+  if (metrics?.maxTruncatedString) {
+    appsecMetrics.distribution('waf.truncated_value_size', {
+      truncation_reason: TRUNCATION_FLAGS.STRING
+    }).track(metrics.maxTruncatedString)
+  }
+
+  if (metrics?.maxTruncatedContainerSize) {
+    appsecMetrics.distribution('waf.truncated_value_size', {
+      truncation_reason: TRUNCATION_FLAGS.CONTAINER_SIZE
+    }).track(metrics.maxTruncatedContainerSize)
+  }
+
+  if (metrics?.maxTruncatedContainerDepth) {
+    appsecMetrics.distribution('waf.truncated_value_size', {
+      truncation_reason: TRUNCATION_FLAGS.CONTAINER_DEPTH
+    }).track(metrics.maxTruncatedContainerDepth)
+  }
+}
+
+function getTruncationReason ({ maxTruncatedString, maxTruncatedContainerSize, maxTruncatedContainerDepth }) {
+  let reason = 0
+
+  if (maxTruncatedString) reason |= TRUNCATION_FLAGS.STRING
+  if (maxTruncatedContainerSize) reason |= TRUNCATION_FLAGS.CONTAINER_SIZE
+  if (maxTruncatedContainerDepth) reason |= TRUNCATION_FLAGS.CONTAINER_DEPTH
+
+  return reason
 }
 
 module.exports = {
