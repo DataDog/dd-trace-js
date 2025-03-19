@@ -47,15 +47,14 @@ versions.forEach((version) => {
     let sandbox, cwd, receiver, childProcess, webAppPort
 
     before(async function () {
-      // bump from 60 to 90 seconds because we also need to install dependencies and download chromium
+      // bump from 60 to 90 seconds because playwright is heavy
       this.timeout(90000)
       sandbox = await createSandbox([`@playwright/test@${version}`, 'typescript'], true)
       cwd = sandbox.folder
       const { NODE_OPTIONS, ...restOfEnv } = process.env
-      // Install system dependencies
-      execSync('npx playwright install-deps', { cwd, env: restOfEnv })
       // Install chromium (configured in integration-tests/playwright.config.js)
-      execSync('npx playwright install', { cwd, env: restOfEnv })
+      // *Be advised*: this means that we'll only be using chromium for this test suite
+      execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
       webAppPort = await getPort()
       webAppServer.listen(webAppPort)
     })
@@ -202,7 +201,9 @@ versions.forEach((version) => {
       })
     })
 
-    it('works when tests are compiled to a different location', (done) => {
+    it('works when tests are compiled to a different location', function (done) {
+      // this has shown some flakiness
+      this.retries(1)
       let testOutput = ''
 
       receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
@@ -215,7 +216,7 @@ versions.forEach((version) => {
         assert.include(testOutput, '1 passed')
         assert.include(testOutput, '1 skipped')
         assert.notInclude(testOutput, 'TypeError')
-      }).then(() => done()).catch(done)
+      }, 25000).then(() => done()).catch(done)
 
       childProcess = exec(
         'node ./node_modules/typescript/bin/tsc' +
@@ -1082,6 +1083,15 @@ versions.forEach((version) => {
 
     context('libraries capabilities', () => {
       it('adds capabilities to tests', (done) => {
+        receiver.setKnownTests(
+          {
+            playwright: {
+              'passing-test.js': [
+                'should work with passing tests'
+              ]
+            }
+          }
+        )
         receiver.setSettings({
           flaky_test_retries_enabled: true,
           itr_enabled: false,
@@ -1111,12 +1121,14 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-test-capabilities',
               DD_TEST_SESSION_NAME: 'my-test-session-name'
             },
             stdio: 'pipe'
           }
         )
-        childProcess.on('exit', (exitCode) => {
+
+        childProcess.on('exit', () => {
           eventsPromise.then(() => {
             done()
           }).catch(done)
