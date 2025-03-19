@@ -129,6 +129,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
           blockTriggered: true,
           ruleTriggered: true,
           wafTimeout: true,
+          input_truncated: true,
           wafVersion,
           rulesVersion
         }, req, { type: 'rule-type' })
@@ -145,7 +146,8 @@ describe('Appsec Rasp Telemetry metrics', () => {
           waf_error: false,
           waf_timeout: false,
           waf_version: wafVersion,
-          event_rules_version: rulesVersion
+          event_rules_version: rulesVersion,
+          input_truncated: false
         })
       })
     })

@@ -8,9 +8,9 @@ const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 const DD_TELEMETRY_WAF_RESULT_TAGS = Symbol('_dd.appsec.telemetry.waf.result.tags')
 
 const TRUNCATION_FLAGS = {
-  LONG_STRING: 1,
-  LARGE_CONTAINER: 2,
-  DEEP_CONTAINER: 4
+  STRING: 1,
+  CONTAINER_SIZE: 2,
+  CONTAINER_DEPTH: 4
 }
 
 function addWafRequestMetrics (store, { duration, durationExt, wafTimeout, errorCode }) {
@@ -58,11 +58,6 @@ function trackWafMetrics (store, metrics) {
     metricTags[tags.EVENT_RULES_VERSION] = versionsTags[tags.EVENT_RULES_VERSION]
   }
 
-  const truncationReason = getTruncationReason(metrics)
-  if (truncationReason > 0) {
-    metricTags[tags.INPUT_TRUNCATED] = true
-  }
-
   if (metrics.blockTriggered) {
     metricTags[tags.REQUEST_BLOCKED] = true
   }
@@ -85,6 +80,12 @@ function trackWafMetrics (store, metrics) {
 
   if (versionsTags[tags.WAF_VERSION]) {
     metricTags[tags.WAF_VERSION] = versionsTags[tags.WAF_VERSION]
+  }
+
+  const truncationReason = getTruncationReason(metrics)
+  if (truncationReason > 0) {
+    metricTags[tags.INPUT_TRUNCATED] = true
+    incrementTruncatedMetrics(metrics, truncationReason)
   }
 
   return metricTags
@@ -131,12 +132,35 @@ function incrementWafRequests (store) {
   }
 }
 
+function incrementTruncatedMetrics (metrics, truncationReason) {
+  const truncationTags = { truncation_reason: truncationReason }
+  appsecMetrics.count('waf.input_truncated', truncationTags).inc(1)
+
+  if (metrics?.maxTruncatedString) {
+    appsecMetrics.distribution('waf.truncated_value_size', {
+      truncation_reason: TRUNCATION_FLAGS.STRING
+    }).track(metrics.maxTruncatedString)
+  }
+
+  if (metrics?.maxTruncatedContainerSize) {
+    appsecMetrics.distribution('waf.truncated_value_size', {
+      truncation_reason: TRUNCATION_FLAGS.CONTAINER_SIZE
+    }).track(metrics.maxTruncatedContainerSize)
+  }
+
+  if (metrics?.maxTruncatedContainerDepth) {
+    appsecMetrics.distribution('waf.truncated_value_size', {
+      truncation_reason: TRUNCATION_FLAGS.CONTAINER_DEPTH
+    }).track(metrics.maxTruncatedContainerDepth)
+  }
+}
+
 function getTruncationReason ({ maxTruncatedString, maxTruncatedContainerSize, maxTruncatedContainerDepth }) {
   let reason = 0
 
-  if (maxTruncatedString) reason |= TRUNCATION_FLAGS.LONG_STRING
-  if (maxTruncatedContainerSize) reason |= TRUNCATION_FLAGS.LARGE_CONTAINER
-  if (maxTruncatedContainerDepth) reason |= TRUNCATION_FLAGS.DEEP_CONTAINER
+  if (maxTruncatedString) reason |= TRUNCATION_FLAGS.STRING
+  if (maxTruncatedContainerSize) reason |= TRUNCATION_FLAGS.CONTAINER_SIZE
+  if (maxTruncatedContainerDepth) reason |= TRUNCATION_FLAGS.CONTAINER_DEPTH
 
   return reason
 }

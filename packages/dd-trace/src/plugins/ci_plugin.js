@@ -194,16 +194,16 @@ module.exports = class CiPlugin extends Plugin {
       })
     })
 
-    this.addSub(`ci:${this.constructor.id}:quarantined-tests`, ({ onDone }) => {
-      if (!this.tracer._exporter?.getQuarantinedTests) {
+    this.addSub(`ci:${this.constructor.id}:test-management-tests`, ({ onDone }) => {
+      if (!this.tracer._exporter?.getTestManagementTests) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
-      this.tracer._exporter.getQuarantinedTests(this.testConfiguration, (err, quarantinedTests) => {
+      this.tracer._exporter.getTestManagementTests(this.testConfiguration, (err, testManagementTests) => {
         if (err) {
-          log.error('Quarantined tests could not be fetched. %s', err.message)
-          this.libraryConfig.isQuarantinedTestsEnabled = false
+          log.error('Test management tests could not be fetched. %s', err.message)
+          this.libraryConfig.isTestManagementEnabled = false
         }
-        onDone({ err, quarantinedTests })
+        onDone({ err, testManagementTests })
       })
     })
   }
