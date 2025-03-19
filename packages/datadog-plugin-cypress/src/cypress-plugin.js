@@ -64,7 +64,8 @@ const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
   CI_PROVIDER_NAME,
-  CI_WORKSPACE_PATH
+  CI_WORKSPACE_PATH,
+  GIT_COMMIT_MESSAGE
 } = require('../../dd-trace/src/plugins/util/tags')
 const {
   OS_VERSION,
@@ -201,7 +202,8 @@ class CypressPlugin {
       [RUNTIME_VERSION]: runtimeVersion,
       [GIT_BRANCH]: branch,
       [CI_PROVIDER_NAME]: ciProviderName,
-      [CI_WORKSPACE_PATH]: repositoryRoot
+      [CI_WORKSPACE_PATH]: repositoryRoot,
+      [GIT_COMMIT_MESSAGE]: commitMessage
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot
@@ -217,7 +219,8 @@ class CypressPlugin {
       runtimeName,
       runtimeVersion,
       branch,
-      testLevel: 'test'
+      testLevel: 'test',
+      commitMessage
     }
     this.finishedTestsByFile = {}
 
