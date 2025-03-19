@@ -493,9 +493,7 @@ describe('Plugin', () => {
             expect(seenSpanId).to.equal(spanId)
           }).then(done, done)
 
-          const clock = sinon.useFakeTimers(new Date())
           client.query('SELECT $1::text as message', ['Hello World!'], (err, result) => {
-            clock.restore()
             if (err) return done(err)
             expect(seenTraceParent).to.be.true
             client.end((err) => {
@@ -577,9 +575,7 @@ describe('Plugin', () => {
               `traceparent='00-${traceId}-${spanId}-00'*/ SELECT $1::text as message`)
           }).then(done, done)
 
-          const clock = sinon.useFakeTimers(new Date())
           client.query(query, ['Hello world!'], (err) => {
-            clock.restore()
             if (err) return done(err)
 
             client.end((err) => {

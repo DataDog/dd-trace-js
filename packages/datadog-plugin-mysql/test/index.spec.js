@@ -468,9 +468,7 @@ describe('Plugin', () => {
               `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
               `traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
-          const clock = sinon.useFakeTimers(new Date())
           connection.query('SELECT 1 + 1 AS solution', () => {
-            clock.restore()
             queryText = connection._protocol._queue[0].sql
           })
         })
@@ -550,9 +548,7 @@ describe('Plugin', () => {
               `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
               `traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
-          const clock = sinon.useFakeTimers(new Date())
           pool.query('SELECT 1 + 1 AS solution', () => {
-            clock.restore()
             queryText = pool._allConnections[0]._protocol._queue[0].sql
           })
         })
