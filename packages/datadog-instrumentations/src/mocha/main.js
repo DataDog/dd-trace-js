@@ -30,7 +30,9 @@ const {
   newTests,
   testsQuarantined,
   getTestFullName,
-  getRunTestsWrapper
+  getRunTestsWrapper,
+  testsAttemptToFix,
+  testsStatuses
 } = require('./utils')
 
 require('./common')
@@ -138,16 +140,26 @@ function getOnEndHandler (isParallel) {
       }
     }
 
+    // We substract the errors of attempt to fix tests (quarantined or disabled) from the total number of failures
     // We subtract the errors from quarantined tests from the total number of failures
     if (config.isTestManagementTestsEnabled) {
       let numFailedQuarantinedTests = 0
+      let numFailedRetriedQuarantinedOrDisabledTests = 0
+      for (const test of testsAttemptToFix) {
+        const testName = getTestFullName(test, true, false)
+        const testProperties = getTestProperties(test, config.testManagementTests)
+        if (isTestFailed(test) && (testProperties.isQuarantined || testProperties.isDisabled)) {
+          const failedTests = testsStatuses.get(testName).filter(status => status === 'fail')
+          numFailedRetriedQuarantinedOrDisabledTests += failedTests.length
+        }
+      }
       for (const test of testsQuarantined) {
         if (isTestFailed(test)) {
           numFailedQuarantinedTests++
         }
       }
-      this.stats.failures -= numFailedQuarantinedTests
-      this.failures -= numFailedQuarantinedTests
+      this.stats.failures -= numFailedQuarantinedTests + numFailedRetriedQuarantinedOrDisabledTests
+      this.failures -= numFailedQuarantinedTests + numFailedRetriedQuarantinedOrDisabledTests
     }
 
     if (status === 'fail') {
@@ -193,6 +205,7 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
     if (err) {
       config.testManagementTests = {}
       config.isTestManagementTestsEnabled = false
+      config.testManagementAttemptToFixRetries = 0
     } else {
       config.testManagementTests = receivedTestManagementTests
     }
@@ -260,6 +273,7 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
     config.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
     config.isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
     config.isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
+    config.testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
     // ITR and auto test retries are not supported in parallel mode yet
     config.isSuitesSkippingEnabled = !isParallel && libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = !isParallel && libraryConfig.isFlakyTestRetriesEnabled
@@ -637,6 +651,7 @@ addHook({
     if (config.isTestManagementTestsEnabled) {
       const testSuiteTestManagementTests = config.testManagementTests?.mocha?.suites?.[testPath] || {}
       newWorkerArgs._ddIsTestManagementTestsEnabled = true
+      newWorkerArgs._ddTestManagementAttemptToFixRetries = config.testManagementAttemptToFixRetries
       newWorkerArgs._ddTestManagementTests = {
         mocha: {
           suites: {
@@ -661,9 +676,19 @@ addHook({
       .map(event => event.data)
 
     for (const test of tests) {
+      const testProperties = getTestProperties(test, config.testManagementTests)
+      if (config.isTestManagementTestsEnabled) {
+        // `testsAttemptToFix` is filled in the worker process, so we need to use the test results to fill it here too.
+        // `testsQuarantined` is filled in the worker process, so we need to use the test results to fill it here too.
+        if (testProperties.isAttemptToFix) {
+          testsAttemptToFix.add(test)
+        } else if (testProperties.isQuarantined) {
+          testsQuarantined.add(test)
+        }
+      }
       // `newTests` is filled in the worker process, so we need to use the test results to fill it here too.
-      if (config.isKnownTestsEnabled && isNewTest(test, config.knownTests)) {
-        const testFullName = getTestFullName(test)
+      if (config.isKnownTestsEnabled && isNewTest(test, config.knownTests) && !testProperties.isAttemptToFix) {
+        const testFullName = getTestFullName(test, false, true)
         const tests = newTests[testFullName]
 
         if (!tests) {
@@ -671,10 +696,6 @@ addHook({
         } else {
           tests.push(test)
         }
-      }
-      // `testsQuarantined` is filled in the worker process, so we need to use the test results to fill it here too.
-      if (config.isTestManagementTestsEnabled && getTestProperties(test, config.testManagementTests).isQuarantined) {
-        testsQuarantined.add(test)
       }
     }
     return testFileResult

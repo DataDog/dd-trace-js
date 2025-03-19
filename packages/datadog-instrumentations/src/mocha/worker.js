@@ -36,6 +36,7 @@ addHook({
     }
     if (this.options._ddIsTestManagementTestsEnabled) {
       config.isTestManagementTestsEnabled = true
+      config.testManagementAttemptToFixRetries = this.options._ddTestManagementAttemptToFixRetries
       config.testManagementTests = this.options._ddTestManagementTests
       delete this.options._ddIsTestManagementTestsEnabled
       delete this.options._ddTestManagementTests
