@@ -43,14 +43,14 @@ class NoopLLMObs {
         const ctx = ctxOrPropertyKey
         if (ctx.kind !== 'method') return target
 
-        return llmobs.wrap({ name: ctx.name, ...options }, target)
+        return llmobs.wrap({ name: ctx.name, _decorator: true, ...options }, target)
       } else {
         const propertyKey = ctxOrPropertyKey
         if (descriptor) {
           if (typeof descriptor.value !== 'function') return descriptor
 
           const original = descriptor.value
-          descriptor.value = llmobs.wrap({ name: propertyKey, ...options }, original)
+          descriptor.value = llmobs.wrap({ name: propertyKey, _decorator: true, ...options }, original)
 
           return descriptor
         } else {
@@ -59,7 +59,7 @@ class NoopLLMObs {
           const original = target[propertyKey]
           Object.defineProperty(target, propertyKey, {
             ...Object.getOwnPropertyDescriptor(target, propertyKey),
-            value: llmobs.wrap({ name: propertyKey, ...options }, original)
+            value: llmobs.wrap({ name: propertyKey, _decorator: true, ...options }, original)
           })
 
           return target

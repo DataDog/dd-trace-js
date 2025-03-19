@@ -5,7 +5,8 @@ const {
   MODEL_PROVIDER,
   PARENT_ID_KEY,
   SESSION_ID,
-  INTEGRATION
+  INTEGRATION,
+  DECORATOR
 } = require('./constants/tags')
 
 const telemetryMetrics = require('../telemetry/metrics')
@@ -25,15 +26,19 @@ function incrementLLMObsSpanFinishedCount (span, value = 1) {
   const hasSessionId = mlObsTags[SESSION_ID] !== null
   const integration = mlObsTags[INTEGRATION]
   const autoInstrumented = integration !== null
+  const decorator = mlObsTags[DECORATOR] !== null
   const spanKind = mlObsTags[SPAN_KIND]
   const modelProvider = mlObsTags[MODEL_PROVIDER]
 
   const tags = {
-    autoinstrumented: autoInstrumented,
-    has_session_id: hasSessionId,
-    is_root_span: isRootSpan,
+    autoinstrumented: Number(autoInstrumented),
+    has_session_id: Number(hasSessionId),
+    is_root_span: Number(isRootSpan),
     span_kind: spanKind,
     integration: integration || "N/A",
+  }
+  if (!autoInstrumented) {
+    tags.decorator = Number(decorator)
   }
   if (modelProvider) {
     tags.model_provider = modelProvider
