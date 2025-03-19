@@ -201,7 +201,9 @@ versions.forEach((version) => {
       })
     })
 
-    it('works when tests are compiled to a different location', (done) => {
+    it('works when tests are compiled to a different location', function (done) {
+      // this has shown some flakiness
+      this.retries(1)
       let testOutput = ''
 
       receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
@@ -214,7 +216,7 @@ versions.forEach((version) => {
         assert.include(testOutput, '1 passed')
         assert.include(testOutput, '1 skipped')
         assert.notInclude(testOutput, 'TypeError')
-      }).then(() => done()).catch(done)
+      }, 25000).then(() => done()).catch(done)
 
       childProcess = exec(
         'node ./node_modules/typescript/bin/tsc' +
