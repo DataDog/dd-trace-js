@@ -12,9 +12,8 @@ const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
 
-const LLMObsAgentlessSpanWriter = require('./writers/spans/agentless')
-const LLMObsAgentProxySpanWriter = require('./writers/spans/agentProxy')
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
+const LLMObsSpanWriter = require('./writers/spans')
 
 /**
  * Setting writers and processor globally when LLMObs is enabled
@@ -31,7 +30,7 @@ let evalWriter
 function enable (config) {
   // create writers and eval writer append and flush channels
   // span writer append is handled by the span processor
-  evalWriter = new LLMObsEvalMetricsWriter(config)
+  evalWriter = new LLMObsEvalMetricsWriter(config, false) // TODO: remove agentless false flag??
   spanWriter = createSpanWriter(config)
 
   evalMetricAppendCh.subscribe(handleEvalMetricAppend)
@@ -72,8 +71,19 @@ function handleLLMObsParentIdInjection ({ carrier }) {
 }
 
 function createSpanWriter (config) {
-  const SpanWriter = config.llmobs.agentlessEnabled ? LLMObsAgentlessSpanWriter : LLMObsAgentProxySpanWriter
-  return new SpanWriter(config)
+  let agentlessEnabled = config.llmobs.agentlessEnabled
+  const apiKey = config.apiKey
+
+  if (agentlessEnabled && !apiKey) {
+    throw new Error(
+      'DD_API_KEY is required for sending LLMObs data when agentless mode is enabled. ' +
+      'Ensure this configuration is set before running your application.'
+    )
+  }
+
+  if (apiKey && agentlessEnabled !== false) agentlessEnabled = true
+
+  return new LLMObsSpanWriter(config, agentlessEnabled)
 }
 
 function handleFlush () {
