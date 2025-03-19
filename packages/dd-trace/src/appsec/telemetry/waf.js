@@ -113,16 +113,22 @@ function getOrCreateMetricTags (store) {
   return metricTags
 }
 
-function incrementWafInit (wafVersion, rulesVersion) {
+function incrementWafInit (wafVersion, rulesVersion, success) {
   const versionsTags = getVersionsTags(wafVersion, rulesVersion)
+  appsecMetrics.count('waf.init', { ...versionsTags, success }).inc()
 
-  appsecMetrics.count('waf.init', versionsTags).inc()
+  if (!success) {
+    appsecMetrics.count('waf.config_errors', versionsTags).inc()
+  }
 }
 
-function incrementWafUpdates (wafVersion, rulesVersion) {
+function incrementWafUpdates (wafVersion, rulesVersion, success) {
   const versionsTags = getVersionsTags(wafVersion, rulesVersion)
+  appsecMetrics.count('waf.updates', { ...versionsTags, success }).inc()
 
-  appsecMetrics.count('waf.updates', versionsTags).inc()
+  if (!success) {
+    appsecMetrics.count('waf.config_errors', versionsTags).inc()
+  }
 }
 
 function incrementWafRequests (store) {

@@ -213,11 +213,12 @@ describe('Appsec Waf Telemetry metrics', () => {
 
     describe('incWafInitMetric', () => {
       it('should increment waf.init metric', () => {
-        appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion)
+        appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, true)
 
         expect(count).to.have.been.calledOnceWithExactly('waf.init', {
           waf_version: wafVersion,
-          event_rules_version: rulesVersion
+          event_rules_version: rulesVersion,
+          success: true
         })
         expect(inc).to.have.been.calledOnce
       })
@@ -225,9 +226,9 @@ describe('Appsec Waf Telemetry metrics', () => {
       it('should increment waf.init metric multiple times', () => {
         sinon.restore()
 
-        appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion)
-        appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion)
-        appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion)
+        appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, true)
+        appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, true)
+        appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, true)
 
         const { metrics } = appsecNamespace.toJSON()
         expect(metrics.series.length).to.be.eq(1)
@@ -236,16 +237,35 @@ describe('Appsec Waf Telemetry metrics', () => {
         expect(metrics.series[0].points[0][1]).to.be.eq(3)
         expect(metrics.series[0].tags).to.include('waf_version:0.0.1')
         expect(metrics.series[0].tags).to.include('event_rules_version:0.0.2')
+        expect(metrics.series[0].tags).to.include('success:true')
+      })
+
+      it('should increment waf.init and waf.config_errors on failed init', () => {
+        sinon.restore()
+
+        appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, false)
+
+        const { metrics } = appsecNamespace.toJSON()
+        expect(metrics.series.length).to.be.eq(2)
+        expect(metrics.series[0].metric).to.be.eq('waf.init')
+        expect(metrics.series[0].tags).to.include('waf_version:0.0.1')
+        expect(metrics.series[0].tags).to.include('event_rules_version:0.0.2')
+        expect(metrics.series[0].tags).to.include('success:false')
+
+        expect(metrics.series[1].metric).to.be.eq('waf.config_errors')
+        expect(metrics.series[1].tags).to.include('waf_version:0.0.1')
+        expect(metrics.series[1].tags).to.include('event_rules_version:0.0.2')
       })
     })
 
     describe('incWafUpdatesMetric', () => {
       it('should increment waf.updates metric', () => {
-        appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion)
+        appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion, true)
 
         expect(count).to.have.been.calledOnceWithExactly('waf.updates', {
           waf_version: wafVersion,
-          event_rules_version: rulesVersion
+          event_rules_version: rulesVersion,
+          success: true
         })
         expect(inc).to.have.been.calledOnce
       })
@@ -253,9 +273,9 @@ describe('Appsec Waf Telemetry metrics', () => {
       it('should increment waf.updates metric multiple times', () => {
         sinon.restore()
 
-        appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion)
-        appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion)
-        appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion)
+        appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion, true)
+        appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion, true)
+        appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion, true)
 
         const { metrics } = appsecNamespace.toJSON()
         expect(metrics.series.length).to.be.eq(1)
@@ -264,6 +284,24 @@ describe('Appsec Waf Telemetry metrics', () => {
         expect(metrics.series[0].points[0][1]).to.be.eq(3)
         expect(metrics.series[0].tags).to.include('waf_version:0.0.1')
         expect(metrics.series[0].tags).to.include('event_rules_version:0.0.2')
+        expect(metrics.series[0].tags).to.include('success:true')
+      })
+
+      it('should increment waf.updates and waf.config_errors on failed update', () => {
+        sinon.restore()
+
+        appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion, false)
+
+        const { metrics } = appsecNamespace.toJSON()
+        expect(metrics.series.length).to.be.eq(2)
+        expect(metrics.series[0].metric).to.be.eq('waf.updates')
+        expect(metrics.series[0].tags).to.include('waf_version:0.0.1')
+        expect(metrics.series[0].tags).to.include('event_rules_version:0.0.2')
+        expect(metrics.series[0].tags).to.include('success:false')
+
+        expect(metrics.series[1].metric).to.be.eq('waf.config_errors')
+        expect(metrics.series[1].tags).to.include('waf_version:0.0.1')
+        expect(metrics.series[1].tags).to.include('event_rules_version:0.0.2')
       })
     })
 
@@ -385,7 +423,7 @@ describe('Appsec Waf Telemetry metrics', () => {
         metrics: true
       })
 
-      appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion)
+      appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, true)
 
       expect(count).to.not.have.been.called
       expect(inc).to.not.have.been.called
@@ -397,7 +435,7 @@ describe('Appsec Waf Telemetry metrics', () => {
         metrics: false
       })
 
-      appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion)
+      appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, true)
 
       expect(count).to.not.have.been.called
       expect(inc).to.not.have.been.called

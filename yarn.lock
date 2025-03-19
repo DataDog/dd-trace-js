@@ -361,10 +361,10 @@
   resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.5.0.tgz#0ef2a2a76bb9505a0e7e5bc9be1415b467dbf368"
   integrity sha512-YvLUVOhYVjJssm0f22/RnDQMc7ZZt/w1bA0nty1vvjyaDz5EWaHfWaaV4GYpCt5MRvnGjCBxIwwbRivmGseKeQ==
 
-"@datadog/native-appsec@8.5.0":
-  version "8.5.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-8.5.0.tgz#cf4eea74a07085a0dc9f3e98c130736b38cd61c9"
-  integrity sha512-95y+fm7jd+3iknzuu57pWEPw9fcK9uSBCPiB4kSPHszHu3bESlZM553tc4ANsz+X3gMkYGVg2pgSydG77nSDJw==
+"@datadog/native-appsec@8.5.1":
+  version "8.5.1"
+  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-8.5.1.tgz#000fb06b91949d74298288ace5da51873922cc03"
+  integrity sha512-g6cjIafeObxVV+zJ2U1TDWVBio+MC8/4QR0EmgZ9afvhgtXRXyth3/DUOBSLUoMvCbduHwl6CV9sBf+tbSksVg==
   dependencies:
     node-gyp-build "^3.9.0"
 
@@ -391,10 +391,10 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/pprof@5.5.1":
-  version "5.5.1"
-  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.5.1.tgz#fba8124b6ad537e29326f5f15ed6e64b7a009e96"
-  integrity sha512-3pZVYqc5YkZJOj9Rc8kQ/wG4qlygcnnwFU/w0QKX6dEdJh+1+dWniuUu+GSEjy/H0jc14yhdT2eJJf/F2AnHNw==
+"@datadog/pprof@5.6.0":
+  version "5.6.0"
+  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.6.0.tgz#b6f5c566512ba5e55c6dbf46e9f0f020cfd5c6b5"
+  integrity sha512-x7yN0s4wMnRqv3PWQ6eXKH5XE5qvCOwWbOsXqpT2Irbsc7Wcl5w5JrJUcbPCdSJGihpIh6kAeIrS6w/ZCcHy2Q==
   dependencies:
     delay "^5.0.0"
     node-gyp-build "<4.0"
