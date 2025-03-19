@@ -1083,6 +1083,15 @@ versions.forEach((version) => {
 
     context('libraries capabilities', () => {
       it('adds capabilities to tests', (done) => {
+        receiver.setKnownTests(
+          {
+            playwright: {
+              'passing-test.js': [
+                'should work with passing tests'
+              ]
+            }
+          }
+        )
         receiver.setSettings({
           flaky_test_retries_enabled: true,
           itr_enabled: false,
@@ -1112,12 +1121,14 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-test-capabilities',
               DD_TEST_SESSION_NAME: 'my-test-session-name'
             },
             stdio: 'pipe'
           }
         )
-        childProcess.on('exit', (exitCode) => {
+
+        childProcess.on('exit', () => {
           eventsPromise.then(() => {
             done()
           }).catch(done)
