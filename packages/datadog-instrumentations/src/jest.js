@@ -529,7 +529,7 @@ addHook({
 })
 
 function cliWrapper (cli, jestVersion) {
-  const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => async function () {
+  return shimmer.wrap(cli, 'runCLI', runCLI => async function () {
     let onDone
     const configurationPromise = new Promise((resolve) => {
       onDone = resolve
@@ -754,10 +754,6 @@ function cliWrapper (cli, jestVersion) {
 
     return result
   })
-
-  cli.runCLI = wrapped.runCLI
-
-  return cli
 }
 
 function coverageReporterWrapper (coverageReporter) {
@@ -797,6 +793,11 @@ addHook({
   name: '@jest/core',
   file: 'build/cli/index.js',
   versions: ['>=24.8.0']
+}, cliWrapper)
+
+addHook({
+  name: '@jest/core',
+  versions: ['>=30']
 }, cliWrapper)
 
 function jestAdapterWrapper (jestAdapter, jestVersion) {
@@ -855,6 +856,12 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
 
   return jestAdapter
 }
+
+addHook({
+  name: 'jest-circus',
+  file: 'build/runner.js',
+  versions: ['>=30']
+}, jestAdapterWrapper)
 
 addHook({
   name: 'jest-circus',
