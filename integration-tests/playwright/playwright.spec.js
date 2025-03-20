@@ -33,7 +33,10 @@ const {
   TEST_MANAGEMENT_IS_DISABLED,
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
   DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
-  DD_CAPABILITIES_AUTO_TEST_RETRIES
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_NAME
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -895,6 +898,138 @@ versions.forEach((version) => {
 
     if (version === 'latest') {
       context('test management', () => {
+        context('attempt to fix', () => {
+          beforeEach(() => {
+            receiver.setTestManagementTests({
+              playwright: {
+                suites: {
+                  'attempt-to-fix-test.js': {
+                    tests: {
+                      'attempt to fix should attempt to fix failed test': {
+                        properties: {
+                          attempt_to_fix: true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            })
+          })
+
+          const getTestAssertions = (isAttemptingToFix) =>
+            receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const testSession = events.find(event => event.type === 'test_session_end').content
+
+                if (isAttemptingToFix) {
+                  assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+                } else {
+                  assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+                }
+
+                const retriedTests = tests.filter(
+                  test => test.meta[TEST_NAME] === 'attempt to fix should attempt to fix failed test'
+                )
+
+                // Retried tests are in "randomly" order
+                let countAttemptToFixTests = 0
+                let hasFailedAllRetries = false
+                for (let i = 0; i < retriedTests.length; i++) {
+                  const test = retriedTests[i]
+                  if (isAttemptingToFix &&
+                    test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true' &&
+                    test.meta[TEST_IS_RETRY] === 'true' &&
+                    test.meta[TEST_RETRY_REASON] === 'attempt_to_fix') {
+                    countAttemptToFixTests++
+                    if (test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true') {
+                      hasFailedAllRetries = true
+                    }
+                  }
+                }
+
+                if (isAttemptingToFix) {
+                  assert.equal(countAttemptToFixTests, retriedTests.length - 1)
+                  assert.equal(hasFailedAllRetries, true)
+                } else {
+                  assert.equal(countAttemptToFixTests, 0)
+                  assert.equal(hasFailedAllRetries, false)
+                }
+              })
+
+          const runAttemptToFixTest = (done, isAttemptingToFix, isQuarantined, extraEnvVars) => {
+            const testAssertionsPromise = getTestAssertions(isAttemptingToFix)
+
+            childProcess = exec(
+              './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  PW_BASE_URL: `http://localhost:${webAppPort}`,
+                  TEST_DIR: './ci-visibility/playwright-tests-test-management',
+                  ...extraEnvVars
+                },
+                stdio: 'pipe'
+              }
+            )
+
+            childProcess.on('exit', (exitCode) => {
+              testAssertionsPromise.then(() => {
+                if (isAttemptingToFix && isQuarantined) {
+                  // even though a test fails, the exit code is 0 because the test is quarantined
+                  assert.equal(exitCode, 0)
+                } else {
+                  assert.equal(exitCode, 1)
+                }
+                done()
+              }).catch(done)
+            })
+          }
+
+          it('can attempt to fix tests', (done) => {
+            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+            runAttemptToFixTest(done, true, false)
+          })
+
+          it('does not attempt to fix tests if test management is not enabled', (done) => {
+            receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
+
+            runAttemptToFixTest(done, false, false)
+          })
+
+          it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+            runAttemptToFixTest(done, false, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+          })
+
+          it('does not fail retry if a test is quarantined', (done) => {
+            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+            receiver.setTestManagementTests({
+              playwright: {
+                suites: {
+                  'attempt-to-fix-test.js': {
+                    tests: {
+                      'attempt to fix should attempt to fix failed test': {
+                        properties: {
+                          attempt_to_fix: true,
+                          quarantined: true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            })
+
+            runAttemptToFixTest(done, true, true)
+          })
+        })
+
         context('disabled', () => {
           beforeEach(() => {
             receiver.setTestManagementTests({
