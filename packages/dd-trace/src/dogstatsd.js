@@ -234,7 +234,7 @@ class MetricsAggregationClient {
     this._histograms[name].get(tag).record(value)
   }
 
-  count (name, count, tag, monotonic = false) {
+  count (name, count, tag, monotonic = true) {
     if (typeof tag === 'boolean') {
       monotonic = tag
       tag = undefined
@@ -254,8 +254,8 @@ class MetricsAggregationClient {
     this._gauges[name].set(tag, value)
   }
 
-  increment (name, count = 1, tag, monotonic) {
-    this.count(name, count, tag, monotonic)
+  increment (name, count = 1, tag) {
+    this.count(name, count, tag)
   }
 
   decrement (name, count = 1, tag) {

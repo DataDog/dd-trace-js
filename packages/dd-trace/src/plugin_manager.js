@@ -28,9 +28,6 @@ loadChannel.subscribe(({ name }) => {
   maybeEnable(plugins[name])
 })
 
-// Always enabled
-maybeEnable(require('../../datadog-plugin-dd-trace-api/src'))
-
 function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
   if (!pluginClasses[Plugin.id]) {
