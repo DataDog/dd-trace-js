@@ -257,9 +257,9 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
       const majorVersion = simpleVersionMatch[1]
       cappedVersionRange = `>=${majorVersion}.0.0 <${parseInt(majorVersion) + 1}.0.0`
     } else if (exactVersionMatch) {
-      // For exact versions like "1.0.0", still restrict to the same major version
-      const majorVersion = exactVersionMatch[1]
-      cappedVersionRange = `>=${dependencyVersionRange} <${parseInt(majorVersion) + 1}.0.0`
+      // For exact versions like "1.0.0" or "2.2.2", use exactly that version
+      // Don't allow newer versions even within the same major
+      cappedVersionRange = dependencyVersionRange
     } else if (latests.latests[name]) {
       // Apply normal capping for other version ranges
       const latestVersion = latests.latests[name]
