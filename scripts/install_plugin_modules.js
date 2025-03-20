@@ -246,18 +246,34 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
   // Apply version cap from latests.json if available
   let cappedVersionRange = dependencyVersionRange
 
-  if (latests.latests[name]) {
-    const latestVersion = latests.latests[name]
+  // Handle simple major version numbers like "1" or exact versions like "1.0.0"
+  if (dependencyVersionRange) {
+    const simpleVersionMatch = dependencyVersionRange.match(/^(\d+)$/)
+    const exactVersionMatch = dependencyVersionRange.match(/^(\d+)\.(\d+)\.(\d+)$/)
 
-    // Only process string version ranges
-    if (dependencyVersionRange && typeof dependencyVersionRange === 'string') {
-      cappedVersionRange = applyCap(dependencyVersionRange, latestVersion)
+    // Attempt to fix issue seen with fastify
+    if (simpleVersionMatch) {
+      // For simple major versions like "1", restrict to that major version only
+      const majorVersion = simpleVersionMatch[1]
+      cappedVersionRange = `>=${majorVersion}.0.0 <${parseInt(majorVersion) + 1}.0.0`
+    } else if (exactVersionMatch) {
+      // For exact versions like "1.0.0", still restrict to the same major version
+      const majorVersion = exactVersionMatch[1]
+      cappedVersionRange = `>=${dependencyVersionRange} <${parseInt(majorVersion) + 1}.0.0`
+    } else if (latests.latests[name]) {
+      // Apply normal capping for other version ranges
+      const latestVersion = latests.latests[name]
+      if (typeof dependencyVersionRange === 'string') {
+        cappedVersionRange = applyCap(dependencyVersionRange, latestVersion)
+      }
     }
   }
+
   const dependencies = { [name]: cappedVersionRange }
   if (deps[name]) {
     await addDependencies(dependencies, name, cappedVersionRange)
   }
+
   const pkg = {
     name: [name, sha1(name).substr(0, 8), sha1(version)].filter(val => val).join('-'),
     version: '1.0.0',
@@ -279,7 +295,6 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
   }
   fs.writeFileSync(filename(name, version, 'package.json'), JSON.stringify(pkg, null, 2) + '\n')
 }
-
 async function addDependencies (dependencies, name, versionRange) {
   const versionList = await getVersionList(name)
   const version = semver.maxSatisfying(versionList, versionRange)
