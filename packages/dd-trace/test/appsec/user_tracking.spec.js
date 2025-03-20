@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('assert')
+const proxyquire = require('proxyquire')
 
 const telemetry = require('../../src/appsec/telemetry')
 const waf = require('../../src/appsec/waf')
@@ -36,7 +37,7 @@ describe('User Tracking', () => {
 
     keepTrace = sinon.stub()
 
-    const UserTracking = proxyquire('../src/appsec/user_tracking', {
+    const UserTracking = proxyquire('../../src/appsec/user_tracking', {
       '../log': log,
       '../priority_sampler': { keepTrace }
     })
