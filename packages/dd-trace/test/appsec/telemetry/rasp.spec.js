@@ -84,29 +84,6 @@ describe('Appsec Rasp Telemetry metrics', () => {
         expect(inc).to.have.been.calledTwice
       })
 
-      it('should increment rasp.rule.match metric if ruleTriggered', () => {
-        appsecTelemetry.updateRaspRequestsMetricTags({
-          duration: 42,
-          durationExt: 52,
-          ruleTriggered: true,
-          wafVersion: '1.0.0',
-          rulesVersion: '2.0.0'
-        }, req, { type: 'rule-type' })
-
-        expect(count).to.have.been.calledWith('rasp.rule.match')
-        expect(count).to.have.been.calledWith('rasp.rule.eval', {
-          rule_type: 'rule-type',
-          waf_version: '1.0.0',
-          event_rules_version: '2.0.0'
-        })
-        expect(count).to.not.have.been.calledWith('rasp.timeout', {
-          rule_type: 'rule-type',
-          waf_version: '1.0.0',
-          event_rules_version: '2.0.0'
-        })
-        expect(inc).to.have.been.calledTwice
-      })
-
       it('should track rasp.duration and rasp.rule.duration metrics', () => {
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 42,
@@ -229,6 +206,73 @@ describe('Appsec Rasp Telemetry metrics', () => {
 
         const { raspErrorCode } = appsecTelemetry.getRequestMetrics(req)
         expect(raspErrorCode).to.equal(-1)
+      })
+    })
+
+    describe('updateRaspRuleMatchMetricTags', () => {
+      const raspRule = { type: 'sql_injection' }
+
+      beforeEach(() => {
+        req = {}
+        appsecTelemetry.updateRaspRequestsMetricTags({
+          ruleTriggered: true,
+          wafVersion: '1.0.0',
+          rulesVersion: '2.0.0'
+        }, req, { type: 'sql_injection' })
+
+        count.resetHistory()
+        inc.resetHistory()
+      })
+
+      it('should increment rasp.rule.match metric with success block status', () => {
+        appsecTelemetry.updateRaspRuleMatchMetricTags(req, raspRule, true, true)
+
+        expect(count).to.have.been.calledWith('rasp.rule.match', {
+          rule_type: 'sql_injection',
+          waf_version: '1.0.0',
+          event_rules_version: '2.0.0',
+          block: 'success'
+        })
+        expect(inc).to.have.been.called
+      })
+
+      it('should increment rasp.rule.match metric with failure block status', () => {
+        appsecTelemetry.updateRaspRuleMatchMetricTags(req, raspRule, true, false)
+
+        expect(count).to.have.been.calledWith('rasp.rule.match', {
+          rule_type: 'sql_injection',
+          waf_version: '1.0.0',
+          event_rules_version: '2.0.0',
+          block: 'failure'
+        })
+        expect(inc).to.have.been.called
+      })
+
+      it('should increment rasp.rule.match metric with irrelevant block status', () => {
+        appsecTelemetry.updateRaspRuleMatchMetricTags(req, raspRule, false, false)
+
+        expect(count).to.have.been.calledWith('rasp.rule.match', {
+          rule_type: 'sql_injection',
+          waf_version: '1.0.0',
+          event_rules_version: '2.0.0',
+          block: 'irrelevant'
+        })
+        expect(inc).to.have.been.called
+      })
+
+      it('should not increment any metric if ruleTriggered is not set', () => {
+        const newReq = {}
+        appsecTelemetry.updateRaspRuleMatchMetricTags(newReq, raspRule, true, true)
+
+        expect(count).to.not.have.been.calledWith('rasp.rule.match')
+        expect(inc).to.not.have.been.called
+      })
+
+      it('should not increment any metric if req is not provided', () => {
+        appsecTelemetry.updateRaspRuleMatchMetricTags(null, raspRule, true, true)
+
+        expect(count).to.not.have.been.called
+        expect(inc).to.not.have.been.called
       })
     })
 
