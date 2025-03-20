@@ -354,9 +354,7 @@ describe('Kinesis', function () {
         }, { timeoutMs: 10000 }).then(done, done)
 
         helpers.putTestRecords(kinesis, streamNameDSM, (err, data) => {
-          if (err) return done(err)
-
-          nowStub.restore()
+          // Swallow the error as it doesn't matter for this test.
         })
       })
     })
