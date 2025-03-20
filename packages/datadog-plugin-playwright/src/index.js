@@ -173,7 +173,6 @@ class PlaywrightPlugin extends CiPlugin {
       const traces = JSON.parse(serializedTraces)
       const formattedTraces = []
 
-      debugger
       for (const trace of traces) {
         const formattedTrace = []
         for (const span of trace) {
@@ -184,22 +183,21 @@ class PlaywrightPlugin extends CiPlugin {
             parent_id: id(span.parent_id)
           }
           if (span.name === 'playwright.test') {
-            formattedSpan.meta[TEST_SESSION_ID] = this.testSessionSpan.context()._traceId
-            formattedSpan.meta[TEST_MODULE_ID] = this.testModuleSpan.context()._spanId
+            formattedSpan.meta[TEST_SESSION_ID] = this.testSessionSpan.context().toTraceId()
+            formattedSpan.meta[TEST_MODULE_ID] = this.testModuleSpan.context().toSpanId()
             formattedSpan.meta[TEST_COMMAND] = this.command
             formattedSpan.meta[TEST_MODULE] = this.constructor.id
             // MISSING _trace.startTime and _trace.ticks - because by now the suite is already serialized
             const testSuite = this._testSuites.get(formattedSpan.meta.test_suite_absolute_path)
             if (testSuite) {
-              formattedSpan.meta[TEST_SUITE_ID] = testSuite.context()._spanId
-              delete formattedSpan.meta.test_suite_absolute_path
+              formattedSpan.meta[TEST_SUITE_ID] = testSuite.context().toSpanId()
             }
+            delete formattedSpan.meta.test_suite_absolute_path
           }
           formattedTrace.push(formattedSpan)
         }
         formattedTraces.push(formattedTrace)
       }
-      console.log('formattedTraces', formattedTraces)
 
       formattedTraces.forEach(trace => {
         this.tracer._exporter.export(trace)
@@ -280,7 +278,6 @@ class PlaywrightPlugin extends CiPlugin {
 
       finishAllTraceSpans(span)
       if (process.env.DD_PLAYWRIGHT_WORKER) {
-        console.log('flushing from worker')
         this.tracer._exporter.flush()
       }
     })

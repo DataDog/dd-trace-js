@@ -20,7 +20,6 @@ const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 
 const workerReportCh = channel('ci:playwright:worker:report')
 
-const testToAr = new WeakMap()
 const testSuiteToAr = new Map()
 const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
@@ -252,20 +251,15 @@ function getTestFullname (test) {
   return names.join(' ')
 }
 
-function testBeginHandler (test, browserName) {
+function testBeginHandler (test) {
   const {
     _requireFile: testSuiteAbsolutePath,
-    _type,
-    location: {
-      line: testSourceLine
-    }
+    _type
   } = test
 
   if (_type === 'beforeAll' || _type === 'afterAll') {
     return
   }
-
-  const testName = getTestFullname(test)
 
   const isNewTestSuite = !startedSuites.includes(testSuiteAbsolutePath)
 
@@ -277,26 +271,10 @@ function testBeginHandler (test, browserName) {
       testSuiteStartCh.publish(testSuiteAbsolutePath)
     })
   }
-
-  // const testAsyncResource = new AsyncResource('bound-anonymous-fn')
-  // testToAr.set(test, testAsyncResource)
-  // testAsyncResource.runInAsyncScope(() => {
-  //   testStartCh.publish({
-  //     testName,
-  //     testSuiteAbsolutePath,
-  //     testSourceLine,
-  //     browserName,
-  //     isDisabled: test._ddIsDisabled
-  //   })
-  // })
 }
 
 function testEndHandler (test, annotations, testStatus, error, isTimeout) {
-  let annotationTags
-  if (annotations.length) {
-    annotationTags = parseAnnotations(annotations)
-  }
-  const { _requireFile: testSuiteAbsolutePath, results, _type } = test
+  const { _requireFile: testSuiteAbsolutePath, _type, results } = test
 
   if (_type === 'beforeAll' || _type === 'afterAll') {
     const hookError = formatTestHookError(error, _type, isTimeout)
@@ -306,21 +284,6 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
     }
     return
   }
-
-  // const testResult = results[results.length - 1]
-  // const testAsyncResource = testToAr.get(test)
-  // testAsyncResource.runInAsyncScope(() => {
-  //   testFinishCh.publish({
-  //     testStatus,
-  //     steps: testResult?.steps || [],
-  //     isRetry: testResult?.retry > 0,
-  //     error,
-  //     extraTags: annotationTags,
-  //     isNew: test._ddIsNew,
-  //     isQuarantined: test._ddIsQuarantined,
-  //     isEfdRetry: test._ddIsEfdRetry
-  //   })
-  // })
 
   if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
     testSuiteToTestStatuses.get(testSuiteAbsolutePath).push(testStatus)
@@ -674,15 +637,24 @@ addHook({
   file: 'lib/worker/workerMain.js',
   versions: ['>=1.38.0']
 }, (workerPackage) => {
-  shimmer.wrap(workerPackage.WorkerMain.prototype, '_runTest', _runTest => async function (test, retry) {
+  // we assume there's only a test running at a time
+  let steps = []
+  const stepInfoByStepId = {}
+
+  shimmer.wrap(workerPackage.WorkerMain.prototype, '_runTest', _runTest => async function (test) {
+    steps = []
+
     const {
       _requireFile: testSuiteAbsolutePath,
-      title: testName,
       location: {
         line: testSourceLine
       }
     } = test
     let res
+
+    let testInfo
+    const testName = getTestFullname(test)
+    const browserName = this._project.project.name
 
     // If test events are created in the worker process I need to stop creating it in the main process
     // Probably yet another test worker exporter is needed in addition to the ones for mocha, jest and cucumber
@@ -693,36 +665,65 @@ addHook({
         testName,
         testSuiteAbsolutePath,
         testSourceLine,
-        browserName: 'chromium' // TODO: get browser name from projects
+        browserName,
+        // TODO: unclear that test._ddIsDisabled will reach the worker
+        isDisabled: test._ddIsDisabled
       })
 
       res = _runTest.apply(this, arguments)
-
-      console.log('res _runTest', res)
-      // call test end here??
+      // we use the fact that _runTest is async
+      // atlernatively we could wrap `this.dispatchEvent` since `testEnd` is sent via `this.dispatchEvent`
+      testInfo = this._currentTest
     })
     await res
 
+    const { status, error, annotations, retry } = testInfo
+
+    // testInfo.errors could be better than "error",
+    // which will only include timeout error (even though the test failed because of a different error)
+
+    let annotationTags
+    if (annotations.length) {
+      annotationTags = parseAnnotations(annotations)
+    }
+
     testAsyncResource.runInAsyncScope(() => {
       testFinishCh.publish({
-        testStatus: 'pass',
-        steps: [],
-        error: null,
-        extraTags: {},
-        isNew: false,
-        isEfdRetry: false,
-        isRetry: false,
-        isQuarantined: false
-        // onDone
+        testStatus: STATUS_TO_TEST_STATUS[status],
+        steps,
+        error,
+        extraTags: annotationTags,
+        isRetry: retry > 0,
+        // probably not going to work
+        isNew: test._ddIsNew,
+        isQuarantined: test._ddIsQuarantined,
+        isEfdRetry: test._ddIsEfdRetry
       })
     })
 
     return res
   })
 
-  // shimmer.wrap(workerPackage.WorkerMain.prototype, 'dispatchEvent', dispatchEvent => function (event) {
-  //   // Do I augment the testBegin event to include the test span id? Or do I create the test events in the worker process?
-  //   return dispatchEvent.apply(this, arguments)
-  // })
+  // We reproduce what happens in `Dispatcher#_onStepBegin` and `Dispatcher#_onStepEnd`,
+  // since `startTime` and `duration` are not available directly in the worker process
+  shimmer.wrap(workerPackage.WorkerMain.prototype, 'dispatchEvent', dispatchEvent => function (event, payload) {
+    if (event === 'stepBegin') {
+      stepInfoByStepId[payload.stepId] = {
+        startTime: payload.wallTime,
+        title: payload.title
+      }
+    } else if (event === 'stepEnd') {
+      const stepInfo = stepInfoByStepId[payload.stepId]
+      delete stepInfoByStepId[payload.stepId]
+      steps.push({
+        startTime: new Date(stepInfo.startTime),
+        title: stepInfo.title,
+        duration: payload.wallTime - stepInfo.startTime,
+        error: payload.error
+      })
+    }
+    return dispatchEvent.apply(this, arguments)
+  })
+
   return workerPackage
 })
