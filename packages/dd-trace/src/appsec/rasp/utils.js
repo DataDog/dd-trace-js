@@ -4,6 +4,7 @@ const web = require('../../plugins/util/web')
 const { getCallsiteFrames, reportStackTrace, canReportStackTrace } = require('../stack_trace')
 const { getBlockingAction } = require('../blocking')
 const log = require('../../log')
+const { updateRaspRuleMatchMetricTags } = require('../telemetry')
 
 const abortOnUncaughtException = process.execArgv?.includes('--abort-on-uncaught-exception')
 
@@ -19,16 +20,17 @@ const RULE_TYPES = {
 }
 
 class DatadogRaspAbortError extends Error {
-  constructor (req, res, blockingAction) {
+  constructor (req, res, blockingAction, raspRule) {
     super('DatadogRaspAbortError')
     this.name = 'DatadogRaspAbortError'
     this.req = req
     this.res = res
     this.blockingAction = blockingAction
+    this.raspRule = raspRule
   }
 }
 
-function handleResult (actions, req, res, abortController, config) {
+function handleResult (actions, req, res, abortController, config, raspRule) {
   const generateStackTraceAction = actions?.generate_stack
 
   const { enabled, maxDepth, maxStackTraces } = config.appsec.stackTrace
@@ -51,7 +53,7 @@ function handleResult (actions, req, res, abortController, config) {
   if (blockingAction) {
     // Should block only in express
     if (rootSpan?.context()._name === 'express.request') {
-      const abortError = new DatadogRaspAbortError(req, res, blockingAction)
+      const abortError = new DatadogRaspAbortError(req, res, blockingAction, raspRule)
       abortController.abort(abortError)
 
       // TODO Delete this when support for node 16 is removed
@@ -59,6 +61,8 @@ function handleResult (actions, req, res, abortController, config) {
         abortController.signal.reason = abortError
       }
     }
+  } else {
+    updateRaspRuleMatchMetricTags(req, raspRule, false, false)
   }
 }
 
