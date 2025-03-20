@@ -133,14 +133,14 @@ module.exports = {
   disable,
 
   updateWafRequestsMetricTags,
+  updateWafRateLimitedMetric,
+  updateWafBlockFailureMetric,
   updateRaspRequestsMetricTags,
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,
   incrementMissingUserLoginMetric,
   incrementMissingUserIdMetric,
-  updateWafRateLimitedMetric,
-  updateWafBlockFailureMetric,
 
   getRequestMetrics
 }

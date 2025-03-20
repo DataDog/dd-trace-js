@@ -207,6 +207,7 @@ function finishRequest (req, res) {
     rootSpan.addTags(Object.fromEntries(metricsQueue))
 
     keepTrace(rootSpan, ASM)
+
     metricsQueue.clear()
   }
 
