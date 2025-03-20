@@ -274,7 +274,7 @@ function testBeginHandler (test) {
 }
 
 function testEndHandler (test, annotations, testStatus, error, isTimeout) {
-  const { _requireFile: testSuiteAbsolutePath, _type, results } = test
+  const { _requireFile: testSuiteAbsolutePath, _type } = test
 
   if (_type === 'beforeAll' || _type === 'afterAll') {
     const hookError = formatTestHookError(error, _type, isTimeout)
@@ -677,7 +677,7 @@ addHook({
     })
     await res
 
-    const { status, error, annotations, retry } = testInfo
+    const { status, error, annotations, retry, testId } = testInfo
 
     // testInfo.errors could be better than "error",
     // which will only include timeout error (even though the test failed because of a different error)
@@ -690,7 +690,7 @@ addHook({
     testAsyncResource.runInAsyncScope(() => {
       testFinishCh.publish({
         testStatus: STATUS_TO_TEST_STATUS[status],
-        steps,
+        steps: steps.filter(step => step.testId === testId),
         error,
         extraTags: annotationTags,
         isRetry: retry > 0,
@@ -710,12 +710,14 @@ addHook({
     if (event === 'stepBegin') {
       stepInfoByStepId[payload.stepId] = {
         startTime: payload.wallTime,
-        title: payload.title
+        title: payload.title,
+        testId: payload.testId
       }
     } else if (event === 'stepEnd') {
       const stepInfo = stepInfoByStepId[payload.stepId]
       delete stepInfoByStepId[payload.stepId]
       steps.push({
+        testId: stepInfo.testId,
         startTime: new Date(stepInfo.startTime),
         title: stepInfo.title,
         duration: payload.wallTime - stepInfo.startTime,

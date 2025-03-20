@@ -27,7 +27,8 @@ const {
   TEST_COMMAND,
   TEST_MODULE,
   TEST_SUITE,
-  TEST_SUITE_ID
+  TEST_SUITE_ID,
+  TEST_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -192,6 +193,12 @@ class PlaywrightPlugin extends CiPlugin {
             if (testSuite) {
               formattedSpan.meta[TEST_SUITE_ID] = testSuite.context().toSpanId()
             }
+            const testSuitePath = getTestSuitePath(formattedSpan.meta.test_suite_absolute_path, this.rootDir)
+            const testSourceFile = getTestSuitePath(formattedSpan.meta.test_suite_absolute_path, this.repositoryRoot)
+            // we need to rewrite this because this.rootDir and this.repositoryRoot are not available in the worker
+            formattedSpan.meta[TEST_SUITE] = testSuitePath
+            formattedSpan.meta[TEST_SOURCE_FILE] = testSourceFile
+            formattedSpan.resource = `${testSuitePath}.${formattedSpan.meta[TEST_NAME]}`
             delete formattedSpan.meta.test_suite_absolute_path
           }
           formattedTrace.push(formattedSpan)
@@ -283,6 +290,7 @@ class PlaywrightPlugin extends CiPlugin {
     })
   }
 
+  // TODO: this can be simplified now that it only runs in worker
   startTestSpan (testName, testSuiteAbsolutePath, testSuite, testSourceFile, testSourceLine, browserName) {
     const testSuiteSpan = this._testSuites.get(testSuiteAbsolutePath)
 
