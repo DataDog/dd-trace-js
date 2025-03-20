@@ -30,7 +30,7 @@ jobs:
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
-          suffix: llmobs-${{ github.job }}-{{ matrix.version }}
+          suffix: llmobs-${{ github.job }}-${{ matrix.version }}
       - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
 
   openai:
