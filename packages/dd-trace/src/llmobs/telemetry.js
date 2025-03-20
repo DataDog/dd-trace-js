@@ -30,7 +30,7 @@ function incrementLLMObsSpanFinishedCount (span, value = 1) {
   const hasSessionId = mlObsTags[SESSION_ID] != null
   const integration = mlObsTags[INTEGRATION]
   const autoInstrumented = integration != null
-  const decorator = !mlObsTags[DECORATOR]
+  const decorator = !!mlObsTags[DECORATOR]
   const spanKind = mlObsTags[SPAN_KIND]
   const modelProvider = mlObsTags[MODEL_PROVIDER]
   const error = spanTags.error || spanTags[ERROR_TYPE]
