@@ -1,18 +1,17 @@
 'use strict'
 
-const LLMObsAgentProxySpanWriter = require('../../../../src/llmobs/writers/spans/agentProxy')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const agent = require('../../../../../dd-trace/test/plugins/agent')
 const {
   expectedLLMObsLLMSpanEvent,
-  expectedLLMObsNonLLMSpanEvent,
-  deepEqualWithMockValues,
+  expectedLLMObsNonLLMSpanEvent
+} = require('../../util')
+const llmobsMocks = require('../../mocks')
+
+const {
   MOCK_ANY,
   MOCK_STRING
-} = require('../../util')
-const chai = require('chai')
-
-chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
+} = llmobsMocks
 
 const nock = require('nock')
 function stubCall ({ base = '', path = '', code = 200, response = {} }) {
@@ -47,26 +46,22 @@ describe('integrations', () => {
   })
 
   describe('langchain', () => {
-    before(async () => {
-      sinon.stub(LLMObsAgentProxySpanWriter.prototype, 'append')
-
-      // reduce errors related to too many listeners
-      process.removeAllListeners('beforeExit')
-
-      LLMObsAgentProxySpanWriter.prototype.append.reset()
-
-      await agent.load('langchain', {}, {
+    before(() => {
+      return agent.load('langchain', {}, {
         llmobs: {
           mlApp: 'test'
         }
       })
+    })
 
+    before(() => {
       llmobs = require('../../../../../..').llmobs
     })
 
+    const { getSpanEvents } = llmobsMocks.setup()
+
     afterEach(() => {
       nock.cleanAll()
-      LLMObsAgentProxySpanWriter.prototype.append.reset()
     })
 
     after(() => {
@@ -111,7 +106,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = getSpanEvents()[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -139,7 +134,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = getSpanEvents()[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -197,7 +192,7 @@ describe('integrations', () => {
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
 
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = getSpanEvents()[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -243,7 +238,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = getSpanEvents()[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -271,7 +266,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = getSpanEvents()[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -322,7 +317,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = getSpanEvents()[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -375,7 +370,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = getSpanEvents()[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -444,7 +439,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = getSpanEvents()[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -471,7 +466,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = getSpanEvents()[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -522,7 +517,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = getSpanEvents()[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -573,8 +568,8 @@ describe('integrations', () => {
               const workflowSpan = spans[0]
               const llmSpan = spans[1]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const llmSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
+              const workflowSpanEvent = getSpanEvents()[0]
+              const llmSpanEvent = getSpanEvents()[1]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
@@ -622,7 +617,7 @@ describe('integrations', () => {
 
               const workflowSpan = spans[0]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const workflowSpanEvent = getSpanEvents()[0]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
@@ -709,11 +704,11 @@ describe('integrations', () => {
               const secondSubWorkflow = spans[3]
               const secondLLM = spans[4]
 
-              const topLevelWorkflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const firstSubWorkflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
-              const firstLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(2).args[0]
-              const secondSubWorkflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(3).args[0]
-              const secondLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(4).args[0]
+              const topLevelWorkflowSpanEvent = getSpanEvents()[0]
+              const firstSubWorkflowSpanEvent = getSpanEvents()[1]
+              const firstLLMSpanEvent = getSpanEvents()[2]
+              const secondSubWorkflowSpanEvent = getSpanEvents()[3]
+              const secondLLMSpanEvent = getSpanEvents()[4]
 
               const expectedTopLevelWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: topLevelWorkflow,
@@ -846,9 +841,9 @@ describe('integrations', () => {
               const firstLLMSpan = spans[1]
               const secondLLMSpan = spans[2]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const firstLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
-              const secondLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(2).args[0]
+              const workflowSpanEvent = getSpanEvents()[0]
+              const firstLLMSpanEvent = getSpanEvents()[1]
+              const secondLLMSpanEvent = getSpanEvents()[2]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
@@ -937,8 +932,8 @@ describe('integrations', () => {
               const workflowSpan = spans[0]
               const llmSpan = spans[1]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const llmSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
+              const workflowSpanEvent = getSpanEvents()[0]
+              const llmSpanEvent = getSpanEvents()[1]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
@@ -1054,9 +1049,9 @@ describe('integrations', () => {
               const taskSpan = spans[1]
               const llmSpan = spans[2]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const taskSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
-              const llmSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(2).args[0]
+              const workflowSpanEvent = getSpanEvents()[0]
+              const taskSpanEvent = getSpanEvents()[1]
+              const llmSpanEvent = getSpanEvents()[2]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,

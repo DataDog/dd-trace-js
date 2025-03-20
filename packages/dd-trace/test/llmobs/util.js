@@ -1,35 +1,41 @@
 'use strict'
 
-const chai = require('chai')
-
 const tracerVersion = require('../../../../package.json').version
 
-const MOCK_STRING = Symbol('string')
-const MOCK_NUMBER = Symbol('number')
-const MOCK_ANY = Symbol('any')
+const {
+  MOCK_STRING
+} = require('./mocks')
 
-function deepEqualWithMockValues (expected) {
-  const actual = this._obj
+/**
+* @typedef {{
+*   span: import('../../src/opentracing/span'),
+*   parentId: string | bigint,
+*   name: string,
+*   spanKind: string,
+*   tags: Record<string, string>,
+*   sessionId: string,
+*   error: boolean,
+*   errorType: string,
+*   errorMessage: string,
+*   errorStack: string,
+*   modelName: string,
+*   modelProvider: string,
+*   inputValue: string,
+*   inputMessages: Record<string, string>,
+*   inputDocuments: Record<string, string>,
+*   outputValue: string,
+*   outputMessages: Record<string, string>,
+*   outputDocuments: Record<string, string>,
+*   metadata: Record<string, string>,
+*   tokenMetrics: Record<string, number>
+* }} ExpectedEventOptions
+*/
 
-  for (const key in actual) {
-    if (expected[key] === MOCK_STRING) {
-      new chai.Assertion(typeof actual[key], `key ${key}`).to.equal('string')
-    } else if (expected[key] === MOCK_NUMBER) {
-      new chai.Assertion(typeof actual[key], `key ${key}`).to.equal('number')
-    } else if (expected[key] === MOCK_ANY) {
-      new chai.Assertion(actual[key], `key ${key}`).to.exist
-    } else if (Array.isArray(expected[key])) {
-      const sortedExpected = [...expected[key].sort()]
-      const sortedActual = [...actual[key].sort()]
-      new chai.Assertion(sortedActual, `key: ${key}`).to.deep.equal(sortedExpected)
-    } else if (typeof expected[key] === 'object') {
-      new chai.Assertion(actual[key], `key: ${key}`).to.deepEqualWithMockValues(expected[key])
-    } else {
-      new chai.Assertion(actual[key], `key: ${key}`).to.equal(expected[key])
-    }
-  }
-}
-
+/**
+ * Creates an expected span event for a LLM span.
+ * @param {ExpectedEventOptions} options options for the expected event
+ * @returns a mock span event to assert against
+ */
 function expectedLLMObsLLMSpanEvent (options) {
   const spanEvent = expectedLLMObsBaseEvent(options)
 
@@ -68,6 +74,11 @@ function expectedLLMObsLLMSpanEvent (options) {
   return spanEvent
 }
 
+/**
+ * Creates an expected span event for a non-LLM span.
+ * @param {ExpectedEventOptions} options
+ * @returns a mock span event to assert against
+ */
 function expectedLLMObsNonLLMSpanEvent (options) {
   const spanEvent = expectedLLMObsBaseEvent(options)
   const {
@@ -99,6 +110,11 @@ function expectedLLMObsNonLLMSpanEvent (options) {
   return spanEvent
 }
 
+/**
+ * Creates an expected base span event.
+ * @param {ExpectedEventOptions} options
+ * @returns the basis for a mock span event, without any annotation-specific fields
+ */
 function expectedLLMObsBaseEvent ({
   span,
   parentId,
@@ -145,6 +161,17 @@ function expectedLLMObsBaseEvent ({
   return spanEvent
 }
 
+/**
+ * Creates the expected tags for a span event.
+ * @param {{
+ *  span: import('../../src/opentracing/span'),
+ *  error: boolean,
+ *  errorType: string,
+ *  tags: Record<string, string>,
+ *  sessionId: string
+ * }} options the options to generate the expected tags
+ * @returns {string[]} the expected tags
+ */
 function expectedLLMObsTags ({
   span,
   error,
@@ -185,6 +212,12 @@ function expectedLLMObsTags ({
   return spanTags
 }
 
+/**
+ * Extracts the value from a buffer.
+ * @param {Buffer} spanProperty the buffer to extract the value from
+ * @param {*} isNumber whether the value is a number
+ * @returns {string | number} the extracted value
+ */
 function fromBuffer (spanProperty, isNumber = false) {
   const strVal = spanProperty.toString(10)
   return isNumber ? Number(strVal) : strVal
@@ -192,9 +225,5 @@ function fromBuffer (spanProperty, isNumber = false) {
 
 module.exports = {
   expectedLLMObsLLMSpanEvent,
-  expectedLLMObsNonLLMSpanEvent,
-  deepEqualWithMockValues,
-  MOCK_ANY,
-  MOCK_NUMBER,
-  MOCK_STRING
+  expectedLLMObsNonLLMSpanEvent
 }

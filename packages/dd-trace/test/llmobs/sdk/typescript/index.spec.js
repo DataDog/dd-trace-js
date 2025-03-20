@@ -8,7 +8,8 @@ const {
 } = require('../../../../../../integration-tests/helpers')
 const chai = require('chai')
 const path = require('path')
-const { expectedLLMObsNonLLMSpanEvent, deepEqualWithMockValues } = require('../../util')
+const { expectedLLMObsNonLLMSpanEvent } = require('../../util')
+const { deepEqualWithMockValues } = require('../../mocks')
 
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
 
@@ -111,7 +112,7 @@ describe('typescript', () => {
           const cwd = sandbox.folder
 
           const results = {}
-          const waiters = test.setup ? test.setup(agent, results) : []
+          const waiters = test.setup?.(agent, results) || []
 
           // compile typescript
           execSync(
@@ -127,7 +128,7 @@ describe('typescript', () => {
           await Promise.all(waiters)
 
           // some tests just need the file to run, not assert payloads
-          test.runTest && test.runTest(results)
+          test.runTest?.(results)
         })
       }
     })

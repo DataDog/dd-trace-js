@@ -24,10 +24,21 @@ const LLMObsEvalMetricsWriter = require('./writers/evaluations')
  * if the tracer is `init`ed. But, in those cases, we don't want to start writers or subscribe
  * to channels.
  */
+
+/** @type {LLMObsSpanProcessor} */
 let spanProcessor
+
+/** @type {LLMObsAgentProxySpanWriter|LLMObsAgentlessSpanWriter} */
 let spanWriter
+
+/** @type {LLMObsEvalMetricsWriter} */
 let evalWriter
 
+/**
+ * Enables the relevant LLM Observability event listeners, and
+ * additionally initializes the evaluation metrics writer, span writer, and span processor.
+ * @param {import('../config')} config
+ */
 function enable (config) {
   // create writers and eval writer append and flush channels
   // span writer append is handled by the span processor
@@ -46,6 +57,9 @@ function enable (config) {
   injectCh.subscribe(handleLLMObsParentIdInjection)
 }
 
+/**
+ * Disables the LLM Observability event listeners and destroys the writers and processor, and dereferences them.
+ */
 function disable () {
   if (evalMetricAppendCh.hasSubscribers) evalMetricAppendCh.unsubscribe(handleEvalMetricAppend)
   if (flushCh.hasSubscribers) flushCh.unsubscribe(handleFlush)
@@ -60,8 +74,14 @@ function disable () {
   evalWriter = null
 }
 
-// since LLMObs traces can extend between services and be the same trace,
-// we need to propogate the parent id.
+/**
+ * Injects the parent LLM Observability span ID into the carrier
+ * Since LLMObs traces can extend between services and be the same trace,
+ * we need to propagate the parent id.
+ * @param {{ carrier: Record<string, string> }} data
+ *  - the data that includes the carrier to inject parent propogation information into
+ * @returns {void}
+ */
 function handleLLMObsParentIdInjection ({ carrier }) {
   const parent = storage.getStore()?.span
   if (!parent) return
@@ -76,6 +96,9 @@ function createSpanWriter (config) {
   return new SpanWriter(config)
 }
 
+/**
+ * Flushes both the span and evaluation metrics writers
+ */
 function handleFlush () {
   try {
     spanWriter.flush()
@@ -85,10 +108,18 @@ function handleFlush () {
   }
 }
 
+/**
+ * Passes the span data to the span processor
+ * @param {{ span: import('../opentracing/span')}} data
+ */
 function handleSpanProcess (data) {
   spanProcessor.process(data)
 }
 
+/**
+ * Enqueues the evaluation metric to be sent to LLM Observability
+ * @param {*} payload
+ */
 function handleEvalMetricAppend (payload) {
   try {
     evalWriter.append(payload)
