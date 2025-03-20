@@ -236,7 +236,7 @@ function reformatSpanSamplingRules (rules) {
 
 class Config {
   constructor (options = {}) {
-    if (!isInServerlessEnvironment()) {
+    if (!isFalse(process.env.DD_TRACE_STABLE_CONFIG_ENABLED) && !isInServerlessEnvironment()) {
       // Bail out early if we're in a serverless environment, stable config isn't supported
       const StableConfig = require('./config_stable')
       this.stableConfig = new StableConfig()
