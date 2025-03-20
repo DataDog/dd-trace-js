@@ -94,6 +94,16 @@ function trackRaspRuleMatch (store, raspRule, blockTriggered, blocked) {
   appsecMetrics.count('rasp.rule.match', { ...tags, block }).inc(1)
 }
 
+function trackRaspRuleSkipped (raspRule, reason) {
+  const tags = { reason, rule_type: raspRule.type }
+
+  if (raspRule.variant) {
+    tags.rule_variant = raspRule.variant
+  }
+
+  appsecMetrics.count('rasp.rule.skipped', tags).inc(1)
+}
+
 function getRuleMatchBlockingStatus (blockTriggered, blocked) {
   if (!blockTriggered) {
     return BLOCKING_STATUS.IRRELEVANT
@@ -105,5 +115,6 @@ function getRuleMatchBlockingStatus (blockTriggered, blocked) {
 module.exports = {
   addRaspRequestMetrics,
   trackRaspMetrics,
-  trackRaspRuleMatch
+  trackRaspRuleMatch,
+  trackRaspRuleSkipped
 }

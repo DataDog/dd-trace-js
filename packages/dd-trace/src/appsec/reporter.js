@@ -6,10 +6,11 @@ const web = require('../plugins/util/web')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const {
   incrementWafInitMetric,
-  updateWafRequestsMetricTags,
-  updateRaspRequestsMetricTags,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,
+  updateWafRequestsMetricTags,
+  updateRaspRequestsMetricTags,
+  updateRaspRuleSkippedMetricTags,
   getRequestMetrics
 } = require('./telemetry')
 const zlib = require('zlib')
@@ -291,6 +292,7 @@ module.exports = {
   reportMetrics,
   reportAttack,
   reportWafUpdate: incrementWafUpdatesMetric,
+  reportRaspRuleSkipped: updateRaspRuleSkippedMetricTags,
   reportDerivatives,
   finishRequest,
   setRateLimit,

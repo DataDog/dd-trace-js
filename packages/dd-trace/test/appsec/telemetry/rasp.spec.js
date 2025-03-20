@@ -276,6 +276,18 @@ describe('Appsec Rasp Telemetry metrics', () => {
       })
     })
 
+    describe('updateRaspRuleSkippedMetricTags', () => {
+      it('should increment rasp.rule.skipped with reason', () => {
+        const raspRule = { type: 'sql_injection' }
+        appsecTelemetry.updateRaspRuleSkippedMetricTags(raspRule, 'after-request')
+
+        expect(count).to.have.been.calledWith('rasp.rule.skipped', {
+          reason: 'after-request',
+          rule_type: 'sql_injection'
+        })
+      })
+    })
+
     describe('incWafRequestsMetric', () => {
       it('should not modify waf.requests metric tags when rasp rule type is provided', () => {
         appsecTelemetry.updateWafRequestsMetricTags({

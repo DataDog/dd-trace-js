@@ -1,8 +1,13 @@
 'use strict'
 
 const { DD_TELEMETRY_REQUEST_METRICS } = require('./common')
-const { addRaspRequestMetrics, trackRaspMetrics, trackRaspRuleMatch } = require('./rasp')
 const { incrementMissingUserId, incrementMissingUserLogin } = require('./user')
+const {
+  addRaspRequestMetrics,
+  trackRaspMetrics,
+  trackRaspRuleMatch,
+  trackRaspRuleSkipped
+} = require('./rasp')
 const {
   addWafRequestMetrics,
   trackWafMetrics,
@@ -72,6 +77,12 @@ function updateRaspRuleMatchMetricTags (req, raspRule, blockTriggered, blocked) 
   trackRaspRuleMatch(store, raspRule, blockTriggered, blocked)
 }
 
+function updateRaspRuleSkippedMetricTags (raspRule, reason) {
+  if (!enabled) return
+
+  trackRaspRuleSkipped(raspRule, reason)
+}
+
 function updateWafRequestsMetricTags (metrics, req) {
   if (!req) return
 
@@ -132,6 +143,7 @@ module.exports = {
   updateWafRequestsMetricTags,
   updateRaspRequestsMetricTags,
   updateRaspRuleMatchMetricTags,
+  updateRaspRuleSkippedMetricTags,
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,
