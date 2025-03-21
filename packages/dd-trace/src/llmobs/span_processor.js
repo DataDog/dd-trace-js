@@ -7,6 +7,7 @@ const {
   METADATA,
   INPUT_MESSAGES,
   INPUT_VALUE,
+  INTEGRATION,
   OUTPUT_MESSAGES,
   INPUT_DOCUMENTS,
   OUTPUT_DOCUMENTS,
@@ -186,6 +187,8 @@ class LLMObsSpanProcessor {
     const errType = span.context()._tags[ERROR_TYPE] || error?.name
     if (errType) tags.error_type = errType
     if (sessionId) tags.session_id = sessionId
+    const integration = LLMObsTagger.tagMap.get(span)?.[INTEGRATION]
+    if (integration) tags.integration = integration
     const existingTags = LLMObsTagger.tagMap.get(span)?.[TAGS] || {}
     if (existingTags) tags = { ...tags, ...existingTags }
     return Object.entries(tags).map(([key, value]) => `${key}:${value ?? ''}`)
