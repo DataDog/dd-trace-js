@@ -111,6 +111,7 @@ describe('Plugin', function () {
           })
 
           it('truncates the prompt and completion', async () => {
+            console.log('before stub call')
             stubCall({
               ...openAiBaseCompletionInfo,
               response: {
@@ -124,22 +125,39 @@ describe('Plugin', function () {
                 usage: { prompt_tokens: 8, completion_tokens: 12, otal_tokens: 20 }
               }
             })
+            console.log('stub call done')
 
+            console.log('before llm creation')
             const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct' })
+            console.log('after llm creation')
+
+            console.log('make checkTraces promise')
             const checkTraces = agent
               .use(async (traces) => {
+                console.log('in checkTraces')
                 expect(traces[0].length).to.equal(1)
+                console.log('traces[0].length', traces[0].length)
                 const span = traces[0][0]
+                console.log('span', span)
 
                 expect(span.meta).to.have.property('langchain.request.prompts.0.content', 'what ...')
+                console.log('langchain.request.prompts.0.content', span.meta['langchain.request.prompts.0.content'])
                 expect(span.meta).to.have.property('langchain.response.completions.0.text', 'The a...')
+                console.log('langchain.response.completions.0.text', span.meta['langchain.response.completions.0.text'])
               })
+            console.log('checkTraces promise made')
 
+            console.log('before llm.generate')
             const result = await llm.generate(['what is 2 + 2?'])
+            console.log('after llm.generate')
 
+            console.log('before expect')
             expect(result.generations[0][0].text).to.equal('The answer is 4')
+            console.log('after expect')
 
+            console.log('before checkTraces')
             await checkTraces
+            console.log('after checkTraces')
           })
         })
       })
