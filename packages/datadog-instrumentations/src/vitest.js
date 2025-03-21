@@ -94,6 +94,10 @@ function isReporterPackageNewest (vitestPackage) {
   return vitestPackage.h?.name === 'BaseSequencer'
 }
 
+function isBaseSequencer (vitestPackage) {
+  return vitestPackage.b?.name === 'BaseSequencer'
+}
+
 function getChannelPromise (channelToPublishTo) {
   return new Promise(resolve => {
     sessionAsyncResource.runInAsyncScope(() => {
@@ -615,11 +619,22 @@ addHook({
 
 addHook({
   name: 'vitest',
-  versions: ['>=3.0.0'],
+  versions: ['>=3.0.9'],
+  filePattern: 'dist/chunks/coverage.*'
+}, (coveragePackage) => {
+  if (isBaseSequencer(coveragePackage)) {
+    shimmer.wrap(coveragePackage.b.prototype, 'sort', getSortWrapper)
+  }
+  return coveragePackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=3.0.0 <3.0.9'],
   filePattern: 'dist/chunks/resolveConfig.*'
-}, (randomSequencerPackage) => {
-  shimmer.wrap(randomSequencerPackage.B.prototype, 'sort', getSortWrapper)
-  return randomSequencerPackage
+}, (resolveConfigPackage) => {
+  shimmer.wrap(resolveConfigPackage.B.prototype, 'sort', getSortWrapper)
+  return resolveConfigPackage
 })
 
 // Can't specify file because compiled vitest includes hashes in their files
