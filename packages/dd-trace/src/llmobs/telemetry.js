@@ -7,7 +7,8 @@ const {
   SESSION_ID,
   ROOT_PARENT_ID,
   INTEGRATION,
-  DECORATOR
+  DECORATOR,
+  DROPPED_IO_COLLECTION_ERROR
 } = require('./constants/tags')
 
 const ERROR_TYPE = require('../constants')
@@ -19,6 +20,7 @@ const LLMObsTagger = require('./tagger')
 const llmobsMetrics = telemetryMetrics.manager.namespace('mlobs')
 
 function extractIntegrationFromTags (tags) {
+  if (!tags || !Array.isArray(tags)) return null
   const integrationTag = tags.find(tag => tag.startsWith('integration:'))
   if (!integrationTag) return null
   return integrationTag.split(':')[1] || null
@@ -72,12 +74,32 @@ function submitLLMObsRawSpanSize (event, rawEventSize) {
     integration: integration || 'N/A'
   }
 
-  console.log('SUBMITTING RAW EVENT SIZE METRIC')
-  llmobsMetrics.distribution('span.raw_size', tags).track({ rawEventSize })
+  llmobsMetrics.distribution('span.raw_size', tags).track(rawEventSize)
+}
+
+function submitLLMObsSpanSize (event, eventSize) {
+  const spanKind = event.meta?.spanKind || ''
+  const integration = extractIntegrationFromTags(event.tags)
+  const error = event.status === 'error'
+  const autoinstrumented = integration != null
+  const truncated = (
+    Array.isArray(event.collection_errors) && event.collection_errors.includes(DROPPED_IO_COLLECTION_ERROR)
+  )
+
+  const tags = {
+    span_kind: spanKind,
+    autoinstrumented: Number(autoinstrumented),
+    error: error ? 1 : 0,
+    integration: integration || 'N/A',
+    truncated: Number(truncated)
+  }
+
+  llmobsMetrics.distribution('span.size', tags).track(eventSize)
 }
 
 module.exports = {
   incrementLLMObsSpanStartCount,
   incrementLLMObsSpanFinishedCount,
-  submitLLMObsRawSpanSize
+  submitLLMObsRawSpanSize,
+  submitLLMObsSpanSize
 }
