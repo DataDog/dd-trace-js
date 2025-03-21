@@ -19,17 +19,18 @@ class LLMObsSpanWriter extends BaseWriter {
 
   append (event) {
     const eventSizeBytes = Buffer.from(JSON.stringify(event)).byteLength
-    telemetry.submitLLMObsRawSpanSize(event, eventSizeBytes)
+    telemetry.recordLLMObsRawSpanSize(event, eventSizeBytes)
 
+    const shouldTruncate = eventSizeBytes > EVP_EVENT_SIZE_LIMIT
     let processedEventSizeBytes = eventSizeBytes
 
-    if (eventSizeBytes > EVP_EVENT_SIZE_LIMIT) {
+    if (shouldTruncate) {
       logger.warn(`Dropping event input/output because its size (${eventSizeBytes}) exceeds the 1MB event size limit`)
       event = this._truncateSpanEvent(event)
       processedEventSizeBytes = Buffer.from(JSON.stringify(event)).byteLength
     }
 
-    telemetry.submitLLMObsSpanSize(event, processedEventSizeBytes)
+    telemetry.recordLLMObsSpanSize(event, processedEventSizeBytes, shouldTruncate)
 
     if (this._bufferSize + eventSizeBytes > EVP_PAYLOAD_SIZE_LIMIT) {
       logger.debug('Flusing queue because queing next event will exceed EvP payload limit')
