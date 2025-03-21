@@ -41,7 +41,8 @@ describe('Plugin', () => {
 
           return agent.load('aws-sdk', {}, {
             llmobs: {
-              mlApp: 'test'
+              mlApp: 'test',
+              agentlessEnabled: true
             }
           })
         })
