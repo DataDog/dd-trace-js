@@ -1,6 +1,7 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
+const AgentInfoExporter = require('../../src/exporters/common/agent-info-exporter')
 
 const { channel } = require('dc-polyfill')
 const spanProcessCh = channel('dd-trace:span:process')
@@ -16,7 +17,7 @@ const config = {
   site: 'datadoghq.com'
 }
 
-describe('module', () => {
+describe.only('module', () => {
   let llmobsModule
   let store
   let logger
@@ -29,12 +30,14 @@ describe('module', () => {
     logger = { debug: sinon.stub() }
 
     LLMObsSpanWriterSpy = sinon.stub().returns({
-      destroy: sinon.stub()
+      destroy: sinon.stub(),
+      setAgentless: sinon.stub()
     })
 
     LLMObsEvalMetricsWriterSpy = sinon.stub().returns({
       destroy: sinon.stub(),
-      append: sinon.stub()
+      append: sinon.stub(),
+      setAgentless: sinon.stub()
     })
 
     llmobsModule = proxyquire('../../../dd-trace/src/llmobs', {
@@ -106,9 +109,34 @@ describe('module', () => {
       delete config.llmobs.agentlessEnabled
     })
 
-    it('throws if no api key is provided', () => {})
+    describe('if no api key is provided', () => {
+      let originalApiKey
 
-    it('configures agentless writers', () => {})
+      beforeEach(() => {
+        originalApiKey = config.apiKey
+        config.apiKey = undefined
+      })
+
+      afterEach(() => {
+        config.apiKey = originalApiKey
+      })
+
+      it('throws an error', () => {
+        expect(() => llmobsModule.enable(config)).to.throw(
+          'DD_API_KEY is required for sending LLMObs data when agentless mode is enabled. ' +
+          'Ensure this configuration is set before running your application.'
+        )
+      })
+    })
+
+    describe('if an api key is provided', () => {
+      it('configures agentless writers', () => {
+        llmobsModule.enable(config)
+
+        expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(true)
+        expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(true)
+      })
+    })
   })
 
   describe('with agentlessEnabled set to `false`', () => {
@@ -120,21 +148,70 @@ describe('module', () => {
       delete config.llmobs.agentlessEnabled
     })
 
-    it('configures agent-proxy writers', () => {})
+    it('configures agent-proxy writers', () => {
+      llmobsModule.enable(config)
+
+      expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(false)
+      expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(false)
+    })
   })
 
   describe('with agentlessEnabled set to undefined', () => {
+    afterEach(() => {
+      sinon.restore()
+    })
+
     describe('when an agent is running', () => {
-      it('configures the agent-proxy writers', () => {})
+      beforeEach(() => {
+        sinon.stub(AgentInfoExporter.prototype, 'getAgentInfo')
+        AgentInfoExporter.prototype.getAgentInfo.callsFake((cb) => {
+          cb(null)
+        })
+      })
+
+      it('configures the agent-proxy writers', () => {
+        llmobsModule.enable(config)
+
+        expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(false)
+        expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(false)
+      })
     })
 
     describe('when no agent is running', () => {
+      beforeEach(() => {
+        sinon.stub(AgentInfoExporter.prototype, 'getAgentInfo')
+        AgentInfoExporter.prototype.getAgentInfo.callsFake((cb) => {
+          cb(new Error('No agent running'))
+        })
+      })
+
       describe('when no API key is provided', () => {
-        it('throws an error', () => {})
+        let originalApiKey
+
+        beforeEach(() => {
+          originalApiKey = config.apiKey
+          config.apiKey = undefined
+        })
+
+        afterEach(() => {
+          config.apiKey = originalApiKey
+        })
+
+        it('throws an error', () => {
+          expect(() => llmobsModule.enable(config)).to.throw(
+            'Cannot send LLM Observability data with no running agent and no Datadog API key.\n' +
+            'Please set DD_API_KEY and set DD_LLMOBS_AGENTLESS_ENABLED to true.'
+          )
+        })
       })
 
       describe('when an API key is provided', () => {
-        it('configures the agentless writers', () => {})
+        it('configures the agentless writers', () => {
+          llmobsModule.enable(config)
+
+          expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(true)
+          expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(true)
+        })
       })
     })
   })
