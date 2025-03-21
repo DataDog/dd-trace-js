@@ -11,7 +11,7 @@ runs:
     - id: yarn-cache
       uses: actions/cache@v4
       with:
-        key: yarn-cache-${{ github.workflow }}-${{ github.job }}-${{ hashFiles('yarn.lock') }}
+        key: yarn-cache-${{ github.workflow }}-${{ github.job }}-${{ hashFiles('yarn.lock') }}-v1
         path: node_modules.tar
       if: inputs.cache == 'true'
     - run: tar -xf node_modules.tar
