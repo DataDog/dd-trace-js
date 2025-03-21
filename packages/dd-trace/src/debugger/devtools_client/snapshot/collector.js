@@ -10,11 +10,6 @@ module.exports = {
   getRuntimeObject: getObject
 }
 
-// TODO: Can we speed up thread pause time by calling mutiple Runtime.getProperties in parallel when possible?
-// The most simple solution would be to swich from an async/await approach to a callback based approach, in which case
-// each lookup will just finish in its own time and traverse the child nodes when the event loop allows it.
-// Alternatively, use `Promise.all` or something like that, but the code would probably be more complex.
-
 async function getObject (objectId, opts, depth = 0, collection = false) {
   const { result, privateProperties } = await session.post('Runtime.getProperties', {
     objectId,
@@ -27,13 +22,13 @@ async function getObject (objectId, opts, depth = 0, collection = false) {
     removeNonEnumerableProperties(result) // remove the `length` property
     const size = result.length
     if (size > opts.maxCollectionSize) {
-      result.splice(opts.maxCollectionSize)
+      result.length = opts.maxCollectionSize
       result[collectionSizeSym] = size
     }
   } else if (result.length > opts.maxFieldCount) {
     // Trim the number of properties on the object if there's too many.
     const size = result.length
-    result.splice(opts.maxFieldCount)
+    result.length = opts.maxFieldCount
     result[fieldCountSym] = size
   } else if (privateProperties) {
     result.push(...privateProperties)
@@ -48,16 +43,26 @@ async function traverseGetPropertiesResult (props, opts, depth) {
 
   if (depth >= opts.maxReferenceDepth) return props
 
+  const promises = []
+
   for (const prop of props) {
     if (prop.value === undefined) continue
     const { value: { type, objectId, subtype } } = prop
     if (type === 'object') {
       if (objectId === undefined) continue // if `subtype` is "null"
       if (LEAF_SUBTYPES.has(subtype)) continue // don't waste time with these subtypes
-      prop.value.properties = await getObjectProperties(subtype, objectId, opts, depth)
+      promises.push(getObjectProperties(subtype, objectId, opts, depth).then((properties) => {
+        prop.value.properties = properties
+      }))
     } else if (type === 'function') {
-      prop.value.properties = await getFunctionProperties(objectId, opts, depth + 1)
+      promises.push(getFunctionProperties(objectId, opts, depth + 1).then((properties) => {
+        prop.value.properties = properties
+      }))
     }
+  }
+
+  if (promises.length) {
+    await Promise.all(promises)
   }
 
   return props
@@ -115,7 +120,7 @@ async function getIterable (objectId, opts, depth) {
   removeNonEnumerableProperties(result) // remove the `length` property
   const size = result.length
   if (size > opts.maxCollectionSize) {
-    result.splice(opts.maxCollectionSize)
+    result.length = opts.maxCollectionSize
     result[collectionSizeSym] = size
   }
 
