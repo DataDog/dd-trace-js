@@ -28,7 +28,7 @@ jobs:
       - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: node_modules
-          path: node_modules
+          path: node_modules.tar
 
   aerospike:
     strategy:
@@ -79,6 +79,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: node_modules
+      - run: tar -xf node_modules.tar
       - run: ls -lisa
         shell: bash
       - run: ls -lisa node_modules
