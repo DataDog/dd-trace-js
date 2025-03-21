@@ -24,7 +24,8 @@ describe('sdk', () => {
     tracer.init({
       service: 'service',
       llmobs: {
-        mlApp: 'mlApp'
+        mlApp: 'mlApp',
+        agentlessEnabled: false
       }
     })
     llmobs = tracer.llmobs

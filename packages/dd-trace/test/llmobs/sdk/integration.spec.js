@@ -53,7 +53,8 @@ describe('end to end sdk integration tests', () => {
     llmobs = tracer.llmobs
     if (!llmobs.enabled) {
       llmobs.enable({
-        mlApp: 'test'
+        mlApp: 'test',
+        agentlessEnabled: false
       })
     }
 

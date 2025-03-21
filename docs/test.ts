@@ -561,7 +561,7 @@ const enabled = llmobs.enabled
 // manually enable
 llmobs.enable({
   mlApp: 'mlApp',
-  agentlessEnabled: true
+  agentlessEnabled: false
 })
 
 // manually disable
