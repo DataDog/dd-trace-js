@@ -4,6 +4,7 @@ const { EVP_EVENT_SIZE_LIMIT, EVP_PAYLOAD_SIZE_LIMIT } = require('../../constant
 const { DROPPED_VALUE_TEXT } = require('../../constants/text')
 const { DROPPED_IO_COLLECTION_ERROR } = require('../../constants/tags')
 const BaseWriter = require('../base')
+const telemetry = require("../../telemetry")
 const logger = require('../../../log')
 
 const tracerVersion = require('../../../../../../package.json').version
@@ -28,6 +29,7 @@ class LLMObsSpanWriter extends BaseWriter {
       this.flush()
     }
 
+    telemetry.submitLLMObsRawSpanSize({ span, rawEventSize: eventSizeBytes })
     super.append(event, eventSizeBytes)
   }
 

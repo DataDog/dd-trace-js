@@ -18,6 +18,12 @@ const LLMObsTagger = require('./tagger')
 
 const llmobsMetrics = telemetryMetrics.manager.namespace('mlobs')
 
+function extractIntegrationFromTags (tags) {
+  const integrationTag = tags.find(tag => tag.startsWith('integration:'))
+  if (!integrationTag) return null
+  return integrationTag.split(':')[1] || null
+}
+
 function incrementLLMObsSpanStartCount (tags, value = 1) {
   llmobsMetrics.count('span.start', tags).inc(value)
 }
@@ -53,7 +59,25 @@ function incrementLLMObsSpanFinishedCount (span, value = 1) {
   llmobsMetrics.count('span.finished', tags).inc(value)
 }
 
+function submitLLMObsRawSpanSize (event, rawEventSize) {
+  const spanKind = event.meta?.spanKind || ''
+  const integration = extractIntegrationFromTags(event.tags)
+  const error = event.status === 'error'
+  const autoinstrumented = integration != null
+
+  const tags = {
+    span_kind: spanKind,
+    autoinstrumented: Number(autoinstrumented),
+    error: error ? 1 : 0,
+    integration: integration || 'N/A'
+  }
+
+  console.log('SUBMITTING RAW EVENT SIZE METRIC')
+  llmobsMetrics.distribution('span.raw_size', tags).track({ rawEventSize })
+}
+
 module.exports = {
   incrementLLMObsSpanStartCount,
-  incrementLLMObsSpanFinishedCount
+  incrementLLMObsSpanFinishedCount,
+  submitLLMObsRawSpanSize
 }
