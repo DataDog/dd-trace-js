@@ -2,15 +2,22 @@
 
 const {
   addHook,
+  channel,
   AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-// Use only the createKafkaChannels function from the kafkajs abstractions
-const { createKafkaChannels } = require('./kafkajs')
-
-// Create channels using the abstracted function
-const channels = createKafkaChannels('confluentinc-kafka-javascript')
+// Create channels for Confluent Kafka JavaScript
+const channels = {
+  producerStart: channel('apm:confluentinc-kafka-javascript:produce:start'),
+  producerFinish: channel('apm:confluentinc-kafka-javascript:produce:finish'),
+  producerError: channel('apm:confluentinc-kafka-javascript:produce:error'),
+  producerCommit: channel('apm:confluentinc-kafka-javascript:produce:commit'),
+  consumerStart: channel('apm:confluentinc-kafka-javascript:consume:start'),
+  consumerFinish: channel('apm:confluentinc-kafka-javascript:consume:finish'),
+  consumerError: channel('apm:confluentinc-kafka-javascript:consume:error'),
+  consumerCommit: channel('apm:confluentinc-kafka-javascript:consume:commit')
+}
 
 // Customize the instrumentation for Confluent Kafka JavaScript
 addHook({ name: '@confluentinc/kafka-javascript', versions: ['>=1.0.0'] }, (module) => {
@@ -145,9 +152,9 @@ function instrumentNativeModule (module) {
 function instrumentKafkaJS (kafkaJS) {
   // Hook the Kafka class if it exists
   if (typeof kafkaJS.Kafka === 'function') {
-    shimmer.wrap(kafkaJS, 'Kafka', function wrapKafka (originalKafka) {
+    shimmer.wrap(kafkaJS, 'Kafka', function wrapKafka (OriginalKafka) {
       return function KafkaWrapper (options) {
-        const kafka = new originalKafka(options)
+        const kafka = new OriginalKafka(options)
         const kafkaJSOptions = options.kafkaJS || options
         const brokers = kafkaJSOptions.brokers ? kafkaJSOptions.brokers.join(',') : ''
 

@@ -7,83 +7,100 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-// Abstracted channel creation
-function createKafkaChannels (prefix) {
-  return {
-    producerStart: channel(`apm:${prefix}:produce:start`),
-    producerCommit: channel(`apm:${prefix}:produce:commit`),
-    producerFinish: channel(`apm:${prefix}:produce:finish`),
-    producerError: channel(`apm:${prefix}:produce:error`),
-    consumerStart: channel(`apm:${prefix}:consume:start`),
-    consumerCommit: channel(`apm:${prefix}:consume:commit`),
-    consumerFinish: channel(`apm:${prefix}:consume:finish`),
-    consumerError: channel(`apm:${prefix}:consume:error`),
-    batchConsumerStart: channel(`apm:${prefix}:consume-batch:start`),
-    batchConsumerFinish: channel(`apm:${prefix}:consume-batch:finish`),
-    batchConsumerError: channel(`apm:${prefix}:consume-batch:error`)
+const producerStartCh = channel('apm:kafkajs:produce:start')
+const producerCommitCh = channel('apm:kafkajs:produce:commit')
+const producerFinishCh = channel('apm:kafkajs:produce:finish')
+const producerErrorCh = channel('apm:kafkajs:produce:error')
+
+const consumerStartCh = channel('apm:kafkajs:consume:start')
+const consumerCommitCh = channel('apm:kafkajs:consume:commit')
+const consumerFinishCh = channel('apm:kafkajs:consume:finish')
+const consumerErrorCh = channel('apm:kafkajs:consume:error')
+
+const batchConsumerStartCh = channel('apm:kafkajs:consume-batch:start')
+const batchConsumerFinishCh = channel('apm:kafkajs:consume-batch:finish')
+const batchConsumerErrorCh = channel('apm:kafkajs:consume-batch:error')
+
+function commitsFromEvent (event) {
+  const { payload: { groupId, topics } } = event
+  const commitList = []
+  for (const { topic, partitions } of topics) {
+    for (const { partition, offset } of partitions) {
+      commitList.push({
+        groupId,
+        partition,
+        offset,
+        topic
+      })
+    }
   }
+  consumerCommitCh.publish(commitList)
 }
 
-// Abstracted producer instrumentation
-function instrumentProducer (Kafka, channels, getClusterId, options = {}) {
-  const {
-    getBootstrapServers = (kafka) => kafka._brokers,
-    extractProducerArgs = (args) => ({ topic: args[0].topic, messages: args[0].messages || [] }),
-    getProducerResult = (result) => result
-  } = options
+addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKafka) => {
+  class Kafka extends BaseKafka {
+    constructor (options) {
+      super(options)
+      this._brokers = (options.brokers && typeof options.brokers !== 'function')
+        ? options.brokers.join(',')
+        : undefined
+    }
+  }
 
   shimmer.wrap(Kafka.prototype, 'producer', createProducer => function () {
     const producer = createProducer.apply(this, arguments)
     const send = producer.send
-    const bootstrapServers = getBootstrapServers(this)
-    const kafkaClusterIdPromise = getClusterId(this)
+    const bootstrapServers = this._brokers
+
+    const kafkaClusterIdPromise = getKafkaClusterId(this)
 
     producer.send = function () {
       const wrappedSend = (clusterId) => {
         const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
 
         return innerAsyncResource.runInAsyncScope(() => {
-          if (!channels.producerStart.hasSubscribers) {
+          if (!producerStartCh.hasSubscribers) {
             return send.apply(this, arguments)
           }
 
           try {
-            const { topic, messages } = extractProducerArgs(arguments)
+            const { topic, messages = [] } = arguments[0]
             for (const message of messages) {
               if (message !== null && typeof message === 'object') {
                 message.headers = message.headers || {}
               }
             }
-            channels.producerStart.publish({ topic, messages, bootstrapServers, clusterId })
+            producerStartCh.publish({ topic, messages, bootstrapServers, clusterId })
 
             const result = send.apply(this, arguments)
-            const producerResult = getProducerResult(result)
 
-            producerResult.then(
+            result.then(
               innerAsyncResource.bind(res => {
-                channels.producerFinish.publish(undefined)
-                channels.producerCommit.publish(res)
+                producerFinishCh.publish(undefined)
+                producerCommitCh.publish(res)
               }),
               innerAsyncResource.bind(err => {
                 if (err) {
-                  channels.producerError.publish(err)
+                  producerErrorCh.publish(err)
                 }
-                channels.producerFinish.publish(undefined)
+                producerFinishCh.publish(undefined)
               })
             )
 
             return result
           } catch (e) {
-            channels.producerError.publish(e)
-            channels.producerFinish.publish(undefined)
+            producerErrorCh.publish(e)
+            producerFinishCh.publish(undefined)
             throw e
           }
         })
       }
 
       if (!isPromise(kafkaClusterIdPromise)) {
+        // promise is already resolved
         return wrappedSend(kafkaClusterIdPromise)
       } else {
+        // promise is not resolved
         return kafkaClusterIdPromise.then((clusterId) => {
           return wrappedSend(clusterId)
         })
@@ -91,66 +108,48 @@ function instrumentProducer (Kafka, channels, getClusterId, options = {}) {
     }
     return producer
   })
-}
-
-// Abstracted consumer instrumentation
-function instrumentConsumer (Kafka, channels, getClusterId, options = {}) {
-  const {
-    getGroupId = (args) => args[0].groupId,
-    extractMessageArgs = (args) => ({ topic: args[0].topic, partition: args[0].partition, message: args[0].message }),
-    extractBatchArgs = (args) => ({ topic: args[0].batch.topic, partition: args[0].batch.partition, messages: args[0].batch.messages }),
-    handleCommits = (event) => {
-      const { payload: { groupId, topics } } = event
-      const commitList = []
-      for (const { topic, partitions } of topics) {
-        for (const { partition, offset } of partitions) {
-          commitList.push({ groupId, partition, offset, topic })
-        }
-      }
-      channels.consumerCommit.publish(commitList)
-    }
-  } = options
 
   shimmer.wrap(Kafka.prototype, 'consumer', createConsumer => function () {
-    if (!channels.consumerStart.hasSubscribers) {
+    if (!consumerStartCh.hasSubscribers) {
       return createConsumer.apply(this, arguments)
     }
 
-    const kafkaClusterIdPromise = getClusterId(this)
-    const groupId = getGroupId(arguments)
+    const kafkaClusterIdPromise = getKafkaClusterId(this)
 
     const eachMessageExtractor = (args, clusterId) => {
-      const extracted = extractMessageArgs(args)
-      return { ...extracted, groupId, clusterId }
+      const { topic, partition, message } = args[0]
+      return { topic, partition, message, groupId, clusterId }
     }
 
     const eachBatchExtractor = (args, clusterId) => {
-      const extracted = extractBatchArgs(args)
-      return { ...extracted, groupId, clusterId }
+      const { batch } = args[0]
+      const { topic, partition, messages } = batch
+      return { topic, partition, messages, groupId, clusterId }
     }
 
     const consumer = createConsumer.apply(this, arguments)
 
-    consumer.on(consumer.events.COMMIT_OFFSETS, handleCommits)
+    consumer.on(consumer.events.COMMIT_OFFSETS, commitsFromEvent)
 
     const run = consumer.run
+    const groupId = arguments[0].groupId
 
     consumer.run = function ({ eachMessage, eachBatch, ...runArgs }) {
       const wrapConsume = (clusterId) => {
         return run({
           eachMessage: wrappedCallback(
             eachMessage,
-            channels.consumerStart,
-            channels.consumerFinish,
-            channels.consumerError,
+            consumerStartCh,
+            consumerFinishCh,
+            consumerErrorCh,
             eachMessageExtractor,
             clusterId
           ),
           eachBatch: wrappedCallback(
             eachBatch,
-            channels.batchConsumerStart,
-            channels.batchConsumerFinish,
-            channels.batchConsumerError,
+            batchConsumerStartCh,
+            batchConsumerFinishCh,
+            batchConsumerErrorCh,
             eachBatchExtractor,
             clusterId
           ),
@@ -159,8 +158,10 @@ function instrumentConsumer (Kafka, channels, getClusterId, options = {}) {
       }
 
       if (!isPromise(kafkaClusterIdPromise)) {
+        // promise is already resolved
         return wrapConsume(kafkaClusterIdPromise)
       } else {
+        // promise is not resolved
         return kafkaClusterIdPromise.then((clusterId) => {
           return wrapConsume(clusterId)
         })
@@ -168,10 +169,10 @@ function instrumentConsumer (Kafka, channels, getClusterId, options = {}) {
     }
     return consumer
   })
-}
+  return Kafka
+})
 
-// Common callback wrapper
-function wrappedCallback (fn, startCh, finishCh, errorCh, extractArgs, clusterId) {
+const wrappedCallback = (fn, startCh, finishCh, errorCh, extractArgs, clusterId) => {
   return typeof fn === 'function'
     ? function (...args) {
       const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
@@ -205,8 +206,7 @@ function wrappedCallback (fn, startCh, finishCh, errorCh, extractArgs, clusterId
     : fn
 }
 
-// Common cluster ID getter
-function getKafkaClusterId (kafka) {
+const getKafkaClusterId = (kafka) => {
   if (kafka._ddKafkaClusterId) {
     return kafka._ddKafkaClusterId
   }
@@ -236,36 +236,6 @@ function getKafkaClusterId (kafka) {
     })
 }
 
-// Common promise check
 function isPromise (obj) {
   return !!obj && (typeof obj === 'object' || typeof obj === 'function') && typeof obj.then === 'function'
 }
-
-// Export common functionality
-module.exports = {
-  createKafkaChannels,
-  instrumentProducer,
-  instrumentConsumer,
-  wrappedCallback,
-  getKafkaClusterId,
-  isPromise
-}
-
-// Original kafkajs instrumentation
-const channels = createKafkaChannels('kafkajs')
-
-addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKafka) => {
-  class Kafka extends BaseKafka {
-    constructor (options) {
-      super(options)
-      this._brokers = (options.brokers && typeof options.brokers !== 'function')
-        ? options.brokers.join(',')
-        : undefined
-    }
-  }
-
-  instrumentProducer(Kafka, channels, getKafkaClusterId)
-  instrumentConsumer(Kafka, channels, getKafkaClusterId)
-
-  return Kafka
-})
