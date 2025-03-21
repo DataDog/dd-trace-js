@@ -6,6 +6,7 @@ const { storage } = require('./storage')
 
 const LLMObsSpanProcessor = require('./span_processor')
 
+const telemetry = require('./telemetry')
 const { channel } = require('dc-polyfill')
 const spanProcessCh = channel('dd-trace:span:process')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -44,6 +45,7 @@ function enable (config) {
 
   // distributed tracing for llmobs
   injectCh.subscribe(handleLLMObsParentIdInjection)
+  telemetry.record_llmobs_enabled()
 }
 
 function disable () {

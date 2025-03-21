@@ -53,7 +53,13 @@ function incrementLLMObsSpanFinishedCount (span, value = 1) {
   llmobsMetrics.count('span.finished', tags).inc(value)
 }
 
+function record_llmobs_enabled (value = 1) {
+  tags = {}
+  llmobsMetrics.count('product_enabled', tags).inc(value)
+}
+
 module.exports = {
+  record_llmobs_enabled,
   incrementLLMObsSpanStartCount,
   incrementLLMObsSpanFinishedCount
 }
