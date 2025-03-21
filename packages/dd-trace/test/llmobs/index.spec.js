@@ -17,7 +17,7 @@ const config = {
   site: 'datadoghq.com'
 }
 
-describe.only('module', () => {
+describe('module', () => {
   let llmobsModule
   let store
   let logger
@@ -54,7 +54,6 @@ describe.only('module', () => {
     })
 
     process.removeAllListeners('beforeExit')
-    process.removeAllListeners('uncaughtException')
   })
 
   afterEach(() => {
