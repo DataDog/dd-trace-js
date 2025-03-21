@@ -26,7 +26,7 @@ function extractIntegrationFromTags (tags) {
 }
 
 function extractTagsFromSpanEvent (event) {
-  const spanKind = event.meta['span.kind'] || ''
+  const spanKind = event.meta?.['span.kind'] || ''
   const integration = extractIntegrationFromTags(event.tags)
   const error = event.status === 'error'
   const autoinstrumented = integration != null
@@ -85,9 +85,17 @@ function recordLLMObsSpanSize (event, eventSize, shouldTruncate) {
   llmobsMetrics.distribution('span.size', tags).track(eventSize)
 }
 
+function recordDroppedPayload (numEvents, eventType, error) {
+  if (eventType != 'span' && eventType != 'evaluation_metric') return
+  const metricName = eventType === "span" ? "dropped_span_event" : "dropped_eval_event"
+  tags = {error: error}
+  llmobsMetrics.count(metricName, tags).inc(numEvents)
+}
+
 module.exports = {
   incrementLLMObsSpanStartCount,
   incrementLLMObsSpanFinishedCount,
   recordLLMObsRawSpanSize,
-  recordLLMObsSpanSize
+  recordLLMObsSpanSize,
+  recordDroppedPayload
 }
