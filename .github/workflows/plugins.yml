@@ -79,6 +79,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: node_modules
+      - run: ls -lisa
+        shell: bash
+      - run: ls -lisa node_modules
+        shell: bash
       - name: Run tests
         run: yarn test:plugins:ci
       - if: always()
