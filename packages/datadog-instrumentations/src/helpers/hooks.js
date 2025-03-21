@@ -43,6 +43,7 @@ module.exports = {
   couchbase: () => require('../couchbase'),
   crypto: () => require('../crypto'),
   cypress: () => require('../cypress'),
+  'dd-trace-api': () => require('../dd-trace-api'),
   dns: () => require('../dns'),
   elasticsearch: () => require('../elasticsearch'),
   express: () => require('../express'),
