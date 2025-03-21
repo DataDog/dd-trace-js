@@ -8,13 +8,13 @@ class Writer {
     this._interprocessCode = interprocessCode
   }
 
-  flush () {
+  flush (onDone) {
     const count = this._encoder.count()
 
     if (count > 0) {
       const payload = this._encoder.makePayload()
 
-      this._sendPayload(payload)
+      this._sendPayload(payload, onDone)
     }
   }
 
@@ -22,7 +22,7 @@ class Writer {
     this._encoder.encode(payload)
   }
 
-  _sendPayload (data) {
+  _sendPayload (data, onDone = () => {}) {
     // ## Jest
     // Only available when `child_process` is used for the jest worker.
     // eslint-disable-next-line
@@ -35,8 +35,11 @@ class Writer {
     // See cucumber code:
     // eslint-disable-next-line
     // https://github.com/cucumber/cucumber-js/blob/5ce371870b677fe3d1a14915dc535688946f734c/src/runtime/parallel/run_worker.ts#L13
+    // console.log('sending payload', !!process.send)
     if (process.send) { // it only works if process.send is available
-      process.send([this._interprocessCode, data])
+      process.send([this._interprocessCode, data], () => {
+        onDone()
+      })
     }
   }
 }

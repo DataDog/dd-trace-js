@@ -69,8 +69,9 @@ class TestWorkerCiVisibilityExporter {
     this._logsWriter.append({ testConfiguration, logMessage })
   }
 
-  flush () {
-    this._writer.flush()
+  // TODO: add to other writers
+  flush (onDone) {
+    this._writer.flush(onDone)
     this._coverageWriter.flush()
     this._logsWriter.flush()
   }

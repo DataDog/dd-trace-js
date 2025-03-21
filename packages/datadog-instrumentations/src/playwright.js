@@ -20,6 +20,7 @@ const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 
 const workerReportCh = channel('ci:playwright:worker:report')
 
+const testToAr = new WeakMap()
 const testSuiteToAr = new Map()
 const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
@@ -251,9 +252,12 @@ function getTestFullname (test) {
   return names.join(' ')
 }
 
-function testBeginHandler (test) {
+function testBeginHandler (test, browserName, isMainProcess) {
   const {
     _requireFile: testSuiteAbsolutePath,
+    location: {
+      line: testSourceLine
+    },
     _type
   } = test
 
@@ -271,10 +275,31 @@ function testBeginHandler (test) {
       testSuiteStartCh.publish(testSuiteAbsolutePath)
     })
   }
+
+  // this handles tests that do not go through the worker process (because they're skipped)
+  if (isMainProcess) {
+    const testAsyncResource = new AsyncResource('bound-anonymous-fn')
+    testToAr.set(test, testAsyncResource)
+    const testName = getTestFullname(test)
+
+    testAsyncResource.runInAsyncScope(() => {
+      testStartCh.publish({
+        testName,
+        testSuiteAbsolutePath,
+        testSourceLine,
+        browserName
+      })
+    })
+  }
 }
 
-function testEndHandler (test, annotations, testStatus, error, isTimeout) {
-  const { _requireFile: testSuiteAbsolutePath, _type } = test
+function testEndHandler (test, annotations, testStatus, error, isTimeout, isMainProcess) {
+  const { _requireFile: testSuiteAbsolutePath, results, _type } = test
+
+  let annotationTags
+  if (annotations.length) {
+    annotationTags = parseAnnotations(annotations)
+  }
 
   if (_type === 'beforeAll' || _type === 'afterAll') {
     const hookError = formatTestHookError(error, _type, isTimeout)
@@ -283,6 +308,23 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
       addErrorToTestSuite(testSuiteAbsolutePath, hookError)
     }
     return
+  }
+
+  if (isMainProcess) {
+    const testResult = results[results.length - 1]
+    const testAsyncResource = testToAr.get(test)
+    testAsyncResource.runInAsyncScope(() => {
+      testFinishCh.publish({
+        testStatus,
+        steps: testResult?.steps || [],
+        isRetry: testResult?.retry > 0,
+        error,
+        extraTags: annotationTags,
+        isNew: test._ddIsNew,
+        isQuarantined: test._ddIsQuarantined,
+        isEfdRetry: test._ddIsEfdRetry
+      })
+    })
   }
 
   if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
@@ -466,8 +508,8 @@ function runnerHook (runnerExport, playwrightVersion) {
       // because they were skipped
       tests.forEach(test => {
         const browser = getBrowserNameFromProjects(projects, test)
-        testBeginHandler(test, browser)
-        testEndHandler(test, [], 'skip')
+        testBeginHandler(test, browser, true)
+        testEndHandler(test, [], 'skip', null, false, true)
       })
     })
 
@@ -687,6 +729,12 @@ addHook({
       annotationTags = parseAnnotations(annotations)
     }
 
+    let onDone
+
+    const flushPromise = new Promise(resolve => {
+      onDone = resolve
+    })
+
     testAsyncResource.runInAsyncScope(() => {
       testFinishCh.publish({
         testStatus: STATUS_TO_TEST_STATUS[status],
@@ -697,9 +745,12 @@ addHook({
         // probably not going to work
         isNew: test._ddIsNew,
         isQuarantined: test._ddIsQuarantined,
-        isEfdRetry: test._ddIsEfdRetry
+        isEfdRetry: test._ddIsEfdRetry,
+        onDone
       })
     })
+
+    await flushPromise
 
     return res
   })

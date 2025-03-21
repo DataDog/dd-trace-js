@@ -184,6 +184,8 @@ class PlaywrightPlugin extends CiPlugin {
             parent_id: id(span.parent_id)
           }
           if (span.name === 'playwright.test') {
+            // TODO: Let's pass rootDir, repositoryRoot, command, session id and module id as env vars
+            // so we don't need this re-serialization logic
             formattedSpan.meta[TEST_SESSION_ID] = this.testSessionSpan.context().toTraceId()
             formattedSpan.meta[TEST_MODULE_ID] = this.testModuleSpan.context().toSpanId()
             formattedSpan.meta[TEST_COMMAND] = this.command
@@ -219,7 +221,8 @@ class PlaywrightPlugin extends CiPlugin {
       isNew,
       isEfdRetry,
       isRetry,
-      isQuarantined
+      isQuarantined,
+      onDone
     }) => {
       const store = storage('legacy').getStore()
       const span = store && store.span
@@ -246,7 +249,6 @@ class PlaywrightPlugin extends CiPlugin {
       if (isQuarantined) {
         span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
       }
-
       steps.forEach(step => {
         const stepStartTime = step.startTime.getTime()
         const stepSpan = this.tracer.startSpan('playwright.step', {
@@ -267,7 +269,6 @@ class PlaywrightPlugin extends CiPlugin {
         }
         stepSpan.finish(stepStartTime + stepDuration)
       })
-
       if (testStatus === 'fail') {
         this.numFailedTests++
       }
@@ -285,12 +286,12 @@ class PlaywrightPlugin extends CiPlugin {
 
       finishAllTraceSpans(span)
       if (process.env.DD_PLAYWRIGHT_WORKER) {
-        this.tracer._exporter.flush()
+        this.tracer._exporter.flush(onDone)
       }
     })
   }
 
-  // TODO: this can be simplified now that it only runs in worker
+  // TODO: this runs both in worker and main process (main process: skipped tests that do not go through _runTest)
   startTestSpan (testName, testSuiteAbsolutePath, testSuite, testSourceFile, testSourceLine, browserName) {
     const testSuiteSpan = this._testSuites.get(testSuiteAbsolutePath)
 
