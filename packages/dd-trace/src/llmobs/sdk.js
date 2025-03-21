@@ -274,24 +274,31 @@ class LLMObs extends NoopLLMObs {
     span = span || this._active()
 
     if (!span) {
+      telemetry.recordExportSpan(span, 'no_active_span')
       throw new Error('No span provided and no active LLMObs-generated span found')
     }
 
     if (!(span instanceof Span)) {
+      telemetry.recordExportSpan(span, 'invalid_span')
       throw new Error('Span must be a valid Span object.')
     }
 
     if (!LLMObsTagger.tagMap.has(span)) {
+      telemetry.recordExportSpan(span, 'invalid_span')
       throw new Error('Span must be an LLMObs-generated span')
     }
 
+    let err = ''
     try {
       return {
         traceId: span.context().toTraceId(true),
         spanId: span.context().toSpanId()
       }
     } catch {
+      err = 'invalid_span'
       logger.warn('Faild to export span. Span must be a valid Span object.')
+    } finally {
+      telemetry.recordExportSpan(span, err)
     }
   }
 
@@ -299,6 +306,7 @@ class LLMObs extends NoopLLMObs {
     if (!this.enabled) return
 
     if (!this._config.apiKey) {
+      telemetry.recordSubmitEvaluation(options, 'missing_api_key')
       throw new Error(
         'DD_API_KEY is required for sending evaluation metrics. Evaluation metric data will not be sent.\n' +
         'Ensure this configuration is set before running your application.'
@@ -307,6 +315,7 @@ class LLMObs extends NoopLLMObs {
 
     const { traceId, spanId } = llmobsSpanContext
     if (!traceId || !spanId) {
+      telemetry.recordSubmitEvaluation(options, 'invalid_span')
       throw new Error(
         'spanId and traceId must both be specified for the given evaluation metric to be submitted.'
       )
@@ -314,6 +323,7 @@ class LLMObs extends NoopLLMObs {
 
     const mlApp = options.mlApp || this._config.llmobs.mlApp
     if (!mlApp) {
+      telemetry.recordSubmitEvaluation(options, 'missing_ml_app')
       throw new Error(
         'ML App name is required for sending evaluation metrics. Evaluation metric data will not be sent.'
       )
@@ -321,22 +331,27 @@ class LLMObs extends NoopLLMObs {
 
     const timestampMs = options.timestampMs || Date.now()
     if (typeof timestampMs !== 'number' || timestampMs < 0) {
+      telemetry.recordSubmitEvaluation(options, 'invalid_timestamp')
       throw new Error('timestampMs must be a non-negative integer. Evaluation metric data will not be sent')
     }
 
     const { label, value, tags } = options
     const metricType = options.metricType?.toLowerCase()
     if (!label) {
+      telemetry.recordSubmitEvaluation(options, 'invalid_metric_label')
       throw new Error('label must be the specified name of the evaluation metric')
     }
     if (!metricType || !['categorical', 'score'].includes(metricType)) {
+      telemetry.recordSubmitEvaluation(options, 'invalid_metric_type')
       throw new Error('metricType must be one of "categorical" or "score"')
     }
 
     if (metricType === 'categorical' && typeof value !== 'string') {
+      telemetry.recordSubmitEvaluation(options, 'invalid_metric_value')
       throw new Error('value must be a string for a categorical metric.')
     }
     if (metricType === 'score' && typeof value !== 'number') {
+      telemetry.recordSubmitEvaluation(options, 'invalid_metric_value')
       throw new Error('value must be a number for a score metric.')
     }
 
@@ -358,6 +373,7 @@ class LLMObs extends NoopLLMObs {
           // should be a rare case
           // every object in JS has a toString, otherwise every primitive has its own toString
           // null and undefined are handled above
+          telemetry.recordSubmitEvaluation(options, 'invalid_tags')
           throw new Error('Failed to parse tags. Tags for evaluation metrics must be strings')
         }
       }
