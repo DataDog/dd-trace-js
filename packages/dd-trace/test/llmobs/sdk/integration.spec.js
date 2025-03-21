@@ -41,7 +41,8 @@ describe('end to end sdk integration tests', () => {
     tracer = require('../../../../dd-trace')
     tracer.init({
       llmobs: {
-        mlApp: 'test'
+        mlApp: 'test',
+        agentlessEnabled: false
       }
     })
 

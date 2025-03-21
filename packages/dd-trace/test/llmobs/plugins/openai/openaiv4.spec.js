@@ -43,7 +43,7 @@ describe('integrations', () => {
       return agent.load('openai', {}, {
         llmobs: {
           mlApp: 'test',
-          agentlessEnabled: true
+          agentlessEnabled: false
         }
       })
     })
