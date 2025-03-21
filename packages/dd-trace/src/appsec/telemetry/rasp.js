@@ -40,11 +40,11 @@ function trackRaspMetrics (store, metrics, raspRule) {
     tags.rule_variant = raspRule.variant
   }
 
-  if (!store[DD_TELEMETRY_REQUEST_METRICS].wafVersion) {
+  if (metrics.wafVersion) {
     store[DD_TELEMETRY_REQUEST_METRICS].wafVersion = metrics.wafVersion
   }
 
-  if (!store[DD_TELEMETRY_REQUEST_METRICS].rulesVersion) {
+  if (metrics.rulesVersion) {
     store[DD_TELEMETRY_REQUEST_METRICS].rulesVersion = metrics.rulesVersion
   }
 

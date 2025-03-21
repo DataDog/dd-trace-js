@@ -60,10 +60,11 @@ function handleResult (actions, req, res, abortController, config, raspRule) {
       if (!abortController.signal.reason) {
         abortController.signal.reason = abortError
       }
+      return
     }
-  } else {
-    updateRaspRuleMatchMetricTags(req, raspRule, false, false)
   }
+
+  updateRaspRuleMatchMetricTags(req, raspRule, false, false)
 }
 
 module.exports = {
