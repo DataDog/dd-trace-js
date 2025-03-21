@@ -4,6 +4,9 @@ let isKnownTestsEnabled = false
 let knownTestsForSuite = []
 let suiteTests = []
 let earlyFlakeDetectionNumRetries = 0
+let isTestManagementEnabled = false
+let testManagementAttemptToFixRetries = 0
+let testManagementTests = {}
 // We need to grab the original window as soon as possible,
 // in case the test changes the origin. If the test does change the origin,
 // any call to `cy.window()` will result in a cross origin error.
@@ -23,31 +26,57 @@ function isNewTest (test) {
   return !knownTestsForSuite.includes(test.fullTitle())
 }
 
-function retryTest (test, suiteTests) {
-  for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
+function getTestProperties (testSuite, testName) {
+  const { attempt_to_fix: isAttemptToFix, disabled: isDisabled, quarantined: isQuarantined } =
+    testManagementTests?.cypress?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
+    
+    return { isAttemptToFix, isDisabled, isQuarantined }
+}
+
+function retryTest (test, suiteTests, numRetries, isAttemptToFix) {
+  for (let retryIndex = 0; retryIndex < numRetries; retryIndex++) {
     const clonedTest = test.clone()
     // TODO: signal in framework logs that this is a retry.
     // TODO: Change it so these tests are allowed to fail.
     // TODO: figure out if reported duration is skewed.
     suiteTests.unshift(clonedTest)
-    clonedTest._ddIsNew = true
-    clonedTest._ddIsEfdRetry = true
+    if (isAttemptToFix) {
+      clonedTest._ddIsAttemptToFix = true
+      if (retryIndex === numRetries - 1) {
+        clonedTest._ddIsLastRetry = true
+      }
+    } else {
+      clonedTest._ddIsNew = true
+      clonedTest._ddIsEfdRetry = true
+    }
   }
 }
 
 
 const oldRunTests = Cypress.mocha.getRunner().runTests
 Cypress.mocha.getRunner().runTests = function (suite, fn) {
-  if (!isKnownTestsEnabled) {
+  if (!isKnownTestsEnabled && !isTestManagementEnabled) {
     return oldRunTests.apply(this, arguments)
   }
   // We copy the new tests at the beginning of the suite run (runTests), so that they're run
   // multiple times.
   suite.tests.forEach(test => {
-    if (!test._ddIsNew && !test.isPending() && isNewTest(test)) {
-      test._ddIsNew = true
-      if (isEarlyFlakeDetectionEnabled) {
-        retryTest(test, suite.tests)
+    const testName = test.fullTitle()
+    const testSuite = Cypress.mocha.getRootSuite().file
+    
+    const { isAttemptToFix } = getTestProperties(testSuite, testName)
+    
+    if (isTestManagementEnabled) {
+      if (isAttemptToFix) {
+        retryTest(test, suite.tests, testManagementAttemptToFixRetries, true)
+      }
+    }
+    if (isKnownTestsEnabled) {
+      if (!test._ddIsNew && !test.isPending() && isNewTest(test) && !isAttemptToFix) {
+        test._ddIsNew = true
+        if (isEarlyFlakeDetectionEnabled) {
+          retryTest(test, suite.tests, earlyFlakeDetectionNumRetries, false)
+        }
       }
     }
   })
@@ -80,6 +109,9 @@ before(function () {
       isKnownTestsEnabled = suiteConfig.isKnownTestsEnabled
       knownTestsForSuite = suiteConfig.knownTestsForSuite
       earlyFlakeDetectionNumRetries = suiteConfig.earlyFlakeDetectionNumRetries
+      isTestManagementEnabled = suiteConfig.isTestManagementEnabled
+      testManagementAttemptToFixRetries = suiteConfig.testManagementAttemptToFixRetries
+      testManagementTests = suiteConfig.testManagementTests
     }
   })
 })
@@ -104,7 +136,9 @@ afterEach(function () {
     state: currentTest.state,
     error: currentTest.err,
     isNew: currentTest._ddIsNew,
-    isEfdRetry: currentTest._ddIsEfdRetry
+    isEfdRetry: currentTest._ddIsEfdRetry,
+    isAttemptToFix: currentTest._ddIsAttemptToFix,
+    isLastRetry: currentTest._ddIsLastRetry
   }
   try {
     testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line
