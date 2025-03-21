@@ -12,12 +12,14 @@ describe.only('IAST - code_injection - integration', () => {
   before(async function () {
     console.log('change to run ci')
     this.timeout(process.platform === 'win32' ? 100000 : 30000)
+    const start = process.hrtime.bigint()
     sandbox = await createSandbox(
       ['express'],
       false,
       [path.join(__dirname, 'resources')]
     )
-    console.log('sandbox created')
+    const end = process.hrtime.bigint()
+    console.log(`sandbox created in ${(end-start)/1_000_000n}ms`)
 
     appPort = await getPort()
     cwd = sandbox.folder
