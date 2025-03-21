@@ -103,6 +103,10 @@ class RemoteConfigManager extends EventEmitter {
     this.state.client.capabilities = Buffer.from(str, 'hex').toString('base64')
   }
 
+  getClientId () {
+    return this.state.client.id
+  }
+
   setProductHandler (product, handler) {
     this._handlers.set(product, handler)
     this.updateProducts()
