@@ -14,6 +14,7 @@ describe('WAFContextWrapper', () => {
 
   beforeEach(() => {
     sinon.stub(Reporter, 'reportMetrics')
+    sinon.stub(Reporter, 'reportRaspRuleSkipped')
   })
 
   afterEach(() => {
@@ -272,6 +273,25 @@ describe('WAFContextWrapper', () => {
 
       sinon.assert.notCalled(ddwafContext.run)
       sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Calling run on a disposed context')
+      expect(Reporter.reportRaspRuleSkipped).to.not.have.been.called
+      expect(Reporter.reportMetrics).to.not.have.been.called
+    })
+
+    it('Should call run with raspRule and call reportRaspRuleSkipped if context is disposed', () => {
+      ddwafContext.disposed = true
+
+      const payload = {
+        persistent: {
+          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
+        }
+      }
+
+      const raspRule = { type: 'rule-type' }
+      wafContextWrapper.run(payload, raspRule)
+
+      sinon.assert.notCalled(ddwafContext.run)
+      sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Calling run on a disposed context')
+      expect(Reporter.reportRaspRuleSkipped).to.have.been.calledOnceWithExactly(raspRule, 'after-request')
       expect(Reporter.reportMetrics).to.not.have.been.called
     })
   })

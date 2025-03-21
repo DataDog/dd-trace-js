@@ -76,7 +76,7 @@ function analyzeSqlInjection (query, dbSystem, abortController) {
 
   const result = waf.run({ ephemeral }, req, raspRule)
 
-  handleResult(result, req, res, abortController, config)
+  handleResult(result, req, res, abortController, config, raspRule)
 }
 
 function hasInputAddress (payload) {
