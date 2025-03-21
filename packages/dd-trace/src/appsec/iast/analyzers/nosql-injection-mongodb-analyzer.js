@@ -107,7 +107,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
   }
 
   _isVulnerableRange (range, value) {
-    const rangeIsWholeValue = range.start === 0 && range.end === value?.length
+    const rangeIsWholeValue = range?.start === 0 && range?.end === value?.length
 
     if (!rangeIsWholeValue) return false
 
