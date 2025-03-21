@@ -10,6 +10,7 @@ describe('IAST - code_injection - integration', () => {
   let axios, sandbox, cwd, appPort, agent, proc
 
   before(async function () {
+    console.log('change to run ci')
     this.timeout(process.platform === 'win32' ? 100000 : 30000)
 
     sandbox = await createSandbox(
