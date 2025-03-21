@@ -55,7 +55,8 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       modelName: modelName.toLowerCase(),
       modelProvider: modelProvider.toLowerCase(),
       kind: 'llm',
-      name: 'bedrock-runtime.command'
+      name: 'bedrock-runtime.command',
+      integration: 'bedrock'
     })
 
     const requestParams = extractRequestParams(request.params, modelProvider)
