@@ -79,7 +79,6 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: node_modules
-      - uses:
       - name: Run tests
         run: yarn test:plugins:ci
       - if: always()
