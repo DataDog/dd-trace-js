@@ -198,7 +198,7 @@ describe('module', () => {
 
         it('throws an error', () => {
           expect(() => llmobsModule.enable(config)).to.throw(
-            'Cannot send LLM Observability data with no running agent and no Datadog API key.\n' +
+            'Cannot send LLM Observability data without a running agent and without a Datadog API key.\n' +
             'Please set DD_API_KEY and set DD_LLMOBS_AGENTLESS_ENABLED to true.'
           )
         })
