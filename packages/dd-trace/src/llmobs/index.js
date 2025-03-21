@@ -14,6 +14,7 @@ const injectCh = channel('dd-trace:span:inject')
 
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
 const LLMObsSpanWriter = require('./writers/spans')
+const { getAgentInfo } = require('./util')
 
 /**
  * Setting writers and processor globally when LLMObs is enabled
@@ -30,9 +31,9 @@ let evalWriter
 function enable (config) {
   // create writers and eval writer append and flush channels
   // span writer append is handled by the span processor
-  const agentlessEnabled = getAgentlessEnabled(config)
-  evalWriter = new LLMObsEvalMetricsWriter(config, agentlessEnabled)
-  spanWriter = new LLMObsSpanWriter(config, agentlessEnabled)
+  evalWriter = new LLMObsEvalMetricsWriter(config)
+  spanWriter = new LLMObsSpanWriter(config)
+  configureWriters(config)
 
   evalMetricAppendCh.subscribe(handleEvalMetricAppend)
   flushCh.subscribe(handleFlush)
@@ -60,6 +61,40 @@ function disable () {
   evalWriter = null
 }
 
+function configureWriters (config) {
+  const { llmobs: { agentlessEnabled }, apiKey } = config
+
+  // check if agentless is explicitly defined
+  if (agentlessEnabled === false) {
+    evalWriter.setAgentless(false)
+    spanWriter.setAgentless(false)
+  } else if (agentlessEnabled === true && !apiKey) {
+    throw new Error(
+      'DD_API_KEY is required for sending LLMObs data when agentless mode is enabled. ' +
+      'Ensure this configuration is set before running your application.'
+    )
+  } else if (agentlessEnabled === true) {
+    evalWriter.setAgentless(true)
+    spanWriter.setAgentless(true)
+  } else {
+    // queue up a callback to configure the writers to agentless or agent-proxy
+    getAgentInfo(config, err => {
+      if (err && !apiKey) {
+        throw new Error(
+          'Cannot send LLM Observability data with no running agent and no Datadog API key.\n' +
+          'Please set DD_API_KEY and set DD_LLMOBS_AGENTLESS_ENABLED to true.'
+        )
+      } else if (err) {
+        evalWriter?.setAgentless(true)
+        spanWriter?.setAgentless(true)
+      } else {
+        evalWriter?.setAgentless(false)
+        spanWriter?.setAgentless(false)
+      }
+    })
+  }
+}
+
 // since LLMObs traces can extend between services and be the same trace,
 // we need to propogate the parent id.
 function handleLLMObsParentIdInjection ({ carrier }) {
@@ -69,26 +104,6 @@ function handleLLMObsParentIdInjection ({ carrier }) {
   const parentId = parent?.context().toSpanId()
 
   carrier['x-datadog-tags'] += `,${PROPAGATED_PARENT_ID_KEY}=${parentId}`
-}
-
-function getAgentlessEnabled (config) {
-  const { llmobs: { agentlessEnabled }, apiKey } = config
-
-  // Explicitly disabled
-  if (agentlessEnabled === false) {
-    return false
-  }
-
-  // Explicitly enabled but missing API key
-  if (agentlessEnabled === true && !apiKey) {
-    throw new Error(
-      'DD_API_KEY is required for sending LLMObs data when agentless mode is enabled. ' +
-      'Ensure this configuration is set before running your application.'
-    )
-  }
-
-  // Enable if API key present and not explicitly disabled
-  return !!apiKey
 }
 
 function handleFlush () {

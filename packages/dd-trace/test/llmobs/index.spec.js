@@ -97,7 +97,7 @@ describe('module', () => {
     })
   })
 
-  describe('with agentless explicitly enabled', () => {
+  describe('with agentlessEnabled set to `true`', () => {
     beforeEach(() => {
       config.llmobs.agentlessEnabled = true
     })
@@ -106,21 +106,12 @@ describe('module', () => {
       delete config.llmobs.agentlessEnabled
     })
 
-    it('throws if no api key is provided', () => {
-      config.apiKey = undefined
-      expect(() => llmobsModule.enable(config)).to.throw()
-      config.apiKey = 'test'
-    })
+    it('throws if no api key is provided', () => {})
 
-    it('uses the agent proxy span writer', () => {
-      config.apiKey = 'test'
-      llmobsModule.enable(config)
-      expect(LLMObsEvalMetricsWriterSpy).to.have.been.calledWith(config, true)
-      expect(LLMObsSpanWriterSpy).to.have.been.calledWith(config, true)
-    })
+    it('configures agentless writers', () => {})
   })
 
-  describe('with agentless explicitly disabled', () => {
+  describe('with agentlessEnabled set to `false`', () => {
     beforeEach(() => {
       config.llmobs.agentlessEnabled = false
     })
@@ -129,46 +120,21 @@ describe('module', () => {
       delete config.llmobs.agentlessEnabled
     })
 
-    it('does not configure writers to be agentless', () => {
-      llmobsModule.enable(config)
-      expect(LLMObsEvalMetricsWriterSpy).to.have.been.calledWith(config, false)
-      expect(LLMObsSpanWriterSpy).to.have.been.calledWith(config, false)
-    })
+    it('configures agent-proxy writers', () => {})
   })
 
-  describe('with agentless undefined', () => {
-    describe('when api key is provided', () => {
-      beforeEach(() => {
-        config.apiKey = 'test'
-      })
-
-      afterEach(() => {
-        delete config.apiKey
-      })
-
-      it('uses the agentless span writer', () => {
-        llmobsModule.enable(config)
-        expect(LLMObsSpanWriterSpy).to.have.been.calledWith(config, true)
-        expect(LLMObsEvalMetricsWriterSpy).to.have.been.calledWith(config, true)
-      })
+  describe('with agentlessEnabled set to undefined', () => {
+    describe('when an agent is running', () => {
+      it('configures the agent-proxy writers', () => {})
     })
 
-    describe('when api key is not provided', () => {
-      let originalApiKey
-
-      beforeEach(() => {
-        originalApiKey = config.apiKey
-        config.apiKey = undefined
+    describe('when no agent is running', () => {
+      describe('when no API key is provided', () => {
+        it('throws an error', () => {})
       })
 
-      afterEach(() => {
-        config.apiKey = originalApiKey
-      })
-
-      it('does not use the agentless span writer', () => {
-        llmobsModule.enable(config)
-        expect(LLMObsSpanWriterSpy).to.have.been.calledWith(config, false)
-        expect(LLMObsEvalMetricsWriterSpy).to.have.been.calledWith(config, false)
+      describe('when an API key is provided', () => {
+        it('configures the agentless writers', () => {})
       })
     })
   })

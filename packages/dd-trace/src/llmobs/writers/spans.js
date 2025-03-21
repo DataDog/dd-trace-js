@@ -9,13 +9,13 @@ const logger = require('../../log')
 const tracerVersion = require('../../../../../package.json').version
 
 class LLMObsSpanWriter extends BaseWriter {
-  constructor (config, agentless = true) {
+  constructor (config) {
     super({
       config,
       eventType: 'span',
       intake: 'llmobs-intake',
       endpoint: AGENTLESS_SPANS_ENDPOINT
-    }, agentless)
+    })
   }
 
   append (event) {

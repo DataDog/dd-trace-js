@@ -35,13 +35,14 @@ describe('LLMObsSpanWriter', () => {
 
   it('creates an agentless writer', () => {
     writer = new LLMObsSpanWriter(config)
-
+    writer.setAgentless(true)
     expect(writer._agentless).to.equal(true)
     expect(writer._url.href).to.equal('https://llmobs-intake.datadoghq.com/api/v2/llmobs')
   })
 
   it('creates an agent proxy writer', () => {
-    writer = new LLMObsSpanWriter(config, false)
+    writer = new LLMObsSpanWriter(config)
+    writer.setAgentless(false)
 
     expect(writer._agentless).to.equal(false)
     expect(writer._url.href).to.equal('http://localhost:8126/evp_proxy/v2/api/v2/llmobs')

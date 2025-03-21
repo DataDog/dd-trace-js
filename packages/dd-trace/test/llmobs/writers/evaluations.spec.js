@@ -18,6 +18,7 @@ describe('LLMObsEvalMetricsWriter', () => {
     writer = new LLMObsEvalMetricsWriter({
       site: 'datadoghq.com'
     })
+    writer.setAgentless(true)
 
     writer.flush = flush // just to stop the beforeExit flush call
 
@@ -29,8 +30,8 @@ describe('LLMObsEvalMetricsWriter', () => {
     writer = new LLMObsEvalMetricsWriter({
       port: 8126,
       hostname: 'localhost'
-    }, false)
-
+    })
+    writer.setAgentless(false)
     expect(writer._url.href).to.equal('http://localhost:8126/evp_proxy/v2/api/intake/llm-obs/v1/eval-metric')
     expect(writer._eventType).to.equal('evaluation_metric')
   })
@@ -40,6 +41,7 @@ describe('LLMObsEvalMetricsWriter', () => {
       site: 'datadoghq.com',
       apiKey: 'test'
     })
+    writer.setAgentless(true)
 
     const events = [
       { name: 'test', value: 1 }

@@ -1,6 +1,7 @@
 'use strict'
 const { expect } = require('chai')
 const proxyquire = require('proxyquire')
+
 describe('BaseLLMObsWriter', () => {
   let BaseLLMObsWriter
   let writer
@@ -43,13 +44,15 @@ describe('BaseLLMObsWriter', () => {
 
   it('constructs an agentless writer', () => {
     writer = new BaseLLMObsWriter(options)
+    writer.setAgentless(true)
 
     expect(writer._agentless).to.be.true
     expect(writer._url.href).to.equal('https://intake.site.com/endpoint')
   })
 
   it('constructs an agent proxy writer', () => {
-    writer = new BaseLLMObsWriter(options, false)
+    writer = new BaseLLMObsWriter(options)
+    writer.setAgentless(false)
 
     expect(writer._agentless).to.be.false
     expect(writer._url.href).to.equal('http://localhost:8126/evp_proxy/v2/endpoint')
@@ -65,7 +68,8 @@ describe('BaseLLMObsWriter', () => {
     })
 
     it('constructs a writer with a custom url', () => {
-      writer = new BaseLLMObsWriter(options, false)
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(false)
 
       expect(writer._url.href).to.equal('http://test-agent:12345/evp_proxy/v2/endpoint')
     })
@@ -73,6 +77,7 @@ describe('BaseLLMObsWriter', () => {
 
   it('calls flush before the process exits', () => {
     writer = new BaseLLMObsWriter(options)
+    writer.setAgentless(true)
     writer.flush = sinon.spy()
 
     process.emit('beforeExit')
@@ -84,6 +89,7 @@ describe('BaseLLMObsWriter', () => {
 
   it('calls flush at the correct interval', async () => {
     writer = new BaseLLMObsWriter(options)
+    writer.setAgentless(true)
 
     writer.flush = sinon.spy()
 
@@ -94,6 +100,7 @@ describe('BaseLLMObsWriter', () => {
 
   it('appends an event to the buffer', () => {
     writer = new BaseLLMObsWriter(options)
+    writer.setAgentless(true)
     const event = { foo: 'bar–' }
     writer.append(event)
 
@@ -104,6 +111,7 @@ describe('BaseLLMObsWriter', () => {
 
   it('does not append an event if the buffer is full', () => {
     writer = new BaseLLMObsWriter(options)
+    writer.setAgentless(true)
 
     for (let i = 0; i < 1000; i++) {
       writer.append({ foo: 'bar' })
@@ -117,6 +125,7 @@ describe('BaseLLMObsWriter', () => {
   describe('flush', () => {
     it('flushes a buffer in agentless mode', () => {
       writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
       writer.makePayload = (events) => ({ events })
 
       writer.append({ foo: 'bar' })
@@ -129,7 +138,8 @@ describe('BaseLLMObsWriter', () => {
     })
 
     it('flushes a buffer in agent proxy mode', () => {
-      writer = new BaseLLMObsWriter(options, false)
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(false)
       writer.makePayload = (events) => ({ events })
 
       writer.append({ foo: 'bar' })
@@ -141,32 +151,28 @@ describe('BaseLLMObsWriter', () => {
       expect(requestOptions.headers['X-Datadog-EVP-Subdomain']).to.equal('intake')
     })
 
-    it('falls back to agentless mode if the agent proxy request fails', () => {
-      writer = new BaseLLMObsWriter(options, false)
+    it('does not flush when agentless property is not set', () => {
+      writer = new BaseLLMObsWriter(options)
       writer.makePayload = (events) => ({ events })
 
-      writer.append({ foo: 'bar' })
-
-      let reqIdx = 0
-      request.callsFake((payload, options, cb) => {
-        if (reqIdx === 0) {
-          cb(new Error('boom'))
-        } else {
-          cb()
-        }
-        reqIdx++
-      })
-
+      const event = { foo: 'bar' }
+      writer.append(event)
       writer.flush()
 
-      expect(request).to.have.been.calledTwice
-      expect(request.getCall(0).args[1].url.href).to.equal('http://localhost:8126/evp_proxy/v2/endpoint')
-      expect(request.getCall(1).args[1].url.href).to.equal('https://intake.site.com/endpoint')
+      expect(request).to.not.have.been.called
+      expect(writer._buffer).to.have.lengthOf(1)
+      expect(writer._buffer[0]).to.deep.equal(event)
+
+      writer.setAgentless(true)
+      writer.flush()
+
+      expect(request).to.have.been.calledOnce
     })
   })
 
   it('does not flush an empty buffer', () => {
     writer = new BaseLLMObsWriter(options)
+    writer.setAgentless(true)
     writer.flush()
 
     expect(request).to.not.have.been.called
@@ -174,6 +180,7 @@ describe('BaseLLMObsWriter', () => {
 
   it('logs errors from the request', () => {
     writer = new BaseLLMObsWriter(options)
+    writer.setAgentless(true)
     writer.makePayload = (events) => ({ events })
 
     writer.append({ foo: 'bar' })
@@ -197,6 +204,7 @@ describe('BaseLLMObsWriter', () => {
       sinon.spy(global, 'clearInterval')
       sinon.spy(process, 'removeListener')
       writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
       writer.flush = sinon.stub()
 
       writer.destroy()
@@ -212,6 +220,7 @@ describe('BaseLLMObsWriter', () => {
 
     it('does not destroy more than once', () => {
       writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
 
       logger.debug.reset() // ignore log from constructor
       writer.destroy()

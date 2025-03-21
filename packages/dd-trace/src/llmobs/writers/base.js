@@ -14,7 +14,7 @@ const {
 } = require('../constants/writers')
 
 class BaseLLMObsWriter {
-  constructor ({ interval, timeout, eventType, config, endpoint, intake }, agentless = true) {
+  constructor ({ interval, timeout, eventType, config, endpoint, intake }) {
     this._interval = interval || 1000 // 1s
     this._timeout = timeout || 5000 // 5s
     this._eventType = eventType
@@ -47,15 +47,12 @@ class BaseLLMObsWriter {
     process.once('uncaughtException', this._uncaughtExceptionHandler)
 
     this._destroyed = false
-    this._agentless = agentless
 
     Object.defineProperty(this, '_url', {
       get () {
         return this._getUrl()
       }
     })
-
-    logger.debug(`Started ${this.constructor.name} to ${this._url.href}`)
   }
 
   append (event, byteLength) {
@@ -69,7 +66,10 @@ class BaseLLMObsWriter {
   }
 
   flush (_cb = () => {}) {
-    if (this._buffer.length === 0) {
+    if (
+      this._buffer.length === 0 ||
+      this._agentless == null
+    ) {
       return
     }
 
@@ -80,7 +80,23 @@ class BaseLLMObsWriter {
 
     log.debug(`Encoded LLMObs payload: ${payload}`)
 
-    this._makeRequest(payload, events.length, _cb)
+    const options = this._getOptions()
+
+    request(payload, options, (err, resp, code) => {
+      if (err) {
+        logger.error(
+          'Error sending %d LLMObs %s events to %s: %s', events.length, this._eventType, options.url, err.message, err
+        )
+      } else if (code >= 300) {
+        logger.error(
+          'Error sending %d LLMObs %s events to %s: %s', events.length, this._eventType, options.url, code
+        )
+      } else {
+        logger.debug(`Sent ${events.length} LLMObs ${this._eventType} events to ${options.url}`)
+      }
+
+      _cb(err, resp, code)
+    })
   }
 
   makePayload (events) {}
@@ -96,42 +112,9 @@ class BaseLLMObsWriter {
     }
   }
 
-  _makeRequest (payload, numEvents, cb = () => {}) {
-    const options = this._getOptions()
-
-    request(payload, options, (err, resp, code) => {
-      if (err) {
-        logger.error(
-          'Error sending %d LLMObs %s events to %s: %s', numEvents, this._eventType, options.url, err.message, err
-        )
-
-        if (!this._agentless) {
-          this._agentless = true
-
-          logger.debug('Retrying LLM Observability with agentless enabled.')
-
-          if (!this._config.apiKey) {
-            throw new Error(
-              'DD_API_KEY is required for sending LLMObs data when no agent is running.\n' +
-              'Ensure either `DD_API_KEY` is set, or an agent is running.'
-            )
-          }
-
-          logger.debug(`Restarting ${this.constructor.name} to ${this._url.href}`)
-
-          this._makeRequest(payload, numEvents, cb)
-          return
-        }
-      } else if (code >= 300) {
-        logger.error(
-          'Error sending %d LLMObs %s events to %s: %s', numEvents, this._eventType, options.url, code
-        )
-      } else {
-        logger.debug(`Sent ${numEvents} LLMObs ${this._eventType} events to ${options.url}`)
-      }
-
-      cb(err, resp, code)
-    })
+  setAgentless (agentless) {
+    this._agentless = agentless
+    logger.debug(`Started ${this.constructor.name} to ${this._url.href}`)
   }
 
   _getOptions () {

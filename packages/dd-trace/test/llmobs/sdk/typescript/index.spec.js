@@ -76,7 +76,7 @@ function getLatestVersion (range) {
   return versions[versions.length - 1]
 }
 
-describe.skip('typescript', () => {
+describe('typescript', () => {
   let agent
   let proc
   let sandbox
