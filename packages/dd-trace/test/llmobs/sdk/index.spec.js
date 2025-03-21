@@ -98,7 +98,7 @@ describe('sdk', () => {
 
       expect(disabledLLMObs.enabled).to.be.true
       expect(disabledLLMObs._config.llmobs.mlApp).to.equal('mlApp')
-      expect(disabledLLMObs._config.llmobs.agentlessEnabled).to.be.false
+      expect(disabledLLMObs._config.llmobs.agentlessEnabled).to.be.undefined
 
       expect(llmobsModule.enable).to.have.been.called
 

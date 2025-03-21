@@ -55,7 +55,7 @@ class BaseLLMObsWriter {
       }
     })
 
-    logger.debug(`Started ${this.constructor.name} to ${this._getUrl().href}`)
+    logger.debug(`Started ${this.constructor.name} to ${this._url.href}`)
   }
 
   append (event, byteLength) {
@@ -107,10 +107,17 @@ class BaseLLMObsWriter {
 
         if (!this._agentless) {
           this._agentless = true
-          logger.debug(
-            'Retrying LLM Observability with agentless enabled.\n' +
-            `Restarting ${this.constructor.name} to ${this._getUrl().href}`
-          )
+
+          logger.debug('Retrying LLM Observability with agentless enabled.')
+
+          if (!this._config.apiKey) {
+            throw new Error(
+              'DD_API_KEY is required for sending LLMObs data when no agent is running.\n' +
+              'Ensure either `DD_API_KEY` is set, or an agent is running.'
+            )
+          }
+
+          logger.debug(`Restarting ${this.constructor.name} to ${this._url.href}`)
 
           this._makeRequest(payload, numEvents, cb)
           return
@@ -134,7 +141,7 @@ class BaseLLMObsWriter {
       },
       method: 'POST',
       timeout: this._timeout,
-      url: this._getUrl()
+      url: this._url
     }
 
     if (this._agentless) {
