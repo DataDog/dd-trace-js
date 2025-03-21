@@ -2,7 +2,7 @@ name: Install dependencies
 description: Install dependencies
 inputs:
   cache:
-    description: "Whether to enabling caching of node_modules."
+    description: "Whether to enable caching of node_modules."
     required: false
     default: 'false'
 runs:
