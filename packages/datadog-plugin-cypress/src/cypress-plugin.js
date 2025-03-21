@@ -439,24 +439,6 @@ class CypressPlugin {
         this.isTestManagementTestsEnabled = false
       } else {
         this.testManagementTests = testManagementTestsResponse.testManagementTests
-        // TODO - REMOVE AFTERWARDS
-        // this.testManagementTests = {
-        //   cypress: {
-        //     suites: {
-        //       'cypress/e2e/spec.cy.js': {
-        //         tests: {
-        //           'My First Test Gets, types and asserts': {
-        //             properties: {
-        //               is_attempt_to_fix: true,
-        //               disabled: false,
-        //               quarantined: true
-        //             }
-        //           }
-        //         }
-        //       }
-        //     }
-        //   }
-        // }
       }
     }
 
