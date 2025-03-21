@@ -22,6 +22,10 @@ const messaging = {
       opName: () => 'kafka.send',
       serviceName: identityService
     },
+    'confluentinc-kafka-javascript': {
+      opName: () => 'kafka.send',
+      serviceName: identityService
+    },
     rhea: amqpOutbound,
     sqs: {
       opName: () => 'aws.sqs.send',
@@ -40,6 +44,10 @@ const messaging = {
       serviceName: identityService
     },
     kafkajs: {
+      opName: () => 'kafka.process',
+      serviceName: identityService
+    },
+    'confluentinc-kafka-javascript': {
       opName: () => 'kafka.process',
       serviceName: identityService
     },

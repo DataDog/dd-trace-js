@@ -15,7 +15,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
 
   constructor () {
     super(...arguments)
-    this.addSub('apm:kafkajs:consume:commit', message => this.commit(message))
+    this.addSub(`apm:${this.constructor.id}:consume:commit`, message => this.commit(message))
   }
 
   /**
@@ -71,7 +71,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       resource: topic,
       type: 'worker',
       meta: {
-        component: 'kafkajs',
+        component: this.constructor.id,
         'kafka.topic': topic,
         'kafka.message.offset': message.offset,
         'kafka.cluster_id': clusterId,

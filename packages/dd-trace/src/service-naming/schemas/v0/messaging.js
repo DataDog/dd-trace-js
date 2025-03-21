@@ -22,6 +22,10 @@ const messaging = {
       opName: () => 'kafka.produce',
       serviceName: ({ tracerService }) => `${tracerService}-kafka`
     },
+    'confluentinc-kafka-javascript': {
+      opName: () => 'kafka.produce',
+      serviceName: ({ tracerService }) => `${tracerService}-kafka`
+    },
     rhea: {
       opName: () => 'amqp.send',
       serviceName: ({ tracerService }) => `${tracerService}-amqp-producer`
@@ -49,6 +53,10 @@ const messaging = {
       serviceName: identityService
     },
     kafkajs: {
+      opName: () => 'kafka.consume',
+      serviceName: ({ tracerService }) => `${tracerService}-kafka`
+    },
+    'confluentinc-kafka-javascript': {
       opName: () => 'kafka.consume',
       serviceName: ({ tracerService }) => `${tracerService}-kafka`
     },
