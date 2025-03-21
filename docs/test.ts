@@ -581,7 +581,7 @@ llmobs.wrap({ kind: 'llm' }, function myLLM () {})()
 llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction () {})()
 
 // export a span
-llmobs.enable({ mlApp: 'myApp' })
+llmobs.enable({ mlApp: 'myApp', agentlessEnabled: false })
 llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
   const llmobsSpanCtx = llmobs.exportSpan(span)
   llmobsSpanCtx.traceId;
