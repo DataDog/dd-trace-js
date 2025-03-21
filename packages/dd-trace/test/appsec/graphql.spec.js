@@ -12,8 +12,7 @@ const {
 } = require('../../src/appsec/channels')
 
 describe('GraphQL', () => {
-  let graphql
-  let blocking
+  let graphql, blocking, telemetry
 
   beforeEach(() => {
     const getBlockingData = sinon.stub()
@@ -29,8 +28,13 @@ describe('GraphQL', () => {
       statusCode: 403
     })
 
+    telemetry = {
+      updateWafBlockFailureMetric: sinon.stub()
+    }
+
     graphql = proxyquire('../../src/appsec/graphql', {
-      './blocking': blocking
+      './blocking': blocking,
+      './telemetry': telemetry
     })
   })
 
@@ -234,6 +238,7 @@ describe('GraphQL', () => {
       expect(blocking.getBlockingData).to.have.been.calledOnceWithExactly(req, 'graphql', blockParameters)
 
       expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
+      expect(telemetry.updateWafBlockFailureMetric).to.not.have.been.called
     })
 
     it('Should catch error when block fails', () => {
@@ -263,6 +268,7 @@ describe('GraphQL', () => {
       expect(blocking.getBlockingData).to.have.been.calledOnceWithExactly(req, 'graphql', blockParameters)
 
       expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.block.failed', 1)
+      expect(telemetry.updateWafBlockFailureMetric).to.be.calledOnceWithExactly(req)
     })
   })
 })
