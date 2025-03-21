@@ -39,7 +39,6 @@ describe('BaseLLMObsWriter', () => {
   afterEach(() => {
     clock.restore()
     process.removeAllListeners('beforeExit')
-    process.removeAllListeners('uncaughtException')
   })
 
   it('constructs an agentless writer', () => {
@@ -212,7 +211,6 @@ describe('BaseLLMObsWriter', () => {
       expect(writer._destroyed).to.be.true
       expect(clearInterval).to.have.been.calledWith(writer._periodic)
       expect(process.removeListener).to.have.been.calledWith('beforeExit', writer._beforeExitHandler)
-      expect(process.removeListener).to.have.been.calledWith('uncaughtException', writer._uncaughtExceptionHandler)
       expect(writer.flush).to.have.been.calledOnce
       expect(logger.debug)
         .to.have.been.calledWith('Stopping BaseLLMObsWriter')

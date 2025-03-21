@@ -36,16 +36,6 @@ class BaseLLMObsWriter {
     }
     process.once('beforeExit', this._beforeExitHandler)
 
-    // We only need uncaughtException since:
-    // - unhandledRejection is for Promises and will eventually trigger uncaughtException if unhandled
-    // - uncaughtExceptionMonitor is just for monitoring and doesn't prevent the exception
-    this._uncaughtExceptionHandler = (error) => {
-      this.flush(() => {
-        throw error // Re-throw to preserve Node's default error handling
-      })
-    }
-    process.once('uncaughtException', this._uncaughtExceptionHandler)
-
     this._destroyed = false
 
     Object.defineProperty(this, '_url', {
@@ -106,7 +96,6 @@ class BaseLLMObsWriter {
       logger.debug(`Stopping ${this.constructor.name}`)
       clearInterval(this._periodic)
       process.removeListener('beforeExit', this._beforeExitHandler)
-      process.removeListener('uncaughtException', this._uncaughtExceptionHandler)
       this.flush()
       this._destroyed = true
     }
