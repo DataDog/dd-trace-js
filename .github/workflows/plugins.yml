@@ -17,19 +17,6 @@ concurrency:
 
 
 jobs:
-  npm-install:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-node@v4
-      - uses: ./.github/actions/install
-        with:
-          cache: 'true'
-      - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
-        with:
-          name: node_modules
-          path: node_modules.tar
-
   aerospike:
     strategy:
       matrix:
@@ -58,7 +45,6 @@ jobs:
             range_clean: gte.6.0.0
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
-    needs: npm-install
     runs-on: ${{ matrix.test-image }}
     services:
       aerospike:
@@ -76,14 +62,8 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - run: yarn config set ignore-engines true
-      - uses: actions/download-artifact@v4
-        with:
-          name: node_modules
-      - run: tar -xf node_modules.tar
-      - run: ls -lisa
-        shell: bash
-      - run: ls -lisa node_modules
-        shell: bash
+      - name: Install dependencies
+        uses: ./.github/actions/install
       - name: Run tests
         run: yarn test:plugins:ci
       - if: always()
