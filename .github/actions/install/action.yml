@@ -4,7 +4,7 @@ inputs:
   cache:
     description: "Whether to enable caching of node_modules."
     required: false
-    default: 'false'
+    default: 'true'
 runs:
   using: composite
   steps:
