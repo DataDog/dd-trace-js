@@ -56,7 +56,7 @@ describe('Appsec User Telemetry metrics', () => {
 
         expect(count).to.have.been.calledOnceWithExactly('sdk.event', {
           event_type: 'login_success',
-          sdk_version: 'v2'
+          sdk_version: 'v1'
         })
       })
     })

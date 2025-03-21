@@ -21,7 +21,7 @@ function incrementMissingUserId (framework, eventType) {
 function incrementSdkEvent (eventType) {
   appsecMetrics.count('sdk.event', {
     event_type: eventType,
-    sdk_version: 'v2'
+    sdk_version: 'v1'
   }).inc()
 }
 
