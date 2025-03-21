@@ -27,10 +27,18 @@ function isNewTest (test) {
 }
 
 function getTestProperties (testSuite, testName) {
-  const { attempt_to_fix: isAttemptToFix, disabled: isDisabled, quarantined: isQuarantined } =
-    testManagementTests?.cypress?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
-    
-    return { isAttemptToFix, isDisabled, isQuarantined }
+  // We neeed to do it in this way because of compatibility with older versions as '?' is not supported in older versions of Cypress
+  const properties = testManagementTests && 
+    testManagementTests.cypress && 
+    testManagementTests.cypress.suites && 
+    testManagementTests.cypress.suites[testSuite] && 
+    testManagementTests.cypress.suites[testSuite].tests && 
+    testManagementTests.cypress.suites[testSuite].tests[testName] && 
+    testManagementTests.cypress.suites[testSuite].tests[testName].properties || {};
+  
+  const { attempt_to_fix: isAttemptToFix, disabled: isDisabled, quarantined: isQuarantined } = properties;
+  
+  return { isAttemptToFix, isDisabled, isQuarantined };
 }
 
 function retryTest (test, suiteTests, numRetries, isAttemptToFix) {
