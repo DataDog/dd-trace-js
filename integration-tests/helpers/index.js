@@ -159,6 +159,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
   console.log('createSandbox - yarn pack finished')
   try {
+    console.log('createSandbox - addCommand starts', addCommand)
     await exec(addCommand, addOptions)
     console.log('createSandbox - addCommand finished')
   } catch (e) { // retry in case of server error from registry
