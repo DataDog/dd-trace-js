@@ -85,9 +85,24 @@ function recordLLMObsSpanSize (event, eventSize, shouldTruncate) {
   llmobsMetrics.distribution('span.size', tags).track(eventSize)
 }
 
+function recordLLMObsAnnotate(span, err, value = 1) {
+  const mlObsTags = LLMObsTagger.tagMap.get(span)
+  const spanKind = mlObsTags[SPAN_KIND] || 'N/A'
+  const isRootSpan = mlObsTags[PARENT_ID_KEY] === ROOT_PARENT_ID
+
+  const tags = {
+    error: Number(!err),
+    span_kind: spanKind,
+    is_root_span: Number(isRootSpan)
+  }
+  if (err) tags.error_type = err
+  llmobsMetrics.count('annotations', tags).inc(value)
+}
+
 module.exports = {
   incrementLLMObsSpanStartCount,
   incrementLLMObsSpanFinishedCount,
   recordLLMObsRawSpanSize,
-  recordLLMObsSpanSize
+  recordLLMObsSpanSize,
+  recordLLMObsAnnotate
 }

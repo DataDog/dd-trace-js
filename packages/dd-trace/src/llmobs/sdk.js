@@ -213,49 +213,60 @@ class LLMObs extends NoopLLMObs {
       span = this._active()
     }
 
-    if (!span) {
-      throw new Error('No span provided and no active LLMObs-generated span found')
-    }
-    if (!options) {
-      throw new Error('No options provided for annotation.')
-    }
+    let err = ''
 
-    if (!LLMObsTagger.tagMap.has(span)) {
-      throw new Error('Span must be an LLMObs-generated span')
-    }
-    if (span._duration !== undefined) {
-      throw new Error('Cannot annotate a finished span')
-    }
-
-    const spanKind = LLMObsTagger.tagMap.get(span)[SPAN_KIND]
-    if (!spanKind) {
-      throw new Error('LLMObs span must have a span kind specified')
-    }
-
-    const { inputData, outputData, metadata, metrics, tags } = options
-
-    if (inputData || outputData) {
-      if (spanKind === 'llm') {
-        this._tagger.tagLLMIO(span, inputData, outputData)
-      } else if (spanKind === 'embedding') {
-        this._tagger.tagEmbeddingIO(span, inputData, outputData)
-      } else if (spanKind === 'retrieval') {
-        this._tagger.tagRetrievalIO(span, inputData, outputData)
-      } else {
-        this._tagger.tagTextIO(span, inputData, outputData)
+    try {
+      if (!span) {
+        err = 'invalid_span_no_active_spans'
+        throw new Error('No span provided and no active LLMObs-generated span found')
       }
-    }
+      if (!options) {
+        err = 'invalid_options'
+        throw new Error('No options provided for annotation.')
+      }
 
-    if (metadata) {
-      this._tagger.tagMetadata(span, metadata)
-    }
+      if (!LLMObsTagger.tagMap.has(span)) {
+        err = 'invalid_span_type'
+        throw new Error('Span must be an LLMObs-generated span')
+      }
+      if (span._duration !== undefined) {
+        err = 'invalid_finished_span'
+        throw new Error('Cannot annotate a finished span')
+      }
 
-    if (metrics) {
-      this._tagger.tagMetrics(span, metrics)
-    }
+      const spanKind = LLMObsTagger.tagMap.get(span)[SPAN_KIND]
+      if (!spanKind) {
+        err = 'invalid_no_span_kind'
+        throw new Error('LLMObs span must have a span kind specified')
+      }
 
-    if (tags) {
-      this._tagger.tagSpanTags(span, tags)
+      const { inputData, outputData, metadata, metrics, tags } = options
+
+      if (inputData || outputData) {
+        if (spanKind === 'llm') {
+          err = this._tagger.tagLLMIO(span, inputData, outputData)
+        } else if (spanKind === 'embedding') {
+          err = this._tagger.tagEmbeddingIO(span, inputData, outputData)
+        } else if (spanKind === 'retrieval') {
+          err = this._tagger.tagRetrievalIO(span, inputData, outputData)
+        } else {
+          err = this._tagger.tagTextIO(span, inputData, outputData)
+        }
+      }
+
+      if (metadata) {
+        this._tagger.tagMetadata(span, metadata)
+      }
+
+      if (metrics) {
+        err = this._tagger.tagMetrics(span, metrics)
+      }
+
+      if (tags) {
+        this._tagger.tagSpanTags(span, tags)
+      }
+    } finally {
+      telemetry.recordLLMObsAnnotate(span, err)
     }
   }
 
