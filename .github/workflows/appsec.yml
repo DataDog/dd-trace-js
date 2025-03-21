@@ -257,7 +257,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - run: yarn install
+      - uses: ./.github/actions/install
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - run: yarn test:integration:appsec
       - uses: ./.github/actions/node/active-lts
