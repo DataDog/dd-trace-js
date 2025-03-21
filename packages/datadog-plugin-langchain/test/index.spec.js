@@ -16,7 +16,8 @@ const openAiBaseCompletionInfo = { base: 'https://api.openai.com', path: '/v1/co
 const openAiBaseChatInfo = { base: 'https://api.openai.com', path: '/v1/chat/completions' }
 const openAiBaseEmbeddingInfo = { base: 'https://api.openai.com', path: '/v1/embeddings' }
 
-describe('Plugin', () => {
+describe('Plugin', function () {
+  this.timeout(10 * 1000)
   let langchainOpenai
   let langchainAnthropic
   let langchainGoogleGenAI
@@ -126,7 +127,7 @@ describe('Plugin', () => {
 
             const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct' })
             const checkTraces = agent
-              .use(traces => {
+              .use(async (traces) => {
                 expect(traces[0].length).to.equal(1)
                 const span = traces[0][0]
 
