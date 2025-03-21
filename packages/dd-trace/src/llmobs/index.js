@@ -30,6 +30,7 @@ let spanWriter
 let evalWriter
 
 function enable (config) {
+  const startTime = performance.now()
   // create writers and eval writer append and flush channels
   // span writer append is handled by the span processor
   evalWriter = new LLMObsEvalMetricsWriter(config)
@@ -45,7 +46,7 @@ function enable (config) {
 
   // distributed tracing for llmobs
   injectCh.subscribe(handleLLMObsParentIdInjection)
-  telemetry.record_llmobs_enabled()
+  telemetry.record_llmobs_enabled(startTime, config)
 }
 
 function disable () {
