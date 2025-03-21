@@ -7,6 +7,7 @@ const waf = require('../waf')
 const { keepTrace } = require('../../priority_sampler')
 const addresses = require('../addresses')
 const { ASM } = require('../../standalone/product')
+const { incrementSdkEventMetric } = require('../telemetry')
 
 function trackUserLoginSuccessEvent (tracer, user, metadata) {
   // TODO: better user check here and in _setUser() ?
@@ -27,7 +28,7 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
 
   metadata = { 'usr.login': login, ...metadata }
 
-  trackEvent('users.login.success', metadata, 'trackUserLoginSuccessEvent', rootSpan)
+  trackEvent('users.login.success', 'login_success', metadata, 'trackUserLoginSuccessEvent', rootSpan)
 
   runWaf('users.login.success', { id: user.id, login })
 }
@@ -45,7 +46,7 @@ function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
     ...metadata
   }
 
-  trackEvent('users.login.failure', fields, 'trackUserLoginFailureEvent', getRootSpan(tracer))
+  trackEvent('users.login.failure', 'login_failure', fields, 'trackUserLoginFailureEvent', getRootSpan(tracer))
 
   runWaf('users.login.failure', { login: userId })
 }
@@ -56,10 +57,10 @@ function trackCustomEvent (tracer, eventName, metadata) {
     return
   }
 
-  trackEvent(eventName, metadata, 'trackCustomEvent', getRootSpan(tracer))
+  trackEvent(eventName, 'custom', metadata, 'trackCustomEvent', getRootSpan(tracer))
 }
 
-function trackEvent (eventName, fields, sdkMethodName, rootSpan) {
+function trackEvent (eventName, eventType, fields, sdkMethodName, rootSpan) {
   if (!rootSpan) {
     log.warn('[ASM] Root span not available in %s', sdkMethodName)
     return
@@ -79,6 +80,8 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan) {
   rootSpan.addTags(tags)
 
   keepTrace(rootSpan, ASM)
+
+  incrementSdkEventMetric(eventType)
 }
 
 function runWaf (eventName, user) {

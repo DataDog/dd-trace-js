@@ -18,7 +18,15 @@ function incrementMissingUserId (framework, eventType) {
   }).inc()
 }
 
+function incrementSdkEvent (eventType) {
+  appsecMetrics.count('sdk.event', {
+    event_type: eventType,
+    sdk_version: 'v2'
+  }).inc()
+}
+
 module.exports = {
   incrementMissingUserLogin,
-  incrementMissingUserId
+  incrementMissingUserId,
+  incrementSdkEvent
 }
