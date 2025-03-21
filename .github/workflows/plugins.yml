@@ -853,7 +853,7 @@ jobs:
           - 1521:1521
           - 5500:5500
       testagent:
-        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.16.0
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.21.1
         env:
           LOG_LEVEL: DEBUG
           TRACE_LANGUAGE: javascript
