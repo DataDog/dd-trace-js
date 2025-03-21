@@ -7,7 +7,8 @@ const tags = {
   RULE_TRIGGERED: 'rule_triggered',
   WAF_TIMEOUT: 'waf_timeout',
   WAF_VERSION: 'waf_version',
-  EVENT_RULES_VERSION: 'event_rules_version'
+  EVENT_RULES_VERSION: 'event_rules_version',
+  INPUT_TRUNCATED: 'input_truncated'
 }
 
 function getVersionsTags (wafVersion, rulesVersion) {

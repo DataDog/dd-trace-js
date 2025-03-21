@@ -327,6 +327,29 @@ describe('sdk', () => {
           })
         })
       })
+
+      it('passes the options to the tagger correctly', () => {
+        let span
+        llmobs.trace({
+          kind: 'workflow',
+          name: 'test',
+          mlApp: 'override',
+          sessionId: 'sessionId',
+          modelName: 'modelName',
+          modelProvider: 'modelProvider'
+        }, (_span) => {
+          span = _span
+        })
+
+        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'workflow',
+          '_ml_obs.meta.ml_app': 'override',
+          '_ml_obs.meta.model_name': 'modelName',
+          '_ml_obs.meta.model_provider': 'modelProvider',
+          '_ml_obs.session_id': 'sessionId',
+          '_ml_obs.llmobs_parent_id': 'undefined'
+        })
+      })
     })
 
     describe('wrap', () => {
@@ -743,6 +766,32 @@ describe('sdk', () => {
           const wrappedInner2 = llmobs.wrap({ kind: 'task' }, inner2)
 
           wrappedOuter()
+        })
+      })
+
+      it('passes the options to the tagger correctly', () => {
+        let span
+
+        const fn = llmobs.wrap({
+          kind: 'workflow',
+          name: 'test',
+          mlApp: 'override',
+          sessionId: 'sessionId',
+          modelName: 'modelName',
+          modelProvider: 'modelProvider'
+        }, () => {
+          span = llmobs._active()
+        })
+
+        fn()
+
+        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'workflow',
+          '_ml_obs.meta.ml_app': 'override',
+          '_ml_obs.meta.model_name': 'modelName',
+          '_ml_obs.meta.model_provider': 'modelProvider',
+          '_ml_obs.session_id': 'sessionId',
+          '_ml_obs.llmobs_parent_id': 'undefined'
         })
       })
     })

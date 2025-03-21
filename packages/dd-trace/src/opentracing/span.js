@@ -143,6 +143,9 @@ class DatadogSpan {
     return `Span${json}`
   }
 
+  /**
+   * @returns {DatadogSpanContext}
+   */
   context () {
     return this._spanContext
   }

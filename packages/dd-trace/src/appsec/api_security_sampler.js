@@ -8,12 +8,16 @@ const { AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
 const MAX_SIZE = 4096
 
 let enabled
+
+/**
+ * @type {TTLCache}
+ */
 let sampledRequests
 
 class NoopTTLCache {
   clear () { }
-  set (key) { return undefined }
-  has (key) { return false }
+  set (_key, _value) { return undefined }
+  has (_key) { return false }
 }
 
 function configure ({ apiSecurity }) {
@@ -48,7 +52,7 @@ function sampleRequest (req, res, force = false) {
   }
 
   if (force) {
-    sampledRequests.set(key)
+    sampledRequests.set(key, undefined)
   }
 
   return true

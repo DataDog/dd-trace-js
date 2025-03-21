@@ -8,9 +8,10 @@ const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
-const { extractIp } = require('./ip_extractor')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
+
+let extractIp
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -47,6 +48,8 @@ const web = {
     const filter = urlFilter.getFilter(config)
     const middleware = getMiddlewareSetting(config)
     const queryStringObfuscation = getQsObfuscator(config)
+
+    extractIp = config.clientIpEnabled && require('./ip_extractor').extractIp
 
     return {
       ...config,
@@ -460,7 +463,7 @@ function addRequestTags (context, spanType) {
   })
 
   // if client ip has already been set by appsec, no need to run it again
-  if (config.clientIpEnabled && !span.context()._tags.hasOwnProperty(HTTP_CLIENT_IP)) {
+  if (extractIp && !span.context()._tags.hasOwnProperty(HTTP_CLIENT_IP)) {
     const clientIp = extractIp(config, req)
 
     if (clientIp) {

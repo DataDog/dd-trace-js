@@ -2,7 +2,7 @@
 
 const path = require('path')
 
-const { _extractModuleNameAndHandlerPath, _extractModuleRootAndHandler, _getLambdaFilePath } = require('./ritm')
+const { _extractModuleNameAndHandlerPath, _extractModuleRootAndHandler, _getLambdaFilePaths } = require('./ritm')
 const { datadog } = require('../handler')
 const { addHook } = require('../../../../datadog-instrumentations/src/helpers/instrument')
 const shimmer = require('../../../../datadog-shimmer')
@@ -65,9 +65,11 @@ if (originalLambdaHandler !== undefined) {
   const [_module, handlerPath] = _extractModuleNameAndHandlerPath(moduleAndHandler)
 
   const lambdaStylePath = path.resolve(lambdaTaskRoot, moduleRoot, _module)
-  const lambdaFilePath = _getLambdaFilePath(lambdaStylePath)
+  const lambdaFilePaths = _getLambdaFilePaths(lambdaStylePath)
 
-  addHook({ name: lambdaFilePath }, patchLambdaModule(handlerPath))
+  for (const lambdaFilePath of lambdaFilePaths) {
+    addHook({ name: lambdaFilePath }, patchLambdaModule(handlerPath))
+  }
 } else {
   // Instrumentation is done manually.
   addHook({ name: 'datadog-lambda-js' }, patchDatadogLambdaModule)

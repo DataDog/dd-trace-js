@@ -12,7 +12,6 @@ describe('Plugin', () => {
   let tds
   let tracer
   let connection
-  let connectionIsClosed
 
   withVersions('tedious', 'tedious', version => {
     beforeEach(() => {
@@ -53,7 +52,6 @@ describe('Plugin', () => {
           config.password = MSSQL_PASSWORD
         }
 
-        connectionIsClosed = false
         connection = new tds.Connection(config)
           .on('connect', done)
 
@@ -64,12 +62,8 @@ describe('Plugin', () => {
       })
 
       afterEach(function (done) {
-        if (connectionIsClosed) {
-          done()
-        } else {
-          connection.on('end', () => done())
-          connection.close()
-        }
+        connection.on('end', () => done())
+        connection.close()
       })
 
       withNamingSchema(
@@ -404,6 +398,69 @@ describe('Plugin', () => {
           }
         })
       }
+    })
+
+    // it's a pretty old version with a different enough API that I don't think it's worth supporting
+    const testDbm = semver.intersects(version, '<10') ? describe.skip : describe
+    testDbm('with configuration and DBM enabled', () => {
+      let config
+      let tds
+      let connection
+
+      beforeEach(() => {
+        return agent.load('tedious', { dbmPropagationMode: 'service', service: 'custom' }).then(() => {
+          tds = require(`../../../versions/tedious@${version}`).get()
+        })
+      })
+
+      afterEach(() => {
+        return agent.close({ ritmReset: false })
+      })
+
+      beforeEach((done) => {
+        config = {
+          server: 'localhost',
+          options: {
+            database: 'master',
+            trustServerCertificate: true
+          },
+          authentication: {
+            options: {
+              userName: MSSQL_USERNAME,
+              password: MSSQL_PASSWORD
+            },
+            type: 'default'
+          }
+        }
+
+        connection = new tds.Connection(config)
+          .on('connect', done)
+
+        connection.connect()
+      })
+
+      afterEach(function (done) {
+        connection.on('end', () => done())
+        connection.close()
+      })
+
+      it('should inject the correct DBM comment into query but not into trace', done => {
+        const query = 'SELECT 1 + 1 AS solution'
+
+        const request = new tds.Request(query, (err) => {
+          if (err) return done(err)
+          promise.then(done, done)
+        })
+
+        const promise = agent
+          .use(traces => {
+            expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
+            expect(request.sqlTextOrProcedure).to.equal("/*dddb='master',dddbs='custom',dde='tester'," +
+              "ddh='localhost',ddps='test',ddpv='10.8.2'*/ SELECT 1 + 1 AS solution")
+          })
+
+        connection.execSql(request)
+      })
     })
   })
 })

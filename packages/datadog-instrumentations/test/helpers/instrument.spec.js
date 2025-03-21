@@ -1,9 +1,6 @@
 'use strict'
 
-require('../../../dd-trace/test/setup/tap')
-
 const { executionAsyncId } = require('async_hooks')
-const { expect } = require('chai')
 const { storage } = require('../../../datadog-core')
 const { AsyncResource } = require('../../src/helpers/instrument')
 
@@ -26,8 +23,8 @@ describe('helpers/instrument', () => {
 
       const tested = AsyncResource.bind(function (a, b, c) {
         expect(this).to.equal(self)
-        expect(test.asyncResource.asyncId()).to.equal(executionAsyncId())
-        expect(test).to.have.length(3)
+        expect(tested.asyncResource.asyncId()).to.equal(executionAsyncId())
+        expect(tested).to.have.length(3)
       }, 'test', self)
 
       tested()
@@ -40,8 +37,8 @@ describe('helpers/instrument', () => {
         storage('legacy').run('test2', () => {
           const tested = asyncResource.bind((a, b, c) => {
             expect(storage('legacy').getStore()).to.equal('test1')
-            expect(test.asyncResource).to.equal(asyncResource)
-            expect(test).to.have.length(3)
+            expect(tested.asyncResource).to.equal(asyncResource)
+            expect(tested).to.have.length(3)
           })
 
           tested()

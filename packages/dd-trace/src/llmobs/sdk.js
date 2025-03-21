@@ -105,12 +105,12 @@ class LLMObs extends NoopLLMObs {
 
     if (fn.length > 1) {
       return this._tracer.trace(name, spanOptions, (span, cb) =>
-        this._activate(span, { kind, options: llmobsOptions }, () => fn(span, cb))
+        this._activate(span, { kind, ...llmobsOptions }, () => fn(span, cb))
       )
     }
 
     return this._tracer.trace(name, spanOptions, span =>
-      this._activate(span, { kind, options: llmobsOptions }, () => fn(span))
+      this._activate(span, { kind, ...llmobsOptions }, () => fn(span))
     )
   }
 
@@ -166,7 +166,7 @@ class LLMObs extends NoopLLMObs {
       }
 
       try {
-        const result = llmobs._activate(span, { kind, options: llmobsOptions }, () => fn.apply(this, fnArgs))
+        const result = llmobs._activate(span, { kind, ...llmobsOptions }, () => fn.apply(this, fnArgs))
 
         if (result && typeof result.then === 'function') {
           return result.then(

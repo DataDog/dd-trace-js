@@ -28,6 +28,18 @@ const wrappedFunctions = new WeakSet()
 const newTests = {}
 const testsQuarantined = new Set()
 
+function getAfterEachHooks (testOrHook) {
+  const hooks = []
+
+  while (testOrHook.parent) {
+    if (testOrHook.parent._afterEach) {
+      hooks.push(...testOrHook.parent._afterEach)
+    }
+    testOrHook = testOrHook.parent
+  }
+  return hooks
+}
+
 function getTestProperties (test, testManagementTests) {
   const testSuite = getTestSuitePath(test.file, process.cwd())
   const testName = test.fullTitle()
@@ -238,7 +250,7 @@ function getOnTestEndHandler () {
     }
 
     // if there are afterEach to be run, we don't finish the test yet
-    if (asyncResource && !test.parent._afterEach.length) {
+    if (asyncResource && !getAfterEachHooks(test).length) {
       asyncResource.runInAsyncScope(() => {
         testFinishCh.publish({
           status,
@@ -253,18 +265,15 @@ function getOnTestEndHandler () {
 function getOnHookEndHandler () {
   return function (hook) {
     const test = hook.ctx.currentTest
-    if (test && hook.parent._afterEach.includes(hook)) { // only if it's an afterEach
-      const isLastRetry = getIsLastRetry(test)
-      if (test._retries > 0 && !isLastRetry) {
-        return
-      }
-      const isLastAfterEach = hook.parent._afterEach.indexOf(hook) === hook.parent._afterEach.length - 1
+    const afterEachHooks = getAfterEachHooks(hook)
+    if (test && afterEachHooks.includes(hook)) { // only if it's an afterEach
+      const isLastAfterEach = afterEachHooks.indexOf(hook) === afterEachHooks.length - 1
       if (isLastAfterEach) {
         const status = getTestStatus(test)
         const asyncResource = getTestAsyncResource(test)
         if (asyncResource) {
           asyncResource.runInAsyncScope(() => {
-            testFinishCh.publish({ status, hasBeenRetried: isMochaRetry(test), isLastRetry })
+            testFinishCh.publish({ status, hasBeenRetried: isMochaRetry(test), isLastRetry: getIsLastRetry(test) })
           })
         }
       }

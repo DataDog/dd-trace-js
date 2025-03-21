@@ -1,5 +1,6 @@
 const NoopTracer = require('../../dd-trace/src/noop/tracer')
 const cypressPlugin = require('./cypress-plugin')
+const satisfies = require('semifies')
 
 const noopTask = {
   'dd:testSuiteStart': () => {
@@ -18,6 +19,15 @@ const noopTask = {
 
 module.exports = (on, config) => {
   const tracer = require('../../dd-trace')
+
+  if (satisfies(config.version, '<10.2.0')) {
+    // console.warn does not seem to work in cypress, so using console.log instead
+    // eslint-disable-next-line no-console
+    console.log(
+      'WARNING: dd-trace support for Cypress<10.2.0 is deprecated' +
+      ' and will not be supported in future versions of dd-trace.'
+    )
+  }
 
   // The tracer was not init correctly for whatever reason (such as invalid DD_SITE)
   if (tracer._tracer instanceof NoopTracer) {

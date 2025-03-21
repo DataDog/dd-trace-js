@@ -9,6 +9,7 @@ module.exports = {
   get '@elastic/elasticsearch' () { return require('../../../datadog-plugin-elasticsearch/src') },
   get '@elastic/transport' () { return require('../../../datadog-plugin-elasticsearch/src') },
   get '@google-cloud/pubsub' () { return require('../../../datadog-plugin-google-cloud-pubsub/src') },
+  get '@google-cloud/vertexai' () { return require('../../../datadog-plugin-google-cloud-vertexai/src') },
   get '@grpc/grpc-js' () { return require('../../../datadog-plugin-grpc/src') },
   get '@hapi/hapi' () { return require('../../../datadog-plugin-hapi/src') },
   get '@jest/core' () { return require('../../../datadog-plugin-jest/src') },

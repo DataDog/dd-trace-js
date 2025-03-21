@@ -161,12 +161,11 @@ async function getVersionList (name) {
   return list
 }
 
-function npmView (input) {
+function npmView (input, retry = true) {
   return new Promise((resolve, reject) => {
     childProcess.exec(`npm view ${input} --json`, (err, stdout) => {
       if (err) {
-        reject(err)
-        return
+        return retry ? npmView(input, false).then(resolve, reject) : reject(err)
       }
       resolve(JSON.parse(stdout.toString('utf8')))
     })

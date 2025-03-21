@@ -646,7 +646,7 @@ describe('AppSec Index', function () {
         responseBody.publish({ req, res, body })
 
         expect(apiSecuritySampler.sampleRequest).to.have.been.calledOnceWith(req, res)
-        expect(waf.run).to.been.calledOnceWith({
+        expect(waf.run).to.have.been.calledOnceWith({
           persistent: {
             [addresses.HTTP_INCOMING_RESPONSE_BODY]: body
           }

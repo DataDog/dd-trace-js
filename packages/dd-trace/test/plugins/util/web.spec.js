@@ -194,6 +194,7 @@ describe('plugins/util/web', () => {
 
         config.clientIpEnabled = true
 
+        web.normalizeConfig(config)
         web.instrument(tracer, config, req, res, 'test.request', span => {
           const tags = span.context()._tags
 
@@ -210,6 +211,7 @@ describe('plugins/util/web', () => {
 
         config.clientIpEnabled = false
 
+        web.normalizeConfig(config)
         web.instrument(tracer, config, req, res, 'test.request', span => {
           const tags = span.context()._tags
 

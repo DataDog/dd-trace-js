@@ -7,7 +7,7 @@ const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
-const { flushStartupLogs } = require('../../datadog-instrumentations/src/check_require_cache')
+const { flushStartupLogs } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
 const log = require('./log/writer')
 
 const SPAN_TYPE = tags.SPAN_TYPE

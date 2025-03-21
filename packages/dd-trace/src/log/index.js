@@ -6,19 +6,7 @@ const { isTrue } = require('../util')
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
 const { Log } = require('./log')
-
-const memoize = func => {
-  const cache = {}
-  const memoized = function (key) {
-    if (!cache[key]) {
-      cache[key] = func.apply(this, arguments)
-    }
-
-    return cache[key]
-  }
-
-  return memoized
-}
+const { memoize } = require('./utils')
 
 const config = {
   enabled: false,

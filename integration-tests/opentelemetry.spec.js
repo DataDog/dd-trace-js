@@ -60,7 +60,7 @@ describe('opentelemetry', () => {
       '@opentelemetry/api@1.8.0',
       '@opentelemetry/instrumentation',
       '@opentelemetry/instrumentation-http',
-      '@opentelemetry/instrumentation-express',
+      '@opentelemetry/instrumentation-express@0.47.1',
       'express'
     ]
     if (satisfies(process.version.slice(1), '>=14')) {
