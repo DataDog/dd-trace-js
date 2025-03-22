@@ -9,7 +9,6 @@ let RemoteConfigManager
 let RuleManager
 let UserTracking
 let log
-let tagger
 let appsec
 let remoteConfig
 
@@ -47,10 +46,6 @@ describe('Remote Config index', () => {
       error: sinon.stub()
     }
 
-    tagger = {
-      add: sinon.stub()
-    }
-
     appsec = {
       enable: sinon.spy(),
       disable: sinon.spy()
@@ -59,7 +54,6 @@ describe('Remote Config index', () => {
     remoteConfig = proxyquire('../src/remote_config', {
       './manager': RemoteConfigManager,
       '../rule_manager': RuleManager,
-      '../tagger': tagger,
       '../user_tracking': UserTracking,
       '../../log': log,
       '..': appsec
@@ -103,14 +97,6 @@ describe('Remote Config index', () => {
       expect(rc.updateCapabilities)
         .to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
       expect(rc.setProductHandler).to.not.have.been.called
-    })
-
-    it('should add the rc.client_id tag', () => {
-      remoteConfig.enable(config)
-
-      expect(tagger.add).to.have.been.calledOnceWithExactly(config.tags, {
-        '_dd.rc.client_id': '1234-5678'
-      })
     })
 
     describe('ASM_FEATURES remote config listener', () => {
