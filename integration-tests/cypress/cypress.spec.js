@@ -44,7 +44,10 @@ const {
   TEST_MANAGEMENT_IS_DISABLED,
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
   DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
-  DD_CAPABILITIES_AUTO_TEST_RETRIES
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  TEST_NAME,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_HAS_FAILED_ALL_RETRIES
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -1775,6 +1778,120 @@ moduleTypes.forEach(({
     })
 
     context('test management', () => {
+      context('attempt to fix', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            cypress: {
+              suites: {
+                'cypress/e2e/attempt-to-fix.js': {
+                  tests: {
+                    'attempt to fix is attempt to fix': {
+                      properties: {
+                        attempt_to_fix: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+        })
+
+        const getTestAssertions = (isAttemptToFix) =>
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              if (isAttemptToFix) {
+                assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+              } else {
+                assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+              }
+
+              const resourceNames = tests.map(span => span.resource)
+
+              assert.includeMembers(resourceNames,
+                [
+                  'cypress/e2e/attempt-to-fix.js.attempt to fix is attempt to fix'
+                ]
+              )
+
+              const retriedTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'attempt to fix is attempt to fix'
+              )
+
+              // Events come in reverse order
+              for (let i = retriedTests.length - 1; i >= 0; i--) {
+                const test = retriedTests[i]
+                if (isAttemptToFix && i !== retriedTests.length - 1) {
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
+                  assert.propertyVal(test.meta, TEST_IS_RETRY, 'true')
+                  assert.propertyVal(test.meta, TEST_RETRY_REASON, 'attempt_to_fix')
+                } else {
+                  assert.notProperty(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX)
+                  assert.notProperty(test.meta, TEST_IS_RETRY)
+                  assert.notProperty(test.meta, TEST_RETRY_REASON)
+                }
+
+                if (isAttemptToFix && i === 0) {
+                  assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
+                }
+              }
+            })
+
+        const runAttemptToFixTest = (done, isAttemptToFix, extraEnvVars) => {
+          const testAssertionsPromise = getTestAssertions(isAttemptToFix)
+
+          const {
+            NODE_OPTIONS,
+            ...restEnvVars
+          } = getCiVisEvpProxyConfig(receiver.port)
+
+          const specToRun = 'cypress/e2e/attempt-to-fix.js'
+
+          childProcess = exec(
+            version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+            {
+              cwd,
+              env: {
+                ...restEnvVars,
+                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                SPEC_PATTERN: specToRun,
+                ...extraEnvVars
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', (exitCode) => {
+            testAssertionsPromise.then(() => {
+              assert.equal(exitCode, 1)
+              done()
+            }).catch(done)
+          })
+        }
+
+        it('can attempt to fix tests', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(done, true)
+        })
+
+        it('does not attempt to fix tests if test management is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(done, false)
+        })
+
+        it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+        })
+      })
+
       context('disabled', () => {
         beforeEach(() => {
           receiver.setTestManagementTests({

@@ -113,7 +113,9 @@ function getLibraryConfiguration ({
           isFlakyTestRetriesEnabled,
           isDiEnabled: isDiEnabled && isFlakyTestRetriesEnabled,
           isKnownTestsEnabled,
-          isTestManagementEnabled: (testManagementConfig?.enabled ?? false)
+          isTestManagementEnabled: (testManagementConfig?.enabled ?? false),
+          testManagementAttemptToFixRetries:
+            testManagementConfig?.attempt_to_fix_retries
         }
 
         log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)

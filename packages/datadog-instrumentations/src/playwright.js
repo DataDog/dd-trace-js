@@ -43,7 +43,9 @@ let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let knownTests = {}
 let isTestManagementTestsEnabled = false
+let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
+const testsAttemptToFix = []
 let rootDir = ''
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0'
 
@@ -51,10 +53,9 @@ function getTestProperties (test) {
   const testName = getTestFullname(test)
   const testSuite = getTestSuitePath(test._requireFile, rootDir)
 
-  const { disabled, quarantined } =
+  const { attempt_to_fix: attemptToFix, disabled, quarantined } =
     testManagementTests?.playwright?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
-
-  return { disabled, quarantined }
+  return { attemptToFix, disabled, quarantined }
 }
 
 function isNewTest (test) {
@@ -73,18 +74,24 @@ function getSuiteType (test, type) {
 }
 
 // Copy of Suite#_deepClone but with a function to filter tests
-function deepCloneSuite (suite, filterTest) {
+function deepCloneSuite (suite, retryNumber, filterTestAttemptToFix, filterTestEfd) {
   const copy = suite._clone()
   for (const entry of suite._entries) {
     if (entry.constructor.name === 'Suite') {
-      copy._addSuite(deepCloneSuite(entry, filterTest))
+      copy._addSuite(deepCloneSuite(entry, retryNumber, filterTestAttemptToFix, filterTestEfd))
     } else {
-      if (filterTest(entry)) {
-        const copiedTest = entry._clone()
+      const copiedTest = entry._clone()
+
+      if (filterTestAttemptToFix && filterTestAttemptToFix(entry)) {
+        if (retryNumber === testManagementAttemptToFixRetries) {
+          copiedTest._ddIsLastRetry = true
+        }
+        copiedTest._ddIsAttemptToFix = true
+      } else if (filterTestEfd && filterTestEfd(entry)) {
         copiedTest._ddIsNew = true
         copiedTest._ddIsEfdRetry = true
-        copy._addTest(copiedTest)
       }
+      copy._addTest(copiedTest)
     }
   }
   return copy
@@ -276,6 +283,11 @@ function testBeginHandler (test, browserName) {
     })
   }
 
+  // We disable retries by default if attemptToFix is true
+  if (getTestProperties(test).attemptToFix) {
+    test.retries = 0
+  }
+
   const testAsyncResource = new AsyncResource('bound-anonymous-fn')
   testToAr.set(test, testAsyncResource)
   testAsyncResource.runInAsyncScope(() => {
@@ -305,6 +317,31 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
     return
   }
 
+  if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
+    const testStatusMap = testSuiteToTestStatuses.get(testSuiteAbsolutePath)
+    const testFullName = getTestFullname(test)
+    if (testStatusMap.has(testFullName)) {
+      testStatusMap.get(testFullName).push(testStatus)
+    } else {
+      testStatusMap.set(testFullName, [testStatus])
+    }
+  } else {
+    const testStatusMap = new Map()
+    testStatusMap.set(getTestFullname(test), [testStatus])
+    testSuiteToTestStatuses.set(testSuiteAbsolutePath, testStatusMap)
+  }
+
+  let hasFailedAllRetries = false
+  let hasPassedAttemptToFixRetries = false
+  if (test._ddIsLastRetry) {
+    const statuses = testSuiteToTestStatuses.get(testSuiteAbsolutePath).get(getTestFullname(test))
+    if (statuses.every(status => status === 'fail')) {
+      hasFailedAllRetries = true
+    } else if (statuses.every(status => status === 'pass')) {
+      hasPassedAttemptToFixRetries = true
+    }
+  }
+
   const testResult = results[results.length - 1]
   const testAsyncResource = testToAr.get(test)
   testAsyncResource.runInAsyncScope(() => {
@@ -315,16 +352,13 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
       error,
       extraTags: annotationTags,
       isNew: test._ddIsNew,
+      isAttemptToFix: test._ddIsAttemptToFix,
       isQuarantined: test._ddIsQuarantined,
-      isEfdRetry: test._ddIsEfdRetry
+      isEfdRetry: test._ddIsEfdRetry,
+      hasFailedAllRetries,
+      hasPassedAttemptToFixRetries
     })
   })
-
-  if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
-    testSuiteToTestStatuses.get(testSuiteAbsolutePath).push(testStatus)
-  } else {
-    testSuiteToTestStatuses.set(testSuiteAbsolutePath, [testStatus])
-  }
 
   if (error) {
     addErrorToTestSuite(testSuiteAbsolutePath, error)
@@ -338,11 +372,11 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
   // Last test, we finish the suite
   if (!remainingTestsByFile[testSuiteAbsolutePath].length) {
     const testStatuses = testSuiteToTestStatuses.get(testSuiteAbsolutePath)
-
+    const testStatusesFlat = Array.from(testStatuses.values()).flat()
     let testSuiteStatus = 'pass'
-    if (testStatuses.some(status => status === 'fail')) {
+    if (testStatusesFlat.some(status => status === 'fail')) {
       testSuiteStatus = 'fail'
-    } else if (testStatuses.every(status => status === 'skip')) {
+    } else if (testStatusesFlat.every(status => status === 'skip')) {
       testSuiteStatus = 'skip'
     }
 
@@ -445,6 +479,7 @@ function runnerHook (runnerExport, playwrightVersion) {
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
         isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
+        testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
       }
     } catch (e) {
       isEarlyFlakeDetectionEnabled = false
@@ -485,7 +520,10 @@ function runnerHook (runnerExport, playwrightVersion) {
 
     const projects = getProjectsFromRunner(this)
 
-    if (isFlakyTestRetriesEnabled && flakyTestRetriesCount > 0) {
+    const shouldSetRetries = isFlakyTestRetriesEnabled &&
+      flakyTestRetriesCount > 0 &&
+      !isTestManagementTestsEnabled
+    if (shouldSetRetries) {
       projects.forEach(project => {
         if (project.retries === 0) { // Only if it hasn't been set by the user
           project.retries = flakyTestRetriesCount
@@ -493,7 +531,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       })
     }
 
-    const runAllTestsReturn = await runAllTests.apply(this, arguments)
+    let runAllTestsReturn = await runAllTests.apply(this, arguments)
 
     Object.values(remainingTestsByFile).forEach(tests => {
       // `tests` should normally be empty, but if it isn't,
@@ -507,6 +545,27 @@ function runnerHook (runnerExport, playwrightVersion) {
     })
 
     const sessionStatus = runAllTestsReturn.status || runAllTestsReturn
+
+    if (isTestManagementTestsEnabled && sessionStatus === 'failed') {
+      let failedTestsCount = 0
+      testSuiteToTestStatuses.forEach(testStatuses => {
+        testStatuses.forEach(statuses => {
+          failedTestsCount += statuses.filter(status => status === 'fail').length
+        })
+      })
+      for (const test of testsAttemptToFix) {
+        const fullname = getTestFullname(test)
+        const testProperties = getTestProperties(test)
+        if (testProperties.quarantined || testProperties.disabled) {
+          const testStatuses = testSuiteToTestStatuses.get(test.parent._requireFile).get(fullname)
+          failedTestsCount -= testStatuses.filter(status => status === 'fail').length
+        }
+      }
+
+      if (failedTestsCount === 0) {
+        runAllTestsReturn = 'passed'
+      }
+    }
 
     const flushWait = new Promise(resolve => {
       onDone = resolve
@@ -606,7 +665,17 @@ addHook({
     if (isTestManagementTestsEnabled) {
       for (const test of allTests) {
         const testProperties = getTestProperties(test)
-        if (testProperties.disabled) {
+        if (testProperties.attemptToFix) {
+          const fileSuite = getSuiteType(test, 'file')
+          const projectSuite = getSuiteType(test, 'project')
+          const isAttemptToFix = test => getTestProperties(test).attemptToFix
+          for (let repeatEachIndex = 1; repeatEachIndex <= testManagementAttemptToFixRetries; repeatEachIndex++) {
+            const copyFileSuite = deepCloneSuite(fileSuite, repeatEachIndex, isAttemptToFix, null)
+            applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
+            projectSuite._addSuite(copyFileSuite)
+          }
+          testsAttemptToFix.push(test)
+        } else if (testProperties.disabled) {
           test._ddIsDisabled = true
           test.expectedStatus = 'skipped'
         } else if (testProperties.quarantined) {
@@ -619,18 +688,22 @@ addHook({
     if (isKnownTestsEnabled) {
       const newTests = allTests.filter(isNewTest)
 
-      newTests.forEach(newTest => {
+      for (const newTest of newTests) {
+        // If the test is an attempt to fix, we don't need to apply EFD
+        if (getTestProperties(newTest).attemptToFix) {
+          continue
+        }
         newTest._ddIsNew = true
         if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped') {
           const fileSuite = getSuiteType(newTest, 'file')
           const projectSuite = getSuiteType(newTest, 'project')
-          for (let repeatEachIndex = 0; repeatEachIndex < earlyFlakeDetectionNumRetries; repeatEachIndex++) {
-            const copyFileSuite = deepCloneSuite(fileSuite, isNewTest)
+          for (let repeatEachIndex = 1; repeatEachIndex <= earlyFlakeDetectionNumRetries; repeatEachIndex++) {
+            const copyFileSuite = deepCloneSuite(fileSuite, repeatEachIndex, null, isNewTest)
             applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
             projectSuite._addSuite(copyFileSuite)
           }
         }
-      })
+      }
     }
 
     return rootSuite

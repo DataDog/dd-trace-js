@@ -20,7 +20,10 @@ const {
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_ENABLED,
   TEST_BROWSER_NAME,
-  TEST_MANAGEMENT_IS_DISABLED
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -141,6 +144,7 @@ class PlaywrightPlugin extends CiPlugin {
       testSuiteAbsolutePath,
       testSourceLine,
       browserName,
+      isAttemptToFix,
       isDisabled
     }) => {
       const store = storage('legacy').getStore()
@@ -162,7 +166,10 @@ class PlaywrightPlugin extends CiPlugin {
       isNew,
       isEfdRetry,
       isRetry,
-      isQuarantined
+      isAttemptToFix,
+      isQuarantined,
+      hasFailedAllRetries,
+      hasPassedAttemptToFixRetries
     }) => {
       const store = storage('legacy').getStore()
       const span = store && store.span
@@ -185,6 +192,17 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (isRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
+      }
+      if (hasFailedAllRetries) {
+        span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+      }
+      if (isAttemptToFix) {
+        span.setTag(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
+        span.setTag(TEST_IS_RETRY, 'true')
+        span.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
+        if (hasPassedAttemptToFixRetries) {
+          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+        }
       }
       if (isQuarantined) {
         span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')

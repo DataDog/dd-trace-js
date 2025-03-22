@@ -41,7 +41,14 @@ const {
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_ITR_SKIPPED
 } = require('../ci-visibility/telemetry')
-const { CI_PROVIDER_NAME, GIT_REPOSITORY_URL, GIT_COMMIT_SHA, GIT_BRANCH, CI_WORKSPACE_PATH } = require('./util/tags')
+const {
+  CI_PROVIDER_NAME,
+  GIT_REPOSITORY_URL,
+  GIT_COMMIT_SHA,
+  GIT_BRANCH,
+  CI_WORKSPACE_PATH,
+  GIT_COMMIT_MESSAGE
+} = require('./util/tags')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
 
@@ -251,7 +258,8 @@ module.exports = class CiPlugin extends Plugin {
       [RUNTIME_VERSION]: runtimeVersion,
       [GIT_BRANCH]: branch,
       [CI_PROVIDER_NAME]: ciProviderName,
-      [CI_WORKSPACE_PATH]: repositoryRoot
+      [CI_WORKSPACE_PATH]: repositoryRoot,
+      [GIT_COMMIT_MESSAGE]: commitMessage
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot || process.cwd()
@@ -269,7 +277,8 @@ module.exports = class CiPlugin extends Plugin {
       runtimeName,
       runtimeVersion,
       branch,
-      testLevel: 'suite'
+      testLevel: 'suite',
+      commitMessage
     }
   }
 

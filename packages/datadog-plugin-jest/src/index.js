@@ -27,7 +27,10 @@ const {
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
-  TEST_MANAGEMENT_IS_DISABLED
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  TEST_HAS_FAILED_ALL_RETRIES
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -177,6 +180,7 @@ class JestPlugin extends CiPlugin {
         config._ddRepositoryRoot = this.repositoryRoot
         config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
         config._ddIsTestManagementTestsEnabled = this.libraryConfig?.isTestManagementEnabled ?? false
+        config._ddTestManagementAttemptToFixRetries = this.libraryConfig?.testManagementAttemptToFixRetries ?? 0
         config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
         config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
         config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
@@ -336,7 +340,13 @@ class JestPlugin extends CiPlugin {
       this.activeTestSpan = span
     })
 
-    this.addSub('ci:jest:test:finish', ({ status, testStartLine, isQuarantined }) => {
+    this.addSub('ci:jest:test:finish', ({
+      status,
+      testStartLine,
+      isQuarantined,
+      attemptToFixPassed,
+      failedAllTests
+    }) => {
       const span = storage('legacy').getStore().span
       span.setTag(TEST_STATUS, status)
       if (testStartLine) {
@@ -344,6 +354,12 @@ class JestPlugin extends CiPlugin {
       }
       if (isQuarantined) {
         span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+      }
+      if (attemptToFixPassed) {
+        span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+      }
+      if (failedAllTests) {
+        span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
       }
 
       const spanTags = span.context()._tags
@@ -407,6 +423,7 @@ class JestPlugin extends CiPlugin {
       testSourceFile,
       isNew,
       isEfdRetry,
+      isAttemptToFixRetry,
       isJestRetry
     } = test
 
@@ -423,6 +440,12 @@ class JestPlugin extends CiPlugin {
 
     if (displayName) {
       extraTags[JEST_DISPLAY_NAME] = displayName
+    }
+
+    if (isAttemptToFixRetry) {
+      extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
+      extraTags[TEST_IS_RETRY] = 'true'
+      extraTags[TEST_RETRY_REASON] = 'attempt_to_fix'
     }
 
     if (isNew) {
