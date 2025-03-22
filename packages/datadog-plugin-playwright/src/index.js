@@ -144,7 +144,6 @@ class PlaywrightPlugin extends CiPlugin {
       testSuiteAbsolutePath,
       testSourceLine,
       browserName,
-      isAttemptToFix,
       isDisabled
     }) => {
       const store = storage('legacy').getStore()
@@ -168,6 +167,7 @@ class PlaywrightPlugin extends CiPlugin {
       isRetry,
       isAttemptToFix,
       isQuarantined,
+      isAttemptToFixRetry,
       hasFailedAllRetries,
       hasPassedAttemptToFixRetries
     }) => {
@@ -198,11 +198,13 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (isAttemptToFix) {
         span.setTag(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
+      }
+      if (isAttemptToFixRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
         span.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
-        if (hasPassedAttemptToFixRetries) {
-          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
-        }
+      }
+      if (hasPassedAttemptToFixRetries) {
+        span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
       }
       if (isQuarantined) {
         span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
