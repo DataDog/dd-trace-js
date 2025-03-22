@@ -310,30 +310,25 @@ function wrapRun (pl, isLatestVersion) {
         let hasPassedAllRetries = false
         let isDisabled = false
         let isQuarantined = false
+
         if (isTestManagementTestsEnabled) {
           const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
           const testProperties = getTestProperties(testSuitePath, this.pickle.name)
           const numRetries = numRetriesByPickleId.get(this.pickle.id)
           isAttemptToFix = testProperties.attemptToFix
           isAttemptToFixRetry = isAttemptToFix && numRetries > 0
-          if (!isAttemptToFix) {
-            isDisabled = testProperties.disabled
-            if (!isDisabled) {
-              isQuarantined = testProperties.quarantined
-            }
-          }
+          isDisabled = testProperties.disabled
+          isQuarantined = testProperties.quarantined
 
           if (isAttemptToFixRetry) {
             const statuses = lastStatusByPickleId.get(this.pickle.id)
             if (statuses.length === testManagementAttemptToFixRetries + 1) {
-              // The first status is the original test status
-              const statusesExceptFirst = statuses.slice(1)
-              const { pass, fail } = statusesExceptFirst.reduce((acc, status) => {
+              const { pass, fail } = statuses.reduce((acc, status) => {
                 acc[status]++
                 return acc
               }, { pass: 0, fail: 0 })
-              hasFailedAllRetries = fail === testManagementAttemptToFixRetries
-              hasPassedAllRetries = pass === testManagementAttemptToFixRetries
+              hasFailedAllRetries = fail === testManagementAttemptToFixRetries + 1
+              hasPassedAllRetries = pass === testManagementAttemptToFixRetries + 1
             }
           }
         }
@@ -344,6 +339,7 @@ function wrapRun (pl, isLatestVersion) {
           isNew = numRetries !== undefined
           isEfdRetry = numRetries > 0
         }
+
         const attemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
 
         const error = getErrorFromCucumberResult(result)
@@ -359,6 +355,7 @@ function wrapRun (pl, isLatestVersion) {
             isNew,
             isEfdRetry,
             isFlakyRetry: numAttempt > 0,
+            isAttemptToFix,
             isAttemptToFixRetry,
             hasFailedAllRetries,
             hasPassedAllRetries,
@@ -612,13 +609,11 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     if (isTestManagementTestsEnabled) {
       const testProperties = getTestProperties(testSuitePath, pickle.name)
       isAttemptToFix = testProperties.attemptToFix
-      if (!isAttemptToFix) {
-        isDisabled = testProperties.disabled
-        if (isDisabled) {
-          this.options.dryRun = true
-        } else {
-          isQuarantined = testProperties.quarantined
-        }
+      isDisabled = testProperties.disabled
+      isQuarantined = testProperties.quarantined
+      // If attempt to fix is enabled, we run even if the test is disabled
+      if (!isAttemptToFix && isDisabled) {
+        this.options.dryRun = true
       }
     }
 
@@ -634,6 +629,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     const testStatuses = lastStatusByPickleId.get(pickle.id)
     const lastTestStatus = testStatuses[testStatuses.length - 1]
 
+    // New tests should not be marked as attempt to fix, so EFD + Attempt to fix should not be enabled at the same time
     if (isAttemptToFix && lastTestStatus !== 'skip') {
       for (let retryIndex = 0; retryIndex < testManagementAttemptToFixRetries; retryIndex++) {
         numRetriesByPickleId.set(pickle.id, retryIndex + 1)
@@ -650,8 +646,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     }
     let testStatus = lastTestStatus
     let shouldBePassedByEFD = false
-    let shouldBePassedByQuarantine = false
-    let shouldBePassedByAttemptToFix = false
+    let shouldBePassedByTestManagement = false
     if (isNew && isEarlyFlakeDetectionEnabled) {
       /**
        * If Early Flake Detection (EFD) is enabled the logic is as follows:
@@ -668,17 +663,9 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       }
     }
 
-    if (isTestManagementTestsEnabled) {
-      if (isAttemptToFix) {
-        const testProperties = getTestProperties(testSuitePath, pickle.name)
-        if (testProperties.disabled || testProperties.quarantined) {
-          this.success = true
-          shouldBePassedByAttemptToFix = true
-        }
-      } else if (isQuarantined) {
-        this.success = true
-        shouldBePassedByQuarantine = true
-      }
+    if (isTestManagementTestsEnabled && (isDisabled || isQuarantined)) {
+      this.success = true
+      shouldBePassedByTestManagement = true
     }
 
     if (!pickleResultByFile[testFileAbsolutePath]) {
@@ -712,8 +699,8 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       return shouldBePassedByEFD
     }
 
-    if (isNewerCucumberVersion && isTestManagementTestsEnabled && (isQuarantined || isAttemptToFix)) {
-      return shouldBePassedByQuarantine || shouldBePassedByAttemptToFix
+    if (isNewerCucumberVersion && isTestManagementTestsEnabled && (isQuarantined || isDisabled)) {
+      return shouldBePassedByTestManagement
     }
 
     return runTestCaseResult

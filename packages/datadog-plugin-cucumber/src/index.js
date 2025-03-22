@@ -331,6 +331,7 @@ class CucumberPlugin extends CiPlugin {
       isNew,
       isEfdRetry,
       isFlakyRetry,
+      isAttemptToFix,
       isAttemptToFixRetry,
       hasFailedAllRetries,
       hasPassedAllRetries,
@@ -368,8 +369,11 @@ class CucumberPlugin extends CiPlugin {
         span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
       }
 
-      if (isAttemptToFixRetry) {
+      if (isAttemptToFix) {
         span.setTag(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
+      }
+
+      if (isAttemptToFixRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
         span.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
         if (hasPassedAllRetries) {
