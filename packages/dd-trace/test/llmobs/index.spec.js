@@ -1,6 +1,7 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
+const AgentInfoExporter = require('../../src/exporters/common/agent-info-exporter')
 
 const { channel } = require('dc-polyfill')
 const spanProcessCh = channel('dd-trace:span:process')
@@ -8,12 +9,12 @@ const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
 
-const LLMObsEvalMetricsWriter = require('../../src/llmobs/writers/evaluations')
-
 const config = {
   llmobs: {
     mlApp: 'test'
-  }
+  },
+  apiKey: 'test',
+  site: 'datadoghq.com'
 }
 
 describe('module', () => {
@@ -21,28 +22,28 @@ describe('module', () => {
   let store
   let logger
 
-  let LLMObsAgentlessSpanWriter
-  let LLMObsAgentProxySpanWriter
-
-  before(() => {
-    sinon.stub(LLMObsEvalMetricsWriter.prototype, 'append')
-  })
+  let LLMObsSpanWriterSpy
+  let LLMObsEvalMetricsWriterSpy
 
   beforeEach(() => {
     store = {}
     logger = { debug: sinon.stub() }
 
-    LLMObsAgentlessSpanWriter = sinon.stub().returns({
-      destroy: sinon.stub()
+    LLMObsSpanWriterSpy = sinon.stub().returns({
+      destroy: sinon.stub(),
+      setAgentless: sinon.stub()
     })
-    LLMObsAgentProxySpanWriter = sinon.stub().returns({
-      destroy: sinon.stub()
+
+    LLMObsEvalMetricsWriterSpy = sinon.stub().returns({
+      destroy: sinon.stub(),
+      append: sinon.stub(),
+      setAgentless: sinon.stub()
     })
 
     llmobsModule = proxyquire('../../../dd-trace/src/llmobs', {
+      './writers/spans': LLMObsSpanWriterSpy,
+      './writers/evaluations': LLMObsEvalMetricsWriterSpy,
       '../log': logger,
-      './writers/spans/agentless': LLMObsAgentlessSpanWriter,
-      './writers/spans/agentProxy': LLMObsAgentProxySpanWriter,
       './storage': {
         storage: {
           getStore () {
@@ -56,14 +57,10 @@ describe('module', () => {
   })
 
   afterEach(() => {
-    LLMObsAgentProxySpanWriter.resetHistory()
-    LLMObsAgentlessSpanWriter.resetHistory()
-    LLMObsEvalMetricsWriter.prototype.append.resetHistory()
     llmobsModule.disable()
   })
 
   after(() => {
-    LLMObsEvalMetricsWriter.prototype.append.restore()
     sinon.restore()
 
     // get rid of mock stubs for writers
@@ -102,16 +99,120 @@ describe('module', () => {
     })
   })
 
-  it('uses the agent proxy span writer', () => {
-    llmobsModule.enable(config)
-    expect(LLMObsAgentProxySpanWriter).to.have.been.called
+  describe('with agentlessEnabled set to `true`', () => {
+    beforeEach(() => {
+      config.llmobs.agentlessEnabled = true
+    })
+
+    afterEach(() => {
+      delete config.llmobs.agentlessEnabled
+    })
+
+    describe('if no api key is provided', () => {
+      let originalApiKey
+
+      beforeEach(() => {
+        originalApiKey = config.apiKey
+        config.apiKey = undefined
+      })
+
+      afterEach(() => {
+        config.apiKey = originalApiKey
+      })
+
+      it('throws an error', () => {
+        expect(() => llmobsModule.enable(config)).to.throw(
+          'DD_API_KEY is required for sending LLMObs data when agentless mode is enabled. ' +
+          'Ensure this configuration is set before running your application.'
+        )
+      })
+    })
+
+    describe('if an api key is provided', () => {
+      it('configures agentless writers', () => {
+        llmobsModule.enable(config)
+
+        expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(true)
+        expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(true)
+      })
+    })
   })
 
-  it('uses the agentless span writer', () => {
-    config.llmobs.agentlessEnabled = true
-    llmobsModule.enable(config)
-    expect(LLMObsAgentlessSpanWriter).to.have.been.called
-    delete config.llmobs.agentlessEnabled
+  describe('with agentlessEnabled set to `false`', () => {
+    beforeEach(() => {
+      config.llmobs.agentlessEnabled = false
+    })
+
+    afterEach(() => {
+      delete config.llmobs.agentlessEnabled
+    })
+
+    it('configures agent-proxy writers', () => {
+      llmobsModule.enable(config)
+
+      expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(false)
+      expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(false)
+    })
+  })
+
+  describe('with agentlessEnabled set to undefined', () => {
+    afterEach(() => {
+      sinon.restore()
+    })
+
+    describe('when an agent is running', () => {
+      beforeEach(() => {
+        sinon.stub(AgentInfoExporter.prototype, 'getAgentInfo')
+        AgentInfoExporter.prototype.getAgentInfo.callsFake((cb) => {
+          cb(null)
+        })
+      })
+
+      it('configures the agent-proxy writers', () => {
+        llmobsModule.enable(config)
+
+        expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(false)
+        expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(false)
+      })
+    })
+
+    describe('when no agent is running', () => {
+      beforeEach(() => {
+        sinon.stub(AgentInfoExporter.prototype, 'getAgentInfo')
+        AgentInfoExporter.prototype.getAgentInfo.callsFake((cb) => {
+          cb(new Error('No agent running'))
+        })
+      })
+
+      describe('when no API key is provided', () => {
+        let originalApiKey
+
+        beforeEach(() => {
+          originalApiKey = config.apiKey
+          config.apiKey = undefined
+        })
+
+        afterEach(() => {
+          config.apiKey = originalApiKey
+        })
+
+        it('throws an error', () => {
+          expect(() => llmobsModule.enable(config)).to.throw(
+            'Cannot send LLM Observability data without a running agent and without a Datadog API key.\n' +
+            'Please set DD_API_KEY and set DD_LLMOBS_AGENTLESS_ENABLED to true.'
+          )
+        })
+      })
+
+      describe('when an API key is provided', () => {
+        it('configures the agentless writers', () => {
+          llmobsModule.enable(config)
+
+          expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(true)
+          expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(true)
+        })
+      })
+    })
   })
 
   it('appends to the eval metric writer', () => {
@@ -121,7 +222,7 @@ describe('module', () => {
 
     evalMetricAppendCh.publish(payload)
 
-    expect(LLMObsEvalMetricsWriter.prototype.append).to.have.been.calledWith(payload)
+    expect(LLMObsEvalMetricsWriterSpy().append).to.have.been.calledWith(payload)
   })
 
   it('removes all subscribers when disabling', () => {

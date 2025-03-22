@@ -6,12 +6,11 @@ const BaseWriter = require('./base')
 class LLMObsEvalMetricsWriter extends BaseWriter {
   constructor (config) {
     super({
-      endpoint: AGENTLESS_EVALULATIONS_ENDPOINT,
-      intake: `api.${config.site}`,
-      eventType: 'evaluation_metric'
+      config,
+      intake: 'api',
+      eventType: 'evaluation_metric',
+      endpoint: AGENTLESS_EVALULATIONS_ENDPOINT
     })
-
-    this._headers['DD-API-KEY'] = config.apiKey
   }
 
   makePayload (events) {

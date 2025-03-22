@@ -174,9 +174,21 @@ function spanHasError (span) {
   return !!(tags.error || tags['error.type'])
 }
 
+const AgentInfoExporter = require('../exporters/common/agent-info-exporter')
+/** @type {AgentInfoExporter} */
+let agentInfoExporter
+
+function getAgentInfo (config, callback) {
+  if (!agentInfoExporter) {
+    agentInfoExporter = new AgentInfoExporter(config)
+  }
+
+  agentInfoExporter.getAgentInfo(callback)
+}
 module.exports = {
   encodeUnicode,
   validateKind,
   getFunctionArguments,
-  spanHasError
+  spanHasError,
+  getAgentInfo
 }
