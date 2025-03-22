@@ -123,6 +123,13 @@ describe('RemoteConfigManager', () => {
     ])
   })
 
+  describe('getClientId', () => {
+    it('should return the client id from the state', () => {
+      expect(rc.getClientId()).to.equal('1234-5678')
+      expect(rc.getClientId()).to.equal(rc.state.client.id)
+    })
+  })
+
   describe('updateCapabilities', () => {
     it('should set multiple capabilities to true', () => {
       rc.updateCapabilities(Capabilities.ASM_ACTIVATION, true)

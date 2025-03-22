@@ -6,11 +6,16 @@ const RemoteConfigManager = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
 const { setCollectionMode } = require('../appsec/user_tracking')
 const log = require('../log')
+const tagger = require('../tagger')
 
 let rc
 
 function enable (config, appsec) {
   rc = new RemoteConfigManager(config)
+  tagger.add(config.tags, {
+    '_dd.rc.client_id': rc.getClientId()
+  })
+
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_CUSTOM_TAGS, true)
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_HTTP_HEADER_TAGS, true)
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_LOGS_INJECTION, true)
