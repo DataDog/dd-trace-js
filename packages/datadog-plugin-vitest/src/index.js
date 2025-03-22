@@ -22,8 +22,7 @@ const {
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_IS_DISABLED,
-  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
-  DD_CAPABILITIES_AUTO_TEST_RETRIES
+  getLibraryCapabilitiesTags
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -203,9 +202,7 @@ class VitestPlugin extends CiPlugin {
 
     this.addSub('ci:vitest:test-suite:start', ({
       testSuiteAbsolutePath,
-      frameworkVersion,
-      isFlakyTestRetriesEnabled,
-      isEarlyFlakeDetectionEnabled
+      frameworkVersion
     }) => {
       this.command = process.env.DD_CIVISIBILITY_TEST_COMMAND
       this.frameworkVersion = frameworkVersion
@@ -223,10 +220,10 @@ class VitestPlugin extends CiPlugin {
         }
       }
       if (this.tracer._exporter.addMetadataTags) {
+        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id)
         metadataTags.test = {
           ...metadataTags.test,
-          [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: isEarlyFlakeDetectionEnabled ? 'true' : 'false',
-          [DD_CAPABILITIES_AUTO_TEST_RETRIES]: isFlakyTestRetriesEnabled ? 'true' : 'false'
+          ...libraryCapabilitiesTags
         }
         this.tracer._exporter.addMetadataTags(metadataTags)
       }

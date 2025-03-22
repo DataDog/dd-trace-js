@@ -44,7 +44,10 @@ const {
   TEST_MANAGEMENT_IS_DISABLED,
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
   DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
-  DD_CAPABILITIES_AUTO_TEST_RETRIES
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -1975,23 +1978,18 @@ moduleTypes.forEach(({
 
     context('libraries capabilities', () => {
       it('adds capabilities to tests', (done) => {
-        receiver.setSettings({
-          flaky_test_retries_enabled: false,
-          itr_enabled: false,
-          early_flake_detection: {
-            enabled: true
-          },
-          known_tests_enabled: true
-        })
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
             assert.isNotEmpty(metadataDicts)
             metadataDicts.forEach(metadata => {
-              assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], 'false')
-              assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], 'true')
-              assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], 'false')
+              assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
+              assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
+              assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
+              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
+              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
+              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '2')
               // capabilities logic does not overwrite test session name
               assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
             })

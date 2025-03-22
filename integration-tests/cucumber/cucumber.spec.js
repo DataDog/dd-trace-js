@@ -49,7 +49,10 @@ const {
   TEST_MANAGEMENT_IS_DISABLED,
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
   DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
-  DD_CAPABILITIES_AUTO_TEST_RETRIES
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
@@ -2235,14 +2238,6 @@ versions.forEach(version => {
 
       runModes.forEach((runMode) => {
         it(`(${runMode}) adds capabilities to tests`, (done) => {
-          receiver.setSettings({
-            flaky_test_retries_enabled: true,
-            itr_enabled: false,
-            early_flake_detection: {
-              enabled: true
-            },
-            known_tests_enabled: false
-          })
           const runCommand = runMode === 'parallel' ? parallelModeCommand : runTestsCommand
 
           const receiverPromise = receiver
@@ -2254,10 +2249,13 @@ versions.forEach(version => {
                 if (runMode === 'parallel') {
                   assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
                 } else {
-                  assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], 'false')
+                  assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
                 }
-                assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], 'false')
-                assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], 'true')
+                assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
+                assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '2')
                 // capabilities logic does not overwrite test session name
                 assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
               })
