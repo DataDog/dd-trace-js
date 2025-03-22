@@ -49,5 +49,16 @@ describe('Appsec User Telemetry metrics', () => {
         })
       })
     })
+
+    describe('incrementSdkEventMetric', () => {
+      it('should increment sdk.event metric', () => {
+        appsecTelemetry.incrementSdkEventMetric('login_success')
+
+        expect(count).to.have.been.calledOnceWithExactly('sdk.event', {
+          event_type: 'login_success',
+          sdk_version: 'v1'
+        })
+      })
+    })
   })
 })
