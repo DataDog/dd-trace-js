@@ -18,6 +18,8 @@ const testManagementTestsCh = channel('ci:playwright:test-management-tests')
 const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 
+const workerReportCh = channel('ci:playwright:worker:report')
+
 const testToAr = new WeakMap()
 const testSuiteToAr = new Map()
 const testSuiteToTestStatuses = new Map()
@@ -250,20 +252,18 @@ function getTestFullname (test) {
   return names.join(' ')
 }
 
-function testBeginHandler (test, browserName) {
+function testBeginHandler (test, browserName, isMainProcess) {
   const {
     _requireFile: testSuiteAbsolutePath,
-    _type,
     location: {
       line: testSourceLine
-    }
+    },
+    _type
   } = test
 
   if (_type === 'beforeAll' || _type === 'afterAll') {
     return
   }
-
-  const testName = getTestFullname(test)
 
   const isNewTestSuite = !startedSuites.includes(testSuiteAbsolutePath)
 
@@ -276,25 +276,30 @@ function testBeginHandler (test, browserName) {
     })
   }
 
-  const testAsyncResource = new AsyncResource('bound-anonymous-fn')
-  testToAr.set(test, testAsyncResource)
-  testAsyncResource.runInAsyncScope(() => {
-    testStartCh.publish({
-      testName,
-      testSuiteAbsolutePath,
-      testSourceLine,
-      browserName,
-      isDisabled: test._ddIsDisabled
+  // this handles tests that do not go through the worker process (because they're skipped)
+  if (isMainProcess) {
+    const testAsyncResource = new AsyncResource('bound-anonymous-fn')
+    testToAr.set(test, testAsyncResource)
+    const testName = getTestFullname(test)
+
+    testAsyncResource.runInAsyncScope(() => {
+      testStartCh.publish({
+        testName,
+        testSuiteAbsolutePath,
+        testSourceLine,
+        browserName
+      })
     })
-  })
+  }
 }
 
-function testEndHandler (test, annotations, testStatus, error, isTimeout) {
+function testEndHandler (test, annotations, testStatus, error, isTimeout, isMainProcess) {
+  const { _requireFile: testSuiteAbsolutePath, results, _type } = test
+
   let annotationTags
   if (annotations.length) {
     annotationTags = parseAnnotations(annotations)
   }
-  const { _requireFile: testSuiteAbsolutePath, results, _type } = test
 
   if (_type === 'beforeAll' || _type === 'afterAll') {
     const hookError = formatTestHookError(error, _type, isTimeout)
@@ -305,20 +310,22 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
     return
   }
 
-  const testResult = results[results.length - 1]
-  const testAsyncResource = testToAr.get(test)
-  testAsyncResource.runInAsyncScope(() => {
-    testFinishCh.publish({
-      testStatus,
-      steps: testResult?.steps || [],
-      isRetry: testResult?.retry > 0,
-      error,
-      extraTags: annotationTags,
-      isNew: test._ddIsNew,
-      isQuarantined: test._ddIsQuarantined,
-      isEfdRetry: test._ddIsEfdRetry
+  if (isMainProcess) {
+    const testResult = results[results.length - 1]
+    const testAsyncResource = testToAr.get(test)
+    testAsyncResource.runInAsyncScope(() => {
+      testFinishCh.publish({
+        testStatus,
+        steps: testResult?.steps || [],
+        isRetry: testResult?.retry > 0,
+        error,
+        extraTags: annotationTags,
+        isNew: test._ddIsNew,
+        isQuarantined: test._ddIsQuarantined,
+        isEfdRetry: test._ddIsEfdRetry
+      })
     })
-  })
+  }
 
   if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
     testSuiteToTestStatuses.get(testSuiteAbsolutePath).push(testStatus)
@@ -501,8 +508,8 @@ function runnerHook (runnerExport, playwrightVersion) {
       // because they were skipped
       tests.forEach(test => {
         const browser = getBrowserNameFromProjects(projects, test)
-        testBeginHandler(test, browser)
-        testEndHandler(test, [], 'skip')
+        testBeginHandler(test, browser, true)
+        testEndHandler(test, [], 'skip', null, false, true)
       })
     })
 
@@ -639,4 +646,137 @@ addHook({
   loadUtilsPackage.createRootSuite = newCreateRootSuite
 
   return loadUtilsPackage
+})
+
+addHook({
+  name: 'playwright',
+  file: 'lib/runner/processHost.js',
+  versions: ['>=1.38.0']
+}, (processHostPackage) => {
+  shimmer.wrap(processHostPackage.ProcessHost.prototype, 'startRunner', startRunner => async function () {
+    this._extraEnv = {
+      ...this._extraEnv,
+      DD_PLAYWRIGHT_WORKER: '1'
+    }
+
+    const res = await startRunner.apply(this, arguments)
+
+    this.process.on('message', (message) => {
+      if (Array.isArray(message) && message[0] === 90) {
+        workerReportCh.publish(message[1])
+      }
+    })
+
+    return res
+  })
+
+  return processHostPackage
+})
+
+// Only in worker
+addHook({
+  name: 'playwright',
+  file: 'lib/worker/workerMain.js',
+  versions: ['>=1.38.0']
+}, (workerPackage) => {
+  // we assume there's only a test running at a time
+  let steps = []
+  const stepInfoByStepId = {}
+
+  shimmer.wrap(workerPackage.WorkerMain.prototype, '_runTest', _runTest => async function (test) {
+    steps = []
+
+    const {
+      _requireFile: testSuiteAbsolutePath,
+      location: {
+        line: testSourceLine
+      }
+    } = test
+    let res
+
+    let testInfo
+    const testName = getTestFullname(test)
+    const browserName = this._project.project.name
+
+    // If test events are created in the worker process I need to stop creating it in the main process
+    // Probably yet another test worker exporter is needed in addition to the ones for mocha, jest and cucumber
+    // it's probably hard to tell that's a playwright worker though, as I don't think there is a specific env variable
+    const testAsyncResource = new AsyncResource('bound-anonymous-fn')
+    testAsyncResource.runInAsyncScope(() => {
+      testStartCh.publish({
+        testName,
+        testSuiteAbsolutePath,
+        testSourceLine,
+        browserName,
+        // TODO: unclear that test._ddIsDisabled will reach the worker
+        isDisabled: test._ddIsDisabled
+      })
+
+      res = _runTest.apply(this, arguments)
+      // we use the fact that _runTest is async
+      // atlernatively we could wrap `this.dispatchEvent` since `testEnd` is sent via `this.dispatchEvent`
+      testInfo = this._currentTest
+    })
+    await res
+
+    const { status, error, annotations, retry, testId } = testInfo
+
+    // testInfo.errors could be better than "error",
+    // which will only include timeout error (even though the test failed because of a different error)
+
+    let annotationTags
+    if (annotations.length) {
+      annotationTags = parseAnnotations(annotations)
+    }
+
+    let onDone
+
+    const flushPromise = new Promise(resolve => {
+      onDone = resolve
+    })
+
+    testAsyncResource.runInAsyncScope(() => {
+      testFinishCh.publish({
+        testStatus: STATUS_TO_TEST_STATUS[status],
+        steps: steps.filter(step => step.testId === testId),
+        error,
+        extraTags: annotationTags,
+        isRetry: retry > 0,
+        // probably not going to work
+        isNew: test._ddIsNew,
+        isQuarantined: test._ddIsQuarantined,
+        isEfdRetry: test._ddIsEfdRetry,
+        onDone
+      })
+    })
+
+    await flushPromise
+
+    return res
+  })
+
+  // We reproduce what happens in `Dispatcher#_onStepBegin` and `Dispatcher#_onStepEnd`,
+  // since `startTime` and `duration` are not available directly in the worker process
+  shimmer.wrap(workerPackage.WorkerMain.prototype, 'dispatchEvent', dispatchEvent => function (event, payload) {
+    if (event === 'stepBegin') {
+      stepInfoByStepId[payload.stepId] = {
+        startTime: payload.wallTime,
+        title: payload.title,
+        testId: payload.testId
+      }
+    } else if (event === 'stepEnd') {
+      const stepInfo = stepInfoByStepId[payload.stepId]
+      delete stepInfoByStepId[payload.stepId]
+      steps.push({
+        testId: stepInfo.testId,
+        startTime: new Date(stepInfo.startTime),
+        title: stepInfo.title,
+        duration: payload.wallTime - stepInfo.startTime,
+        error: payload.error
+      })
+    }
+    return dispatchEvent.apply(this, arguments)
+  })
+
+  return workerPackage
 })

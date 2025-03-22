@@ -6,6 +6,7 @@ const log = require('../packages/dd-trace/src/log')
 const isJestWorker = !!process.env.JEST_WORKER_ID
 const isCucumberWorker = !!process.env.CUCUMBER_WORKER_ID
 const isMochaWorker = !!process.env.MOCHA_WORKER_ID
+const isPlaywrightWorker = !!process.env.DD_PLAYWRIGHT_WORKER
 
 const packageManagers = [
   'npm',
@@ -64,6 +65,12 @@ if (isCucumberWorker) {
 if (isMochaWorker) {
   options.experimental = {
     exporter: 'mocha_worker'
+  }
+}
+
+if (isPlaywrightWorker) {
+  options.experimental = {
+    exporter: 'playwright_worker'
   }
 }
 

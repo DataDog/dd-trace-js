@@ -6,5 +6,6 @@ module.exports = {
   AGENT_PROXY: 'agent_proxy',
   JEST_WORKER: 'jest_worker',
   CUCUMBER_WORKER: 'cucumber_worker',
-  MOCHA_WORKER: 'mocha_worker'
+  MOCHA_WORKER: 'mocha_worker',
+  PLAYWRIGHT_WORKER: 'playwright_worker'
 }
