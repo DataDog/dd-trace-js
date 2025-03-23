@@ -102,6 +102,7 @@ class VitestPlugin extends CiPlugin {
       isNew,
       isAttemptToFix,
       isQuarantined,
+      isDisabled,
       mightHitProbe,
       isRetryReasonEfd,
       isRetryReasonAttemptToFix
@@ -129,6 +130,9 @@ class VitestPlugin extends CiPlugin {
       }
       if (isQuarantined) {
         extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
+      }
+      if (isDisabled) {
+        extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
       }
 
       const span = this.startTestSpan(

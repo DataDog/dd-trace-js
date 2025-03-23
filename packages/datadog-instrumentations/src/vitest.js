@@ -388,6 +388,7 @@ addHook({
           if (isTestDisabled) {
             disabledTasks.add(task)
             if (!attemptToFixTasks.has(task)) {
+              // we only actually skip if the test is not being attempted to be fixed
               task.mode = 'skip'
             }
           }
@@ -422,14 +423,14 @@ addHook({
     const { isEarlyFlakeDetectionEnabled, isTestManagementTestsEnabled } = getProvidedContext()
 
     if (isTestManagementTestsEnabled) {
-      if (attemptToFixTasks.has(task)) {
-        if (disabledTasks.has(task) || quarantinedTasks.has(task)) {
-          if (task.result.state === 'fail') {
-            switchedStatuses.add(task)
-          }
-          task.result.state = 'pass'
+      const isAttemptingToFix = attemptToFixTasks.has(task)
+      const isDisabled = disabledTasks.has(task)
+      const isQuarantined = quarantinedTasks.has(task)
+
+      if ((isAttemptingToFix && isDisabled) || isQuarantined) {
+        if (task.result.state === 'fail') {
+          switchedStatuses.add(task)
         }
-      } else if (quarantinedTasks.has(task)) {
         task.result.state = 'pass'
       }
     }
@@ -456,7 +457,6 @@ addHook({
     }
     const testName = getTestName(task)
     let isNew = false
-    const isAttemptToFix = attemptToFixTasks.has(task)
     let isQuarantined = false
 
     const {
@@ -477,9 +477,7 @@ addHook({
         testSuiteAbsolutePath: task.file.filepath,
         testName,
         onDone: (isTestQuarantined) => {
-          if (!isAttemptToFix) {
-            isQuarantined = isTestQuarantined
-          }
+          isQuarantined = isTestQuarantined
           if (isTestQuarantined) {
             quarantinedTasks.add(task)
           }
@@ -516,10 +514,12 @@ addHook({
     }
 
     const lastExecutionStatus = task.result.state
+    const shouldFlipStatus = isEarlyFlakeDetectionEnabled || attemptToFixTasks.has(task)
+    const statuses = taskToStatuses.get(task)
 
     // These clauses handle task.repeats, whether EFD is enabled or not
     // The only thing that EFD does is to forcefully pass the test if it has passed at least once
-    if (numRepetition > 0 && numRepetition <= task.repeats) { // it may or may have not failed
+    if (numRepetition > 0 && numRepetition < task.repeats) { // it may or may have not failed
       // Here we finish the earlier iteration,
       // as long as it's not the _last_ iteration (which will be finished normally)
 
@@ -536,15 +536,21 @@ addHook({
             testPassCh.publish({ task })
           })
         }
-        if (isEarlyFlakeDetectionEnabled || attemptToFixTasks.has(task)) {
-          const statuses = taskToStatuses.get(task)
+        if (shouldFlipStatus) {
           statuses.push(lastExecutionStatus)
           // If we don't "reset" the result.state to "pass", once a repetition fails,
           // vitest will always consider the test as failed, so we can't read the actual status
+          // This means that we change vitest's behavior:
+          // if the last attempt passes, vitest would consider the test as failed
+          // but after this change, it will consider the test as passed
           task.result.state = 'pass'
         }
       }
     } else if (numRepetition === task.repeats) {
+      if (shouldFlipStatus) {
+        statuses.push(lastExecutionStatus)
+      }
+
       const asyncResource = taskToAsync.get(task)
       if (lastExecutionStatus === 'fail') {
         const testError = task.result?.errors?.[0]
@@ -570,7 +576,8 @@ addHook({
         isRetryReasonAttemptToFix: isRetryReasonAttemptToFix && numRepetition > 0,
         isNew,
         mightHitProbe: isDiEnabled && numAttempt > 0,
-        isAttemptToFix: isAttemptToFix && numRepetition > 0,
+        isAttemptToFix: attemptToFixTasks.has(task),
+        isDisabled: disabledTasks.has(task),
         isQuarantined
       })
     })
