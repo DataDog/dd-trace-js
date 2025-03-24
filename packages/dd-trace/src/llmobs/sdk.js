@@ -64,7 +64,7 @@ class LLMObs extends NoopLLMObs {
     this._config.configure({ ...this._config, llmobs: llmobsConfig })
 
     // configure writers and channel subscribers
-    this._llmobsModule.enable(this._config)
+    this._llmobsModule.enable(this._config, true)
   }
 
   disable () {

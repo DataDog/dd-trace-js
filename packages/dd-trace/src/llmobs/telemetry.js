@@ -53,19 +53,20 @@ function incrementLLMObsSpanFinishedCount (span, value = 1) {
   llmobsMetrics.count('span.finished', tags).inc(value)
 }
 
-function record_llmobs_enabled (startTime, config, auto, value = 1) {
+function recordLLMObsEnabled (startTime, config, enabledManually, value = 1) {
   const initTimeMs = performance.now() - startTime
   tags = {
     error: 0,
     agentless: Number(config.llmobs.agentlessEnabled),
     site: config.site,
+    _auto: Number(!enabledManually)
   }
   llmobsMetrics.count('product_enabled', tags).inc(value)
-  llmobsMetrics.distribution('product_enabled', tags).track(initTimeMs)
+  llmobsMetrics.distribution('init_time', tags).track(initTimeMs)
 }
 
 module.exports = {
-  record_llmobs_enabled,
+  recordLLMObsEnabled,
   incrementLLMObsSpanStartCount,
   incrementLLMObsSpanFinishedCount
 }
