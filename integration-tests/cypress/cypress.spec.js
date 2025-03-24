@@ -47,6 +47,7 @@ const {
   DD_CAPABILITIES_AUTO_TEST_RETRIES,
   TEST_NAME,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
@@ -1797,7 +1798,13 @@ moduleTypes.forEach(({
           })
         })
 
-        const getTestAssertions = (isAttemptToFix) =>
+        const getTestAssertions = ({
+          isAttemptToFix,
+          shouldAlwaysPass,
+          shouldFailSometimes,
+          isQuarantined,
+          isDisabled
+        }) =>
           receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
               const events = payloads.flatMap(({ payload }) => payload.events)
@@ -1818,31 +1825,73 @@ moduleTypes.forEach(({
                 ]
               )
 
-              const retriedTests = tests.filter(
+              const attemptToFixTests = tests.filter(
                 test => test.meta[TEST_NAME] === 'attempt to fix is attempt to fix'
               )
 
-              // Events come in reverse order
-              for (let i = retriedTests.length - 1; i >= 0; i--) {
-                const test = retriedTests[i]
-                if (isAttemptToFix && i !== retriedTests.length - 1) {
-                  assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
-                  assert.propertyVal(test.meta, TEST_IS_RETRY, 'true')
-                  assert.propertyVal(test.meta, TEST_RETRY_REASON, 'attempt_to_fix')
-                } else {
+              if (isAttemptToFix) {
+                assert.equal(attemptToFixTests.length, 4)
+              } else {
+                assert.equal(attemptToFixTests.length, 1)
+              }
+
+              for (let i = attemptToFixTests.length - 1; i >= 0; i--) {
+                const test = attemptToFixTests[i]
+                if (!isAttemptToFix) {
                   assert.notProperty(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX)
                   assert.notProperty(test.meta, TEST_IS_RETRY)
                   assert.notProperty(test.meta, TEST_RETRY_REASON)
+                  continue
+                }
+                if (isQuarantined) {
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+                  assert.notPropertyVal(test.meta, TEST_STATUS, 'skip')
+                }
+                if (isDisabled) {
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
+                  assert.notPropertyVal(test.meta, TEST_STATUS, 'skip')
                 }
 
-                if (isAttemptToFix && i === 0) {
-                  assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
+                const isLastAttempt = i === attemptToFixTests.length - 1
+                const isFirstAttempt = i === 0
+                assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
+                if (isFirstAttempt) {
+                  assert.notProperty(test.meta, TEST_IS_RETRY)
+                  assert.notProperty(test.meta, TEST_RETRY_REASON)
+                } else {
+                  assert.propertyVal(test.meta, TEST_IS_RETRY, 'true')
+                  assert.propertyVal(test.meta, TEST_RETRY_REASON, 'attempt_to_fix')
+                }
+                if (isLastAttempt) {
+                  if (shouldFailSometimes) {
+                    assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
+                    assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                  } else if (shouldAlwaysPass) {
+                    assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+                    assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
+                  } else {
+                    assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
+                    assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                  }
                 }
               }
             })
 
-        const runAttemptToFixTest = (done, isAttemptToFix, extraEnvVars) => {
-          const testAssertionsPromise = getTestAssertions(isAttemptToFix)
+        const runAttemptToFixTest = (done, {
+          isAttemptToFix,
+          shouldAlwaysPass,
+          shouldFailSometimes,
+          isQuarantined,
+          isDisabled,
+          extraEnvVars = {}
+        } = {}) => {
+          const testAssertionsPromise = getTestAssertions({
+            isAttemptToFix,
+            shouldAlwaysPass,
+            shouldFailSometimes,
+            isQuarantined,
+            isDisabled
+          })
 
           const {
             NODE_OPTIONS,
@@ -1859,7 +1908,9 @@ moduleTypes.forEach(({
                 ...restEnvVars,
                 CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
                 SPEC_PATTERN: specToRun,
-                ...extraEnvVars
+                ...extraEnvVars,
+                ...(shouldAlwaysPass ? { CYPRESS_SHOULD_ALWAYS_PASS: '1' } : {}),
+                ...(shouldFailSometimes ? { CYPRESS_SHOULD_FAIL_SOMETIMES: '1' } : {})
               },
               stdio: 'pipe'
             }
@@ -1867,28 +1918,103 @@ moduleTypes.forEach(({
 
           childProcess.on('exit', (exitCode) => {
             testAssertionsPromise.then(() => {
-              assert.equal(exitCode, 1)
+              if (shouldAlwaysPass) {
+                assert.equal(exitCode, 0)
+              } else {
+                // TODO: we need to figure out how to trick cypress into returning exit code 0
+                // even if there are failed tests
+                assert.equal(exitCode, 1)
+              }
               done()
             }).catch(done)
           })
         }
 
-        it('can attempt to fix tests', (done) => {
+        it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
-          runAttemptToFixTest(done, true)
+          runAttemptToFixTest(done, { isAttemptToFix: true })
+        })
+
+        it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(done, { isAttemptToFix: true, shouldAlwaysPass: true })
+        })
+
+        it('can attempt to fix and not mark last attempt if attempts both pass and fail', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(done, { isAttemptToFix: true, shouldFailSometimes: true })
         })
 
         it('does not attempt to fix tests if test management is not enabled', (done) => {
           receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
 
-          runAttemptToFixTest(done, false)
+          runAttemptToFixTest(done)
         })
 
         it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
-          runAttemptToFixTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+          runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
+        })
+
+        /**
+         * TODO:
+         * The spec says that quarantined tests that are not attempted to fix should be run and their result ignored.
+         * Cypress will skip the test instead.
+         *
+         * When a test is quarantined and attempted to fix, the spec is to run the test and ignore its result.
+         * Cypress will run the test, but it won't ignore its result.
+         */
+        it('can mark tests as quarantined and tests are not skipped', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            cypress: {
+              suites: {
+                'cypress/e2e/attempt-to-fix.js': {
+                  tests: {
+                    'attempt to fix is attempt to fix': {
+                      properties: {
+                        attempt_to_fix: true,
+                        quarantined: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+
+          runAttemptToFixTest(done, { isAttemptToFix: true, isQuarantined: true })
+        })
+
+        /**
+         * TODO:
+         * When a test is disabled and attempted to fix, the spec is to run the test and ignore its result.
+         * Cypress will run the test, but it won't ignore its result.
+         */
+        it('can mark tests as disabled and tests are not skipped', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            cypress: {
+              suites: {
+                'cypress/e2e/attempt-to-fix.js': {
+                  tests: {
+                    'attempt to fix is attempt to fix': {
+                      properties: {
+                        attempt_to_fix: true,
+                        disabled: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+
+          runAttemptToFixTest(done, { isAttemptToFix: true, isDisabled: true })
         })
       })
 

@@ -290,9 +290,13 @@ class CypressPlugin {
     return this.libraryConfigurationPromise
   }
 
+  getTestSuiteProperties (testSuite) {
+    return this.testManagementTests?.cypress?.suites?.[testSuite]?.tests || {}
+  }
+
   getTestProperties (testSuite, testName) {
     const { attempt_to_fix: isAttemptToFix, disabled: isDisabled, quarantined: isQuarantined } =
-      this.testManagementTests?.cypress?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
+      this.getTestSuiteProperties(testSuite)?.[testName]?.properties || {}
 
     return { isAttemptToFix, isDisabled, isQuarantined }
   }
@@ -323,7 +327,7 @@ class CypressPlugin {
     })
   }
 
-  getTestSpan ({ testName, testSuite, isUnskippable, isForcedToRun, testSourceFile }) {
+  getTestSpan ({ testName, testSuite, isUnskippable, isForcedToRun, testSourceFile, isDisabled, isQuarantined }) {
     const testSuiteTags = {
       [TEST_COMMAND]: this.command,
       [TEST_COMMAND]: this.command,
@@ -366,6 +370,14 @@ class CypressPlugin {
       this.hasForcedToRunSuites = true
       incrementCountMetric(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
       testSpanMetadata[TEST_ITR_FORCED_RUN] = 'true'
+    }
+
+    if (isDisabled) {
+      testSpanMetadata[TEST_MANAGEMENT_IS_DISABLED] = 'true'
+    }
+
+    if (isQuarantined) {
+      testSpanMetadata[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
     }
 
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'test', { hasCodeOwners: !!codeOwners })
@@ -607,14 +619,12 @@ class CypressPlugin {
         skippedTestSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
       }
 
-      const { isAttemptToFix, isDisabled, isQuarantined } = this.getTestProperties(spec.relative, cypressTestName)
+      const { isDisabled, isQuarantined } = this.getTestProperties(spec.relative, cypressTestName)
 
-      if (!isAttemptToFix) {
-        if (isDisabled) {
-          skippedTestSpan.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
-        } else if (isQuarantined) {
-          skippedTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
-        }
+      if (isDisabled) {
+        skippedTestSpan.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
+      } else if (isQuarantined) {
+        skippedTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
       }
 
       skippedTestSpan.finish()
@@ -707,7 +717,7 @@ class CypressPlugin {
           isKnownTestsEnabled: this.isKnownTestsEnabled,
           isTestManagementEnabled: this.isTestManagementTestsEnabled,
           testManagementAttemptToFixRetries: this.testManagementAttemptToFixRetries,
-          testManagementTests: this.testManagementTests
+          testManagementTests: this.getTestSuiteProperties(testSuite)
         }
 
         if (this.testSuiteSpan) {
@@ -742,7 +752,9 @@ class CypressPlugin {
             testName,
             testSuite,
             isUnskippable,
-            isForcedToRun
+            isForcedToRun,
+            isDisabled,
+            isQuarantined
           })
         }
 
@@ -763,8 +775,7 @@ class CypressPlugin {
           testName,
           isNew,
           isEfdRetry,
-          isAttemptToFix,
-          isLastRetry
+          isAttemptToFix
         } = test
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
@@ -793,6 +804,7 @@ class CypressPlugin {
         } else {
           this.testStatuses[testName].push(testStatus)
         }
+        const testStatuses = this.testStatuses[testName]
 
         if (error) {
           this.activeTestSpan.setTag('error', error)
@@ -812,18 +824,17 @@ class CypressPlugin {
         }
         if (isAttemptToFix) {
           this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
-          this.activeTestSpan.setTag(TEST_IS_RETRY, 'true')
-          this.activeTestSpan.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
-          if (isLastRetry) {
-            if (this.testStatuses[testName].every(status => status === 'pass')) {
+          if (testStatuses.length > 1) {
+            this.activeTestSpan.setTag(TEST_IS_RETRY, 'true')
+            this.activeTestSpan.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
+          }
+          const isLastAttempt = testStatuses.length === this.testManagementAttemptToFixRetries + 1
+          if (isLastAttempt) {
+            if (testStatuses.every(status => status === 'fail')) {
+              this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+            } else if (testStatuses.every(status => status === 'pass')) {
               this.activeTestSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
             }
-          }
-        }
-
-        if (isLastRetry) {
-          if (this.testStatuses[testName].every(status => status === 'fail')) {
-            this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
           }
         }
 
