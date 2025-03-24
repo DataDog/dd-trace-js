@@ -9,14 +9,14 @@ const shimmer = require('../../datadog-shimmer')
 
 // Create channels for Confluent Kafka JavaScript
 const channels = {
-  producerStart: channel('apm:confluentinc-kafka-javascript:produce:start'),
-  producerFinish: channel('apm:confluentinc-kafka-javascript:produce:finish'),
-  producerError: channel('apm:confluentinc-kafka-javascript:produce:error'),
-  producerCommit: channel('apm:confluentinc-kafka-javascript:produce:commit'),
-  consumerStart: channel('apm:confluentinc-kafka-javascript:consume:start'),
-  consumerFinish: channel('apm:confluentinc-kafka-javascript:consume:finish'),
-  consumerError: channel('apm:confluentinc-kafka-javascript:consume:error'),
-  consumerCommit: channel('apm:confluentinc-kafka-javascript:consume:commit')
+  producerStart: channel('apm:@confluentinc/kafka-javascript:produce:start'),
+  producerFinish: channel('apm:@confluentinc/kafka-javascript:produce:finish'),
+  producerError: channel('apm:@confluentinc/kafka-javascript:produce:error'),
+  producerCommit: channel('apm:@confluentinc/kafka-javascript:produce:commit'),
+  consumerStart: channel('apm:@confluentinc/kafka-javascript:consume:start'),
+  consumerFinish: channel('apm:@confluentinc/kafka-javascript:consume:finish'),
+  consumerError: channel('apm:@confluentinc/kafka-javascript:consume:error'),
+  consumerCommit: channel('apm:@confluentinc/kafka-javascript:consume:commit')
 }
 
 // Customize the instrumentation for Confluent Kafka JavaScript
