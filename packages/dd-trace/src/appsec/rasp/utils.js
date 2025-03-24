@@ -47,20 +47,21 @@ function handleResult (actions, req, res, abortController, config, raspRule) {
     )
   }
 
-  if (!abortController || abortOnUncaughtException) return
+  if (abortController && !abortOnUncaughtException) {
+    const blockingAction = getBlockingAction(actions)
 
-  const blockingAction = getBlockingAction(actions)
-  if (blockingAction) {
-    // Should block only in express
-    if (rootSpan?.context()._name === 'express.request') {
-      const abortError = new DatadogRaspAbortError(req, res, blockingAction, raspRule)
-      abortController.abort(abortError)
+    if (blockingAction) {
+      // Should block only in express
+      if (rootSpan?.context()._name === 'express.request') {
+        const abortError = new DatadogRaspAbortError(req, res, blockingAction, raspRule)
+        abortController.abort(abortError)
 
-      // TODO Delete this when support for node 16 is removed
-      if (!abortController.signal.reason) {
-        abortController.signal.reason = abortError
+        // TODO Delete this when support for node 16 is removed
+        if (!abortController.signal.reason) {
+          abortController.signal.reason = abortError
+        }
+        return
       }
-      return
     }
   }
 
