@@ -213,8 +213,8 @@ jobs:
             range_clean: gte.11.0.0.and.lt.12.3.5
           - range: '11.1.4'
             range_clean: 11.1.4
-          - range: '>12.3.5 <13'
-            range_clean: gt.12.3.5.and.lt.13
+          - range: '>=12.3.5 <13'
+            range_clean: gte.12.3.5.and.lt.13
           - range: '>=13.0.0 <14'
             range_clean: gte.13.0.0.and.lt.14
           - range: '13.2.0'
