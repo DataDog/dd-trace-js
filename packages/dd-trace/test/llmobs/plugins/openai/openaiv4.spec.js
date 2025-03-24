@@ -125,7 +125,7 @@ describe('integrations', () => {
             modelName: 'text-davinci-002',
             modelProvider: 'openai',
             metadata: {},
-            tags: { ml_app: 'test', language: 'javascript' }
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
           })
 
           expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -181,7 +181,7 @@ describe('integrations', () => {
             modelName: 'gpt-3.5-turbo-0301',
             modelProvider: 'openai',
             metadata: {},
-            tags: { ml_app: 'test', language: 'javascript' }
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
           })
 
           expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -231,7 +231,7 @@ describe('integrations', () => {
             modelName: 'text-embedding-ada-002-v2',
             modelProvider: 'openai',
             metadata: { encoding_format: 'float' },
-            tags: { ml_app: 'test', language: 'javascript' }
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
           })
 
           expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -306,7 +306,7 @@ describe('integrations', () => {
                 ]
               }],
               metadata: { tool_choice: 'auto' },
-              tags: { ml_app: 'test', language: 'javascript' },
+              tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
               tokenMetrics: { input_tokens: 37, output_tokens: 10, total_tokens: 47 }
             })
 
@@ -355,7 +355,7 @@ describe('integrations', () => {
               modelName: 'text-davinci-002',
               modelProvider: 'openai',
               metadata: { temperature: 0.5, stream: true },
-              tags: { ml_app: 'test', language: 'javascript' }
+              tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
             })
 
             expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -406,7 +406,7 @@ describe('integrations', () => {
               modelName: 'gpt-3.5-turbo-0301',
               modelProvider: 'openai',
               metadata: { stream: true },
-              tags: { ml_app: 'test', language: 'javascript' }
+              tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
             })
 
             expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -463,7 +463,7 @@ describe('integrations', () => {
                   ]
                 }],
                 metadata: { tool_choice: 'auto', stream: true },
-                tags: { ml_app: 'test', language: 'javascript' },
+                tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
                 tokenMetrics: { input_tokens: 9, output_tokens: 5, total_tokens: 14 }
               })
 
@@ -507,7 +507,7 @@ describe('integrations', () => {
             modelName: 'gpt-3.5-turbo',
             modelProvider: 'openai',
             metadata: { max_tokens: 50 },
-            tags: { ml_app: 'test', language: 'javascript' },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
             error,
             errorType: error.type || error.name,
             errorMessage: error.message,
@@ -549,7 +549,7 @@ describe('integrations', () => {
             modelName: 'gpt-3.5-turbo',
             modelProvider: 'openai',
             metadata: { max_tokens: 50 },
-            tags: { ml_app: 'test', language: 'javascript' },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
             error,
             errorType: error.type || error.name,
             errorMessage: error.message,
