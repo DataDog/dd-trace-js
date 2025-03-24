@@ -47,7 +47,7 @@ function getGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, getOrig
 function getRewriter (telemetryVerbosity) {
   if (!rewriter) {
     try {
-      const iastRewriter = require('@datadog/native-iast-rewriter')
+      const iastRewriter = require('@datadog/wasm-js-rewriter')
       const Rewriter = iastRewriter.Rewriter
       getPrepareStackTrace = iastRewriter.getPrepareStackTrace
       kSymbolPrepareStackTrace = iastRewriter.kSymbolPrepareStackTrace
