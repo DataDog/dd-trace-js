@@ -48,7 +48,8 @@ const {
   DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
   DD_CAPABILITIES_AUTO_TEST_RETRIES,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
-  TEST_HAS_FAILED_ALL_RETRIES
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -2963,7 +2964,14 @@ describe('jest CommonJS', () => {
         })
       })
 
-      const getTestAssertions = (isAttemptToFix, isParallel) =>
+      const getTestAssertions = ({
+        isAttemptToFix,
+        isParallel,
+        isQuarantined,
+        isDisabled,
+        shouldAlwaysPass,
+        shouldFailSometimes
+      }) =>
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -2999,25 +3007,64 @@ describe('jest CommonJS', () => {
 
             for (let i = 0; i < retriedTests.length; i++) {
               const test = retriedTests[i]
-              if (isAttemptToFix && i !== 0) {
-                assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
-                assert.propertyVal(test.meta, TEST_IS_RETRY, 'true')
-                assert.propertyVal(test.meta, TEST_RETRY_REASON, 'attempt_to_fix')
-              } else {
+              if (!isAttemptToFix) {
                 assert.notProperty(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX)
                 assert.notProperty(test.meta, TEST_IS_RETRY)
                 assert.notProperty(test.meta, TEST_RETRY_REASON)
+                continue
               }
 
-              if (isAttemptToFix && i === retriedTests.length - 1) {
-                assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
+              if (isQuarantined) {
+                assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+              }
+
+              if (isDisabled) {
+                assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
+              }
+
+              const isFirstAttempt = i === 0
+              const isLastAttempt = i === retriedTests.length - 1
+              assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
+
+              if (isFirstAttempt) {
+                assert.notProperty(test.meta, TEST_IS_RETRY)
+                assert.notProperty(test.meta, TEST_RETRY_REASON)
+              } else {
+                assert.propertyVal(test.meta, TEST_IS_RETRY, 'true')
+                assert.propertyVal(test.meta, TEST_RETRY_REASON, 'attempt_to_fix')
+              }
+
+              if (isLastAttempt) {
+                if (shouldAlwaysPass) {
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+                } else if (shouldFailSometimes) {
+                  assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
+                  assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                } else {
+                  assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
+                }
               }
             }
           })
 
-      const runAttemptToFixTest = (done, isAttemptToFix, isQuarantined, extraEnvVars = {}, isParallel = false) => {
+      const runAttemptToFixTest = (done, {
+        isAttemptToFix,
+        isQuarantined,
+        isDisabled,
+        shouldAlwaysPass,
+        shouldFailSometimes,
+        extraEnvVars = {},
+        isParallel = false
+      } = {}) => {
         let stdout = ''
-        const testAssertionsPromise = getTestAssertions(isAttemptToFix, isParallel)
+        const testAssertionsPromise = getTestAssertions({
+          isAttemptToFix,
+          isParallel,
+          isQuarantined,
+          isDisabled,
+          shouldAlwaysPass,
+          shouldFailSometimes
+        })
 
         childProcess = exec(
           runTestsWithCoverageCommand,
@@ -3027,21 +3074,26 @@ describe('jest CommonJS', () => {
               ...getCiVisAgentlessConfig(receiver.port),
               TESTS_TO_RUN: 'test-management/test-attempt-to-fix-1',
               SHOULD_CHECK_RESULTS: '1',
+              ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
+              ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {}),
               ...extraEnvVars
             },
             stdio: 'inherit'
           }
         )
 
-        // jest uses stderr to output logs
         childProcess.stderr.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        childProcess.stdout.on('data', (chunk) => {
           stdout += chunk.toString()
         })
 
         childProcess.on('exit', exitCode => {
           testAssertionsPromise.then(() => {
             assert.include(stdout, 'I am running when attempt to fix')
-            if (isAttemptToFix && isQuarantined) {
+            if (isQuarantined || shouldAlwaysPass || isDisabled) {
               // even though a test fails, the exit code is 0 because the test is quarantined
               assert.equal(exitCode, 0)
             } else {
@@ -3052,22 +3104,34 @@ describe('jest CommonJS', () => {
         })
       }
 
-      it('can attempt to fix tests', (done) => {
+      it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
-        runAttemptToFixTest(done, true, false)
+        runAttemptToFixTest(done, { isAttemptToFix: true })
+      })
+
+      it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+        runAttemptToFixTest(done, { isAttemptToFix: true, shouldAlwaysPass: true })
+      })
+
+      it('can attempt to fix and not mark last attempt if attempts both pass and fail', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+        runAttemptToFixTest(done, { isAttemptToFix: true, shouldFailSometimes: true })
       })
 
       it('does not attempt to fix tests if test management is not enabled', (done) => {
         receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
 
-        runAttemptToFixTest(done, false, false)
+        runAttemptToFixTest(done)
       })
 
       it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
-        runAttemptToFixTest(done, false, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+        runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
       })
 
       it('does not fail retry if a test is quarantined', (done) => {
@@ -3089,7 +3153,29 @@ describe('jest CommonJS', () => {
           }
         })
 
-        runAttemptToFixTest(done, true, true)
+        runAttemptToFixTest(done, { isAttemptToFix: true, isQuarantined: true })
+      })
+
+      it('does not fail retry if a test is disabled', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-attempt-to-fix-1.js': {
+                tests: {
+                  'attempt to fix tests can attempt to fix a test': {
+                    properties: {
+                      attempt_to_fix: true,
+                      disabled: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        })
+
+        runAttemptToFixTest(done, { isAttemptToFix: true, isDisabled: true })
       })
 
       it('can attempt to fix in parallel mode', (done) => {
@@ -3097,14 +3183,15 @@ describe('jest CommonJS', () => {
 
         runAttemptToFixTest(
           done,
-          true,
-          false,
           {
-            // we need to run more than 1 suite for parallel mode to kick in
-            TESTS_TO_RUN: 'test-management/test-attempt-to-fix',
-            RUN_IN_PARALLEL: true
-          },
-          true
+            isAttemptToFix: true,
+            isParallel: true,
+            extraEnvVars: {
+              // we need to run more than 1 suite for parallel mode to kick in
+              TESTS_TO_RUN: 'test-management/test-attempt-to-fix',
+              RUN_IN_PARALLEL: true
+            }
+          }
         )
       })
     })

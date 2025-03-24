@@ -343,7 +343,6 @@ class JestPlugin extends CiPlugin {
     this.addSub('ci:jest:test:finish', ({
       status,
       testStartLine,
-      isQuarantined,
       attemptToFixPassed,
       failedAllTests
     }) => {
@@ -351,9 +350,6 @@ class JestPlugin extends CiPlugin {
       span.setTag(TEST_STATUS, status)
       if (testStartLine) {
         span.setTag(TEST_SOURCE_START, testStartLine)
-      }
-      if (isQuarantined) {
-        span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
       }
       if (attemptToFixPassed) {
         span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
@@ -423,8 +419,11 @@ class JestPlugin extends CiPlugin {
       testSourceFile,
       isNew,
       isEfdRetry,
+      isAttemptToFix,
       isAttemptToFixRetry,
-      isJestRetry
+      isJestRetry,
+      isDisabled,
+      isQuarantined
     } = test
 
     const extraTags = {
@@ -442,10 +441,21 @@ class JestPlugin extends CiPlugin {
       extraTags[JEST_DISPLAY_NAME] = displayName
     }
 
-    if (isAttemptToFixRetry) {
+    if (isAttemptToFix) {
       extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
+    }
+
+    if (isAttemptToFixRetry) {
       extraTags[TEST_IS_RETRY] = 'true'
       extraTags[TEST_RETRY_REASON] = 'attempt_to_fix'
+    }
+
+    if (isDisabled) {
+      extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
+    }
+
+    if (isQuarantined) {
+      extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
     }
 
     if (isNew) {

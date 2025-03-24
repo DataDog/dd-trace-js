@@ -15,7 +15,7 @@ describe('attempt to fix tests', () => {
         expect(1 + 2).to.equal(4)
       }
     } else {
-      expect(1 + 2).to.equal(5)
+      expect(1 + 2).to.equal(4)
     }
   })
 })
