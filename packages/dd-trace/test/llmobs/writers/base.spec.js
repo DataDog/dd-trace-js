@@ -19,7 +19,10 @@ describe('BaseLLMObsWriter', () => {
     }
     BaseLLMObsWriter = proxyquire('../../../src/llmobs/writers/base', {
       '../../exporters/common/request': request,
-      '../../log': logger
+      '../../log': logger,
+      './util': proxyquire('../../../src/llmobs/writers/util', {
+        '../../log': logger
+      })
     })
 
     clock = sinon.useFakeTimers()
@@ -187,7 +190,7 @@ describe('BaseLLMObsWriter', () => {
     const error = new Error('boom')
     let reqUrl
     request.callsFake((url, options, callback) => {
-      reqUrl = options.url
+      reqUrl = options.url.href
       callback(error)
     })
 

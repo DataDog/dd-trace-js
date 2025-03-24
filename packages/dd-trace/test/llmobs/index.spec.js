@@ -161,18 +161,53 @@ describe('module', () => {
     })
 
     describe('when an agent is running', () => {
-      beforeEach(() => {
-        sinon.stub(AgentInfoExporter.prototype, 'getAgentInfo')
-        AgentInfoExporter.prototype.getAgentInfo.callsFake((cb) => {
-          cb(null)
+      describe('when the agent does not have the correct proxy endpoint', () => {
+        beforeEach(() => {
+          sinon.stub(AgentInfoExporter.prototype, 'getAgentInfo')
+          AgentInfoExporter.prototype.getAgentInfo.callsFake((cb) => {
+            cb(null, {})
+          })
+        })
+
+        describe('when no API key is provided', () => {
+          let originalApiKey
+
+          beforeEach(() => {
+            originalApiKey = config.apiKey
+            config.apiKey = undefined
+          })
+
+          afterEach(() => {
+            config.apiKey = originalApiKey
+          })
+
+          it('throws an error', () => {
+            expect(() => llmobsModule.enable(config)).to.throw()
+          })
+        })
+
+        it('configures the agentless writers', () => {
+          llmobsModule.enable(config)
+
+          expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(true)
+          expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(true)
         })
       })
 
-      it('configures the agent-proxy writers', () => {
-        llmobsModule.enable(config)
+      describe('when the agent has the correct proxy endpoint', () => {
+        beforeEach(() => {
+          sinon.stub(AgentInfoExporter.prototype, 'getAgentInfo')
+          AgentInfoExporter.prototype.getAgentInfo.callsFake((cb) => {
+            cb(null, { endpoints: ['/evp_proxy/v2'] })
+          })
+        })
 
-        expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(false)
-        expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(false)
+        it('configures the agent-proxy writers', () => {
+          llmobsModule.enable(config)
+
+          expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(false)
+          expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(false)
+        })
       })
     })
 

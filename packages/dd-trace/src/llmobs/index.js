@@ -14,7 +14,7 @@ const injectCh = channel('dd-trace:span:inject')
 
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
 const LLMObsSpanWriter = require('./writers/spans')
-const { getAgentInfo } = require('./util')
+const { configureWriters } = require('./writers/util')
 
 /**
  * Setting writers and processor globally when LLMObs is enabled
@@ -33,7 +33,7 @@ function enable (config) {
   // span writer append is handled by the span processor
   evalWriter = new LLMObsEvalMetricsWriter(config)
   spanWriter = new LLMObsSpanWriter(config)
-  configureWriters(config)
+  configureWriters(config, [evalWriter, spanWriter])
 
   evalMetricAppendCh.subscribe(handleEvalMetricAppend)
   flushCh.subscribe(handleFlush)
@@ -59,40 +59,6 @@ function disable () {
 
   spanWriter = null
   evalWriter = null
-}
-
-function configureWriters (config) {
-  const { llmobs: { agentlessEnabled }, apiKey } = config
-
-  // check if agentless is explicitly defined
-  if (agentlessEnabled === false) {
-    evalWriter.setAgentless(false)
-    spanWriter.setAgentless(false)
-  } else if (agentlessEnabled === true && !apiKey) {
-    throw new Error(
-      'DD_API_KEY is required for sending LLMObs data when agentless mode is enabled. ' +
-      'Ensure this configuration is set before running your application.'
-    )
-  } else if (agentlessEnabled === true) {
-    evalWriter.setAgentless(true)
-    spanWriter.setAgentless(true)
-  } else {
-    // queue up a callback to configure the writers to agentless or agent-proxy
-    getAgentInfo(config, err => {
-      if (err && !apiKey) {
-        throw new Error(
-          'Cannot send LLM Observability data without a running agent and without a Datadog API key.\n' +
-          'Please set DD_API_KEY and set DD_LLMOBS_AGENTLESS_ENABLED to true.'
-        )
-      } else if (err) {
-        evalWriter?.setAgentless(true)
-        spanWriter?.setAgentless(true)
-      } else {
-        evalWriter?.setAgentless(false)
-        spanWriter?.setAgentless(false)
-      }
-    })
-  }
 }
 
 // since LLMObs traces can extend between services and be the same trace,

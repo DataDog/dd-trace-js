@@ -12,6 +12,7 @@ const {
   EVP_SUBDOMAIN_HEADER_NAME,
   EVP_PROXY_AGENT_BASE_PATH
 } = require('../constants/writers')
+const { parseResponseAndLog } = require('./util')
 
 class BaseLLMObsWriter {
   constructor ({ interval, timeout, eventType, config, endpoint, intake }) {
@@ -73,17 +74,7 @@ class BaseLLMObsWriter {
     const options = this._getOptions()
 
     request(payload, options, (err, resp, code) => {
-      if (err) {
-        logger.error(
-          'Error sending %d LLMObs %s events to %s: %s', events.length, this._eventType, options.url, err.message, err
-        )
-      } else if (code >= 300) {
-        logger.error(
-          'Error sending %d LLMObs %s events to %s: %s', events.length, this._eventType, options.url, code
-        )
-      } else {
-        logger.debug(`Sent ${events.length} LLMObs ${this._eventType} events to ${options.url}`)
-      }
+      parseResponseAndLog(err, code, events.length, options.url.href, this._eventType)
 
       _cb(err, resp, code)
     })
