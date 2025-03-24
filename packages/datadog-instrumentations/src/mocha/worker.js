@@ -36,7 +36,8 @@ addHook({
     }
     if (this.options._ddIsTestManagementTestsEnabled) {
       config.isTestManagementTestsEnabled = true
-      config.testManagementAttemptToFixRetries = this.options._ddTestManagementAttemptToFixRetries
+      // TODO: attempt to fix does not work in parallel mode yet
+      // config.testManagementAttemptToFixRetries = this.options._ddTestManagementAttemptToFixRetries
       config.testManagementTests = this.options._ddTestManagementTests
       delete this.options._ddIsTestManagementTestsEnabled
       delete this.options._ddTestManagementTests
@@ -65,7 +66,7 @@ addHook({
     })
     this.on('test', getOnTestHandler(false))
 
-    this.on('test end', getOnTestEndHandler())
+    this.on('test end', getOnTestEndHandler(config))
 
     // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
     this.on('hook end', getOnHookEndHandler())

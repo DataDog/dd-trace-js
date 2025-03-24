@@ -206,7 +206,8 @@ class MochaPlugin extends CiPlugin {
       hasBeenRetried,
       isLastRetry,
       hasFailedAllRetries,
-      attemptToFixPassed
+      attemptToFixPassed,
+      isAttemptToFixRetry
     }) => {
       const store = storage('legacy').getStore()
       const span = store?.span
@@ -221,6 +222,10 @@ class MochaPlugin extends CiPlugin {
         }
         if (attemptToFixPassed) {
           span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+        }
+        if (isAttemptToFixRetry) {
+          span.setTag(TEST_IS_RETRY, 'true')
+          span.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
         }
 
         const spanTags = span.context()._tags
@@ -445,8 +450,6 @@ class MochaPlugin extends CiPlugin {
 
     if (isAttemptToFix) {
       extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
-      extraTags[TEST_IS_RETRY] = 'true'
-      extraTags[TEST_RETRY_REASON] = 'attempt_to_fix'
     }
 
     if (isDisabled) {

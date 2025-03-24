@@ -50,7 +50,8 @@ const {
   DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
   DD_CAPABILITIES_AUTO_TEST_RETRIES,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
-  TEST_HAS_FAILED_ALL_RETRIES
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -2587,7 +2588,13 @@ describe('mocha CommonJS', function () {
         })
       })
 
-      const getTestAssertions = (isAttemptToFix) =>
+      const getTestAssertions = ({
+        isAttemptToFix,
+        shouldAlwaysPass,
+        shouldFailSometimes,
+        isQuarantined,
+        isDisabled
+      }) =>
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -2614,25 +2621,63 @@ describe('mocha CommonJS', function () {
 
             for (let i = 0; i < retriedTests.length; i++) {
               const test = retriedTests[i]
-              if (isAttemptToFix && i !== 0) {
-                assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
-                assert.propertyVal(test.meta, TEST_IS_RETRY, 'true')
-                assert.propertyVal(test.meta, TEST_RETRY_REASON, 'attempt_to_fix')
-              } else {
+              const isFirstAttempt = i === 0
+              const isLastAttempt = i === retriedTests.length - 1
+              if (!isAttemptToFix) {
                 assert.notProperty(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX)
                 assert.notProperty(test.meta, TEST_IS_RETRY)
                 assert.notProperty(test.meta, TEST_RETRY_REASON)
+                continue
               }
 
-              if (isAttemptToFix && i === retriedTests.length - 1) {
-                assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
+              assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
+              if (isFirstAttempt) {
+                assert.notProperty(test.meta, TEST_IS_RETRY)
+                assert.notProperty(test.meta, TEST_RETRY_REASON)
+              } else {
+                assert.propertyVal(test.meta, TEST_IS_RETRY, 'true')
+                assert.propertyVal(test.meta, TEST_RETRY_REASON, 'attempt_to_fix')
+              }
+
+              if (isQuarantined) {
+                assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+              }
+
+              if (isDisabled) {
+                assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
+              }
+
+              if (isLastAttempt) {
+                if (shouldAlwaysPass) {
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+                  assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
+                } else if (shouldFailSometimes) {
+                  assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
+                  assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                } else {
+                  assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
+                  assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                }
               }
             }
           })
 
-      const runAttemptToFixTest = (done, isAttemptToFix, isQuarantined, extraEnvVars = {}) => {
+      const runAttemptToFixTest = (done, {
+        isAttemptToFix,
+        shouldAlwaysPass,
+        shouldFailSometimes,
+        isQuarantined,
+        isDisabled,
+        extraEnvVars = {}
+      } = {}) => {
         let stdout = ''
-        const testAssertionsPromise = getTestAssertions(isAttemptToFix)
+        const testAssertionsPromise = getTestAssertions({
+          isAttemptToFix,
+          shouldAlwaysPass,
+          shouldFailSometimes,
+          isQuarantined,
+          isDisabled
+        })
 
         childProcess = exec(
           runTestsWithCoverageCommand,
@@ -2644,7 +2689,9 @@ describe('mocha CommonJS', function () {
                 './test-management/test-attempt-to-fix-1.js'
               ]),
               SHOULD_CHECK_RESULTS: '1',
-              ...extraEnvVars
+              ...extraEnvVars,
+              ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
+              ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {})
             },
             stdio: 'inherit'
           }
@@ -2657,8 +2704,8 @@ describe('mocha CommonJS', function () {
         childProcess.on('exit', exitCode => {
           testAssertionsPromise.then(() => {
             assert.include(stdout, 'I am running when attempt to fix')
-            if (isAttemptToFix && isQuarantined) {
-              // even though a test fails, the exit code is 0 because the test is quarantined
+            if (shouldAlwaysPass || isQuarantined || isDisabled) {
+              // even though a test fails, the exit code is 0 because the test is quarantined or disabled
               assert.equal(exitCode, 0)
             } else {
               assert.equal(exitCode, 1)
@@ -2668,22 +2715,34 @@ describe('mocha CommonJS', function () {
         })
       }
 
-      it('can attempt to fix tests', (done) => {
+      it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
-        runAttemptToFixTest(done, true, false)
+        runAttemptToFixTest(done, { isAttemptToFix: true })
+      })
+
+      it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+        runAttemptToFixTest(done, { isAttemptToFix: true, shouldAlwaysPass: true })
+      })
+
+      it('can attempt to fix and not mark last attempt if attempts both pass and fail', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+        runAttemptToFixTest(done, { isAttemptToFix: true, shouldFailSometimes: true })
       })
 
       it('does not attempt to fix tests if test management is not enabled', (done) => {
         receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
 
-        runAttemptToFixTest(done, false, false)
+        runAttemptToFixTest(done)
       })
 
       it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
-        runAttemptToFixTest(done, false, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+        runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
       })
 
       it('does not fail retry if a test is quarantined', (done) => {
@@ -2705,7 +2764,29 @@ describe('mocha CommonJS', function () {
           }
         })
 
-        runAttemptToFixTest(done, true, true)
+        runAttemptToFixTest(done, { isAttemptToFix: true, isQuarantined: true })
+      })
+
+      it('does not fail retry if a test is disabled', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        receiver.setTestManagementTests({
+          mocha: {
+            suites: {
+              'ci-visibility/test-management/test-attempt-to-fix-1.js': {
+                tests: {
+                  'attempt to fix tests can attempt to fix a test': {
+                    properties: {
+                      attempt_to_fix: true,
+                      disabled: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        })
+
+        runAttemptToFixTest(done, { isAttemptToFix: true, isDisabled: true })
       })
     })
 

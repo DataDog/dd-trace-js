@@ -146,11 +146,11 @@ function getOnEndHandler (isParallel) {
       let numFailedQuarantinedTests = 0
       let numFailedRetriedQuarantinedOrDisabledTests = 0
       for (const test of testsAttemptToFix) {
-        const testName = getTestFullName(test, true, false)
+        const testName = getTestFullName(test)
         const testProperties = getTestProperties(test, config.testManagementTests)
         if (isTestFailed(test) && (testProperties.isQuarantined || testProperties.isDisabled)) {
-          const failedTests = testsStatuses.get(testName).filter(status => status === 'fail')
-          numFailedRetriedQuarantinedOrDisabledTests += failedTests.length
+          const numFailedTests = testsStatuses.get(testName).filter(status => status === 'fail').length
+          numFailedRetriedQuarantinedOrDisabledTests += numFailedTests
         }
       }
       for (const test of testsQuarantined) {
@@ -415,7 +415,7 @@ addHook({
 
     this.on('test', getOnTestHandler(true))
 
-    this.on('test end', getOnTestEndHandler())
+    this.on('test end', getOnTestEndHandler(config))
 
     this.on('retry', getOnTestRetryHandler())
 
@@ -651,7 +651,8 @@ addHook({
     if (config.isTestManagementTestsEnabled) {
       const testSuiteTestManagementTests = config.testManagementTests?.mocha?.suites?.[testPath] || {}
       newWorkerArgs._ddIsTestManagementTestsEnabled = true
-      newWorkerArgs._ddTestManagementAttemptToFixRetries = config.testManagementAttemptToFixRetries
+      // TODO: attempt to fix does not work in parallel mode yet
+      // newWorkerArgs._ddTestManagementAttemptToFixRetries = config.testManagementAttemptToFixRetries
       newWorkerArgs._ddTestManagementTests = {
         mocha: {
           suites: {
@@ -676,19 +677,9 @@ addHook({
       .map(event => event.data)
 
     for (const test of tests) {
-      const testProperties = getTestProperties(test, config.testManagementTests)
-      if (config.isTestManagementTestsEnabled) {
-        // `testsAttemptToFix` is filled in the worker process, so we need to use the test results to fill it here too.
-        // `testsQuarantined` is filled in the worker process, so we need to use the test results to fill it here too.
-        if (testProperties.isAttemptToFix) {
-          testsAttemptToFix.add(test)
-        } else if (testProperties.isQuarantined) {
-          testsQuarantined.add(test)
-        }
-      }
       // `newTests` is filled in the worker process, so we need to use the test results to fill it here too.
-      if (config.isKnownTestsEnabled && isNewTest(test, config.knownTests) && !testProperties.isAttemptToFix) {
-        const testFullName = getTestFullName(test, false, true)
+      if (config.isKnownTestsEnabled && isNewTest(test, config.knownTests)) {
+        const testFullName = getTestFullName(test)
         const tests = newTests[testFullName]
 
         if (!tests) {
@@ -696,6 +687,10 @@ addHook({
         } else {
           tests.push(test)
         }
+      }
+      // `testsQuarantined` is filled in the worker process, so we need to use the test results to fill it here too.
+      if (config.isTestManagementTestsEnabled && getTestProperties(test, config.testManagementTests).isQuarantined) {
+        testsQuarantined.add(test)
       }
     }
     return testFileResult
