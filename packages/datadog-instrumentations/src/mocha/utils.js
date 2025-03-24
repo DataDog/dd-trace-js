@@ -433,6 +433,11 @@ function getRunTestsWrapper (runTests, config) {
             addAttemptToFixStringToTestName,
             ['_ddIsAttemptToFix', isDisabled && '_ddIsDisabled', isQuarantined && '_ddIsQuarantined']
           )
+        } else if (isDisabled) {
+          test._ddIsDisabled = true
+        } else if (isQuarantined) {
+          testsQuarantined.add(test)
+          test._ddIsQuarantined = true
         }
       })
     }
