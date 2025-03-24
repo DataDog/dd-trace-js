@@ -23,7 +23,7 @@ describe('blocking', () => {
     }
 
     telemetry = {
-      updateWafBlockFailureMetric: sinon.stub()
+      updateBlockFailureMetric: sinon.stub()
     }
 
     const blocking = proxyquire('../src/appsec/blocking', {
@@ -71,7 +71,7 @@ describe('blocking', () => {
       expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.block.failed', 1)
       expect(res.setHeader).to.not.have.been.called
       expect(res.constructor.prototype.end).to.not.have.been.called
-      expect(telemetry.updateWafBlockFailureMetric).to.be.calledOnceWithExactly(req)
+      expect(telemetry.updateBlockFailureMetric).to.be.calledOnceWithExactly(req)
     })
 
     it('should send blocking response with html type if present in the headers', () => {
@@ -85,7 +85,7 @@ describe('blocking', () => {
         'Content-Length': 12
       })
       expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('htmlBodyéé')
-      expect(telemetry.updateWafBlockFailureMetric).to.not.have.been.called
+      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
     })
 
     it('should send blocking response with json type if present in the headers in priority', () => {
@@ -99,7 +99,7 @@ describe('blocking', () => {
         'Content-Length': 8
       })
       expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('jsonBody')
-      expect(telemetry.updateWafBlockFailureMetric).to.not.have.been.called
+      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
     })
 
     it('should send blocking response with json type if neither html or json is present in the headers', () => {
@@ -112,7 +112,7 @@ describe('blocking', () => {
         'Content-Length': 8
       })
       expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('jsonBody')
-      expect(telemetry.updateWafBlockFailureMetric).to.not.have.been.called
+      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
     })
 
     it('should send blocking response and call abortController if passed in arguments', () => {
@@ -127,7 +127,7 @@ describe('blocking', () => {
       })
       expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('jsonBody')
       expect(abortController.signal.aborted).to.be.true
-      expect(telemetry.updateWafBlockFailureMetric).to.not.have.been.called
+      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
     })
 
     it('should remove all headers before sending blocking response', () => {
@@ -145,7 +145,7 @@ describe('blocking', () => {
         'Content-Length': 8
       })
       expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('jsonBody')
-      expect(telemetry.updateWafBlockFailureMetric).to.not.have.been.called
+      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
     })
   })
 

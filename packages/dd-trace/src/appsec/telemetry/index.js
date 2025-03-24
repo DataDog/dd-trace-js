@@ -74,14 +74,14 @@ function updateWafRequestsMetricTags (metrics, req) {
   return trackWafMetrics(store, metrics)
 }
 
-function updateWafRateLimitedMetric (req) {
+function updateRateLimitedMetric (req) {
   if (!enabled) return
 
   const store = getStore(req)
   trackWafMetrics(store, { rateLimited: true })
 }
 
-function updateWafBlockFailureMetric (req) {
+function updateBlockFailureMetric (req) {
   if (!enabled) return
 
   const store = getStore(req)
@@ -133,8 +133,8 @@ module.exports = {
   disable,
 
   updateWafRequestsMetricTags,
-  updateWafRateLimitedMetric,
-  updateWafBlockFailureMetric,
+  updateRateLimitedMetric,
+  updateBlockFailureMetric,
   updateRaspRequestsMetricTags,
   incrementWafInitMetric,
   incrementWafUpdatesMetric,

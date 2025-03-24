@@ -29,7 +29,7 @@ describe('GraphQL', () => {
     })
 
     telemetry = {
-      updateWafBlockFailureMetric: sinon.stub()
+      updateBlockFailureMetric: sinon.stub()
     }
 
     graphql = proxyquire('../../src/appsec/graphql', {
@@ -238,7 +238,7 @@ describe('GraphQL', () => {
       expect(blocking.getBlockingData).to.have.been.calledOnceWithExactly(req, 'graphql', blockParameters)
 
       expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
-      expect(telemetry.updateWafBlockFailureMetric).to.not.have.been.called
+      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
     })
 
     it('Should catch error when block fails', () => {
@@ -268,7 +268,7 @@ describe('GraphQL', () => {
       expect(blocking.getBlockingData).to.have.been.calledOnceWithExactly(req, 'graphql', blockParameters)
 
       expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.block.failed', 1)
-      expect(telemetry.updateWafBlockFailureMetric).to.be.calledOnceWithExactly(req)
+      expect(telemetry.updateBlockFailureMetric).to.be.calledOnceWithExactly(req)
     })
   })
 })
