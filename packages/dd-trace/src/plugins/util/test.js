@@ -31,6 +31,7 @@ const { version: ddTraceVersion } = require('../../../../../package.json')
 
 // session tags
 const TEST_SESSION_NAME = 'test_session.name'
+const TEST_SESSION_SUMMARY = 'test_session.summary'
 
 const TEST_FRAMEWORK = 'test.framework'
 const TEST_FRAMEWORK_VERSION = 'test.framework_version'
@@ -127,6 +128,7 @@ const TEST_MANAGEMENT_ENABLED = 'test.test_management.enabled'
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
+  TEST_SESSION_SUMMARY,
   TEST_FRAMEWORK,
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
@@ -214,7 +216,8 @@ module.exports = {
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
-  TEST_MANAGEMENT_ENABLED
+  TEST_MANAGEMENT_ENABLED,
+  getJestTestSessionSummary
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -717,4 +720,69 @@ function getFormattedError (error, repositoryRoot) {
   newError.name = error.name
 
   return newError
+}
+
+function getJestTestSessionSummary (executionStats) {
+  const {
+    numFailedTestSuites,
+    numFailedTests,
+    numTotalTests,
+    numTotalTestSuites,
+    numPendingTestSuites,
+    numPendingTests,
+    numTodoTests,
+    numPassedTestSuites,
+    numPassedTests,
+    snapshot: {
+      failed,
+      passed,
+      total
+    }
+  } = executionStats
+
+  const testSuiteStats = []
+  if (numFailedTestSuites > 0) {
+    testSuiteStats.push(`${numFailedTestSuites} failed`)
+  }
+  if (numPendingTestSuites > 0) {
+    testSuiteStats.push(`${numPendingTestSuites} pending`)
+  }
+  testSuiteStats.push(`${numPassedTestSuites} passed`)
+  testSuiteStats.push(`${numTotalTestSuites} total`)
+
+  const testStats = []
+  if (numFailedTests > 0) {
+    testStats.push(`${numFailedTests} failed`)
+  }
+  if (numPendingTests > 0) {
+    testStats.push(`${numPendingTests} skipped`)
+  }
+  if (numTodoTests > 0) {
+    testStats.push(`${numTodoTests} todo`)
+  }
+  testStats.push(`${numPassedTests} passed`)
+  testStats.push(`${numTotalTests} total`)
+
+  const snapshotStats = []
+  if (failed > 0) {
+    snapshotStats.push(`${failed} failed`)
+  }
+  if (passed > 0) {
+    snapshotStats.push(`${passed} passed`)
+  }
+  snapshotStats.push(`${total} total`)
+
+  const maxLabelLength = Math.max(
+    'Test suites'.length,
+    'Tests'.length,
+    'Snapshots'.length
+  )
+
+  const summaryLines = [
+    `${'Test suites'.padEnd(maxLabelLength)}: ${testSuiteStats.join(', ')}`,
+    `${'Tests'.padEnd(maxLabelLength)}: ${testStats.join(', ')}`,
+    `${'Snapshots'.padEnd(maxLabelLength)}: ${snapshotStats.join(', ')}`
+  ]
+
+  return summaryLines.join('\n')
 }

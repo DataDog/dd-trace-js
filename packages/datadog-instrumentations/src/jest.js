@@ -632,7 +632,18 @@ function cliWrapper (cli, jestVersion) {
         numFailedTestSuites,
         numFailedTests,
         numTotalTests,
-        numTotalTestSuites
+        numTotalTestSuites,
+        numPendingTestSuites,
+        numPendingTests,
+        numTodoTests,
+        numPassedTestSuites,
+        numPassedTests,
+        testResults,
+        snapshot: {
+          unmatched: failedSnapshots,
+          matched: passedSnapshots,
+          total: totalSnapshots
+        }
       }
     } = result
 
@@ -646,7 +657,8 @@ function cliWrapper (cli, jestVersion) {
         // ignore errors
       }
     }
-    let status, error
+
+    let status
 
     if (success) {
       if (numTotalTests === 0 && numTotalTestSuites === 0) {
@@ -656,7 +668,6 @@ function cliWrapper (cli, jestVersion) {
       }
     } else {
       status = 'fail'
-      error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
     }
     let timeoutId
 
@@ -674,6 +685,24 @@ function cliWrapper (cli, jestVersion) {
       }, FLUSH_TIMEOUT).unref()
     })
 
+    const executionStats = {
+      numFailedTestSuites,
+      numFailedTests,
+      numTotalTests,
+      numTotalTestSuites,
+      numPendingTestSuites,
+      numPendingTests,
+      numTodoTests,
+      numPassedTestSuites,
+      numPassedTests,
+      snapshot: {
+        failed: failedSnapshots,
+        passed: passedSnapshots,
+        total: totalSnapshots
+      },
+      testResults
+    }
+
     sessionAsyncResource.runInAsyncScope(() => {
       testSessionFinishCh.publish({
         status,
@@ -684,10 +713,10 @@ function cliWrapper (cli, jestVersion) {
         numSkippedSuites,
         hasUnskippableSuites,
         hasForcedToRunSuites,
-        error,
         isEarlyFlakeDetectionEnabled,
         isEarlyFlakeDetectionFaulty,
         isTestManagementTestsEnabled,
+        executionStats,
         onDone
       })
     })
