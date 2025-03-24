@@ -40,9 +40,11 @@ describe('Plugin', function () {
         return agent.load('langchain')
       })
 
-      afterEach(() => {
+      afterEach(async () => {
+        console.log('afterEach agent.close')
         // wiping in order to read new env vars for the config each time
-        return agent.close({ ritmReset: false, wipe: true })
+        await agent.close({ ritmReset: false, wipe: true })
+        console.log('afterEach agent.close done')
       })
 
       beforeEach(() => {
@@ -63,7 +65,9 @@ describe('Plugin', function () {
       })
 
       afterEach(() => {
+        console.log('afterEach nock.cleanAll')
         nock.cleanAll()
+        console.log('afterEach nock.cleanAll done')
       })
 
       describe('with global configurations', () => {
