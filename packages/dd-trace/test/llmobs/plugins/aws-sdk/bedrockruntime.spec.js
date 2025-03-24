@@ -109,7 +109,7 @@ describe('Plugin', () => {
                   temperature: modelConfig.temperature,
                   max_tokens: modelConfig.maxTokens
                 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'bedrock' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)

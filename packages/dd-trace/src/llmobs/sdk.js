@@ -430,6 +430,7 @@ class LLMObs extends NoopLLMObs {
       modelProvider,
       sessionId,
       mlApp,
+      _decorator,
       ...spanOptions
     } = options
 
@@ -438,6 +439,7 @@ class LLMObs extends NoopLLMObs {
       modelName,
       modelProvider,
       sessionId,
+      _decorator,
       spanOptions
     }
   }
