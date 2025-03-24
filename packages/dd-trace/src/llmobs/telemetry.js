@@ -85,7 +85,7 @@ function recordLLMObsSpanSize (event, eventSize, shouldTruncate) {
   llmobsMetrics.distribution('span.size', tags).track(eventSize)
 }
 
-function recordLLMObsAnnotate(span, err, value = 1) {
+function recordLLMObsAnnotate (span, err, value = 1) {
   const mlObsTags = LLMObsTagger.tagMap.get(span)
   const spanKind = mlObsTags[SPAN_KIND] || 'N/A'
   const isRootSpan = mlObsTags[PARENT_ID_KEY] === ROOT_PARENT_ID
@@ -100,7 +100,7 @@ function recordLLMObsAnnotate(span, err, value = 1) {
 }
 
 function recordUserFlush (err, value = 1) {
-  tags = { error: Number(!err) }
+  const tags = { error: Number(!err) }
   if (err) tags.error_type = err
   llmobsMetrics.count('user_flushes', tags).inc(value)
 }
@@ -120,16 +120,15 @@ function recordExportSpan (span, err, value = 1) {
 }
 
 function recordSubmitEvaluation (options, err, value = 1) {
-  tags = {
+  const tags = {
     error: Number(!err),
     custom_joining_key: 0
   }
   const metricType = options?.metricType?.toLowerCase()
-  if (metricType != 'categorical' && metricType != 'score') tags.metric_type = 'other'
+  if (metricType !== 'categorical' && metricType !== 'score') tags.metric_type = 'other'
   if (err) tags.error_type = err
   llmobsMetrics.count('evals_submitted', tags).inc(value)
 }
-
 
 module.exports = {
   incrementLLMObsSpanStartCount,

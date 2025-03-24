@@ -86,26 +86,26 @@ class LLMObsTagger {
   // TODO: similarly for the following `tag` methods,
   // how can we transition from a span weakmap to core API functionality
   tagLLMIO (span, inputData, outputData) {
-    errIn = this._tagMessages(span, inputData, INPUT_MESSAGES)
-    errOut = this._tagMessages(span, outputData, OUTPUT_MESSAGES)
+    const errIn = this._tagMessages(span, inputData, INPUT_MESSAGES)
+    const errOut = this._tagMessages(span, outputData, OUTPUT_MESSAGES)
     return errIn || errOut
   }
 
   tagEmbeddingIO (span, inputData, outputData) {
-    errIn = this._tagDocuments(span, inputData, INPUT_DOCUMENTS)
-    errOut = this._tagText(span, outputData, OUTPUT_VALUE)
+    const errIn = this._tagDocuments(span, inputData, INPUT_DOCUMENTS)
+    const errOut = this._tagText(span, outputData, OUTPUT_VALUE)
     return errIn || errOut
   }
 
   tagRetrievalIO (span, inputData, outputData) {
-    errIn = this._tagText(span, inputData, INPUT_VALUE)
-    errOut = this._tagDocuments(span, outputData, OUTPUT_DOCUMENTS)
+    const errIn = this._tagText(span, inputData, INPUT_VALUE)
+    const errOut = this._tagDocuments(span, outputData, OUTPUT_DOCUMENTS)
     return errIn || errOut
   }
 
   tagTextIO (span, inputData, outputData) {
-    errIn = this._tagText(span, inputData, INPUT_VALUE)
-    errOut = this._tagText(span, outputData, OUTPUT_VALUE)
+    const errIn = this._tagText(span, inputData, INPUT_VALUE)
+    const errOut = this._tagText(span, outputData, OUTPUT_VALUE)
     return errIn || errOut
   }
 
