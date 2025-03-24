@@ -1135,5 +1135,73 @@ versions.forEach((version) => {
         })
       })
     })
+
+    if (version === 'latest') {
+      context('active test span', () => {
+        it('can grab the test span and add tags', (done) => {
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+
+              const test = events.find(event => event.type === 'test').content
+
+              assert.equal(test.meta['test.custom_tag'], 'this is custom')
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js active-test-span-tags-test.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-active-test-span'
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', () => {
+            receiverPromise.then(() => done()).catch(done)
+          })
+        })
+
+        it('can grab the test span and add spans', (done) => {
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+
+              const test = events.find(event => event.type === 'test').content
+              const spans = events.filter(event => event.type === 'span').map(event => event.content)
+
+              const customSpan = spans.find(span => span.name === 'my custom span')
+
+              assert.exists(customSpan)
+              assert.equal(customSpan.meta['test.really_custom_tag'], 'this is really custom')
+
+              // custom span is children of active test span
+              assert.equal(customSpan.trace_id.toString(), test.trace_id.toString())
+              assert.equal(customSpan.parent_id.toString(), test.span_id.toString())
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js active-test-span-custom-span-test.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-active-test-span'
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', () => {
+            receiverPromise.then(() => done()).catch(done)
+          })
+        })
+      })
+    }
   })
 })
