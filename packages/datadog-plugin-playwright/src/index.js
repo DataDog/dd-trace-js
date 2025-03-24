@@ -183,9 +183,19 @@ class PlaywrightPlugin extends CiPlugin {
             trace_id: id(span.trace_id),
             parent_id: id(span.parent_id)
           }
+          // TODO: remove this comment
+          // Since tests are generated in the worker but not test suites, the test module and the test session,
+          // We need to re-serialize the test span to include the necessary tags:
+          // - test_session_id
+          // - test_module_id
+          // - test_command
+          // - test_module
+          // - test_suite_id
           if (span.name === 'playwright.test') {
+            // TODO: remove this comment
             // TODO: Let's pass rootDir, repositoryRoot, command, session id and module id as env vars
-            // so we don't need this re-serialization logic
+            // so we don't need this re-serialization logic. This can be passed just once, since they're unique
+            // for a test session. They can be passed the same way `DD_PLAYWRIGHT_WORKER` is passed.
             formattedSpan.meta[TEST_SESSION_ID] = this.testSessionSpan.context().toTraceId()
             formattedSpan.meta[TEST_MODULE_ID] = this.testModuleSpan.context().toSpanId()
             formattedSpan.meta[TEST_COMMAND] = this.command
@@ -195,6 +205,8 @@ class PlaywrightPlugin extends CiPlugin {
             if (testSuite) {
               formattedSpan.meta[TEST_SUITE_ID] = testSuite.context().toSpanId()
             }
+            // test_suite_absolute_path is just a hack because in the worker we don't have rootDir and repositoryRoot
+            // but if we pass those the same way we pass `DD_PLAYWRIGHT_WORKER` this is not necessary
             const testSuitePath = getTestSuitePath(formattedSpan.meta.test_suite_absolute_path, this.rootDir)
             const testSourceFile = getTestSuitePath(formattedSpan.meta.test_suite_absolute_path, this.repositoryRoot)
             // we need to rewrite this because this.rootDir and this.repositoryRoot are not available in the worker
@@ -286,6 +298,9 @@ class PlaywrightPlugin extends CiPlugin {
 
       finishAllTraceSpans(span)
       if (process.env.DD_PLAYWRIGHT_WORKER) {
+        // TODO: remove this comment.
+        // This happens on every test, but it's way faster than a normal flush because it's just
+        // a `process.send` to the main process.
         this.tracer._exporter.flush(onDone)
       }
     })
@@ -307,7 +322,8 @@ class PlaywrightPlugin extends CiPlugin {
       extraTags[TEST_BROWSER_NAME] = browserName
     }
 
-    // this tag will be eliminated later, but we need it for correlation
+    // TODO: remove this comment
+    // if we pass certain parameters as env vars we don't need this anymore.
     extraTags.test_suite_absolute_path = testSuiteAbsolutePath
 
     return super.startTestSpan(testName, testSuite, testSuiteSpan, extraTags)

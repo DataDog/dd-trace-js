@@ -310,6 +310,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
     return
   }
 
+  // this handles tests that do not go through the worker process (because they're skipped)
   if (isMainProcess) {
     const testResult = results[results.length - 1]
     const testAsyncResource = testToAr.get(test)
@@ -648,6 +649,7 @@ addHook({
   return loadUtilsPackage
 })
 
+// main process hook
 addHook({
   name: 'playwright',
   file: 'lib/runner/processHost.js',
@@ -656,12 +658,18 @@ addHook({
   shimmer.wrap(processHostPackage.ProcessHost.prototype, 'startRunner', startRunner => async function () {
     this._extraEnv = {
       ...this._extraEnv,
+      // Used to detect that we're in a playwright worker
       DD_PLAYWRIGHT_WORKER: '1'
     }
 
     const res = await startRunner.apply(this, arguments)
 
+    // We add a new listener to `this.process`, which is represents the worker
     this.process.on('message', (message) => {
+      // These messages are [code, payload]. The payload is test data
+      // TODO: remove this comment
+      // It's not recommended that workers report directly to the intake or the agent,
+      // since they're more likely to be shut down quickly. `process.send` is more reliable.
       if (Array.isArray(message) && message[0] === 90) {
         workerReportCh.publish(message[1])
       }
@@ -707,18 +715,24 @@ addHook({
         testName,
         testSuiteAbsolutePath,
         testSourceLine,
-        browserName,
-        // TODO: unclear that test._ddIsDisabled will reach the worker
-        isDisabled: test._ddIsDisabled
+        browserName
+        // TODO: remove this comment
+        // TODO: modifications to `test` (like adding _ddIsDisabled) happen in the main process
+        // and are _not_ propagated to the worker, so test management breaks.
+        // isDisabled: test._ddIsDisabled
       })
 
       res = _runTest.apply(this, arguments)
-      // we use the fact that _runTest is async
-      // atlernatively we could wrap `this.dispatchEvent` since `testEnd` is sent via `this.dispatchEvent`
+
+      // TODO: remove this comment
+      // we need to grab `testInfo` before awaiting for `res`, otherwise `this._currentTest` will be empty
       testInfo = this._currentTest
     })
     await res
 
+    // TODO: remove this comment
+    // `testInfo` has `steps` because they're not usable, as they have no timing info
+    // This is why we need to manually fill `steps` by intercepting `WorkerMain#dispatchEvent`
     const { status, error, annotations, retry, testId } = testInfo
 
     // testInfo.errors could be better than "error",
@@ -742,14 +756,17 @@ addHook({
         error,
         extraTags: annotationTags,
         isRetry: retry > 0,
-        // probably not going to work
-        isNew: test._ddIsNew,
-        isQuarantined: test._ddIsQuarantined,
-        isEfdRetry: test._ddIsEfdRetry,
+        // TODO: remove this comment
+        // These do not work because `test` modifications are not sent to the worker
+        // isNew: test._ddIsNew,
+        // isQuarantined: test._ddIsQuarantined,
+        // isEfdRetry: test._ddIsEfdRetry,
         onDone
       })
     })
 
+    // TODO: remove this comment
+    // Important, or the worker will exit before the flush is done
     await flushPromise
 
     return res

@@ -6,6 +6,10 @@ const log = require('../packages/dd-trace/src/log')
 const isJestWorker = !!process.env.JEST_WORKER_ID
 const isCucumberWorker = !!process.env.CUCUMBER_WORKER_ID
 const isMochaWorker = !!process.env.MOCHA_WORKER_ID
+
+// TODO: remove this comment
+// we detect that this is running in a playwright working by checking,
+// which we actually add ourselves in one of the main process' hooks
 const isPlaywrightWorker = !!process.env.DD_PLAYWRIGHT_WORKER
 
 const packageManagers = [
@@ -69,6 +73,9 @@ if (isMochaWorker) {
 }
 
 if (isPlaywrightWorker) {
+  // TODO: remove this comment
+  // This will use `packages/dd-trace/src/ci-visibility/exporters/test-worker/index.js`
+  // which is a exporter with a writer that uses `process.send` to send events to the main process
   options.experimental = {
     exporter: 'playwright_worker'
   }
