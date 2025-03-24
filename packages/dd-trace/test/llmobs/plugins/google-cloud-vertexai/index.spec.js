@@ -151,7 +151,7 @@ describe('integrations', () => {
                 max_output_tokens: 50
               },
               tokenMetrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37 },
-              tags: { ml_app: 'test', language: 'javascript' }
+              tags: { ml_app: 'test', language: 'javascript', integration: 'vertexai' }
             })
 
             expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -200,7 +200,7 @@ describe('integrations', () => {
                 max_output_tokens: 50
               },
               tokenMetrics: { input_tokens: 20, output_tokens: 3, total_tokens: 23 },
-              tags: { ml_app: 'test', language: 'javascript' }
+              tags: { ml_app: 'test', language: 'javascript', integration: 'vertexai' }
             })
 
             expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -251,7 +251,7 @@ describe('integrations', () => {
                   max_output_tokens: 50
                 },
                 tokenMetrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'vertexai' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
