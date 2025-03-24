@@ -427,10 +427,12 @@ addHook({
       const isDisabled = disabledTasks.has(task)
       const isQuarantined = quarantinedTasks.has(task)
 
-      if ((isAttemptingToFix && isDisabled) || isQuarantined) {
+      if (isAttemptingToFix && (isDisabled || isQuarantined)) {
         if (task.result.state === 'fail') {
           switchedStatuses.add(task)
         }
+        task.result.state = 'pass'
+      } else if (isQuarantined) {
         task.result.state = 'pass'
       }
     }
