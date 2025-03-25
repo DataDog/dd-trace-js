@@ -58,7 +58,7 @@ describe('RASP metrics', () => {
 
     it('should report rasp error metrics', async () => {
       try {
-        await axios.get('/shi/execFileSync?dir=$(cat /etc/passwd 1>%262 ; echo .)')
+        await axios.get('/shi/execFileSync?dir=.')
       } catch (e) {
         if (!e.response) {
           throw e
@@ -110,7 +110,7 @@ describe('RASP metrics', () => {
     })
 
     it('should report rasp timeout metrics', async () => {
-      await axios.get('/shi/execFileSync?dir=$(cat /etc/passwd 1>%262 ; echo .)')
+      await axios.get('/shi/execFileSync?dir=.')
 
       let appsecTelemetryReceived = false
 
