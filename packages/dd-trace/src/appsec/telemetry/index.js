@@ -74,11 +74,11 @@ function updateWafRequestsMetricTags (metrics, req) {
   return trackWafMetrics(store, metrics)
 }
 
-function updateRateLimitedMetric (req, { rulesVersion, wafVersion }) {
+function updateRateLimitedMetric (req) {
   if (!enabled) return
 
   const store = getStore(req)
-  trackWafMetrics(store, { rateLimited: true, rulesVersion, wafVersion })
+  trackWafMetrics(store, { rateLimited: true })
 }
 
 function updateBlockFailureMetric (req) {

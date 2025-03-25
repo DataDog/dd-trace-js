@@ -136,7 +136,7 @@ function reportTruncationMetrics (rootSpan, metrics) {
   }
 }
 
-function reportAttack (attackData, { rulesVersion, wafVersion }) {
+function reportAttack (attackData) {
   const store = storage('legacy').getStore()
   const req = store?.req
   const rootSpan = web.root(req)
@@ -151,7 +151,7 @@ function reportAttack (attackData, { rulesVersion, wafVersion }) {
   if (limiter.isAllowed()) {
     keepTrace(rootSpan, ASM)
   } else {
-    updateRateLimitedMetric(req, { rulesVersion, wafVersion })
+    updateRateLimitedMetric(req)
   }
 
   // TODO: maybe add this to format.js later (to take decision as late as possible)
