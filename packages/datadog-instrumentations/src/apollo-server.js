@@ -78,5 +78,8 @@ function apolloServerHook (apolloServer) {
 }
 
 addHook({ name: '@apollo/server', file: 'dist/cjs/ApolloServer.js', versions: ['>=4.0.0'] }, apolloServerHook)
+addHook({ name: '@apollo/server', file: 'dist/esm/ApolloServer.js', versions: ['>=4.0.0'] }, apolloServerHook)
 addHook({ name: '@apollo/server', file: 'dist/cjs/express4/index.js', versions: ['>=4.0.0'] }, apolloExpress4Hook)
+addHook({ name: '@apollo/server', file: 'dist/esm/express4/index.js', versions: ['>=4.0.0'] }, apolloExpress4Hook)
 addHook({ name: '@apollo/server', file: 'dist/cjs/utils/HeaderMap.js', versions: ['>=4.0.0'] }, apolloHeaderMapHook)
+addHook({ name: '@apollo/server', file: 'dist/esm/utils/HeaderMap.js', versions: ['>=4.0.0'] }, apolloHeaderMapHook)
