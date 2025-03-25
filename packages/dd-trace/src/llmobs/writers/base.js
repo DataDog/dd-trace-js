@@ -38,12 +38,26 @@ class BaseLLMObsWriter {
     process.once('beforeExit', this._beforeExitHandler)
 
     this._destroyed = false
+  }
 
-    Object.defineProperty(this, '_url', {
-      get () {
-        return this._getUrl()
-      }
-    })
+  get _url () {
+    if (this._agentless) {
+      return new URL(format({
+        protocol: 'https:',
+        hostname: `${this._intake}.${this._config.site}`,
+        pathname: this._endpoint
+      }))
+    } else {
+      const { hostname, port } = this._config
+      const base = this._config.url || new URL(format({
+        protocol: 'http:',
+        hostname,
+        port
+      }))
+
+      const proxyPath = path.join(EVP_PROXY_AGENT_BASE_PATH, this._endpoint)
+      return new URL(proxyPath, base)
+    }
   }
 
   append (event, byteLength) {
@@ -114,26 +128,6 @@ class BaseLLMObsWriter {
     }
 
     return options
-  }
-
-  _getUrl () {
-    if (this._agentless) {
-      return new URL(format({
-        protocol: 'https:',
-        hostname: `${this._intake}.${this._config.site}`,
-        pathname: this._endpoint
-      }))
-    } else {
-      const { hostname, port } = this._config
-      const base = this._config.url || new URL(format({
-        protocol: 'http:',
-        hostname,
-        port
-      }))
-
-      const proxyPath = path.join(EVP_PROXY_AGENT_BASE_PATH, this._endpoint)
-      return new URL(proxyPath, base)
-    }
   }
 
   _encode (payload) {
