@@ -70,7 +70,7 @@ class BaseLLMObsWriter {
     this._buffer.push(event)
   }
 
-  flush (_cb = () => {}) {
+  flush () {
     if (
       this._buffer.length === 0 ||
       this._agentless == null
@@ -89,8 +89,6 @@ class BaseLLMObsWriter {
 
     request(payload, options, (err, resp, code) => {
       parseResponseAndLog(err, code, events.length, options.url.href, this._eventType)
-
-      _cb(err, resp, code)
     })
   }
 
