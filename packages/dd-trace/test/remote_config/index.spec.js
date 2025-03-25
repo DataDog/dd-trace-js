@@ -28,8 +28,7 @@ describe('Remote Config index', () => {
       on: sinon.spy(),
       off: sinon.spy(),
       setProductHandler: sinon.spy(),
-      removeProductHandler: sinon.spy(),
-      getClientId: sinon.stub().returns('1234-5678')
+      removeProductHandler: sinon.spy()
     }
 
     RemoteConfigManager = sinon.stub().returns(rc)
