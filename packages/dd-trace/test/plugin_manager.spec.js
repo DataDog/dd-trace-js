@@ -338,4 +338,70 @@ describe('Plugin Manager', () => {
       expect(Four.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
     })
   })
+
+  describe('_getSharedConfig', () => {
+    it('should extract and combine shared configuration values', () => {
+      const tracerConfig = {
+        logInjection: true,
+        serviceMapping: { 'test-plugin': 'custom-service' },
+        queryStringObfuscation: true,
+        site: 'datadoghq.eu',
+        url: 'https://agent:8126',
+        headerTags: ['bar'],
+        dbmPropagationMode: 'service',
+        dsmEnabled: true,
+        clientIpEnabled: true,
+        clientIpHeader: 'foo',
+        memcachedCommandEnabled: true,
+        ciVisibilityTestSessionName: 'test-session',
+        ciVisAgentlessLogSubmissionEnabled: true,
+        isTestDynamicInstrumentationEnabled: true,
+        isServiceUserProvided: true,
+        middlewareTracingEnabled: true
+      }
+
+      const pluginManager = new PluginManager(tracer)
+      pluginManager.configure(tracerConfig)
+      const config = pluginManager._getSharedConfig('test-plugin')
+
+      expect(config).to.deep.equal({
+        logInjection: true,
+        service: 'custom-service',
+        queryStringObfuscation: true,
+        site: 'datadoghq.eu',
+        url: 'https://agent:8126',
+        headers: ['bar'],
+        dbmPropagationMode: 'service',
+        dsmEnabled: true,
+        memcachedCommandEnabled: true,
+        clientIpHeader: 'foo',
+        ciVisibilityTestSessionName: 'test-session',
+        ciVisAgentlessLogSubmissionEnabled: true,
+        isTestDynamicInstrumentationEnabled: true,
+        isServiceUserProvided: true,
+        clientIpEnabled: true,
+        middleware: true
+      })
+    })
+
+    it('should handle undefined values correctly', () => {
+      const tracerConfig = {
+        logInjection: undefined,
+        serviceMapping: undefined,
+        queryStringObfuscation: undefined,
+        clientIpEnabled: undefined,
+        middlewareTracingEnabled: undefined
+      }
+
+      const pluginManager = new PluginManager(tracer)
+      pluginManager.configure(tracerConfig)
+      const config = pluginManager._getSharedConfig('test-plugin')
+
+      expect(config).to.not.have.property('logInjection')
+      expect(config).to.not.have.property('queryStringObfuscation')
+      expect(config).to.not.have.property('clientIpEnabled')
+      expect(config).to.not.have.property('middleware')
+      expect(config.headers).to.deep.equal([])
+    })
+  })
 })
