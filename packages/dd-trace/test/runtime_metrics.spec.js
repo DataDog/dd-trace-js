@@ -262,6 +262,32 @@ suiteDescribe('runtimeMetrics', () => {
         }
       }))
     })
+
+    it('should collect individual metrics only once every 10 seconds', (done) => {
+      runtimeMetrics.stop()
+      runtimeMetrics.start(config)
+
+      global.gc()
+
+      setImmediate(() => setImmediate(() => { // Wait for GC observer to trigger.
+        clock.tick(60 * 60 * 1000)
+
+        try {
+          // If a metric is leaking, it will leak expontentially because it will
+          // be sent one more time each flush, in addition to the previous
+          // flushes that also had the metric multiple times in them, so after
+          // 1 hour even if a single metric is leaking it would get over
+          // 64980 calls on its own without any other metric. A slightly lower
+          // value is used here to be on the safer side.
+          expect(client.gauge.callCount).to.be.lt(60000)
+          expect(client.increment.callCount).to.be.lt(60000)
+
+          done()
+        } catch (e) {
+          done(e)
+        }
+      }))
+    })
   })
 
   describe('when started', () => {

@@ -270,12 +270,12 @@ function captureNativeMetrics () {
   })
 
   for (let i = 0, l = spaces.length; i < l; i++) {
-    const tags = [`heap_space:${spaces[i].space_name}`]
+    const tag = `heap_space:${spaces[i].space_name}`
 
-    client.gauge('runtime.node.heap.size.by.space', spaces[i].space_size, tags)
-    client.gauge('runtime.node.heap.used_size.by.space', spaces[i].space_used_size, tags)
-    client.gauge('runtime.node.heap.available_size.by.space', spaces[i].space_available_size, tags)
-    client.gauge('runtime.node.heap.physical_size.by.space', spaces[i].physical_space_size, tags)
+    client.gauge('runtime.node.heap.size.by.space', spaces[i].space_size, tag)
+    client.gauge('runtime.node.heap.used_size.by.space', spaces[i].space_used_size, tag)
+    client.gauge('runtime.node.heap.available_size.by.space', spaces[i].space_available_size, tag)
+    client.gauge('runtime.node.heap.physical_size.by.space', spaces[i].physical_space_size, tag)
   }
 }
 
