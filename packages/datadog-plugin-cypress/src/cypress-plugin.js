@@ -37,12 +37,10 @@ const {
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_DISABLED,
-  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
-  DD_CAPABILITIES_AUTO_TEST_RETRIES,
-  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
-  TEST_HAS_FAILED_ALL_RETRIES
+  TEST_HAS_FAILED_ALL_RETRIES,
+  getLibraryCapabilitiesTags
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -482,11 +480,10 @@ class CypressPlugin {
           [TEST_SESSION_NAME]: testSessionName
         }
       }
+      const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id)
       metadataTags.test = {
         ...metadataTags.test,
-        [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: this.isSuitesSkippingEnabled ? 'true' : 'false',
-        [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: this.isEarlyFlakeDetectionEnabled ? 'true' : 'false',
-        [DD_CAPABILITIES_AUTO_TEST_RETRIES]: this.isFlakyTestRetriesEnabled ? 'true' : 'false'
+        ...libraryCapabilitiesTags
       }
 
       this.tracer._tracer._exporter.addMetadataTags(metadataTags)
