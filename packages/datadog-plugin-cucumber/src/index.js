@@ -30,7 +30,10 @@ const {
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
-  TEST_MANAGEMENT_IS_DISABLED
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -328,6 +331,10 @@ class CucumberPlugin extends CiPlugin {
       isNew,
       isEfdRetry,
       isFlakyRetry,
+      isAttemptToFix,
+      isAttemptToFixRetry,
+      hasFailedAllRetries,
+      hasPassedAllRetries,
       isDisabled,
       isQuarantined
     }) => {
@@ -356,6 +363,22 @@ class CucumberPlugin extends CiPlugin {
 
       if (isFlakyRetry > 0) {
         span.setTag(TEST_IS_RETRY, 'true')
+      }
+
+      if (hasFailedAllRetries) {
+        span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+      }
+
+      if (isAttemptToFix) {
+        span.setTag(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
+      }
+
+      if (isAttemptToFixRetry) {
+        span.setTag(TEST_IS_RETRY, 'true')
+        span.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
+        if (hasPassedAllRetries) {
+          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+        }
       }
 
       if (isDisabled) {

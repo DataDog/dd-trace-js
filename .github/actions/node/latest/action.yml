@@ -5,5 +5,4 @@ runs:
   steps:
     - uses: actions/setup-node@v4
       with:
-        cache: yarn
         node-version: 'latest'

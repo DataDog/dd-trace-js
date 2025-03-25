@@ -52,7 +52,10 @@ const {
   DD_CAPABILITIES_AUTO_TEST_RETRIES,
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
-  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX
+  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
@@ -2034,6 +2037,229 @@ versions.forEach(version => {
     })
 
     context('test management', () => {
+      context('attempt to fix', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            cucumber: {
+              suites: {
+                'ci-visibility/features-test-management/attempt-to-fix.feature': {
+                  tests: {
+                    'Say attempt to fix': {
+                      properties: {
+                        attempt_to_fix: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+        })
+
+        const getTestAssertions = ({
+          isAttemptToFix,
+          isQuarantined,
+          isDisabled,
+          shouldAlwaysPass,
+          shouldFailSometimes
+        }) =>
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              if (isAttemptToFix) {
+                assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+              } else {
+                assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+              }
+
+              const retriedTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'Say attempt to fix'
+              )
+
+              if (isAttemptToFix) {
+                // 3 retries + 1 initial run
+                assert.equal(retriedTests.length, 4)
+              } else {
+                assert.equal(retriedTests.length, 1)
+              }
+
+              for (let i = 0; i < retriedTests.length; i++) {
+                const isFirstAttempt = i === 0
+                const isLastAttempt = i === retriedTests.length - 1
+                const test = retriedTests[i]
+
+                assert.equal(
+                  test.resource,
+                  'ci-visibility/features-test-management/attempt-to-fix.feature.Say attempt to fix'
+                )
+
+                if (isDisabled) {
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
+                } else if (isQuarantined) {
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+                } else {
+                  assert.notProperty(test.meta, TEST_MANAGEMENT_IS_DISABLED)
+                  assert.notProperty(test.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+                }
+
+                if (isAttemptToFix) {
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
+                  if (!isFirstAttempt) {
+                    assert.propertyVal(test.meta, TEST_IS_RETRY, 'true')
+                    assert.propertyVal(test.meta, TEST_RETRY_REASON, 'attempt_to_fix')
+                  }
+                  if (isLastAttempt) {
+                    if (shouldFailSometimes) {
+                      assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                      assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
+                    } else if (shouldAlwaysPass) {
+                      assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+                    } else {
+                      assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
+                    }
+                  }
+                } else {
+                  assert.notProperty(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX)
+                  assert.notProperty(test.meta, TEST_IS_RETRY)
+                  assert.notProperty(test.meta, TEST_RETRY_REASON)
+                }
+              }
+            })
+
+        const runTest = (done, {
+          isAttemptToFix,
+          isQuarantined,
+          isDisabled,
+          extraEnvVars,
+          shouldAlwaysPass,
+          shouldFailSometimes
+        } = {}) => {
+          const testAssertions = getTestAssertions({
+            isAttemptToFix,
+            isQuarantined,
+            isDisabled,
+            shouldAlwaysPass,
+            shouldFailSometimes
+          })
+          let stdout = ''
+
+          childProcess = exec(
+            './node_modules/.bin/cucumber-js ci-visibility/features-test-management/attempt-to-fix.feature',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                ...extraEnvVars,
+                ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
+                ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {})
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          childProcess.stdout.on('data', (data) => {
+            stdout += data.toString()
+          })
+
+          childProcess.on('exit', exitCode => {
+            testAssertions.then(() => {
+              assert.include(stdout, 'I am running')
+              if (isQuarantined || isDisabled || shouldAlwaysPass) {
+                assert.equal(exitCode, 0)
+              } else {
+                assert.equal(exitCode, 1)
+              }
+              done()
+            }).catch(done)
+          })
+        }
+
+        it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runTest(done, { isAttemptToFix: true })
+        })
+
+        it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runTest(done, { isAttemptToFix: true, shouldAlwaysPass: true })
+        })
+
+        it('can attempt to fix and not mark last attempt if attempts both pass and fail', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runTest(done, { isAttemptToFix: true, shouldFailSometimes: true })
+        })
+
+        it('does not attempt to fix tests if test management is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
+
+          runTest(done)
+        })
+
+        it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runTest(done, {
+            extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' }
+          })
+        })
+
+        it('does not fail retry if a test is quarantined', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            cucumber: {
+              suites: {
+                'ci-visibility/features-test-management/attempt-to-fix.feature': {
+                  tests: {
+                    'Say attempt to fix': {
+                      properties: {
+                        attempt_to_fix: true,
+                        quarantined: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+
+          runTest(done, {
+            isAttemptToFix: true,
+            isQuarantined: true
+          })
+        })
+
+        it('does not fail retry if a test is disabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            cucumber: {
+              suites: {
+                'ci-visibility/features-test-management/attempt-to-fix.feature': {
+                  tests: {
+                    'Say attempt to fix': {
+                      properties: {
+                        attempt_to_fix: true,
+                        disabled: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+
+          runTest(done, {
+            isAttemptToFix: true,
+            isDisabled: true
+          })
+        })
+      })
+
       context('disabled', () => {
         beforeEach(() => {
           receiver.setTestManagementTests({
