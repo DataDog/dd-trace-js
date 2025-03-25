@@ -17,6 +17,8 @@ const config = {
   site: 'datadoghq.com'
 }
 
+const { expect } = require('chai')
+
 describe('module', () => {
   let llmobsModule
   let store
@@ -120,11 +122,19 @@ describe('module', () => {
         config.apiKey = originalApiKey
       })
 
-      it('throws an error', () => {
-        expect(() => llmobsModule.enable(config)).to.throw(
-          'DD_API_KEY is required for sending LLMObs data when agentless mode is enabled. ' +
-          'Ensure this configuration is set before running your application.'
-        )
+      it('throws an error', async () => {
+        try {
+          await new Promise((resolve) => {
+            llmobsModule.enable(config)
+            resolve()
+          })
+          throw new Error('Expected enable to throw an error')
+        } catch (e) {
+          expect(e.message).to.equal(
+            'Cannot send LLM Observability data without a running agent or without a Datadog API key.\n' +
+            'Ensure this configuration is set before running your application.'
+          )
+        }
       })
     })
 
@@ -198,7 +208,7 @@ describe('module', () => {
         beforeEach(() => {
           sinon.stub(AgentInfoExporter.prototype, 'getAgentInfo')
           AgentInfoExporter.prototype.getAgentInfo.callsFake((cb) => {
-            cb(null, { endpoints: ['/evp_proxy/v2'] })
+            cb(null, { endpoints: ['/evp_proxy/v2/'] })
           })
         })
 
@@ -233,8 +243,8 @@ describe('module', () => {
 
         it('throws an error', () => {
           expect(() => llmobsModule.enable(config)).to.throw(
-            'Cannot send LLM Observability data without a running agent and without a Datadog API key.\n' +
-            'Please set DD_API_KEY and set DD_LLMOBS_AGENTLESS_ENABLED to true.'
+            'Cannot send LLM Observability data without a running agent or without a Datadog API key.\n' +
+            'Ensure this configuration is set before running your application.'
           )
         })
       })

@@ -57,8 +57,7 @@ describe('integrations', () => {
 
       await agent.load('langchain', {}, {
         llmobs: {
-          mlApp: 'test',
-          agentlessEnabled: false
+          mlApp: 'test'
         }
       })
 
