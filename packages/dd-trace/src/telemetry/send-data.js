@@ -102,7 +102,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
       if (backendUrl) {
         request(data, backendOptions, (error) => {
           if (error) {
-            log.error('Error sending telemetry data', error);
+            log.error('Error sending telemetry data', error)
           }
         })
       } else {
