@@ -57,6 +57,7 @@ const storage = {
         pluginConfig.service || `${tracerService}-elasticsearch`
     },
     ioredis: redisConfig,
+    iovalkey: redisConfig,
     mariadb: {
       opName: () => 'mariadb.query',
       serviceName: mysqlServiceName

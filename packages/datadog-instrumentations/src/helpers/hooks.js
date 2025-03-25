@@ -61,6 +61,7 @@ module.exports = {
   http2: () => require('../http2'),
   https: () => require('../http'),
   ioredis: () => require('../ioredis'),
+  iovalkey: () => require('../valkey'),
   'jest-circus': () => require('../jest'),
   'jest-config': () => require('../jest'),
   'jest-environment-node': () => require('../jest'),
