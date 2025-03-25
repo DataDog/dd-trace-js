@@ -10,7 +10,8 @@ const {
   updateRaspRequestsMetricTags,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,
-  getRequestMetrics
+  getRequestMetrics,
+  updateRateLimitedMetric
 } = require('./telemetry')
 const zlib = require('zlib')
 const { keepTrace } = require('../priority_sampler')
@@ -149,6 +150,8 @@ function reportAttack (attackData) {
 
   if (limiter.isAllowed()) {
     keepTrace(rootSpan, ASM)
+  } else {
+    updateRateLimitedMetric(req)
   }
 
   // TODO: maybe add this to format.js later (to take decision as late as possible)
