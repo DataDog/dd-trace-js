@@ -10,7 +10,8 @@ const Histogram = require('../histogram')
 const { performance, PerformanceObserver } = require('perf_hooks')
 
 const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
-const INTERVAL = 10 * 1000
+const { DD_RUNTIME_METRICS_FLUSH_INTERVAL = '10000' } = process.env
+const INTERVAL = parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
 
 // Node >=16 has PerformanceObserver with `gc` type, but <16.7 had a critical bug.
 // See: https://github.com/nodejs/node/issues/39548
