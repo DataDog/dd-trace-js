@@ -80,12 +80,12 @@ function recordLLMObsEnabled (startTime, config, value = 1) {
   // in-code or command line setup. We'll use the presence of DD_LLMOBS_ENABLED env var
   // as a rough heuristic, but note that this isn't perfect since
   // a user may have env vars but enable manually in code.
-  const autoEnabled = Number(!!config._env?.['llmobs.enabled'])
+  const autoEnabled = !!config._env?.['llmobs.enabled']
   const tags = {
     error: 0,
     agentless: Number(config.llmobs.agentlessEnabled),
     site: config.site,
-    auto: autoEnabled
+    auto: Number(autoEnabled)
   }
   llmobsMetrics.count('product_enabled', tags).inc(value)
   llmobsMetrics.distribution('init_time', tags).track(initTimeMs)
