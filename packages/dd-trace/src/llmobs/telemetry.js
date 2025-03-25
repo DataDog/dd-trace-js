@@ -18,6 +18,27 @@ const LLMObsTagger = require('./tagger')
 
 const llmobsMetrics = telemetryMetrics.manager.namespace('mlobs')
 
+function extractIntegrationFromTags (tags) {
+  if (!Array.isArray(tags)) return null
+  const integrationTag = tags.find(tag => tag.startsWith('integration:'))
+  if (!integrationTag) return null
+  return integrationTag.split(':')[1] || null
+}
+
+function extractTagsFromSpanEvent (event) {
+  const spanKind = event.meta?.['span.kind'] || ''
+  const integration = extractIntegrationFromTags(event.tags)
+  const error = event.status === 'error'
+  const autoinstrumented = integration != null
+
+  return {
+    span_kind: spanKind,
+    autoinstrumented: Number(autoinstrumented),
+    error: error ? 1 : 0,
+    integration: integration || 'N/A'
+  }
+}
+
 function incrementLLMObsSpanStartCount (tags, value = 1) {
   llmobsMetrics.count('span.start', tags).inc(value)
 }
@@ -53,7 +74,20 @@ function incrementLLMObsSpanFinishedCount (span, value = 1) {
   llmobsMetrics.count('span.finished', tags).inc(value)
 }
 
+function recordLLMObsRawSpanSize (event, rawEventSize) {
+  const tags = extractTagsFromSpanEvent(event)
+  llmobsMetrics.distribution('span.raw_size', tags).track(rawEventSize)
+}
+
+function recordLLMObsSpanSize (event, eventSize, shouldTruncate) {
+  const tags = extractTagsFromSpanEvent(event)
+  tags.truncated = Number(shouldTruncate)
+  llmobsMetrics.distribution('span.size', tags).track(eventSize)
+}
+
 module.exports = {
   incrementLLMObsSpanStartCount,
-  incrementLLMObsSpanFinishedCount
+  incrementLLMObsSpanFinishedCount,
+  recordLLMObsRawSpanSize,
+  recordLLMObsSpanSize
 }
