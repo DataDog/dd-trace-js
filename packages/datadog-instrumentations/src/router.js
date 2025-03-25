@@ -18,7 +18,7 @@ function createWrapRouterMethod (name) {
   function wrapLayerHandle (layer, original) {
     original._name = original._name || layer.name
 
-    const handle = shimmer.wrapFunction(original, original => function () {
+    return shimmer.wrapFunction(original, original => function () {
       if (!enterChannel.hasSubscribers) return original.apply(this, arguments)
 
       const matchers = layerMatchers.get(layer)
@@ -58,12 +58,6 @@ function createWrapRouterMethod (name) {
         exitChannel.publish({ req })
       }
     })
-
-    // This is a workaround for the `loopback` library so that it can find the correct express layer
-    // that contains the real handle function
-    handle._datadog_orig = original
-
-    return handle
   }
 
   function wrapStack (stack, offset, matchers) {
