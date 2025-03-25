@@ -96,6 +96,20 @@ function updateWafRequestsMetricTags (metrics, req) {
   return trackWafMetrics(store, metrics)
 }
 
+function updateRateLimitedMetric (req) {
+  if (!enabled) return
+
+  const store = getStore(req)
+  trackWafMetrics(store, { rateLimited: true })
+}
+
+function updateBlockFailureMetric (req) {
+  if (!enabled) return
+
+  const store = getStore(req)
+  trackWafMetrics(store, { blockFailed: true })
+}
+
 function incrementWafInitMetric (wafVersion, rulesVersion, success) {
   if (!enabled) return
 
@@ -141,6 +155,8 @@ module.exports = {
   disable,
 
   updateWafRequestsMetricTags,
+  updateRateLimitedMetric,
+  updateBlockFailureMetric,
   updateRaspRequestsMetricTags,
   updateRaspRuleMatchMetricTags,
   updateRaspRuleSkippedMetricTags,

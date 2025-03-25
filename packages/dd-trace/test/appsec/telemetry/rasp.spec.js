@@ -311,12 +311,15 @@ describe('Appsec Rasp Telemetry metrics', () => {
         appsecTelemetry.incrementWafRequestsMetric(req)
 
         expect(count).to.have.been.calledWithExactly('waf.requests', {
+          block_failure: false,
+          input_truncated: false,
           request_blocked: false,
+          rate_limited: false,
           rule_triggered: false,
+          waf_error: false,
           waf_timeout: false,
           waf_version: wafVersion,
-          event_rules_version: rulesVersion,
-          input_truncated: false
+          event_rules_version: rulesVersion
         })
       })
     })
