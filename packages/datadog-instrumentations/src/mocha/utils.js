@@ -3,7 +3,9 @@
 const {
   getTestSuitePath,
   removeEfdStringFromTestName,
-  addEfdStringToTestName
+  addEfdStringToTestName,
+  addAttemptToFixStringToTestName,
+  removeAttemptToFixStringFromTestName
 } = require('../../../dd-trace/src/plugins/util/test')
 const { channel, AsyncResource } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
@@ -26,7 +28,9 @@ const testToStartLine = new WeakMap()
 const testFileToSuiteAr = new Map()
 const wrappedFunctions = new WeakSet()
 const newTests = {}
+const testsAttemptToFix = new Set()
 const testsQuarantined = new Set()
+const testsStatuses = new Map()
 
 function getAfterEachHooks (testOrHook) {
   const hooks = []
@@ -44,10 +48,10 @@ function getTestProperties (test, testManagementTests) {
   const testSuite = getTestSuitePath(test.file, process.cwd())
   const testName = test.fullTitle()
 
-  const { disabled: isDisabled, quarantined: isQuarantined } =
+  const { attempt_to_fix: isAttemptToFix, disabled: isDisabled, quarantined: isQuarantined } =
     testManagementTests?.mocha?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
 
-  return { isDisabled, isQuarantined }
+  return { isAttemptToFix, isDisabled, isQuarantined }
 }
 
 function isNewTest (test, knownTests) {
@@ -57,15 +61,18 @@ function isNewTest (test, knownTests) {
   return !testsForSuite.includes(testName)
 }
 
-function retryTest (test, earlyFlakeDetectionNumRetries) {
+function retryTest (test, numRetries, modifyTestName, tags) {
   const originalTestName = test.title
   const suite = test.parent
-  for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
+  for (let retryIndex = 0; retryIndex < numRetries; retryIndex++) {
     const clonedTest = test.clone()
-    clonedTest.title = addEfdStringToTestName(originalTestName, retryIndex + 1)
+    clonedTest.title = modifyTestName(originalTestName, retryIndex + 1)
     suite.addTest(clonedTest)
-    clonedTest._ddIsNew = true
-    clonedTest._ddIsEfdRetry = true
+    tags.forEach(tag => {
+      if (tag) {
+        clonedTest[tag] = true
+      }
+    })
   }
 }
 
@@ -102,7 +109,10 @@ function getIsLastRetry (test) {
 }
 
 function getTestFullName (test) {
-  return `mocha.${getTestSuitePath(test.file, process.cwd())}.${removeEfdStringFromTestName(test.fullTitle())}`
+  const testName = removeEfdStringFromTestName(
+    removeAttemptToFixStringFromTestName(test.fullTitle())
+  )
+  return `mocha.${getTestSuitePath(test.file, process.cwd())}.${testName}`
 }
 
 function getTestStatus (test) {
@@ -195,12 +205,15 @@ function getOnTestHandler (isMain) {
       title,
       _ddIsNew: isNew,
       _ddIsEfdRetry: isEfdRetry,
+      _ddIsAttemptToFix: isAttemptToFix,
       _ddIsDisabled: isDisabled,
       _ddIsQuarantined: isQuarantined
     } = test
 
+    const testName = removeEfdStringFromTestName(removeAttemptToFixStringFromTestName(test.fullTitle()))
+
     const testInfo = {
-      testName: test.fullTitle(),
+      testName,
       testSuiteAbsolutePath,
       title,
       testStartLine
@@ -212,6 +225,7 @@ function getOnTestHandler (isMain) {
 
     testInfo.isNew = isNew
     testInfo.isEfdRetry = isEfdRetry
+    testInfo.isAttemptToFix = isAttemptToFix
     testInfo.isDisabled = isDisabled
     testInfo.isQuarantined = isQuarantined
     // We want to store the result of the new tests
@@ -224,7 +238,7 @@ function getOnTestHandler (isMain) {
       }
     }
 
-    if (isDisabled) {
+    if (!isAttemptToFix && isDisabled) {
       test.pending = true
     }
 
@@ -234,7 +248,7 @@ function getOnTestHandler (isMain) {
   }
 }
 
-function getOnTestEndHandler () {
+function getOnTestEndHandler (config) {
   return async function (test) {
     const asyncResource = getTestAsyncResource(test)
     const status = getTestStatus(test)
@@ -249,13 +263,40 @@ function getOnTestEndHandler () {
       })
     }
 
+    let hasFailedAllRetries = false
+    let attemptToFixPassed = false
+
+    const testName = getTestFullName(test)
+
+    if (!testsStatuses.get(testName)) {
+      testsStatuses.set(testName, [status])
+    } else {
+      testsStatuses.get(testName).push(status)
+    }
+    const testStatuses = testsStatuses.get(testName)
+
+    const isLastAttempt = testStatuses.length === config.testManagementAttemptToFixRetries + 1
+
+    if (test._ddIsAttemptToFix && isLastAttempt) {
+      if (testStatuses.every(status => status === 'fail')) {
+        hasFailedAllRetries = true
+      } else if (testStatuses.every(status => status === 'pass')) {
+        attemptToFixPassed = true
+      }
+    }
+
+    const isAttemptToFixRetry = test._ddIsAttemptToFix && testStatuses.length > 1
+
     // if there are afterEach to be run, we don't finish the test yet
     if (asyncResource && !getAfterEachHooks(test).length) {
       asyncResource.runInAsyncScope(() => {
         testFinishCh.publish({
           status,
           hasBeenRetried: isMochaRetry(test),
-          isLastRetry: getIsLastRetry(test)
+          isLastRetry: getIsLastRetry(test),
+          hasFailedAllRetries,
+          attemptToFixPassed,
+          isAttemptToFixRetry
         })
       })
     }
@@ -374,29 +415,46 @@ function getOnPendingHandler () {
   }
 }
 
-// Hook to add retries to tests if EFD is enabled
+// Hook to add retries to tests if Test Management or EFD is enabled
 function getRunTestsWrapper (runTests, config) {
-  return function (suite, fn) {
+  return function (suite) {
+    if (config.isTestManagementTestsEnabled) {
+      suite.tests.forEach((test) => {
+        const { isAttemptToFix, isDisabled, isQuarantined } = getTestProperties(test, config.testManagementTests)
+        if (isAttemptToFix && !test.isPending()) {
+          test._ddIsAttemptToFix = true
+          test._ddIsDisabled = isDisabled
+          test._ddIsQuarantined = isQuarantined
+          // This is needed to know afterwards which ones have been retried to ignore its result
+          testsAttemptToFix.add(test)
+          retryTest(
+            test,
+            config.testManagementAttemptToFixRetries,
+            addAttemptToFixStringToTestName,
+            ['_ddIsAttemptToFix', isDisabled && '_ddIsDisabled', isQuarantined && '_ddIsQuarantined']
+          )
+        } else if (isDisabled) {
+          test._ddIsDisabled = true
+        } else if (isQuarantined) {
+          testsQuarantined.add(test)
+          test._ddIsQuarantined = true
+        }
+      })
+    }
+
     if (config.isKnownTestsEnabled) {
       // by the time we reach `this.on('test')`, it is too late. We need to add retries here
       suite.tests.forEach(test => {
         if (!test.isPending() && isNewTest(test, config.knownTests)) {
           test._ddIsNew = true
           if (config.isEarlyFlakeDetectionEnabled) {
-            retryTest(test, config.earlyFlakeDetectionNumRetries)
+            retryTest(
+              test,
+              config.earlyFlakeDetectionNumRetries,
+              addEfdStringToTestName,
+              ['_ddIsNew', '_ddIsEfdRetry']
+            )
           }
-        }
-      })
-    }
-
-    if (config.isTestManagementTestsEnabled) {
-      suite.tests.forEach(test => {
-        const { isDisabled, isQuarantined } = getTestProperties(test, config.testManagementTests)
-        if (isDisabled) {
-          test._ddIsDisabled = true
-        } else if (isQuarantined) {
-          testsQuarantined.add(test)
-          test._ddIsQuarantined = true
         }
       })
     }
@@ -408,7 +466,6 @@ function getRunTestsWrapper (runTests, config) {
 module.exports = {
   isNewTest,
   getTestProperties,
-  retryTest,
   getSuitesByTestFile,
   isMochaRetry,
   getTestFullName,
@@ -427,5 +484,7 @@ module.exports = {
   testFileToSuiteAr,
   getRunTestsWrapper,
   newTests,
-  testsQuarantined
+  testsQuarantined,
+  testsAttemptToFix,
+  testsStatuses
 }

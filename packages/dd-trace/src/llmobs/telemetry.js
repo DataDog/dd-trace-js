@@ -19,7 +19,7 @@ const LLMObsTagger = require('./tagger')
 const llmobsMetrics = telemetryMetrics.manager.namespace('mlobs')
 
 function extractIntegrationFromTags (tags) {
-  if (!tags || !Array.isArray(tags)) return null
+  if (!Array.isArray(tags)) return null
   const integrationTag = tags.find(tag => tag.startsWith('integration:'))
   if (!integrationTag) return null
   return integrationTag.split(':')[1] || null
