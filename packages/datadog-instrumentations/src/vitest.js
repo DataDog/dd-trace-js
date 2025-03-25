@@ -721,15 +721,11 @@ addHook({
     // From >=3.0.1, the first arguments changes from a string to an object containing the filepath
     const testSuiteAbsolutePath = testPaths[0]?.filepath || testPaths[0]
 
-    const { isEarlyFlakeDetectionEnabled, isFlakyTestRetriesEnabled } = getProvidedContext()
-
     const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
     testSuiteAsyncResource.runInAsyncScope(() => {
       testSuiteStartCh.publish({
         testSuiteAbsolutePath,
-        frameworkVersion,
-        isFlakyTestRetriesEnabled,
-        isEarlyFlakeDetectionEnabled
+        frameworkVersion
       })
     })
     const startTestsResponse = await startTests.apply(this, arguments)
