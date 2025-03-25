@@ -591,8 +591,11 @@ class Config {
     this._setValue(defaults, 'url', undefined)
     this._setValue(defaults, 'version', pkg.version)
     this._setValue(defaults, 'instrumentation_config_id', undefined)
+    this._setValue(defaults, 'aws.dynamoDb.tablePrimaryKeys', undefined)
+    this._setValue(defaults, 'vertexai.spanCharLimit', 128)
+    this._setValue(defaults, 'vertexai.spanPromptCompletionSampleRate', 1.0)
     this._setValue(defaults, 'trace.aws.addSpanPointers', true)
-    this._setValue(defaults, 'trace.dynamoDb.tablePrimaryKeys', undefined)
+    this._setValue(defaults, 'trace.nativeSpanEvents', false)
   }
 
   _applyLocalStableConfig () {
@@ -760,7 +763,10 @@ class Config {
       DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       DD_TRACING_ENABLED,
       DD_VERSION,
+      DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,
+      DD_VERTEXAI_SPAN_CHAR_LIMIT,
       DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED,
+      DD_TRACE_NATIVE_SPAN_EVENTS,
       OTEL_METRICS_EXPORTER,
       OTEL_PROPAGATORS,
       OTEL_RESOURCE_ATTRIBUTES,
@@ -973,6 +979,13 @@ class Config {
     this._setBoolean(env, 'trace.aws.addSpanPointers', DD_TRACE_AWS_ADD_SPAN_POINTERS)
     this._setString(env, 'trace.dynamoDb.tablePrimaryKeys', DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS)
     this._setArray(env, 'graphqlErrorExtensions', DD_TRACE_GRAPHQL_ERROR_EXTENSIONS)
+    this._setBoolean(env, 'trace.nativeSpanEvents', DD_TRACE_NATIVE_SPAN_EVENTS)
+    this._setValue(
+      env,
+      'vertexai.spanPromptCompletionSampleRate',
+      maybeFloat(DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
+    )
+    this._setValue(env, 'vertexai.spanCharLimit', maybeInt(DD_VERTEXAI_SPAN_CHAR_LIMIT))
   }
 
   _applyOptions (options) {
@@ -1104,6 +1117,7 @@ class Config {
     this._setString(opts, 'version', options.version || tags.version)
     this._setBoolean(opts, 'inferredProxyServicesEnabled', options.inferredProxyServicesEnabled)
     this._setBoolean(opts, 'graphqlErrorExtensions', options.graphqlErrorExtensions)
+    this._setBoolean(opts, 'trace.nativeSpanEvents', options.trace?.nativeSpanEvents)
 
     // For LLMObs, we want the environment variable to take precedence over the options.
     // This is reliant on environment config being set before options.

@@ -113,6 +113,42 @@ moduleTypes.forEach(({
       await receiver.stop()
     })
 
+    if (version === '6.7.0') {
+      // to be removed when we drop support for cypress@6.7.0
+      it('logs a warning if using a deprecated version of cypress', (done) => {
+        let stdout = ''
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        childProcess = exec(
+          `${testCommand} --spec cypress/e2e/spec.cy.js`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.stdout.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        childProcess.on('exit', () => {
+          assert.include(
+            stdout,
+            'WARNING: dd-trace support for Cypress<10.2.0 is deprecated' +
+            ' and will not be supported in future versions of dd-trace.'
+          )
+          done()
+        })
+      })
+    }
+
     it('does not crash if badly init', (done) => {
       const {
         NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
