@@ -49,6 +49,7 @@ describe('Plugin', () => {
       })
 
       after(() => {
+        // wiping in order to read new env vars for the config each time
         return agent.close({ ritmReset: false })
       })
 
