@@ -325,7 +325,10 @@ describe('WAF Manager', () => {
 
         wafContextWrapper.run(params)
 
-        expect(Reporter.reportAttack).to.be.calledOnceWithExactly('["ATTACK DATA"]')
+        expect(Reporter.reportAttack).to.be.calledOnceWithExactly(
+          '["ATTACK DATA"]',
+          { rulesVersion: '1.0.0', wafVersion: '1.2.3' }
+        )
       })
 
       it('should report if rule is triggered', () => {

@@ -48,14 +48,10 @@ function trackWafMetrics (store, metrics) {
 
   trackWafDurations(metrics, versionsTags)
 
-  const metricTags = getOrCreateMetricTags(store)
+  const metricTags = getOrCreateMetricTags(store, versionsTags)
 
   if (metrics.blockFailed) {
     metricTags[tags.BLOCK_FAILURE] = true
-  }
-
-  if (versionsTags[tags.EVENT_RULES_VERSION]) {
-    metricTags[tags.EVENT_RULES_VERSION] = versionsTags[tags.EVENT_RULES_VERSION]
   }
 
   if (metrics.blockTriggered) {
@@ -79,10 +75,6 @@ function trackWafMetrics (store, metrics) {
     metricTags[tags.WAF_TIMEOUT] = true
   }
 
-  if (versionsTags[tags.WAF_VERSION]) {
-    metricTags[tags.WAF_VERSION] = versionsTags[tags.WAF_VERSION]
-  }
-
   const truncationReason = getTruncationReason(metrics)
   if (truncationReason > 0) {
     metricTags[tags.INPUT_TRUNCATED] = true
@@ -92,20 +84,20 @@ function trackWafMetrics (store, metrics) {
   return metricTags
 }
 
-function getOrCreateMetricTags (store) {
+function getOrCreateMetricTags (store, versionsTags) {
   let metricTags = store[DD_TELEMETRY_WAF_RESULT_TAGS]
 
   if (!metricTags) {
     metricTags = {
       [tags.BLOCK_FAILURE]: false,
-      [tags.EVENT_RULES_VERSION]: null,
       [tags.INPUT_TRUNCATED]: false,
       [tags.RATE_LIMITED]: false,
       [tags.REQUEST_BLOCKED]: false,
       [tags.RULE_TRIGGERED]: false,
       [tags.WAF_ERROR]: false,
       [tags.WAF_TIMEOUT]: false,
-      [tags.WAF_VERSION]: null
+
+      ...versionsTags
     }
     store[DD_TELEMETRY_WAF_RESULT_TAGS] = metricTags
   }
