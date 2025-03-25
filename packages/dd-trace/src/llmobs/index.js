@@ -33,7 +33,6 @@ function enable (config) {
   // span writer append is handled by the span processor
   evalWriter = new LLMObsEvalMetricsWriter(config)
   spanWriter = new LLMObsSpanWriter(config)
-  configureWriters(config, [evalWriter, spanWriter])
 
   evalMetricAppendCh.subscribe(handleEvalMetricAppend)
   flushCh.subscribe(handleFlush)
@@ -45,6 +44,23 @@ function enable (config) {
 
   // distributed tracing for llmobs
   injectCh.subscribe(handleLLMObsParentIdInjection)
+
+  configureWriters(config, useAgentless => {
+    if (useAgentless && !config.apiKey) {
+      throw new Error(
+        'Cannot send LLM Observability data without a running agent or without a Datadog API key.\n' +
+        'Ensure this configuration is set before running your application.'
+      )
+    } else if (useAgentless && !config.site) {
+      throw new Error(
+        'Cannot send LLM Observability data without a running agent or without a Datadog site.\n' +
+        'Ensure this configuration is set before running your application.'
+      )
+    }
+
+    evalWriter?.setAgentless(useAgentless)
+    spanWriter?.setAgentless(useAgentless)
+  })
 }
 
 function disable () {

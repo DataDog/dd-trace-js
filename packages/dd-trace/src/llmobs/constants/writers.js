@@ -1,7 +1,7 @@
 'use strict'
 
 module.exports = {
-  EVP_PROXY_AGENT_BASE_PATH: '/evp_proxy/v2',
+  EVP_PROXY_AGENT_BASE_PATH: '/evp_proxy/v2/',
   EVP_PROXY_AGENT_ENDPOINT: '/evp_proxy/v2/api/v2/llmobs',
   EVP_SUBDOMAIN_HEADER_NAME: 'X-Datadog-EVP-Subdomain',
   EVP_SUBDOMAIN_HEADER_VALUE: 'llmobs-intake',
