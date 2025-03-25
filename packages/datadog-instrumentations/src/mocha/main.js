@@ -30,7 +30,9 @@ const {
   newTests,
   testsQuarantined,
   getTestFullName,
-  getRunTestsWrapper
+  getRunTestsWrapper,
+  testsAttemptToFix,
+  testsStatuses
 } = require('./utils')
 
 require('./common')
@@ -138,16 +140,26 @@ function getOnEndHandler (isParallel) {
       }
     }
 
+    // We substract the errors of attempt to fix tests (quarantined or disabled) from the total number of failures
     // We subtract the errors from quarantined tests from the total number of failures
     if (config.isTestManagementTestsEnabled) {
       let numFailedQuarantinedTests = 0
+      let numFailedRetriedQuarantinedOrDisabledTests = 0
+      for (const test of testsAttemptToFix) {
+        const testName = getTestFullName(test)
+        const testProperties = getTestProperties(test, config.testManagementTests)
+        if (isTestFailed(test) && (testProperties.isQuarantined || testProperties.isDisabled)) {
+          const numFailedTests = testsStatuses.get(testName).filter(status => status === 'fail').length
+          numFailedRetriedQuarantinedOrDisabledTests += numFailedTests
+        }
+      }
       for (const test of testsQuarantined) {
         if (isTestFailed(test)) {
           numFailedQuarantinedTests++
         }
       }
-      this.stats.failures -= numFailedQuarantinedTests
-      this.failures -= numFailedQuarantinedTests
+      this.stats.failures -= numFailedQuarantinedTests + numFailedRetriedQuarantinedOrDisabledTests
+      this.failures -= numFailedQuarantinedTests + numFailedRetriedQuarantinedOrDisabledTests
     }
 
     if (status === 'fail') {
@@ -193,6 +205,7 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
     if (err) {
       config.testManagementTests = {}
       config.isTestManagementTestsEnabled = false
+      config.testManagementAttemptToFixRetries = 0
     } else {
       config.testManagementTests = receivedTestManagementTests
     }
@@ -260,6 +273,7 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
     config.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
     config.isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
     config.isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
+    config.testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
     // ITR and auto test retries are not supported in parallel mode yet
     config.isSuitesSkippingEnabled = !isParallel && libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = !isParallel && libraryConfig.isFlakyTestRetriesEnabled
@@ -401,7 +415,7 @@ addHook({
 
     this.on('test', getOnTestHandler(true))
 
-    this.on('test end', getOnTestEndHandler())
+    this.on('test end', getOnTestEndHandler(config))
 
     this.on('retry', getOnTestRetryHandler())
 
@@ -637,6 +651,8 @@ addHook({
     if (config.isTestManagementTestsEnabled) {
       const testSuiteTestManagementTests = config.testManagementTests?.mocha?.suites?.[testPath] || {}
       newWorkerArgs._ddIsTestManagementTestsEnabled = true
+      // TODO: attempt to fix does not work in parallel mode yet
+      // newWorkerArgs._ddTestManagementAttemptToFixRetries = config.testManagementAttemptToFixRetries
       newWorkerArgs._ddTestManagementTests = {
         mocha: {
           suites: {
