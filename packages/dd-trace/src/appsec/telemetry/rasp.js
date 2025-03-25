@@ -83,15 +83,15 @@ function trackRaspRuleMatch (store, raspRule, blockTriggered, blocked) {
   const tags = {
     waf_version: store[DD_TELEMETRY_REQUEST_METRICS].wafVersion,
     event_rules_version: store[DD_TELEMETRY_REQUEST_METRICS].rulesVersion,
-    rule_type: raspRule.type
+    rule_type: raspRule.type,
+    block: getRuleMatchBlockingStatus(blockTriggered, blocked)
   }
 
   if (raspRule.variant) {
     tags.rule_variant = raspRule.variant
   }
 
-  const block = getRuleMatchBlockingStatus(blockTriggered, blocked)
-  appsecMetrics.count('rasp.rule.match', { ...tags, block }).inc(1)
+  appsecMetrics.count('rasp.rule.match', tags).inc(1)
 }
 
 function trackRaspRuleSkipped (raspRule, reason) {
