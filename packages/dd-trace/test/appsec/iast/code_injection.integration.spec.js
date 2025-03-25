@@ -6,20 +6,17 @@ const Axios = require('axios')
 const { assert } = require('chai')
 const { createSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 
-describe.only('IAST - code_injection - integration', () => {
+describe('IAST - code_injection - integration', () => {
   let axios, sandbox, cwd, appPort, agent, proc
 
   before(async function () {
-    console.log('change to run ci')
-    this.timeout(process.platform === 'win32' ? 100000 : 30000)
-    const start = process.hrtime.bigint()
+    this.timeout(process.platform === 'win32' ? 300000 : 30000)
+
     sandbox = await createSandbox(
       ['express'],
       false,
       [path.join(__dirname, 'resources')]
     )
-    const end = process.hrtime.bigint()
-    console.log(`sandbox created in ${(end-start)/1_000_000n}ms`)
 
     appPort = await getPort()
     cwd = sandbox.folder

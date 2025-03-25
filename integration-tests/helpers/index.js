@@ -140,7 +140,6 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
 
 async function createSandbox (dependencies = [], isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
-  console.log('createSandbox - start')
   /* To execute integration tests without a sandbox uncomment the next line
    * and do `yarn link && yarn link dd-trace` */
   // return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
@@ -152,44 +151,32 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   const { NODE_OPTIONS, ...restOfEnv } = process.env
 
   fs.mkdirSync(folder)
-  console.log('createSandbox - mkdirSync finished')
   const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines`
   const addOptions = { cwd: folder, env: restOfEnv }
   await exec(`yarn pack --filename ${out}`, { env: restOfEnv }) // TODO: cache this
 
-  console.log('createSandbox - yarn pack finished')
   try {
-    console.log('createSandbox - addCommand starts', addCommand)
     await exec(addCommand, addOptions)
-    console.log('createSandbox - addCommand finished')
   } catch (e) { // retry in case of server error from registry
-    console.log('createSandbox - addCommand failed - trying again')
     await exec(addCommand, addOptions)
-    console.log('createSandbox - addCommand finished - second attemp')
   }
 
   for (const path of integrationTestsPaths) {
-    console.log('createSandbox - copying path', path)
     if (process.platform === 'win32') {
       await exec(`Copy-Item -Recurse -Path "${path}" -Destination "${folder}"`, { shell: 'powershell.exe' })
     } else {
       await exec(`cp -R ${path} ${folder}`)
     }
-    console.log('createSandbox - copied path', path)
   }
-  console.log('createSandbox - before Write-VolumeCache', folder)
   if (process.platform === 'win32') {
     // On Windows, we can only sync entire filesystem volume caches.
     await exec(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
   } else {
     await exec(`sync ${folder}`)
   }
-  console.log('createSandbox - after Write-VolumeCache', folder)
 
   if (followUpCommand) {
-    console.log('createSandbox - followUpCommand start', followUpCommand)
     await exec(followUpCommand, { cwd: folder, env: restOfEnv })
-    console.log('createSandbox - followUpCommand finished')
   }
 
   if (isGitRepo) {
