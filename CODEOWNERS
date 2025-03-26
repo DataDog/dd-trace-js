@@ -2,6 +2,13 @@
 
 /packages/dd-trace/src/appsec/ @DataDog/asm-js
 /packages/dd-trace/test/appsec/ @DataDog/asm-js
+
+/integration-tests/debugger/ @DataDog/dd-trace-js @DataDog/debugger
+/packages/datadog-code-origin/ @DataDog/dd-trace-js @DataDog/debugger
+/packages/datadog-plugin-*/**/code_origin.* @DataDog/dd-trace-js @DataDog/debugger
+/packages/dd-trace/src/debugger/ @DataDog/dd-trace-js @DataDog/debugger
+/packages/dd-trace/test/debugger/ @DataDog/dd-trace-js @DataDog/debugger
+
 /packages/dd-trace/src/lambda/ @DataDog/serverless-aws
 /packages/dd-trace/test/lambda/ @DataDog/serverless-aws
 
@@ -18,6 +25,7 @@
 /packages/datadog-plugin-playwright/ @DataDog/ci-app-libraries
 /packages/datadog-plugin-vitest/ @DataDog/ci-app-libraries
 /packages/dd-trace/src/plugins/util/git.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/ci_plugin.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/ci-visibility/ @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/git.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/ci-env/ @DataDog/ci-app-libraries
@@ -45,6 +53,17 @@
 /packages/dd-trace/src/service-naming/ @Datadog/apm-idm-js
 /packages/dd-trace/test/service-naming/ @Datadog/apm-idm-js
 
+/packages/dd-trace/src/llmobs/ @DataDog/ml-observability
+/packages/dd-trace/test/llmobs/ @DataDog/ml-observability
+/packages/datadog-plugin-openai/ @DataDog/ml-observability
+/packages/datadog-plugin-langchain/ @DataDog/ml-observability
+/packages/datadog-plugin-google-cloud-vertexai/ @DataDog/ml-observability
+/packages/datadog-instrumentations/src/openai.js @DataDog/ml-observability
+/packages/datadog-instrumentations/src/langchain.js @DataDog/ml-observability
+/packages/datadog-instrumentations/src/google-cloud-vertexai.js @DataDog/ml-observability
+/packages/datadog-plugin-aws-sdk/src/services/bedrockruntime @DataDog/ml-observability
+/packages/datadog-plugin-aws-sdk/test/bedrockruntime.spec.js @DataDog/ml-observability
+
 # CI
 /.github/workflows/appsec.yml @DataDog/asm-js
 /.github/workflows/ci-visibility-performance.yml @DataDog/ci-app-libraries
@@ -61,7 +80,7 @@
 /.github/workflows/release-latest.yml @DataDog/dd-trace-js
 /.github/workflows/release-proposal.yml @DataDog/dd-trace-js
 /.github/workflows/serverless-integration-test.yml @DataDog/serverless-aws @DataDog/serverless
-/.github/workflows/system-tests.yml @DataDog/asm-js
+/.github/workflows/system-tests.yml @DataDog/dd-trace-js @DataDog/asm-js
 /.github/workflows/test-k8s-lib-injection.yaml @DataDog/dd-trace-js
 /.github/workflows/tracing.yml @DataDog/dd-trace-js
 /.gitlab/benchmarks.yml @DataDog/dd-trace-js

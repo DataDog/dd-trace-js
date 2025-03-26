@@ -32,9 +32,6 @@ class Metric {
     this.namespace = namespace.toString()
     this.metric = common ? metric : `nodejs.${metric}`
     this.tags = tagArray(tags)
-    if (common) {
-      this.tags.push(`version:${process.version}`)
-    }
     this.common = common
 
     this.points = []

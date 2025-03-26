@@ -4,6 +4,7 @@ const log = require('../../log')
 const Reporter = require('../reporter')
 const addresses = require('../addresses')
 const { getBlockingAction } = require('../blocking')
+const { wafRunFinished } = require('../channels')
 
 // TODO: remove once ephemeral addresses are implemented
 const preventDuplicateAddresses = new Set([
@@ -11,45 +12,84 @@ const preventDuplicateAddresses = new Set([
 ])
 
 class WAFContextWrapper {
-  constructor (ddwafContext, wafTimeout, wafVersion, rulesVersion) {
+  constructor (ddwafContext, wafTimeout, wafVersion, rulesVersion, knownAddresses) {
     this.ddwafContext = ddwafContext
     this.wafTimeout = wafTimeout
     this.wafVersion = wafVersion
     this.rulesVersion = rulesVersion
+    this.knownAddresses = knownAddresses
     this.addressesToSkip = new Set()
+    this.cachedUserIdActions = new Map()
   }
 
-  run ({ persistent, ephemeral }, raspRuleType) {
+  run ({ persistent, ephemeral }, raspRule) {
+    if (this.ddwafContext.disposed) {
+      log.warn('[ASM] Calling run on a disposed context')
+      return
+    }
+
+    // SPECIAL CASE FOR USER_ID
+    // TODO: make this universal
+    const userId = persistent?.[addresses.USER_ID] || ephemeral?.[addresses.USER_ID]
+    if (userId) {
+      const cachedAction = this.cachedUserIdActions.get(userId)
+      if (cachedAction) {
+        return cachedAction
+      }
+    }
+
     const payload = {}
     let payloadHasData = false
-    const inputs = {}
     const newAddressesToSkip = new Set(this.addressesToSkip)
 
     if (persistent !== null && typeof persistent === 'object') {
-      // TODO: possible optimization: only send params that haven't already been sent with same value to this wafContext
+      const persistentInputs = {}
+
       for (const key of Object.keys(persistent)) {
-        // TODO: requiredAddresses is no longer used due to processor addresses are not included in the list. Check on
-        // future versions when the actual addresses are included in the 'loaded' section inside diagnostics.
-        if (!this.addressesToSkip.has(key)) {
-          inputs[key] = persistent[key]
+        if (!this.addressesToSkip.has(key) && this.knownAddresses.has(key)) {
+          persistentInputs[key] = persistent[key]
           if (preventDuplicateAddresses.has(key)) {
             newAddressesToSkip.add(key)
           }
         }
       }
+
+      if (Object.keys(persistentInputs).length) {
+        payload.persistent = persistentInputs
+        payloadHasData = true
+      }
     }
 
-    if (Object.keys(inputs).length) {
-      payload.persistent = inputs
-      payloadHasData = true
-    }
+    if (ephemeral !== null && typeof ephemeral === 'object') {
+      const ephemeralInputs = {}
 
-    if (ephemeral && Object.keys(ephemeral).length) {
-      payload.ephemeral = ephemeral
-      payloadHasData = true
+      for (const key of Object.keys(ephemeral)) {
+        if (this.knownAddresses.has(key)) {
+          ephemeralInputs[key] = ephemeral[key]
+        }
+      }
+
+      if (Object.keys(ephemeralInputs).length) {
+        payload.ephemeral = ephemeralInputs
+        payloadHasData = true
+      }
     }
 
     if (!payloadHasData) return
+
+    const metrics = {
+      rulesVersion: this.rulesVersion,
+      wafVersion: this.wafVersion,
+      wafTimeout: false,
+      duration: 0,
+      durationExt: 0,
+      blockTriggered: false,
+      ruleTriggered: false,
+      errorCode: null,
+      maxTruncatedString: null,
+      maxTruncatedContainerSize: null,
+      maxTruncatedContainerDepth: null
+    }
 
     try {
       const start = process.hrtime.bigint()
@@ -58,32 +98,77 @@ class WAFContextWrapper {
 
       const end = process.hrtime.bigint()
 
+      metrics.durationExt = parseInt(end - start) / 1e3
+
+      if (typeof result.errorCode === 'number' && result.errorCode < 0) {
+        const error = new Error('WAF code error')
+        error.errorCode = result.errorCode
+
+        throw error
+      }
+
+      if (result.metrics) {
+        const { maxTruncatedString, maxTruncatedContainerSize, maxTruncatedContainerDepth } = result.metrics
+
+        if (maxTruncatedString) metrics.maxTruncatedString = maxTruncatedString
+        if (maxTruncatedContainerSize) metrics.maxTruncatedContainerSize = maxTruncatedContainerSize
+        if (maxTruncatedContainerDepth) metrics.maxTruncatedContainerDepth = maxTruncatedContainerDepth
+      }
+
       this.addressesToSkip = newAddressesToSkip
 
       const ruleTriggered = !!result.events?.length
 
       const blockTriggered = !!getBlockingAction(result.actions)
 
-      Reporter.reportMetrics({
-        duration: result.totalRuntime / 1e3,
-        durationExt: parseInt(end - start) / 1e3,
-        rulesVersion: this.rulesVersion,
-        ruleTriggered,
-        blockTriggered,
-        wafVersion: this.wafVersion,
-        wafTimeout: result.timeout
-      }, raspRuleType)
+      // SPECIAL CASE FOR USER_ID
+      // TODO: make this universal
+      if (userId && ruleTriggered && blockTriggered) {
+        this.setUserIdCache(userId, result)
+      }
+
+      metrics.duration = result.totalRuntime / 1e3
+      metrics.blockTriggered = blockTriggered
+      metrics.ruleTriggered = ruleTriggered
+      metrics.wafTimeout = result.timeout
 
       if (ruleTriggered) {
         Reporter.reportAttack(JSON.stringify(result.events))
       }
 
-      Reporter.reportSchemas(result.derivatives)
+      Reporter.reportDerivatives(result.derivatives)
 
       return result.actions
     } catch (err) {
-      log.error('Error while running the AppSec WAF')
-      log.error(err)
+      log.error('[ASM] Error while running the AppSec WAF', err)
+
+      metrics.errorCode = err.errorCode ?? -127
+    } finally {
+      if (wafRunFinished.hasSubscribers) {
+        wafRunFinished.publish({ payload })
+      }
+
+      Reporter.reportMetrics(metrics, raspRule)
+    }
+  }
+
+  setUserIdCache (userId, result) {
+    // using old loops for speed
+    for (let i = 0; i < result.events.length; i++) {
+      const event = result.events[i]
+
+      for (let j = 0; j < event?.rule_matches?.length; j++) {
+        const match = event.rule_matches[j]
+
+        for (let k = 0; k < match?.parameters?.length; k++) {
+          const parameter = match.parameters[k]
+
+          if (parameter?.address === addresses.USER_ID) {
+            this.cachedUserIdActions.set(userId, result.actions)
+            return
+          }
+        }
+      }
     }
   }
 

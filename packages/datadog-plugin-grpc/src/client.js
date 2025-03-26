@@ -20,7 +20,7 @@ class GrpcClientPlugin extends ClientPlugin {
   }
 
   bindStart (message) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const { metadata, path, type } = message
     const metadataFilter = this.config.metadataFilter
     const method = getMethodMetadata(path, type)
@@ -62,8 +62,11 @@ class GrpcClientPlugin extends ClientPlugin {
     return parentStore
   }
 
-  error ({ span, error }) {
+  error ({ span = this.activeSpan, error }) {
     this.addCode(span, error.code)
+    if (error.code && !this._tracerConfig.grpc.client.error.statuses.includes(error.code)) {
+      return
+    }
     this.addError(error, span)
   }
 
@@ -105,7 +108,7 @@ class GrpcClientPlugin extends ClientPlugin {
   }
 
   addCode (span, code) {
-    if (code !== undefined) {
+    if (code !== undefined && span) {
       span.setTag('grpc.status.code', code)
     }
   }

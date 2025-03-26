@@ -1,6 +1,6 @@
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
-const { getCallSites } = require('../../../dd-trace/src/plugins/util/test')
+const { getCallSites } = require('../../../dd-trace/src/plugins/util/stacktrace')
 const { testToStartLine } = require('./utils')
 
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
@@ -15,7 +15,7 @@ addHook({
 
   patched.add(mochaEach)
 
-  return shimmer.wrap(mochaEach, function () {
+  return shimmer.wrapFunction(mochaEach, mochaEach => function () {
     const [params] = arguments
     const { it, ...rest } = mochaEach.apply(this, arguments)
     return {

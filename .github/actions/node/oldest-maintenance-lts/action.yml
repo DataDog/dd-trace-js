@@ -1,0 +1,8 @@
+name: Node.js Oldest Maintenance LTS
+description: Install the oldest Maintenance LTS version of Node.js
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '18'

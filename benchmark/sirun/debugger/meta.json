@@ -1,0 +1,66 @@
+{
+  "name": "debugger",
+  "cachegrind": false,
+  "iterations": 10,
+  "instructions": true,
+  "variants": {
+    "control": {
+      "service": "while true; do { echo -e 'HTTP/1.1 202 Accepted\r\n\r\n'; } | nc -l 8080 > /dev/null; done",
+      "run": "node app.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
+      "env": {
+        "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "false"
+      }
+    },
+    "enabled-but-breakpoint-not-hit": {
+      "service": "while true; do { echo -e 'HTTP/1.1 202 Accepted\r\n\r\n'; } | nc -l 8080 > /dev/null; done",
+      "run": "node app.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
+      "baseline": "control",
+      "env": {
+        "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
+        "BREAKPOINT_FILE": "app.js",
+        "BREAKPOINT_LINE": "25"
+      }
+    },
+    "line-probe-without-snapshot": {
+      "service": "while true; do { echo -e 'HTTP/1.1 202 Accepted\r\n\r\n'; } | nc -l 8080 > /dev/null; done",
+      "run": "node app.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
+      "baseline": "control",
+      "env": {
+        "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
+        "BREAKPOINT_FILE": "app.js",
+        "BREAKPOINT_LINE": "18"
+      }
+    },
+    "line-probe-with-snapshot-default": {
+      "service": "while true; do { echo -e 'HTTP/1.1 202 Accepted\r\n\r\n'; } | nc -l 8080 > /dev/null; done",
+      "run": "node app.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
+      "baseline": "line-probe-without-snapshot",
+      "env": {
+        "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
+        "BREAKPOINT_FILE": "app.js",
+        "BREAKPOINT_LINE": "18",
+        "CAPTURE_SNAPSHOT": "true"
+      }
+    },
+    "line-probe-with-snapshot-minimal": {
+      "service": "while true; do { echo -e 'HTTP/1.1 202 Accepted\r\n\r\n'; } | nc -l 8080 > /dev/null; done",
+      "run": "node app.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
+      "baseline": "line-probe-without-snapshot",
+      "env": {
+        "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
+        "BREAKPOINT_FILE": "app.js",
+        "BREAKPOINT_LINE": "18",
+        "CAPTURE_SNAPSHOT": "true",
+        "MAX_REFERENCE_DEPTH": "0",
+        "MAX_COLLECTION_SIZE": "0",
+        "MAX_FIELD_COUNT": "0",
+        "MAX_LENGTH": "9007199254740991"
+      }
+    }
+  }
+}

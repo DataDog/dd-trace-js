@@ -16,7 +16,7 @@ class Writer extends BaseWriter {
   _sendPayload (data, _, done) {
     makeRequest(data, this._url, (err, res) => {
       if (err) {
-        log.error(err)
+        log.error('Error sending span stats', err)
         done()
         return
       }

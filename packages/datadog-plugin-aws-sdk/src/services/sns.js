@@ -1,12 +1,12 @@
 'use strict'
-const { getHeadersSize } = require('../../../dd-trace/src/datastreams/processor')
-const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
+const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 
 class Sns extends BaseAwsSdkPlugin {
   static get id () { return 'sns' }
   static get peerServicePrecursors () { return ['topicname'] }
+  static get isPayloadReporter () { return true }
 
   generateTags (params, operation, response) {
     if (!params) return {}
@@ -20,6 +20,7 @@ class Sns extends BaseAwsSdkPlugin {
 
     // Get the topic name from the last part of the ARN
     const topicName = arnParts[arnParts.length - 1]
+
     return {
       'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
       'aws.sns.topic_arn': TopicArn,

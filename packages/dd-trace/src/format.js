@@ -68,7 +68,7 @@ function setSingleSpanIngestionTags (span, options) {
   addTag({}, span.metrics, SPAN_SAMPLING_MAX_PER_SECOND, options.maxPerSecond)
 }
 
-function extractSpanLinks (trace, span) {
+function extractSpanLinks (formattedSpan, span) {
   const links = []
   if (span._links) {
     for (const link of span._links) {
@@ -87,10 +87,10 @@ function extractSpanLinks (trace, span) {
       links.push(formattedLink)
     }
   }
-  if (links.length > 0) { trace.meta['_dd.span_links'] = JSON.stringify(links) }
+  if (links.length > 0) { formattedSpan.meta['_dd.span_links'] = JSON.stringify(links) }
 }
 
-function extractSpanEvents (trace, span) {
+function extractSpanEvents (formattedSpan, span) {
   const events = []
   if (span._events) {
     for (const event of span._events) {
@@ -103,10 +103,12 @@ function extractSpanEvents (trace, span) {
       events.push(formattedEvent)
     }
   }
-  if (events.length > 0) { trace.meta.events = JSON.stringify(events) }
+  if (events.length > 0) {
+    formattedSpan.span_events = events
+  }
 }
 
-function extractTags (trace, span) {
+function extractTags (formattedSpan, span) {
   const context = span.context()
   const origin = context._trace.origin
   const tags = context._tags
@@ -114,7 +116,7 @@ function extractTags (trace, span) {
   const priority = context._sampling.priority
 
   if (tags['span.kind'] && tags['span.kind'] !== 'internal') {
-    addTag({}, trace.metrics, MEASURED, 1)
+    addTag({}, formattedSpan.metrics, MEASURED, 1)
   }
 
   const tracerService = span.tracer()._service.toLowerCase()
@@ -129,22 +131,22 @@ function extractTags (trace, span) {
       case 'service.name':
       case 'span.type':
       case 'resource.name':
-        addTag(trace, {}, map[tag], tags[tag])
+        addTag(formattedSpan, {}, map[tag], tags[tag])
         break
       // HACK: remove when Datadog supports numeric status code
       case 'http.status_code':
-        addTag(trace.meta, {}, tag, tags[tag] && String(tags[tag]))
+        addTag(formattedSpan.meta, {}, tag, tags[tag] && String(tags[tag]))
         break
       case 'analytics.event':
-        addTag({}, trace.metrics, ANALYTICS, tags[tag] === undefined || tags[tag] ? 1 : 0)
+        addTag({}, formattedSpan.metrics, ANALYTICS, tags[tag] === undefined || tags[tag] ? 1 : 0)
         break
       case HOSTNAME_KEY:
       case MEASURED:
-        addTag({}, trace.metrics, tag, tags[tag] === undefined || tags[tag] ? 1 : 0)
+        addTag({}, formattedSpan.metrics, tag, tags[tag] === undefined || tags[tag] ? 1 : 0)
         break
       case 'error':
         if (context._name !== 'fs.operation') {
-          extractError(trace, tags[tag])
+          extractError(formattedSpan, tags[tag])
         }
         break
       case ERROR_TYPE:
@@ -152,67 +154,66 @@ function extractTags (trace, span) {
       case ERROR_STACK:
         // HACK: remove when implemented in the backend
         if (context._name !== 'fs.operation') {
-          // HACK: to ensure otel.recordException does not influence trace.error
+          // HACK: to ensure otel.recordException does not influence formattedSpan.error
           if (tags.setTraceError) {
-            trace.error = 1
+            formattedSpan.error = 1
           }
         } else {
           break
         }
       default: // eslint-disable-line no-fallthrough
-        addTag(trace.meta, trace.metrics, tag, tags[tag])
+        addTag(formattedSpan.meta, formattedSpan.metrics, tag, tags[tag])
     }
   }
-  setSingleSpanIngestionTags(trace, context._spanSampling)
+  setSingleSpanIngestionTags(formattedSpan, context._spanSampling)
 
-  addTag(trace.meta, trace.metrics, 'language', 'javascript')
-  addTag(trace.meta, trace.metrics, PROCESS_ID, process.pid)
-  addTag(trace.meta, trace.metrics, SAMPLING_PRIORITY_KEY, priority)
-  addTag(trace.meta, trace.metrics, ORIGIN_KEY, origin)
-  addTag(trace.meta, trace.metrics, HOSTNAME_KEY, hostname)
+  addTag(formattedSpan.meta, formattedSpan.metrics, 'language', 'javascript')
+  addTag(formattedSpan.meta, formattedSpan.metrics, PROCESS_ID, process.pid)
+  addTag(formattedSpan.meta, formattedSpan.metrics, SAMPLING_PRIORITY_KEY, priority)
+  addTag(formattedSpan.meta, formattedSpan.metrics, ORIGIN_KEY, origin)
+  addTag(formattedSpan.meta, formattedSpan.metrics, HOSTNAME_KEY, hostname)
 }
 
-function extractRootTags (trace, span) {
+function extractRootTags (formattedSpan, span) {
   const context = span.context()
   const isLocalRoot = span === context._trace.started[0]
   const parentId = context._parentId
 
   if (!isLocalRoot || (parentId && parentId.toString(10) !== '0')) return
 
-  addTag({}, trace.metrics, SAMPLING_RULE_DECISION, context._trace[SAMPLING_RULE_DECISION])
-  addTag({}, trace.metrics, SAMPLING_LIMIT_DECISION, context._trace[SAMPLING_LIMIT_DECISION])
-  addTag({}, trace.metrics, SAMPLING_AGENT_DECISION, context._trace[SAMPLING_AGENT_DECISION])
-  addTag({}, trace.metrics, TOP_LEVEL_KEY, 1)
+  addTag({}, formattedSpan.metrics, SAMPLING_RULE_DECISION, context._trace[SAMPLING_RULE_DECISION])
+  addTag({}, formattedSpan.metrics, SAMPLING_LIMIT_DECISION, context._trace[SAMPLING_LIMIT_DECISION])
+  addTag({}, formattedSpan.metrics, SAMPLING_AGENT_DECISION, context._trace[SAMPLING_AGENT_DECISION])
+  addTag({}, formattedSpan.metrics, TOP_LEVEL_KEY, 1)
 }
 
-function extractChunkTags (trace, span) {
+function extractChunkTags (formattedSpan, span) {
   const context = span.context()
   const isLocalRoot = span === context._trace.started[0]
 
   if (!isLocalRoot) return
 
   for (const key in context._trace.tags) {
-    addTag(trace.meta, trace.metrics, key, context._trace.tags[key])
+    addTag(formattedSpan.meta, formattedSpan.metrics, key, context._trace.tags[key])
   }
 }
 
-function extractError (trace, error) {
+function extractError (formattedSpan, error) {
   if (!error) return
 
-  trace.error = 1
+  formattedSpan.error = 1
 
   if (isError(error)) {
     // AggregateError only has a code and no message.
-    addTag(trace.meta, trace.metrics, ERROR_MESSAGE, error.message || error.code)
-    addTag(trace.meta, trace.metrics, ERROR_TYPE, error.name)
-    addTag(trace.meta, trace.metrics, ERROR_STACK, error.stack)
+    addTag(formattedSpan.meta, formattedSpan.metrics, ERROR_MESSAGE, error.message || error.code)
+    addTag(formattedSpan.meta, formattedSpan.metrics, ERROR_TYPE, error.name)
+    addTag(formattedSpan.meta, formattedSpan.metrics, ERROR_STACK, error.stack)
   }
 }
 
 function addTag (meta, metrics, key, value, nested) {
   switch (typeof value) {
     case 'string':
-      if (!value) break
       meta[key] = value
       break
     case 'number':

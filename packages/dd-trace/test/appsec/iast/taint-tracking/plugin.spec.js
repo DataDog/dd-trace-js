@@ -8,14 +8,18 @@ const {
   HTTP_REQUEST_COOKIE_VALUE,
   HTTP_REQUEST_HEADER_VALUE,
   HTTP_REQUEST_PATH_PARAM,
-  HTTP_REQUEST_URI
+  HTTP_REQUEST_URI,
+  SQL_ROW_VALUE
 } = require('../../../../src/appsec/iast/taint-tracking/source-types')
+const Config = require('../../../../src/config')
 
 const middlewareNextChannel = dc.channel('apm:express:middleware:next')
-const queryParseFinishChannel = dc.channel('datadog:qs:parse:finish')
+const queryReadFinishChannel = dc.channel('datadog:query:read:finish')
 const bodyParserFinishChannel = dc.channel('datadog:body-parser:read:finish')
 const cookieParseFinishCh = dc.channel('datadog:cookie:parse:finish')
 const processParamsStartCh = dc.channel('datadog:express:process_params:start')
+const routerParamStartCh = dc.channel('datadog:router:param:start')
+const sequelizeFinish = dc.channel('datadog:sequelize:query:finish')
 
 describe('IAST Taint tracking plugin', () => {
   let taintTrackingPlugin
@@ -23,8 +27,10 @@ describe('IAST Taint tracking plugin', () => {
   const store = {}
 
   const datadogCore = {
-    storage: {
-      getStore: () => store
+    storage: () => {
+      return {
+        getStore: () => store
+      }
     }
   }
 
@@ -33,7 +39,8 @@ describe('IAST Taint tracking plugin', () => {
       './operations': sinon.spy(taintTrackingOperations),
       '../../../../../datadog-core': datadogCore
     })
-    taintTrackingPlugin.enable()
+    const config = new Config()
+    taintTrackingPlugin.enable(config.iast)
   })
 
   afterEach(() => {
@@ -42,13 +49,20 @@ describe('IAST Taint tracking plugin', () => {
   })
 
   it('Should subscribe to body parser, qs, cookie and process_params channel', () => {
-    expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(6)
+    expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(13)
     expect(taintTrackingPlugin._subscriptions[0]._channel.name).to.equals('datadog:body-parser:read:finish')
-    expect(taintTrackingPlugin._subscriptions[1]._channel.name).to.equals('datadog:qs:parse:finish')
-    expect(taintTrackingPlugin._subscriptions[2]._channel.name).to.equals('apm:express:middleware:next')
-    expect(taintTrackingPlugin._subscriptions[3]._channel.name).to.equals('datadog:cookie:parse:finish')
-    expect(taintTrackingPlugin._subscriptions[4]._channel.name).to.equals('datadog:express:process_params:start')
-    expect(taintTrackingPlugin._subscriptions[5]._channel.name).to.equals('apm:graphql:resolve:start')
+    expect(taintTrackingPlugin._subscriptions[1]._channel.name).to.equals('datadog:multer:read:finish')
+    expect(taintTrackingPlugin._subscriptions[2]._channel.name).to.equals('datadog:query:read:finish')
+    expect(taintTrackingPlugin._subscriptions[3]._channel.name).to.equals('datadog:express:query:finish')
+    expect(taintTrackingPlugin._subscriptions[4]._channel.name).to.equals('apm:express:middleware:next')
+    expect(taintTrackingPlugin._subscriptions[5]._channel.name).to.equals('datadog:cookie:parse:finish')
+    expect(taintTrackingPlugin._subscriptions[6]._channel.name).to.equals('datadog:sequelize:query:finish')
+    expect(taintTrackingPlugin._subscriptions[7]._channel.name).to.equals('apm:pg:query:finish')
+    expect(taintTrackingPlugin._subscriptions[8]._channel.name).to.equals('datadog:express:process_params:start')
+    expect(taintTrackingPlugin._subscriptions[9]._channel.name).to.equals('datadog:router:param:start')
+    expect(taintTrackingPlugin._subscriptions[10]._channel.name).to.equals('apm:graphql:resolve:start')
+    expect(taintTrackingPlugin._subscriptions[11]._channel.name).to.equals('datadog:url:parse:finish')
+    expect(taintTrackingPlugin._subscriptions[12]._channel.name).to.equals('datadog:url:getter:finish')
   })
 
   describe('taint sources', () => {
@@ -133,7 +147,7 @@ describe('IAST Taint tracking plugin', () => {
         }
       }
 
-      queryParseFinishChannel.publish({ qs: req.query })
+      queryReadFinishChannel.publish({ query: req.query })
 
       expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
         iastContext,
@@ -206,7 +220,7 @@ describe('IAST Taint tracking plugin', () => {
       )
     })
 
-    it('Should taint request params when process params event is published', () => {
+    it('Should taint request params when process params event is published with processParamsStartCh', () => {
       const req = {
         params: {
           parameter1: 'tainted1'
@@ -214,6 +228,21 @@ describe('IAST Taint tracking plugin', () => {
       }
 
       processParamsStartCh.publish({ req })
+      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+        iastContext,
+        req.params,
+        HTTP_REQUEST_PATH_PARAM
+      )
+    })
+
+    it('Should taint request params when process params event is published with routerParamStartCh', () => {
+      const req = {
+        params: {
+          parameter1: 'tainted1'
+        }
+      }
+
+      routerParamStartCh.publish({ req })
       expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
         iastContext,
         req.params,
@@ -249,6 +278,260 @@ describe('IAST Taint tracking plugin', () => {
         HTTP_REQUEST_URI,
         HTTP_REQUEST_URI
       )
+    })
+
+    describe('taint database sources', () => {
+      it('Should not taint if config is set to 0', () => {
+        taintTrackingPlugin.disable()
+        const config = new Config()
+        config.dbRowsToTaint = 0
+        taintTrackingPlugin.enable(config)
+
+        const result = [
+          {
+            id: 1,
+            name: 'string value 1'
+          },
+          {
+            id: 2,
+            name: 'string value 2'
+          }]
+        sequelizeFinish.publish({ result })
+
+        expect(taintTrackingOperations.newTaintedString).to.not.have.been.called
+      })
+
+      describe('with default config', () => {
+        it('Should taint first database row coming from sequelize', () => {
+          const result = [
+            {
+              id: 1,
+              name: 'string value 1'
+            },
+            {
+              id: 2,
+              name: 'string value 2'
+            }]
+          sequelizeFinish.publish({ result })
+
+          expect(taintTrackingOperations.newTaintedString).to.be.calledOnceWith(
+            iastContext,
+            'string value 1',
+            '0.name',
+            SQL_ROW_VALUE
+          )
+        })
+
+        it('Should taint whole object', () => {
+          const result = { id: 1, description: 'value' }
+          sequelizeFinish.publish({ result })
+
+          expect(taintTrackingOperations.newTaintedString).to.be.calledOnceWith(
+            iastContext,
+            'value',
+            'description',
+            SQL_ROW_VALUE
+          )
+        })
+
+        it('Should taint first row in nested objects', () => {
+          const result = [
+            {
+              id: 1,
+              description: 'value',
+              children: [
+                {
+                  id: 11,
+                  name: 'child1'
+                },
+                {
+                  id: 12,
+                  name: 'child2'
+                }
+              ]
+            },
+            {
+              id: 2,
+              description: 'value',
+              children: [
+                {
+                  id: 21,
+                  name: 'child3'
+                },
+                {
+                  id: 22,
+                  name: 'child4'
+                }
+              ]
+            }
+          ]
+          sequelizeFinish.publish({ result })
+
+          expect(taintTrackingOperations.newTaintedString).to.be.calledTwice
+          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+            iastContext,
+            'value',
+            '0.description',
+            SQL_ROW_VALUE
+          )
+          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+            iastContext,
+            'child1',
+            '0.children.0.name',
+            SQL_ROW_VALUE
+          )
+        })
+      })
+
+      describe('with config set to 2', () => {
+        beforeEach(() => {
+          taintTrackingPlugin.disable()
+          const config = new Config()
+          config.dbRowsToTaint = 2
+          taintTrackingPlugin.enable(config)
+        })
+
+        it('Should taint first database row coming from sequelize', () => {
+          const result = [
+            {
+              id: 1,
+              name: 'string value 1'
+            },
+            {
+              id: 2,
+              name: 'string value 2'
+            },
+            {
+              id: 3,
+              name: 'string value 2'
+            }]
+          sequelizeFinish.publish({ result })
+
+          expect(taintTrackingOperations.newTaintedString).to.be.calledTwice
+          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+            iastContext,
+            'string value 1',
+            '0.name',
+            SQL_ROW_VALUE
+          )
+          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+            iastContext,
+            'string value 2',
+            '1.name',
+            SQL_ROW_VALUE
+          )
+        })
+
+        it('Should taint whole object', () => {
+          const result = { id: 1, description: 'value' }
+          sequelizeFinish.publish({ result })
+
+          expect(taintTrackingOperations.newTaintedString).to.be.calledOnceWith(
+            iastContext,
+            'value',
+            'description',
+            SQL_ROW_VALUE
+          )
+        })
+
+        it('Should taint first row in nested objects', () => {
+          const result = [
+            {
+              id: 1,
+              description: 'value',
+              children: [
+                {
+                  id: 11,
+                  name: 'child1'
+                },
+                {
+                  id: 12,
+                  name: 'child2'
+                },
+                {
+                  id: 13,
+                  name: 'child3'
+                }
+              ]
+            },
+            {
+              id: 2,
+              description: 'value2',
+              children: [
+                {
+                  id: 21,
+                  name: 'child4'
+                },
+                {
+                  id: 22,
+                  name: 'child5'
+                },
+                {
+                  id: 23,
+                  name: 'child6'
+                }
+              ]
+            },
+            {
+              id: 3,
+              description: 'value3',
+              children: [
+                {
+                  id: 31,
+                  name: 'child7'
+                },
+                {
+                  id: 32,
+                  name: 'child8'
+                },
+                {
+                  id: 33,
+                  name: 'child9'
+                }
+              ]
+            }
+          ]
+          sequelizeFinish.publish({ result })
+
+          expect(taintTrackingOperations.newTaintedString).to.callCount(6)
+          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+            iastContext,
+            'value',
+            '0.description',
+            SQL_ROW_VALUE
+          )
+          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+            iastContext,
+            'child1',
+            '0.children.0.name',
+            SQL_ROW_VALUE
+          )
+          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+            iastContext,
+            'child2',
+            '0.children.1.name',
+            SQL_ROW_VALUE
+          )
+          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+            iastContext,
+            'value2',
+            '1.description',
+            SQL_ROW_VALUE
+          )
+          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+            iastContext,
+            'child4',
+            '1.children.0.name',
+            SQL_ROW_VALUE
+          )
+          expect(taintTrackingOperations.newTaintedString).to.be.calledWith(
+            iastContext,
+            'child5',
+            '1.children.1.name',
+            SQL_ROW_VALUE
+          )
+        })
+      })
     })
   })
 })

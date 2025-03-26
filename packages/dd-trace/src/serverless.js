@@ -23,7 +23,7 @@ function maybeStartServerlessMiniAgent (config) {
   try {
     require('child_process').spawn(rustBinaryPath, { stdio: 'inherit' })
   } catch (err) {
-    log.error(`Error spawning mini agent process: ${err}`)
+    log.error('Error spawning mini agent process: %s', err.message)
   }
 }
 
@@ -60,9 +60,18 @@ function getIsAzureFunction () {
   return isAzureFunction
 }
 
+function isInServerlessEnvironment () {
+  const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+  const isGCPFunction = getIsGCPFunction()
+  const isAzureFunction = getIsAzureFunction()
+
+  return inAWSLambda || isGCPFunction || isAzureFunction
+}
+
 module.exports = {
   maybeStartServerlessMiniAgent,
   getIsGCPFunction,
   getIsAzureFunction,
-  getRustBinaryPath
+  getRustBinaryPath,
+  isInServerlessEnvironment
 }

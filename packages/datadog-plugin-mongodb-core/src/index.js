@@ -11,8 +11,9 @@ class MongodbCorePlugin extends DatabasePlugin {
   start ({ ns, ops, options = {}, name }) {
     const query = getQuery(ops)
     const resource = truncate(getResource(this, ns, query, name))
-    this.startSpan(this.operationName(), {
-      service: this.serviceName({ pluginConfig: this.config }),
+    const service = this.serviceName({ pluginConfig: this.config })
+    const span = this.startSpan(this.operationName(), {
+      service,
       resource,
       type: 'mongodb',
       kind: 'client',
@@ -24,6 +25,10 @@ class MongodbCorePlugin extends DatabasePlugin {
         'out.port': options.port
       }
     })
+    const comment = this.injectDbmComment(span, ops.comment, service)
+    if (comment) {
+      ops.comment = comment
+    }
   }
 
   getPeerService (tags) {
@@ -33,6 +38,27 @@ class MongodbCorePlugin extends DatabasePlugin {
       tags['peer.service'] = ns.split('.', 1)[0]
     }
     return super.getPeerService(tags)
+  }
+
+  injectDbmComment (span, comment, serviceName) {
+    const dbmTraceComment = this.createDbmComment(span, serviceName)
+
+    if (!dbmTraceComment) {
+      return comment
+    }
+
+    if (comment) {
+      // if the command already has a comment, append the dbm trace comment
+      if (typeof comment === 'string') {
+        comment += `,${dbmTraceComment}`
+      } else if (Array.isArray(comment)) {
+        comment.push(dbmTraceComment)
+      } // do nothing if the comment is not a string or an array
+    } else {
+      comment = dbmTraceComment
+    }
+
+    return comment
   }
 }
 
@@ -44,6 +70,7 @@ function getQuery (cmd) {
   if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) return
   if (cmd.query) return sanitizeBigInt(limitDepth(cmd.query))
   if (cmd.filter) return sanitizeBigInt(limitDepth(cmd.filter))
+  if (cmd.pipeline) return sanitizeBigInt(limitDepth(cmd.pipeline))
 }
 
 function getResource (plugin, ns, query, operationName) {

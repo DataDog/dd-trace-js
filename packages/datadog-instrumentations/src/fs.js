@@ -13,6 +13,9 @@ const errorChannel = channel('apm:fs:operation:error')
 const ddFhSym = Symbol('ddFileHandle')
 let kHandle, kDirReadPromisified, kDirClosePromisified
 
+// Update packages/dd-trace/src/profiling/profilers/event_plugins/fs.js if you make changes to param names in any of
+// the following objects.
+
 const paramsByMethod = {
   access: ['path', 'mode'],
   appendFile: ['path', 'data', 'options'],
@@ -266,24 +269,44 @@ function createWrapFunction (prefix = '', override = '') {
       const lastIndex = arguments.length - 1
       const cb = typeof arguments[lastIndex] === 'function' && arguments[lastIndex]
       const innerResource = new AsyncResource('bound-anonymous-fn')
-      const message = getMessage(method, getMethodParamsRelationByPrefix(prefix)[operation], arguments, this)
+      const params = getMethodParamsRelationByPrefix(prefix)[operation]
+      const abortController = new AbortController()
+      const message = { ...getMessage(method, params, arguments, this), abortController }
+
+      const finish = innerResource.bind(function (error) {
+        if (error !== null && typeof error === 'object') { // fs.exists receives a boolean
+          errorChannel.publish(error)
+        }
+        finishChannel.publish()
+      })
 
       if (cb) {
         const outerResource = new AsyncResource('bound-anonymous-fn')
 
-        arguments[lastIndex] = innerResource.bind(function (e) {
-          if (e !== null && typeof e === 'object') { // fs.exists receives a boolean
-            errorChannel.publish(e)
-          }
-
-          finishChannel.publish()
-
+        arguments[lastIndex] = shimmer.wrapFunction(cb, cb => innerResource.bind(function (e) {
+          finish(e)
           return outerResource.runInAsyncScope(() => cb.apply(this, arguments))
-        })
+        }))
       }
 
       return innerResource.runInAsyncScope(() => {
         startChannel.publish(message)
+
+        if (abortController.signal.aborted) {
+          const error = abortController.signal.reason || new Error('Aborted')
+
+          if (prefix === 'promises.') {
+            finish(error)
+            return Promise.reject(error)
+          } else if (name.includes('Sync') || !cb) {
+            finish(error)
+            throw error
+          } else if (cb) {
+            arguments[lastIndex](error)
+            return
+          }
+        }
+
         try {
           const result = original.apply(this, arguments)
           if (cb) return result

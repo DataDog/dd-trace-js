@@ -5,6 +5,7 @@ const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 
 const errorChannel = channel('apm:fastify:middleware:error')
 const handleChannel = channel('apm:fastify:request:handle')
+const routeAddedChannel = channel('apm:fastify:route:added')
 
 const parsingResources = new WeakMap()
 
@@ -16,6 +17,7 @@ function wrapFastify (fastify, hasParsingEvents) {
 
     if (!app || typeof app.addHook !== 'function') return app
 
+    app.addHook('onRoute', onRoute)
     app.addHook('onRequest', onRequest)
     app.addHook('preHandler', preHandler)
 
@@ -34,12 +36,12 @@ function wrapFastify (fastify, hasParsingEvents) {
 }
 
 function wrapAddHook (addHook) {
-  return function addHookWithTrace (name, fn) {
+  return shimmer.wrapFunction(addHook, addHook => function addHookWithTrace (name, fn) {
     fn = arguments[arguments.length - 1]
 
     if (typeof fn !== 'function') return addHook.apply(this, arguments)
 
-    arguments[arguments.length - 1] = shimmer.wrap(fn, function (request, reply, done) {
+    arguments[arguments.length - 1] = shimmer.wrapFunction(fn, fn => function (request, reply, done) {
       const req = getReq(request)
 
       try {
@@ -78,7 +80,7 @@ function wrapAddHook (addHook) {
     })
 
     return addHook.apply(this, arguments)
-  }
+  })
 }
 
 function onRequest (request, reply, done) {
@@ -86,8 +88,9 @@ function onRequest (request, reply, done) {
 
   const req = getReq(request)
   const res = getRes(reply)
+  const routeConfig = getRouteConfig(request)
 
-  handleChannel.publish({ req, res })
+  handleChannel.publish({ req, res, routeConfig })
 
   return done()
 }
@@ -142,6 +145,10 @@ function getRes (reply) {
   return reply && (reply.raw || reply.res || reply)
 }
 
+function getRouteConfig (request) {
+  return request?.routeOptions?.config
+}
+
 function publishError (error, req) {
   if (error) {
     errorChannel.publish({ error, req })
@@ -150,8 +157,12 @@ function publishError (error, req) {
   return error
 }
 
+function onRoute (routeOptions) {
+  routeAddedChannel.publish({ routeOptions, onRoute })
+}
+
 addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
-  const wrapped = shimmer.wrap(fastify, wrapFastify(fastify, true))
+  const wrapped = shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, true))
 
   wrapped.fastify = wrapped
   wrapped.default = wrapped
@@ -160,9 +171,9 @@ addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
 })
 
 addHook({ name: 'fastify', versions: ['2'] }, fastify => {
-  return shimmer.wrap(fastify, wrapFastify(fastify, true))
+  return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, true))
 })
 
 addHook({ name: 'fastify', versions: ['1'] }, fastify => {
-  return shimmer.wrap(fastify, wrapFastify(fastify, false))
+  return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, false))
 })

@@ -60,7 +60,7 @@ describe('opentelemetry', () => {
       '@opentelemetry/api@1.8.0',
       '@opentelemetry/instrumentation',
       '@opentelemetry/instrumentation-http',
-      '@opentelemetry/instrumentation-express',
+      '@opentelemetry/instrumentation-express@0.47.1',
       'express'
     ]
     if (satisfies(process.version.slice(1), '>=14')) {
@@ -152,45 +152,37 @@ describe('opentelemetry', () => {
       assert.strictEqual(otelInvalid.length, 0)
 
       assert.deepStrictEqual(otelHiding[0].tags, [
-        'config_datadog:dd_trace_log_level', 'config_opentelemetry:otel_log_level',
-        `version:${process.version}`
+        'config_datadog:dd_trace_log_level', 'config_opentelemetry:otel_log_level'
       ])
       assert.deepStrictEqual(otelHiding[1].tags, [
-        'config_datadog:dd_trace_propagation_style', 'config_opentelemetry:otel_propagators',
-        `version:${process.version}`
+        'config_datadog:dd_trace_propagation_style', 'config_opentelemetry:otel_propagators'
       ])
       assert.deepStrictEqual(otelHiding[2].tags, [
-        'config_datadog:dd_service', 'config_opentelemetry:otel_service_name',
-        `version:${process.version}`
+        'config_datadog:dd_service', 'config_opentelemetry:otel_service_name'
       ])
 
       assert.deepStrictEqual(otelHiding[3].tags, [
-        'config_datadog:dd_trace_sample_rate', 'config_opentelemetry:otel_traces_sampler', `version:${process.version}`
+        'config_datadog:dd_trace_sample_rate', 'config_opentelemetry:otel_traces_sampler'
       ])
 
       assert.deepStrictEqual(otelHiding[4].tags, [
-        'config_datadog:dd_trace_sample_rate', 'config_opentelemetry:otel_traces_sampler_arg',
-        `version:${process.version}`
+        'config_datadog:dd_trace_sample_rate', 'config_opentelemetry:otel_traces_sampler_arg'
       ])
 
       assert.deepStrictEqual(otelHiding[5].tags, [
-        'config_datadog:dd_trace_enabled', 'config_opentelemetry:otel_traces_exporter',
-        `version:${process.version}`
+        'config_datadog:dd_trace_enabled', 'config_opentelemetry:otel_traces_exporter'
       ])
 
       assert.deepStrictEqual(otelHiding[6].tags, [
-        'config_datadog:dd_runtime_metrics_enabled', 'config_opentelemetry:otel_metrics_exporter',
-        `version:${process.version}`
+        'config_datadog:dd_runtime_metrics_enabled', 'config_opentelemetry:otel_metrics_exporter'
       ])
 
       assert.deepStrictEqual(otelHiding[7].tags, [
-        'config_datadog:dd_tags', 'config_opentelemetry:otel_resource_attributes',
-        `version:${process.version}`
+        'config_datadog:dd_tags', 'config_opentelemetry:otel_resource_attributes'
       ])
 
       assert.deepStrictEqual(otelHiding[8].tags, [
-        'config_datadog:dd_trace_otel_enabled', 'config_opentelemetry:otel_sdk_disabled',
-        `version:${process.version}`
+        'config_datadog:dd_trace_otel_enabled', 'config_opentelemetry:otel_sdk_disabled'
       ])
 
       for (const metric of otelHiding) {
@@ -234,51 +226,42 @@ describe('opentelemetry', () => {
       assert.strictEqual(otelInvalid.length, 8)
 
       assert.deepStrictEqual(otelHiding[0].tags, [
-        'config_datadog:dd_trace_otel_enabled', 'config_opentelemetry:otel_sdk_disabled',
-        `version:${process.version}`
+        'config_datadog:dd_trace_otel_enabled', 'config_opentelemetry:otel_sdk_disabled'
       ])
 
       assert.deepStrictEqual(otelInvalid[0].tags, [
-        'config_datadog:dd_trace_log_level', 'config_opentelemetry:otel_log_level',
-        `version:${process.version}`
+        'config_datadog:dd_trace_log_level', 'config_opentelemetry:otel_log_level'
       ])
 
       assert.deepStrictEqual(otelInvalid[1].tags, [
         'config_datadog:dd_trace_sample_rate',
-        'config_opentelemetry:otel_traces_sampler',
-        `version:${process.version}`
+        'config_opentelemetry:otel_traces_sampler'
       ])
 
       assert.deepStrictEqual(otelInvalid[2].tags, [
         'config_datadog:dd_trace_sample_rate',
-        'config_opentelemetry:otel_traces_sampler_arg',
-        `version:${process.version}`
+        'config_opentelemetry:otel_traces_sampler_arg'
       ])
       assert.deepStrictEqual(otelInvalid[3].tags, [
-        'config_datadog:dd_trace_enabled', 'config_opentelemetry:otel_traces_exporter',
-        `version:${process.version}`
+        'config_datadog:dd_trace_enabled', 'config_opentelemetry:otel_traces_exporter'
       ])
 
       assert.deepStrictEqual(otelInvalid[4].tags, [
         'config_datadog:dd_runtime_metrics_enabled',
-        'config_opentelemetry:otel_metrics_exporter',
-        `version:${process.version}`
+        'config_opentelemetry:otel_metrics_exporter'
       ])
 
       assert.deepStrictEqual(otelInvalid[5].tags, [
-        'config_datadog:dd_trace_otel_enabled', 'config_opentelemetry:otel_sdk_disabled',
-        `version:${process.version}`
+        'config_datadog:dd_trace_otel_enabled', 'config_opentelemetry:otel_sdk_disabled'
       ])
 
       assert.deepStrictEqual(otelInvalid[6].tags, [
-        'config_opentelemetry:otel_logs_exporter',
-        `version:${process.version}`
+        'config_opentelemetry:otel_logs_exporter'
       ])
 
       assert.deepStrictEqual(otelInvalid[7].tags, [
         'config_datadog:dd_trace_propagation_style',
-        'config_opentelemetry:otel_propagators',
-        `version:${process.version}`
+        'config_opentelemetry:otel_propagators'
       ])
 
       for (const metric of otelInvalid) {
@@ -341,8 +324,52 @@ describe('opentelemetry', () => {
         assert.strictEqual(series.common, true)
         assert.deepStrictEqual(series.tags, [
           'integration_name:otel',
-          'otel_enabled:true',
-          `version:${process.version}`
+          'otel_enabled:true'
+        ])
+      }
+    }, true)
+  })
+
+  it('should capture auto-instrumentation telemetry', async () => {
+    const SERVER_PORT = 6666
+    proc = fork(join(cwd, 'opentelemetry/auto-instrumentation.js'), {
+      cwd,
+      env: {
+        DD_TRACE_AGENT_PORT: agent.port,
+        DD_TRACE_OTEL_ENABLED: 1,
+        SERVER_PORT,
+        DD_TRACE_DISABLED_INSTRUMENTATIONS: 'http,dns,express,net',
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: 1
+      }
+    })
+    await new Promise(resolve => setTimeout(resolve, 1000)) // Adjust the delay as necessary
+    await axios.get(`http://localhost:${SERVER_PORT}/first-endpoint`)
+
+    return check(agent, proc, 10000, ({ payload }) => {
+      assert.strictEqual(payload.request_type, 'generate-metrics')
+
+      const metrics = payload.payload
+      assert.strictEqual(metrics.namespace, 'tracers')
+
+      const spanCreated = metrics.series.find(({ metric }) => metric === 'spans_created')
+      const spanFinished = metrics.series.find(({ metric }) => metric === 'spans_finished')
+
+      // Validate common fields between start and finish
+      for (const series of [spanCreated, spanFinished]) {
+        assert.ok(series)
+
+        assert.strictEqual(series.points.length, 1)
+        assert.strictEqual(series.points[0].length, 2)
+
+        const [ts, value] = series.points[0]
+        assert.ok(nearNow(ts, Date.now() / 1e3))
+        assert.strictEqual(value, 9)
+
+        assert.strictEqual(series.type, 'count')
+        assert.strictEqual(series.common, true)
+        assert.deepStrictEqual(series.tags, [
+          'integration_name:otel.library',
+          'otel_enabled:true'
         ])
       }
     }, true)

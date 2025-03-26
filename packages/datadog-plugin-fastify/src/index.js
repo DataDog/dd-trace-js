@@ -1,18 +1,16 @@
 'use strict'
 
-const RouterPlugin = require('../../datadog-plugin-router/src')
+const FastifyTracingPlugin = require('./tracing')
+const FastifyCodeOriginForSpansPlugin = require('./code_origin')
+const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 
-class FastifyPlugin extends RouterPlugin {
-  static get id () {
-    return 'fastify'
-  }
-
-  constructor (...args) {
-    super(...args)
-
-    this.addSub('apm:fastify:request:handle', ({ req }) => {
-      this.setFramework(req, 'fastify', this.config)
-    })
+class FastifyPlugin extends CompositePlugin {
+  static get id () { return 'fastify' }
+  static get plugins () {
+    return {
+      tracing: FastifyTracingPlugin,
+      codeOriginForSpans: FastifyCodeOriginForSpansPlugin
+    }
   }
 }
 

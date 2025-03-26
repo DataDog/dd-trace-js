@@ -151,6 +151,7 @@ describe('CI Visibility Exporter', () => {
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       })
+
       it('should request the API after EVP proxy is resolved', (done) => {
         const scope = nock(`http://localhost:${port}`)
           .post('/api/v2/libraries/tests/services/setting')
@@ -160,7 +161,8 @@ describe('CI Visibility Exporter', () => {
                 itr_enabled: true,
                 require_git: false,
                 code_coverage: true,
-                tests_skipping: true
+                tests_skipping: true,
+                known_tests_enabled: false
               }
             }
           }))
@@ -649,34 +651,39 @@ describe('CI Visibility Exporter', () => {
   })
 
   describe('getKnownTests', () => {
-    context('if early flake detection is disabled', () => {
-      it('should resolve immediately to undefined', (done) => {
-        const scope = nock(`http://localhost:${port}`)
+    context('if known tests is disabled', () => {
+      it('should resolve to undefined', (done) => {
+        const knownTestsScope = nock(`http://localhost:${port}`)
           .post('/api/v2/ci/libraries/tests')
           .reply(200)
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ port, isEarlyFlakeDetectionEnabled: false })
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          port
+        })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: false }
 
         ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
           expect(err).to.be.null
           expect(knownTests).to.eql(undefined)
-          expect(scope.isDone()).not.to.be.true
+          expect(knownTestsScope.isDone()).not.to.be.true
           done()
         })
       })
     })
-    context('if early flake detection is enabled but can not use CI Visibility protocol', () => {
+
+    context('if known tests is enabled but can not use CI Visibility protocol', () => {
       it('should not request known tests', (done) => {
         const scope = nock(`http://localhost:${port}`)
           .post('/api/v2/ci/libraries/tests')
           .reply(200)
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ port, isEarlyFlakeDetectionEnabled: true })
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(false)
-        ciVisibilityExporter._libraryConfig = { isEarlyFlakeDetectionEnabled: true }
+        ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
+
         ciVisibilityExporter.getKnownTests({}, (err) => {
           expect(err).to.be.null
           expect(scope.isDone()).not.to.be.true
@@ -684,7 +691,8 @@ describe('CI Visibility Exporter', () => {
         })
       })
     })
-    context('if early flake detection is enabled and can use CI Vis Protocol', () => {
+
+    context('if known tests is enabled and can use CI Vis Protocol', () => {
       it('should request known tests', (done) => {
         const scope = nock(`http://localhost:${port}`)
           .post('/api/v2/ci/libraries/tests')
@@ -701,10 +709,10 @@ describe('CI Visibility Exporter', () => {
             }
           }))
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ port, isEarlyFlakeDetectionEnabled: true })
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-        ciVisibilityExporter._libraryConfig = { isEarlyFlakeDetectionEnabled: true }
+        ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
         ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
           expect(err).to.be.null
           expect(knownTests).to.eql({
@@ -717,20 +725,22 @@ describe('CI Visibility Exporter', () => {
           done()
         })
       })
+
       it('should return an error if the request fails', (done) => {
         const scope = nock(`http://localhost:${port}`)
           .post('/api/v2/ci/libraries/tests')
           .reply(500)
-        const ciVisibilityExporter = new CiVisibilityExporter({ port, isEarlyFlakeDetectionEnabled: true })
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-        ciVisibilityExporter._libraryConfig = { isEarlyFlakeDetectionEnabled: true }
+        ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
         ciVisibilityExporter.getKnownTests({}, (err) => {
           expect(err).not.to.be.null
           expect(scope.isDone()).to.be.true
           done()
         })
       })
+
       it('should accept gzip if the exporter is gzip compatible', (done) => {
         let requestHeaders = {}
         const scope = nock(`http://localhost:${port}`)
@@ -754,10 +764,10 @@ describe('CI Visibility Exporter', () => {
             'content-encoding': 'gzip'
           })
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ port, isEarlyFlakeDetectionEnabled: true })
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-        ciVisibilityExporter._libraryConfig = { isEarlyFlakeDetectionEnabled: true }
+        ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
         ciVisibilityExporter._isGzipCompatible = true
         ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
           expect(err).to.be.null
@@ -772,6 +782,7 @@ describe('CI Visibility Exporter', () => {
           done()
         })
       })
+
       it('should not accept gzip if the exporter is gzip incompatible', (done) => {
         let requestHeaders = {}
         const scope = nock(`http://localhost:${port}`)
@@ -793,11 +804,10 @@ describe('CI Visibility Exporter', () => {
             })
           })
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ port, isEarlyFlakeDetectionEnabled: true })
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-        ciVisibilityExporter._libraryConfig = { isEarlyFlakeDetectionEnabled: true }
-
+        ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
         ciVisibilityExporter._isGzipCompatible = false
 
         ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
@@ -812,6 +822,99 @@ describe('CI Visibility Exporter', () => {
           expect(requestHeaders['accept-encoding']).not.to.equal('gzip')
           done()
         })
+      })
+    })
+  })
+
+  describe('exportDiLogs', () => {
+    context('is not initialized', () => {
+      it('should do nothing', () => {
+        const log = { message: 'log' }
+        const ciVisibilityExporter = new CiVisibilityExporter({ port, isTestDynamicInstrumentationEnabled: true })
+        ciVisibilityExporter.exportDiLogs(log)
+        ciVisibilityExporter._export = sinon.spy()
+        expect(ciVisibilityExporter._export).not.to.be.called
+      })
+    })
+
+    context('is initialized but can not forward logs', () => {
+      it('should do nothing', () => {
+        const writer = {
+          append: sinon.spy(),
+          flush: sinon.spy(),
+          setUrl: sinon.spy()
+        }
+        const log = { message: 'log' }
+        const ciVisibilityExporter = new CiVisibilityExporter({ port, isTestDynamicInstrumentationEnabled: true })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._logsWriter = writer
+        ciVisibilityExporter._canForwardLogs = false
+        ciVisibilityExporter.exportDiLogs(log)
+        expect(ciVisibilityExporter._logsWriter.append).not.to.be.called
+      })
+    })
+
+    context('is initialized and can forward logs', () => {
+      it('should export formatted logs', () => {
+        const writer = {
+          append: sinon.spy(),
+          flush: sinon.spy(),
+          setUrl: sinon.spy()
+        }
+        const diLog = {
+          message: 'log',
+          debugger: {
+            snapshot: {
+              id: '1234',
+              timestamp: 1234567890,
+              probe: {
+                id: '54321',
+                version: '1',
+                location: {
+                  file: 'example.js',
+                  lines: ['1']
+                }
+              },
+              stack: [
+                {
+                  fileName: 'example.js',
+                  function: 'sum',
+                  lineNumber: 1
+                }
+              ],
+              language: 'javascript'
+            }
+          }
+        }
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          env: 'ci',
+          version: '1.0.0',
+          port,
+          isTestDynamicInstrumentationEnabled: true,
+          service: 'my-service'
+        })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._logsWriter = writer
+        ciVisibilityExporter._canForwardLogs = true
+        ciVisibilityExporter.exportDiLogs(
+          {
+            'git.repository_url': 'https://github.com/datadog/dd-trace-js.git',
+            'git.commit.sha': '1234'
+          },
+          diLog
+        )
+        expect(ciVisibilityExporter._logsWriter.append).to.be.calledWith(sinon.match({
+          ddtags: 'git.repository_url:https://github.com/datadog/dd-trace-js.git,git.commit.sha:1234',
+          level: 'error',
+          ddsource: 'dd_debugger',
+          service: 'my-service',
+          dd: {
+            service: 'my-service',
+            env: 'ci',
+            version: '1.0.0'
+          },
+          ...diLog
+        }))
       })
     })
   })

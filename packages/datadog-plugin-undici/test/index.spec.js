@@ -23,7 +23,7 @@ describe('Plugin', () => {
   describe('undici-fetch', () => {
     withVersions('undici', 'undici', version => {
       const specificVersion = require(`../../../versions/undici@${version}`).version()
-      if ((NODE_MAJOR <= 16) && semver.satisfies(specificVersion, '>=6')) return
+      if (NODE_MAJOR <= 16 && semver.satisfies(specificVersion, '>=6')) return
 
       function server (app, listener) {
         const server = require('http').createServer(app)

@@ -1,8 +1,16 @@
 /* eslint-disable */
 let isEarlyFlakeDetectionEnabled = false
+let isKnownTestsEnabled = false
 let knownTestsForSuite = []
 let suiteTests = []
 let earlyFlakeDetectionNumRetries = 0
+let isTestManagementEnabled = false
+let testManagementAttemptToFixRetries = 0
+let testManagementTests = {}
+// We need to grab the original window as soon as possible,
+// in case the test changes the origin. If the test does change the origin,
+// any call to `cy.window()` will result in a cross origin error.
+let originalWindow
 
 // If the test is using multi domain with cy.origin, trying to access
 // window properties will result in a cross origin error.
@@ -18,30 +26,54 @@ function isNewTest (test) {
   return !knownTestsForSuite.includes(test.fullTitle())
 }
 
-function retryTest (test, suiteTests) {
-  for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
+function getTestProperties (testName) {
+  // We neeed to do it in this way because of compatibility with older versions as '?' is not supported in older versions of Cypress
+  const properties = testManagementTests[testName] && testManagementTests[testName].properties || {};
+
+  const { attempt_to_fix: isAttemptToFix, disabled: isDisabled, quarantined: isQuarantined } = properties;
+
+  return { isAttemptToFix, isDisabled, isQuarantined };
+}
+
+function retryTest (test, suiteTests, numRetries, tags) {
+  for (let retryIndex = 0; retryIndex < numRetries; retryIndex++) {
     const clonedTest = test.clone()
     // TODO: signal in framework logs that this is a retry.
     // TODO: Change it so these tests are allowed to fail.
     // TODO: figure out if reported duration is skewed.
     suiteTests.unshift(clonedTest)
-    clonedTest._ddIsNew = true
-    clonedTest._ddIsEfdRetry = true
+    tags.forEach(tag => {
+      clonedTest[tag] = true
+    })
   }
 }
 
 
 const oldRunTests = Cypress.mocha.getRunner().runTests
 Cypress.mocha.getRunner().runTests = function (suite, fn) {
-  if (!isEarlyFlakeDetectionEnabled) {
+  if (!isKnownTestsEnabled && !isTestManagementEnabled) {
     return oldRunTests.apply(this, arguments)
   }
   // We copy the new tests at the beginning of the suite run (runTests), so that they're run
   // multiple times.
   suite.tests.forEach(test => {
-    if (!test._ddIsNew && !test.isPending() && isNewTest(test)) {
-      test._ddIsNew = true
-      retryTest(test, suite.tests)
+    const testName = test.fullTitle()
+
+    const { isAttemptToFix } = getTestProperties(testName)
+
+    if (isTestManagementEnabled) {
+      if (isAttemptToFix && !test.isPending()) {
+        test._ddIsAttemptToFix = true
+        retryTest(test, suite.tests, testManagementAttemptToFixRetries, ['_ddIsAttemptToFix'])
+      }
+    }
+    if (isKnownTestsEnabled) {
+      if (!test._ddIsNew && !test.isPending() && isNewTest(test)) {
+        test._ddIsNew = true
+        if (isEarlyFlakeDetectionEnabled && !isAttemptToFix) {
+          retryTest(test, suite.tests, earlyFlakeDetectionNumRetries, ['_ddIsNew', '_ddIsEfdRetry'])
+        }
+      }
     }
   })
 
@@ -58,51 +90,63 @@ beforeEach(function () {
       this.skip()
     }
   })
+  cy.window().then(win => {
+    originalWindow = win
+  })
 })
 
 before(function () {
-  cy.task('dd:testSuiteStart', Cypress.mocha.getRootSuite().file).then((suiteConfig) => {
+  cy.task('dd:testSuiteStart', {
+    testSuite: Cypress.mocha.getRootSuite().file,
+    testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute
+  }).then((suiteConfig) => {
     if (suiteConfig) {
       isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled
+      isKnownTestsEnabled = suiteConfig.isKnownTestsEnabled
       knownTestsForSuite = suiteConfig.knownTestsForSuite
       earlyFlakeDetectionNumRetries = suiteConfig.earlyFlakeDetectionNumRetries
+      isTestManagementEnabled = suiteConfig.isTestManagementEnabled
+      testManagementAttemptToFixRetries = suiteConfig.testManagementAttemptToFixRetries
+      testManagementTests = suiteConfig.testManagementTests
     }
   })
 })
 
 after(() => {
-  cy.window().then(win => {
-    if (safeGetRum(win)) {
-      win.dispatchEvent(new Event('beforeunload'))
+  try {
+    if (safeGetRum(originalWindow)) {
+      originalWindow.dispatchEvent(new Event('beforeunload'))
     }
-  })
+  } catch (e) {
+    // ignore error. It's usually a multi origin issue.
+  }
 })
 
 
 afterEach(function () {
-  cy.window().then(win => {
-    const currentTest = Cypress.mocha.getRunner().suite.ctx.currentTest
-    const testInfo = {
-      testName: currentTest.fullTitle(),
-      testSuite: Cypress.mocha.getRootSuite().file,
-      state: currentTest.state,
-      error: currentTest.err,
-      isNew: currentTest._ddIsNew,
-      isEfdRetry: currentTest._ddIsEfdRetry
-    }
-    try {
-      testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line
-    } catch (e) {}
+  const currentTest = Cypress.mocha.getRunner().suite.ctx.currentTest
+  const testInfo = {
+    testName: currentTest.fullTitle(),
+    testSuite: Cypress.mocha.getRootSuite().file,
+    testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
+    state: currentTest.state,
+    error: currentTest.err,
+    isNew: currentTest._ddIsNew,
+    isEfdRetry: currentTest._ddIsEfdRetry,
+    isAttemptToFix: currentTest._ddIsAttemptToFix
+  }
+  try {
+    testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line
+  } catch (e) {}
 
-    if (safeGetRum(win)) {
-      testInfo.isRUMActive = true
-    }
-    let coverage
-    try {
-      coverage = win.__coverage__
-    } catch (e) {
-      // ignore error and continue
-    }
-    cy.task('dd:afterEach', { test: testInfo, coverage })
-  })
+  if (safeGetRum(originalWindow)) {
+    testInfo.isRUMActive = true
+  }
+  let coverage
+  try {
+    coverage = originalWindow.__coverage__
+  } catch (e) {
+    // ignore error and continue
+  }
+  cy.task('dd:afterEach', { test: testInfo, coverage })
 })

@@ -8,8 +8,8 @@ process.once('beforeExit', () => { profiler.stop() })
 
 module.exports = {
   start: config => {
-    const { service, version, env, url, hostname, port, tags, repositoryUrl, commitSHA } = config
-    const { enabled, sourceMap, exporters, heuristicsEnabled } = config.profiling
+    const { service, version, env, url, hostname, port, tags, repositoryUrl, commitSHA, injectionEnabled } = config
+    const { enabled, sourceMap, exporters } = config.profiling
     const logger = {
       debug: (message) => log.debug(message),
       info: (message) => log.info(message),
@@ -17,9 +17,17 @@ module.exports = {
       error: (message) => log.error(message)
     }
 
+    const libraryInjected = injectionEnabled.length > 0
+    let activation
+    if (enabled === 'auto') {
+      activation = 'auto'
+    } else if (enabled === 'true') {
+      activation = 'manual'
+    } else if (injectionEnabled.includes('profiler')) {
+      activation = 'injection'
+    } // else activation = undefined
+
     return profiler.start({
-      enabled,
-      heuristicsEnabled,
       service,
       version,
       env,
@@ -31,7 +39,9 @@ module.exports = {
       port,
       tags,
       repositoryUrl,
-      commitSHA
+      commitSHA,
+      libraryInjected,
+      activation
     })
   },
 

@@ -2,12 +2,13 @@
 
 const { channel } = require('dc-polyfill')
 const path = require('path')
-const semver = require('semver')
+const satisfies = require('semifies')
 const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
-const checkRequireCache = require('../check_require_cache')
-const telemetry = require('../../../dd-trace/src/telemetry/init-telemetry')
+const checkRequireCache = require('./check-require-cache')
+const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
+const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
 
 const {
   DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
@@ -21,6 +22,15 @@ const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 const disabledInstrumentations = new Set(
   DD_TRACE_DISABLED_INSTRUMENTATIONS ? DD_TRACE_DISABLED_INSTRUMENTATIONS.split(',') : []
 )
+
+// Check for DD_TRACE_<INTEGRATION>_ENABLED environment variables
+for (const [key, value] of Object.entries(process.env)) {
+  const match = key.match(/^DD_TRACE_(.+)_ENABLED$/)
+  if (match && (value.toLowerCase() === 'false' || value === '0')) {
+    const integration = match[1].toLowerCase()
+    disabledInstrumentations.add(integration)
+  }
+}
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
@@ -51,6 +61,8 @@ for (const packageName of names) {
   let hook = hooks[packageName]
 
   if (typeof hook === 'object') {
+    if (hook.serverless === false && isInServerlessEnvironment()) continue
+
     hookOptions.internals = hook.esmFirst
     hook = hook.fn
   }
@@ -90,8 +102,14 @@ for (const packageName of names) {
       }
 
       if (matchesFile) {
-        const version = moduleVersion || getVersion(moduleBaseDir)
-        if (!Object.hasOwnProperty(namesAndSuccesses, name)) {
+        let version = moduleVersion
+        try {
+          version = version || getVersion(moduleBaseDir)
+        } catch (e) {
+          log.error('Error getting version for "%s": %s', name, e.message, e)
+          continue
+        }
+        if (typeof namesAndSuccesses[`${name}@${version}`] === 'undefined') {
           namesAndSuccesses[`${name}@${version}`] = false
         }
 
@@ -130,7 +148,7 @@ for (const packageName of names) {
           `integration:${name}`,
           `integration_version:${version}`
         ])
-        log.info(`Found incompatible integration version: ${nameVersion}`)
+        log.info('Found incompatible integration version: %s', nameVersion)
         seenCombo.add(nameVersion)
       }
     }
@@ -140,7 +158,7 @@ for (const packageName of names) {
 }
 
 function matchVersion (version, ranges) {
-  return !version || (ranges && ranges.some(range => semver.satisfies(semver.coerce(version), range)))
+  return !version || !ranges || ranges.some(range => satisfies(version, range))
 }
 
 function getVersion (moduleBaseDir) {

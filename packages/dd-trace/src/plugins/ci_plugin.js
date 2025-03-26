@@ -1,5 +1,6 @@
 const {
   getTestEnvironmentMetadata,
+  getTestSessionName,
   getCodeOwnersFileEntries,
   getTestParentSpan,
   getTestCommonTags,
@@ -13,11 +14,21 @@ const {
   TEST_SESSION_ID,
   TEST_COMMAND,
   TEST_MODULE,
+  TEST_SESSION_NAME,
   getTestSuiteCommonTags,
   TEST_STATUS,
   TEST_SKIPPED_BY_ITR,
   ITR_CORRELATION_ID,
-  TEST_SOURCE_FILE
+  TEST_SOURCE_FILE,
+  TEST_LEVEL_EVENT_TYPES,
+  TEST_SUITE,
+  getFileAndLineNumberFromError,
+  DI_ERROR_DEBUG_INFO_CAPTURED,
+  DI_DEBUG_ERROR_PREFIX,
+  DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
+  DI_DEBUG_ERROR_FILE_SUFFIX,
+  DI_DEBUG_ERROR_LINE_SUFFIX,
+  getLibraryCapabilitiesTags
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -28,36 +39,53 @@ const {
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_ITR_SKIPPED
 } = require('../ci-visibility/telemetry')
-const { CI_PROVIDER_NAME, GIT_REPOSITORY_URL, GIT_COMMIT_SHA, GIT_BRANCH, CI_WORKSPACE_PATH } = require('./util/tags')
+const {
+  CI_PROVIDER_NAME,
+  GIT_REPOSITORY_URL,
+  GIT_COMMIT_SHA,
+  GIT_BRANCH,
+  CI_WORKSPACE_PATH,
+  GIT_COMMIT_MESSAGE
+} = require('./util/tags')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
+const getDiClient = require('../ci-visibility/dynamic-instrumentation')
 
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
+    this.fileLineToProbeId = new Map()
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
 
-    this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone }) => {
+    this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone, isParallel }) => {
       if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
-        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
         if (err) {
-          log.error(`Library configuration could not be fetched. ${err.message}`)
+          log.error('Library configuration could not be fetched. %s', err.message)
         } else {
           this.libraryConfig = libraryConfig
         }
+
+        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, isParallel)
+        const metadataTags = {
+          test: {
+            ...libraryCapabilitiesTags
+          }
+        }
+        this.tracer._exporter.addMetadataTags(metadataTags)
         onDone({ err, libraryConfig })
       })
     })
 
     this.addSub(`ci:${this.constructor.id}:test-suite:skippable`, ({ onDone }) => {
       if (!this.tracer._exporter?.getSkippableSuites) {
-        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites, itrCorrelationId) => {
         if (err) {
-          log.error(`Skippable suites could not be fetched. ${err.message}`)
+          log.error('Skippable suites could not be fetched. %s', err.message)
         } else {
           this.itrCorrelationId = itrCorrelationId
         }
@@ -75,6 +103,19 @@ module.exports = class CiPlugin extends Plugin {
       // only for playwright
       this.rootDir = rootDir
 
+      const testSessionName = getTestSessionName(this.config, this.command, this.testEnvironmentMetadata)
+
+      const metadataTags = {}
+      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+        metadataTags[testLevel] = {
+          [TEST_SESSION_NAME]: testSessionName
+        }
+      }
+      // tracer might not be initialized correctly
+      if (this.tracer._exporter.addMetadataTags) {
+        this.tracer._exporter.addMetadataTags(metadataTags)
+      }
+
       this.testSessionSpan = this.tracer.startSpan(`${this.constructor.id}.test_session`, {
         childOf,
         tags: {
@@ -83,7 +124,9 @@ module.exports = class CiPlugin extends Plugin {
           ...testSessionSpanMetadata
         }
       })
+      // TODO: add telemetry tag when we can add `is_agentless_log_submission_enabled` for agentless log submission
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
+
       this.testModuleSpan = this.tracer.startSpan(`${this.constructor.id}.test_module`, {
         childOf: this.testSessionSpan,
         tags: {
@@ -97,6 +140,7 @@ module.exports = class CiPlugin extends Plugin {
       if (this.constructor.id === 'vitest') {
         process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()
         process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()
+        process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command
       }
 
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
@@ -126,14 +170,28 @@ module.exports = class CiPlugin extends Plugin {
 
     this.addSub(`ci:${this.constructor.id}:known-tests`, ({ onDone }) => {
       if (!this.tracer._exporter?.getKnownTests) {
-        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getKnownTests(this.testConfiguration, (err, knownTests) => {
         if (err) {
-          log.error(`Known tests could not be fetched. ${err.message}`)
+          log.error('Known tests could not be fetched. %s', err.message)
           this.libraryConfig.isEarlyFlakeDetectionEnabled = false
+          this.libraryConfig.isKnownTestsEnabled = false
         }
         onDone({ err, knownTests })
+      })
+    })
+
+    this.addSub(`ci:${this.constructor.id}:test-management-tests`, ({ onDone }) => {
+      if (!this.tracer._exporter?.getTestManagementTests) {
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
+      }
+      this.tracer._exporter.getTestManagementTests(this.testConfiguration, (err, testManagementTests) => {
+        if (err) {
+          log.error('Test management tests could not be fetched. %s', err.message)
+          this.libraryConfig.isTestManagementEnabled = false
+        }
+        onDone({ err, testManagementTests })
       })
     })
   }
@@ -145,7 +203,7 @@ module.exports = class CiPlugin extends Plugin {
         incrementCountMetric(name, {
           testLevel,
           testFramework,
-          isUnsupportedCIProvider: this.isUnsupportedCIProvider,
+          isUnsupportedCIProvider: !this.ciProviderName,
           ...tags
         })
       },
@@ -158,8 +216,17 @@ module.exports = class CiPlugin extends Plugin {
     }
   }
 
-  configure (config) {
+  configure (config, shouldGetEnvironmentData = true) {
     super.configure(config)
+
+    if (!shouldGetEnvironmentData) {
+      return
+    }
+
+    if (config.isTestDynamicInstrumentationEnabled && !this.di) {
+      this.di = getDiClient()
+    }
+
     this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.id, this.config)
 
     const {
@@ -172,14 +239,15 @@ module.exports = class CiPlugin extends Plugin {
       [RUNTIME_VERSION]: runtimeVersion,
       [GIT_BRANCH]: branch,
       [CI_PROVIDER_NAME]: ciProviderName,
-      [CI_WORKSPACE_PATH]: repositoryRoot
+      [CI_WORKSPACE_PATH]: repositoryRoot,
+      [GIT_COMMIT_MESSAGE]: commitMessage
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot || process.cwd()
 
     this.codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
 
-    this.isUnsupportedCIProvider = !ciProviderName
+    this.ciProviderName = ciProviderName
 
     this.testConfiguration = {
       repositoryUrl,
@@ -190,8 +258,22 @@ module.exports = class CiPlugin extends Plugin {
       runtimeName,
       runtimeVersion,
       branch,
-      testLevel: 'suite'
+      testLevel: 'suite',
+      commitMessage
     }
+  }
+
+  getCodeOwners (tags) {
+    const {
+      [TEST_SOURCE_FILE]: testSourceFile,
+      [TEST_SUITE]: testSuite
+    } = tags
+    // We'll try with the test source file if available (it could be different from the test suite)
+    let codeOwners = getCodeOwnersForFilename(testSourceFile, this.codeOwnersEntries)
+    if (!codeOwners) {
+      codeOwners = getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
+    }
+    return codeOwners
   }
 
   startTestSpan (testName, testSuite, testSuiteSpan, extraTags = {}) {
@@ -208,13 +290,7 @@ module.exports = class CiPlugin extends Plugin {
       ...extraTags
     }
 
-    const { [TEST_SOURCE_FILE]: testSourceFile } = extraTags
-    // We'll try with the test source file if available (it could be different from the test suite)
-    let codeOwners = getCodeOwnersForFilename(testSourceFile, this.codeOwnersEntries)
-    if (!codeOwners) {
-      codeOwners = getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
-    }
-
+    const codeOwners = this.getCodeOwners(testTags)
     if (codeOwners) {
       testTags[TEST_CODE_OWNERS] = codeOwners
     }
@@ -255,5 +331,95 @@ module.exports = class CiPlugin extends Plugin {
     testSpan.context()._trace.origin = CI_APP_ORIGIN
 
     return testSpan
+  }
+
+  onDiBreakpointHit ({ snapshot }) {
+    if (!this.activeTestSpan || this.activeTestSpan.context()._isFinished) {
+      // This is unexpected and is caused by a race condition.
+      log.warn('Breakpoint snapshot could not be attached to the active test span')
+      return
+    }
+
+    const stackIndex = this.testErrorStackIndex
+
+    this.activeTestSpan.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+    this.activeTestSpan.setTag(
+      `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`,
+      snapshot.id
+    )
+    this.activeTestSpan.setTag(
+      `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_FILE_SUFFIX}`,
+      snapshot.probe.location.file
+    )
+    this.activeTestSpan.setTag(
+      `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_LINE_SUFFIX}`,
+      Number(snapshot.probe.location.lines[0])
+    )
+
+    const activeTestSpanContext = this.activeTestSpan.context()
+
+    this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
+      debugger: { snapshot },
+      dd: {
+        trace_id: activeTestSpanContext.toTraceId(),
+        span_id: activeTestSpanContext.toSpanId()
+      }
+    })
+  }
+
+  removeAllDiProbes () {
+    if (this.fileLineToProbeId.size === 0) {
+      return Promise.resolve()
+    }
+    log.debug('Removing all Dynamic Instrumentation probes')
+    return Promise.all(Array.from(this.fileLineToProbeId.keys())
+      .map((fileLine) => {
+        const [file, line] = fileLine.split(':')
+        return this.removeDiProbe({ file, line })
+      }))
+  }
+
+  removeDiProbe ({ file, line }) {
+    const probeId = this.fileLineToProbeId.get(`${file}:${line}`)
+    log.warn(`Removing probe from ${file}:${line}, with id: ${probeId}`)
+    this.fileLineToProbeId.delete(probeId)
+    return this.di.removeProbe(probeId)
+  }
+
+  addDiProbe (err) {
+    const [file, line, stackIndex] = getFileAndLineNumberFromError(err, this.repositoryRoot)
+
+    if (!file || !Number.isInteger(line)) {
+      log.warn('Could not add breakpoint for dynamic instrumentation')
+      return
+    }
+    log.debug('Adding breakpoint for Dynamic Instrumentation')
+
+    this.testErrorStackIndex = stackIndex
+    const activeProbeKey = `${file}:${line}`
+
+    if (this.fileLineToProbeId.has(activeProbeKey)) {
+      log.warn('Probe already set for this line')
+      const oldProbeId = this.fileLineToProbeId.get(activeProbeKey)
+      return {
+        probeId: oldProbeId,
+        setProbePromise: Promise.resolve(),
+        stackIndex,
+        file,
+        line
+      }
+    }
+
+    const [probeId, setProbePromise] = this.di.addLineProbe({ file, line }, this.onDiBreakpointHit.bind(this))
+
+    this.fileLineToProbeId.set(activeProbeKey, probeId)
+
+    return {
+      probeId,
+      setProbePromise,
+      stackIndex,
+      file,
+      line
+    }
   }
 }

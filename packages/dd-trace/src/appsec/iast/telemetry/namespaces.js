@@ -4,7 +4,6 @@ const log = require('../../../log')
 const { Namespace } = require('../../../telemetry/metrics')
 const { addMetricsToSpan } = require('./span-tags')
 const { IAST_TRACE_METRIC_PREFIX } = require('../tags')
-const iastLog = require('../iast-log')
 
 const DD_IAST_METRICS_NAMESPACE = Symbol('_dd.iast.request.metrics.namespace')
 
@@ -31,7 +30,7 @@ function finalizeRequestNamespace (context, rootSpan) {
 
     namespace.clear()
   } catch (e) {
-    log.error(e)
+    log.error('[ASM] Error merging request metrics', e)
   } finally {
     if (context) {
       delete context[DD_IAST_METRICS_NAMESPACE]
@@ -79,7 +78,7 @@ class IastNamespace extends Namespace {
 
       if (metrics.size === this.maxMetricTagsSize) {
         metrics.clear()
-        iastLog.warnAndPublish(`Tags cache max size reached for metric ${name}`)
+        log.error('[ASM] Tags cache max size reached for metric %s', name)
       }
 
       metrics.set(tags, metric)

@@ -35,10 +35,11 @@ function sanitizedExec (
   flags,
   operationMetric,
   durationMetric,
-  errorMetric
+  errorMetric,
+  shouldTrim = true
 ) {
-  const store = storage.getStore()
-  storage.enterWith({ noop: true })
+  const store = storage('legacy').getStore()
+  storage('legacy').enterWith({ noop: true })
 
   let startTime
   if (operationMetric) {
@@ -48,7 +49,10 @@ function sanitizedExec (
     startTime = Date.now()
   }
   try {
-    const result = cp.execFileSync(cmd, flags, { stdio: 'pipe' }).toString().replace(/(\r\n|\n|\r)/gm, '')
+    let result = cp.execFileSync(cmd, flags, { stdio: 'pipe' }).toString()
+    if (shouldTrim) {
+      result = result.replace(/(\r\n|\n|\r)/gm, '')
+    }
     if (durationMetric) {
       distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)
     }
@@ -61,10 +65,10 @@ function sanitizedExec (
         exitCode: err.status || err.errno
       })
     }
-    log.error(err)
+    log.error('Git plugin error executing command', err)
     return ''
   } finally {
-    storage.enterWith(store)
+    storage('legacy').enterWith(store)
   }
 }
 
@@ -73,6 +77,18 @@ function isDirectory (path) {
     const stats = fs.statSync(path)
     return stats.isDirectory()
   } catch (e) {
+    return false
+  }
+}
+
+function isGitAvailable () {
+  const isWindows = os.platform() === 'win32'
+  const command = isWindows ? 'where' : 'which'
+  try {
+    cp.execFileSync(command, ['git'], { stdio: 'pipe' })
+    return true
+  } catch (e) {
+    incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'check_git', exitCode: 'missing' })
     return false
   }
 }
@@ -132,7 +148,7 @@ function unshallowRepository () {
     ], { stdio: 'pipe' })
   } catch (err) {
     // If the local HEAD is a commit that has not been pushed to the remote, the above command will fail.
-    log.error(err)
+    log.error('Git plugin error executing git command', err)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
@@ -145,7 +161,7 @@ function unshallowRepository () {
       ], { stdio: 'pipe' })
     } catch (err) {
       // If the CI is working on a detached HEAD or branch tracking hasn’t been set up, the above command will fail.
-      log.error(err)
+      log.error('Git plugin error executing fallback git command', err)
       incrementCountMetric(
         TELEMETRY_GIT_COMMAND_ERRORS,
         { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
@@ -184,7 +200,7 @@ function getLatestCommits () {
     distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_local_commits' }, Date.now() - startTime)
     return result
   } catch (err) {
-    log.error(`Get latest commits failed: ${err.message}`)
+    log.error('Get latest commits failed: %s', err.message)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'get_local_commits', errorType: err.status }
@@ -217,7 +233,7 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
       .split('\n')
       .filter(commit => commit)
   } catch (err) {
-    log.error(`Get commits to upload failed: ${err.message}`)
+    log.error('Get commits to upload failed: %s', err.message)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'get_objects', errorType: err.code, exitCode: err.status || err.errno } // err.status might be null
@@ -260,7 +276,7 @@ function generatePackFilesForCommits (commitsToUpload) {
   try {
     result = execGitPackObjects(temporaryPath)
   } catch (err) {
-    log.error(err)
+    log.error('Git plugin error executing git pack-objects command', err)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'pack_objects', exitCode: err.status || err.errno, errorType: err.code }
@@ -280,7 +296,7 @@ function generatePackFilesForCommits (commitsToUpload) {
     try {
       result = execGitPackObjects(cwdPath)
     } catch (err) {
-      log.error(err)
+      log.error('Git plugin error executing fallback git pack-objects command', err)
       incrementCountMetric(
         TELEMETRY_GIT_COMMAND_ERRORS,
         { command: 'pack_objects', exitCode: err.status || err.errno, errorType: err.code }
@@ -316,22 +332,34 @@ function getGitMetadata (ciMetadata) {
     committerDate
   ] = sanitizedExec('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI']).split(',')
 
-  return {
-    [GIT_REPOSITORY_URL]:
-      filterSensitiveInfoFromRepository(repositoryUrl || sanitizedExec('git', ['ls-remote', '--get-url'])),
+  const tags = {
     [GIT_COMMIT_MESSAGE]:
-      commitMessage || sanitizedExec('git', ['show', '-s', '--format=%s']),
-    [GIT_COMMIT_AUTHOR_DATE]: authorDate,
-    [GIT_COMMIT_AUTHOR_NAME]: ciAuthorName || authorName,
-    [GIT_COMMIT_AUTHOR_EMAIL]: ciAuthorEmail || authorEmail,
-    [GIT_COMMIT_COMMITTER_DATE]: committerDate,
-    [GIT_COMMIT_COMMITTER_NAME]: committerName,
-    [GIT_COMMIT_COMMITTER_EMAIL]: committerEmail,
+      commitMessage || sanitizedExec('git', ['show', '-s', '--format=%B'], null, null, null, false),
     [GIT_BRANCH]: branch || sanitizedExec('git', ['rev-parse', '--abbrev-ref', 'HEAD']),
     [GIT_COMMIT_SHA]: commitSHA || sanitizedExec('git', ['rev-parse', 'HEAD']),
-    [GIT_TAG]: tag,
     [CI_WORKSPACE_PATH]: ciWorkspacePath || sanitizedExec('git', ['rev-parse', '--show-toplevel'])
   }
+
+  const entries = [
+    GIT_REPOSITORY_URL,
+    filterSensitiveInfoFromRepository(repositoryUrl || sanitizedExec('git', ['ls-remote', '--get-url'])),
+    GIT_COMMIT_AUTHOR_DATE, authorDate,
+    GIT_COMMIT_AUTHOR_NAME, ciAuthorName || authorName,
+    GIT_COMMIT_AUTHOR_EMAIL, ciAuthorEmail || authorEmail,
+    GIT_COMMIT_COMMITTER_DATE, committerDate,
+    GIT_COMMIT_COMMITTER_NAME, committerName,
+    GIT_COMMIT_COMMITTER_EMAIL, committerEmail,
+    GIT_TAG, tag
+  ]
+
+  for (let i = 0; i < entries.length; i += 2) {
+    const value = entries[i + 1]
+    if (value) {
+      tags[entries[i]] = value
+    }
+  }
+
+  return tags
 }
 
 module.exports = {
@@ -342,5 +370,6 @@ module.exports = {
   getCommitsRevList,
   GIT_REV_LIST_MAX_BUFFER,
   isShallowRepository,
-  unshallowRepository
+  unshallowRepository,
+  isGitAvailable
 }

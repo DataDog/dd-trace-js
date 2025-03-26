@@ -9,14 +9,7 @@ const { execSync, spawn } = require('child_process')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { writeFileSync, readdirSync } = require('fs')
 const { satisfies } = require('semver')
-const { DD_MAJOR, NODE_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
-
-const BUILD_COMMAND = NODE_MAJOR < 18
-  ? 'yarn exec next build'
-  : 'NODE_OPTIONS=--openssl-legacy-provider yarn exec next build'
-let VERSIONS_TO_TEST = NODE_MAJOR < 18 ? '>=11.1 <13.2' : '>=11.1'
-VERSIONS_TO_TEST = DD_MAJOR >= 4 ? VERSIONS_TO_TEST : '>=9.5 <11.1'
 
 describe('Plugin', function () {
   let server
@@ -26,7 +19,7 @@ describe('Plugin', function () {
     const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
 
     // TODO: Figure out why 10.x tests are failing.
-    withVersions('next', 'next', VERSIONS_TO_TEST, version => {
+    withVersions('next', 'next', '>=11.1', version => {
       const pkg = require(`../../../versions/next@${version}/node_modules/next/package.json`)
 
       const startServer = ({ withConfig, standalone }, schemaVersion = 'v0', defaultToGlobalService = false) => {
@@ -37,7 +30,7 @@ describe('Plugin', function () {
         })
 
         before(function (done) {
-          this.timeout(120000)
+          this.timeout(300 * 1000)
           const cwd = standalone
             ? path.join(__dirname, '.next/standalone')
             : __dirname
@@ -75,7 +68,7 @@ describe('Plugin', function () {
         })
 
         after(async function () {
-          this.timeout(5000)
+          this.timeout(30 * 1000)
 
           server.kill()
 
@@ -110,7 +103,7 @@ describe('Plugin', function () {
         }
 
         // building in-process makes tests fail for an unknown reason
-        execSync(BUILD_COMMAND, {
+        execSync('NODE_OPTIONS=--openssl-legacy-provider yarn exec next build', {
           cwd,
           env: {
             ...process.env,

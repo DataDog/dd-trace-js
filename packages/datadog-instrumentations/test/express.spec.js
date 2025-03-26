@@ -14,7 +14,7 @@ withVersions('express', 'express', version => {
     })
 
     before((done) => {
-      const express = require('../../../versions/express').get()
+      const express = require(`../../../versions/express@${version}`).get()
       const app = express()
       app.get('/', (req, res) => {
         requestBody()

@@ -12,7 +12,7 @@ const requestChannel = dc.tracingChannel('datadog:apollo:request')
 let HeaderMap
 
 function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
-  return async function executeHTTPGraphQLRequest () {
+  return function executeHTTPGraphQLRequest () {
     if (!HeaderMap || !requestChannel.start.hasSubscribers) {
       return originalExecuteHTTPGraphQLRequest.apply(this, arguments)
     }
@@ -55,7 +55,7 @@ function apolloExpress4Hook (express4) {
     return function expressMiddleware (server, options) {
       const originalMiddleware = originalExpressMiddleware.apply(this, arguments)
 
-      return shimmer.wrap(originalMiddleware, function (req, res, next) {
+      return shimmer.wrapFunction(originalMiddleware, originalMiddleware => function (req, res, next) {
         if (!graphqlMiddlewareChannel.start.hasSubscribers) {
           return originalMiddleware.apply(this, arguments)
         }

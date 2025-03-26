@@ -13,7 +13,7 @@ variables:
   tags: ["runner:apm-k8s-tweaked-metal"]
   image: $MICROBENCHMARKS_CI_IMAGE
   interruptible: true
-  timeout: 15m
+  timeout: 20m
   script:
     - git clone --branch dd-trace-js https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform platform && cd platform
     - bp-runner bp-runner.yml --debug
@@ -64,6 +64,18 @@ benchmark:
       - MAJOR_VERSION: 18
         GROUP: 2
       - MAJOR_VERSION: 18
+        GROUP: 3
+      - MAJOR_VERSION: 20
+        GROUP: 1
+      - MAJOR_VERSION: 20
+        GROUP: 2
+      - MAJOR_VERSION: 20
+        GROUP: 3
+      - MAJOR_VERSION: 22
+        GROUP: 1
+      - MAJOR_VERSION: 22
+        GROUP: 2
+      - MAJOR_VERSION: 22
         GROUP: 3
   variables:
     SPLITS: 3

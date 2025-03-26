@@ -5,17 +5,11 @@ const Config = require('./config')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
+const DynamicInstrumentation = require('./debugger')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
-const remoteConfig = require('./appsec/remote_config')
-const AppsecSdk = require('./appsec/sdk')
-const dogstatsd = require('./dogstatsd')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
-const spanleak = require('./spanleak')
-const { SSIHeuristics } = require('./profiling/ssi-heuristics')
-const telemetryLog = require('dc-polyfill').channel('datadog:telemetry:log')
-const appsecStandalone = require('./appsec/standalone')
 
 class LazyModule {
   constructor (provider) {
@@ -32,6 +26,35 @@ class LazyModule {
   }
 }
 
+function lazyProxy (obj, property, config, getClass, ...args) {
+  if (config?._isInServerlessEnvironment?.() === false) {
+    defineEagerly(obj, property, getClass, ...args)
+  } else {
+    defineLazily(obj, property, getClass, ...args)
+  }
+}
+
+function defineEagerly (obj, property, getClass, ...args) {
+  const RealClass = getClass()
+
+  obj[property] = new RealClass(...args)
+}
+
+function defineLazily (obj, property, getClass, ...args) {
+  Reflect.defineProperty(obj, property, {
+    get () {
+      const RealClass = getClass()
+      const value = new RealClass(...args)
+
+      Reflect.defineProperty(obj, property, { value, configurable: true, enumerable: true })
+
+      return value
+    },
+    configurable: true,
+    enumerable: true
+  })
+}
+
 class Tracer extends NoopProxy {
   constructor () {
     super()
@@ -46,7 +69,8 @@ class Tracer extends NoopProxy {
     // these requires must work with esm bundler
     this._modules = {
       appsec: new LazyModule(() => require('./appsec')),
-      iast: new LazyModule(() => require('./appsec/iast'))
+      iast: new LazyModule(() => require('./appsec/iast')),
+      llmobs: new LazyModule(() => require('./llmobs'))
     }
   }
 
@@ -57,22 +81,20 @@ class Tracer extends NoopProxy {
 
     try {
       const config = new Config(options) // TODO: support dynamic code config
+
+      if (config.crashtracking.enabled) {
+        require('./crashtracking').start(config)
+      }
+
       telemetry.start(config, this._pluginManager)
 
       if (config.dogstatsd) {
         // Custom Metrics
-        this.dogstatsd = new dogstatsd.CustomMetrics(config)
-
-        setInterval(() => {
-          this.dogstatsd.flush()
-        }, 10 * 1000).unref()
-
-        process.once('beforeExit', () => {
-          this.dogstatsd.flush()
-        })
+        lazyProxy(this, 'dogstatsd', config, () => require('./dogstatsd').CustomMetrics, config)
       }
 
       if (config.spanLeakDebug > 0) {
+        const spanleak = require('./spanleak')
         if (config.spanLeakDebug === spanleak.MODES.LOG) {
           spanleak.enableLogging()
         } else if (config.spanLeakDebug === spanleak.MODES.GC_AND_LOG) {
@@ -82,9 +104,9 @@ class Tracer extends NoopProxy {
       }
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
-        const rc = remoteConfig.enable(config, this._modules.appsec)
+        const rc = require('./remote_config').enable(config, this._modules.appsec)
 
-        rc.on('APM_TRACING', (action, conf) => {
+        rc.setProductHandler('APM_TRACING', (action, conf) => {
           if (action === 'unapply') {
             config.configure({}, true)
           } else {
@@ -93,7 +115,7 @@ class Tracer extends NoopProxy {
           this._enableOrDisableTracing(config)
         })
 
-        rc.on('AGENT_CONFIG', (action, conf) => {
+        rc.setProductHandler('AGENT_CONFIG', (action, conf) => {
           if (!conf?.name?.startsWith('flare-log-level.')) return
 
           if (action === 'unapply') {
@@ -104,37 +126,50 @@ class Tracer extends NoopProxy {
           }
         })
 
-        rc.on('AGENT_TASK', (action, conf) => {
+        rc.setProductHandler('AGENT_TASK', (action, conf) => {
           if (action === 'unapply' || !conf) return
           if (conf.task_type !== 'tracer_flare' || !conf.args) return
 
           this._flare.enable(config)
           this._flare.module.send(conf.args)
         })
+
+        if (config.dynamicInstrumentation.enabled) {
+          DynamicInstrumentation.start(config, rc)
+        }
       }
 
       if (config.isGCPFunction || config.isAzureFunction) {
         require('./serverless').maybeStartServerlessMiniAgent(config)
       }
 
-      const ssiHeuristics = new SSIHeuristics(config.profiling)
-      ssiHeuristics.start()
-      if (config.profiling.enabled) {
-        this._profilerStarted = this._startProfiler(config)
-      } else if (config.profiling.ssi) {
-        const mockProfiler = require('./profiling/ssi-telemetry-mock-profiler')
-        mockProfiler.start(config)
+      if (config.profiling.enabled !== 'false') {
+        const { SSIHeuristics } = require('./profiling/ssi-heuristics')
+        const ssiHeuristics = new SSIHeuristics(config)
+        ssiHeuristics.start()
+        let mockProfiler = null
+        if (config.profiling.enabled === 'true') {
+          this._profilerStarted = this._startProfiler(config)
+        } else if (ssiHeuristics.emitsTelemetry) {
+          // Start a mock profiler that emits mock profile-submitted events for the telemetry.
+          // It will be stopped if the real profiler is started by the heuristics.
+          mockProfiler = require('./profiling/ssi-telemetry-mock-profiler')
+          mockProfiler.start(config)
+        }
 
-        if (config.profiling.heuristicsEnabled) {
+        if (ssiHeuristics.heuristicsActive) {
           ssiHeuristics.onTriggered(() => {
-            mockProfiler.stop()
+            if (mockProfiler) {
+              mockProfiler.stop()
+            }
             this._startProfiler(config)
-            ssiHeuristics.onTriggered()
+            ssiHeuristics.onTriggered() // deregister this callback
           })
         }
-      }
-      if (!this._profilerStarted) {
-        this._profilerStarted = Promise.resolve(false)
+
+        if (!this._profilerStarted) {
+          this._profilerStarted = Promise.resolve(false)
+        }
       }
 
       if (config.runtimeMetrics) {
@@ -147,11 +182,32 @@ class Tracer extends NoopProxy {
         if (config.isManualApiEnabled) {
           const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
           this._testApiManualPlugin = new TestApiManualPlugin(this)
-          this._testApiManualPlugin.configure({ ...config, enabled: true })
+          // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
+          // This is the only place where we need to do this because the rest of the plugins
+          // are lazily configured when the library is imported.
+          this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
         }
       }
+      if (config.ciVisAgentlessLogSubmissionEnabled) {
+        if (process.env.DD_API_KEY) {
+          const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
+          const automaticLogPlugin = new LogSubmissionPlugin(this)
+          automaticLogPlugin.configure({ ...config, enabled: true })
+        } else {
+          log.warn(
+            'DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set, ' +
+            'but DD_API_KEY is undefined, so no automatic log submission will be performed.'
+          )
+        }
+      }
+
+      if (config.isTestDynamicInstrumentationEnabled) {
+        const getDynamicInstrumentationClient = require('./ci-visibility/dynamic-instrumentation')
+        // We instantiate the client but do not start the Worker here. The worker is started lazily
+        getDynamicInstrumentationClient(config)
+      }
     } catch (e) {
-      log.error(e)
+      log.error('Error initialising tracer', e)
     }
 
     return this
@@ -162,14 +218,11 @@ class Tracer extends NoopProxy {
     try {
       return require('./profiler').start(config)
     } catch (e) {
-      log.error(e)
-      if (telemetryLog.hasSubscribers) {
-        telemetryLog.publish({
-          message: e.message,
-          level: 'ERROR',
-          stack_trace: e.stack
-        })
-      }
+      log.error(
+        'Error starting profiler. For troubleshooting tips, see ' +
+        '<https://dtdg.co/nodejs-profiler-troubleshooting>',
+        e
+      )
     }
   }
 
@@ -178,11 +231,17 @@ class Tracer extends NoopProxy {
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)
       }
+      if (config.llmobs.enabled) {
+        this._modules.llmobs.enable(config)
+      }
       if (!this._tracingInitialized) {
-        const prioritySampler = appsecStandalone.configure(config)
+        const prioritySampler = config.apmTracingEnabled === false
+          ? require('./standalone').configure(config)
+          : undefined
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
-        this.appsec = new AppsecSdk(this._tracer, config)
+        lazyProxy(this, 'appsec', config, () => require('./appsec/sdk'), this._tracer, config)
+        lazyProxy(this, 'llmobs', config, () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {
@@ -191,17 +250,20 @@ class Tracer extends NoopProxy {
     } else if (this._tracingInitialized) {
       this._modules.appsec.disable()
       this._modules.iast.disable()
+      this._modules.llmobs.disable()
     }
 
     if (this._tracingInitialized) {
       this._tracer.configure(config)
       this._pluginManager.configure(config)
+      DynamicInstrumentation.configure(config)
       setStartupLogPluginManager(this._pluginManager)
     }
   }
 
   profilerStarted () {
     if (!this._profilerStarted) {
+      // injection hardening: this is only ever invoked from tests.
       throw new Error('profilerStarted() must be called after init()')
     }
     return this._profilerStarted

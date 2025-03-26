@@ -2,12 +2,15 @@
 
 const log = require('../log')
 const blockedTemplates = require('./blocked_templates')
+const { updateBlockFailureMetric } = require('./telemetry')
 
 const detectedSpecificEndpoints = {}
 
 let templateHtml = blockedTemplates.html
 let templateJson = blockedTemplates.json
 let templateGraphqlJson = blockedTemplates.graphqlJson
+
+let defaultBlockingActionParameters
 
 const responseBlockedSet = new WeakSet()
 
@@ -23,7 +26,7 @@ function addSpecificEndpoint (method, url, type) {
   detectedSpecificEndpoints[getSpecificKey(method, url)] = type
 }
 
-function getBlockWithRedirectData (rootSpan, actionParameters) {
+function getBlockWithRedirectData (actionParameters) {
   let statusCode = actionParameters.status_code
   if (!statusCode || statusCode < 300 || statusCode >= 400) {
     statusCode = 303
@@ -31,10 +34,6 @@ function getBlockWithRedirectData (rootSpan, actionParameters) {
   const headers = {
     Location: actionParameters.location
   }
-
-  rootSpan.addTags({
-    'appsec.blocked': 'true'
-  })
 
   return { headers, statusCode }
 }
@@ -49,7 +48,7 @@ function getSpecificBlockingData (type) {
   }
 }
 
-function getBlockWithContentData (req, specificType, rootSpan, actionParameters) {
+function getBlockWithContentData (req, specificType, actionParameters) {
   let type
   let body
 
@@ -90,42 +89,54 @@ function getBlockWithContentData (req, specificType, rootSpan, actionParameters)
     'Content-Length': Buffer.byteLength(body)
   }
 
-  rootSpan.addTags({
-    'appsec.blocked': 'true'
-  })
-
   return { body, statusCode, headers }
 }
 
-function getBlockingData (req, specificType, rootSpan, actionParameters) {
+function getBlockingData (req, specificType, actionParameters) {
   if (actionParameters?.location) {
-    return getBlockWithRedirectData(rootSpan, actionParameters)
+    return getBlockWithRedirectData(actionParameters)
   } else {
-    return getBlockWithContentData(req, specificType, rootSpan, actionParameters)
+    return getBlockWithContentData(req, specificType, actionParameters)
   }
 }
 
-function block (req, res, rootSpan, abortController, actionParameters) {
-  if (res.headersSent) {
-    log.warn('Cannot send blocking response when headers have already been sent')
-    return
+function block (req, res, rootSpan, abortController, actionParameters = defaultBlockingActionParameters) {
+  try {
+    if (res.headersSent) {
+      log.warn('[ASM] Cannot send blocking response when headers have already been sent')
+
+      throw new Error('Headers have already been sent')
+    }
+
+    const { body, headers, statusCode } = getBlockingData(req, null, actionParameters)
+
+    for (const headerName of res.getHeaderNames()) {
+      res.removeHeader(headerName)
+    }
+
+    res.writeHead(statusCode, headers)
+
+    // this is needed to call the original end method, since express-session replaces it
+    res.constructor.prototype.end.call(res, body)
+
+    rootSpan.setTag('appsec.blocked', 'true')
+
+    responseBlockedSet.add(res)
+    abortController?.abort()
+
+    return true
+  } catch (err) {
+    rootSpan?.setTag('_dd.appsec.block.failed', 1)
+    log.error('[ASM] Blocking error', err)
+
+    updateBlockFailureMetric(req)
+    return false
   }
-
-  const { body, headers, statusCode } = getBlockingData(req, null, rootSpan, actionParameters)
-
-  for (const headerName of res.getHeaderNames()) {
-    res.removeHeader(headerName)
-  }
-
-  res.writeHead(statusCode, headers).end(body)
-
-  responseBlockedSet.add(res)
-
-  abortController?.abort()
 }
 
 function getBlockingAction (actions) {
-  return actions?.block_request || actions?.redirect_request
+  // waf only returns one action, but it prioritizes redirect over block
+  return actions?.redirect_request || actions?.block_request
 }
 
 function setTemplates (config) {
@@ -152,6 +163,12 @@ function isBlocked (res) {
   return responseBlockedSet.has(res)
 }
 
+function setDefaultBlockingActionParameters (actions) {
+  const blockAction = actions?.find(action => action.id === 'block')
+
+  defaultBlockingActionParameters = blockAction?.parameters
+}
+
 module.exports = {
   addSpecificEndpoint,
   block,
@@ -159,5 +176,6 @@ module.exports = {
   getBlockingData,
   getBlockingAction,
   setTemplates,
-  isBlocked
+  isBlocked,
+  setDefaultBlockingActionParameters
 }

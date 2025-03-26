@@ -2,6 +2,7 @@
 
 const { prepareTestServerForIastInExpress } = require('../utils')
 const axios = require('axios')
+const { URL } = require('url')
 
 function noop () {}
 
@@ -46,6 +47,95 @@ describe('Taint tracking plugin sources express tests', () => {
             const childProcess = require('child_process')
             childProcess.exec(req.headers['x-iast-test-command'], noop)
           }, 'COMMAND_INJECTION', 1, noop, makeRequestWithHeader)
+        })
+
+        describe('url parse taint tracking', () => {
+          function makePostRequest (done) {
+            axios.post(`http://localhost:${config.port}/`, {
+              url: 'http://www.datadoghq.com/'
+            }).catch(done)
+          }
+
+          testThatRequestHasVulnerability(
+            {
+              fn: (req) => {
+                // eslint-disable-next-line n/no-deprecated-api
+                const { parse } = require('url')
+                const url = parse(req.body.url)
+
+                const childProcess = require('child_process')
+                childProcess.exec(url.host, noop)
+              },
+              vulnerability: 'COMMAND_INJECTION',
+              occurrences: 1,
+              cb: noop,
+              makeRequest: makePostRequest,
+              testDescription: 'should detect vulnerability when tainted is coming from url.parse'
+            })
+
+          testThatRequestHasVulnerability(
+            {
+              fn: (req) => {
+                const { URL } = require('url')
+                const url = new URL(req.body.url)
+
+                const childProcess = require('child_process')
+                childProcess.exec(url.host, noop)
+              },
+              vulnerability: 'COMMAND_INJECTION',
+              occurrences: 1,
+              cb: noop,
+              makeRequest: makePostRequest,
+              testDescription: 'should detect vulnerability when tainted is coming from new url.URL input'
+            })
+
+          testThatRequestHasVulnerability(
+            {
+              fn: (req) => {
+                const { URL } = require('url')
+                const url = new URL('/path', req.body.url)
+
+                const childProcess = require('child_process')
+                childProcess.exec(url.host, noop)
+              },
+              vulnerability: 'COMMAND_INJECTION',
+              occurrences: 1,
+              cb: noop,
+              makeRequest: makePostRequest,
+              testDescription: 'should detect vulnerability when tainted is coming from new url.URL base'
+            })
+
+          if (URL.parse) {
+            testThatRequestHasVulnerability(
+              {
+                fn: (req) => {
+                  const { URL } = require('url')
+                  const url = URL.parse(req.body.url)
+                  const childProcess = require('child_process')
+                  childProcess.exec(url.host, noop)
+                },
+                vulnerability: 'COMMAND_INJECTION',
+                occurrences: 1,
+                cb: noop,
+                makeRequest: makePostRequest,
+                testDescription: 'should detect vulnerability when tainted is coming from url.URL.parse input'
+              })
+
+            testThatRequestHasVulnerability(
+              {
+                fn: (req) => {
+                  const { URL } = require('url')
+                  const url = URL.parse('/path', req.body.url)
+                  const childProcess = require('child_process')
+                  childProcess.exec(url.host, noop)
+                },
+                vulnerability: 'COMMAND_INJECTION',
+                occurrences: 1,
+                cb: noop,
+                makeRequest: makePostRequest,
+                testDescription: 'should detect vulnerability when tainted is coming from url.URL.parse base'
+              })
+          }
         })
       }
     )

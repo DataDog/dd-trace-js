@@ -52,8 +52,15 @@ class DatadogTracer {
       ? getContext(options.childOf)
       : getParent(options.references)
 
+    // as per spec, allow the setting of service name through options
     const tags = {
-      'service.name': this._service
+      'service.name': options?.tags?.service ? String(options.tags.service) : this._service
+    }
+
+    // As per unified service tagging spec if a span is created with a service name different from the global
+    // service name it will not inherit the global version value
+    if (options?.tags?.service && options.tags.service !== this._service) {
+      options.tags.version = undefined
     }
 
     const span = new Span(this, this._processor, this._prioritySampler, {
@@ -84,7 +91,7 @@ class DatadogTracer {
       }
       this._propagators[format].inject(context, carrier)
     } catch (e) {
-      log.error(e)
+      log.error('Error injecting trace', e)
       runtimeMetrics.increment('datadog.tracer.node.inject.errors', true)
     }
   }
@@ -93,7 +100,7 @@ class DatadogTracer {
     try {
       return this._propagators[format].extract(carrier)
     } catch (e) {
-      log.error(e)
+      log.error('Error extracting trace', e)
       runtimeMetrics.increment('datadog.tracer.node.extract.errors', true)
       return null
     }

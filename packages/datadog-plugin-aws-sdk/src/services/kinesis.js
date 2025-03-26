@@ -1,8 +1,5 @@
 'use strict'
-const {
-  getSizeOrZero
-} = require('../../../dd-trace/src/datastreams/processor')
-const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
+const { DsmPathwayCodec, getSizeOrZero } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { storage } = require('../../../datadog-core')
@@ -10,6 +7,7 @@ const { storage } = require('../../../datadog-core')
 class Kinesis extends BaseAwsSdkPlugin {
   static get id () { return 'kinesis' }
   static get peerServicePrecursors () { return ['streamname'] }
+  static get isPayloadReporter () { return true }
 
   constructor (...args) {
     super(...args)
@@ -20,7 +18,7 @@ class Kinesis extends BaseAwsSdkPlugin {
 
     this.addSub('apm:aws:response:start:kinesis', obj => {
       const { request, response } = obj
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const plugin = this
 
       // if we have either of these operations, we want to store the streamName param
@@ -48,7 +46,7 @@ class Kinesis extends BaseAwsSdkPlugin {
         }
 
         // get the stream name that should have been stored previously
-        const { streamName } = storage.getStore()
+        const { streamName } = storage('legacy').getStore()
 
         // extract DSM context after as we might not have a parent-child but may have a DSM context
         this.responseExtractDSMContext(
@@ -58,7 +56,7 @@ class Kinesis extends BaseAwsSdkPlugin {
     })
 
     this.addSub('apm:aws:response:finish:kinesis', err => {
-      const { span } = storage.getStore()
+      const { span } = storage('legacy').getStore()
       this.finish(span, null, err)
     })
   }
@@ -78,7 +76,7 @@ class Kinesis extends BaseAwsSdkPlugin {
     if (!params || !params.StreamName) return
 
     const streamName = params.StreamName
-    storage.enterWith({ ...store, streamName })
+    storage('legacy').enterWith({ ...store, streamName })
   }
 
   responseExtract (params, operation, response) {
@@ -96,7 +94,7 @@ class Kinesis extends BaseAwsSdkPlugin {
         parsedAttributes: decodedData._datadog
       }
     } catch (e) {
-      log.error(e)
+      log.error('Kinesis error extracting response', e)
     }
   }
 
@@ -112,14 +110,15 @@ class Kinesis extends BaseAwsSdkPlugin {
     response.Records.forEach(record => {
       const parsedAttributes = JSON.parse(Buffer.from(record.Data).toString())
 
-      if (
-        parsedAttributes?._datadog && streamName && DsmPathwayCodec.contextExists(parsedAttributes._datadog)
-      ) {
-        const payloadSize = getSizeOrZero(record.Data)
+      const payloadSize = getSizeOrZero(record.Data)
+      if (parsedAttributes?._datadog) {
         this.tracer.decodeDataStreamsContext(parsedAttributes._datadog)
-        this.tracer
-          .setCheckpoint(['direction:in', `topic:${streamName}`, 'type:kinesis'], span, payloadSize)
       }
+      const tags = streamName
+        ? ['direction:in', `topic:${streamName}`, 'type:kinesis']
+        : ['direction:in', 'type:kinesis']
+      this.tracer
+        .setCheckpoint(tags, span, payloadSize)
     })
   }
 

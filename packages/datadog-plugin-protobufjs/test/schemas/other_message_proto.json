@@ -1,0 +1,17 @@
+{
+    "nested": {
+      "OtherMessage": {
+        "fields": {
+          "name": {
+            "rule": "repeated",
+            "type": "string",
+            "id": 1
+          },
+          "age": {
+            "type": "int32",
+            "id": 2
+          }
+        }
+      }
+    }
+  }

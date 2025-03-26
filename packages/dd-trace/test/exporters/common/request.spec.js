@@ -163,7 +163,6 @@ describe('request', function () {
       hostname: 'test',
       port: 123,
       path: '/'
-    // eslint-disable-next-line n/handle-callback-err
     }, (err, res) => {
       expect(res).to.equal('OK')
     })
@@ -179,7 +178,6 @@ describe('request', function () {
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT'
-    // eslint-disable-next-line n/handle-callback-err
     }, (err, res) => {
       expect(res).to.equal('OK')
       done()
@@ -216,7 +214,6 @@ describe('request', function () {
     request(form, {
       path: '/path',
       method: 'PUT'
-    // eslint-disable-next-line n/handle-callback-err
     }, (err, res) => {
       expect(res).to.equal('OK')
       done()
@@ -246,7 +243,6 @@ describe('request', function () {
             hostname: 'localhost',
             protocol: 'http:',
             port: port2
-          // eslint-disable-next-line n/handle-callback-err
           }, (err, res) => {
             expect(res).to.equal('OK')
             shutdownFirst()
@@ -309,6 +305,36 @@ describe('request', function () {
         expect(err.address).to.equal(pipe)
         done()
       })
+  })
+
+  it('should calculate correct Content-Length header for multi-byte characters', (done) => {
+    const sandbox = sinon.createSandbox()
+    sandbox.spy(http, 'request')
+
+    const body = 'æøå'
+    const charLength = body.length
+    const byteLength = Buffer.byteLength(body, 'utf-8')
+
+    expect(charLength).to.be.below(byteLength)
+
+    nock('http://test:123').post('/').reply(200, 'OK')
+
+    request(
+      body,
+      {
+        host: 'test',
+        port: 123,
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      },
+      (err, res) => {
+        expect(res).to.equal('OK')
+        const { headers } = http.request.getCall(0).args[0]
+        sandbox.restore()
+        expect(headers['Content-Length']).to.equal(byteLength)
+        done(err)
+      }
+    )
   })
 
   describe('when intercepting http', () => {
@@ -399,7 +425,7 @@ describe('request', function () {
           'accept-encoding': 'gzip'
         }
       }, (err, res) => {
-        expect(log.error).to.have.been.calledWith('Could not gunzip response: unexpected end of file')
+        expect(log.error).to.have.been.calledWith('Could not gunzip response: %s', 'unexpected end of file')
         expect(res).to.equal('')
         done(err)
       })

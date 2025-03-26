@@ -1,0 +1,57 @@
+{
+  "openapi": "3.0.0",
+  "components": {
+      "schemas": {
+          "example.avro.AdvancedUser": {
+              "type": "object",
+              "properties": {
+                  "email": {
+                      "type": "union[null,string]"
+                  },
+                  "preferences": {
+                      "type": "object"
+                  },
+                  "tags": {
+                      "type": "array",
+                      "items": {
+                          "type": "string"
+                      }
+                  },
+                  "status": {
+                      "type": "string",
+                      "enum": [
+                          "ACTIVE",
+                          "INACTIVE",
+                          "BANNED"
+                      ]
+                  },
+                  "profile_picture": {
+                      "type": "string",
+                      "format": "byte"
+                  },
+                  "metadata": {
+                      "type": "string"
+                  },
+                  "address": {
+                      "type": "object",
+                      "$ref": "#/components/schemas/example.avro.Address"
+                  }
+              }
+          },
+          "example.avro.Address": {
+              "type": "object",
+              "properties": {
+                  "street": {
+                      "type": "string"
+                  },
+                  "city": {
+                      "type": "string"
+                  },
+                  "zipcode": {
+                      "type": "string"
+                  }
+              }
+          }
+      }
+  }
+}

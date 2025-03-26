@@ -41,16 +41,16 @@ function update (newRules) {
   try {
     waf.wafManager.update(newRules)
   } catch (err) {
-    log.error('Could not apply rules from remote config')
+    log.error('[ASM] Could not apply rules from remote config')
     throw err
   }
 }
 
-function run (data, req, raspRuleType) {
+function run (data, req, raspRule) {
   if (!req) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     if (!store || !store.req) {
-      log.warn('Request object not available in waf.run')
+      log.warn('[ASM] Request object not available in waf.run')
       return
     }
 
@@ -59,7 +59,7 @@ function run (data, req, raspRuleType) {
 
   const wafContext = waf.wafManager.getWAFContext(req)
 
-  return wafContext.run(data, raspRuleType)
+  return wafContext.run(data, raspRule)
 }
 
 function disposeContext (req) {

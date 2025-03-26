@@ -2,8 +2,7 @@
 
 const http = require('http')
 const bodyParser = require('body-parser')
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
+const msgpack = require('@msgpack/msgpack')
 const express = require('express')
 const path = require('path')
 const ritm = require('../../src/ritm')
@@ -69,6 +68,45 @@ function dsmStatsExist (agent, expectedHash, expectedEdgeTags) {
   return hashFound
 }
 
+function dsmStatsExistWithParentHash (agent, expectedParentHash) {
+  const dsmStats = agent.getDsmStats()
+  let hashFound = false
+  if (dsmStats.length !== 0) {
+    for (const statsTimeBucket of dsmStats) {
+      for (const statsBucket of statsTimeBucket.Stats) {
+        for (const stats of statsBucket.Stats) {
+          if (stats.ParentHash.toString() === expectedParentHash) {
+            hashFound = true
+            return hashFound
+          }
+        }
+      }
+    }
+  }
+  return hashFound
+}
+
+function unformatSpanEvents (span) {
+  if (span.meta && span.meta.events) {
+    // Parse the JSON string back into an object
+    const events = JSON.parse(span.meta.events)
+
+    // Create the _events array
+    const spanEvents = events.map(event => {
+      return {
+        name: event.name,
+        startTime: event.time_unix_nano / 1e6, // Convert from nanoseconds back to milliseconds
+        attributes: event.attributes ? event.attributes : undefined
+      }
+    })
+
+    // Return the unformatted _events
+    return spanEvents
+  }
+
+  return [] // Return an empty array if no events are found
+}
+
 function addEnvironmentVariablesToHeaders (headers) {
   // get all environment variables that start with "DD_"
   const ddEnvVars = new Map(
@@ -104,6 +142,7 @@ function handleTraceRequest (req, res, sendToTestAgent) {
   // handles the received trace request and sends trace to Test Agent if bool enabled.
   if (sendToTestAgent) {
     const testAgentUrl = process.env.DD_TEST_AGENT_URL || 'http://127.0.0.1:9126'
+    const replacer = (k, v) => typeof v === 'bigint' ? Number(v) : v
 
     // remove incorrect headers
     delete req.headers.host
@@ -135,7 +174,7 @@ function handleTraceRequest (req, res, sendToTestAgent) {
         })
       }
     })
-    testAgentReq.write(JSON.stringify(req.body))
+    testAgentReq.write(JSON.stringify(req.body, replacer))
     testAgentReq.end()
   }
 
@@ -210,10 +249,10 @@ function runCallback (callback, options, handlers) {
 
   function handler () {
     try {
-      callback.apply(null, arguments)
+      const result = callback.apply(null, arguments)
       handlers.delete(handlerPayload)
       clearTimeout(timeout)
-      deferred.resolve()
+      deferred.resolve(result)
     } catch (e) {
       if (options && options.rejectFirst) {
         clearTimeout(timeout)
@@ -239,7 +278,7 @@ module.exports = {
     agent.use((req, res, next) => {
       if (req.is('application/msgpack')) {
         if (!req.body.length) return res.status(200).send()
-        req.body = msgpack.decode(req.body, { codec })
+        req.body = msgpack.decode(req.body, { useBigInt64: true })
       }
       next()
     })
@@ -286,7 +325,7 @@ module.exports = {
     const emit = server.emit
 
     server.emit = function () {
-      storage.enterWith({ noop: true })
+      storage('legacy').enterWith({ noop: true })
       return emit.apply(this, arguments)
     }
 
@@ -424,5 +463,7 @@ module.exports = {
   tracer,
   testedPlugins,
   getDsmStats,
-  dsmStatsExist
+  dsmStatsExist,
+  dsmStatsExistWithParentHash,
+  unformatSpanEvents
 }

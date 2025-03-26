@@ -2,6 +2,9 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
+const id = require('../../dd-trace/src/id')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
@@ -9,12 +12,14 @@ describe('Plugin', () => {
   let tracer
   let connection
   let channel
+  let queue
 
   describe('amqplib', () => {
     withVersions('amqplib', 'amqplib', version => {
       beforeEach(() => {
         process.env.DD_DATA_STREAMS_ENABLED = 'true'
         tracer = require('../../dd-trace')
+        queue = `test-${id()}`
       })
 
       afterEach(() => {
@@ -40,26 +45,22 @@ describe('Plugin', () => {
           })
         })
 
+        afterEach(() => {
+          return agent.close({ ritmReset: false })
+        })
+
         describe('without plugin', () => {
           it('should run commands normally', done => {
-            channel.assertQueue('test', {}, () => { done() })
+            channel.assertQueue(queue, {}, () => { done() })
           })
         })
 
         describe('when using a callback', () => {
-          before(() => {
-            return agent.load('amqplib')
-          })
-
-          after(() => {
-            return agent.close({ ritmReset: false })
-          })
-
           describe('when sending commands', () => {
             withPeerService(
               () => tracer,
               'amqplib',
-              () => channel.assertQueue('test', {}, () => {}),
+              () => channel.assertQueue(queue, {}, () => {}),
               'localhost',
               'out.host'
             )
@@ -70,7 +71,7 @@ describe('Plugin', () => {
                   const span = traces[0][0]
                   expect(span).to.have.property('name', expectedSchema.controlPlane.opName)
                   expect(span).to.have.property('service', expectedSchema.controlPlane.serviceName)
-                  expect(span).to.have.property('resource', 'queue.declare test')
+                  expect(span).to.have.property('resource', `queue.declare ${queue}`)
                   expect(span).to.not.have.property('type')
                   expect(span.meta).to.have.property('span.kind', 'client')
                   expect(span.meta).to.have.property('out.host', 'localhost')
@@ -80,7 +81,7 @@ describe('Plugin', () => {
                 .then(done)
                 .catch(done)
 
-              channel.assertQueue('test', {}, () => {})
+              channel.assertQueue(queue, {}, () => {})
             })
 
             it('should do automatic instrumentation for queued commands', done => {
@@ -90,7 +91,7 @@ describe('Plugin', () => {
 
                   expect(span).to.have.property('name', expectedSchema.controlPlane.opName)
                   expect(span).to.have.property('service', expectedSchema.controlPlane.serviceName)
-                  expect(span).to.have.property('resource', 'queue.delete test')
+                  expect(span).to.have.property('resource', `queue.delete ${queue}`)
                   expect(span).to.not.have.property('type')
                   expect(span.meta).to.have.property('span.kind', 'client')
                   expect(span.meta).to.have.property('out.host', 'localhost')
@@ -100,8 +101,8 @@ describe('Plugin', () => {
                 .then(done)
                 .catch(done)
 
-              channel.assertQueue('test', {}, () => {})
-              channel.deleteQueue('test', () => {})
+              channel.assertQueue(queue, {}, () => {})
+              channel.deleteQueue(queue, () => {})
             })
 
             it('should handle errors', done => {
@@ -128,7 +129,7 @@ describe('Plugin', () => {
             })
 
             withNamingSchema(
-              () => channel.assertQueue('test', {}, () => {}),
+              () => channel.assertQueue(queue, {}, () => {}),
               rawExpectedSchema.controlPlane
             )
           })
@@ -137,7 +138,7 @@ describe('Plugin', () => {
             withPeerService(
               () => tracer,
               'amqplib',
-              () => channel.assertQueue('test', {}, () => {}),
+              () => channel.assertQueue(queue, {}, () => {}),
               'localhost',
               'out.host'
             )
@@ -181,7 +182,7 @@ describe('Plugin', () => {
                 .catch(done)
 
               try {
-                channel.sendToQueue('test', 'invalid')
+                channel.sendToQueue(queue, 'invalid')
               } catch (e) {
                 error = e
               }
@@ -276,7 +277,6 @@ describe('Plugin', () => {
                 channel.assertQueue('', {}, (err, ok) => {
                   if (err) return
                   channel.sendToQueue(ok.queue, Buffer.from('content'))
-                  // eslint-disable-next-line n/handle-callback-err
                   channel.consume(ok.queue, () => {}, {}, (err, ok) => {})
                 })
               },
@@ -294,7 +294,7 @@ describe('Plugin', () => {
           })
 
           it('should run the callback in the parent context', done => {
-            channel.assertQueue('test', {})
+            channel.assertQueue(queue, {})
               .then(() => {
                 expect(tracer.scope().active()).to.be.null
                 done()
@@ -306,70 +306,174 @@ describe('Plugin', () => {
         describe('when data streams monitoring is enabled', function () {
           this.timeout(10000)
 
-          const expectedProducerHash = '17191234428405871432'
-          const expectedConsumerHash = '18277095184718602853'
+          let expectedProducerHashWithTopic
+          let expectedProducerHashWithExchange
+          let expectedConsumerHash
 
-          before(() => {
-            tracer = require('../../dd-trace')
-            tracer.use('amqplib')
+          beforeEach(() => {
+            const producerHashWithTopic = computePathwayHash('test', 'tester', [
+              'direction:out',
+              'has_routing_key:true',
+              `topic:${queue}`,
+              'type:rabbitmq'
+            ], ENTRY_PARENT_HASH)
+
+            expectedProducerHashWithTopic = producerHashWithTopic.readBigUInt64BE(0).toString()
+
+            expectedProducerHashWithExchange = computePathwayHash('test', 'tester', [
+              'direction:out',
+              'exchange:namedExchange',
+              'has_routing_key:true',
+              'type:rabbitmq'
+            ], ENTRY_PARENT_HASH).readBigUInt64BE(0).toString()
+
+            expectedConsumerHash = computePathwayHash('test', 'tester', [
+              'direction:in',
+              `topic:${queue}`,
+              'type:rabbitmq'
+            ], producerHashWithTopic).readBigUInt64BE(0).toString()
           })
 
-          before(async () => {
-            return agent.load('amqplib')
-          })
-
-          after(() => {
-            return agent.close({ ritmReset: false })
-          })
-
-          it('Should emit DSM stats to the agent when sending a message', done => {
+          it('Should emit DSM stats to the agent when sending a message on an unnamed exchange', done => {
             agent.expectPipelineStats(dsmStats => {
-              let statsPointsReceived = 0
+              let statsPointsReceived = []
               // we should have 1 dsm stats points
               dsmStats.forEach((timeStatsBucket) => {
                 if (timeStatsBucket && timeStatsBucket.Stats) {
                   timeStatsBucket.Stats.forEach((statsBuckets) => {
-                    statsPointsReceived += statsBuckets.Stats.length
+                    statsPointsReceived = statsPointsReceived.concat(statsBuckets.Stats)
                   })
                 }
               })
-              expect(statsPointsReceived).to.be.at.least(1)
-              expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+              expect(statsPointsReceived.length).to.be.at.least(1)
+              expect(statsPointsReceived[0].EdgeTags).to.deep.equal([
+                'direction:out',
+                'has_routing_key:true',
+                `topic:${queue}`,
+                'type:rabbitmq'
+              ])
+              expect(agent.dsmStatsExist(agent, expectedProducerHashWithTopic)).to.equal(true)
             }, { timeoutMs: 10000 }).then(done, done)
 
-            channel.assertQueue('testDSM', {}, (err, ok) => {
+            channel.assertQueue(queue, {}, (err, ok) => {
               if (err) return done(err)
 
               channel.sendToQueue(ok.queue, Buffer.from('DSM pathway test'))
             })
           })
 
+          it('Should emit DSM stats to the agent when sending a message on an named exchange', done => {
+            agent.expectPipelineStats(dsmStats => {
+              let statsPointsReceived = []
+              // we should have 1 dsm stats points
+              dsmStats.forEach((timeStatsBucket) => {
+                if (timeStatsBucket && timeStatsBucket.Stats) {
+                  timeStatsBucket.Stats.forEach((statsBuckets) => {
+                    statsPointsReceived = statsPointsReceived.concat(statsBuckets.Stats)
+                  })
+                }
+              })
+              expect(statsPointsReceived.length).to.be.at.least(1)
+              expect(statsPointsReceived[0].EdgeTags).to.deep.equal([
+                'direction:out',
+                'exchange:namedExchange',
+                'has_routing_key:true',
+                'type:rabbitmq'
+              ])
+              expect(agent.dsmStatsExist(agent, expectedProducerHashWithExchange)).to.equal(true)
+            }, { timeoutMs: 10000 }).then(done, done)
+
+            channel.assertExchange('namedExchange', 'direct', {}, (err, ok) => {
+              if (err) return done(err)
+
+              channel.publish('namedExchange', 'anyOldRoutingKey', Buffer.from('DSM pathway test'))
+            })
+          })
+
           it('Should emit DSM stats to the agent when receiving a message', done => {
             agent.expectPipelineStats(dsmStats => {
-              let statsPointsReceived = 0
+              let statsPointsReceived = []
               // we should have 2 dsm stats points
               dsmStats.forEach((timeStatsBucket) => {
                 if (timeStatsBucket && timeStatsBucket.Stats) {
                   timeStatsBucket.Stats.forEach((statsBuckets) => {
-                    statsPointsReceived += statsBuckets.Stats.length
+                    statsPointsReceived = statsPointsReceived.concat(statsBuckets.Stats)
                   })
                 }
               })
-              expect(statsPointsReceived).to.be.at.least(1)
+              expect(statsPointsReceived.length).to.equal(2)
+              expect(statsPointsReceived[1].EdgeTags).to.deep.equal(
+                ['direction:in', `topic:${queue}`, 'type:rabbitmq'])
               expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
             }, { timeoutMs: 10000 }).then(done, done)
 
-            channel.assertQueue('testDSM', {}, (err, ok) => {
+            channel.assertQueue(queue, {}, (err, ok) => {
               if (err) return done(err)
 
+              channel.sendToQueue(ok.queue, Buffer.from('DSM pathway test'))
               channel.consume(ok.queue, () => {}, {}, (err, ok) => {
                 if (err) done(err)
               })
             })
           })
 
+          it('Should emit DSM stats to the agent when sending another message', done => {
+            agent.expectPipelineStats(dsmStats => {
+              let statsPointsReceived = []
+              // we should have 1 dsm stats points
+              dsmStats.forEach((timeStatsBucket) => {
+                if (timeStatsBucket && timeStatsBucket.Stats) {
+                  timeStatsBucket.Stats.forEach((statsBuckets) => {
+                    statsPointsReceived = statsPointsReceived.concat(statsBuckets.Stats)
+                  })
+                }
+              })
+              expect(statsPointsReceived.length).to.equal(1)
+              expect(statsPointsReceived[0].EdgeTags).to.deep.equal([
+                'direction:out',
+                'has_routing_key:true',
+                `topic:${queue}`,
+                'type:rabbitmq'
+              ])
+              expect(agent.dsmStatsExist(agent, expectedProducerHashWithTopic)).to.equal(true)
+            }, { timeoutMs: 10000 }).then(done, done)
+
+            channel.assertQueue(queue, {}, (err, ok) => {
+              if (err) return done(err)
+
+              channel.sendToQueue(ok.queue, Buffer.from('DSM pathway test'))
+            })
+          })
+
+          it('Should emit DSM stats to the agent when receiving a message with get', done => {
+            agent.expectPipelineStats(dsmStats => {
+              let statsPointsReceived = []
+              // we should have 2 dsm stats points
+              dsmStats.forEach((timeStatsBucket) => {
+                if (timeStatsBucket && timeStatsBucket.Stats) {
+                  timeStatsBucket.Stats.forEach((statsBuckets) => {
+                    statsPointsReceived = statsPointsReceived.concat(statsBuckets.Stats)
+                  })
+                }
+              })
+              expect(statsPointsReceived.length).to.equal(2)
+              expect(statsPointsReceived[1].EdgeTags).to.deep.equal(
+                ['direction:in', `topic:${queue}`, 'type:rabbitmq'])
+              expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
+            }, { timeoutMs: 10000 }).then(done, done)
+
+            channel.assertQueue(queue, {}, (err, ok) => {
+              if (err) return done(err)
+
+              channel.sendToQueue(ok.queue, Buffer.from('DSM pathway test'))
+              channel.get(ok.queue, {}, (err, ok) => {
+                if (err) done(err)
+              })
+            })
+          })
+
           it('Should set pathway hash tag on a span when producing', (done) => {
-            channel.assertQueue('testDSM', {}, (err, ok) => {
+            channel.assertQueue(queue, {}, (err, ok) => {
               if (err) return done(err)
 
               channel.sendToQueue(ok.queue, Buffer.from('dsm test'))
@@ -383,16 +487,17 @@ describe('Plugin', () => {
                 }
 
                 expect(produceSpanMeta).to.include({
-                  'pathway.hash': expectedProducerHash
+                  'pathway.hash': expectedProducerHashWithTopic
                 })
               }, { timeoutMs: 10000 }).then(done, done)
             })
           })
 
           it('Should set pathway hash tag on a span when consuming', (done) => {
-            channel.assertQueue('testDSM', {}, (err, ok) => {
+            channel.assertQueue(queue, {}, (err, ok) => {
               if (err) return done(err)
 
+              channel.sendToQueue(ok.queue, Buffer.from('dsm test'))
               channel.consume(ok.queue, () => {}, {}, (err, ok) => {
                 if (err) return done(err)
 
@@ -415,7 +520,7 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        after(() => {
+        afterEach(() => {
           return agent.close({ ritmReset: false })
         })
 
@@ -440,16 +545,16 @@ describe('Plugin', () => {
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', 'test-custom-service')
-              expect(traces[0][0]).to.have.property('resource', 'queue.declare test')
+              expect(traces[0][0]).to.have.property('resource', `queue.declare ${queue}`)
             }, 2)
             .then(done)
             .catch(done)
 
-          channel.assertQueue('test', {}, () => {})
+          channel.assertQueue(queue, {}, () => {})
         })
 
         withNamingSchema(
-          () => channel.assertQueue('test', {}, () => {}),
+          () => channel.assertQueue(queue, {}, () => {}),
           {
             v0: {
               opName: 'amqp.command',

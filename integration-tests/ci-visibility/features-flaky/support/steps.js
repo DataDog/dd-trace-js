@@ -8,5 +8,11 @@ Then('I should have heard {string}', function (expectedResponse) {
 })
 
 When('the greeter says flaky', function () {
-  this.whatIHeard = globalCounter++ % 2 === 0 ? 'flaky' : 'not flaky'
+  // It's important that the first time this fails. The reason is the following:
+  // In `getWrappedRunTestCase` we were returning the first result from
+  // `runTestCaseFunction`, so if the first time it passed, the EFD logic was
+  // not kicking in. By making it fail, `runTestCaseResult` is false (fail),
+  // and the EFD logic is tested correctly, i.e. the test passes as long as a single
+  // attempt has passed.
+  this.whatIHeard = globalCounter++ % 2 === 1 ? 'flaky' : 'not flaky'
 })

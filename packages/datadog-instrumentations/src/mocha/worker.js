@@ -9,11 +9,44 @@ const {
   getOnTestEndHandler,
   getOnHookEndHandler,
   getOnFailHandler,
-  getOnPendingHandler
+  getOnPendingHandler,
+  getRunTestsWrapper
 } = require('./utils')
 require('./common')
 
 const workerFinishCh = channel('ci:mocha:worker:finish')
+
+const config = {}
+
+addHook({
+  name: 'mocha',
+  versions: ['>=8.0.0'],
+  file: 'lib/mocha.js'
+}, (Mocha) => {
+  shimmer.wrap(Mocha.prototype, 'run', run => function () {
+    if (this.options._ddIsKnownTestsEnabled) {
+      config.isKnownTestsEnabled = true
+      config.isEarlyFlakeDetectionEnabled = this.options._ddIsEfdEnabled
+      config.knownTests = this.options._ddKnownTests
+      config.earlyFlakeDetectionNumRetries = this.options._ddEfdNumRetries
+      delete this.options._ddIsEfdEnabled
+      delete this.options._ddKnownTests
+      delete this.options._ddEfdNumRetries
+      delete this.options._ddIsKnownTestsEnabled
+    }
+    if (this.options._ddIsTestManagementTestsEnabled) {
+      config.isTestManagementTestsEnabled = true
+      // TODO: attempt to fix does not work in parallel mode yet
+      // config.testManagementAttemptToFixRetries = this.options._ddTestManagementAttemptToFixRetries
+      config.testManagementTests = this.options._ddTestManagementTests
+      delete this.options._ddIsTestManagementTestsEnabled
+      delete this.options._ddTestManagementTests
+    }
+    return run.apply(this, arguments)
+  })
+
+  return Mocha
+})
 
 // Runner is also hooked in mocha/main.js, but in here we only generate test events.
 addHook({
@@ -21,14 +54,19 @@ addHook({
   versions: ['>=5.2.0'],
   file: 'lib/runner.js'
 }, function (Runner) {
+  shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
+
   shimmer.wrap(Runner.prototype, 'run', run => function () {
+    if (!workerFinishCh.hasSubscribers) {
+      return run.apply(this, arguments)
+    }
     // We flush when the worker ends with its test file (a mocha instance in a worker runs a single test file)
     this.on('end', () => {
       workerFinishCh.publish()
     })
     this.on('test', getOnTestHandler(false))
 
-    this.on('test end', getOnTestEndHandler())
+    this.on('test end', getOnTestEndHandler(config))
 
     // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
     this.on('hook end', getOnHookEndHandler())

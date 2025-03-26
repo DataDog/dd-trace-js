@@ -39,7 +39,7 @@ function patch (http, methodName) {
       try {
         args = normalizeArgs.apply(null, arguments)
       } catch (e) {
-        log.error(e)
+        log.error('Error normalising http req arguments', e)
         return request.apply(this, arguments)
       }
 
@@ -52,11 +52,11 @@ function patch (http, methodName) {
         let callback = args.callback
 
         if (callback) {
-          callback = function () {
+          callback = shimmer.wrapFunction(args.callback, cb => function () {
             return asyncStartChannel.runStores(ctx, () => {
-              return args.callback.apply(this, arguments)
+              return cb.apply(this, arguments)
             })
-          }
+          })
         }
 
         const options = args.options
@@ -117,6 +117,11 @@ function patch (http, methodName) {
         } catch (e) {
           ctx.error = e
           errorChannel.publish(ctx)
+          // if the initial request failed, ctx.req will be unset, we must close the span here
+          // fix for: https://github.com/DataDog/dd-trace-js/issues/5016
+          if (!ctx.req) {
+            finish()
+          }
           throw e
         } finally {
           endChannel.publish(ctx)

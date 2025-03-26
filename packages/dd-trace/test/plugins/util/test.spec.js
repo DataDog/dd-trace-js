@@ -15,7 +15,8 @@ const {
   resetCoverage,
   removeInvalidMetadata,
   parseAnnotations,
-  getIsFaultyEarlyFlakeDetection
+  getIsFaultyEarlyFlakeDetection,
+  getNumFromKnownTests
 } = require('../../../src/plugins/util/test')
 
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
@@ -333,5 +334,34 @@ describe('getIsFaultyEarlyFlakeDetection', () => {
       faultyThreshold
     )
     expect(isFaulty).to.be.true
+  })
+})
+
+describe('getNumFromKnownTests', () => {
+  it('calculates the number of tests from the known tests', () => {
+    const knownTests = {
+      testModule: {
+        'test1.spec.js': ['test1', 'test2'],
+        'test2.spec.js': ['test3']
+      }
+    }
+
+    const numTests = getNumFromKnownTests(knownTests)
+    expect(numTests).to.equal(3)
+  })
+
+  it('does not crash with empty dictionaries', () => {
+    const knownTests = {}
+
+    const numTests = getNumFromKnownTests(knownTests)
+    expect(numTests).to.equal(0)
+  })
+
+  it('does not crash if known tests is undefined or null', () => {
+    const numTestsUndefined = getNumFromKnownTests(undefined)
+    expect(numTestsUndefined).to.equal(0)
+
+    const numTestsNull = getNumFromKnownTests(null)
+    expect(numTestsNull).to.equal(0)
   })
 })

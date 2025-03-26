@@ -20,6 +20,7 @@ esmHook(['express', 'os'], (exports, name, baseDir) => {
   const { freemem } = await import('os')
   const expressResult = expressDefault()
   const express = typeof expressResult === 'function' ? 'express()' : expressResult
+  // eslint-disable-next-line no-console
   console.log(JSON.stringify({
     express,
     freemem: freemem()

@@ -6,6 +6,7 @@ const assert = require('assert')
 const express = require('express')
 const http = require('http')
 require('knex') // has dead code paths for multiple instrumented packages
+require('@apollo/server')
 
 const app = express()
 const PORT = 31415

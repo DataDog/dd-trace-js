@@ -43,10 +43,10 @@ describe('Exporter', () => {
     })
   })
 
-  it('should pass computed stats header through to writer if standalone appsec is enabled', () => {
+  it('should pass computed stats header through to writer if APM Tracing is disabled', () => {
     const stats = { enabled: false }
-    const appsec = { standalone: { enabled: true } }
-    exporter = new Exporter({ url, flushInterval, stats, appsec }, prioritySampler)
+    const apmTracingEnabled = false
+    exporter = new Exporter({ url, flushInterval, stats, apmTracingEnabled }, prioritySampler)
 
     expect(Writer).to.have.been.calledWithMatch({
       headers: {

@@ -6,7 +6,7 @@ const { storage } = require('../../../datadog-core') // TODO: noop storage?
 
 class NoopSpan {
   constructor (tracer, parent) {
-    this._store = storage.getStore()
+    this._store = storage('legacy').getHandle()
     this._noopTracer = tracer
     this._noopContext = this._createContext(parent)
   }
@@ -16,9 +16,13 @@ class NoopSpan {
   setOperationName (name) { return this }
   setBaggageItem (key, value) { return this }
   getBaggageItem (key) {}
+  getAllBaggageItems () {}
+  removeBaggageItem (key) { return this }
+  removeAllBaggageItems () { return this }
   setTag (key, value) { return this }
   addTags (keyValueMap) { return this }
   addLink (link) { return this }
+  addSpanPointer (ptrKind, ptrDir, ptrHash) { return this }
   log () { return this }
   logEvent () {}
   finish (finishTime) {}

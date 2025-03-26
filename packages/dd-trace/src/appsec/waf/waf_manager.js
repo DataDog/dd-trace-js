@@ -11,21 +11,24 @@ class WAFManager {
     this.config = config
     this.wafTimeout = config.wafTimeout
     this.ddwaf = this._loadDDWAF(rules)
-    this.ddwafVersion = this.ddwaf.constructor.version()
     this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
 
-    Reporter.reportWafInit(this.ddwafVersion, this.rulesVersion, this.ddwaf.diagnostics.rules)
+    Reporter.reportWafInit(this.ddwafVersion, this.rulesVersion, this.ddwaf.diagnostics.rules, true)
   }
 
   _loadDDWAF (rules) {
     try {
       // require in `try/catch` because this can throw at require time
       const { DDWAF } = require('@datadog/native-appsec')
+      this.ddwafVersion = DDWAF.version()
 
       const { obfuscatorKeyRegex, obfuscatorValueRegex } = this.config
       return new DDWAF(rules, { obfuscatorKeyRegex, obfuscatorValueRegex })
     } catch (err) {
-      log.error('AppSec could not load native package. In-app WAF features will not be available.')
+      this.ddwafVersion = this.ddwafVersion || 'unknown'
+      Reporter.reportWafInit(this.ddwafVersion, 'unknown')
+
+      log.error('[ASM] AppSec could not load native package. In-app WAF features will not be available.')
 
       throw err
     }
@@ -39,7 +42,8 @@ class WAFManager {
         this.ddwaf.createContext(),
         this.wafTimeout,
         this.ddwafVersion,
-        this.rulesVersion
+        this.rulesVersion,
+        this.ddwaf.knownAddresses
       )
       contexts.set(req, wafContext)
     }
@@ -48,9 +52,19 @@ class WAFManager {
   }
 
   update (newRules) {
-    this.ddwaf.update(newRules)
+    try {
+      this.ddwaf.update(newRules)
 
-    Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion)
+      if (this.ddwaf.diagnostics.ruleset_version) {
+        this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
+      }
+
+      Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion, true)
+    } catch (error) {
+      Reporter.reportWafUpdate(this.ddwafVersion, 'unknown', false)
+
+      throw error
+    }
   }
 
   destroy () {

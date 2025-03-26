@@ -1,0 +1,14 @@
+[
+  {"name": "unsupported 2.x glibc x64","filepath": "/some/path", "args": [], "envars": [], "host": {"os": "linux", "arch": "x64", "libc": "glibc:2.16"}},
+  {"name": "unsupported 1.x glibc x64","filepath": "/some/path", "args": [], "envars": [], "host": {"os": "linux", "arch": "x64", "libc": "glibc:1.22"}},
+  {"name": "unsupported 2.x.x glibc x64","filepath": "/some/path", "args": [], "envars": [], "host": {"os": "linux", "arch": "x64", "libc": "glibc:2.16.9"}},
+  {"name": "unsupported 2.x glibc arm64","filepath": "/some/path", "args": [], "envars": [], "host": {"os": "linux", "arch": "arm64", "libc": "glibc:2.16"}},
+  {"name": "unsupported 2.x.x glibc x64","filepath": "/some/path", "args": [], "envars": [], "host": {"os": "linux", "arch": "arm64", "libc": "glibc:2.16.9"}},
+  {"name": "unsupported 2.x.x glibc x86","filepath": "/some/path", "args": [], "envars": [], "host": {"os": "linux", "arch": "x86", "libc": "glibc:2.17"}},
+  {"name": "npm","filepath": "/pathto/node", "args": ["/pathto/node", "/pathto/npm-cli.js"], "envars": [], "host": {"os": "linux", "arch": "x64", "libc": "glibc:2.40"}},
+  {"name": "npm-symlink","filepath": "/pathto/node", "args": ["/pathto/node", "/pathto/npm"], "envars": [], "host": {"os": "linux", "arch": "x64", "libc": "glibc:2.40"}},
+  {"name": "yarn","filepath": "/pathto/node", "args": ["/pathto/node", "/pathto/yarn.js"], "envars": [], "host": {"os": "linux", "arch": "x64", "libc": "glibc:2.40"}},
+  {"name": "yarn-symlink","filepath": "/pathto/node", "args": ["/pathto/node", "/pathto/yarn"], "envars": [], "host": {"os": "linux", "arch": "x64", "libc": "glibc:2.40"}},
+  {"name": "pnpm","filepath": "/pathto/node", "args": ["/pathto/node", "/pathto/pnpm.cjs"], "envars": [], "host": {"os": "linux", "arch": "x64", "libc": "glibc:2.40"}},
+  {"name": "pnpm-symlink","filepath": "/pathto/node", "args": ["/pathto/node", "/pathto/pnpm"], "envars": [], "host": {"os": "linux", "arch": "x64", "libc": "glibc:2.40"}}
+]

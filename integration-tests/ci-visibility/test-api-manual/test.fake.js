@@ -31,7 +31,7 @@ describe('can run tests', () => {
   })
   test('integration test', () => {
     // Just for testing purposes, so we don't create a custom span
-    if (!process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED) {
+    if (process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED === 'false') {
       return Promise.resolve()
     }
     const testSpan = tracer.scope().active()

@@ -11,8 +11,10 @@ const {
   SAMPLING_MECHANISM_MANUAL,
   SAMPLING_MECHANISM_REMOTE_USER,
   SAMPLING_MECHANISM_REMOTE_DYNAMIC,
-  DECISION_MAKER_KEY
+  DECISION_MAKER_KEY,
+  SAMPLING_MECHANISM_APPSEC
 } = require('../src/constants')
+const { ASM } = require('../src/standalone/product')
 
 const SERVICE_NAME = ext.tags.SERVICE_NAME
 const SAMPLING_PRIORITY = ext.tags.SAMPLING_PRIORITY
@@ -449,6 +451,80 @@ describe('PrioritySampler', () => {
 
       expect(context._sampling.priority).to.equal(AUTO_REJECT)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_AGENT)
+    })
+  })
+
+  describe('setPriority', () => {
+    it('should set sampling priority and default mechanism', () => {
+      prioritySampler.setPriority(span, USER_KEEP)
+
+      expect(context._sampling.priority).to.equal(USER_KEEP)
+      expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_MANUAL)
+    })
+
+    it('should set sampling priority and mechanism', () => {
+      prioritySampler.setPriority(span, USER_KEEP, ASM)
+
+      expect(context._sampling.priority).to.equal(USER_KEEP)
+      expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_APPSEC)
+    })
+
+    it('should filter out invalid priorities', () => {
+      prioritySampler.setPriority(span, 42)
+
+      expect(context._sampling.priority).to.be.undefined
+      expect(context._sampling.mechanism).to.be.undefined
+    })
+
+    it('should add decision maker tag if not set before', () => {
+      prioritySampler.setPriority(span, USER_KEEP, ASM)
+
+      expect(context._trace.tags[DECISION_MAKER_KEY]).to.equal('-5')
+    })
+
+    it('should set sampling priority if no product is provided', () => {
+      prioritySampler.setPriority(span, USER_KEEP)
+
+      expect(context._sampling.priority).to.equal(USER_KEEP)
+      expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_MANUAL)
+    })
+
+    it('should override previous priority but mantain previous decision maker tag', () => {
+      prioritySampler.sample(span)
+
+      prioritySampler.setPriority(span, USER_KEEP, ASM)
+
+      expect(context._sampling.priority).to.equal(USER_KEEP)
+      expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_APPSEC)
+      expect(context._trace.tags[DECISION_MAKER_KEY]).to.equal('-0')
+    })
+
+    it('should ignore noop spans', () => {
+      context._trace.started[0] = undefined // noop
+
+      prioritySampler.setPriority(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+
+      expect(context._sampling.priority).to.undefined
+      expect(context._sampling.mechanism).to.undefined
+      expect(context._trace.tags[DECISION_MAKER_KEY]).to.undefined
+    })
+  })
+
+  describe('keepTrace', () => {
+    it('should not fail if no _prioritySampler', () => {
+      expect(() => {
+        PrioritySampler.keepTrace(span, SAMPLING_MECHANISM_APPSEC)
+      }).to.not.throw()
+    })
+
+    it('should call setPriority with span USER_KEEP and mechanism', () => {
+      const setPriority = sinon.stub(prioritySampler, 'setPriority')
+
+      span._prioritySampler = prioritySampler
+
+      PrioritySampler.keepTrace(span, SAMPLING_MECHANISM_APPSEC)
+
+      expect(setPriority).to.be.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
     })
   })
 })

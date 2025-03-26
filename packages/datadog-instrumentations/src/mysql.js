@@ -37,14 +37,14 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
 
         if (res._callback) {
           const cb = callbackResource.bind(res._callback)
-          res._callback = asyncResource.bind(function (error, result) {
+          res._callback = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (error, result) {
             if (error) {
               errorCh.publish(error)
             }
             finishCh.publish(result)
 
             return cb.apply(this, arguments)
-          })
+          }))
         } else {
           const cb = asyncResource.bind(function () {
             finishCh.publish(undefined)
@@ -92,7 +92,7 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
 
       const cb = arguments[arguments.length - 1]
       if (typeof cb === 'function') {
-        arguments[arguments.length - 1] = shimmer.wrap(cb, function () {
+        arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function () {
           finish()
           return cb.apply(this, arguments)
         })

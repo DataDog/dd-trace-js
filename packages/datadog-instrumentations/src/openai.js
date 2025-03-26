@@ -1,106 +1,110 @@
 'use strict'
 
-const {
-  channel,
-  addHook
-} = require('./helpers/instrument')
+const { addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const startCh = channel('apm:openai:request:start')
-const finishCh = channel('apm:openai:request:finish')
-const errorCh = channel('apm:openai:request:error')
+const dc = require('dc-polyfill')
+const ch = dc.tracingChannel('apm:openai:request')
 
 const V4_PACKAGE_SHIMS = [
   {
-    file: 'resources/chat/completions.js',
+    file: 'resources/chat/completions',
     targetClass: 'Completions',
     baseResource: 'chat.completions',
     methods: ['create'],
     streamedResponse: true
   },
   {
-    file: 'resources/completions.js',
+    file: 'resources/completions',
     targetClass: 'Completions',
     baseResource: 'completions',
     methods: ['create'],
     streamedResponse: true
   },
   {
-    file: 'resources/embeddings.js',
+    file: 'resources/embeddings',
     targetClass: 'Embeddings',
     baseResource: 'embeddings',
     methods: ['create']
   },
   {
-    file: 'resources/files.js',
+    file: 'resources/files',
     targetClass: 'Files',
     baseResource: 'files',
     methods: ['create', 'del', 'list', 'retrieve']
   },
   {
-    file: 'resources/files.js',
+    file: 'resources/files',
     targetClass: 'Files',
     baseResource: 'files',
     methods: ['retrieveContent'],
     versions: ['>=4.0.0 <4.17.1']
   },
   {
-    file: 'resources/files.js',
+    file: 'resources/files',
     targetClass: 'Files',
     baseResource: 'files',
     methods: ['content'], // replaced `retrieveContent` in v4.17.1
     versions: ['>=4.17.1']
   },
   {
-    file: 'resources/images.js',
+    file: 'resources/images',
     targetClass: 'Images',
     baseResource: 'images',
     methods: ['createVariation', 'edit', 'generate']
   },
   {
-    file: 'resources/fine-tuning/jobs/jobs.js',
+    file: 'resources/fine-tuning/jobs/jobs',
     targetClass: 'Jobs',
     baseResource: 'fine_tuning.jobs',
     methods: ['cancel', 'create', 'list', 'listEvents', 'retrieve'],
     versions: ['>=4.34.0'] // file location changed in 4.34.0
   },
   {
-    file: 'resources/fine-tuning/jobs.js',
+    file: 'resources/fine-tuning/jobs',
     targetClass: 'Jobs',
     baseResource: 'fine_tuning.jobs',
     methods: ['cancel', 'create', 'list', 'listEvents', 'retrieve'],
     versions: ['>=4.1.0 <4.34.0']
   },
   {
-    file: 'resources/fine-tunes.js', // deprecated after 4.1.0
+    file: 'resources/fine-tunes', // deprecated after 4.1.0
     targetClass: 'FineTunes',
     baseResource: 'fine-tune',
     methods: ['cancel', 'create', 'list', 'listEvents', 'retrieve'],
     versions: ['>=4.0.0 <4.1.0']
   },
   {
-    file: 'resources/models.js',
+    file: 'resources/models',
     targetClass: 'Models',
     baseResource: 'models',
     methods: ['del', 'list', 'retrieve']
   },
   {
-    file: 'resources/moderations.js',
+    file: 'resources/moderations',
     targetClass: 'Moderations',
     baseResource: 'moderations',
     methods: ['create']
   },
   {
-    file: 'resources/audio/transcriptions.js',
+    file: 'resources/audio/transcriptions',
     targetClass: 'Transcriptions',
     baseResource: 'audio.transcriptions',
     methods: ['create']
   },
   {
-    file: 'resources/audio/translations.js',
+    file: 'resources/audio/translations',
     targetClass: 'Translations',
     baseResource: 'audio.translations',
     methods: ['create']
+  },
+  {
+    file: 'resources/chat/completions/completions',
+    targetClass: 'Completions',
+    baseResource: 'chat.completions',
+    methods: ['create'],
+    streamedResponse: true,
+    versions: ['>=4.85.0']
   }
 ]
 
@@ -110,33 +114,18 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
 
   for (const methodName of methodNames) {
     shimmer.wrap(exports.OpenAIApi.prototype, methodName, fn => function () {
-      if (!startCh.hasSubscribers) {
+      if (!ch.start.hasSubscribers) {
         return fn.apply(this, arguments)
       }
 
-      startCh.publish({
+      const ctx = {
         methodName,
         args: arguments,
         basePath: this.basePath,
         apiKey: this.configuration.apiKey
-      })
+      }
 
-      return fn.apply(this, arguments)
-        .then((response) => {
-          finish({
-            headers: response.headers,
-            body: response.data,
-            path: response.request.path,
-            method: response.request.method
-          })
-
-          return response
-        })
-        .catch(error => {
-          finish(undefined, error)
-
-          throw error
-        })
+      return ch.tracePromise(fn, ctx, this, ...arguments)
     })
   }
 
@@ -184,10 +173,12 @@ function addStreamedChunk (content, chunk) {
 
       if (tools) {
         oldChoice.delta.tool_calls = tools.map((newTool, toolIdx) => {
-          const oldTool = oldChoice.delta.tool_calls[toolIdx]
+          const oldTool = oldChoice.delta.tool_calls?.[toolIdx]
 
           if (oldTool) {
             oldTool.function.arguments += newTool.function.arguments
+          } else {
+            return newTool
           }
 
           return oldTool
@@ -213,7 +204,7 @@ function convertBufferstoObjects (chunks = []) {
  * the chunks, and let the combined content be the final response.
  * This way, spans look the same as when not streamed.
  */
-function wrapStreamIterator (response, options, n) {
+function wrapStreamIterator (response, options, n, ctx) {
   let processChunksAsBuffers = false
   let chunks = []
   return function (itr) {
@@ -253,18 +244,20 @@ function wrapStreamIterator (response, options, n) {
                 }
               }
 
-              finish({
+              finish(ctx, {
                 headers: response.headers,
-                body,
-                path: response.url,
-                method: options.method
+                data: body,
+                request: {
+                  path: response.url,
+                  method: options.method
+                }
               })
             }
 
             return res
           })
           .catch(err => {
-            finish(undefined, err)
+            finish(ctx, undefined, err)
 
             throw err
           })
@@ -274,97 +267,129 @@ function wrapStreamIterator (response, options, n) {
   }
 }
 
-for (const shim of V4_PACKAGE_SHIMS) {
-  const { file, targetClass, baseResource, methods, versions, streamedResponse } = shim
-  addHook({ name: 'openai', file, versions: versions || ['>=4'] }, exports => {
-    const targetPrototype = exports[targetClass].prototype
+const extensions = ['.js', '.mjs']
 
-    for (const methodName of methods) {
-      shimmer.wrap(targetPrototype, methodName, methodFn => function () {
-        if (!startCh.hasSubscribers) {
-          return methodFn.apply(this, arguments)
-        }
+for (const extension of extensions) {
+  for (const shim of V4_PACKAGE_SHIMS) {
+    const { file, targetClass, baseResource, methods, versions, streamedResponse } = shim
+    addHook({ name: 'openai', file: file + extension, versions: versions || ['>=4'] }, exports => {
+      const targetPrototype = exports[targetClass].prototype
 
-        // The OpenAI library lets you set `stream: true` on the options arg to any method
-        // However, we only want to handle streamed responses in specific cases
-        // chat.completions and completions
-        const stream = streamedResponse && getOption(arguments, 'stream', false)
-
-        // we need to compute how many prompts we are sending in streamed cases for completions
-        // not applicable for chat completiond
-        let n
-        if (stream) {
-          n = getOption(arguments, 'n', 1)
-          const prompt = getOption(arguments, 'prompt')
-          if (Array.isArray(prompt) && typeof prompt[0] !== 'number') {
-            n *= prompt.length
+      for (const methodName of methods) {
+        shimmer.wrap(targetPrototype, methodName, methodFn => function () {
+          if (!ch.start.hasSubscribers) {
+            return methodFn.apply(this, arguments)
           }
-        }
 
-        const client = this._client || this.client
+          // The OpenAI library lets you set `stream: true` on the options arg to any method
+          // However, we only want to handle streamed responses in specific cases
+          // chat.completions and completions
+          const stream = streamedResponse && getOption(arguments, 'stream', false)
 
-        startCh.publish({
-          methodName: `${baseResource}.${methodName}`,
-          args: arguments,
-          basePath: client.baseURL,
-          apiKey: client.apiKey
-        })
+          // we need to compute how many prompts we are sending in streamed cases for completions
+          // not applicable for chat completiond
+          let n
+          if (stream) {
+            n = getOption(arguments, 'n', 1)
+            const prompt = getOption(arguments, 'prompt')
+            if (Array.isArray(prompt) && typeof prompt[0] !== 'number') {
+              n *= prompt.length
+            }
+          }
 
-        const apiProm = methodFn.apply(this, arguments)
+          const client = this._client || this.client
 
-        // wrapping `parse` avoids problematic wrapping of `then` when trying to call
-        // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
-        shimmer.wrap(apiProm, 'parse', origApiPromParse => function () {
-          return origApiPromParse.apply(this, arguments)
-            // the original response is wrapped in a promise, so we need to unwrap it
-            .then(body => Promise.all([this.responsePromise, body]))
-            .then(([{ response, options }, body]) => {
-              if (stream) {
-                if (body.iterator) {
-                  shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, n))
-                } else {
-                  shimmer.wrap(
-                    body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, n)
-                  )
-                }
-              } else {
-                finish({
-                  headers: response.headers,
-                  body,
-                  path: response.url,
-                  method: options.method
+          const ctx = {
+            methodName: `${baseResource}.${methodName}`,
+            args: arguments,
+            basePath: client.baseURL,
+            apiKey: client.apiKey
+          }
+
+          return ch.start.runStores(ctx, () => {
+            const apiProm = methodFn.apply(this, arguments)
+
+            if (baseResource === 'chat.completions' && typeof apiProm._thenUnwrap === 'function') {
+              // this should only ever be invoked from a client.beta.chat.completions.parse call
+              shimmer.wrap(apiProm, '_thenUnwrap', origApiPromThenUnwrap => function () {
+                // TODO(sam.brenner): I wonder if we can patch the APIPromise prototype instead, although
+                // we might not have access to everything we need...
+
+                // this is a new apipromise instance
+                const unwrappedPromise = origApiPromThenUnwrap.apply(this, arguments)
+
+                shimmer.wrap(unwrappedPromise, 'parse', origApiPromParse => function () {
+                  const parsedPromise = origApiPromParse.apply(this, arguments)
+                    .then(body => Promise.all([this.responsePromise, body]))
+
+                  return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, n)
                 })
-              }
 
-              return body
-            })
-            .catch(error => {
-              finish(undefined, error)
+                return unwrappedPromise
+              })
+            }
 
-              throw error
+            // wrapping `parse` avoids problematic wrapping of `then` when trying to call
+            // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
+            shimmer.wrap(apiProm, 'parse', origApiPromParse => function () {
+              const parsedPromise = origApiPromParse.apply(this, arguments)
+                .then(body => Promise.all([this.responsePromise, body]))
+
+              return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, n)
             })
-            .finally(() => {
-              // maybe we don't want to unwrap here in case the promise is re-used?
-              // other hand: we want to avoid resource leakage
-              shimmer.unwrap(apiProm, 'parse')
-            })
+
+            ch.end.publish(ctx)
+
+            return apiProm
+          })
         })
-
-        return apiProm
-      })
-    }
-    return exports
-  })
+      }
+      return exports
+    })
+  }
 }
 
-function finish (response, error) {
+function handleUnwrappedAPIPromise (apiProm, ctx, stream, n) {
+  return apiProm
+    .then(([{ response, options }, body]) => {
+      if (stream) {
+        if (body.iterator) {
+          shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, n, ctx))
+        } else {
+          shimmer.wrap(
+            body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, n, ctx)
+          )
+        }
+      } else {
+        finish(ctx, {
+          headers: response.headers,
+          data: body,
+          request: {
+            path: response.url,
+            method: options.method
+          }
+        })
+      }
+
+      return body
+    })
+    .catch(error => {
+      finish(ctx, undefined, error)
+
+      throw error
+    })
+}
+
+function finish (ctx, response, error) {
   if (error) {
-    errorCh.publish({ error })
+    ctx.error = error
+    ch.error.publish(ctx)
   }
 
-  finishCh.publish(response)
+  ctx.result = response
+  ch.asyncEnd.publish(ctx)
 }
 
 function getOption (args, option, defaultValue) {
-  return args[args.length - 1]?.[option] || defaultValue
+  return args[0]?.[option] || defaultValue
 }

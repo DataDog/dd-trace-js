@@ -13,7 +13,6 @@ const fsync = require('fs')
 const net = require('net')
 const zlib = require('zlib')
 const { Profile } = require('pprof-format')
-const semver = require('semver')
 
 const DEFAULT_PROFILE_TYPES = ['wall', 'space']
 if (process.platform !== 'win32') {
@@ -34,17 +33,20 @@ function expectProfileMessagePromise (agent, timeout,
 ) {
   const fileNames = expectedProfileTypes.map(type => `${type}.pprof`)
   return agent.assertMessageReceived(({ headers, _, files }) => {
+    let event
     try {
       assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
       assert.propertyVal(files[0], 'originalname', 'event.json')
-      const event = JSON.parse(files[0].buffer.toString())
+      event = JSON.parse(files[0].buffer.toString())
       assert.propertyVal(event, 'family', 'node')
+      assert.isString(event.info.profiler.activation)
+      assert.isString(event.info.profiler.ssi.mechanism)
       assert.deepPropertyVal(event, 'attachments', fileNames)
       for (const [index, fileName] of fileNames.entries()) {
         assert.propertyVal(files[index + 1], 'originalname', fileName)
       }
     } catch (e) {
-      e.message += ` ${JSON.stringify({ headers, files })}`
+      e.message += ` ${JSON.stringify({ headers, files, event })}`
       throw e
     }
   }, timeout, multiplicity)
@@ -73,6 +75,12 @@ function processExitPromise (proc, timeout, expectBadExit = false) {
 }
 
 async function getLatestProfile (cwd, pattern) {
+  const pprofGzipped = await readLatestFile(cwd, pattern)
+  const pprofUnzipped = zlib.gunzipSync(pprofGzipped)
+  return { profile: Profile.decode(pprofUnzipped), encoded: pprofGzipped.toString('base64') }
+}
+
+async function readLatestFile (cwd, pattern) {
   const dirEntries = await fs.readdir(cwd)
   // Get the latest file matching the pattern
   const pprofEntries = dirEntries.filter(name => pattern.test(name))
@@ -81,9 +89,7 @@ async function getLatestProfile (cwd, pattern) {
     .map(name => ({ name, modified: fsync.statSync(path.join(cwd, name), { bigint: true }).mtimeNs }))
     .reduce((a, b) => a.modified > b.modified ? a : b)
     .name
-  const pprofGzipped = await fs.readFile(path.join(cwd, pprofEntry))
-  const pprofUnzipped = zlib.gunzipSync(pprofGzipped)
-  return { profile: Profile.decode(pprofUnzipped), encoded: pprofGzipped.toString('base64') }
+  return await fs.readFile(path.join(cwd, pprofEntry))
 }
 
 function expectTimeout (messagePromise, allowErrors = false) {
@@ -98,15 +104,115 @@ function expectTimeout (messagePromise, allowErrors = false) {
   )
 }
 
+class TimelineEventProcessor {
+  constructor (strings, encoded) {
+    this.strings = strings
+    this.encoded = encoded
+  }
+}
+
+class NetworkEventProcessor extends TimelineEventProcessor {
+  constructor (strings, encoded) {
+    super(strings, encoded)
+
+    this.hostKey = strings.dedup('host')
+    this.addressKey = strings.dedup('address')
+    this.portKey = strings.dedup('port')
+  }
+
+  processLabel (label, processedLabels) {
+    switch (label.key) {
+      case this.hostKey:
+        processedLabels.host = label.str
+        return true
+      case this.addressKey:
+        processedLabels.address = label.str
+        return true
+      case this.portKey:
+        processedLabels.port = label.num
+        return true
+      default:
+        return false
+    }
+  }
+
+  decorateEvent (ev, pl) {
+    // Exactly one of these is defined
+    assert.isTrue(!!pl.address !== !!pl.host, this.encoded)
+    if (pl.address) {
+      ev.address = this.strings.strings[pl.address]
+    } else {
+      ev.host = this.strings.strings[pl.host]
+    }
+    if (pl.port) {
+      ev.port = pl.port
+    }
+  }
+}
+
 async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args) {
+  return gatherTimelineEvents(cwd, scriptFilePath, eventType, args, NetworkEventProcessor)
+}
+
+class FilesystemEventProcessor extends TimelineEventProcessor {
+  constructor (strings, encoded) {
+    super(strings, encoded)
+
+    this.fdKey = strings.dedup('fd')
+    this.fileKey = strings.dedup('file')
+    this.flagKey = strings.dedup('flag')
+    this.modeKey = strings.dedup('mode')
+    this.pathKey = strings.dedup('path')
+  }
+
+  processLabel (label, processedLabels) {
+    switch (label.key) {
+      case this.fdKey:
+        processedLabels.fd = label.num
+        return true
+      case this.fileKey:
+        processedLabels.file = label.str
+        return true
+      case this.flagKey:
+        processedLabels.flag = label.str
+        return true
+      case this.modeKey:
+        processedLabels.mode = label.str
+        return true
+      case this.pathKey:
+        processedLabels.path = label.str
+        return true
+      default:
+        return false
+    }
+  }
+
+  decorateEvent (ev, pl) {
+    ev.fd = pl.fd
+    ev.file = this.strings.strings[pl.file]
+    ev.flag = this.strings.strings[pl.flag]
+    ev.mode = this.strings.strings[pl.mode]
+    ev.path = this.strings.strings[pl.path]
+    for (const [k, v] of Object.entries(ev)) {
+      if (v === undefined) {
+        delete ev[k]
+      }
+    }
+  }
+}
+
+async function gatherFilesystemTimelineEvents (cwd, scriptFilePath) {
+  return gatherTimelineEvents(cwd, scriptFilePath, 'fs', [], FilesystemEventProcessor)
+}
+
+async function gatherTimelineEvents (cwd, scriptFilePath, eventType, args, Processor) {
   const procStart = BigInt(Date.now() * 1000000)
   const proc = fork(path.join(cwd, scriptFilePath), args, {
     cwd,
     env: {
-      DD_PROFILING_PROFILERS: 'wall',
       DD_PROFILING_EXPORTERS: 'file',
       DD_PROFILING_ENABLED: 1,
-      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED: 1
+      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: 0 // capture all events
     }
   })
 
@@ -118,43 +224,50 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args
   const strings = profile.stringTable
   const tsKey = strings.dedup('end_timestamp_ns')
   const eventKey = strings.dedup('event')
-  const hostKey = strings.dedup('host')
-  const addressKey = strings.dedup('address')
-  const portKey = strings.dedup('port')
-  const nameKey = strings.dedup('operation')
+  const operationKey = strings.dedup('operation')
+  const spanIdKey = strings.dedup('span id')
+  const localRootSpanIdKey = strings.dedup('local root span id')
   const eventValue = strings.dedup(eventType)
   const events = []
+  const processor = new Processor(strings, encoded)
   for (const sample of profile.sample) {
-    let ts, event, host, address, port, name
+    let ts, event, operation, spanId, localRootSpanId
+    const processedLabels = {}
+    const unexpectedLabels = []
     for (const label of sample.label) {
       switch (label.key) {
         case tsKey: ts = label.num; break
-        case nameKey: name = label.str; break
+        case operationKey: operation = label.str; break
         case eventKey: event = label.str; break
-        case hostKey: host = label.str; break
-        case addressKey: address = label.str; break
-        case portKey: port = label.num; break
-        default: assert.fail(`Unexpected label key ${label.key} ${strings.strings[label.key]} ${encoded}`)
+        case spanIdKey: spanId = label.str; break
+        case localRootSpanIdKey: localRootSpanId = label.str; break
+        default:
+          if (!processor.processLabel(label, processedLabels)) {
+            unexpectedLabels.push(label.key)
+          }
       }
     }
     // Timestamp must be defined and be between process start and end time
     assert.isDefined(ts, encoded)
     assert.isTrue(ts <= procEnd, encoded)
     assert.isTrue(ts >= procStart, encoded)
-    // Gather only DNS events; ignore sporadic GC events
+    // Gather only tested events
     if (event === eventValue) {
-      assert.isDefined(name, encoded)
-      // Exactly one of these is defined
-      assert.isTrue(!!address !== !!host, encoded)
-      const ev = { name: strings.strings[name] }
-      if (address) {
-        ev.address = strings.strings[address]
+      if (process.platform !== 'win32') {
+        assert.isDefined(spanId, encoded)
+        assert.isDefined(localRootSpanId, encoded)
       } else {
-        ev.host = strings.strings[host]
+        assert.isUndefined(spanId, encoded)
+        assert.isUndefined(localRootSpanId, encoded)
       }
-      if (port) {
-        ev.port = port
+      assert.isDefined(operation, encoded)
+      if (unexpectedLabels.length > 0) {
+        const labelsStr = JSON.stringify(unexpectedLabels)
+        const labelsStrStr = unexpectedLabels.map(k => strings.strings[k]).join(',')
+        assert.fail(`Unexpected labels: ${labelsStr}\n${labelsStrStr}\n${encoded}`)
       }
+      const ev = { operation: strings.strings[operation] }
+      processor.decorateEvent(ev, processedLabels)
       events.push(ev)
     }
   }
@@ -192,17 +305,17 @@ describe('profiler', () => {
       const proc = fork(path.join(cwd, 'profiler/codehotspots.js'), {
         cwd,
         env: {
-          DD_PROFILING_PROFILERS: 'wall',
           DD_PROFILING_EXPORTERS: 'file',
-          DD_PROFILING_ENABLED: 1,
-          DD_PROFILING_CODEHOTSPOTS_ENABLED: 1,
-          DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: 1,
-          DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED: 1
+          DD_PROFILING_ENABLED: 1
         }
       })
 
       await processExitPromise(proc, 30000)
       const procEnd = BigInt(Date.now() * 1000000)
+
+      // Must've counted the number of times each endpoint was hit
+      const event = JSON.parse((await readLatestFile(cwd, /^event_.+\.json$/)).toString())
+      assert.deepEqual(event.endpoint_counts, { 'endpoint-0': 1, 'endpoint-1': 1, 'endpoint-2': 1 })
 
       const { profile, encoded } = await getLatestProfile(cwd, /^wall_.+\.pprof$/)
 
@@ -301,61 +414,75 @@ describe('profiler', () => {
       assert.equal(endpoints.size, 3, encoded)
     })
 
-    if (semver.gte(process.version, '16.0.0')) {
-      it('dns timeline events work', async () => {
-        const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', 'dns')
-        assert.sameDeepMembers(dnsEvents, [
-          { name: 'lookup', host: 'example.org' },
-          { name: 'lookup', host: 'example.com' },
-          { name: 'lookup', host: 'datadoghq.com' },
-          { name: 'queryA', host: 'datadoghq.com' },
-          { name: 'lookupService', address: '13.224.103.60', port: 80 }
-        ])
-      })
+    it('fs timeline events work', async () => {
+      const fsEvents = await gatherFilesystemTimelineEvents(cwd, 'profiler/fstest.js')
+      assert.equal(fsEvents.length, 6)
+      const path = fsEvents[0].path
+      const fd = fsEvents[1].fd
+      assert(path.endsWith('tempfile.txt'))
+      assert.sameDeepMembers(fsEvents, [
+        { flag: 'w', mode: '', operation: 'open', path },
+        { fd, operation: 'write' },
+        { fd, operation: 'close' },
+        { file: path, operation: 'writeFile' },
+        { operation: 'readFile', path },
+        { operation: 'unlink', path }
+      ])
+    })
 
-      it('net timeline events work', async () => {
-        // Simple server that writes a constant message to the socket.
-        const msg = 'cya later!\n'
-        function createServer () {
-          const server = net.createServer((socket) => {
-            socket.end(msg, 'utf8')
-          }).on('error', (err) => {
-            throw err
-          })
-          return server
-        }
-        // Create two instances of the server
-        const server1 = createServer()
+    it('dns timeline events work', async () => {
+      const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', 'dns')
+      assert.sameDeepMembers(dnsEvents, [
+        { operation: 'lookup', host: 'example.org' },
+        { operation: 'lookup', host: 'example.com' },
+        { operation: 'lookup', host: 'datadoghq.com' },
+        { operation: 'queryA', host: 'datadoghq.com' },
+        { operation: 'lookupService', address: '13.224.103.60', port: 80 }
+      ])
+    })
+
+    it('net timeline events work', async () => {
+      // Simple server that writes a constant message to the socket.
+      const msg = 'cya later!\n'
+      function createServer () {
+        const server = net.createServer((socket) => {
+          socket.end(msg, 'utf8')
+        }).on('error', (err) => {
+          throw err
+        })
+        return server
+      }
+      // Create two instances of the server
+      const server1 = createServer()
+      try {
+        const server2 = createServer()
         try {
-          const server2 = createServer()
-          try {
-            // Have the servers listen on ephemeral ports
-            const p = new Promise(resolve => {
-              server1.listen(0, () => {
-                server2.listen(0, async () => {
-                  resolve([server1.address().port, server2.address().port])
-                })
+          // Have the servers listen on ephemeral ports
+          const p = new Promise(resolve => {
+            server1.listen(0, () => {
+              server2.listen(0, async () => {
+                resolve([server1.address().port, server2.address().port])
               })
             })
-            const [port1, port2] = await p
-            const args = [String(port1), String(port2), msg]
-            // Invoke the profiled program, passing it the ports of the servers and
-            // the expected message.
-            const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', 'net', args)
-            // The profiled program should have two TCP connection events to the two
-            // servers.
-            assert.sameDeepMembers(events, [
-              { name: 'connect', host: '127.0.0.1', port: port1 },
-              { name: 'connect', host: '127.0.0.1', port: port2 }
-            ])
-          } finally {
-            server2.close()
-          }
+          })
+          const [port1, port2] = await p
+          const args = [String(port1), String(port2), msg]
+          // Invoke the profiled program, passing it the ports of the servers and
+          // the expected message.
+          const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', 'net', args)
+          // The profiled program should have two TCP connection events to the two
+          // servers.
+          assert.sameDeepMembers(events, [
+            { operation: 'connect', host: '127.0.0.1', port: port1 },
+            { operation: 'connect', host: '127.0.0.1', port: port2 }
+          ])
         } finally {
-          server1.close()
+          server2.close()
         }
-      })
-    }
+      } finally {
+        server1.close()
+      }
+    })
   }
 
   context('shutdown', () => {
@@ -530,6 +657,71 @@ describe('profiler', () => {
 
     it('triggers for long-lived span-creating app with the auto env var', () => {
       return heuristicsTrigger(true)
+    })
+  })
+
+  context('Profiler API telemetry', () => {
+    beforeEach(async () => {
+      agent = await new FakeAgent().start()
+    })
+
+    afterEach(async () => {
+      proc.kill()
+      await agent.stop()
+    })
+
+    it('sends profiler API telemetry', () => {
+      proc = fork(profilerTestFile, {
+        cwd,
+        env: {
+          DD_TRACE_AGENT_PORT: agent.port,
+          DD_PROFILING_ENABLED: 1,
+          DD_PROFILING_UPLOAD_PERIOD: 1,
+          TEST_DURATION_MS: 2500
+        }
+      })
+
+      let requestCount = 0
+      let pointsCount = 0
+
+      const checkMetrics = agent.assertTelemetryReceived(({ _, payload }) => {
+        const pp = payload.payload
+        assert.equal(pp.namespace, 'profilers')
+        const series = pp.series
+        assert.lengthOf(series, 2)
+        assert.equal(series[0].metric, 'profile_api.requests')
+        assert.equal(series[0].type, 'count')
+        // There's a race between metrics and on-shutdown profile, so metric
+        // value will be between 1 and 3
+        requestCount = series[0].points[0][1]
+        assert.isAtLeast(requestCount, 1)
+        assert.isAtMost(requestCount, 3)
+
+        assert.equal(series[1].metric, 'profile_api.responses')
+        assert.equal(series[1].type, 'count')
+        assert.include(series[1].tags, 'status_code:200')
+
+        // Same number of requests and responses
+        assert.equal(series[1].points[0][1], requestCount)
+      }, timeout, 'generate-metrics')
+
+      const checkDistributions = agent.assertTelemetryReceived(({ _, payload }) => {
+        const pp = payload.payload
+        assert.equal(pp.namespace, 'profilers')
+        const series = pp.series
+        assert.lengthOf(series, 2)
+        assert.equal(series[0].metric, 'profile_api.bytes')
+        assert.equal(series[1].metric, 'profile_api.ms')
+
+        // Same number of points
+        pointsCount = series[0].points.length
+        assert.equal(pointsCount, series[1].points.length)
+      }, timeout, 'distributions')
+
+      return Promise.all([checkProfiles(agent, proc, timeout), checkMetrics, checkDistributions]).then(() => {
+        // Same number of requests and points
+        assert.equal(requestCount, pointsCount)
+      })
     })
   })
 

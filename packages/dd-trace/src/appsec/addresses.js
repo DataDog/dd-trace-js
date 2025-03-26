@@ -1,5 +1,6 @@
 'use strict'
 
+// TODO: reorder all this, it's a mess
 module.exports = {
   HTTP_INCOMING_BODY: 'server.request.body',
   HTTP_INCOMING_QUERY: 'server.request.query',
@@ -20,7 +21,20 @@ module.exports = {
   HTTP_CLIENT_IP: 'http.client_ip',
 
   USER_ID: 'usr.id',
+  USER_LOGIN: 'usr.login',
+  USER_SESSION_ID: 'usr.session_id',
+
   WAF_CONTEXT_PROCESSOR: 'waf.context.processor',
 
-  HTTP_OUTGOING_URL: 'server.io.net.url'
+  HTTP_OUTGOING_URL: 'server.io.net.url',
+  FS_OPERATION_PATH: 'server.io.fs.file',
+
+  DB_STATEMENT: 'server.db.statement',
+  DB_SYSTEM: 'server.db.system',
+
+  EXEC_COMMAND: 'server.sys.exec.cmd',
+  SHELL_COMMAND: 'server.sys.shell.cmd',
+
+  LOGIN_SUCCESS: 'server.business_logic.users.login.success',
+  LOGIN_FAILURE: 'server.business_logic.users.login.failure'
 }

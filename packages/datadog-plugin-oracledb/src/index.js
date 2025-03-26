@@ -33,7 +33,7 @@ function getUrl (connectString) {
   try {
     return new URL(`http://${connectString}`)
   } catch (e) {
-    log.error(e)
+    log.error('Invalid oracle connection string', e)
     return {}
   }
 }

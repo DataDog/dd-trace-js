@@ -300,6 +300,37 @@ describe('Span', () => {
     })
   })
 
+  describe('span pointers', () => {
+    it('should add a span pointer with a zero context', () => {
+      // Override id stub for this test to return '0' when called with '0'
+      id.withArgs('0').returns('0')
+
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      span.addSpanPointer('pointer_kind', 'd', 'abc123')
+      expect(span._links).to.have.lengthOf(1)
+      expect(span._links[0].context.toTraceId()).to.equal('0')
+      expect(span._links[0].context.toSpanId()).to.equal('0')
+      expect(span._links[0].attributes).to.deep.equal({
+        'ptr.kind': 'pointer_kind',
+        'ptr.dir': 'd',
+        'ptr.hash': 'abc123',
+        'link.kind': 'span-pointer'
+      })
+    })
+
+    span.addSpanPointer('another_kind', 'd', '1234567')
+    expect(span._links).to.have.lengthOf(2)
+    expect(span._links[1].attributes).to.deep.equal({
+      'ptr.kind': 'another_kind',
+      'ptr.dir': 'd',
+      'ptr.hash': '1234567',
+      'link.kind': 'span-pointer'
+    })
+    expect(span._links[1].context.toTraceId()).to.equal('0')
+    expect(span._links[1].context.toSpanId()).to.equal('0')
+  })
+
   describe('events', () => {
     it('should add span events', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
@@ -343,6 +374,40 @@ describe('Span', () => {
       span._spanContext._baggageItems.foo = 'bar'
 
       expect(span.getBaggageItem('foo')).to.equal('bar')
+    })
+  })
+
+  describe('getAllBaggageItems', () => {
+    it('should get all baggage items', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      expect(span.getAllBaggageItems()).to.equal(JSON.stringify({}))
+
+      span._spanContext._baggageItems.foo = 'bar'
+      span._spanContext._baggageItems.raccoon = 'cute'
+      expect(span.getAllBaggageItems()).to.equal(JSON.stringify({
+        foo: 'bar',
+        raccoon: 'cute'
+      }))
+    })
+  })
+
+  describe('removeBaggageItem', () => {
+    it('should remove a baggage item', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      span._spanContext._baggageItems.foo = 'bar'
+      expect(span.getBaggageItem('foo')).to.equal('bar')
+      span.removeBaggageItem('foo')
+      expect(span.getBaggageItem('foo')).to.be.undefined
+    })
+  })
+
+  describe('removeAllBaggageItems', () => {
+    it('should remove all baggage items', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      span._spanContext._baggageItems.foo = 'bar'
+      span._spanContext._baggageItems.raccoon = 'cute'
+      span.removeAllBaggageItems()
+      expect(span._spanContext._baggageItems).to.deep.equal({})
     })
   })
 

@@ -1,8 +1,8 @@
-const semver = require('semver')
+const satisfies = require('semifies')
 
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const { parseAnnotations, getTestSuitePath, NUM_FAILED_TEST_RETRIES } = require('../../dd-trace/src/plugins/util/test')
+const { parseAnnotations, getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
 
 const testStartCh = channel('ci:playwright:test:start')
@@ -13,6 +13,7 @@ const testSessionFinishCh = channel('ci:playwright:session:finish')
 
 const libraryConfigurationCh = channel('ci:playwright:library-configuration')
 const knownTestsCh = channel('ci:playwright:known-tests')
+const testManagementTestsCh = channel('ci:playwright:test-management-tests')
 
 const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
@@ -21,6 +22,7 @@ const testToAr = new WeakMap()
 const testSuiteToAr = new Map()
 const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
+const testsToTestStatuses = new Map()
 const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 let applyRepeatEachIndex = null
@@ -35,18 +37,33 @@ const STATUS_TO_TEST_STATUS = {
 }
 
 let remainingTestsByFile = {}
+let isKnownTestsEnabled = false
 let isEarlyFlakeDetectionEnabled = false
-let isFlakyTestRetriesEnabled = false
 let earlyFlakeDetectionNumRetries = 0
+let isFlakyTestRetriesEnabled = false
+let flakyTestRetriesCount = 0
 let knownTests = {}
+let isTestManagementTestsEnabled = false
+let testManagementAttemptToFixRetries = 0
+let testManagementTests = {}
+const quarantinedOrDisabledTestsAttemptToFix = []
 let rootDir = ''
-const MINIMUM_SUPPORTED_VERSION_EFD = '1.38.0'
+const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0'
+
+function getTestProperties (test) {
+  const testName = getTestFullname(test)
+  const testSuite = getTestSuitePath(test._requireFile, rootDir)
+
+  const { attempt_to_fix: attemptToFix, disabled, quarantined } =
+    testManagementTests?.playwright?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
+  return { attemptToFix, disabled, quarantined }
+}
 
 function isNewTest (test) {
   const testSuite = getTestSuitePath(test._requireFile, rootDir)
   const testsForSuite = knownTests?.playwright?.[testSuite] || []
 
-  return !testsForSuite.includes(test.title)
+  return !testsForSuite.includes(getTestFullname(test))
 }
 
 function getSuiteType (test, type) {
@@ -58,16 +75,19 @@ function getSuiteType (test, type) {
 }
 
 // Copy of Suite#_deepClone but with a function to filter tests
-function deepCloneSuite (suite, filterTest) {
+function deepCloneSuite (suite, filterTest, tags = []) {
   const copy = suite._clone()
   for (const entry of suite._entries) {
     if (entry.constructor.name === 'Suite') {
-      copy._addSuite(deepCloneSuite(entry, filterTest))
+      copy._addSuite(deepCloneSuite(entry, filterTest, tags))
     } else {
       if (filterTest(entry)) {
         const copiedTest = entry._clone()
-        copiedTest._ddIsNew = true
-        copiedTest._ddIsEfdRetry = true
+        tags.forEach(tag => {
+          if (tag) {
+            copiedTest[tag] = true
+          }
+        })
         copy._addTest(copiedTest)
       }
     }
@@ -223,10 +243,21 @@ function testWillRetry (test, testStatus) {
   return testStatus === 'fail' && test.results.length <= test.retries
 }
 
+function getTestFullname (test) {
+  let parent = test.parent
+  const names = [test.title]
+  while (parent?._type === 'describe' || parent?._isDescribe) {
+    if (parent.title) {
+      names.unshift(parent.title)
+    }
+    parent = parent.parent
+  }
+  return names.join(' ')
+}
+
 function testBeginHandler (test, browserName) {
   const {
     _requireFile: testSuiteAbsolutePath,
-    title: testName,
     _type,
     location: {
       line: testSourceLine
@@ -236,6 +267,8 @@ function testBeginHandler (test, browserName) {
   if (_type === 'beforeAll' || _type === 'afterAll') {
     return
   }
+
+  const testName = getTestFullname(test)
 
   const isNewTestSuite = !startedSuites.includes(testSuiteAbsolutePath)
 
@@ -248,13 +281,23 @@ function testBeginHandler (test, browserName) {
     })
   }
 
+  // We disable retries by default if attemptToFix is true
+  if (getTestProperties(test).attemptToFix) {
+    test.retries = 0
+  }
+
   const testAsyncResource = new AsyncResource('bound-anonymous-fn')
   testToAr.set(test, testAsyncResource)
   testAsyncResource.runInAsyncScope(() => {
-    testStartCh.publish({ testName, testSuiteAbsolutePath, testSourceLine, browserName })
+    testStartCh.publish({
+      testName,
+      testSuiteAbsolutePath,
+      testSourceLine,
+      browserName,
+      isDisabled: test._ddIsDisabled
+    })
   })
 }
-
 function testEndHandler (test, annotations, testStatus, error, isTimeout) {
   let annotationTags
   if (annotations.length) {
@@ -271,6 +314,27 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
     return
   }
 
+  const testFullName = getTestFullname(test)
+  const testFqn = `${testSuiteAbsolutePath} ${testFullName}`
+  const testStatuses = testsToTestStatuses.get(testFqn) || []
+
+  if (testStatuses.length === 0) {
+    testsToTestStatuses.set(testFqn, [testStatus])
+  } else {
+    testStatuses.push(testStatus)
+  }
+
+  let hasFailedAllRetries = false
+  let hasPassedAttemptToFixRetries = false
+
+  if (testStatuses.length === testManagementAttemptToFixRetries + 1) {
+    if (testStatuses.every(status => status === 'fail')) {
+      hasFailedAllRetries = true
+    } else if (testStatuses.every(status => status === 'pass')) {
+      hasPassedAttemptToFixRetries = true
+    }
+  }
+
   const testResult = results[results.length - 1]
   const testAsyncResource = testToAr.get(test)
   testAsyncResource.runInAsyncScope(() => {
@@ -281,7 +345,12 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
       error,
       extraTags: annotationTags,
       isNew: test._ddIsNew,
-      isEfdRetry: test._ddIsEfdRetry
+      isAttemptToFix: test._ddIsAttemptToFix,
+      isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
+      isQuarantined: test._ddIsQuarantined,
+      isEfdRetry: test._ddIsEfdRetry,
+      hasFailedAllRetries,
+      hasPassedAttemptToFixRetries
     })
   })
 
@@ -303,7 +372,6 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
   // Last test, we finish the suite
   if (!remainingTestsByFile[testSuiteAbsolutePath].length) {
     const testStatuses = testSuiteToTestStatuses.get(testSuiteAbsolutePath)
-
     let testSuiteStatus = 'pass'
     if (testStatuses.some(status => status === 'fail')) {
       testSuiteStatus = 'fail'
@@ -404,40 +472,65 @@ function runnerHook (runnerExport, playwrightVersion) {
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
       if (!err) {
+        isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+        flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+        isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
+        testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
       }
     } catch (e) {
       isEarlyFlakeDetectionEnabled = false
-      log.error(e)
+      isKnownTestsEnabled = false
+      isTestManagementTestsEnabled = false
+      log.error('Playwright session start error', e)
     }
 
-    if (isEarlyFlakeDetectionEnabled && semver.gte(playwrightVersion, MINIMUM_SUPPORTED_VERSION_EFD)) {
+    if (isKnownTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
       try {
         const { err, knownTests: receivedKnownTests } = await getChannelPromise(knownTestsCh)
         if (!err) {
           knownTests = receivedKnownTests
         } else {
           isEarlyFlakeDetectionEnabled = false
+          isKnownTestsEnabled = false
         }
       } catch (err) {
         isEarlyFlakeDetectionEnabled = false
-        log.error(err)
+        isKnownTestsEnabled = false
+        log.error('Playwright known tests error', err)
+      }
+    }
+
+    if (isTestManagementTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
+      try {
+        const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
+        if (!err) {
+          testManagementTests = receivedTestManagementTests
+        } else {
+          isTestManagementTestsEnabled = false
+        }
+      } catch (err) {
+        isTestManagementTestsEnabled = false
+        log.error('Playwright test management tests error', err)
       }
     }
 
     const projects = getProjectsFromRunner(this)
 
-    if (isFlakyTestRetriesEnabled) {
+    const shouldSetRetries = isFlakyTestRetriesEnabled &&
+      flakyTestRetriesCount > 0 &&
+      !isTestManagementTestsEnabled
+    if (shouldSetRetries) {
       projects.forEach(project => {
         if (project.retries === 0) { // Only if it hasn't been set by the user
-          project.retries = NUM_FAILED_TEST_RETRIES
+          project.retries = flakyTestRetriesCount
         }
       })
     }
 
-    const runAllTestsReturn = await runAllTests.apply(this, arguments)
+    let runAllTestsReturn = await runAllTests.apply(this, arguments)
 
     Object.values(remainingTestsByFile).forEach(tests => {
       // `tests` should normally be empty, but if it isn't,
@@ -452,6 +545,26 @@ function runnerHook (runnerExport, playwrightVersion) {
 
     const sessionStatus = runAllTestsReturn.status || runAllTestsReturn
 
+    if (isTestManagementTestsEnabled && sessionStatus === 'failed') {
+      let totalFailedTestCount = 0
+      let totalAttemptToFixFailedTestCount = 0
+
+      for (const testStatuses of testsToTestStatuses.values()) {
+        totalFailedTestCount += testStatuses.filter(status => status === 'fail').length
+      }
+
+      for (const test of quarantinedOrDisabledTestsAttemptToFix) {
+        const fullname = getTestFullname(test)
+        const fqn = `${test._requireFile} ${fullname}`
+        const testStatuses = testsToTestStatuses.get(fqn)
+        totalAttemptToFixFailedTestCount += testStatuses.filter(status => status === 'fail').length
+      }
+
+      if (totalFailedTestCount === totalAttemptToFixFailedTestCount) {
+        runAllTestsReturn = 'passed'
+      }
+    }
+
     const flushWait = new Promise(resolve => {
       onDone = resolve
     })
@@ -459,6 +572,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       testSessionFinishCh.publish({
         status: STATUS_TO_TEST_STATUS[sessionStatus],
         isEarlyFlakeDetectionEnabled,
+        isTestManagementTestsEnabled,
         onDone
       })
     })
@@ -467,6 +581,8 @@ function runnerHook (runnerExport, playwrightVersion) {
     startedSuites = []
     remainingTestsByFile = {}
 
+    // TODO: we can trick playwright into thinking the session passed by returning
+    // 'passed' here. We might be able to use this for both EFD and Test Management tests.
     return runAllTestsReturn
   })
 
@@ -520,7 +636,7 @@ addHook({
 addHook({
   name: 'playwright',
   file: 'lib/common/suiteUtils.js',
-  versions: [`>=${MINIMUM_SUPPORTED_VERSION_EFD}`]
+  versions: [MINIMUM_SUPPORTED_VERSION_RANGE_EFD]
 }, suiteUtilsPackage => {
   // We grab `applyRepeatEachIndex` to use it later
   // `applyRepeatEachIndex` needs to be applied to a cloned suite
@@ -532,31 +648,70 @@ addHook({
 addHook({
   name: 'playwright',
   file: 'lib/runner/loadUtils.js',
-  versions: [`>=${MINIMUM_SUPPORTED_VERSION_EFD}`]
+  versions: [MINIMUM_SUPPORTED_VERSION_RANGE_EFD]
 }, (loadUtilsPackage) => {
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 
   async function newCreateRootSuite () {
-    const rootSuite = await oldCreateRootSuite.apply(this, arguments)
-    if (!isEarlyFlakeDetectionEnabled) {
-      return rootSuite
+    if (!isKnownTestsEnabled && !isTestManagementTestsEnabled) {
+      return oldCreateRootSuite.apply(this, arguments)
     }
-    const newTests = rootSuite
-      .allTests()
-      .filter(isNewTest)
+    const rootSuite = await oldCreateRootSuite.apply(this, arguments)
 
-    newTests.forEach(newTest => {
-      newTest._ddIsNew = true
-      if (newTest.expectedStatus !== 'skipped') {
-        const fileSuite = getSuiteType(newTest, 'file')
-        const projectSuite = getSuiteType(newTest, 'project')
-        for (let repeatEachIndex = 0; repeatEachIndex < earlyFlakeDetectionNumRetries; repeatEachIndex++) {
-          const copyFileSuite = deepCloneSuite(fileSuite, isNewTest)
-          applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
-          projectSuite._addSuite(copyFileSuite)
+    const allTests = rootSuite.allTests()
+
+    if (isTestManagementTestsEnabled) {
+      for (const test of allTests) {
+        const testProperties = getTestProperties(test)
+        if (testProperties.disabled) {
+          test._ddIsDisabled = true
+        } else if (testProperties.quarantined) {
+          test._ddIsQuarantined = true
+        }
+        if (testProperties.attemptToFix) {
+          test._ddIsAttemptToFix = true
+          const fileSuite = getSuiteType(test, 'file')
+          const projectSuite = getSuiteType(test, 'project')
+          const isAttemptToFix = test => getTestProperties(test).attemptToFix
+          for (let repeatEachIndex = 1; repeatEachIndex <= testManagementAttemptToFixRetries; repeatEachIndex++) {
+            const copyFileSuite = deepCloneSuite(fileSuite, isAttemptToFix, [
+              testProperties.disabled && '_ddIsDisabled',
+              testProperties.quarantined && '_ddIsQuarantined',
+              '_ddIsAttemptToFix',
+              '_ddIsAttemptToFixRetry'
+            ])
+            applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
+            projectSuite._addSuite(copyFileSuite)
+          }
+          if (testProperties.disabled || testProperties.quarantined) {
+            quarantinedOrDisabledTestsAttemptToFix.push(test)
+          }
+        } else if (testProperties.disabled || testProperties.quarantined) {
+          test.expectedStatus = 'skipped'
         }
       }
-    })
+    }
+
+    if (isKnownTestsEnabled) {
+      const newTests = allTests.filter(isNewTest)
+
+      for (const newTest of newTests) {
+        // No need to filter out attempt to fix tests here because attempt to fix tests are never new
+        newTest._ddIsNew = true
+        if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped') {
+          const fileSuite = getSuiteType(newTest, 'file')
+          const projectSuite = getSuiteType(newTest, 'project')
+          for (let repeatEachIndex = 1; repeatEachIndex <= earlyFlakeDetectionNumRetries; repeatEachIndex++) {
+            const copyFileSuite = deepCloneSuite(fileSuite, isNewTest, [
+              '_ddIsNew',
+              '_ddIsEfdRetry'
+            ])
+            applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
+            projectSuite._addSuite(copyFileSuite)
+          }
+        }
+      }
+    }
 
     return rootSuite
   }

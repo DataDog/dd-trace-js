@@ -11,29 +11,68 @@ telemetryManagerNamespace.returns()
 const dc = require('dc-polyfill')
 const Config = require('../../src/config')
 
-describe('SSI Heuristics', () => {
-  it('should be disabled without SSI even if the profiler is manually enabled', () => {
-    delete process.env.DD_INJECTION_ENABLED
-    process.env.DD_PROFILING_ENABLED = 'true'
-    testDisabledHeuristics()
+describe('Profiling for SSI', () => {
+  describe('When injection is not present', () => {
+    describe('Neither telemetry nor heuristics should work when', () => {
+      it('profiler enablement is unspecified', () => {
+        delete process.env.DD_INJECTION_ENABLED
+        testInactive('')
+      })
+
+      it('the profiler is explicitly enabled', () => {
+        delete process.env.DD_INJECTION_ENABLED
+        testInactive('true')
+      })
+
+      it('the profiler is explicitly disabled', () => {
+        delete process.env.DD_INJECTION_ENABLED
+        testInactive('false')
+      })
+    })
+
+    describe('Only telemetry should work when', () => {
+      it('the profiler is explicitly auto-enabled', () => {
+        delete process.env.DD_INJECTION_ENABLED
+        process.env.DD_PROFILING_ENABLED = 'auto'
+        return testEnabledHeuristics(undefined, true)
+      })
+    })
   })
 
-  it('should be disabled when SSI is present but the profiler is manually disabled', () => {
-    process.env.DD_INJECTION_ENABLED = 'tracing'
-    process.env.DD_PROFILING_ENABLED = 'false'
-    testDisabledHeuristics()
-  })
+  describe('When injection is present', () => {
+    describe('Neither telemetry nor heuristics should work when', () => {
+      it('the profiler is explicitly disabled', () => {
+        process.env.DD_INJECTION_ENABLED = 'tracer'
+        return testInactive('false')
+      })
+    })
 
-  it('should be enabled when SSI is present', () => {
-    process.env.DD_INJECTION_ENABLED = 'tracing'
-    delete process.env.DD_PROFILING_ENABLED
-    return testEnabledHeuristics('not_enabled')
-  })
+    describe('Only telemetry should work when', () => {
+      it('profiler enablement is unspecified', () => {
+        process.env.DD_INJECTION_ENABLED = 'tracer'
+        delete process.env.DD_PROFILING_ENABLED
+        return testEnabledHeuristics('ssi_not_enabled', false)
+      })
 
-  it('should be enabled when SSI is present and profiling is manually enabled', () => {
-    process.env.DD_INJECTION_ENABLED = 'tracing'
-    process.env.DD_PROFILING_ENABLED = 'true'
-    return testEnabledHeuristics('manually_enabled')
+      it('the profiler is explicitly enabled', () => {
+        process.env.DD_INJECTION_ENABLED = 'tracer'
+        process.env.DD_PROFILING_ENABLED = 'true'
+        return testEnabledHeuristics('manually_enabled', false)
+      })
+    })
+
+    describe('Both telemetry and heuristics should work when', () => {
+      it('the profiler is explicitly auto-enabled', () => {
+        process.env.DD_INJECTION_ENABLED = 'tracer'
+        process.env.DD_PROFILING_ENABLED = 'auto'
+        return testEnabledHeuristics('auto_enabled', true)
+      })
+
+      it('\'profiler\' value is in DD_INJECTION_ENABLED', () => {
+        process.env.DD_INJECTION_ENABLED = 'tracer,service_name,profiler'
+        return testEnabledHeuristics('ssi_enabled', true)
+      })
+    })
   })
 })
 
@@ -55,7 +94,7 @@ function setupHarness () {
   }
 
   const namespaceFn = sinon.stub().returns(ssiMetricsNamespace)
-  const { SSIHeuristics, EnablementChoice } = proxyquire('../src/profiling/ssi-heuristics', {
+  const { SSIHeuristics } = proxyquire('../src/profiling/ssi-heuristics', {
     '../telemetry/metrics': {
       manager: {
         namespace: namespaceFn
@@ -68,19 +107,23 @@ function setupHarness () {
     runtimeIdCountInc: runtimeIdCount.inc,
     count: ssiMetricsNamespace.count
   }
-  return { stubs, SSIHeuristics, EnablementChoice }
+  return { stubs, SSIHeuristics }
 }
 
-function testDisabledHeuristics () {
-  const { stubs, SSIHeuristics, EnablementChoice } = setupHarness()
-  const heuristics = new SSIHeuristics(new Config().profiling)
+function testInactive (profilingEnabledValue) {
+  process.env.DD_PROFILING_ENABLED = profilingEnabledValue
+
+  const { stubs, SSIHeuristics } = setupHarness()
+  const heuristics = new SSIHeuristics(new Config())
   heuristics.start()
+  expect(heuristics.emitsTelemetry).to.equal(false)
+  expect(heuristics.heuristicsActive).to.equal(false)
+
   dc.channel('dd-trace:span:start').publish()
   dc.channel('datadog:profiling:profile-submitted').publish()
   dc.channel('datadog:profiling:mock-profile-submitted').publish()
   dc.channel('datadog:telemetry:app-closing').publish()
-  expect(heuristics.enablementChoice).to.equal(EnablementChoice.DISABLED)
-  expect(heuristics.enabled()).to.equal(false)
+  expect(heuristics.enablementChoice).to.equal(undefined)
   // When it is disabled, the telemetry should not subscribe to any channel
   // so the preceding publishes should not have any effect.
   expect(heuristics._profileCount).to.equal(undefined)
@@ -94,6 +137,7 @@ function executeTelemetryEnabledScenario (
   profileCount,
   sentProfiles,
   enablementChoice,
+  heuristicsActive,
   heuristicDecision,
   longLived = false
 ) {
@@ -102,13 +146,23 @@ function executeTelemetryEnabledScenario (
   if (longLived) {
     config.profiling.longLivedThreshold = 2
   }
-  const heuristics = new SSIHeuristics(config.profiling)
+  const heuristics = new SSIHeuristics(config)
   heuristics.start()
-  expect(heuristics.enabled()).to.equal(true)
+  expect(heuristics.heuristicsActive).to.equal(heuristicsActive)
 
   function runScenarioAndCheck () {
     scenario(heuristics)
-    createAndCheckMetrics(stubs, profileCount, sentProfiles, enablementChoice, heuristicDecision)
+    if (enablementChoice) {
+      createAndCheckMetrics(stubs, profileCount, sentProfiles, enablementChoice, heuristicDecision)
+    } else {
+      // enablementChose being undefined means telemetry should not be active so
+      // no metrics APIs must've been called
+      expect(stubs.count.args.length).to.equal(0)
+      expect(stubs.profileCountCountInc.args.length).to.equal(0)
+      expect(stubs.count.args.length).to.equal(0)
+      expect(stubs.runtimeIdCountInc.args.length).to.equal(0)
+    }
+    dc.channel('datadog:telemetry:app-closing').publish()
   }
 
   if (longLived) {
@@ -118,7 +172,13 @@ function executeTelemetryEnabledScenario (
   }
 }
 
-function createAndCheckMetrics (stubs, profileCount, sentProfiles, enablementChoice, heuristicDecision) {
+function createAndCheckMetrics (
+  stubs,
+  profileCount,
+  sentProfiles,
+  enablementChoice,
+  heuristicDecision
+) {
   // Trigger metrics creation
   dc.channel('datadog:telemetry:app-closing').publish()
 
@@ -134,41 +194,45 @@ function createAndCheckMetrics (stubs, profileCount, sentProfiles, enablementCho
   expect(stubs.runtimeIdCountInc.args.length).to.equal(1)
 }
 
-function testEnabledHeuristics (enablementChoice) {
-  testNoOp(enablementChoice)
-  testProfilesSent(enablementChoice)
-  testMockProfilesSent(enablementChoice)
-  testSpan(enablementChoice)
-  return testLongLived(enablementChoice).then(() => testTriggered(enablementChoice))
+function testEnabledHeuristics (enablementChoice, heuristicsEnabled) {
+  testNoOp(enablementChoice, heuristicsEnabled)
+  testProfilesSent(enablementChoice, heuristicsEnabled)
+  testMockProfilesSent(enablementChoice, heuristicsEnabled)
+  testSpan(enablementChoice, heuristicsEnabled)
+  return testLongLived(enablementChoice, heuristicsEnabled).then(
+    () => testTriggered(enablementChoice, heuristicsEnabled)
+  )
 }
 
-function testNoOp (enablementChoice) {
-  executeTelemetryEnabledScenario(_ => {}, 0, false, enablementChoice, 'no_span_short_lived')
+function testNoOp (enablementChoice, heuristicsActive) {
+  executeTelemetryEnabledScenario(_ => {}, 0, false, enablementChoice, heuristicsActive, 'no_span_short_lived')
 }
 
-function testProfilesSent (enablementChoice) {
+function testProfilesSent (enablementChoice, heuristicsActive) {
   executeTelemetryEnabledScenario(_ => {
     dc.channel('datadog:profiling:profile-submitted').publish()
     dc.channel('datadog:profiling:profile-submitted').publish()
-  }, 2, true, enablementChoice, 'no_span_short_lived')
+  }, 2, true, enablementChoice, heuristicsActive, 'no_span_short_lived')
 }
 
-function testMockProfilesSent (enablementChoice) {
+function testMockProfilesSent (enablementChoice, heuristicsActive) {
   executeTelemetryEnabledScenario(_ => {
     dc.channel('datadog:profiling:mock-profile-submitted').publish()
     dc.channel('datadog:profiling:mock-profile-submitted').publish()
-  }, 2, false, enablementChoice, 'no_span_short_lived')
+  }, 2, false, enablementChoice, heuristicsActive, 'no_span_short_lived')
 }
 
-function testSpan (enablementChoice) {
+function testSpan (enablementChoice, heuristicsActive) {
   executeTelemetryEnabledScenario(heuristics => {
-    dc.channel('dd-trace:span:start').publish()
+    const ch = dc.channel('dd-trace:span:start')
+    expect(ch.hasSubscribers).to.equal(true)
+    ch.publish()
     expect(heuristics.noSpan).to.equal(false)
     dc.channel('datadog:profiling:profile-submitted').publish()
-  }, 1, true, enablementChoice, 'short_lived')
+  }, 1, true, enablementChoice, heuristicsActive, 'short_lived')
 }
 
-function testLongLived (enablementChoice) {
+function testLongLived (enablementChoice, heuristicsActive) {
   let callbackInvoked = false
   return executeTelemetryEnabledScenario(heuristics => {
     heuristics.onTriggered(() => {
@@ -176,12 +240,12 @@ function testLongLived (enablementChoice) {
       heuristics.onTriggered()
     })
     dc.channel('datadog:profiling:profile-submitted').publish()
-  }, 1, true, enablementChoice, 'no_span', true).then(() => {
+  }, 1, true, enablementChoice, heuristicsActive, 'no_span', true).then(() => {
     expect(callbackInvoked).to.equal(false)
   })
 }
 
-function testTriggered (enablementChoice) {
+function testTriggered (enablementChoice, heuristicsActive) {
   let callbackInvoked = false
   return executeTelemetryEnabledScenario(heuristics => {
     heuristics.onTriggered(() => {
@@ -191,7 +255,7 @@ function testTriggered (enablementChoice) {
     dc.channel('dd-trace:span:start').publish()
     expect(heuristics.noSpan).to.equal(false)
     dc.channel('datadog:profiling:profile-submitted').publish()
-  }, 1, true, enablementChoice, 'triggered', true).then(() => {
+  }, 1, true, enablementChoice, heuristicsActive, 'triggered', true).then(() => {
     expect(callbackInvoked).to.equal(true)
   })
 }

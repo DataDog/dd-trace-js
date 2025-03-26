@@ -331,7 +331,8 @@ describe('Overhead controller', () => {
               iast: {
                 enabled: true,
                 requestSampling: 100,
-                maxConcurrentRequests: 2
+                maxConcurrentRequests: 2,
+                deduplicationEnabled: false
               }
             }
           })
@@ -365,7 +366,6 @@ describe('Overhead controller', () => {
             } else if (url === SECOND_REQUEST) {
               setImmediate(() => {
                 requestResolvers[FIRST_REQUEST]()
-                vulnerabilityReporter.clearCache()
               })
             }
           })
@@ -373,7 +373,6 @@ describe('Overhead controller', () => {
             if (url === FIRST_REQUEST) {
               setImmediate(() => {
                 requestResolvers[SECOND_REQUEST]()
-                vulnerabilityReporter.clearCache()
               })
             }
           })
@@ -388,7 +387,8 @@ describe('Overhead controller', () => {
               iast: {
                 enabled: true,
                 requestSampling: 100,
-                maxConcurrentRequests: 2
+                maxConcurrentRequests: 2,
+                deduplicationEnabled: false
               }
             }
           })
@@ -435,7 +435,6 @@ describe('Overhead controller', () => {
               requestResolvers[FIRST_REQUEST]()
             } else if (url === FIFTH_REQUEST) {
               requestResolvers[SECOND_REQUEST]()
-              vulnerabilityReporter.clearCache()
             }
           })
           testRequestEventEmitter.on(TEST_REQUEST_FINISHED, (url) => {
@@ -444,7 +443,6 @@ describe('Overhead controller', () => {
               axios.get(`http://localhost:${serverConfig.port}${FIFTH_REQUEST}`).then().catch(done)
             } else if (url === SECOND_REQUEST) {
               setImmediate(() => {
-                vulnerabilityReporter.clearCache()
                 requestResolvers[THIRD_REQUEST]()
                 requestResolvers[FOURTH_REQUEST]()
                 requestResolvers[FIFTH_REQUEST]()

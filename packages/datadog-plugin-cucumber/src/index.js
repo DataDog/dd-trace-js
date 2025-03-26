@@ -17,6 +17,7 @@ const {
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_SUITE_ID,
@@ -25,7 +26,14 @@ const {
   TEST_MODULE,
   TEST_MODULE_ID,
   TEST_SUITE,
-  CUCUMBER_IS_PARALLEL
+  CUCUMBER_IS_PARALLEL,
+  TEST_RETRY_REASON,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -37,10 +45,15 @@ const {
   TELEMETRY_ITR_FORCED_TO_RUN,
   TELEMETRY_CODE_COVERAGE_EMPTY,
   TELEMETRY_ITR_UNSKIPPABLE,
-  TELEMETRY_CODE_COVERAGE_NUM_FILES
+  TELEMETRY_CODE_COVERAGE_NUM_FILES,
+  TEST_IS_RUM_ACTIVE,
+  TEST_BROWSER_DRIVER,
+  TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const id = require('../../dd-trace/src/id')
 
+const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
+const BREAKPOINT_SET_GRACE_PERIOD_MS = 200
 const isCucumberWorker = !!process.env.CUCUMBER_WORKER_ID
 
 function getTestSuiteTags (testSuiteSpan) {
@@ -76,6 +89,8 @@ class CucumberPlugin extends CiPlugin {
       hasUnskippableSuites,
       hasForcedToRunSuites,
       isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
+      isTestManagementTestsEnabled,
       isParallel
     }) => {
       const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
@@ -96,8 +111,14 @@ class CucumberPlugin extends CiPlugin {
       if (isEarlyFlakeDetectionEnabled) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
       }
+      if (isEarlyFlakeDetectionFaulty) {
+        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+      }
       if (isParallel) {
         this.testSessionSpan.setTag(CUCUMBER_IS_PARALLEL, 'true')
+      }
+      if (isTestManagementTestsEnabled) {
+        this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
 
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -107,12 +128,24 @@ class CucumberPlugin extends CiPlugin {
       this.testSessionSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
+      this.telemetry.count(TELEMETRY_TEST_SESSION, {
+        provider: this.ciProviderName,
+        autoInjected: !!process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER
+      })
 
       this.libraryConfig = null
       this.tracer._exporter.flush()
     })
 
-    this.addSub('ci:cucumber:test-suite:start', ({ testSuitePath, isUnskippable, isForcedToRun, itrCorrelationId }) => {
+    this.addSub('ci:cucumber:test-suite:start', ({
+      testFileAbsolutePath,
+      isUnskippable,
+      isForcedToRun,
+      itrCorrelationId
+    }) => {
+      const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
+      const testSourceFile = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)
+
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
         this.frameworkVersion,
@@ -130,6 +163,16 @@ class CucumberPlugin extends CiPlugin {
       if (itrCorrelationId) {
         testSuiteMetadata[ITR_CORRELATION_ID] = itrCorrelationId
       }
+      if (testSourceFile) {
+        testSuiteMetadata[TEST_SOURCE_FILE] = testSourceFile
+        testSuiteMetadata[TEST_SOURCE_START] = 1
+      }
+
+      const codeOwners = this.getCodeOwners(testSuiteMetadata)
+      if (codeOwners) {
+        testSuiteMetadata[TEST_CODE_OWNERS] = codeOwners
+      }
+
       const testSuiteSpan = this.tracer.startSpan('cucumber.test_suite', {
         childOf: this.testModuleSpan,
         tags: {
@@ -177,8 +220,14 @@ class CucumberPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: 'istanbul' })
     })
 
-    this.addSub('ci:cucumber:test:start', ({ testName, testFileAbsolutePath, testSourceLine, isParallel }) => {
-      const store = storage.getStore()
+    this.addSub('ci:cucumber:test:start', ({
+      testName,
+      testFileAbsolutePath,
+      testSourceLine,
+      isParallel,
+      promises
+    }) => {
+      const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testFileAbsolutePath, this.sourceRoot)
       const testSourceFile = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)
 
@@ -193,13 +242,36 @@ class CucumberPlugin extends CiPlugin {
       const testSpan = this.startTestSpan(testName, testSuite, extraTags)
 
       this.enter(testSpan, store)
+
+      this.activeTestSpan = testSpan
+      // Time we give the breakpoint to be hit
+      if (promises && this.runningTestProbe) {
+        promises.hitBreakpointPromise = new Promise((resolve) => {
+          setTimeout(resolve, BREAKPOINT_HIT_GRACE_PERIOD_MS)
+        })
+      }
     })
 
-    this.addSub('ci:cucumber:test:retry', (isFlakyRetry) => {
-      const store = storage.getStore()
+    this.addSub('ci:cucumber:test:retry', ({ isFirstAttempt, error }) => {
+      const store = storage('legacy').getStore()
       const span = store.span
-      if (isFlakyRetry) {
+      if (!isFirstAttempt) {
         span.setTag(TEST_IS_RETRY, 'true')
+      }
+      span.setTag('error', error)
+      if (isFirstAttempt && this.di && error && this.libraryConfig?.isDiEnabled) {
+        const probeInformation = this.addDiProbe(error)
+        if (probeInformation) {
+          const { file, line, stackIndex } = probeInformation
+          this.runningTestProbe = { file, line }
+          this.testErrorStackIndex = stackIndex
+          const waitUntil = Date.now() + BREAKPOINT_SET_GRACE_PERIOD_MS
+          while (Date.now() < waitUntil) {
+            // TODO: To avoid a race condition, we should wait until `probeInformation.setProbePromise` has resolved.
+            // However, Cucumber doesn't have a mechanism for waiting asyncrounously here, so for now, we'll have to
+            // fall back to a fixed syncronous delay.
+          }
+        }
       }
       span.setTag(TEST_STATUS, 'fail')
       span.finish()
@@ -207,7 +279,7 @@ class CucumberPlugin extends CiPlugin {
     })
 
     this.addSub('ci:cucumber:test-step:start', ({ resource }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const childOf = store ? store.span : store
       const span = this.tracer.startSpan('cucumber.step', {
         childOf,
@@ -254,12 +326,19 @@ class CucumberPlugin extends CiPlugin {
       isStep,
       status,
       skipReason,
+      error,
       errorMessage,
       isNew,
       isEfdRetry,
-      isFlakyRetry
+      isFlakyRetry,
+      isAttemptToFix,
+      isAttemptToFixRetry,
+      hasFailedAllRetries,
+      hasPassedAllRetries,
+      isDisabled,
+      isQuarantined
     }) => {
-      const span = storage.getStore().span
+      const span = storage('legacy').getStore().span
       const statusTag = isStep ? 'step.status' : TEST_STATUS
 
       span.setTag(statusTag, status)
@@ -268,6 +347,7 @@ class CucumberPlugin extends CiPlugin {
         span.setTag(TEST_IS_NEW, 'true')
         if (isEfdRetry) {
           span.setTag(TEST_IS_RETRY, 'true')
+          span.setTag(TEST_RETRY_REASON, 'efd')
         }
       }
 
@@ -275,7 +355,9 @@ class CucumberPlugin extends CiPlugin {
         span.setTag(TEST_SKIP_REASON, skipReason)
       }
 
-      if (errorMessage) {
+      if (error) {
+        span.setTag('error', error)
+      } else if (errorMessage) { // we can't get a full error in cucumber steps
         span.setTag(ERROR_MESSAGE, errorMessage)
       }
 
@@ -283,24 +365,59 @@ class CucumberPlugin extends CiPlugin {
         span.setTag(TEST_IS_RETRY, 'true')
       }
 
+      if (hasFailedAllRetries) {
+        span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+      }
+
+      if (isAttemptToFix) {
+        span.setTag(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
+      }
+
+      if (isAttemptToFixRetry) {
+        span.setTag(TEST_IS_RETRY, 'true')
+        span.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
+        if (hasPassedAllRetries) {
+          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+        }
+      }
+
+      if (isDisabled) {
+        span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
+      }
+
+      if (isQuarantined) {
+        span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+      }
+
       span.finish()
       if (!isStep) {
+        const spanTags = span.context()._tags
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
           'test',
-          { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+          {
+            hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
+            isNew,
+            isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
+            browserDriver: spanTags[TEST_BROWSER_DRIVER]
+          }
         )
         finishAllTraceSpans(span)
         // If it's a worker, flushing is cheap, as it's just sending data to the main process
         if (isCucumberWorker) {
           this.tracer._exporter.flush()
         }
+        this.activeTestSpan = null
+        if (this.runningTestProbe) {
+          this.removeDiProbe(this.runningTestProbe)
+          this.runningTestProbe = null
+        }
       }
     })
 
     this.addSub('ci:cucumber:error', (err) => {
       if (err) {
-        const span = storage.getStore().span
+        const span = storage('legacy').getStore().span
         span.setTag('error', err)
       }
     })

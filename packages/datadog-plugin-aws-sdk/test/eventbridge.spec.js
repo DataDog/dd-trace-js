@@ -1,4 +1,4 @@
-/* eslint-disable max-len */
+/* eslint-disable @stylistic/js/max-len */
 'use strict'
 
 const EventBridge = require('../src/services/eventbridge')
@@ -27,6 +27,7 @@ describe('EventBridge', () => {
             _traceFlags: {
               sampled: 1
             },
+            _baggageItems: {},
             'x-datadog-trace-id': traceId,
             'x-datadog-parent-id': parentId,
             'x-datadog-sampling-priority': '1',

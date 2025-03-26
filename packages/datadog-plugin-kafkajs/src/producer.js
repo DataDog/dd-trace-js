@@ -1,10 +1,10 @@
 'use strict'
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
-const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
-const { getMessageSize } = require('../../dd-trace/src/datastreams/processor')
+const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
 
 const BOOTSTRAP_SERVERS_KEY = 'messaging.kafka.bootstrap.servers'
+const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
 
 class KafkajsProducerPlugin extends ProducerPlugin {
   static get id () { return 'kafkajs' }
@@ -66,12 +66,14 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     }
   }
 
-  start ({ topic, messages, bootstrapServers }) {
+  start ({ topic, messages, bootstrapServers, clusterId }) {
     const span = this.startSpan({
       resource: topic,
       meta: {
         component: 'kafkajs',
-        'kafka.topic': topic
+        'kafka.topic': topic,
+        'kafka.cluster_id': clusterId,
+        [MESSAGING_DESTINATION_KEY]: topic
       },
       metrics: {
         'kafka.batch_size': messages.length
@@ -85,8 +87,13 @@ class KafkajsProducerPlugin extends ProducerPlugin {
         this.tracer.inject(span, 'text_map', message.headers)
         if (this.config.dsmEnabled) {
           const payloadSize = getMessageSize(message)
-          const dataStreamsContext = this.tracer
-            .setCheckpoint(['direction:out', `topic:${topic}`, 'type:kafka'], span, payloadSize)
+          const edgeTags = ['direction:out', `topic:${topic}`, 'type:kafka']
+
+          if (clusterId) {
+            edgeTags.push(`kafka_cluster_id:${clusterId}`)
+          }
+
+          const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
           DsmPathwayCodec.encode(dataStreamsContext, message.headers)
         }
       }

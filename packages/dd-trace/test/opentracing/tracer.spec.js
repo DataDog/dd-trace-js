@@ -245,6 +245,40 @@ describe('Tracer', () => {
       expect(span.addTags).to.have.been.calledWith(fields.tags)
     })
 
+    it('If span is granted a service name that differs from the global service name' +
+      'ensure spans `version` tag is undefined.', () => {
+      config.tags = {
+        foo: 'tracer',
+        bar: 'tracer'
+      }
+
+      fields.tags = {
+        bar: 'span',
+        baz: 'span',
+        service: 'new-service'
+
+      }
+
+      tracer = new Tracer(config)
+      const testSpan = tracer.startSpan('name', fields)
+
+      expect(span.addTags).to.have.been.calledWith(config.tags)
+      expect(span.addTags).to.have.been.calledWith({ ...fields.tags, version: undefined })
+      expect(Span).to.have.been.calledWith(tracer, processor, prioritySampler, {
+        operationName: 'name',
+        parent: null,
+        tags: {
+          'service.name': 'new-service'
+        },
+        startTime: fields.startTime,
+        hostname: undefined,
+        traceId128BitGenerationEnabled: undefined,
+        integrationName: undefined,
+        links: undefined
+      })
+      expect(testSpan).to.equal(span)
+    })
+
     it('should start a span with the trace ID generation configuration', () => {
       config.traceId128BitGenerationEnabled = true
       tracer = new Tracer(config)

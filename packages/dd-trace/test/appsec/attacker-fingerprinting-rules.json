@@ -1,0 +1,204 @@
+{
+  "version": "2.2",
+  "metadata": {
+    "rules_version": "1.5.0"
+  },
+  "rules": [
+    {
+      "id": "tst-000-001-",
+      "name": "rule to test fingerprint",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "confidence": "1"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              }
+            ],
+            "list": [
+              "testattack"
+            ]
+          },
+          "operator": "phrase_match"
+        }
+      ],
+      "transformers": []
+    }
+  ],
+  "processors": [
+    {
+      "id": "http-endpoint-fingerprint",
+      "generator": "http_endpoint_fingerprint",
+      "conditions": [
+        {
+          "operator": "exists",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "waf.context.event"
+              },
+              {
+                "address": "server.business_logic.users.login.failure"
+              },
+              {
+                "address": "server.business_logic.users.login.success"
+              }
+            ]
+          }
+        }
+      ],
+      "parameters": {
+        "mappings": [
+          {
+            "method": [
+              {
+                "address": "server.request.method"
+              }
+            ],
+            "uri_raw": [
+              {
+                "address": "server.request.uri.raw"
+              }
+            ],
+            "body": [
+              {
+                "address": "server.request.body"
+              }
+            ],
+            "query": [
+              {
+                "address": "server.request.query"
+              }
+            ],
+            "output": "_dd.appsec.fp.http.endpoint"
+          }
+        ]
+      },
+      "evaluate": false,
+      "output": true
+    },
+    {
+      "id": "http-header-fingerprint",
+      "generator": "http_header_fingerprint",
+      "conditions": [
+        {
+          "operator": "exists",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "waf.context.event"
+              },
+              {
+                "address": "server.business_logic.users.login.failure"
+              },
+              {
+                "address": "server.business_logic.users.login.success"
+              }
+            ]
+          }
+        }
+      ],
+      "parameters": {
+        "mappings": [
+          {
+            "headers": [
+              {
+                "address": "server.request.headers.no_cookies"
+              }
+            ],
+            "output": "_dd.appsec.fp.http.header"
+          }
+        ]
+      },
+      "evaluate": false,
+      "output": true
+    },
+    {
+      "id": "http-network-fingerprint",
+      "generator": "http_network_fingerprint",
+      "conditions": [
+        {
+          "operator": "exists",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "waf.context.event"
+              },
+              {
+                "address": "server.business_logic.users.login.failure"
+              },
+              {
+                "address": "server.business_logic.users.login.success"
+              }
+            ]
+          }
+        }
+      ],
+      "parameters": {
+        "mappings": [
+          {
+            "headers": [
+              {
+                "address": "server.request.headers.no_cookies"
+              }
+            ],
+            "output": "_dd.appsec.fp.http.network"
+          }
+        ]
+      },
+      "evaluate": false,
+      "output": true
+    },
+    {
+      "id": "session-fingerprint",
+      "generator": "session_fingerprint",
+      "conditions": [
+        {
+          "operator": "exists",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "waf.context.event"
+              },
+              {
+                "address": "server.business_logic.users.login.failure"
+              },
+              {
+                "address": "server.business_logic.users.login.success"
+              }
+            ]
+          }
+        }
+      ],
+      "parameters": {
+        "mappings": [
+          {
+            "cookies": [
+              {
+                "address": "server.request.cookies"
+              }
+            ],
+            "session_id": [
+              {
+                "address": "usr.session_id"
+              }
+            ],
+            "user_id": [
+              {
+                "address": "usr.id"
+              }
+            ],
+            "output": "_dd.appsec.fp.session"
+          }
+        ]
+      },
+      "evaluate": false,
+      "output": true
+    }
+  ]
+}

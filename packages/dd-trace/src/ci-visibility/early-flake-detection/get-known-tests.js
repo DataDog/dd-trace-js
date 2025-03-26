@@ -1,5 +1,18 @@
 const request = require('../../exporters/common/request')
 const id = require('../../id')
+const log = require('../../log')
+
+const {
+  incrementCountMetric,
+  distributionMetric,
+  TELEMETRY_KNOWN_TESTS,
+  TELEMETRY_KNOWN_TESTS_MS,
+  TELEMETRY_KNOWN_TESTS_ERRORS,
+  TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS,
+  TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES
+} = require('../../ci-visibility/telemetry')
+
+const { getNumFromKnownTests } = require('../../plugins/util/test')
 
 function getKnownTests ({
   url,
@@ -64,12 +77,26 @@ function getKnownTests ({
     }
   })
 
-  request(data, options, (err, res) => {
+  incrementCountMetric(TELEMETRY_KNOWN_TESTS)
+
+  const startTime = Date.now()
+
+  request(data, options, (err, res, statusCode) => {
+    distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
     if (err) {
+      incrementCountMetric(TELEMETRY_KNOWN_TESTS_ERRORS, { statusCode })
       done(err)
     } else {
       try {
         const { data: { attributes: { tests: knownTests } } } = JSON.parse(res)
+
+        const numTests = getNumFromKnownTests(knownTests)
+
+        incrementCountMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS, {}, numTests)
+        distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES, {}, res.length)
+
+        log.debug(() => `Number of received known tests: ${numTests}`)
+
         done(null, knownTests)
       } catch (err) {
         done(err)

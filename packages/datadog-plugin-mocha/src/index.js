@@ -17,17 +17,26 @@ const {
   TEST_CODE_OWNERS,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
-  removeEfdStringFromTestName,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_SESSION_ID,
   TEST_MODULE_ID,
   TEST_MODULE,
   TEST_SUITE_ID,
   TEST_COMMAND,
   TEST_SUITE,
-  MOCHA_IS_PARALLEL
+  MOCHA_IS_PARALLEL,
+  TEST_IS_RUM_ACTIVE,
+  TEST_BROWSER_DRIVER,
+  TEST_RETRY_REASON,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -38,10 +47,13 @@ const {
   TELEMETRY_ITR_FORCED_TO_RUN,
   TELEMETRY_CODE_COVERAGE_EMPTY,
   TELEMETRY_ITR_UNSKIPPABLE,
-  TELEMETRY_CODE_COVERAGE_NUM_FILES
+  TELEMETRY_CODE_COVERAGE_NUM_FILES,
+  TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const id = require('../../dd-trace/src/id')
 const log = require('../../dd-trace/src/log')
+
+const BREAKPOINT_SET_GRACE_PERIOD_MS = 200
 
 function getTestSuiteLevelVisibilityTags (testSuiteSpan) {
   const testSuiteSpanContext = testSuiteSpan.context()
@@ -81,7 +93,7 @@ class MochaPlugin extends CiPlugin {
       }
 
       const relativeCoverageFiles = [...coverageFiles, suiteFile]
-        .map(filename => getTestSuitePath(filename, this.sourceRoot))
+        .map(filename => getTestSuitePath(filename, this.repositoryRoot || this.sourceRoot))
 
       const { _traceId, _spanId } = testSuiteSpan.context()
 
@@ -121,6 +133,19 @@ class MochaPlugin extends CiPlugin {
         testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
         this.telemetry.count(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
       }
+      if (this.repositoryRoot !== this.sourceRoot && !!this.repositoryRoot) {
+        testSuiteMetadata[TEST_SOURCE_FILE] = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      } else {
+        testSuiteMetadata[TEST_SOURCE_FILE] = testSuite
+      }
+      if (testSuiteMetadata[TEST_SOURCE_FILE]) {
+        testSuiteMetadata[TEST_SOURCE_START] = 1
+      }
+
+      const codeOwners = this.getCodeOwners(testSuiteMetadata)
+      if (codeOwners) {
+        testSuiteMetadata[TEST_CODE_OWNERS] = codeOwners
+      }
 
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
         childOf: this.testModuleSpan,
@@ -137,13 +162,13 @@ class MochaPlugin extends CiPlugin {
       if (itrCorrelationId) {
         testSuiteSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
       }
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       this.enter(testSuiteSpan, store)
       this._testSuites.set(testSuite, testSuiteSpan)
     })
 
     this.addSub('ci:mocha:test-suite:finish', (status) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       if (store && store.span) {
         const span = store.span
         // the test status of the suite may have been set in ci:mocha:test-suite:error already
@@ -156,7 +181,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test-suite:error', (err) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       if (store && store.span) {
         const span = store.span
         span.setTag('error', err)
@@ -165,18 +190,26 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:start', (testInfo) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = this.startTestSpan(testInfo)
 
       this.enter(span, store)
+      this.activeTestSpan = span
     })
 
     this.addSub('ci:mocha:worker:finish', () => {
       this.tracer._exporter.flush()
     })
 
-    this.addSub('ci:mocha:test:finish', ({ status, hasBeenRetried }) => {
-      const store = storage.getStore()
+    this.addSub('ci:mocha:test:finish', ({
+      status,
+      hasBeenRetried,
+      isLastRetry,
+      hasFailedAllRetries,
+      attemptToFixPassed,
+      isAttemptToFixRetry
+    }) => {
+      const store = storage('legacy').getStore()
       const span = store?.span
 
       if (span) {
@@ -184,18 +217,41 @@ class MochaPlugin extends CiPlugin {
         if (hasBeenRetried) {
           span.setTag(TEST_IS_RETRY, 'true')
         }
-        span.finish()
+        if (hasFailedAllRetries) {
+          span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+        }
+        if (attemptToFixPassed) {
+          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+        }
+        if (isAttemptToFixRetry) {
+          span.setTag(TEST_IS_RETRY, 'true')
+          span.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
+        }
+
+        const spanTags = span.context()._tags
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
           'test',
-          { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+          {
+            hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
+            isNew: spanTags[TEST_IS_NEW] === 'true',
+            isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
+            browserDriver: spanTags[TEST_BROWSER_DRIVER]
+          }
         )
+
+        span.finish()
         finishAllTraceSpans(span)
+        this.activeTestSpan = null
+        if (this.di && this.libraryConfig?.isDiEnabled && this.runningTestProbe && isLastRetry) {
+          this.removeDiProbe(this.runningTestProbe)
+          this.runningTestProbe = null
+        }
       }
     })
 
     this.addSub('ci:mocha:test:skip', (testInfo) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       // skipped through it.skip, so the span is not created yet
       // for this test
       if (!store) {
@@ -205,7 +261,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:error', (err) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = store?.span
       if (err && span) {
         if (err.constructor.name === 'Pending' && !this.forbidPending) {
@@ -217,21 +273,46 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:retry', (isFirstAttempt) => {
-      const store = storage.getStore()
+    this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, willBeRetried, err, test }) => {
+      const store = storage('legacy').getStore()
       const span = store?.span
       if (span) {
         span.setTag(TEST_STATUS, 'fail')
         if (!isFirstAttempt) {
           span.setTag(TEST_IS_RETRY, 'true')
         }
+        if (err) {
+          span.setTag('error', err)
+        }
 
-        span.finish()
+        const spanTags = span.context()._tags
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
           'test',
-          { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+          {
+            hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
+            isNew: spanTags[TEST_IS_NEW] === 'true',
+            isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
+            browserDriver: spanTags[TEST_BROWSER_DRIVER]
+          }
         )
+        if (isFirstAttempt && willBeRetried && this.di && this.libraryConfig?.isDiEnabled) {
+          const probeInformation = this.addDiProbe(err)
+          if (probeInformation) {
+            const { file, line, stackIndex } = probeInformation
+            this.runningTestProbe = { file, line }
+            this.testErrorStackIndex = stackIndex
+            test._ddShouldWaitForHitProbe = true
+            const waitUntil = Date.now() + BREAKPOINT_SET_GRACE_PERIOD_MS
+            while (Date.now() < waitUntil) {
+              // TODO: To avoid a race condition, we should wait until `probeInformation.setProbePromise` has resolved.
+              // However, Mocha doesn't have a mechanism for waiting asyncrounously here, so for now, we'll have to
+              // fall back to a fixed syncronous delay.
+            }
+          }
+        }
+
+        span.finish()
         finishAllTraceSpans(span)
       }
     })
@@ -249,6 +330,8 @@ class MochaPlugin extends CiPlugin {
       hasUnskippableSuites,
       error,
       isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
+      isTestManagementEnabled,
       isParallel
     }) => {
       if (this.testSessionSpan) {
@@ -263,6 +346,10 @@ class MochaPlugin extends CiPlugin {
 
         if (isParallel) {
           this.testSessionSpan.setTag(MOCHA_IS_PARALLEL, 'true')
+        }
+
+        if (isTestManagementEnabled) {
+          this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
         }
 
         addIntelligentTestRunnerSpanTags(
@@ -283,12 +370,19 @@ class MochaPlugin extends CiPlugin {
         if (isEarlyFlakeDetectionEnabled) {
           this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
         }
+        if (isEarlyFlakeDetectionFaulty) {
+          this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+        }
 
         this.testModuleSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
         this.testSessionSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
         finishAllTraceSpans(this.testSessionSpan)
+        this.telemetry.count(TELEMETRY_TEST_SESSION, {
+          provider: this.ciProviderName,
+          autoInjected: !!process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER
+        })
       }
       this.libraryConfig = null
       this.tracer._exporter.flush()
@@ -328,15 +422,17 @@ class MochaPlugin extends CiPlugin {
 
   startTestSpan (testInfo) {
     const {
+      testName,
       testSuiteAbsolutePath,
       title,
       isNew,
       isEfdRetry,
       testStartLine,
-      isParallel
+      isParallel,
+      isAttemptToFix,
+      isDisabled,
+      isQuarantined
     } = testInfo
-
-    const testName = removeEfdStringFromTestName(testInfo.testName)
 
     const extraTags = {}
     const testParametersString = getTestParametersString(this._testTitleToParams, title)
@@ -352,6 +448,18 @@ class MochaPlugin extends CiPlugin {
       extraTags[MOCHA_IS_PARALLEL] = 'true'
     }
 
+    if (isAttemptToFix) {
+      extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
+    }
+
+    if (isDisabled) {
+      extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
+    }
+
+    if (isQuarantined) {
+      extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
+    }
+
     const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
     const testSuiteSpan = this._testSuites.get(testSuite)
 
@@ -365,6 +473,7 @@ class MochaPlugin extends CiPlugin {
       extraTags[TEST_IS_NEW] = 'true'
       if (isEfdRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
+        extraTags[TEST_RETRY_REASON] = 'efd'
       }
     }
 

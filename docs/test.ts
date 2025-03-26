@@ -39,6 +39,7 @@ let promise: Promise<void>;
 
 ddTrace.init();
 tracer.init({
+  apmTracingEnabled: false,
   logInjection: true,
   startupLogs: false,
   env: 'test',
@@ -111,11 +112,10 @@ tracer.init({
     blockedTemplateJson: './blocked.json',
     blockedTemplateGraphql: './blockedgraphql.json',
     eventTracking: {
-      mode: 'safe'
+      mode: 'anon'
     },
     apiSecurity: {
       enabled: true,
-      requestSampling: 1.0
     },
     rasp: {
       enabled: true
@@ -128,14 +128,19 @@ tracer.init({
   },
   iast: {
     enabled: true,
+    cookieFilterPattern: '.*',
     requestSampling: 50,
     maxConcurrentRequests: 4,
     maxContextOperations: 30,
+    dbRowsToTaint: 12,
     deduplicationEnabled: true,
     redactionEnabled: true,
     redactionNamePattern: 'password',
     redactionValuePattern: 'bearer',
-    telemetryVerbosity: 'OFF'
+    telemetryVerbosity: 'OFF',
+    stackTrace: {
+      enabled: true
+    }
   }
 });
 
@@ -143,9 +148,11 @@ tracer.init({
   experimental: {
     iast: {
       enabled: true,
+      cookieFilterPattern: '.*',
       requestSampling: 50,
       maxConcurrentRequests: 4,
       maxContextOperations: 30,
+      dbRowsToTaint: 6,
       deduplicationEnabled: true,
       redactionEnabled: true,
       redactionNamePattern: 'password',
@@ -281,8 +288,10 @@ const openSearchOptions: plugins.opensearch = {
 
 tracer.use('amqp10');
 tracer.use('amqplib');
+tracer.use('avsc');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
+tracer.use('azure-functions');
 tracer.use('bunyan');
 tracer.use('couchbase');
 tracer.use('cassandra-driver');
@@ -303,6 +312,7 @@ tracer.use('fetch');
 tracer.use('fetch', httpClientOptions);
 tracer.use('generic-pool');
 tracer.use('google-cloud-pubsub');
+tracer.use('google-cloud-vertexai');
 tracer.use('graphql');
 tracer.use('graphql', graphqlOptions);
 tracer.use('graphql', { variables: ['foo', 'bar'] });
@@ -339,6 +349,7 @@ tracer.use('kafkajs');
 tracer.use('knex');
 tracer.use('koa');
 tracer.use('koa', httpServerOptions);
+tracer.use('langchain');
 tracer.use('mariadb', { service: () => `my-custom-mariadb` })
 tracer.use('memcached');
 tracer.use('microgateway-core');
@@ -365,6 +376,7 @@ tracer.use('playwright');
 tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });
 tracer.use('pino');
+tracer.use('protobufjs');
 tracer.use('redis');
 tracer.use('redis', redisOptions);
 tracer.use('restify');
@@ -534,3 +546,80 @@ const otelTraceId: string = spanContext.traceId
 const otelSpanId: string = spanContext.spanId
 const otelTraceFlags: number = spanContext.traceFlags
 const otelTraceState: opentelemetry.TraceState = spanContext.traceState!
+
+// -- LLM Observability --
+const llmobsEnableOptions = {
+  mlApp: 'mlApp',
+  agentlessEnabled: true
+}
+tracer.init({
+  llmobs: llmobsEnableOptions,
+})
+const llmobs = tracer.llmobs
+const enabled = llmobs.enabled
+
+// manually enable
+llmobs.enable({
+  mlApp: 'mlApp',
+  agentlessEnabled: true
+})
+
+// manually disable
+llmobs.disable()
+
+// trace block of code
+llmobs.trace({ name: 'name', kind: 'llm' }, () => {})
+llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, () => {})
+llmobs.trace({ name: 'name', kind: 'llm' }, (span, cb) => {
+  llmobs.annotate(span, {})
+  span.setTag('foo', 'bar')
+  cb(new Error('boom'))
+})
+
+// wrap a function
+llmobs.wrap({ kind: 'llm' }, function myLLM () {})()
+llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction () {})()
+
+// export a span
+llmobs.enable({ mlApp: 'myApp' })
+llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
+  const llmobsSpanCtx = llmobs.exportSpan(span)
+  llmobsSpanCtx.traceId;
+  llmobsSpanCtx.spanId;
+
+  // submit evaluation
+  llmobs.disable()
+  llmobs.submitEvaluation(llmobsSpanCtx, {
+    label: 'my-eval-metric',
+    metricType: 'categorical',
+    value: 'good',
+    mlApp: 'myApp',
+    tags: {},
+    timestampMs: Date.now()
+  })
+})
+
+// annotate a span
+llmobs.annotate({
+  inputData: 'input',
+  outputData: 'output',
+  metadata: {},
+  metrics: {
+    inputTokens: 10,
+    outputTokens: 5,
+    totalTokens: 15
+  },
+  tags: {}
+})
+llmobs.annotate(span, {
+  inputData: 'input',
+  outputData: 'output',
+  metadata: {},
+  metrics: {},
+  tags: {}
+})
+
+
+
+// flush
+llmobs.flush()

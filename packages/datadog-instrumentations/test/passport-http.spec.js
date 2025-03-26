@@ -1,8 +1,9 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const axios = require('axios')
+const axios = require('axios').create({ validateStatus: null })
 const dc = require('dc-polyfill')
+const { storage } = require('../../datadog-core')
 
 withVersions('passport-http', 'passport-http', version => {
   describe('passport-http instrumentation', () => {
@@ -10,7 +11,7 @@ withVersions('passport-http', 'passport-http', version => {
     let port, server, subscriberStub
 
     before(() => {
-      return agent.load(['express', 'passport', 'passport-http'], { client: false })
+      return agent.load(['http', 'express', 'passport', 'passport-http'], { client: false })
     })
 
     before((done) => {
@@ -19,7 +20,17 @@ withVersions('passport-http', 'passport-http', version => {
       const BasicStrategy = require(`../../../versions/passport-http@${version}`).get().BasicStrategy
       const app = express()
 
-      passport.use(new BasicStrategy((username, password, done) => {
+      function validateUser (req, username, password, done) {
+        // support with or without passReqToCallback
+        if (typeof done !== 'function') {
+          done = password
+          password = username
+          username = req
+        }
+
+        // simulate db error
+        if (username === 'error') return done('error')
+
         const users = [{
           _id: 1,
           username: 'test',
@@ -35,7 +46,18 @@ withVersions('passport-http', 'passport-http', version => {
           return done(null, user)
         }
       }
-      ))
+
+      passport.use('basic', new BasicStrategy({
+        usernameField: 'username',
+        passwordField: 'password',
+        passReqToCallback: false
+      }, validateUser))
+
+      passport.use('basic-withreq', new BasicStrategy({
+        usernameField: 'username',
+        passwordField: 'password',
+        passReqToCallback: true
+      }, validateUser))
 
       app.use(passport.initialize())
       app.use(express.json())
@@ -44,16 +66,14 @@ withVersions('passport-http', 'passport-http', version => {
         passport.authenticate('basic', {
           successRedirect: '/grant',
           failureRedirect: '/deny',
-          passReqToCallback: false,
           session: false
         })
       )
 
-      app.post('/req',
-        passport.authenticate('basic', {
+      app.get('/req',
+        passport.authenticate('basic-withreq', {
           successRedirect: '/grant',
           failureRedirect: '/deny',
-          passReqToCallback: true,
           session: false
         })
       )
@@ -66,9 +86,7 @@ withVersions('passport-http', 'passport-http', version => {
         res.send('Denied')
       })
 
-      passportVerifyChannel.subscribe(function ({ credentials, user, err, info }) {
-        subscriberStub(arguments[0])
-      })
+      passportVerifyChannel.subscribe((data) => subscriberStub(data))
 
       server = app.listen(0, () => {
         port = server.address().port
@@ -85,6 +103,18 @@ withVersions('passport-http', 'passport-http', version => {
       return agent.close({ ritmReset: false })
     })
 
+    it('should not call subscriber when an error occurs', async () => {
+      const res = await axios.get(`http://localhost:${port}/`, {
+        headers: {
+          // error:1234
+          Authorization: 'Basic ZXJyb3I6MTIzNA=='
+        }
+      })
+
+      expect(res.status).to.equal(500)
+      expect(subscriberStub).to.not.be.called
+    })
+
     it('should call subscriber with proper arguments on success', async () => {
       const res = await axios.get(`http://localhost:${port}/`, {
         headers: {
@@ -95,16 +125,17 @@ withVersions('passport-http', 'passport-http', version => {
 
       expect(res.status).to.equal(200)
       expect(res.data).to.equal('Granted')
-      expect(subscriberStub).to.be.calledOnceWithExactly(
-        {
-          credentials: { type: 'http', username: 'test' },
-          user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' }
-        }
-      )
+      expect(subscriberStub).to.be.calledOnceWithExactly({
+        framework: 'passport-basic',
+        login: 'test',
+        user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
+        success: true,
+        abortController: new AbortController()
+      })
     })
 
     it('should call subscriber with proper arguments on success with passReqToCallback set to true', async () => {
-      const res = await axios.get(`http://localhost:${port}/`, {
+      const res = await axios.get(`http://localhost:${port}/req`, {
         headers: {
           // test:1234
           Authorization: 'Basic dGVzdDoxMjM0'
@@ -113,12 +144,13 @@ withVersions('passport-http', 'passport-http', version => {
 
       expect(res.status).to.equal(200)
       expect(res.data).to.equal('Granted')
-      expect(subscriberStub).to.be.calledOnceWithExactly(
-        {
-          credentials: { type: 'http', username: 'test' },
-          user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' }
-        }
-      )
+      expect(subscriberStub).to.be.calledOnceWithExactly({
+        framework: 'passport-basic',
+        login: 'test',
+        user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
+        success: true,
+        abortController: new AbortController()
+      })
     })
 
     it('should call subscriber with proper arguments on failure', async () => {
@@ -131,12 +163,37 @@ withVersions('passport-http', 'passport-http', version => {
 
       expect(res.status).to.equal(200)
       expect(res.data).to.equal('Denied')
-      expect(subscriberStub).to.be.calledOnceWithExactly(
-        {
-          credentials: { type: 'http', username: 'test' },
-          user: false
+      expect(subscriberStub).to.be.calledOnceWithExactly({
+        framework: 'passport-basic',
+        login: 'test',
+        user: false,
+        success: false,
+        abortController: new AbortController()
+      })
+    })
+
+    it('should block when subscriber aborts', async () => {
+      subscriberStub = sinon.spy(({ abortController }) => {
+        storage('legacy').getStore().req.res.writeHead(403).end('Blocked')
+        abortController.abort()
+      })
+
+      const res = await axios.get(`http://localhost:${port}/`, {
+        headers: {
+          // test:1234
+          Authorization: 'Basic dGVzdDoxMjM0'
         }
-      )
+      })
+
+      expect(res.status).to.equal(403)
+      expect(res.data).to.equal('Blocked')
+      expect(subscriberStub).to.be.calledOnceWithExactly({
+        framework: 'passport-basic',
+        login: 'test',
+        user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
+        success: true,
+        abortController: new AbortController()
+      })
     })
   })
 })

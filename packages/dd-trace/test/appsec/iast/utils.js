@@ -3,12 +3,15 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const { assert } = require('chai')
+const msgpack = require('@msgpack/msgpack')
 
 const agent = require('../../plugins/agent')
 const axios = require('axios')
 const iast = require('../../../src/appsec/iast')
 const Config = require('../../../src/config')
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
+const { getWebSpan } = require('../utils')
 
 function testInRequest (app, tests) {
   let http
@@ -112,9 +115,7 @@ function beforeEachIastTest (iastConfig) {
   beforeEach(() => {
     vulnerabilityReporter.clearCache()
     iast.enable(new Config({
-      experimental: {
-        iast: iastConfig
-      }
+      iast: iastConfig
     }))
   })
 }
@@ -138,6 +139,7 @@ function endResponse (res, appResult) {
 function checkNoVulnerabilityInRequest (vulnerability, config, done, makeRequest) {
   agent
     .use(traces => {
+      if (traces[0][0].type !== 'web') throw new Error('Not a web span')
       // iastJson == undefiend is valid
       const iastJson = traces[0][0].meta['_dd.iast.json'] || ''
       expect(iastJson).to.not.include(`"${vulnerability}"`)
@@ -151,7 +153,15 @@ function checkNoVulnerabilityInRequest (vulnerability, config, done, makeRequest
   }
 }
 
-function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb, makeRequest, config, done) {
+function checkVulnerabilityInRequest (
+  vulnerability,
+  occurrencesAndLocation,
+  cb,
+  makeRequest,
+  config,
+  done,
+  matchLocation
+) {
   let location
   let occurrences = occurrencesAndLocation
   if (occurrencesAndLocation !== null && typeof occurrencesAndLocation === 'object') {
@@ -162,6 +172,10 @@ function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb,
     .use(traces => {
       expect(traces[0][0].metrics['_dd.iast.enabled']).to.be.equal(1)
       expect(traces[0][0].meta).to.have.property('_dd.iast.json')
+
+      const span = getWebSpan(traces)
+      assert.property(span.meta_struct, '_dd.stack')
+
       const vulnerabilitiesTrace = JSON.parse(traces[0][0].meta['_dd.iast.json'])
       expect(vulnerabilitiesTrace).to.not.be.null
       const vulnerabilitiesCount = new Map()
@@ -192,6 +206,12 @@ function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb,
         if (!found) {
           throw new Error(`Expected ${vulnerability} on ${location.path}:${location.line}`)
         }
+      }
+
+      if (matchLocation) {
+        const matchFound = locationHasMatchingFrame(span, vulnerability, vulnerabilitiesTrace.vulnerabilities)
+
+        assert.isTrue(matchFound)
       }
 
       if (cb) {
@@ -249,16 +269,24 @@ function prepareTestServerForIast (description, tests, iastConfig) {
       return agent.close({ ritmReset: false })
     })
 
-    function testThatRequestHasVulnerability (fn, vulnerability, occurrences, cb, makeRequest) {
-      it(`should have ${vulnerability} vulnerability`, function (done) {
+    function testThatRequestHasVulnerability (
+      fn,
+      vulnerability,
+      occurrences,
+      cb,
+      makeRequest,
+      description,
+      matchLocation = true
+    ) {
+      it(description || `should have ${vulnerability} vulnerability`, function (done) {
         this.timeout(5000)
         app = fn
-        checkVulnerabilityInRequest(vulnerability, occurrences, cb, makeRequest, config, done)
+        checkVulnerabilityInRequest(vulnerability, occurrences, cb, makeRequest, config, done, matchLocation)
       })
     }
 
-    function testThatRequestHasNoVulnerability (fn, vulnerability, makeRequest) {
-      it(`should not have ${vulnerability} vulnerability`, function (done) {
+    function testThatRequestHasNoVulnerability (fn, vulnerability, makeRequest, description) {
+      it(description || `should not have ${vulnerability} vulnerability`, function (done) {
         app = fn
         checkNoVulnerabilityInRequest(vulnerability, config, done, makeRequest)
       })
@@ -290,9 +318,10 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
     before((done) => {
       const express = require(`../../../../../versions/express@${expressVersion}`).get()
       const bodyParser = require('../../../../../versions/body-parser').get()
+
       const expressApp = express()
 
-      if (loadMiddlewares) loadMiddlewares(expressApp)
+      if (loadMiddlewares) loadMiddlewares(expressApp, listener)
 
       expressApp.use(bodyParser.json())
       try {
@@ -365,6 +394,29 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
 
     tests(testThatRequestHasVulnerability, testThatRequestHasNoVulnerability, config)
   })
+}
+
+function locationHasMatchingFrame (span, vulnerabilityType, vulnerabilities) {
+  const stack = msgpack.decode(span.meta_struct['_dd.stack'])
+  const matchingVulns = vulnerabilities.filter(vulnerability => vulnerability.type === vulnerabilityType)
+
+  for (const vulnerability of stack.vulnerability) {
+    for (const frame of vulnerability.frames) {
+      for (const { location } of matchingVulns) {
+        if (
+          frame.line === location.line &&
+          frame.class_name === location.class &&
+          frame.function === location.method &&
+          frame.path === location.path &&
+          !location.hasOwnProperty('column')
+        ) {
+          return true
+        }
+      }
+    }
+  }
+
+  return false
 }
 
 module.exports = {

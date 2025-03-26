@@ -9,7 +9,8 @@ const {
   OS_PLATFORM,
   OS_VERSION,
   RUNTIME_NAME,
-  RUNTIME_VERSION
+  RUNTIME_VERSION,
+  DD_HOST_CPU_COUNT
 } = require('../../../src/plugins/util/env')
 
 describe('env', () => {
@@ -22,7 +23,8 @@ describe('env', () => {
         [OS_ARCHITECTURE]: process.arch,
         [OS_PLATFORM]: process.platform,
         [RUNTIME_NAME]: 'node',
-        [OS_VERSION]: os.release()
+        [OS_VERSION]: os.release(),
+        [DD_HOST_CPU_COUNT]: os.cpus().length
       }
     )
   })

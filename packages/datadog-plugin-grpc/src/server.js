@@ -27,7 +27,7 @@ class GrpcServerPlugin extends ServerPlugin {
   }
 
   bindStart (message) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const { name, metadata, type } = message
     const metadataFilter = this.config.metadataFilter
     const childOf = extract(this.tracer, metadata)
@@ -70,6 +70,9 @@ class GrpcServerPlugin extends ServerPlugin {
     if (!span) return
 
     this.addCode(span, error.code)
+    if (error.code && !this._tracerConfig.grpc.server.error.statuses.includes(error.code)) {
+      return
+    }
     this.addError(error)
   }
 

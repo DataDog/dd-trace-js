@@ -6,7 +6,6 @@ const { getNodeModulesPaths } = require('../path-line')
 const { HEADER_NAME_VALUE_SEPARATOR } = require('../vulnerabilities-formatter/constants')
 const { getRanges } = require('../taint-tracking/operations')
 const {
-  HTTP_REQUEST_COOKIE_NAME,
   HTTP_REQUEST_COOKIE_VALUE,
   HTTP_REQUEST_HEADER_VALUE
 } = require('../taint-tracking/source-types')
@@ -45,13 +44,7 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
     if (this.isExcludedHeaderName(lowerCasedHeaderName) || typeof value !== 'string') return
 
     const ranges = getRanges(iastContext, value)
-    if (ranges?.length > 0) {
-      return !(this.isCookieExclusion(lowerCasedHeaderName, ranges) ||
-        this.isSameHeaderExclusion(lowerCasedHeaderName, ranges) ||
-        this.isAccessControlAllowExclusion(lowerCasedHeaderName, ranges))
-    }
-
-    return false
+    return ranges?.length > 0 && !this.shouldIgnoreHeader(lowerCasedHeaderName, ranges)
   }
 
   _getEvidence (headerInfo, iastContext) {
@@ -75,26 +68,50 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
     return EXCLUDED_HEADER_NAMES.includes(name)
   }
 
-  isCookieExclusion (name, ranges) {
-    if (name === 'set-cookie') {
-      return ranges
-        .every(range => range.iinfo.type === HTTP_REQUEST_COOKIE_VALUE || range.iinfo.type === HTTP_REQUEST_COOKIE_NAME)
-    }
-
-    return false
+  isAllRangesFromHeader (ranges, headerName) {
+    return ranges
+      .every(range =>
+        range.iinfo.type === HTTP_REQUEST_HEADER_VALUE && range.iinfo.parameterName?.toLowerCase() === headerName
+      )
   }
 
+  isAllRangesFromSource (ranges, source) {
+    return ranges
+      .every(range => range.iinfo.type === source)
+  }
+
+  /**
+   * Exclude access-control-allow-*: when the header starts with access-control-allow- and the
+   * source of the tainted range is a request header
+   */
   isAccessControlAllowExclusion (name, ranges) {
     if (name?.startsWith('access-control-allow-')) {
-      return ranges
-        .every(range => range.iinfo.type === HTTP_REQUEST_HEADER_VALUE)
+      return this.isAllRangesFromSource(ranges, HTTP_REQUEST_HEADER_VALUE)
     }
 
     return false
   }
 
+  /** Exclude when the header is reflected from the request */
   isSameHeaderExclusion (name, ranges) {
     return ranges.length === 1 && name === ranges[0].iinfo.parameterName?.toLowerCase()
+  }
+
+  shouldIgnoreHeader (headerName, ranges) {
+    switch (headerName) {
+      case 'set-cookie':
+        /** Exclude set-cookie header if the source of all the tainted ranges are cookies */
+        return this.isAllRangesFromSource(ranges, HTTP_REQUEST_COOKIE_VALUE)
+      case 'pragma':
+        /** Ignore pragma headers when the source is the cache control header. */
+        return this.isAllRangesFromHeader(ranges, 'cache-control')
+      case 'transfer-encoding':
+      case 'content-encoding':
+        /** Ignore transfer and content encoding headers when the source is the accept encoding header. */
+        return this.isAllRangesFromHeader(ranges, 'accept-encoding')
+    }
+
+    return this.isAccessControlAllowExclusion(headerName, ranges) || this.isSameHeaderExclusion(headerName, ranges)
   }
 
   _getExcludedPaths () {

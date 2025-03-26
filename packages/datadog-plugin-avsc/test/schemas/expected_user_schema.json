@@ -1,0 +1,21 @@
+{
+  "openapi": "3.0.0",
+  "components": {
+      "schemas": {
+          "example.avro.User": {
+              "type": "object",
+              "properties": {
+                  "name": {
+                      "type": "string"
+                  },
+                  "favorite_number": {
+                      "type": "union[integer,null]"
+                  },
+                  "favorite_color": {
+                      "type": "union[string,null]"
+                  }
+              }
+          }
+      }
+  }
+}

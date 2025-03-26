@@ -40,6 +40,18 @@ function wrapRequest (send) {
   }
 }
 
+function wrapDeserialize (deserialize, channelSuffix) {
+  const headersCh = channel(`apm:aws:response:deserialize:${channelSuffix}`)
+
+  return function (response) {
+    if (headersCh.hasSubscribers) {
+      headersCh.publish({ headers: response.headers })
+    }
+
+    return deserialize.apply(this, arguments)
+  }
+}
+
 function wrapSmithySend (send) {
   return function (command, ...args) {
     const cb = args[args.length - 1]
@@ -61,6 +73,10 @@ function wrapSmithySend (send) {
     const responseStartChannel = channel(`apm:aws:response:start:${channelSuffix}`)
     const responseFinishChannel = channel(`apm:aws:response:finish:${channelSuffix}`)
 
+    if (typeof command.deserialize === 'function') {
+      shimmer.wrap(command, 'deserialize', deserialize => wrapDeserialize(deserialize, channelSuffix))
+    }
+
     return innerAr.runInAsyncScope(() => {
       startCh.publish({
         serviceIdentifier,
@@ -75,7 +91,7 @@ function wrapSmithySend (send) {
       })
 
       if (typeof cb === 'function') {
-        args[args.length - 1] = function (err, result) {
+        args[args.length - 1] = shimmer.wrapFunction(cb, cb => function (err, result) {
           const message = getMessage(request, err, result)
 
           completeChannel.publish(message)
@@ -89,7 +105,7 @@ function wrapSmithySend (send) {
               responseFinishChannel.publish(message.response.error)
             }
           })
-        }
+        })
       } else { // always a promise
         return send.call(this, command, ...args)
           .then(
@@ -113,7 +129,7 @@ function wrapSmithySend (send) {
 
 function wrapCb (cb, serviceName, request, ar) {
   // eslint-disable-next-line n/handle-callback-err
-  return function wrappedCb (err, response) {
+  return shimmer.wrapFunction(cb, cb => function wrappedCb (err, response) {
     const obj = { request, response }
     return ar.runInAsyncScope(() => {
       channel(`apm:aws:response:start:${serviceName}`).publish(obj)
@@ -141,7 +157,7 @@ function wrapCb (cb, serviceName, request, ar) {
         throw e
       }
     })
-  }
+  })
 }
 
 function getMessage (request, error, result) {
@@ -155,6 +171,8 @@ function getMessage (request, error, result) {
 }
 
 function getChannelSuffix (name) {
+  // some resource identifiers have spaces between ex: bedrock runtime
+  name = String(name).replaceAll(' ', '')
   return [
     'cloudwatchlogs',
     'dynamodb',
@@ -167,7 +185,8 @@ function getChannelSuffix (name) {
     'sns',
     'sqs',
     'states',
-    'stepfunctions'
+    'stepfunctions',
+    'bedrockruntime'
   ].includes(name)
     ? name
     : 'default'

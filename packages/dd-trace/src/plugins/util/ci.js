@@ -1,3 +1,4 @@
+const { readFileSync } = require('fs')
 const {
   GIT_BRANCH,
   GIT_COMMIT_SHA,
@@ -6,6 +7,9 @@ const {
   GIT_COMMIT_AUTHOR_NAME,
   GIT_COMMIT_MESSAGE,
   GIT_COMMIT_AUTHOR_DATE,
+  GIT_COMMIT_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH,
   GIT_REPOSITORY_URL,
   CI_PIPELINE_ID,
   CI_PIPELINE_NAME,
@@ -75,6 +79,13 @@ function resolveTilde (filePath) {
     return filePath.replace('~', process.env.HOME)
   }
   return filePath
+}
+
+function getGitHubEventPayload () {
+  if (!process.env.GITHUB_EVENT_PATH) {
+    return
+  }
+  return JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'))
 }
 
 module.exports = {
@@ -241,7 +252,8 @@ module.exports = {
         GITHUB_REPOSITORY,
         GITHUB_SERVER_URL,
         GITHUB_RUN_ATTEMPT,
-        GITHUB_JOB
+        GITHUB_JOB,
+        GITHUB_BASE_REF
       } = env
 
       const repositoryURL = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git`
@@ -276,6 +288,16 @@ module.exports = {
           GITHUB_RUN_ID,
           GITHUB_RUN_ATTEMPT
         })
+      }
+      if (GITHUB_BASE_REF) { // `pull_request` or `pull_request_target` event
+        tags[GIT_PULL_REQUEST_BASE_BRANCH] = GITHUB_BASE_REF
+        try {
+          const eventContent = getGitHubEventPayload()
+          tags[GIT_PULL_REQUEST_BASE_BRANCH_SHA] = eventContent.pull_request.base.sha
+          tags[GIT_COMMIT_HEAD_SHA] = eventContent.pull_request.head.sha
+        } catch (e) {
+          // ignore malformed event content
+        }
       }
     }
 
@@ -603,6 +625,38 @@ module.exports = {
           DD_PIPELINE_EXECUTION_ID,
           DD_ACTION_EXECUTION_ID
         })
+      }
+    }
+
+    if (env.DRONE && env.CI) {
+      const {
+        DRONE_BUILD_NUMBER,
+        DRONE_BUILD_LINK,
+        DRONE_STEP_NAME,
+        DRONE_STAGE_NAME,
+        DRONE_WORKSPACE,
+        DRONE_GIT_HTTP_URL,
+        DRONE_COMMIT_SHA,
+        DRONE_BRANCH,
+        DRONE_TAG,
+        DRONE_COMMIT_AUTHOR_NAME,
+        DRONE_COMMIT_AUTHOR_EMAIL,
+        DRONE_COMMIT_MESSAGE
+      } = env
+      tags = {
+        [CI_PROVIDER_NAME]: 'drone',
+        [CI_PIPELINE_NUMBER]: DRONE_BUILD_NUMBER,
+        [CI_PIPELINE_URL]: DRONE_BUILD_LINK,
+        [CI_JOB_NAME]: DRONE_STEP_NAME,
+        [CI_STAGE_NAME]: DRONE_STAGE_NAME,
+        [CI_WORKSPACE_PATH]: DRONE_WORKSPACE,
+        [GIT_REPOSITORY_URL]: DRONE_GIT_HTTP_URL,
+        [GIT_COMMIT_SHA]: DRONE_COMMIT_SHA,
+        [GIT_BRANCH]: DRONE_BRANCH,
+        [GIT_TAG]: DRONE_TAG,
+        [GIT_COMMIT_AUTHOR_NAME]: DRONE_COMMIT_AUTHOR_NAME,
+        [GIT_COMMIT_AUTHOR_EMAIL]: DRONE_COMMIT_AUTHOR_EMAIL,
+        [GIT_COMMIT_MESSAGE]: DRONE_COMMIT_MESSAGE
       }
     }
 

@@ -6,6 +6,19 @@ function insertStr (str) {
   return `pre_${str}_suf`
 }
 
+function templateLiteralEndingWithNumberParams (str) {
+  const num1 = 1
+  const num2 = 2
+  return `${str}Literal${num1}${num2}`
+}
+
+function templateLiteralWithTaintedAtTheEnd (str) {
+  const num1 = 1
+  const num2 = 2
+  const hello = 'world'
+  return `Literal${num1}${num2}-${hello}-${str}`
+}
+
 function appendStr (str) {
   let pre = 'pre_'
   pre += str
@@ -101,6 +114,8 @@ module.exports = {
   sliceStr,
   substrStr,
   substringStr,
+  templateLiteralEndingWithNumberParams,
+  templateLiteralWithTaintedAtTheEnd,
   toLowerCaseStr,
   toUpperCaseStr,
   trimEndStr,

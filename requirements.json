@@ -1,0 +1,94 @@
+{
+  "$schema": "https://raw.githubusercontent.com/DataDog/auto_inject/refs/heads/main/preload_go/cmd/library_requirements_tester/testdata/requirements_schema.json",
+  "version": 1,
+  "native_deps": {
+    "glibc": [{
+      "arch": "arm",
+      "supported": true,
+      "description": "From ubuntu xenial (16.04)",
+      "min": "2.23"
+    },{
+      "arch": "arm64",
+      "supported": true,
+      "description": "From centOS 7",
+      "min": "2.17"
+    },{
+      "arch": "x64",
+      "supported": true,
+      "description": "From centOS 7",
+      "min": "2.17"
+    },{
+      "arch": "x86",
+      "supported": true,
+      "description": "From debian jessie (8)",
+      "min": "2.19"
+    }],
+    "musl": [{
+      "arch": "arm",
+      "supported": true,
+      "description": "From alpine 3.13"
+    },{
+      "arch": "arm64",
+      "supported": true,
+      "description": "From alpine 3.13"
+    },{
+      "arch": "x64",
+      "supported": true,
+      "description": "From alpine 3.13"
+    },{
+      "arch": "x86",
+      "supported": true,
+      "description": "From alpine 3.13"
+    }]
+  },
+  "deny": [
+    {
+      "id": "npm",
+      "description": "Ignore the npm CLI",
+      "os": null,
+      "cmds": [],
+      "args": [{ "args":  ["*/npm-cli.js"], "position": 1}],
+      "envars": null
+    },
+    {
+      "id": "npm_symlink",
+      "description": "Ignore the npm CLI (symlink)",
+      "os": null,
+      "cmds": [],
+      "args": [{ "args":  ["*/npm"], "position": 1}],
+      "envars": null
+    },
+    {
+      "id": "yarn",
+      "description": "Ignore the yarn CLI",
+      "os": null,
+      "cmds": [],
+      "args": [{ "args":  ["*/yarn.js"], "position": 1}],
+      "envars": null
+    },
+    {
+      "id": "yarn_symlink",
+      "description": "Ignore the yarn CLI (symlink)",
+      "os": null,
+      "cmds": [],
+      "args": [{ "args":  ["*/yarn"], "position": 1}],
+      "envars": null
+    },
+    {
+      "id": "pnpm",
+      "description": "Ignore the pnpm CLI",
+      "os": null,
+      "cmds": [],
+      "args": [{ "args":  ["*/pnpm.cjs"], "position": 1}],
+      "envars": null
+    },
+    {
+      "id": "pnpm_symlink",
+      "description": "Ignore the pnpm CLI (symlink)",
+      "os": null,
+      "cmds": [],
+      "args": [{ "args":  ["*/pnpm"], "position": 1}],
+      "envars": null
+    }
+  ]
+}

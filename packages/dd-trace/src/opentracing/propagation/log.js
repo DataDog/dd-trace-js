@@ -14,8 +14,9 @@ class LogPropagator {
     carrier.dd = {}
 
     if (spanContext) {
-      if (this._config.traceId128BitLoggingEnabled && spanContext._trace.tags['_dd.p.tid']) {
-        carrier.dd.trace_id = spanContext._trace.tags['_dd.p.tid'] + spanContext._traceId.toString(16)
+      if (this._config.traceId128BitGenerationEnabled &&
+        this._config.traceId128BitLoggingEnabled && spanContext._trace.tags['_dd.p.tid']) {
+        carrier.dd.trace_id = spanContext.toTraceId(true)
       } else {
         carrier.dd.trace_id = spanContext.toTraceId()
       }

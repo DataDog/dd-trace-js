@@ -5,7 +5,7 @@ const { PORT, HOSTNAME } = process.env
 const { createServer } = require('http')
 // eslint-disable-next-line n/no-deprecated-api
 const { parse } = require('url')
-const next = require('next') // eslint-disable-line import/no-extraneous-dependencies
+const next = require('next')
 
 const app = next({ dir: __dirname, dev: false, quiet: true, hostname: HOSTNAME, port: PORT })
 const handle = app.getRequestHandler()

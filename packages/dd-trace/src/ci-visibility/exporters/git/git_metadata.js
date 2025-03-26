@@ -5,13 +5,15 @@ const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
 
 const log = require('../../../log')
+const { isFalse } = require('../../../util')
 const {
   getLatestCommits,
   getRepositoryUrl,
   generatePackFilesForCommits,
   getCommitsRevList,
   isShallowRepository,
-  unshallowRepository
+  unshallowRepository,
+  isGitAvailable
 } = require('../../../plugins/util/git')
 
 const {
@@ -24,8 +26,7 @@ const {
   TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES,
   TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_MS,
   TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_ERRORS,
-  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_BYTES,
-  getErrorTypeFromStatusCode
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_BYTES
 } = require('../../../ci-visibility/telemetry')
 
 const isValidSha1 = (sha) => /^[0-9a-f]{40}$/.test(sha)
@@ -92,8 +93,7 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, ev
   request(localCommitData, options, (err, response, statusCode) => {
     distributionMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_MS, {}, Date.now() - startTime)
     if (err) {
-      const errorType = getErrorTypeFromStatusCode(statusCode)
-      incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS, { errorType })
+      incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS, { statusCode })
       const error = new Error(`Error fetching commits to exclude: ${err.message}`)
       return callback(error)
     }
@@ -178,8 +178,7 @@ function uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, re
   request(form, options, (err, _, statusCode) => {
     distributionMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_MS, {}, Date.now() - startTime)
     if (err) {
-      const errorType = getErrorTypeFromStatusCode(statusCode)
-      incrementCountMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_ERRORS, { errorType })
+      incrementCountMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_ERRORS, { statusCode })
       const error = new Error(`Could not upload packfiles: status code ${statusCode}: ${err.message}`)
       return callback(error, uploadSize)
     }
@@ -245,6 +244,9 @@ function generateAndUploadPackFiles ({
  * This function uploads git metadata to CI Visibility's backend.
 */
 function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback) {
+  if (!isGitAvailable()) {
+    return callback(new Error('Git is not available'))
+  }
   let repositoryUrl = configRepositoryUrl
   if (!repositoryUrl) {
     repositoryUrl = getRepositoryUrl()
@@ -283,7 +285,9 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     }
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
-    unshallowRepository()
+    if (!isFalse(process.env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED)) {
+      unshallowRepository()
+    }
 
     // The latest commits change after unshallowing
     latestCommits = getLatestCommits()

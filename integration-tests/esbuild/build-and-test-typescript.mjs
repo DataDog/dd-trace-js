@@ -18,8 +18,8 @@ await esbuild.build({
   external: [
     'graphql/language/visitor',
     'graphql/language/printer',
-    'graphql/utilities',
-  ],
+    'graphql/utilities'
+  ]
 })
 
 console.log('ok') // eslint-disable-line no-console

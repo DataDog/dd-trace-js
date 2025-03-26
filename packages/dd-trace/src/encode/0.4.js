@@ -1,26 +1,31 @@
 'use strict'
 
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
-const Chunk = require('./chunk')
+const { Chunk, MsgpackEncoder } = require('../msgpack')
 const log = require('../log')
 const { isTrue } = require('../util')
 const coalesce = require('koalas')
+const { memoize } = require('../log/utils')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 
-const float64Array = new Float64Array(1)
-const uInt8Float64Array = new Uint8Array(float64Array.buffer)
-
-float64Array[0] = -1
-
-const bigEndian = uInt8Float64Array[7] === 0
-
-function formatSpan (span) {
-  return normalizeSpan(truncateSpan(span, false))
+function formatSpan (span, config) {
+  span = normalizeSpan(truncateSpan(span, false))
+  if (span.span_events) {
+    // ensure span events are encoded as tags if agent doesn't support native top level span events
+    if (!config?.trace?.nativeSpanEvents) {
+      span.meta.events = JSON.stringify(span.span_events)
+      delete span.span_events
+    } else {
+      formatSpanEvents(span)
+    }
+  }
+  return span
 }
 
 class AgentEncoder {
   constructor (writer, limit = SOFT_LIMIT) {
+    this._msgpack = new MsgpackEncoder()
     this._limit = limit
     this._traceBytes = new Chunk()
     this._stringBytes = new Chunk()
@@ -30,6 +35,7 @@ class AgentEncoder {
       process.env.DD_TRACE_ENCODING_DEBUG,
       false
     ))
+    this._config = this._writer?._config
   }
 
   count () {
@@ -80,16 +86,18 @@ class AgentEncoder {
     this._encodeArrayPrefix(bytes, trace)
 
     for (let span of trace) {
-      span = formatSpan(span)
+      span = formatSpan(span, this._config)
       bytes.reserve(1)
 
-      if (span.type && span.meta_struct) {
-        bytes.buffer[bytes.length++] = 0x8d
-      } else if (span.type || span.meta_struct) {
-        bytes.buffer[bytes.length++] = 0x8c
-      } else {
-        bytes.buffer[bytes.length++] = 0x8b
-      }
+      // this is the original size of the fixed map for span attributes that always exist
+      let mapSize = 11
+
+      // increment the payload map size depending on if some optional fields exist
+      if (span.type) mapSize += 1
+      if (span.meta_struct) mapSize += 1
+      if (span.span_events) mapSize += 1
+
+      bytes.buffer[bytes.length - 1] = 0x80 + mapSize
 
       if (span.type) {
         this._encodeString(bytes, 'type')
@@ -118,6 +126,10 @@ class AgentEncoder {
       this._encodeMap(bytes, span.meta)
       this._encodeString(bytes, 'metrics')
       this._encodeMap(bytes, span.metrics)
+      if (span.span_events) {
+        this._encodeString(bytes, 'span_events')
+        this._encodeObjectAsArray(bytes, span.span_events, new Set())
+      }
       if (span.meta_struct) {
         this._encodeString(bytes, 'meta_struct')
         this._encodeMetaStruct(bytes, span.meta_struct)
@@ -135,43 +147,31 @@ class AgentEncoder {
     this._cacheString('')
   }
 
+  _encodeBuffer (bytes, buffer) {
+    this._msgpack.encodeBin(bytes, buffer)
+  }
+
+  _encodeBool (bytes, value) {
+    this._msgpack.encodeBoolean(bytes, value)
+  }
+
   _encodeArrayPrefix (bytes, value) {
-    const length = value.length
-    const offset = bytes.length
-
-    bytes.reserve(5)
-    bytes.length += 5
-
-    bytes.buffer[offset] = 0xdd
-    bytes.buffer[offset + 1] = length >> 24
-    bytes.buffer[offset + 2] = length >> 16
-    bytes.buffer[offset + 3] = length >> 8
-    bytes.buffer[offset + 4] = length
+    this._msgpack.encodeArrayPrefix(bytes, value)
   }
 
   _encodeMapPrefix (bytes, keysLength) {
-    const offset = bytes.length
-
-    bytes.reserve(5)
-    bytes.length += 5
-    bytes.buffer[offset] = 0xdf
-    bytes.buffer[offset + 1] = keysLength >> 24
-    bytes.buffer[offset + 2] = keysLength >> 16
-    bytes.buffer[offset + 3] = keysLength >> 8
-    bytes.buffer[offset + 4] = keysLength
+    this._msgpack.encodeMapPrefix(bytes, keysLength)
   }
 
   _encodeByte (bytes, value) {
-    bytes.reserve(1)
-
-    bytes.buffer[bytes.length++] = value
+    this._msgpack.encodeByte(bytes, value)
   }
 
+  // TODO: Use BigInt instead.
   _encodeId (bytes, id) {
     const offset = bytes.length
 
     bytes.reserve(9)
-    bytes.length += 9
 
     id = id.toArray()
 
@@ -186,36 +186,16 @@ class AgentEncoder {
     bytes.buffer[offset + 8] = id[7]
   }
 
+  _encodeNumber (bytes, value) {
+    this._msgpack.encodeNumber(bytes, value)
+  }
+
   _encodeInteger (bytes, value) {
-    const offset = bytes.length
-
-    bytes.reserve(5)
-    bytes.length += 5
-
-    bytes.buffer[offset] = 0xce
-    bytes.buffer[offset + 1] = value >> 24
-    bytes.buffer[offset + 2] = value >> 16
-    bytes.buffer[offset + 3] = value >> 8
-    bytes.buffer[offset + 4] = value
+    this._msgpack.encodeInteger(bytes, value)
   }
 
   _encodeLong (bytes, value) {
-    const offset = bytes.length
-    const hi = (value / Math.pow(2, 32)) >> 0
-    const lo = value >>> 0
-
-    bytes.reserve(9)
-    bytes.length += 9
-
-    bytes.buffer[offset] = 0xcf
-    bytes.buffer[offset + 1] = hi >> 24
-    bytes.buffer[offset + 2] = hi >> 16
-    bytes.buffer[offset + 3] = hi >> 8
-    bytes.buffer[offset + 4] = hi
-    bytes.buffer[offset + 5] = lo >> 24
-    bytes.buffer[offset + 6] = lo >> 16
-    bytes.buffer[offset + 7] = lo >> 8
-    bytes.buffer[offset + 8] = lo
+    this._msgpack.encodeLong(bytes, value)
   }
 
   _encodeMap (bytes, value) {
@@ -238,6 +218,9 @@ class AgentEncoder {
       case 'number':
         this._encodeFloat(bytes, value)
         break
+      case 'boolean':
+        this._encodeBool(bytes, value)
+        break
       default:
         // should not happen
     }
@@ -252,23 +235,7 @@ class AgentEncoder {
   }
 
   _encodeFloat (bytes, value) {
-    float64Array[0] = value
-
-    const offset = bytes.length
-    bytes.reserve(9)
-    bytes.length += 9
-
-    bytes.buffer[offset] = 0xcb
-
-    if (bigEndian) {
-      for (let i = 0; i <= 7; i++) {
-        bytes.buffer[offset + i + 1] = uInt8Float64Array[i]
-      }
-    } else {
-      for (let i = 7; i >= 0; i--) {
-        bytes.buffer[bytes.length - i - 1] = uInt8Float64Array[i]
-      }
-    }
+    this._msgpack.encodeFloat(bytes, value)
   }
 
   _encodeMetaStruct (bytes, value) {
@@ -294,7 +261,6 @@ class AgentEncoder {
     const offset = bytes.length
 
     bytes.reserve(prefixLength)
-    bytes.length += prefixLength
 
     this._encodeObject(bytes, value)
 
@@ -313,7 +279,7 @@ class AgentEncoder {
       this._encodeObjectAsArray(bytes, value, circularReferencesDetector)
     } else if (value !== null && typeof value === 'object') {
       this._encodeObjectAsMap(bytes, value, circularReferencesDetector)
-    } else if (typeof value === 'string' || typeof value === 'number') {
+    } else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
       this._encodeValue(bytes, value)
     }
   }
@@ -323,7 +289,7 @@ class AgentEncoder {
     const validKeys = keys.filter(key => {
       const v = value[key]
       return typeof v === 'string' ||
-        typeof v === 'number' ||
+        typeof v === 'number' || typeof v === 'boolean' ||
         (v !== null && typeof v === 'object' && !circularReferencesDetector.has(v))
     })
 
@@ -371,6 +337,81 @@ class AgentEncoder {
     offset += this._traceBytes.buffer.copy(buffer, offset, 0, this._traceBytes.length)
 
     return offset
+  }
+}
+
+const memoizedLogDebug = memoize((key, message) => {
+  log.debug(message)
+  // return something to store in memoize cache
+  return true
+})
+
+function formatSpanEvents (span) {
+  for (const spanEvent of span.span_events) {
+    if (spanEvent.attributes) {
+      for (const [key, value] of Object.entries(spanEvent.attributes)) {
+        const newValue = convertSpanEventAttributeValues(key, value)
+        if (newValue !== undefined) {
+          spanEvent.attributes[key] = newValue
+        } else {
+          delete spanEvent.attributes[key] // delete from attributes if undefined
+        }
+      }
+      if (Object.entries(spanEvent.attributes).length === 0) {
+        delete spanEvent.attributes
+      }
+    }
+  }
+}
+
+function convertSpanEventAttributeValues (key, value, depth = 0) {
+  if (typeof value === 'string') {
+    return {
+      type: 0,
+      string_value: value
+    }
+  } else if (typeof value === 'boolean') {
+    return {
+      type: 1,
+      bool_value: value
+    }
+  } else if (Number.isInteger(value)) {
+    return {
+      type: 2,
+      int_value: value
+    }
+  } else if (typeof value === 'number') {
+    return {
+      type: 3,
+      double_value: value
+    }
+  } else if (Array.isArray(value)) {
+    if (depth === 0) {
+      const convertedArray = value
+        .map((val) => convertSpanEventAttributeValues(key, val, 1))
+        .filter((convertedVal) => convertedVal !== undefined)
+
+      // Only include array_value if there are valid elements
+      if (convertedArray.length > 0) {
+        return {
+          type: 4,
+          array_value: convertedArray
+        }
+      } else {
+        // If all elements were unsupported, return undefined
+        return undefined
+      }
+    } else {
+      memoizedLogDebug(key, 'Encountered nested array data type for span event v0.4 encoding. ' +
+        `Skipping encoding key: ${key}: with value: ${typeof value}.`
+      )
+      return undefined
+    }
+  } else {
+    memoizedLogDebug(key, 'Encountered unsupported data type for span event v0.4 encoding, key: ' +
+       `${key}: with value: ${typeof value}. Skipping encoding of pair.`
+    )
+    return undefined
   }
 }
 

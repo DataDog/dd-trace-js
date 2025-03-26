@@ -28,9 +28,6 @@ loadChannel.subscribe(({ name }) => {
   maybeEnable(plugins[name])
 })
 
-// Globals
-maybeEnable(require('../../datadog-plugin-fetch/src'))
-
 function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
   if (!pluginClasses[Plugin.id]) {
@@ -136,10 +133,26 @@ module.exports = class PluginManager {
       dbmPropagationMode,
       dsmEnabled,
       clientIpEnabled,
-      memcachedCommandEnabled
+      memcachedCommandEnabled,
+      ciVisibilityTestSessionName,
+      ciVisAgentlessLogSubmissionEnabled,
+      isTestDynamicInstrumentationEnabled,
+      isServiceUserProvided,
+      middlewareTracingEnabled
     } = this._tracerConfig
 
-    const sharedConfig = {}
+    const sharedConfig = {
+      dbmPropagationMode,
+      dsmEnabled,
+      memcachedCommandEnabled,
+      site,
+      url,
+      headers: headerTags || [],
+      ciVisibilityTestSessionName,
+      ciVisAgentlessLogSubmissionEnabled,
+      isTestDynamicInstrumentationEnabled,
+      isServiceUserProvided
+    }
 
     if (logInjection !== undefined) {
       sharedConfig.logInjection = logInjection
@@ -149,10 +162,6 @@ module.exports = class PluginManager {
       sharedConfig.queryStringObfuscation = queryStringObfuscation
     }
 
-    sharedConfig.dbmPropagationMode = dbmPropagationMode
-    sharedConfig.dsmEnabled = dsmEnabled
-    sharedConfig.memcachedCommandEnabled = memcachedCommandEnabled
-
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]
     }
@@ -161,9 +170,12 @@ module.exports = class PluginManager {
       sharedConfig.clientIpEnabled = clientIpEnabled
     }
 
-    sharedConfig.site = site
-    sharedConfig.url = url
-    sharedConfig.headers = headerTags || []
+    // For the global setting, we use the name `middlewareTracingEnabled`, but
+    // for the plugin-specific setting, we use `middleware`. They mean the same
+    // to an individual plugin, so we normalize them here.
+    if (middlewareTracingEnabled !== undefined) {
+      sharedConfig.middleware = middlewareTracingEnabled
+    }
 
     return sharedConfig
   }

@@ -2,8 +2,7 @@
 
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { storage } = require('../../datadog-core')
-const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams/processor')
-const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
+const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams')
 
 class RheaConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'rhea' }
@@ -12,7 +11,7 @@ class RheaConsumerPlugin extends ConsumerPlugin {
     super(...args)
 
     this.addTraceSub('dispatch', ({ state }) => {
-      const span = storage.getStore().span
+      const span = storage('legacy').getStore().span
       span.setTag('amqp.delivery.state', state)
     })
   }
@@ -34,8 +33,7 @@ class RheaConsumerPlugin extends ConsumerPlugin {
 
     if (
       this.config.dsmEnabled &&
-      msgObj?.message?.delivery_annotations &&
-      DsmPathwayCodec.contextExists(msgObj.message.delivery_annotations)
+      msgObj?.message?.delivery_annotations
     ) {
       const payloadSize = getAmqpMessageSize(
         { headers: msgObj.message.delivery_annotations, content: msgObj.message.body }

@@ -53,7 +53,7 @@ describe('TaintTracking lodash', () => {
           describe(`with command: '${command}'`, () => {
             testThatRequestHasVulnerability(function () {
               const _ = require('../../../../../../versions/lodash').get()
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
               const iastContext = iastContextFunctions.getIastContext(store)
               const commandTainted = newTaintedString(iastContext, command, 'param', 'Request')
 
@@ -82,7 +82,7 @@ describe('TaintTracking lodash', () => {
   describe('lodash method with no taint tracking', () => {
     it('should return the original result', () => {
       const _ = require('../../../../../../versions/lodash').get()
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const iastContext = iastContextFunctions.getIastContext(store)
       const taintedValue = newTaintedString(iastContext, 'tainted', 'param', 'Request')
 

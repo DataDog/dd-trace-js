@@ -40,7 +40,7 @@ module.exports = class LogPlugin extends Plugin {
     super(...args)
 
     this.addSub(`apm:${this.constructor.id}:log`, (arg) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = store && store.span
 
       // NOTE: This needs to run whether or not there is a span
@@ -54,7 +54,7 @@ module.exports = class LogPlugin extends Plugin {
   configure (config) {
     return super.configure({
       ...config,
-      enabled: config.enabled && config.logInjection
+      enabled: config.enabled && (config.logInjection || config.ciVisAgentlessLogSubmissionEnabled)
     })
   }
 }

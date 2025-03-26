@@ -11,7 +11,7 @@ const skipCh = channel('apm:mariadb:pool:skip')
 const unskipCh = channel('apm:mariadb:pool:unskip')
 
 function wrapCommandStart (start, callbackResource) {
-  return function () {
+  return shimmer.wrapFunction(start, start => function () {
     if (!startCh.hasSubscribers) return start.apply(this, arguments)
 
     const resolve = callbackResource.bind(this.resolve)
@@ -44,7 +44,7 @@ function wrapCommandStart (start, callbackResource) {
       startCh.publish({ sql: this.sql, conf: this.opts })
       return start.apply(this, arguments)
     })
-  }
+  })
 }
 
 function wrapCommand (Command) {
@@ -98,7 +98,7 @@ function createWrapQueryCallback (options) {
         arguments.length = arguments.length + 1
       }
 
-      arguments[arguments.length - 1] = asyncResource.bind(function (err) {
+      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (err) {
         if (err) {
           errorCh.publish(err)
         }
@@ -108,7 +108,7 @@ function createWrapQueryCallback (options) {
         if (typeof cb === 'function') {
           return callbackResource.runInAsyncScope(() => cb.apply(this, arguments))
         }
-      })
+      }))
 
       return asyncResource.runInAsyncScope(() => {
         startCh.publish({ sql, conf: options })
@@ -119,7 +119,7 @@ function createWrapQueryCallback (options) {
   }
 }
 
-function wrapConnection (Connection, promiseMethod) {
+function wrapConnection (promiseMethod, Connection) {
   return function (options) {
     Connection.apply(this, arguments)
 
@@ -170,13 +170,13 @@ addHook({ name, file: 'lib/pool.js', versions: ['>=3'] }, (Pool) => {
 })
 
 addHook({ name, file: 'lib/connection.js', versions: ['>=2.5.2 <3'] }, (Connection) => {
-  return shimmer.wrap(Connection, wrapConnection(Connection, '_queryPromise'))
+  return shimmer.wrapFunction(Connection, wrapConnection.bind(null, '_queryPromise'))
 })
 
 addHook({ name, file: 'lib/connection.js', versions: ['>=2.0.4 <=2.5.1'] }, (Connection) => {
-  return shimmer.wrap(Connection, wrapConnection(Connection, 'query'))
+  return shimmer.wrapFunction(Connection, wrapConnection.bind(null, 'query'))
 })
 
 addHook({ name, file: 'lib/pool-base.js', versions: ['>=2.0.4 <3'] }, (PoolBase) => {
-  return shimmer.wrap(PoolBase, wrapPoolBase(PoolBase))
+  return shimmer.wrapFunction(PoolBase, wrapPoolBase)
 })
