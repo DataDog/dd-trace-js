@@ -35,21 +35,22 @@ function addRaspRequestMetrics (store, { duration, durationExt, wafTimeout, erro
 function trackRaspMetrics (store, metrics, raspRule) {
   const versionsTags = getVersionsTags(metrics.wafVersion, metrics.rulesVersion)
   const tags = { rule_type: raspRule.type, ...versionsTags }
+  const telemetryMetrics = store[DD_TELEMETRY_REQUEST_METRICS]
 
   if (raspRule.variant) {
     tags.rule_variant = raspRule.variant
   }
 
   if (metrics.wafVersion) {
-    store[DD_TELEMETRY_REQUEST_METRICS].wafVersion = metrics.wafVersion
+    telemetryMetrics.wafVersion = metrics.wafVersion
   }
 
   if (metrics.rulesVersion) {
-    store[DD_TELEMETRY_REQUEST_METRICS].rulesVersion = metrics.rulesVersion
+    telemetryMetrics.rulesVersion = metrics.rulesVersion
   }
 
   if (metrics.ruleTriggered) {
-    store[DD_TELEMETRY_REQUEST_METRICS].ruleTriggered = true
+    telemetryMetrics.ruleTriggered = true
   }
 
   appsecMetrics.count('rasp.rule.eval', tags).inc(1)
@@ -57,12 +58,12 @@ function trackRaspMetrics (store, metrics, raspRule) {
   if (metrics.duration) {
     appsecMetrics.distribution('rasp.rule.duration', tags).track(metrics.duration)
 
-    const raspDuration = store[DD_TELEMETRY_REQUEST_METRICS].raspDuration
+    const raspDuration = telemetryMetrics.raspDuration
     appsecMetrics.distribution('rasp.duration', versionsTags).track(raspDuration)
   }
 
   if (metrics.durationExt) {
-    const raspDurationExt = store[DD_TELEMETRY_REQUEST_METRICS].raspDurationExt
+    const raspDurationExt = telemetryMetrics.raspDurationExt
     appsecMetrics.distribution('rasp.duration_ext', versionsTags).track(raspDurationExt)
   }
 
@@ -78,11 +79,12 @@ function trackRaspMetrics (store, metrics, raspRule) {
 }
 
 function trackRaspRuleMatch (store, raspRule, blockTriggered, blocked) {
-  if (!store[DD_TELEMETRY_REQUEST_METRICS].ruleTriggered) return
+  const telemetryMetrics = store[DD_TELEMETRY_REQUEST_METRICS]
+  if (!telemetryMetrics.ruleTriggered) return
 
   const tags = {
-    waf_version: store[DD_TELEMETRY_REQUEST_METRICS].wafVersion,
-    event_rules_version: store[DD_TELEMETRY_REQUEST_METRICS].rulesVersion,
+    waf_version: telemetryMetrics.wafVersion,
+    event_rules_version: telemetryMetrics.rulesVersion,
     rule_type: raspRule.type,
     block: getRuleMatchBlockingStatus(blockTriggered, blocked)
   }
@@ -92,6 +94,8 @@ function trackRaspRuleMatch (store, raspRule, blockTriggered, blocked) {
   }
 
   appsecMetrics.count('rasp.rule.match', tags).inc(1)
+
+  telemetryMetrics.ruleTriggered = null
 }
 
 function trackRaspRuleSkipped (raspRule, reason) {
