@@ -9,6 +9,7 @@ const tags = require('../../../../../ext/tags')
 const { channel } = require('dc-polyfill')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
+const { trackUser } = require('../../appsec/user_tracking')
 
 const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
@@ -297,7 +298,12 @@ class TextMapPropagator {
   }
 
   _extractSpanContext (carrier) {
+    if(this._config.propagationBehaviorExtract === 'ignore'){
+      return null
+    }
+    
     let context = null
+    let style = ''
     for (const extractor of this._config.tracePropagationStyle.extract) {
       let extractedContext = null
       switch (extractor) {
@@ -331,9 +337,9 @@ class TextMapPropagator {
 
       if (context === null) {
         context = extractedContext
+        style = extractor
         if (this._config.tracePropagationExtractFirst) {
-          this._extractBaggageItems(carrier, context)
-          return context
+          break;
         }
       } else {
         // If extractor is tracecontext, add tracecontext specific information to the context
@@ -353,6 +359,14 @@ class TextMapPropagator {
     }
 
     this._extractBaggageItems(carrier, context)
+
+    if(this._config.propagationBehaviorExtract === 'restart'){
+      return new DatadogSpanContext({
+        traceId: id(),
+        spanId: id(),
+        isRemote: true,
+        links: {context: context, attributes: {reason: 'propagation_behavior_extract', context_headers: style}}})
+    }
 
     return context || this._extractSqsdContext(carrier)
   }
