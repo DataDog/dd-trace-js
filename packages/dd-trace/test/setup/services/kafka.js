@@ -1,17 +1,23 @@
 'use strict'
 
 const RetryOperation = require('../operation')
-let Kafka
+let kafka
 try {
-  Kafka = require('../../../../../versions/kafkajs').get().Kafka
+  const Kafka = require('../../../../../versions/kafkajs').get().Kafka
+  kafka = new Kafka({
+    clientId: 'setup-client',
+    brokers: ['127.0.0.1:9092']
+  })
 } catch (e) {
-  Kafka = require('../../../../../versions/@confluentinc/kafka-javascript').get().KafkaJS.Kafka
+  const Kafka = require('../../../../../versions/@confluentinc/kafka-javascript').get().KafkaJS.Kafka
+  kafka = new Kafka({
+    kafkaJS: {
+      clientId: 'setup-client',
+      brokers: ['127.0.0.1:9092']
+    }
+  })
 }
 
-const kafka = new Kafka({
-  clientId: 'setup-client',
-  brokers: ['127.0.0.1:9092']
-})
 const admin = kafka.admin()
 const producer = kafka.producer()
 const consumer = kafka.consumer({ groupId: 'test-group' })
