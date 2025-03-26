@@ -1,28 +1,44 @@
 'use strict'
 
 const RetryOperation = require('../operation')
+
 let kafka
 let consumer
+let admin
+let adminConnect
+let subscribe
+
 try {
   const Kafka = require('../../../../../versions/kafkajs').get().Kafka
   kafka = new Kafka({
     clientId: 'setup-client',
     brokers: ['127.0.0.1:9092']
   })
-  consumer = kafka.consumer({ groupId: 'test-group' })
+  consumer = kafka.consumer(
+    { groupId: 'test-group' }
+  )
+  subscribe = async (topic) => {
+    await consumer.subscribe({ topic, fromBeginning: true })
+  }
+  admin = kafka.admin()
+  adminConnect = async () => { }
 } catch (e) {
   const Kafka = require('../../../../../versions/@confluentinc/kafka-javascript').get().KafkaJS.Kafka
   kafka = new Kafka({
     kafkaJS: {
       clientId: 'setup-client',
-      brokers: ['127.0.0.1:9092'],
-      groupId: 'test-group'
+      brokers: ['127.0.0.1:9092']
     }
   })
-  consumer = kafka.consumer()
+  consumer = kafka.consumer({ kafkaJS: { groupId: 'test-group' } })
+  subscribe = async (topic) => {
+    await consumer.subscribe({ topic })
+  }
+
+  admin = kafka.admin()
+  adminConnect = async () => { await admin.connect() }
 }
 
-const admin = kafka.admin()
 const producer = kafka.producer()
 const topic = 'test-topic'
 const messages = [{ key: 'setup', value: 'test' }]
@@ -32,6 +48,7 @@ function waitForKafka () {
     const operation = new RetryOperation('kafka')
     operation.attempt(async currentAttempt => {
       try {
+        await adminConnect()
         await admin.listTopics()
         try {
           await admin.createTopics({
@@ -48,7 +65,7 @@ function waitForKafka () {
         }
 
         await consumer.connect()
-        await consumer.subscribe({ topic, fromBeginning: true })
+        await subscribe(topic)
         await consumer.run({
           eachMessage: () => {
             setTimeout(async () => {
