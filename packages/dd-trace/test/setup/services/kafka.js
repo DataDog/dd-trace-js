@@ -2,25 +2,28 @@
 
 const RetryOperation = require('../operation')
 let kafka
+let consumer
 try {
   const Kafka = require('../../../../../versions/kafkajs').get().Kafka
   kafka = new Kafka({
     clientId: 'setup-client',
     brokers: ['127.0.0.1:9092']
   })
+  consumer = kafka.consumer({ groupId: 'test-group' })
 } catch (e) {
   const Kafka = require('../../../../../versions/@confluentinc/kafka-javascript').get().KafkaJS.Kafka
   kafka = new Kafka({
     kafkaJS: {
       clientId: 'setup-client',
-      brokers: ['127.0.0.1:9092']
+      brokers: ['127.0.0.1:9092'],
+      groupId: 'test-group'
     }
   })
+  consumer = kafka.consumer()
 }
 
 const admin = kafka.admin()
 const producer = kafka.producer()
-const consumer = kafka.consumer({ groupId: 'test-group' })
 const topic = 'test-topic'
 const messages = [{ key: 'setup', value: 'test' }]
 
