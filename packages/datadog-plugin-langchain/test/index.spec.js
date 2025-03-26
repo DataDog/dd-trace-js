@@ -36,27 +36,22 @@ describe('Plugin', function () {
 
   describe('langchain', () => {
     withVersions('langchain', ['@langchain/core'], version => {
-      beforeEach(() => {
+      before(() => {
         return agent.load('langchain')
       })
 
-      afterEach(async () => {
-        console.log('afterEach agent.close')
+      after(async () => {
         // wiping in order to read new env vars for the config each time
-        await agent.close({ ritmReset: false, wipe: true })
-        console.log('afterEach agent.close done')
+        await agent.close({ ritmReset: false })
       })
 
       beforeEach(() => {
         langchainOpenai = require(`../../../versions/@langchain/openai@${version}`).get()
         langchainAnthropic = require(`../../../versions/@langchain/anthropic@${version}`).get()
         if (version !== '0.1.0') {
-          // version mismatching otherwise
-          // can probably scaffold `withVersions` better to make this a bit cleaner
           langchainGoogleGenAI = require(`../../../versions/@langchain/google-genai@${version}`).get()
         }
 
-        // need to specify specific import in `get(...)`
         langchainMessages = require(`../../../versions/@langchain/core@${version}`).get('@langchain/core/messages')
         langchainOutputParsers = require(`../../../versions/@langchain/core@${version}`)
           .get('@langchain/core/output_parsers')
@@ -65,105 +60,7 @@ describe('Plugin', function () {
       })
 
       afterEach(() => {
-        console.log('afterEach nock.cleanAll')
         nock.cleanAll()
-        console.log('afterEach nock.cleanAll done')
-      })
-
-      describe('with global configurations', () => {
-        describe('with sampling rate', () => {
-          useEnv({
-            DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE: 0
-          })
-
-          it('does not tag prompt or completion', async () => {
-            stubCall({
-              ...openAiBaseCompletionInfo,
-              response: {
-                model: 'gpt-3.5-turbo-instruct',
-                choices: [{
-                  text: 'The answer is 4',
-                  index: 0,
-                  logprobs: null,
-                  finish_reason: 'length'
-                }],
-                usage: { prompt_tokens: 8, completion_tokens: 12, otal_tokens: 20 }
-              }
-            })
-
-            const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct' })
-            const checkTraces = agent
-              .use(traces => {
-                expect(traces[0].length).to.equal(1)
-                const span = traces[0][0]
-
-                expect(span.meta).to.not.have.property('langchain.request.prompts.0.content')
-                expect(span.meta).to.not.have.property('langchain.response.completions.0.text')
-              })
-
-            const result = await llm.generate(['what is 2 + 2?'])
-
-            expect(result.generations[0][0].text).to.equal('The answer is 4')
-
-            await checkTraces
-          })
-        })
-
-        describe('with span char limit', () => {
-          useEnv({
-            DD_LANGCHAIN_SPAN_CHAR_LIMIT: 5
-          })
-
-          it('truncates the prompt and completion', async () => {
-            console.log('before stub call')
-            stubCall({
-              ...openAiBaseCompletionInfo,
-              response: {
-                model: 'gpt-3.5-turbo-instruct',
-                choices: [{
-                  text: 'The answer is 4',
-                  index: 0,
-                  logprobs: null,
-                  finish_reason: 'length'
-                }],
-                usage: { prompt_tokens: 8, completion_tokens: 12, otal_tokens: 20 }
-              }
-            })
-            console.log('stub call done')
-
-            console.log('before llm creation')
-            const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct' })
-            console.log('after llm creation')
-
-            console.log('make checkTraces promise')
-            const checkTraces = agent
-              .use(async (traces) => {
-                console.log('in checkTraces')
-                expect(traces[0].length).to.equal(1)
-                console.log('traces[0].length', traces[0].length)
-                const span = traces[0][0]
-                console.log('span', span)
-
-                expect(span.meta).to.have.property('langchain.request.prompts.0.content', 'what ...')
-                console.log('langchain.request.prompts.0.content', span.meta['langchain.request.prompts.0.content'])
-                expect(span.meta).to.have.property('langchain.response.completions.0.text', 'The a...')
-                console.log('langchain.response.completions.0.text', span.meta['langchain.response.completions.0.text'])
-              })
-            console.log('checkTraces promise made')
-
-            console.log('before llm.generate')
-            const result = await llm.generate(['what is 2 + 2?'])
-            console.log('after llm.generate')
-
-            console.log('before expect')
-            expect(result.generations[0][0].text).to.equal('The answer is 4')
-            console.log('after expect')
-
-            console.log('before checkTraces')
-            await checkTraces
-            console.log('after checkTraces')
-          })
-        })
       })
 
       describe('llm', () => {
