@@ -1,7 +1,12 @@
 'use strict'
 
 const RetryOperation = require('../operation')
-const { Kafka } = require('../../../../../versions/kafkajs').get()
+let Kafka
+try {
+  Kafka = require('../../../../../versions/kafkajs').get().Kafka
+} catch (e) {
+  Kafka = require('../../../../../versions/@confluentinc/kafka-javascript').get().KafkaJS.Kafka
+}
 
 const kafka = new Kafka({
   clientId: 'setup-client',
