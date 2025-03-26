@@ -16,7 +16,7 @@ const openAiBaseCompletionInfo = { base: 'https://api.openai.com', path: '/v1/co
 const openAiBaseChatInfo = { base: 'https://api.openai.com', path: '/v1/chat/completions' }
 const openAiBaseEmbeddingInfo = { base: 'https://api.openai.com', path: '/v1/embeddings' }
 
-describe('Plugin', function () {
+describe('Plugin', () => {
   let langchainOpenai
   let langchainAnthropic
   let langchainGoogleGenAI
