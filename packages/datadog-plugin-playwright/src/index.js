@@ -22,6 +22,9 @@ const {
   TEST_MANAGEMENT_ENABLED,
   TEST_BROWSER_NAME,
   TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_SESSION_ID,
   TEST_MODULE_ID,
   TEST_COMMAND,
@@ -233,7 +236,11 @@ class PlaywrightPlugin extends CiPlugin {
       isNew,
       isEfdRetry,
       isRetry,
+      isAttemptToFix,
       isQuarantined,
+      isAttemptToFixRetry,
+      hasFailedAllRetries,
+      hasPassedAttemptToFixRetries,
       onDone
     }) => {
       const store = storage('legacy').getStore()
@@ -257,6 +264,19 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (isRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
+      }
+      if (hasFailedAllRetries) {
+        span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+      }
+      if (isAttemptToFix) {
+        span.setTag(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
+      }
+      if (isAttemptToFixRetry) {
+        span.setTag(TEST_IS_RETRY, 'true')
+        span.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
+      }
+      if (hasPassedAttemptToFixRetries) {
+        span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
       }
       if (isQuarantined) {
         span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')

@@ -50,17 +50,28 @@ function trackWafMetrics (store, metrics) {
 
   const metricTags = getOrCreateMetricTags(store, versionsTags)
 
-  const { blockTriggered, ruleTriggered, wafTimeout } = metrics
+  if (metrics.blockFailed) {
+    metricTags[tags.BLOCK_FAILURE] = true
+  }
 
-  if (blockTriggered) {
+  if (metrics.blockTriggered) {
     metricTags[tags.REQUEST_BLOCKED] = true
   }
 
-  if (ruleTriggered) {
+  if (metrics.rateLimited) {
+    metricTags[tags.RATE_LIMITED] = true
+  }
+
+  if (metrics.ruleTriggered) {
     metricTags[tags.RULE_TRIGGERED] = true
   }
 
-  if (wafTimeout) {
+  if (metrics.errorCode) {
+    metricTags[tags.WAF_ERROR] = true
+    appsecMetrics.count('waf.error', { ...versionsTags, waf_error: metrics.errorCode }).inc()
+  }
+
+  if (metrics.wafTimeout) {
     metricTags[tags.WAF_TIMEOUT] = true
   }
 
@@ -78,10 +89,13 @@ function getOrCreateMetricTags (store, versionsTags) {
 
   if (!metricTags) {
     metricTags = {
+      [tags.BLOCK_FAILURE]: false,
+      [tags.INPUT_TRUNCATED]: false,
+      [tags.RATE_LIMITED]: false,
       [tags.REQUEST_BLOCKED]: false,
       [tags.RULE_TRIGGERED]: false,
+      [tags.WAF_ERROR]: false,
       [tags.WAF_TIMEOUT]: false,
-      [tags.INPUT_TRUNCATED]: false,
 
       ...versionsTags
     }
