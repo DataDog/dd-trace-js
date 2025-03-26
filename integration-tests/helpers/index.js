@@ -315,16 +315,12 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
 
 function useEnv (env) {
   before(() => {
-    console.log('before useEnv')
     Object.assign(process.env, env)
-    console.log('after useEnv')
   })
   after(() => {
-    console.log('before after useEnv')
     for (const key of Object.keys(env)) {
       delete process.env[key]
     }
-    console.log('after after useEnv')
   })
 }
 
