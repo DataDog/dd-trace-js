@@ -88,7 +88,7 @@ function recordLLMObsSpanSize (event, eventSize, shouldTruncate) {
 function recordDroppedPayload (numEvents, eventType, error) {
   if (eventType !== 'span' && eventType !== 'evaluation_metric') return
   const metricName = eventType === 'span' ? 'dropped_span_event' : 'dropped_eval_event'
-  const tags = { error: error }
+  const tags = { error }
   llmobsMetrics.count(metricName, tags).inc(numEvents)
 }
 
