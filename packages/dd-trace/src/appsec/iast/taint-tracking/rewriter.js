@@ -1,5 +1,7 @@
 'use strict'
 
+const fs = require('fs')
+
 const Module = require('module')
 const { pathToFileURL } = require('url')
 const { MessageChannel } = require('worker_threads')
@@ -62,7 +64,9 @@ function getRewriter (telemetryVerbosity) {
         csiMethods,
         telemetryVerbosity: getName(telemetryVerbosity),
         chainSourceMap,
-        orchestrion
+        orchestrion,
+        logger: console,
+        logLevel: 'ERROR'
       })
     } catch (e) {
       log.error('Unable to initialize Rewriter', e)
