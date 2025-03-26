@@ -74,6 +74,23 @@ function incrementLLMObsSpanFinishedCount (span, value = 1) {
   llmobsMetrics.count('span.finished', tags).inc(value)
 }
 
+function recordLLMObsEnabled (startTime, config, value = 1) {
+  const initTimeMs = performance.now() - startTime
+  // There isn't an easy way to determine if a user automatically enabled LLMObs via
+  // in-code or command line setup. We'll use the presence of DD_LLMOBS_ENABLED env var
+  // as a rough heuristic, but note that this isn't perfect since
+  // a user may have env vars but enable manually in code.
+  const autoEnabled = !!config._env?.['llmobs.enabled']
+  const tags = {
+    error: 0,
+    agentless: Number(config.llmobs.agentlessEnabled),
+    site: config.site,
+    auto: Number(autoEnabled)
+  }
+  llmobsMetrics.count('product_enabled', tags).inc(value)
+  llmobsMetrics.distribution('init_time', tags).track(initTimeMs)
+}
+
 function recordLLMObsRawSpanSize (event, rawEventSize) {
   const tags = extractTagsFromSpanEvent(event)
   llmobsMetrics.distribution('span.raw_size', tags).track(rawEventSize)
@@ -86,6 +103,7 @@ function recordLLMObsSpanSize (event, eventSize, shouldTruncate) {
 }
 
 module.exports = {
+  recordLLMObsEnabled,
   incrementLLMObsSpanStartCount,
   incrementLLMObsSpanFinishedCount,
   recordLLMObsRawSpanSize,
