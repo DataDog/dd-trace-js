@@ -17,7 +17,6 @@ const openAiBaseChatInfo = { base: 'https://api.openai.com', path: '/v1/chat/com
 const openAiBaseEmbeddingInfo = { base: 'https://api.openai.com', path: '/v1/embeddings' }
 
 describe('Plugin', function () {
-  this.timeout(10 * 1000)
   let langchainOpenai
   let langchainAnthropic
   let langchainGoogleGenAI
@@ -40,18 +39,20 @@ describe('Plugin', function () {
         return agent.load('langchain')
       })
 
-      after(async () => {
-        // wiping in order to read new env vars for the config each time
-        await agent.close({ ritmReset: false })
+      after(() => {
+        return agent.close({ ritmReset: false })
       })
 
       beforeEach(() => {
         langchainOpenai = require(`../../../versions/@langchain/openai@${version}`).get()
         langchainAnthropic = require(`../../../versions/@langchain/anthropic@${version}`).get()
         if (version !== '0.1.0') {
+          // version mismatching otherwise
+          // can probably scaffold `withVersions` better to make this a bit cleaner
           langchainGoogleGenAI = require(`../../../versions/@langchain/google-genai@${version}`).get()
         }
 
+        // need to specify specific import in `get(...)`
         langchainMessages = require(`../../../versions/@langchain/core@${version}`).get('@langchain/core/messages')
         langchainOutputParsers = require(`../../../versions/@langchain/core@${version}`)
           .get('@langchain/core/output_parsers')
