@@ -54,6 +54,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
    */
   commit (commitList) {
     if (!this.config.dsmEnabled) return
+    if (!commitList || !Array.isArray(commitList)) return
     const keys = [
       'type',
       'partition',

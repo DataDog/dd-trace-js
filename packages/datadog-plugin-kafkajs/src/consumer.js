@@ -3,7 +3,7 @@
 const dc = require('dc-polyfill')
 const { getMessageSize } = require('../../dd-trace/src/datastreams')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
-
+const { convertToTextMap } = require('./utils')
 const afterStartCh = dc.channel('dd-trace:kafkajs:consumer:afterStart')
 const beforeFinishCh = dc.channel('dd-trace:kafkajs:consumer:beforeFinish')
 
@@ -65,7 +65,11 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
   }
 
   start ({ topic, partition, message, groupId, clusterId }) {
-    const childOf = extract(this.tracer, message.headers)
+    let childOf
+    const headers = convertToTextMap(message?.headers)
+    if (headers) {
+      childOf = this.tracer.extract('text_map', headers)
+    }
     const span = this.startSpan({
       childOf,
       resource: topic,
@@ -73,7 +77,6 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       meta: {
         component: this.constructor.id,
         'kafka.topic': topic,
-        'kafka.message.offset': message.offset,
         'kafka.cluster_id': clusterId,
         [MESSAGING_DESTINATION_KEY]: topic
       },
@@ -81,9 +84,11 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
         'kafka.partition': partition
       }
     })
-    if (this.config.dsmEnabled && message?.headers) {
+    if (message?.offset) span.setTag('kafka.message.offset', message?.offset)
+
+    if (this.config.dsmEnabled && headers) {
       const payloadSize = getMessageSize(message)
-      this.tracer.decodeDataStreamsContext(message.headers)
+      this.tracer.decodeDataStreamsContext(headers)
       const edgeTags = ['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka']
       if (clusterId) {
         edgeTags.push(`kafka_cluster_id:${clusterId}`)
@@ -103,20 +108,6 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
 
     super.finish()
   }
-}
-
-function extract (tracer, bufferMap) {
-  if (!bufferMap) return null
-
-  const textMap = {}
-
-  for (const key of Object.keys(bufferMap)) {
-    if (bufferMap[key] === null || bufferMap[key] === undefined) continue
-
-    textMap[key] = bufferMap[key].toString()
-  }
-
-  return tracer.extract('text_map', textMap)
 }
 
 module.exports = KafkajsConsumerPlugin

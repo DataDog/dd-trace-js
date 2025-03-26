@@ -18,9 +18,8 @@ const sendMessage = async (topic, messages) => {
       messages
     })
     await producer.disconnect()
-    console.log('Message sent successfully')
   } catch (error) {
-    console.error('Error sending message:', error)
+    // pass
   }
 }
 

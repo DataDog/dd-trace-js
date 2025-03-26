@@ -16,13 +16,20 @@ const channels = {
   consumerStart: channel('apm:@confluentinc/kafka-javascript:consume:start'),
   consumerFinish: channel('apm:@confluentinc/kafka-javascript:consume:finish'),
   consumerError: channel('apm:@confluentinc/kafka-javascript:consume:error'),
-  consumerCommit: channel('apm:@confluentinc/kafka-javascript:consume:commit')
+  consumerCommit: channel('apm:@confluentinc/kafka-javascript:consume:commit'),
+
+  // batch operations
+  batchConsumerStart: channel('apm:@confluentinc/kafka-javascript:consume-batch:start'),
+  batchConsumerFinish: channel('apm:@confluentinc/kafka-javascript:consume-batch:finish'),
+  batchConsumerError: channel('apm:@confluentinc/kafka-javascript:consume-batch:error'),
+  batchConsumerCommit: channel('apm:@confluentinc/kafka-javascript:consume-batch:commit')
 }
 
 // Customize the instrumentation for Confluent Kafka JavaScript
 addHook({ name: '@confluentinc/kafka-javascript', versions: ['>=1.0.0'] }, (module) => {
   // Hook native module classes first
-  instrumentNativeModule(module)
+  instrumentBaseModule(module)
+  instrumentBaseModule(module.RdKafka)
 
   // Then hook KafkaJS if it exists
   if (module.KafkaJS) {
@@ -32,12 +39,12 @@ addHook({ name: '@confluentinc/kafka-javascript', versions: ['>=1.0.0'] }, (modu
   return module
 })
 
-function instrumentNativeModule (module) {
-  // Hook the Producer class if it exists
-  if (typeof module.Producer === 'function') {
-    shimmer.wrap(module, 'Producer', function wrapProducer (original) {
+function instrumentBaseModule (module) {
+  // Helper function to wrap producer classes
+  function wrapProducerClass (ProducerClass, className) {
+    return shimmer.wrap(module, className, function wrapProducer (Original) {
       return function wrappedProducer () {
-        const producer = original.apply(this, arguments)
+        const producer = new Original(...arguments)
 
         // Hook the produce method
         if (producer && typeof producer.produce === 'function') {
@@ -60,7 +67,7 @@ function instrumentNativeModule (module) {
 
                   const result = produce.apply(this, arguments)
 
-                  channels.producerCommit.publish(result)
+                  channels.producerCommit.publish(undefined)
                   channels.producerFinish.publish(undefined)
                   return result
                 } catch (error) {
@@ -78,12 +85,12 @@ function instrumentNativeModule (module) {
     })
   }
 
-  // Hook the Consumer class if it exists
-  if (typeof module.Consumer === 'function') {
-    shimmer.wrap(module, 'Consumer', function wrapConsumer (original) {
+  // Helper function to wrap consumer classes
+  function wrapConsumerClass (ConsumerClass, className) {
+    return shimmer.wrap(module, className, function wrapConsumer (Original) {
       return function wrappedConsumer () {
-        const consumer = original.apply(this, arguments)
-        const groupId = this.groupId || (arguments[0] && arguments[0].groupId)
+        const consumer = new Original(...arguments)
+        const groupId = this.groupId || (arguments[0] && arguments[0]['group.id'])
 
         // Wrap the consume method
         if (consumer && typeof consumer.consume === 'function') {
@@ -93,10 +100,15 @@ function instrumentNativeModule (module) {
                 return consume.apply(this, arguments)
               }
 
+              if (!callback && typeof numMessages === 'function') {
+                callback = numMessages
+              }
+
               // Handle callback-based consumption
               if (typeof callback === 'function') {
                 return consume.call(this, numMessages, function wrappedCallback (err, messages) {
                   if (messages && messages.length > 0) {
+                    const commitList = []
                     messages.forEach(message => {
                       channels.consumerStart.publish({
                         topic: message.topic,
@@ -104,41 +116,35 @@ function instrumentNativeModule (module) {
                         message,
                         groupId
                       })
-                      channels.consumerFinish.publish(undefined)
+                      commitList.push({
+                        topic: message.topic,
+                        partition: message.partition,
+                        offset: message.offset,
+                        groupId
+                      })
                     })
+
+                    channels.consumerCommit.publish(commitList)
                   }
 
                   if (err) {
                     channels.consumerError.publish(err)
                   }
 
-                  return callback.apply(this, arguments)
-                })
-              }
-
-              // If it's returning a promise
-              const result = consume.apply(this, arguments)
-              if (result && typeof result.then === 'function') {
-                return result.then(messages => {
-                  if (messages && messages.length > 0) {
-                    messages.forEach(message => {
-                      channels.consumerStart.publish({
-                        topic: message.topic,
-                        partition: message.partition,
-                        message,
-                        groupId
-                      })
-                      channels.consumerFinish.publish(undefined)
-                    })
+                  try {
+                    const result = callback.apply(this, arguments)
+                    channels.consumerFinish.publish(undefined)
+                    return result
+                  } catch (error) {
+                    channels.consumerError.publish(error)
+                    channels.consumerFinish.publish(undefined)
+                    throw error
                   }
-                  return messages
-                }).catch(err => {
-                  channels.consumerError.publish(err)
-                  throw err
                 })
               }
 
-              return result
+              // If no callback is provided, just pass through
+              return consume.apply(this, arguments)
             }
           })
         }
@@ -146,6 +152,22 @@ function instrumentNativeModule (module) {
         return consumer
       }
     })
+  }
+
+  // Wrap Producer and KafkaProducer classes if they exist
+  if (typeof module.Producer === 'function') {
+    wrapProducerClass(module.Producer, 'Producer')
+  }
+  if (typeof module.KafkaProducer === 'function') {
+    wrapProducerClass(module.KafkaProducer, 'KafkaProducer')
+  }
+
+  // Wrap Consumer and KafkaConsumer classes if they exist
+  if (typeof module.Consumer === 'function') {
+    wrapConsumerClass(module.Consumer, 'Consumer')
+  }
+  if (typeof module.KafkaConsumer === 'function') {
+    wrapConsumerClass(module.KafkaConsumer, 'KafkaConsumer')
   }
 }
 
@@ -186,26 +208,24 @@ function instrumentKafkaJS (kafkaJS) {
 
                         const result = send.apply(this, arguments)
 
-                        if (result && typeof result.then === 'function') {
-                          return result
-                            .then(asyncResource.bind(res => {
-                              channels.producerFinish.publish(undefined)
-                              channels.producerCommit.publish(res)
-                              return res
-                            }))
-                            .catch(asyncResource.bind(err => {
+                        result.then(
+                          asyncResource.bind(res => {
+                            channels.producerCommit.publish(res)
+                            channels.producerFinish.publish(undefined)
+                          }),
+                          asyncResource.bind(err => {
+                            if (err) {
                               channels.producerError.publish(err)
-                              channels.producerFinish.publish(undefined)
-                              throw err
-                            }))
-                        }
+                            }
+                            channels.producerFinish.publish(undefined)
+                          })
+                        )
 
-                        channels.producerFinish.publish(undefined)
                         return result
-                      } catch (error) {
-                        channels.producerError.publish(error)
+                      } catch (e) {
+                        channels.producerError.publish(e)
                         channels.producerFinish.publish(undefined)
-                        throw error
+                        throw e
                       }
                     })
                   }
@@ -233,47 +253,45 @@ function instrumentKafkaJS (kafkaJS) {
                     }
 
                     const eachMessage = options.eachMessage
+                    const eachBatch = options.eachBatch
                     if (eachMessage) {
-                      options.eachMessage = function wrappedEachMessage (payload) {
-                        const asyncResource = new AsyncResource('bound-anonymous-fn')
-                        return asyncResource.runInAsyncScope(() => {
-                          channels.consumerStart.publish({
+                      options.eachMessage = wrapKafkaCallback(
+                        eachMessage,
+                        {
+                          startCh: channels.consumerStart,
+                          commitCh: channels.consumerCommit,
+                          finishCh: channels.consumerFinish,
+                          errorCh: channels.consumerError
+                        },
+                        (payload) => {
+                          return {
                             topic: payload.topic,
                             partition: payload.partition,
+                            offset: payload.message.offset,
                             message: payload.message,
                             groupId
-                          })
-
-                          try {
-                            const result = eachMessage.apply(this, arguments)
-
-                            if (result && typeof result.then === 'function') {
-                              return result
-                                .then(asyncResource.bind(res => {
-                                  channels.consumerFinish.publish(undefined)
-                                  return res
-                                }))
-                                .catch(asyncResource.bind(err => {
-                                  channels.consumerError.publish(err)
-                                  channels.consumerFinish.publish(undefined)
-                                  throw err
-                                }))
-                            }
-
-                            channels.consumerFinish.publish(undefined)
-                            return result
-                          } catch (error) {
-                            channels.consumerError.publish(error)
-                            channels.consumerFinish.publish(undefined)
-                            throw error
                           }
                         })
-                      }
-                    }
-
-                    const eachBatch = options.eachBatch
-                    if (eachBatch) {
-                      // Similar handling for batch processing if needed
+                    } else if (eachBatch) {
+                      options.eachBatch = wrapKafkaCallback(
+                        eachBatch,
+                        {
+                          startCh: channels.batchConsumerStart,
+                          commitCh: channels.batchConsumerCommit,
+                          finishCh: channels.batchConsumerFinish,
+                          errorCh: channels.batchConsumerError
+                        },
+                        (payload) => {
+                          const { batch } = payload
+                          return {
+                            topic: batch.topic,
+                            partition: batch.partition,
+                            offset: batch.messages[batch.messages.length - 1].offset,
+                            messages: batch.messages,
+                            groupId
+                          }
+                        }
+                      )
                     }
 
                     return run.apply(this, arguments)
@@ -287,6 +305,43 @@ function instrumentKafkaJS (kafkaJS) {
         }
 
         return kafka
+      }
+    })
+  }
+}
+
+function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, getPayload) {
+  return function wrappedKafkaCallback (payload) {
+    const commitPayload = getPayload(payload)
+
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    return asyncResource.runInAsyncScope(() => {
+      startCh.publish(commitPayload)
+
+      commitCh.publish([commitPayload])
+
+      try {
+        const result = callback.apply(this, arguments)
+
+        if (result && typeof result.then === 'function') {
+          return result
+            .then(asyncResource.bind(res => {
+              finishCh.publish(undefined)
+              return res
+            }))
+            .catch(asyncResource.bind(err => {
+              errorCh.publish(err)
+              finishCh.publish(undefined)
+              throw err
+            }))
+        } else {
+          finishCh.publish(undefined)
+          return result
+        }
+      } catch (error) {
+        errorCh.publish(error)
+        finishCh.publish(undefined)
+        throw error
       }
     })
   }
