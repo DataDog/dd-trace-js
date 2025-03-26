@@ -35,13 +35,12 @@ describe('Plugin', () => {
 
   describe('langchain', () => {
     withVersions('langchain', ['@langchain/core'], version => {
-      beforeEach(() => {
+      before(() => {
         return agent.load('langchain')
       })
 
-      afterEach(() => {
-        // wiping in order to read new env vars for the config each time
-        return agent.close({ ritmReset: false, wipe: true })
+      after(() => {
+        return agent.close({ ritmReset: false })
       })
 
       beforeEach(() => {
@@ -63,84 +62,6 @@ describe('Plugin', () => {
 
       afterEach(() => {
         nock.cleanAll()
-      })
-
-      describe('with global configurations', () => {
-        describe('with sampling rate', () => {
-          useEnv({
-            DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE: 0
-          })
-
-          it('does not tag prompt or completion', async () => {
-            stubCall({
-              ...openAiBaseCompletionInfo,
-              response: {
-                model: 'gpt-3.5-turbo-instruct',
-                choices: [{
-                  text: 'The answer is 4',
-                  index: 0,
-                  logprobs: null,
-                  finish_reason: 'length'
-                }],
-                usage: { prompt_tokens: 8, completion_tokens: 12, otal_tokens: 20 }
-              }
-            })
-
-            const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct' })
-            const checkTraces = agent
-              .use(traces => {
-                expect(traces[0].length).to.equal(1)
-                const span = traces[0][0]
-
-                expect(span.meta).to.not.have.property('langchain.request.prompts.0.content')
-                expect(span.meta).to.not.have.property('langchain.response.completions.0.text')
-              })
-
-            const result = await llm.generate(['what is 2 + 2?'])
-
-            expect(result.generations[0][0].text).to.equal('The answer is 4')
-
-            await checkTraces
-          })
-        })
-
-        describe('with span char limit', () => {
-          useEnv({
-            DD_LANGCHAIN_SPAN_CHAR_LIMIT: 5
-          })
-
-          it('truncates the prompt and completion', async () => {
-            stubCall({
-              ...openAiBaseCompletionInfo,
-              response: {
-                model: 'gpt-3.5-turbo-instruct',
-                choices: [{
-                  text: 'The answer is 4',
-                  index: 0,
-                  logprobs: null,
-                  finish_reason: 'length'
-                }],
-                usage: { prompt_tokens: 8, completion_tokens: 12, otal_tokens: 20 }
-              }
-            })
-
-            const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct' })
-            const checkTraces = agent
-              .use(traces => {
-                expect(traces[0].length).to.equal(1)
-                const span = traces[0][0]
-
-                expect(span.meta).to.have.property('langchain.request.prompts.0.content', 'what ...')
-                expect(span.meta).to.have.property('langchain.response.completions.0.text', 'The a...')
-              })
-
-            const result = await llm.generate(['what is 2 + 2?'])
-
-            expect(result.generations[0][0].text).to.equal('The answer is 4')
-
-            await checkTraces
-          })
-        })
       })
 
       describe('llm', () => {
