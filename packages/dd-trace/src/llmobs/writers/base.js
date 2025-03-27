@@ -71,10 +71,9 @@ class BaseLLMObsWriter {
   }
 
   flush () {
-    if (
-      this._buffer.length === 0 ||
-      this._agentless == null
-    ) {
+    const hasAgentStrategy = this._agentless != null
+
+    if (this._buffer.length === 0 || !hasAgentStrategy) {
       return
     }
 
