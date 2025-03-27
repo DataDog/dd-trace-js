@@ -379,13 +379,13 @@ describe('dogstatsd', () => {
 
       client.gauge('test.avg', 10, { foo: 'bar' })
       client.gauge('test.avg', 10, { foo: 'bar', baz: 'qux' })
-      client.gauge('test.avg', 20, { baz: 'qux', foo: 'bar' })
+      client.gauge('test.avg', 20, { foo: 'bar', baz: 'qux' })
       client.flush()
 
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal([
         'test.avg:10|g|#foo:bar',
-        'test.avg:20|g|#baz:qux,foo:bar'
+        'test.avg:20|g|#foo:bar,baz:qux'
       ].join('\n') + '\n')
     })
 
@@ -416,13 +416,13 @@ describe('dogstatsd', () => {
 
       client.increment('test.count', 10, { foo: 'bar' })
       client.increment('test.count', 10, { foo: 'bar', baz: 'qux' })
-      client.increment('test.count', 10, { baz: 'qux', foo: 'bar' })
+      client.increment('test.count', 10, { foo: 'bar', baz: 'qux' })
       client.flush()
 
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal([
         'test.count:10|c|#foo:bar',
-        'test.count:20|c|#baz:qux,foo:bar'
+        'test.count:20|c|#foo:bar,baz:qux'
       ].join('\n') + '\n')
     })
 
@@ -484,7 +484,7 @@ describe('dogstatsd', () => {
 
       client.histogram('test.histogram', 10, { foo: 'bar' })
       client.histogram('test.histogram', 10, { foo: 'bar', baz: 'qux' })
-      client.histogram('test.histogram', 10, { baz: 'qux', foo: 'bar' })
+      client.histogram('test.histogram', 10, { foo: 'bar', baz: 'qux' })
       client.flush()
 
       expect(udp4.send).to.have.been.called
@@ -497,28 +497,19 @@ describe('dogstatsd', () => {
         'test.histogram.count:1|c|#foo:bar',
         'test.histogram.median:10.074696689511441|g|#foo:bar',
         'test.histogram.95percentile:10.074696689511441|g|#foo:bar',
-        'test.histogram.min:10|g|#baz:qux,foo:bar',
-        'test.histogram.max:10|g|#baz:qux,foo:bar',
-        'test.histogram.sum:20|c|#baz:qux,foo:bar',
-        'test.histogram.total:20|c|#baz:qux,foo:bar',
-        'test.histogram.avg:10|g|#baz:qux,foo:bar',
-        'test.histogram.count:2|c|#baz:qux,foo:bar',
-        'test.histogram.median:10.074696689511441|g|#baz:qux,foo:bar',
-        'test.histogram.95percentile:10.074696689511441|g|#baz:qux,foo:bar'
+        'test.histogram.min:10|g|#foo:bar,baz:qux',
+        'test.histogram.max:10|g|#foo:bar,baz:qux',
+        'test.histogram.sum:20|c|#foo:bar,baz:qux',
+        'test.histogram.total:20|c|#foo:bar,baz:qux',
+        'test.histogram.avg:10|g|#foo:bar,baz:qux',
+        'test.histogram.count:2|c|#foo:bar,baz:qux',
+        'test.histogram.median:10.074696689511441|g|#foo:bar,baz:qux',
+        'test.histogram.95percentile:10.074696689511441|g|#foo:bar,baz:qux'
       ].join('\n') + '\n')
     })
 
     it('should flush via interval', () => {
-      const clock = sinon.useFakeTimers({
-        toFake: [ // skip process.hrtime
-          'setTimeout',
-          'clearTimeout',
-          'setInterval',
-          'clearInterval',
-          'setImmediate',
-          'clearImmediate'
-        ]
-      })
+      const clock = sinon.useFakeTimers()
 
       client = new CustomMetrics({ dogstatsd: {} })
 

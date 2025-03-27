@@ -147,16 +147,7 @@ suiteDescribe('runtimeMetrics', () => {
     }
 
     setImmediate = require('timers/promises').setImmediate
-    clock = sinon.useFakeTimers({
-      toFake: [ // skip process.hrtime
-        'setTimeout',
-        'clearTimeout',
-        'setInterval',
-        'clearInterval',
-        'setImmediate',
-        'clearImmediate'
-      ]
-    })
+    clock = sinon.useFakeTimers()
 
     runtimeMetrics.start(config)
   })

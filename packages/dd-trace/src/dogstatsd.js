@@ -210,9 +210,9 @@ class MetricsAggregationClient {
   }
 
   reset () {
-    this._counters = {}
-    this._gauges = {}
-    this._histograms = {}
+    this._counters = new Map()
+    this._gauges = new Map()
+    this._histograms = new Map()
   }
 
   // TODO: Aggerate with a histogram and send the buckets to the client.
@@ -225,13 +225,12 @@ class MetricsAggregationClient {
   }
 
   histogram (name, value, tags) {
-    const node = this._ensureNode(this._histograms, name, tags, null, false)
+    const node = this._ensureTree(this._histograms, name, tags, null)
 
     if (!node.value) {
       node.value = new Histogram()
     }
 
-    node.touched = true
     node.value.record(value)
   }
 
@@ -242,16 +241,14 @@ class MetricsAggregationClient {
     }
 
     const container = monotonic ? this._counters : this._gauges
-    const node = this._ensureNode(container, name, tags, 0, false)
+    const node = this._ensureTree(container, name, tags, 0)
 
-    node.touched = true
     node.value = node.value + count
   }
 
   gauge (name, value, tags) {
-    const node = this._ensureNode(this._gauges, name, tags, 0, 0n)
+    const node = this._ensureTree(this._gauges, name, tags, 0)
 
-    node.touched = process.hrtime.bigint()
     node.value = value
   }
 
@@ -263,68 +260,27 @@ class MetricsAggregationClient {
     this.count(name, -count, tags)
   }
 
-  _ensureNode (container, name, tags, value, touched) {
-    tags = tags ? [].concat(tags) : []
-
-    let node = container[name] = container[name] || { nodes: {}, touched, value }
-    let tagIdx = tags.length
-
-    while (node) {
-      if (tagIdx === 0) {
-        return node
-      } else {
-        const tag = tags[--tagIdx]
-        node = node.nodes[tag] = node.nodes[tag] || { nodes: {}, touched, value }
-      }
-    }
-  }
-
   _captureGauges () {
-    const gauges = this._normalizeTree(this._gauges, (node, current) => {
-      return !current || current.touched < node.touched ? node : current
-    })
-
-    this._captureTree(gauges, (node, name, tags) => {
+    this._captureTree(this._gauges, (node, name, tags) => {
       this._client.gauge(name, node.value, tags)
     })
   }
 
   _captureCounters () {
-    const counters = this._normalizeTree(this._counters, (node, current) => {
-      if (!current) return node
-
-      return {
-        value: node.value + current.value
-      }
-    })
-
-    this._captureTree(counters, (node, name, tags) => {
+    this._captureTree(this._counters, (node, name, tags) => {
       this._client.increment(name, node.value, tags)
     })
 
-    this._counters = {}
+    this._counters.clear()
   }
 
   _captureHistograms () {
-    const histograms = this._normalizeTree(this._histograms, (node, current) => {
-      if (!current) {
-        current = {
-          value: new Histogram()
-        }
-      }
-
-      current.value.merge(node.value)
-      node.value.reset()
-
-      return current
-    })
-
-    this._captureTree(histograms, (node, name, tags) => {
+    this._captureTree(this._histograms, (node, name, tags) => {
       let stats = node.value
 
       // Stats can contain garbage data when a value was never recorded.
       if (stats.count === 0) {
-        stats = { max: 0, min: 0, sum: 0, avg: 0, median: 0, p95: 0, count: 0, reset: stats.reset }
+        stats = { max: 0, min: 0, sum: 0, avg: 0, median: 0, p95: 0, count: 0 }
       }
 
       this._client.gauge(`${name}.min`, stats.min, tags)
@@ -335,38 +291,50 @@ class MetricsAggregationClient {
       this._client.increment(`${name}.count`, stats.count, tags)
       this._client.gauge(`${name}.median`, stats.median, tags)
       this._client.gauge(`${name}.95percentile`, stats.p95, tags)
+
+      node.value.reset()
     })
   }
 
   _captureTree (tree, fn) {
-    for (const [name, root] of Object.entries(tree)) {
-      for (const [tags, node] of Object.entries(root)) {
-        fn(node, name, tags ? tags.split(',') : [])
-      }
+    for (const [name, root] of tree) {
+      this._captureNode(root, name, [], fn)
     }
   }
 
-  _normalizeTree (nodes, normalizer) {
-    const flattened = {}
-
-    for (const [name, node] of Object.entries(nodes)) {
-      this._normalizeNode(name, node, [], flattened, normalizer)
-    }
-
-    return flattened
-  }
-
-  _normalizeNode (name, node, tags, flattened, normalizer) {
+  _captureNode (node, name, tags, fn) {
     if (node.touched) {
-      const key = [].concat(tags).sort().join(',')
-
-      flattened[name] = flattened[name] || {}
-      flattened[name][key] = normalizer(node, flattened[name][key])
+      fn(node, name, tags)
     }
 
-    for (const [tag, child] of Object.entries(node.nodes)) {
-      this._normalizeNode(name, child, tags.concat(tag), flattened, normalizer)
+    for (const [tag, next] of node.nodes) {
+      this._captureNode(next, name, tags.concat(tag), fn)
     }
+  }
+
+  _ensureTree (tree, name, tags, value) {
+    tags = tags ? [].concat(tags) : []
+
+    let node = this._ensureNode(tree, name, value)
+
+    for (const tag of tags) {
+      node = this._ensureNode(node.nodes, tag, value)
+    }
+
+    node.touched = true
+
+    return node
+  }
+
+  _ensureNode (container, key, value) {
+    let node = container.get(key)
+
+    if (!node) {
+      node = { nodes: new Map(), touched: false, value }
+      container.set(key, node)
+    }
+
+    return node
   }
 }
 
