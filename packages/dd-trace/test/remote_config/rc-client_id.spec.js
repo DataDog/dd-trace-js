@@ -60,7 +60,7 @@ describe('Remote config client id', () => {
     })
   })
 
-  describe('disbaled', () => {
+  describe('disabled', () => {
     let agent, proc
 
     beforeEach(async () => {
