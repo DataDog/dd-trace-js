@@ -5,7 +5,6 @@ const RetryOperation = require('../operation')
 let kafka
 let adminConnectAndCreateTopic
 let runConsumer
-let runProducer
 
 const topic = 'test-topic'
 const messages = [{ key: 'setup', value: 'test' }]
@@ -49,19 +48,10 @@ try {
       }
     })
   }
-
-  runProducer = async (topic) => {
-    const producer = kafka.producer()
-    await producer.connect()
-    await producer.send({
-      topic,
-      messages
-    })
-  }
 } catch (e) {
   // retry with the other kafka package
   console.log('Retrying with the other kafka package')
-  const Kafka = require('../../../../../versions/@confluentinc/kafka-javascript').get().KafkaJS.Kafka
+  const Kafka = require('../../../../../versions/@confluentinc/kafka-javascript@1.0.0').get().KafkaJS.Kafka
   kafka = new Kafka({
     kafkaJS: {
       clientId: 'setup-client',
@@ -91,9 +81,11 @@ try {
   runConsumer = async (topic, resolve) => {
     const consumer = kafka.consumer({ kafkaJS: { groupId: 'test-group' } })
     await consumer.connect()
+    console.log(topic)
     await consumer.subscribe({ topic })
     await consumer.run({
       eachMessage: () => {
+        console.log('received message')
         setTimeout(async () => {
           await consumer.disconnect()
           resolve()
@@ -103,7 +95,18 @@ try {
   }
 }
 
-function waitForKafka (topic) {
+const runProducer = async (topic) => {
+  const producer = kafka.producer()
+  await producer.connect()
+  await producer.send({
+    topic,
+    messages
+  }).then(() => {
+    console.log('sent message')
+  })
+}
+
+function waitForKafka () {
   return new Promise((resolve, reject) => {
     const operation = new RetryOperation('kafka')
     operation.attempt(async currentAttempt => {
