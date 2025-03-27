@@ -14,7 +14,7 @@ const weakKey = { weak: 'key' }
 
 const testCases = [
   [{ ref: 'foo' }, { foo: 42 }, 42],
-  [{ ref: 'foo' }, {}, new ReferenceError('foo is not defined')], // TODO: Will this actually throw in CDP?
+  [{ ref: 'foo' }, {}, new ReferenceError('foo is not defined')],
 
   [{ getmember: [{ ref: 'obj' }, 'foo'] }, { obj: { foo: 'test-me' } }, 'test-me'],
   [
@@ -45,7 +45,7 @@ const testCases = [
   [
     { getmember: [{ ref: 'obj' }, 'getter'] },
     { obj: Object.create(Object.prototype, { getter: { get () { return 'x' } } }) },
-    new Error('Posibility of side effect')
+    new Error('Possibility of side effect')
   ],
 
   [{ len: { ref: 'str' } }, { str: 'hello' }, 5],
@@ -54,13 +54,13 @@ const testCases = [
   [
     { len: { ref: 'set' } },
     { set: overloadPropertyWithGetter(new Set([1, 2]), 'size') },
-    new Error('Posibility of side effect')
+    new Error('Possibility of side effect')
   ],
   [{ len: { ref: 'map' } }, { map: new Map([[1, 2]]) }, 1],
   [
     { len: { ref: 'map' } },
     { map: overloadPropertyWithGetter(new Map([[1, 2]]), 'size') },
-    new Error('Posibility of side effect')
+    new Error('Possibility of side effect')
   ],
   [
     { len: { ref: 'wset' } },
@@ -118,7 +118,7 @@ const testCases = [
   [
     { index: [{ ref: 'obj' }, 'getter'] },
     { obj: Object.create(Object.prototype, { getter: { get () { return 'x' } } }) },
-    new Error('Posibility of side effect')
+    new Error('Possibility of side effect')
   ],
 
   [{ eq: [{ ref: 'hits' }, true] }, { hits: true }, true],
@@ -241,7 +241,7 @@ const testCases = [
   [
     { instanceof: [{ ref: 'bar' }, 'SideEffectObject'] },
     { bar: new SideEffectObject(), SideEffectObject },
-    new Error('Posibility of side effect')
+    new Error('Possibility of side effect')
   ]
 
   // TODO: Ensure there's no side-effects due to proxies
