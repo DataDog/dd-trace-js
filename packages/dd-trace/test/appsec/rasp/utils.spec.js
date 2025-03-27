@@ -28,7 +28,7 @@ describe('RASP - utils.js', () => {
       '../stack_trace': stackTrace,
       '../telemetry': telemetry,
       '../blocking': {
-        getBlockingAction: sinon.stub().callsFake((actions) => actions?.blocking_action)
+        getBlockingAction: sinon.spy((actions) => actions?.blocking_action)
       }
     })
 

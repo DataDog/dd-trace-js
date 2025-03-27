@@ -210,7 +210,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
     })
 
     describe('updateRaspRuleMatchMetricTags', () => {
-      const raspRule = { type: 'sql_injection' }
+      const raspRule = { type: 'rule-type', variant: 'rule-variant' }
 
       beforeEach(() => {
         req = {}
@@ -218,7 +218,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
           ruleTriggered: true,
           wafVersion: '1.0.0',
           rulesVersion: '2.0.0'
-        }, req, { type: 'sql_injection' })
+        }, req, { type: 'rule-type' })
 
         count.resetHistory()
         inc.resetHistory()
@@ -228,7 +228,8 @@ describe('Appsec Rasp Telemetry metrics', () => {
         appsecTelemetry.updateRaspRuleMatchMetricTags(req, raspRule, true, true)
 
         expect(count).to.have.been.calledWith('rasp.rule.match', {
-          rule_type: 'sql_injection',
+          rule_type: 'rule-type',
+          rule_variant: 'rule-variant',
           waf_version: '1.0.0',
           event_rules_version: '2.0.0',
           block: 'success'
@@ -240,7 +241,8 @@ describe('Appsec Rasp Telemetry metrics', () => {
         appsecTelemetry.updateRaspRuleMatchMetricTags(req, raspRule, true, false)
 
         expect(count).to.have.been.calledWith('rasp.rule.match', {
-          rule_type: 'sql_injection',
+          rule_type: 'rule-type',
+          rule_variant: 'rule-variant',
           waf_version: '1.0.0',
           event_rules_version: '2.0.0',
           block: 'failure'
@@ -252,7 +254,8 @@ describe('Appsec Rasp Telemetry metrics', () => {
         appsecTelemetry.updateRaspRuleMatchMetricTags(req, raspRule, false, false)
 
         expect(count).to.have.been.calledWith('rasp.rule.match', {
-          rule_type: 'sql_injection',
+          rule_type: 'rule-type',
+          rule_variant: 'rule-variant',
           waf_version: '1.0.0',
           event_rules_version: '2.0.0',
           block: 'irrelevant'
@@ -264,7 +267,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
         const newReq = {}
         appsecTelemetry.updateRaspRuleMatchMetricTags(newReq, raspRule, true, true)
 
-        expect(count).to.not.have.been.calledWith('rasp.rule.match')
+        expect(count).to.not.have.been.called
         expect(inc).to.not.have.been.called
       })
 
@@ -278,12 +281,13 @@ describe('Appsec Rasp Telemetry metrics', () => {
 
     describe('updateRaspRuleSkippedMetricTags', () => {
       it('should increment rasp.rule.skipped with reason', () => {
-        const raspRule = { type: 'sql_injection' }
+        const raspRule = { type: 'rule-type', variant: 'rule-variant' }
         appsecTelemetry.updateRaspRuleSkippedMetricTags(raspRule, 'after-request')
 
         expect(count).to.have.been.calledWith('rasp.rule.skipped', {
           reason: 'after-request',
-          rule_type: 'sql_injection'
+          rule_type: 'rule-type',
+          rule_variant: 'rule-variant'
         })
       })
     })
