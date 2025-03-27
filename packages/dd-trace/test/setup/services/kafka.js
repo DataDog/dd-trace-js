@@ -3,26 +3,64 @@
 const RetryOperation = require('../operation')
 
 let kafka
-let consumer
-let admin
-let adminConnect
-let subscribe
+let adminConnectAndCreateTopic
+let runConsumer
+let runProducer
+
+const topic = 'test-topic'
+const messages = [{ key: 'setup', value: 'test' }]
 
 try {
   const Kafka = require('../../../../../versions/kafkajs').get().Kafka
+  console.log('Using kafkajs')
   kafka = new Kafka({
     clientId: 'setup-client',
     brokers: ['127.0.0.1:9092']
   })
-  consumer = kafka.consumer(
-    { groupId: 'test-group' }
-  )
-  subscribe = async (topic) => {
-    await consumer.subscribe({ topic, fromBeginning: true })
+
+  adminConnectAndCreateTopic = async () => {
+    const admin = kafka.admin()
+    await admin.listTopics()
+    try {
+      await admin.createTopics({
+        topics: [{
+          topic,
+          numPartitions: 1,
+          replicationFactor: 1
+        }]
+      })
+    } catch (e) {
+      // Ignore since this will fail when the topic already exists.
+    } finally {
+      await admin.disconnect()
+    }
   }
-  admin = kafka.admin()
-  adminConnect = async () => { }
+
+  runConsumer = async (topic, resolve) => {
+    const consumer = kafka.consumer({ groupId: 'test-group' })
+    await consumer.connect()
+    await consumer.subscribe({ topic, fromBeginning: true })
+    await consumer.run({
+      eachMessage: () => {
+        setTimeout(async () => {
+          await consumer.disconnect()
+          resolve()
+        }, 1000)
+      }
+    })
+  }
+
+  runProducer = async (topic) => {
+    const producer = kafka.producer()
+    await producer.connect()
+    await producer.send({
+      topic,
+      messages
+    })
+  }
 } catch (e) {
+  // retry with the other kafka package
+  console.log('Retrying with the other kafka package')
   const Kafka = require('../../../../../versions/@confluentinc/kafka-javascript').get().KafkaJS.Kafka
   kafka = new Kafka({
     kafkaJS: {
@@ -30,62 +68,49 @@ try {
       brokers: ['127.0.0.1:9092']
     }
   })
-  consumer = kafka.consumer({ kafkaJS: { groupId: 'test-group' } })
-  subscribe = async (topic) => {
-    await consumer.subscribe({ topic })
+
+  adminConnectAndCreateTopic = async (topic) => {
+    const admin = kafka.admin()
+    await admin.connect()
+    await admin.listTopics()
+    try {
+      await admin.createTopics({
+        topics: [{
+          topic,
+          numPartitions: 1,
+          replicationFactor: 1
+        }]
+      })
+    } catch (e) {
+      // Ignore since this will fail when the topic already exists.
+    } finally {
+      await admin.disconnect()
+    }
   }
 
-  admin = kafka.admin()
-  adminConnect = async () => { await admin.connect() }
+  runConsumer = async (topic, resolve) => {
+    const consumer = kafka.consumer({ kafkaJS: { groupId: 'test-group' } })
+    await consumer.connect()
+    await consumer.subscribe({ topic })
+    await consumer.run({
+      eachMessage: () => {
+        setTimeout(async () => {
+          await consumer.disconnect()
+          resolve()
+        }, 1000)
+      }
+    })
+  }
 }
 
-const producer = kafka.producer()
-const topic = 'test-topic'
-const messages = [{ key: 'setup', value: 'test' }]
-
-function waitForKafka () {
+function waitForKafka (topic) {
   return new Promise((resolve, reject) => {
     const operation = new RetryOperation('kafka')
     operation.attempt(async currentAttempt => {
       try {
-        await adminConnect()
-        await admin.listTopics()
-        try {
-          await admin.createTopics({
-            topics: [{
-              topic,
-              numPartitions: 1,
-              replicationFactor: 1
-            }]
-          })
-        } catch (e) {
-          // Ignore since this will fail when the topic already exists.
-        } finally {
-          await admin.disconnect()
-        }
-
-        await consumer.connect()
-        await subscribe(topic)
-        await consumer.run({
-          eachMessage: () => {
-            setTimeout(async () => {
-              try {
-                await consumer.disconnect()
-                resolve()
-              } catch (e) {
-                if (operation.retry(e)) return
-                reject(e)
-              }
-            })
-          }
-        })
-
-        await producer.connect()
-        await producer.send({
-          topic,
-          messages
-        })
-        await producer.disconnect()
+        await adminConnectAndCreateTopic(topic)
+        await runConsumer(topic, resolve)
+        await runProducer(topic)
       } catch (error) {
         if (operation.retry(error)) return
         return reject(error)
