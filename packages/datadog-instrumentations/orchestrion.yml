@@ -1,5 +1,5 @@
 version: 1
-dc_module: diagnostics_channel
+dc_module: dc-polyfill
 instrumentations:
   - module_name: "@langchain/core"
     version_range: ">=0.1.0"
