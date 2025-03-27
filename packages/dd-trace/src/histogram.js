@@ -7,8 +7,8 @@ class Histogram {
     this.reset()
   }
 
-  get min () { return this._sketch.min }
-  get max () { return this._sketch.max }
+  get min () { return this._sketch.count === 0 ? 0 : this._sketch.min }
+  get max () { return this._sketch.count === 0 ? 0 : this._sketch.max }
   get avg () { return this._sketch.count === 0 ? 0 : this._sketch.sum / this._sketch.count }
   get sum () { return this._sketch.sum }
   get count () { return this._sketch.count }

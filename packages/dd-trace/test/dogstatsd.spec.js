@@ -510,7 +510,7 @@ describe('dogstatsd', () => {
 
     it('should flush via interval', () => {
       const clock = sinon.useFakeTimers({
-        toFake: [
+        toFake: [ // skip process.hrtime
           'setTimeout',
           'clearTimeout',
           'setInterval',
