@@ -1782,9 +1782,10 @@ data-view-byte-offset@^1.0.1:
     es-errors "^1.3.0"
     is-data-view "^1.0.1"
 
-dc-polyfill@0.1.6:
-  version "0.1.6"
-  resolved "git+ssh://git@github.com:DataDog/dc-polyfill.git#e432d281f309d10bf897e40df66abe031f5275ca"
+dc-polyfill@0.1.8:
+  version "0.1.8"
+  resolved "https://registry.yarnpkg.com/dc-polyfill/-/dc-polyfill-0.1.8.tgz#2d91dd4dd0f2e3575ce038d013f346161f5a413a"
+  integrity sha512-F9+06papa9GOFUMjxGiqM1bS98pOkinZpBF3Sygb46owrXaHdR2uLkftE6nygrqNcAurdwKjLAtX+0GJkSwIFQ==
 
 debug@2.6.9:
   version "2.6.9"
