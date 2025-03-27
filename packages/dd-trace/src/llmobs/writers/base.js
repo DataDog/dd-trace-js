@@ -98,17 +98,17 @@ class BaseLLMObsWriter {
         hostname: `${this._intake}.${this._config.site}`,
         pathname: this._endpoint
       }))
-    } else {
-      const { hostname, port } = this._config
-      const base = this._config.url || new URL(format({
-        protocol: 'http:',
-        hostname,
-        port
-      }))
-
-      const proxyPath = path.join(EVP_PROXY_AGENT_BASE_PATH, this._endpoint)
-      return new URL(proxyPath, base)
     }
+
+    const { hostname, port } = this._config
+    const base = this._config.url || new URL(format({
+      protocol: 'http:',
+      hostname,
+      port
+    }))
+
+    const proxyPath = path.join(EVP_PROXY_AGENT_BASE_PATH, this._endpoint)
+    return new URL(proxyPath, base)
   }
 
   _getOptions () {
