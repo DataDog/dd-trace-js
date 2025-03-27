@@ -51,7 +51,7 @@ class DatadogTracer {
     const parent = options.childOf
       ? getContext(options.childOf)
       : getParent(options.references)
-
+    console.log("getting parent: " + parent)
     // as per spec, allow the setting of service name through options
     const tags = {
       'service.name': options?.tags?.service ? String(options.tags.service) : this._service
