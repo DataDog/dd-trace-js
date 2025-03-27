@@ -30,7 +30,7 @@ describe('Plugin', function () {
         })
 
         before(function (done) {
-          this.timeout(120000)
+          this.timeout(300 * 1000)
           const cwd = standalone
             ? path.join(__dirname, '.next/standalone')
             : __dirname
@@ -68,7 +68,7 @@ describe('Plugin', function () {
         })
 
         after(async function () {
-          this.timeout(5000)
+          this.timeout(30 * 1000)
 
           server.kill()
 

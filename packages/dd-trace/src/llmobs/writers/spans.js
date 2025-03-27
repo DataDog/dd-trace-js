@@ -10,6 +10,7 @@ const {
 const { DROPPED_VALUE_TEXT } = require('../constants/text')
 const { DROPPED_IO_COLLECTION_ERROR } = require('../constants/tags')
 const BaseWriter = require('./base')
+const telemetry = require('../../telemetry')
 const logger = require('../../log')
 
 const tracerVersion = require('../../../../../package.json').version
@@ -26,10 +27,18 @@ class LLMObsSpanWriter extends BaseWriter {
 
   append (event) {
     const eventSizeBytes = Buffer.from(JSON.stringify(event)).byteLength
-    if (eventSizeBytes > EVP_EVENT_SIZE_LIMIT) {
+    telemetry.recordLLMObsRawSpanSize(event, eventSizeBytes)
+
+    const shouldTruncate = eventSizeBytes > EVP_EVENT_SIZE_LIMIT
+    let processedEventSizeBytes = eventSizeBytes
+
+    if (shouldTruncate) {
       logger.warn(`Dropping event input/output because its size (${eventSizeBytes}) exceeds the 1MB event size limit`)
       event = this._truncateSpanEvent(event)
+      processedEventSizeBytes = Buffer.from(JSON.stringify(event)).byteLength
     }
+
+    telemetry.recordLLMObsSpanSize(event, processedEventSizeBytes, shouldTruncate)
 
     if (this._bufferSize + eventSizeBytes > EVP_PAYLOAD_SIZE_LIMIT) {
       logger.debug('Flushing queue because queuing next event will exceed EvP payload limit')

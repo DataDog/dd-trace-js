@@ -7,6 +7,7 @@ const path = require('node:path')
 const logger = require('../../log')
 
 const { encodeUnicode } = require('../util')
+const telemetry = require('../telemetry')
 const log = require('../../log')
 const {
   EVP_SUBDOMAIN_HEADER_NAME,
@@ -63,6 +64,7 @@ class BaseLLMObsWriter {
   append (event, byteLength) {
     if (this._buffer.length >= this._bufferLimit) {
       logger.warn(`${this.constructor.name} event buffer full (limit is ${this._bufferLimit}), dropping event`)
+      telemetry.recordDroppedPayload(1, this._eventType, 'buffer_full')
       return
     }
 

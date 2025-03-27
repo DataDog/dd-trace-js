@@ -43,7 +43,7 @@ class LLMObsPlugin extends TracingPlugin {
       llmobsStorage.enterWith({ span })
       ctx.llmobs.parent = parent
 
-      this._tagger.registerLLMObsSpan(span, { parent, ...registerOptions })
+      this._tagger.registerLLMObsSpan(span, { parent, integration: this.constructor.id, ...registerOptions })
     }
   }
 

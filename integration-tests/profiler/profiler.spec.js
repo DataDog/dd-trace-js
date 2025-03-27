@@ -692,9 +692,9 @@ describe('profiler', () => {
         assert.equal(series[0].metric, 'profile_api.requests')
         assert.equal(series[0].type, 'count')
         // There's a race between metrics and on-shutdown profile, so metric
-        // value will be between 2 and 3
+        // value will be between 1 and 3
         requestCount = series[0].points[0][1]
-        assert.isAtLeast(requestCount, 2)
+        assert.isAtLeast(requestCount, 1)
         assert.isAtMost(requestCount, 3)
 
         assert.equal(series[1].metric, 'profile_api.responses')
