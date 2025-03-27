@@ -41,26 +41,6 @@ class BaseLLMObsWriter {
     this._destroyed = false
   }
 
-  get _url () {
-    if (this._agentless) {
-      return new URL(format({
-        protocol: 'https:',
-        hostname: `${this._intake}.${this._config.site}`,
-        pathname: this._endpoint
-      }))
-    } else {
-      const { hostname, port } = this._config
-      const base = this._config.url || new URL(format({
-        protocol: 'http:',
-        hostname,
-        port
-      }))
-
-      const proxyPath = path.join(EVP_PROXY_AGENT_BASE_PATH, this._endpoint)
-      return new URL(proxyPath, base)
-    }
-  }
-
   append (event, byteLength) {
     if (this._buffer.length >= this._bufferLimit) {
       logger.warn(`${this.constructor.name} event buffer full (limit is ${this._bufferLimit}), dropping event`)
@@ -107,7 +87,28 @@ class BaseLLMObsWriter {
 
   setAgentless (agentless) {
     this._agentless = agentless
+    this._url = this._getUrl()
     logger.debug(`Configuring ${this.constructor.name} to ${this._url.href}`)
+  }
+
+  _getUrl () {
+    if (this._agentless) {
+      return new URL(format({
+        protocol: 'https:',
+        hostname: `${this._intake}.${this._config.site}`,
+        pathname: this._endpoint
+      }))
+    } else {
+      const { hostname, port } = this._config
+      const base = this._config.url || new URL(format({
+        protocol: 'http:',
+        hostname,
+        port
+      }))
+
+      const proxyPath = path.join(EVP_PROXY_AGENT_BASE_PATH, this._endpoint)
+      return new URL(proxyPath, base)
+    }
   }
 
   _getOptions () {
