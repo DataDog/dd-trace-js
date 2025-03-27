@@ -179,6 +179,8 @@ class Tracer extends NoopProxy {
 
       this._enableOrDisableTracing(config)
 
+      this._modules.rewriter.enable(config)
+
       if (config.tracing) {
         if (config.isManualApiEnabled) {
           const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
@@ -249,12 +251,10 @@ class Tracer extends NoopProxy {
         this._modules.iast.enable(config, this._tracer)
       }
       // This needs to be after the IAST module is enabled
-      this._modules.rewriter.enable(config)
     } else if (this._tracingInitialized) {
       this._modules.appsec.disable()
       this._modules.iast.disable()
       this._modules.llmobs.disable()
-      this._modules.rewriter.disable()
     }
 
     if (this._tracingInitialized) {
@@ -263,6 +263,7 @@ class Tracer extends NoopProxy {
       DynamicInstrumentation.configure(config)
       setStartupLogPluginManager(this._pluginManager)
     }
+
   }
 
   profilerStarted () {

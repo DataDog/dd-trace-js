@@ -3,7 +3,7 @@
 import path from 'path'
 import { URL } from 'url'
 import { getName } from '../telemetry/verbosity.js'
-import { isNotLibraryFile, isPrivateModule } from './filter.js'
+import { isLibraryFile, isPrivateModule } from './filter.js'
 import constants from './constants.js'
 
 const currentUrl = new URL(import.meta.url)
@@ -42,10 +42,10 @@ export async function load (url, context, nextLoad) {
 
   let passes
   try {
-    if (!isNotLibraryFile(url)) {
+    if (isLibraryFile(url)) {
       return result
     }
-    if (isPrivateModule(url) && isNotLibraryFile(url)) {
+    if (isPrivateModule(url) && isLibraryFile(url)) {
       // TODO error tracking needs to be added based on config
       passes = ['error_tracking']
       if (iastEnabled) {
