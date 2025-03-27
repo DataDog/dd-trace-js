@@ -40,7 +40,7 @@ function setGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, { getOr
   getRewriterOriginalPathAndLineFromSourceMap = chainSourceMap ? (path, line, column) => {
       // if --enable-source-maps is present stacktraces of the rewritten files contain the original path, file and
       // column because the sourcemap chaining is done during the rewriting process so we can skip it
-      if (isPrivateModule(path) && isNotLibraryFile(path)) {
+      if (isPrivateModule(path) && !isLibraryFile(path)) {
         return { path, line, column }
       } else {
         return getOriginalPathAndLineFromSourceMap(path, line, column)

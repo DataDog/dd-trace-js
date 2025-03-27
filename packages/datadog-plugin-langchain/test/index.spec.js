@@ -58,7 +58,7 @@ describe('Plugin', () => {
       })
 
       after(() => {
-        iastFilter.isNotLibraryFile = isNotLibraryFile
+        iastFilter.isLibraryFile = isLibraryFile
         // wiping in order to read new env vars for the config each time
         return agent.close({ ritmReset: false })
       })
