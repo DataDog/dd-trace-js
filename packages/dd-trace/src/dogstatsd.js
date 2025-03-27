@@ -194,7 +194,6 @@ class DogStatsDClient {
   }
 }
 
-// TODO: Handle arrays of tags and tags translation.
 class MetricsAggregationClient {
   constructor (client) {
     this._client = client
@@ -216,92 +215,158 @@ class MetricsAggregationClient {
     this._histograms = {}
   }
 
-  distribution (name, value, tag) {
-    this._client.distribution(name, value, tag && [tag])
+  // TODO: Aggerate with a histogram and send the buckets to the client.
+  distribution (name, value, tags) {
+    this._client.distribution(name, value, tags)
   }
 
-  boolean (name, value, tag) {
-    this.gauge(name, value ? 1 : 0, tag)
+  boolean (name, value, tags) {
+    this.gauge(name, value ? 1 : 0, tags)
   }
 
-  histogram (name, value, tag) {
-    this._histograms[name] = this._histograms[name] || new Map()
+  histogram (name, value, tags) {
+    const node = this._ensureNode(this._histograms, name, tags, null, false)
 
-    if (!this._histograms[name].has(tag)) {
-      this._histograms[name].set(tag, new Histogram())
+    if (!node.value) {
+      node.value = new Histogram()
     }
 
-    this._histograms[name].get(tag).record(value)
+    node.touched = true
+    node.value.record(value)
   }
 
-  count (name, count, tag, monotonic = true) {
-    if (typeof tag === 'boolean') {
-      monotonic = tag
-      tag = undefined
+  count (name, count, tags = [], monotonic = true) {
+    if (typeof tags === 'boolean') {
+      monotonic = tags
+      tags = []
     }
 
-    const map = monotonic ? this._counters : this._gauges
+    const container = monotonic ? this._counters : this._gauges
+    const node = this._ensureNode(container, name, tags, 0, false)
 
-    map[name] = map[name] || new Map()
-
-    const value = map[name].get(tag) || 0
-
-    map[name].set(tag, value + count)
+    node.touched = true
+    node.value = node.value + count
   }
 
-  gauge (name, value, tag) {
-    this._gauges[name] = this._gauges[name] || new Map()
-    this._gauges[name].set(tag, value)
+  gauge (name, value, tags) {
+    const node = this._ensureNode(this._gauges, name, tags, 0, 0n)
+
+    node.touched = process.hrtime.bigint()
+    node.value = value
   }
 
-  increment (name, count = 1, tag) {
-    this.count(name, count, tag)
+  increment (name, count = 1, tags) {
+    this.count(name, count, tags)
   }
 
-  decrement (name, count = 1, tag) {
-    this.count(name, -count, tag)
+  decrement (name, count = 1, tags) {
+    this.count(name, -count, tags)
+  }
+
+  _ensureNode (container, name, tags, value, touched) {
+    tags = tags ? [].concat(tags) : []
+
+    let node = container[name] = container[name] || { nodes: {}, touched, value }
+    let tagIdx = tags.length
+
+    while (node) {
+      if (tagIdx === 0) {
+        return node
+      } else {
+        const tag = tags[--tagIdx]
+        node = node.nodes[tag] = node.nodes[tag] || { nodes: {}, touched, value }
+      }
+    }
   }
 
   _captureGauges () {
-    Object.keys(this._gauges).forEach(name => {
-      this._gauges[name].forEach((value, tag) => {
-        this._client.gauge(name, value, tag && [tag])
-      })
+    const gauges = this._normalizeTree(this._gauges, (node, current) => {
+      return !current || current.touched < node.touched ? node : current
+    })
+
+    this._captureTree(gauges, (node, name, tags) => {
+      this._client.gauge(name, node.value, tags)
     })
   }
 
   _captureCounters () {
-    Object.keys(this._counters).forEach(name => {
-      this._counters[name].forEach((value, tag) => {
-        this._client.increment(name, value, tag && [tag])
-      })
+    const counters = this._normalizeTree(this._counters, (node, current) => {
+      if (!current) return node
+
+      return {
+        value: node.value + current.value
+      }
+    })
+
+    this._captureTree(counters, (node, name, tags) => {
+      this._client.increment(name, node.value, tags)
     })
 
     this._counters = {}
   }
 
   _captureHistograms () {
-    Object.keys(this._histograms).forEach(name => {
-      this._histograms[name].forEach((stats, tag) => {
-        const tags = tag && [tag]
-
-        // Stats can contain garbage data when a value was never recorded.
-        if (stats.count === 0) {
-          stats = { max: 0, min: 0, sum: 0, avg: 0, median: 0, p95: 0, count: 0, reset: stats.reset }
+    const histograms = this._normalizeTree(this._histograms, (node, current) => {
+      if (!current) {
+        current = {
+          value: new Histogram()
         }
+      }
 
-        this._client.gauge(`${name}.min`, stats.min, tags)
-        this._client.gauge(`${name}.max`, stats.max, tags)
-        this._client.increment(`${name}.sum`, stats.sum, tags)
-        this._client.increment(`${name}.total`, stats.sum, tags)
-        this._client.gauge(`${name}.avg`, stats.avg, tags)
-        this._client.increment(`${name}.count`, stats.count, tags)
-        this._client.gauge(`${name}.median`, stats.median, tags)
-        this._client.gauge(`${name}.95percentile`, stats.p95, tags)
+      current.value.merge(node.value)
+      node.value.reset()
 
-        stats.reset()
-      })
+      return current
     })
+
+    this._captureTree(histograms, (node, name, tags) => {
+      let stats = node.value
+
+      // Stats can contain garbage data when a value was never recorded.
+      if (stats.count === 0) {
+        stats = { max: 0, min: 0, sum: 0, avg: 0, median: 0, p95: 0, count: 0, reset: stats.reset }
+      }
+
+      this._client.gauge(`${name}.min`, stats.min, tags)
+      this._client.gauge(`${name}.max`, stats.max, tags)
+      this._client.increment(`${name}.sum`, stats.sum, tags)
+      this._client.increment(`${name}.total`, stats.sum, tags)
+      this._client.gauge(`${name}.avg`, stats.avg, tags)
+      this._client.increment(`${name}.count`, stats.count, tags)
+      this._client.gauge(`${name}.median`, stats.median, tags)
+      this._client.gauge(`${name}.95percentile`, stats.p95, tags)
+    })
+  }
+
+  _captureTree (tree, fn) {
+    for (const [name, root] of Object.entries(tree)) {
+      for (const [tags, node] of Object.entries(root)) {
+        fn(node, name, tags ? tags.split(',') : [])
+      }
+    }
+  }
+
+  _normalizeTree (nodes, normalizer) {
+    const flattened = {}
+
+    for (const [name, node] of Object.entries(nodes)) {
+      this._normalizeNode(name, node, [], flattened, normalizer)
+    }
+
+    return flattened
+  }
+
+  _normalizeNode (name, node, tags, flattened, normalizer) {
+    if (node.touched) {
+      const key = [].concat(tags).sort().join(',')
+
+      flattened[name] = flattened[name] || {}
+      flattened[name][key] = normalizer(node, flattened[name][key])
+    }
+
+    for (const [tag, child] of Object.entries(node.nodes)) {
+      this._normalizeNode(name, child, tags.concat(tag), flattened, normalizer)
+    }
   }
 }
 
@@ -324,43 +389,27 @@ class CustomMetrics {
   }
 
   increment (stat, value = 1, tags) {
-    for (const tag of this._normalizeTags(tags)) {
-      this._client.increment(stat, value, tag)
-    }
+    this._client.increment(stat, value, CustomMetrics.tagTranslator(tags))
   }
 
   decrement (stat, value = 1, tags) {
-    for (const tag of this._normalizeTags(tags)) {
-      this._client.decrement(stat, value, tag)
-    }
+    this._client.decrement(stat, value, CustomMetrics.tagTranslator(tags))
   }
 
   gauge (stat, value, tags) {
-    for (const tag of this._normalizeTags(tags)) {
-      this._client.gauge(stat, value, tag)
-    }
+    this._client.gauge(stat, value, CustomMetrics.tagTranslator(tags))
   }
 
   distribution (stat, value, tags) {
-    for (const tag of this._normalizeTags(tags)) {
-      this._client.distribution(stat, value, tag)
-    }
+    this._client.distribution(stat, value, CustomMetrics.tagTranslator(tags))
   }
 
   histogram (stat, value, tags) {
-    for (const tag of this._normalizeTags(tags)) {
-      this._client.histogram(stat, value, tag)
-    }
+    this._client.histogram(stat, value, CustomMetrics.tagTranslator(tags))
   }
 
   flush () {
     return this._client.flush()
-  }
-
-  _normalizeTags (tags) {
-    tags = CustomMetrics.tagTranslator(tags)
-
-    return tags.length === 0 ? [undefined] : tags
   }
 
   /**

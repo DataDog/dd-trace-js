@@ -374,6 +374,21 @@ describe('dogstatsd', () => {
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g|#foo:bar\n')
     })
 
+    it('.gauge() with tags', () => {
+      client = new CustomMetrics({ dogstatsd: {} })
+
+      client.gauge('test.avg', 10, { foo: 'bar' })
+      client.gauge('test.avg', 10, { foo: 'bar', baz: 'qux' })
+      client.gauge('test.avg', 20, { baz: 'qux', foo: 'bar' })
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal([
+        'test.avg:10|g|#foo:bar',
+        'test.avg:20|g|#baz:qux,foo:bar'
+      ].join('\n') + '\n')
+    })
+
     it('.increment()', () => {
       client = new CustomMetrics({ dogstatsd: {} })
 
@@ -394,6 +409,21 @@ describe('dogstatsd', () => {
 
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:2|c\n')
+    })
+
+    it('.increment() with tags', () => {
+      client = new CustomMetrics({ dogstatsd: {} })
+
+      client.increment('test.count', 10, { foo: 'bar' })
+      client.increment('test.count', 10, { foo: 'bar', baz: 'qux' })
+      client.increment('test.count', 10, { baz: 'qux', foo: 'bar' })
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal([
+        'test.count:10|c|#foo:bar',
+        'test.count:20|c|#baz:qux,foo:bar'
+      ].join('\n') + '\n')
     })
 
     it('.decrement()', () => {
@@ -449,8 +479,46 @@ describe('dogstatsd', () => {
       ].join('\n') + '\n')
     })
 
+    it('.histogram() with tags', () => {
+      client = new CustomMetrics({ dogstatsd: {} })
+
+      client.histogram('test.histogram', 10, { foo: 'bar' })
+      client.histogram('test.histogram', 10, { foo: 'bar', baz: 'qux' })
+      client.histogram('test.histogram', 10, { baz: 'qux', foo: 'bar' })
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal([
+        'test.histogram.min:10|g|#foo:bar',
+        'test.histogram.max:10|g|#foo:bar',
+        'test.histogram.sum:10|c|#foo:bar',
+        'test.histogram.total:10|c|#foo:bar',
+        'test.histogram.avg:10|g|#foo:bar',
+        'test.histogram.count:1|c|#foo:bar',
+        'test.histogram.median:10.074696689511441|g|#foo:bar',
+        'test.histogram.95percentile:10.074696689511441|g|#foo:bar',
+        'test.histogram.min:10|g|#baz:qux,foo:bar',
+        'test.histogram.max:10|g|#baz:qux,foo:bar',
+        'test.histogram.sum:20|c|#baz:qux,foo:bar',
+        'test.histogram.total:20|c|#baz:qux,foo:bar',
+        'test.histogram.avg:10|g|#baz:qux,foo:bar',
+        'test.histogram.count:2|c|#baz:qux,foo:bar',
+        'test.histogram.median:10.074696689511441|g|#baz:qux,foo:bar',
+        'test.histogram.95percentile:10.074696689511441|g|#baz:qux,foo:bar'
+      ].join('\n') + '\n')
+    })
+
     it('should flush via interval', () => {
-      const clock = sinon.useFakeTimers()
+      const clock = sinon.useFakeTimers({
+        toFake: [
+          'setTimeout',
+          'clearTimeout',
+          'setInterval',
+          'clearInterval',
+          'setImmediate',
+          'clearImmediate'
+        ]
+      })
 
       client = new CustomMetrics({ dogstatsd: {} })
 
