@@ -10,7 +10,7 @@ const {
 const { DROPPED_VALUE_TEXT } = require('../constants/text')
 const { DROPPED_IO_COLLECTION_ERROR } = require('../constants/tags')
 const BaseWriter = require('./base')
-const telemetry = require('../../telemetry')
+const telemetry = require('../telemetry')
 const logger = require('../../log')
 
 const tracerVersion = require('../../../../../package.json').version
