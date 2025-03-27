@@ -347,12 +347,15 @@ describe('Plugin', () => {
               // Send a test message using the producer
               const message = Buffer.from('test message for native consumer')
               const key = 'native-consumer-key'
-              nativeProducer.produce(testTopic, null, message, key)
 
-              // Consume messages
-              const consumePromise = new Promise(resolve => {
-                nativeConsumer.consume(1, (err, messages) => {
-                  resolve()
+              let consumePromise
+              nativeConsumer.on('ready', () => {
+                // Consume messages
+                consumePromise = new Promise(resolve => {
+                  nativeConsumer.consume(1, (err, messages) => {
+                    resolve()
+                  })
+                  nativeProducer.produce(testTopic, null, message, key)
                 })
               })
 
