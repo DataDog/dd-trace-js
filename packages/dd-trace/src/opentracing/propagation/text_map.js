@@ -365,7 +365,9 @@ class TextMapPropagator {
       }
     }
 
-    console.log("context in extractSpanContext: " + context)
+    if(context){
+      console.log("context in extractSpanContext: " + context.toString())
+    }
     return context || this._extractSqsdContext(carrier)
   }
 
