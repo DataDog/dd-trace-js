@@ -2,7 +2,11 @@ const satisfies = require('semifies')
 
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const { parseAnnotations, getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')
+const {
+  parseAnnotations,
+  getTestSuitePath,
+  PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE
+} = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
 
 const testStartCh = channel('ci:playwright:test:start')
@@ -297,7 +301,8 @@ function testBeginHandler (test, browserName, isMainProcess) {
         testName,
         testSuiteAbsolutePath,
         testSourceLine,
-        browserName
+        browserName,
+        isDisabled: test._ddIsDisabled
       })
     })
   }
@@ -330,14 +335,11 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
     testStatuses.push(testStatus)
   }
 
-  let hasFailedAllRetries = false
-  let hasPassedAttemptToFixRetries = false
-
   if (testStatuses.length === testManagementAttemptToFixRetries + 1) {
     if (testStatuses.every(status => status === 'fail')) {
-      hasFailedAllRetries = true
+      test._ddHasFailedAllRetries = true
     } else if (testStatuses.every(status => status === 'pass')) {
-      hasPassedAttemptToFixRetries = true
+      test._ddHasPassedAttemptToFixRetries = true
     }
   }
 
@@ -357,8 +359,8 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
         isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
         isQuarantined: test._ddIsQuarantined,
         isEfdRetry: test._ddIsEfdRetry,
-        hasFailedAllRetries,
-        hasPassedAttemptToFixRetries
+        hasFailedAllRetries: test._ddHasFailedAllRetries,
+        hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries
       })
     })
   }
@@ -425,7 +427,7 @@ function dispatcherHook (dispatcherExport) {
         const { test } = dispatcher._testById.get(params.testId)
         const projects = getProjectsFromDispatcher(dispatcher)
         const browser = getBrowserNameFromProjects(projects, test)
-        testBeginHandler(test, browser)
+        testBeginHandler(test, browser, true)
       } else if (method === 'testEnd') {
         const { test } = dispatcher._testById.get(params.testId)
 
@@ -433,7 +435,14 @@ function dispatcherHook (dispatcherExport) {
         const testResult = results[results.length - 1]
 
         const isTimeout = testResult.status === 'timedOut'
-        testEndHandler(test, params.annotations, STATUS_TO_TEST_STATUS[testResult.status], testResult.error, isTimeout)
+        testEndHandler(
+          test,
+          params.annotations,
+          STATUS_TO_TEST_STATUS[testResult.status],
+          testResult.error,
+          isTimeout,
+          true
+        )
       }
     })
 
@@ -452,13 +461,28 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
       const test = getTestByTestId(dispatcher, testId)
       const projects = getProjectsFromDispatcher(dispatcher)
       const browser = getBrowserNameFromProjects(projects, test)
-      testBeginHandler(test, browser)
+      testBeginHandler(test, browser, false)
     })
     worker.on('testEnd', ({ testId, status, errors, annotations }) => {
       const test = getTestByTestId(dispatcher, testId)
 
       const isTimeout = status === 'timedOut'
-      testEndHandler(test, annotations, STATUS_TO_TEST_STATUS[status], errors && errors[0], isTimeout)
+      testEndHandler(test, annotations, STATUS_TO_TEST_STATUS[status], errors && errors[0], isTimeout, false)
+      // We want to send the ddProperties to the worker
+      worker.process.send({
+        type: 'ddProperties',
+        testId: test.id,
+        properties: {
+          _ddIsDisabled: test._ddIsDisabled,
+          _ddIsQuarantined: test._ddIsQuarantined,
+          _ddIsAttemptToFix: test._ddIsAttemptToFix,
+          _ddIsAttemptToFixRetry: test._ddIsAttemptToFixRetry,
+          _ddIsNew: test._ddIsNew,
+          _ddIsEfdRetry: test._ddIsEfdRetry,
+          _ddHasFailedAllRetries: test._ddHasFailedAllRetries,
+          _ddHasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries
+        }
+      })
     })
 
     return worker
@@ -751,7 +775,7 @@ addHook({
       // TODO: remove this comment
       // It's not recommended that workers report directly to the intake or the agent,
       // since they're more likely to be shut down quickly. `process.send` is more reliable.
-      if (Array.isArray(message) && message[0] === 90) {
+      if (Array.isArray(message) && message[0] === PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE) {
         workerReportCh.publish(message[1])
       }
     })
@@ -830,18 +854,42 @@ addHook({
       onDone = resolve
     })
 
+    // Wait for ddProperties to be received and processed
+    // Create a promise that will be resolved when the properties are received
+    const ddPropertiesPromise = new Promise(resolve => {
+      const messageHandler = ({ type, testId, properties }) => {
+        if (type === 'ddProperties' && testId === test.id) {
+          // Apply the properties to the test object
+          if (properties) {
+            Object.assign(test, properties)
+          }
+          process.removeListener('message', messageHandler)
+          resolve()
+        }
+      }
+
+      // Add the listener
+      process.on('message', messageHandler)
+    })
+
+    // Wait for the properties to be received
+    await ddPropertiesPromise
+
     testAsyncResource.runInAsyncScope(() => {
       testFinishCh.publish({
         testStatus: STATUS_TO_TEST_STATUS[status],
         steps: steps.filter(step => step.testId === testId),
         error,
         extraTags: annotationTags,
+        isNew: test._ddIsNew,
         isRetry: retry > 0,
-        // TODO: remove this comment
-        // These do not work because `test` modifications are not sent to the worker
-        // isNew: test._ddIsNew,
-        // isQuarantined: test._ddIsQuarantined,
-        // isEfdRetry: test._ddIsEfdRetry,
+        isEfdRetry: test._ddIsEfdRetry,
+        isAttemptToFix: test._ddIsAttemptToFix,
+        isDisabled: test._ddIsDisabled,
+        isQuarantined: test._ddIsQuarantined,
+        isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
+        hasFailedAllRetries: test._ddHasFailedAllRetries,
+        hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
         onDone
       })
     })

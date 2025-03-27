@@ -237,6 +237,7 @@ class PlaywrightPlugin extends CiPlugin {
       isEfdRetry,
       isRetry,
       isAttemptToFix,
+      isDisabled,
       isQuarantined,
       isAttemptToFixRetry,
       hasFailedAllRetries,
@@ -277,6 +278,9 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (hasPassedAttemptToFixRetries) {
         span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+      }
+      if (isDisabled) {
+        span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
       }
       if (isQuarantined) {
         span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
