@@ -2,7 +2,7 @@
 
 const { DD_TELEMETRY_REQUEST_METRICS } = require('./common')
 const { addRaspRequestMetrics, trackRaspMetrics } = require('./rasp')
-const { incrementMissingUserId, incrementMissingUserLogin } = require('./user')
+const { incrementMissingUserId, incrementMissingUserLogin, incrementSdkEvent } = require('./user')
 const {
   addWafRequestMetrics,
   trackWafMetrics,
@@ -74,6 +74,20 @@ function updateWafRequestsMetricTags (metrics, req) {
   return trackWafMetrics(store, metrics)
 }
 
+function updateRateLimitedMetric (req) {
+  if (!enabled) return
+
+  const store = getStore(req)
+  trackWafMetrics(store, { rateLimited: true })
+}
+
+function updateBlockFailureMetric (req) {
+  if (!enabled) return
+
+  const store = getStore(req)
+  trackWafMetrics(store, { blockFailed: true })
+}
+
 function incrementWafInitMetric (wafVersion, rulesVersion, success) {
   if (!enabled) return
 
@@ -107,6 +121,12 @@ function incrementMissingUserIdMetric (framework, eventType) {
   incrementMissingUserId(framework, eventType)
 }
 
+function incrementSdkEventMetric (framework, eventType) {
+  if (!enabled) return
+
+  incrementSdkEvent(framework, eventType)
+}
+
 function getRequestMetrics (req) {
   if (req) {
     const store = getStore(req)
@@ -119,12 +139,15 @@ module.exports = {
   disable,
 
   updateWafRequestsMetricTags,
+  updateRateLimitedMetric,
+  updateBlockFailureMetric,
   updateRaspRequestsMetricTags,
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,
   incrementMissingUserLoginMetric,
   incrementMissingUserIdMetric,
+  incrementSdkEventMetric,
 
   getRequestMetrics
 }
