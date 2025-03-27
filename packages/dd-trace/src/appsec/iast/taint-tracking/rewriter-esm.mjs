@@ -9,7 +9,7 @@ import constants from './constants.js'
 const currentUrl = new URL(import.meta.url)
 const ddTraceDir = path.join(currentUrl.pathname, '..', '..', '..', '..', '..', '..')
 
-let port, rewriter
+let port, rewriter, iastEnabled
 
 let orchestrionConfig
 
@@ -18,6 +18,7 @@ export async function initialize (data) {
 
   const { csiMethods, telemetryVerbosity, chainSourceMap, orchestrion } = data
   port = data.port
+  iastEnabled = data.iastEnabled
 
   const iastRewriter = await import('@datadog/wasm-js-rewriter')
 
@@ -41,12 +42,15 @@ export async function load (url, context, nextLoad) {
 
   let passes
   try {
+    if (!isNotLibraryFile(url)) {
+      return result
+    }
     if (isPrivateModule(url) && isNotLibraryFile(url)) {
       // TODO error tracking needs to be added based on config
       passes = ['error_tracking']
-      // if (config.iast?.enabled) { // TODO add config so we can actually do this
-      //   passes.push('iast')
-      // }
+      if (iastEnabled) {
+        passes.push('iast')
+      }
     } else {
       passes = ['orchestrion']
     }
