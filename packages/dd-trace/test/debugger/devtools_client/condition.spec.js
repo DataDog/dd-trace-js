@@ -12,6 +12,8 @@ class SideEffectObject {
 }
 const weakKey = { weak: 'key' }
 
+process[Symbol.for('datadog:isProxy')] = require('util').types.isProxy
+
 const testCases = [
   [{ ref: 'foo' }, { foo: 42 }, 42],
   [{ ref: 'foo' }, {}, new ReferenceError('foo is not defined')],
@@ -242,9 +244,14 @@ const testCases = [
     { instanceof: [{ ref: 'bar' }, 'SideEffectObject'] },
     { bar: new SideEffectObject(), SideEffectObject },
     new Error('Possibility of side effect')
-  ]
+  ],
 
-  // TODO: Ensure there's no side-effects due to proxies
+  // Proxies
+  [
+    { eq: [{ getmember: [{ ref: 'proxy' }, 'foo'] }, 'bar'] },
+    { proxy: new Proxy({}, { get (_, p) { if (p === 'foo') throw new Error('This should never throw!') } }) },
+    new Error('Possibility of side effect')
+  ]
 ]
 
 const definedTestCases = [
@@ -292,6 +299,13 @@ describe('Expresion language condition compilation', function () {
       expect(result).to.deep.equal(expected)
     })
   }
+
+  it('should abort if isProxy is not available on the global scope', function () {
+    process[Symbol.for('datadog:isProxy')] = undefined
+    const ast = { getmember: [{ ref: 'proxy' }, 'foo'] }
+    const fn = new Function('proxy', `return ${compile(ast)}`) // eslint-disable-line no-new-func
+    expect(fn).to.throw(Error, 'Possibility of side effect')
+  })
 })
 
 function runWithDebug (fn, args = []) {

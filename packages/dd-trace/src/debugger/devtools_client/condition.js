@@ -157,10 +157,15 @@ function accessProperty (variable, keyOrIndex, allowMapAccess) {
 
 function guardAgainstPropertyAccessSideEffects (variable, propertyName) {
   return `(() => {
-    if (Object.getOwnPropertyDescriptor(${variable}, ${propertyName})?.get === undefined) {
-      return ${variable}[${propertyName}]
-    } else {
+    const isProxy = process[Symbol.for('datadog:isProxy')]
+    if (
+      !isProxy ||
+      isProxy(${variable}) ||
+      Object.getOwnPropertyDescriptor(${variable}, ${propertyName})?.get !== undefined
+    ) {
       throw new Error('Possibility of side effect')
+    } else {
+      return ${variable}[${propertyName}]
     }
   })()`
 }

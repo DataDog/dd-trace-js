@@ -1,5 +1,6 @@
 'use strict'
 
+const { types: { isProxy } } = require('util')
 const { join } = require('path')
 const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
 const log = require('../log')
@@ -23,6 +24,8 @@ function start (config, rc) {
   const rcAckCallbacks = new Map()
   const rcChannel = new MessageChannel()
   configChannel = new MessageChannel()
+
+  process[Symbol.for('datadog:isProxy')] = isProxy
 
   rc.setProductHandler('LIVE_DEBUGGING', (action, conf, id, ack) => {
     rcAckCallbacks.set(++ackId, ack)
