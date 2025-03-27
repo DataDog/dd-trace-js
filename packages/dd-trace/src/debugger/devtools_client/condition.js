@@ -31,7 +31,7 @@ function compile (node) {
         typeof klass[Symbol.hasInstance] === 'function' &&
         klass[Symbol.hasInstance] !== Function.prototype[Symbol.hasInstance]
       ) {
-        throw new Error('Posibility of side effect')
+        throw new Error('Possibility of side effect')
       } else {
         return ${compile(value[0])} instanceof klass
       }
@@ -45,7 +45,7 @@ function compile (node) {
       ) {
         return val.length
       } else if (val instanceof Set || val instanceof Map) {
-        return ${throwOnSideEffect('val', '"size"')}
+        return ${guardAgainstPropertyAccessSideEffects('val', '"size"')}
       } else {
         throw new TypeError('Variable does not support len/count')
       }
@@ -150,17 +150,17 @@ function accessProperty (variable, keyOrIndex, allowMapAccess) {
         ? `return ${callMethodOnPrototype(variable, 'get', keyOrIndex)}`
         : 'throw new Error(\'Accessing a Map or WeakMap is not allowed\')'}
     } else {
-      return ${throwOnSideEffect(variable, keyOrIndex)}
+      return ${guardAgainstPropertyAccessSideEffects(variable, keyOrIndex)}
     }
   })()`
 }
 
-function throwOnSideEffect (variable, propertyName) {
+function guardAgainstPropertyAccessSideEffects (variable, propertyName) {
   return `(() => {
     if (Object.getOwnPropertyDescriptor(${variable}, ${propertyName})?.get === undefined) {
       return ${variable}[${propertyName}]
     } else {
-      throw new Error('Posibility of side effect')
+      throw new Error('Possibility of side effect')
     }
   })()`
 }
