@@ -972,6 +972,8 @@ class Config {
     this._setBoolean(env, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
     this._setBoolean(env, 'tracePropagationExtractFirst', DD_TRACE_PROPAGATION_EXTRACT_FIRST)
     const stringPropagationBehaviorExtract = String(DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT)
+    console.log("printing Config: " + stringPropagationBehaviorExtract)
+    console.log("VALID_PROPAGATION_BEHAVIOR_EXTRACT.has(stringPropagationBehaviorExtract): " + VALID_PROPAGATION_BEHAVIOR_EXTRACT.has(stringPropagationBehaviorExtract))
     this._setValue(env, 'tracePropagationBehaviorExtract', VALID_PROPAGATION_BEHAVIOR_EXTRACT.has(stringPropagationBehaviorExtract) ? stringPropagationBehaviorExtract : 'continue')
     this._setBoolean(env, 'tracePropagationStyle.otelPropagators',
       DD_TRACE_PROPAGATION_STYLE ||
