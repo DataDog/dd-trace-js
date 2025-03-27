@@ -319,10 +319,11 @@ class DatadogSpan {
     let spanContext
     let startTime
     
-
+    let baggage = {}
     if(parent && this._parentTracer._config.tracePropagationBehaviorExtract !== 'continue' && parent._isRemote){
       console.log("in createContext parent: " + parent)
       console.log("in createContext fields: " + fields)
+      baggage = parent._baggageItems
       parent = null
     }
 
@@ -358,6 +359,10 @@ class DatadogSpan {
         spanContext._trace.tags['_dd.p.tid'] = Math.floor(startTime / 1000).toString(16)
           .padStart(8, '0')
           .padEnd(16, '0')
+      }
+
+      if(this._parentTracer._config.tracePropagationBehaviorExtract !== 'continue'){
+        spanContext._baggageItems = baggage
       }
     }
 
