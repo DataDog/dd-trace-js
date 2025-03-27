@@ -320,11 +320,11 @@ class DatadogSpan {
     let startTime
     
 
-    if(parent && this._parentTracer._config.tracePropagationBehaviorExtract !== 'continue' && parent._isRemote){
-      console.log("in createContext parent: " + parent)
-      console.log("in createContext fields: " + fields)
-      parent = None
-    }
+    // if(parent && this._parentTracer._config.tracePropagationBehaviorExtract !== 'continue' && parent._isRemote){
+    //   console.log("in createContext parent: " + parent)
+    //   console.log("in createContext fields: " + fields)
+    //   parent = None
+    // }
 
     if (fields.context) {
       spanContext = fields.context
