@@ -1,6 +1,12 @@
 'use strict'
 
-const { EVP_EVENT_SIZE_LIMIT, EVP_PAYLOAD_SIZE_LIMIT, AGENTLESS_SPANS_ENDPOINT } = require('../constants/writers')
+const {
+  EVP_EVENT_SIZE_LIMIT,
+  EVP_PAYLOAD_SIZE_LIMIT,
+  SPANS_ENDPOINT,
+  SPANS_EVENT_TYPE,
+  SPANS_INTAKE
+} = require('../constants/writers')
 const { DROPPED_VALUE_TEXT } = require('../constants/text')
 const { DROPPED_IO_COLLECTION_ERROR } = require('../constants/tags')
 const BaseWriter = require('./base')
@@ -12,9 +18,9 @@ class LLMObsSpanWriter extends BaseWriter {
   constructor (config) {
     super({
       config,
-      eventType: 'span',
-      intake: 'llmobs-intake',
-      endpoint: AGENTLESS_SPANS_ENDPOINT
+      eventType: SPANS_EVENT_TYPE,
+      intake: SPANS_INTAKE,
+      endpoint: SPANS_ENDPOINT
     })
   }
 
