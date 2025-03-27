@@ -358,12 +358,12 @@ class TextMapPropagator {
 
     this._extractBaggageItems(carrier, context)
 
-    // if(this._config.tracePropagationBehaviorExtract !== 'continue'){
-    //   context._links = []
-    //   if(this._config.tracePropagationBehaviorExtract === 'restart'){
-    //     context._links.push({context: context, attributes: {reason: 'propagation_behavior_extract', context_headers: style}})
-    //   }
-    // }
+    if(this._config.tracePropagationBehaviorExtract !== 'continue'){
+      context._links = []
+      if(this._config.tracePropagationBehaviorExtract === 'restart'){
+        context._links.push({context: context, attributes: {reason: 'propagation_behavior_extract', context_headers: style}})
+      }
+    }
 
     if(context){
       console.log("context in extractSpanContext: " + context.traceId)
