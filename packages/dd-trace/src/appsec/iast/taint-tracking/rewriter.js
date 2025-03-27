@@ -6,7 +6,7 @@ const Module = require('module')
 const { pathToFileURL } = require('url')
 const { MessageChannel } = require('worker_threads')
 const shimmer = require('../../../../../datadog-shimmer')
-const { isPrivateModule, isNotLibraryFile } = require('./filter')
+const { isPrivateModule, isLibraryFile } = require('./filter')
 const { csiMethods } = require('./csi-methods')
 const { getName } = require('../telemetry/verbosity')
 const telemetry = require('../telemetry')
@@ -92,7 +92,7 @@ function getCompileMethodFn (compileMethod) {
   return function (content, filename) {
     try {
       let passes
-      if (!isNotLibraryFile(filename)) {
+      if (isLibraryFile(filename)) {
         return compileMethod.apply(this, [content, filename])
       }
       if (isPrivateModule(filename)) {
