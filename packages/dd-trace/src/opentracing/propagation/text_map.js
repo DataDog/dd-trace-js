@@ -298,6 +298,7 @@ class TextMapPropagator {
   }
 
   _extractSpanContext (carrier) {
+    console.log("propagationBehaviorExtract in extractSpanContext: " + this._config.propagationBehaviorExtract)
     if(this._config.propagationBehaviorExtract === 'ignore'){
       console.log(id())
       return new DatadogSpanContext({
