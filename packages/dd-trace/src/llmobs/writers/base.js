@@ -105,7 +105,7 @@ class BaseLLMObsWriter {
 
   setAgentless (agentless) {
     this._agentless = agentless
-    logger.debug(`Started ${this.constructor.name} to ${this._url.href}`)
+    logger.debug(`Configuring ${this.constructor.name} to ${this._url.href}`)
   }
 
   _getOptions () {

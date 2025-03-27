@@ -9,14 +9,6 @@ const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
 
-const config = {
-  llmobs: {
-    mlApp: 'test'
-  },
-  apiKey: 'test',
-  site: 'datadoghq.com'
-}
-
 const { expect } = require('chai')
 
 describe('module', () => {
@@ -71,7 +63,7 @@ describe('module', () => {
 
   describe('handle llmobs info injection', () => {
     it('injects LLMObs parent ID when there is a parent LLMObs span', () => {
-      llmobsModule.enable(config)
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
       store.span = {
         context () {
           return {
@@ -91,7 +83,7 @@ describe('module', () => {
     })
 
     it('does not inject LLMObs parent ID when there is no parent LLMObs span', () => {
-      llmobsModule.enable(config)
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
 
       const carrier = {
         'x-datadog-tags': ''
@@ -102,28 +94,13 @@ describe('module', () => {
   })
 
   describe('with agentlessEnabled set to `true`', () => {
-    beforeEach(() => {
-      config.llmobs.agentlessEnabled = true
-    })
-
-    afterEach(() => {
-      delete config.llmobs.agentlessEnabled
-    })
-
     describe('if no api key is provided', () => {
-      let originalApiKey
-
-      beforeEach(() => {
-        originalApiKey = config.apiKey
-        config.apiKey = undefined
-      })
-
-      afterEach(() => {
-        config.apiKey = originalApiKey
-      })
-
       it('throws an error', () => {
-        expect(() => llmobsModule.enable(config)).to.throw(
+        expect(() => llmobsModule.enable({
+          llmobs: {
+            agentlessEnabled: true
+          }
+        })).to.throw(
           'Cannot send LLM Observability data without a running agent or without a Datadog API key.\n' +
           'Ensure this configuration is set before running your application.'
         )
@@ -132,7 +109,13 @@ describe('module', () => {
 
     describe('if an api key is provided', () => {
       it('configures agentless writers', () => {
-        llmobsModule.enable(config)
+        llmobsModule.enable({
+          llmobs: {
+            agentlessEnabled: true
+          },
+          apiKey: 'test',
+          site: 'datadoghq.com'
+        })
 
         expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(true)
         expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(true)
@@ -141,16 +124,12 @@ describe('module', () => {
   })
 
   describe('with agentlessEnabled set to `false`', () => {
-    beforeEach(() => {
-      config.llmobs.agentlessEnabled = false
-    })
-
-    afterEach(() => {
-      delete config.llmobs.agentlessEnabled
-    })
-
     it('configures agent-proxy writers', () => {
-      llmobsModule.enable(config)
+      llmobsModule.enable({
+        llmobs: {
+          agentlessEnabled: false
+        }
+      })
 
       expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(false)
       expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(false)
@@ -172,24 +151,17 @@ describe('module', () => {
         })
 
         describe('when no API key is provided', () => {
-          let originalApiKey
-
-          beforeEach(() => {
-            originalApiKey = config.apiKey
-            config.apiKey = undefined
-          })
-
-          afterEach(() => {
-            config.apiKey = originalApiKey
-          })
-
           it('throws an error', () => {
-            expect(() => llmobsModule.enable(config)).to.throw()
+            expect(() => llmobsModule.enable({ llmobs: { mlApp: 'test' } })).to.throw()
           })
         })
 
         it('configures the agentless writers', () => {
-          llmobsModule.enable(config)
+          llmobsModule.enable({
+            llmobs: {},
+            apiKey: 'test',
+            site: 'datadoghq.com'
+          })
 
           expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(true)
           expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(true)
@@ -205,7 +177,7 @@ describe('module', () => {
         })
 
         it('configures the agent-proxy writers', () => {
-          llmobsModule.enable(config)
+          llmobsModule.enable({ llmobs: { mlApp: 'test' } })
 
           expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(false)
           expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(false)
@@ -222,19 +194,8 @@ describe('module', () => {
       })
 
       describe('when no API key is provided', () => {
-        let originalApiKey
-
-        beforeEach(() => {
-          originalApiKey = config.apiKey
-          config.apiKey = undefined
-        })
-
-        afterEach(() => {
-          config.apiKey = originalApiKey
-        })
-
         it('throws an error', () => {
-          expect(() => llmobsModule.enable(config)).to.throw(
+          expect(() => llmobsModule.enable({ llmobs: { mlApp: 'test' } })).to.throw(
             'Cannot send LLM Observability data without a running agent or without a Datadog API key.\n' +
             'Ensure this configuration is set before running your application.'
           )
@@ -243,7 +204,7 @@ describe('module', () => {
 
       describe('when an API key is provided', () => {
         it('configures the agentless writers', () => {
-          llmobsModule.enable(config)
+          llmobsModule.enable({ llmobs: {}, apiKey: 'test', site: 'datadoghq.com' })
 
           expect(LLMObsSpanWriterSpy().setAgentless).to.have.been.calledWith(true)
           expect(LLMObsEvalMetricsWriterSpy().setAgentless).to.have.been.calledWith(true)
@@ -253,7 +214,7 @@ describe('module', () => {
   })
 
   it('appends to the eval metric writer', () => {
-    llmobsModule.enable(config)
+    llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
 
     const payload = {}
 
@@ -263,7 +224,7 @@ describe('module', () => {
   })
 
   it('removes all subscribers when disabling', () => {
-    llmobsModule.enable(config)
+    llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
 
     llmobsModule.disable()
 

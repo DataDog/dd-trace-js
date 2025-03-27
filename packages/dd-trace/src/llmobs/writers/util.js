@@ -4,7 +4,7 @@ const logger = require('../../log')
 const { EVP_PROXY_AGENT_BASE_PATH } = require('../constants/writers')
 const { getAgentInfo } = require('../util')
 
-function configureWriters (config, setWritersAgentlessValue) {
+function setAgentStrategy (config, setWritersAgentlessValue) {
   const agentlessEnabled = config.llmobs.agentlessEnabled
 
   if (agentlessEnabled != null) {
@@ -44,6 +44,6 @@ function parseResponseAndLog (err, code, eventsLength, url, eventType) {
 }
 
 module.exports = {
-  configureWriters,
+  setAgentStrategy,
   parseResponseAndLog
 }

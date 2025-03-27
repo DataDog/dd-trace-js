@@ -14,7 +14,7 @@ const injectCh = channel('dd-trace:span:inject')
 
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
 const LLMObsSpanWriter = require('./writers/spans')
-const { configureWriters } = require('./writers/util')
+const { setAgentStrategy } = require('./writers/util')
 
 /**
  * Setting writers and processor globally when LLMObs is enabled
@@ -24,8 +24,14 @@ const { configureWriters } = require('./writers/util')
  * if the tracer is `init`ed. But, in those cases, we don't want to start writers or subscribe
  * to channels.
  */
+
+/** @type {LLMObsSpanProcessor | null} */
 let spanProcessor
+
+/** @type {LLMObsSpanWriter | null} */
 let spanWriter
+
+/** @type {LLMObsEvalMetricsWriter | null} */
 let evalWriter
 
 function enable (config) {
@@ -45,7 +51,7 @@ function enable (config) {
   // distributed tracing for llmobs
   injectCh.subscribe(handleLLMObsParentIdInjection)
 
-  configureWriters(config, useAgentless => {
+  setAgentStrategy(config, useAgentless => {
     if (useAgentless && !config.apiKey) {
       throw new Error(
         'Cannot send LLM Observability data without a running agent or without a Datadog API key.\n' +
