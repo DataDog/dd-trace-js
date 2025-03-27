@@ -146,7 +146,7 @@ class EmbeddingsConstructorPlugin extends TracingPlugin {
     return 'tracing:orchestrion:@langchain/core:Embeddings_constructor'
   }
 
-  end(ctx) {
+  end (ctx) {
     const { self } = ctx
     const namespace = ['langchain', 'embeddings']
 
@@ -157,7 +157,8 @@ class EmbeddingsConstructorPlugin extends TracingPlugin {
     const queryChannel = tracingChannel('apm:@langchain/core:Embeddings_embedQuery')
     shimmer.wrap(self, 'embedQuery', embedQuery => wrapLangChainPromise(embedQuery, namespace, queryChannel))
     const documentsChannel = tracingChannel('apm:@langchain/core:Embeddings_embedDocuments')
-    shimmer.wrap(self, 'embedDocuments', embedDocuments => wrapLangChainPromise(embedDocuments, namespace, documentsChannel))
+    shimmer.wrap(
+      self, 'embedDocuments', embedDocuments => wrapLangChainPromise(embedDocuments, namespace, documentsChannel))
   }
 }
 
