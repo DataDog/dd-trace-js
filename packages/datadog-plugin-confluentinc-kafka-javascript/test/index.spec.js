@@ -150,7 +150,9 @@ describe('Plugin', () => {
               })
 
               await consumer.run({
-                eachMessage: () => {}
+                eachMessage: async () => {
+                  await consumer.disconnect()
+                }
               })
               await sendMessages(kafka, testTopic, messages)
               return expectedSpanPromise
@@ -166,6 +168,7 @@ describe('Plugin', () => {
                   expect(currentSpan).to.not.equal(firstSpan)
                   expect(currentSpan.context()._name).to.equal(expectedSchema.receive.opName)
                   done()
+                  await consumer.disconnect()
                 } catch (e) {
                   done(e)
                 } finally {
@@ -191,7 +194,11 @@ describe('Plugin', () => {
                 expect(parseInt(span.parent_id.toString())).to.be.gt(0)
               }, 10000)
 
-              await consumer.run({ eachMessage: () => {} })
+              await consumer.run({
+                eachMessage: async () => {
+                  await consumer.disconnect()
+                }
+              })
               await sendMessages(kafka, testTopic, messages)
               await expectedSpanPromise
             })
@@ -215,6 +222,7 @@ describe('Plugin', () => {
               })
 
               const eachMessage = async ({ topic, partition, message }) => {
+                await consumer.disconnect()
                 throw fakeError
               }
 
@@ -440,6 +448,7 @@ describe('Plugin', () => {
               await consumer.run({
                 eachMessage: async () => {
                   runArgs.push(setDataStreamsContextSpy.lastCall.args[0])
+                  await consumer.disconnect()
                 }
               })
               await sendMessages(kafka, testTopic, messages)
@@ -454,10 +463,10 @@ describe('Plugin', () => {
               await consumer.run({
                 eachBatch: async () => {
                   runArgs.push(setDataStreamsContextSpy.lastCall.args[0])
+                  await consumer.disconnect()
                 }
               })
               await sendMessages(kafka, testTopic, messages)
-              await consumer.disconnect()
               for (const runArg of runArgs) {
                 expect(runArg.hash).to.equal(expectedConsumerHash)
               }
@@ -480,13 +489,14 @@ describe('Plugin', () => {
                 DataStreamsProcessor.prototype.recordCheckpoint.restore()
               }
               const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
-              await sendMessages(kafka, testTopic, messages)
               await consumer.run({
                 eachMessage: async () => {
                   expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
                   recordCheckpointSpy.restore()
+                  await consumer.disconnect()
                 }
               })
+              await sendMessages(kafka, testTopic, messages)
             })
           })
 
@@ -513,10 +523,11 @@ describe('Plugin', () => {
                     partition,
                     offset: Number(message.offset)
                   }
+                  await consumer.disconnect()
                 }
               })
               await new Promise(resolve => setTimeout(resolve, 50)) // Let eachMessage be called
-              await consumer.disconnect() // Flush ongoing `eachMessage` calls
+
               for (const call of setOffsetSpy.getCalls()) {
                 // TODO: Why do we not want to see consumer offsets here?
                 expect(call.args[0]).to.not.have.property('type', 'kafka_commit')
@@ -528,10 +539,14 @@ describe('Plugin', () => {
                */
               consumer.connect()
               await sendMessages(kafka, testTopic, messages)
-              await consumer.run({ eachMessage: async () => {}, autoCommit: false })
+              await consumer.run({
+                eachMessage: async () => {
+                  await consumer.disconnect()
+                },
+                autoCommit: false
+              })
               setOffsetSpy.resetHistory()
               await consumer.commitOffsets([commitMeta])
-              await consumer.disconnect()
 
               // Check our work
               const runArg = setOffsetSpy.lastCall.args[0]
