@@ -6,6 +6,7 @@ const { storage } = require('./storage')
 
 const LLMObsSpanProcessor = require('./span_processor')
 
+const telemetry = require('./telemetry')
 const { channel } = require('dc-polyfill')
 const spanProcessCh = channel('dd-trace:span:process')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -29,6 +30,7 @@ let spanWriter
 let evalWriter
 
 function enable (config) {
+  const startTime = performance.now()
   // create writers and eval writer append and flush channels
   // span writer append is handled by the span processor
   evalWriter = new LLMObsEvalMetricsWriter(config)
@@ -44,6 +46,7 @@ function enable (config) {
 
   // distributed tracing for llmobs
   injectCh.subscribe(handleLLMObsParentIdInjection)
+  telemetry.recordLLMObsEnabled(startTime, config)
 }
 
 function disable () {

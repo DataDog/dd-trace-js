@@ -1,7 +1,7 @@
 'use strict'
 
 const { DD_TELEMETRY_REQUEST_METRICS } = require('./common')
-const { incrementMissingUserId, incrementMissingUserLogin } = require('./user')
+const { incrementMissingUserId, incrementMissingUserLogin, incrementSdkEvent } = require('./user')
 const {
   addRaspRequestMetrics,
   trackRaspMetrics,
@@ -143,6 +143,12 @@ function incrementMissingUserIdMetric (framework, eventType) {
   incrementMissingUserId(framework, eventType)
 }
 
+function incrementSdkEventMetric (framework, eventType) {
+  if (!enabled) return
+
+  incrementSdkEvent(framework, eventType)
+}
+
 function getRequestMetrics (req) {
   if (req) {
     const store = getStore(req)
@@ -165,6 +171,7 @@ module.exports = {
   incrementWafRequestsMetric,
   incrementMissingUserLoginMetric,
   incrementMissingUserIdMetric,
+  incrementSdkEventMetric,
 
   getRequestMetrics
 }
