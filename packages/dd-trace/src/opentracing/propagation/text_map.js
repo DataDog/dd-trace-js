@@ -299,13 +299,6 @@ class TextMapPropagator {
 
   _extractSpanContext (carrier) {
     console.log("propagationBehaviorExtract in extractSpanContext: " + this._config.propagationBehaviorExtract)
-    if(this._config.tracePropagationBehaviorExtract === 'ignore'){
-      console.log(id())
-      return new DatadogSpanContext({
-        traceId: id(),
-        spanId: id(),
-        isRemote: true})
-    }
     
     let context = null
     let style = ''
@@ -365,12 +358,11 @@ class TextMapPropagator {
 
     this._extractBaggageItems(carrier, context)
 
-    if(this._config.propagationBehaviorExtract === 'restart'){
-      return new DatadogSpanContext({
-        traceId: id(),
-        spanId: id(),
-        isRemote: true,
-        links: {context: context, attributes: {reason: 'propagation_behavior_extract', context_headers: style}}})
+    if(this._config.tracePropagationBehaviorExtract !== 'continue'){
+      context._links = []
+      if(this._config.tracePropagationBehaviorExtract === 'restart'){
+        context._links.push({context: context, attributes: {reason: 'propagation_behavior_extract', context_headers: style}})
+      }
     }
 
     return context || this._extractSqsdContext(carrier)
