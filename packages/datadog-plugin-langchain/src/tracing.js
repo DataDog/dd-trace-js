@@ -3,8 +3,6 @@
 const { MEASURED } = require('../../../ext/tags')
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const shimmer = require('../../datadog-shimmer')
-const { tracingChannel } = require('dc-polyfill')
 
 const API_KEY = 'langchain.request.api_key'
 const MODEL = 'langchain.request.model'
@@ -124,44 +122,6 @@ class BaseLLMGeneratePlugin extends BaseLangChainTracingPlugin {
   }
 }
 
-function wrapLangChainPromise (fn, namespace, channel) {
-  return function () {
-    if (!channel.start.hasSubscribers) {
-      return fn.apply(this, arguments)
-    }
-
-    const ctx = {
-      self: this,
-      arguments,
-      namespace
-    }
-
-    return channel.tracePromise(fn, ctx, this, ...arguments)
-  }
-}
-
-class EmbeddingsConstructorPlugin extends TracingPlugin {
-  static get id () { return 'langchain_embeddings_constructor' }
-  static get prefix () {
-    return 'tracing:orchestrion:@langchain/core:Embeddings_constructor'
-  }
-
-  end (ctx) {
-    const { self } = ctx
-    const namespace = ['langchain', 'embeddings']
-
-    if (self.constructor.name === 'OpenAIEmbeddings') {
-      namespace.push('openai')
-    }
-
-    const queryChannel = tracingChannel('apm:@langchain/core:Embeddings_embedQuery')
-    shimmer.wrap(self, 'embedQuery', embedQuery => wrapLangChainPromise(embedQuery, namespace, queryChannel))
-    const documentsChannel = tracingChannel('apm:@langchain/core:Embeddings_embedDocuments')
-    shimmer.wrap(
-      self, 'embedDocuments', embedDocuments => wrapLangChainPromise(embedDocuments, namespace, documentsChannel))
-  }
-}
-
 class EmbeddingsEmbedQueryPlugin extends BaseLangChainTracingPlugin {
   static get id () { return 'langchain_embeddings_embed_query' }
   static get lcType () { return 'embedding' }
@@ -183,7 +143,6 @@ module.exports = [
   RunnableSequenceBatchPlugin,
   BaseChatModelGeneratePlugin,
   BaseLLMGeneratePlugin,
-  EmbeddingsConstructorPlugin,
   EmbeddingsEmbedQueryPlugin,
   EmbeddingsEmbedDocumentsPlugin
 ]

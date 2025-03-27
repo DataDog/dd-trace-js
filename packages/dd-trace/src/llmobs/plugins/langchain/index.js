@@ -169,44 +169,6 @@ class BaseLLMGeneratePlugin extends BaseLangChainLLMObsPlugin {
   }
 }
 
-function wrapLangChainPromise (fn, namespace, channel) {
-  return function () {
-    if (!channel.start.hasSubscribers) {
-      return fn.apply(this, arguments)
-    }
-
-    const ctx = {
-      self: this,
-      arguments,
-      namespace
-    }
-
-    return channel.tracePromise(fn, ctx, this, ...arguments)
-  }
-}
-
-class EmbeddingsConstructorPlugin extends BaseLangChainLLMObsPlugin {
-  static get id () { return 'llmobs_langchain_embeddings_constructor' }
-  static get prefix () {
-    return 'tracing:orchestrion:@langchain/core:Embeddings_constructor'
-  }
-
-  end (ctx) {
-    const { self } = ctx
-    const namespace = ['langchain', 'embeddings']
-
-    if (self.constructor.name === 'OpenAIEmbeddings') {
-      namespace.push('openai')
-    }
-
-    const queryChannel = tracingChannel('apm:@langchain/core:Embeddings_embedQuery')
-    shimmer.wrap(self, 'embedQuery', embedQuery => wrapLangChainPromise(embedQuery, namespace, queryChannel))
-    const documentsChannel = tracingChannel('apm:@langchain/core:Embeddings_embedDocuments')
-    shimmer.wrap(
-      self, 'embedDocuments', embedDocuments => wrapLangChainPromise(embedDocuments, namespace, documentsChannel)
-    )
-  }
-}
 
 class EmbeddingsEmbedQueryPlugin extends BaseLangChainLLMObsPlugin {
   static get id () { return 'llmobs_langchain_embeddings_embed_query' }
@@ -231,7 +193,6 @@ module.exports = [
   RunnableSequenceBatchPlugin,
   BaseChatModelGeneratePlugin,
   BaseLLMGeneratePlugin,
-  EmbeddingsConstructorPlugin,
   EmbeddingsEmbedQueryPlugin,
   EmbeddingsEmbedDocumentsPlugin
 ]
