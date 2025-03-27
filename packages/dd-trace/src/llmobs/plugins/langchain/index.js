@@ -3,6 +3,10 @@
 const log = require('../../../log')
 const LLMObsPlugin = require('../base')
 
+const shimmer = require('../../../../../datadog-shimmer')
+
+const { tracingChannel } = require('dc-polyfill')
+
 const pluginManager = require('../../../../../..')._pluginManager
 
 const ANTHROPIC_PROVIDER_NAME = 'anthropic'
@@ -20,7 +24,8 @@ const ChatModelHandler = require('./handlers/chat_model')
 const LlmHandler = require('./handlers/llm')
 const EmbeddingHandler = require('./handlers/embedding')
 
-class LangChainLLMObsPlugin extends LLMObsPlugin {
+class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
+  static get integration () { return 'langchain' }
   static get id () { return 'langchain' }
   static get prefix () {
     return 'tracing:apm:langchain:invoke'
@@ -55,8 +60,11 @@ class LangChainLLMObsPlugin extends LLMObsPlugin {
   }
 
   setLLMObsTags (ctx) {
+    ctx.args = ctx.arguments
+    ctx.instance = ctx.self
+
     const span = ctx.currentStore?.span
-    const type = ctx.type // langchain operation type (oneof chain,chat_model,llm,embedding)
+    const type = ctx.type = this.constructor.lcType // langchain operation type (oneof chain,chat_model,llm,embedding)
 
     if (!Object.keys(this._handlers).includes(type)) {
       log.warn(`Unsupported LangChain operation type: ${type}`)
@@ -129,4 +137,101 @@ class LangChainLLMObsPlugin extends LLMObsPlugin {
   }
 }
 
-module.exports = LangChainLLMObsPlugin
+class RunnableSequenceInvokePlugin extends BaseLangChainLLMObsPlugin {
+  static get id () { return 'llmobs_langchain_rs_invoke' }
+  static get lcType () { return 'chain' }
+  static get prefix () {
+    return 'tracing:orchestrion:@langchain/core:RunnableSequence_invoke'
+  }
+}
+
+class RunnableSequenceBatchPlugin extends BaseLangChainLLMObsPlugin {
+  static get id () { return 'llmobs_langchain_rs_batch' }
+  static get lcType () { return 'chain' }
+  static get prefix () {
+    return 'tracing:orchestrion:@langchain/core:RunnableSequence_batch'
+  }
+}
+
+class BaseChatModelGeneratePlugin extends BaseLangChainLLMObsPlugin {
+  static get id () { return 'llmobs_langchain_chat_model_generate' }
+  static get lcType () { return 'chat_model' }
+  static get prefix () {
+    return 'tracing:orchestrion:@langchain/core:BaseChatModel_generate'
+  }
+}
+
+class BaseLLMGeneratePlugin extends BaseLangChainLLMObsPlugin {
+  static get id () { return 'llmobs_langchain_llm_generate' }
+  static get lcType () { return 'llm' }
+  static get prefix () {
+    return 'tracing:orchestrion:@langchain/core:BaseLLM_generate'
+  }
+}
+
+function wrapLangChainPromise (fn, namespace, channel) {
+  return function () {
+    if (!channel.start.hasSubscribers) {
+      return fn.apply(this, arguments)
+    }
+
+    const ctx = {
+      self: this,
+      arguments,
+      namespace
+    }
+
+    return channel.tracePromise(fn, ctx, this, ...arguments)
+  }
+}
+
+class EmbeddingsConstructorPlugin extends BaseLangChainLLMObsPlugin {
+  static get id () { return 'llmobs_langchain_embeddings_constructor' }
+  static get prefix () {
+    return 'tracing:orchestrion:@langchain/core:Embeddings_constructor'
+  }
+
+  end (ctx) {
+    const { self } = ctx
+    const namespace = ['langchain', 'embeddings']
+
+    if (self.constructor.name === 'OpenAIEmbeddings') {
+      namespace.push('openai')
+    }
+
+    const queryChannel = tracingChannel('apm:@langchain/core:Embeddings_embedQuery')
+    shimmer.wrap(self, 'embedQuery', embedQuery => wrapLangChainPromise(embedQuery, namespace, queryChannel))
+    const documentsChannel = tracingChannel('apm:@langchain/core:Embeddings_embedDocuments')
+    shimmer.wrap(
+      self, 'embedDocuments', embedDocuments => wrapLangChainPromise(embedDocuments, namespace, documentsChannel)
+    )
+  }
+}
+
+class EmbeddingsEmbedQueryPlugin extends BaseLangChainLLMObsPlugin {
+  static get id () { return 'llmobs_langchain_embeddings_embed_query' }
+  static get lcType () { return 'embedding' }
+  static get prefix () {
+    return 'tracing:apm:@langchain/core:Embeddings_embedQuery'
+  }
+}
+
+class EmbeddingsEmbedDocumentsPlugin extends BaseLangChainLLMObsPlugin {
+  static get id () { return 'llmobs_langchain_embeddings_embed_documents' }
+  static get lcType () { return 'embedding' }
+  static get prefix () {
+    return 'tracing:apm:@langchain/core:Embeddings_embedDocuments'
+  }
+}
+
+// module.exports = LangChainLLMObsPlugin
+
+module.exports = [
+  RunnableSequenceInvokePlugin,
+  RunnableSequenceBatchPlugin,
+  BaseChatModelGeneratePlugin,
+  BaseLLMGeneratePlugin,
+  EmbeddingsConstructorPlugin,
+  EmbeddingsEmbedQueryPlugin,
+  EmbeddingsEmbedDocumentsPlugin
+]
