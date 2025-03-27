@@ -93,7 +93,10 @@ function getCompileMethodFn (compileMethod) {
   let delegate = function (content, filename) {
     try {
       let passes
-      if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
+      if (!isNotLibraryFile(filename)) {
+        return compileMethod.apply(this, [content, filename])
+      }
+      if (isPrivateModule(filename)) {
         // TODO error tracking needs to be added based on config
         passes = ['error_tracking']
         if (config.iast?.enabled) {
@@ -204,7 +207,8 @@ function enableEsmRewriter (telemetryVerbosity) {
           csiMethods,
           telemetryVerbosity,
           chainSourceMap: isFlagPresent('--enable-source-maps'),
-          orchestrion
+          orchestrion,
+          iastEnabled: config?.iast?.enabled
         }
       })
     } catch (e) {
