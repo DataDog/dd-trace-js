@@ -178,6 +178,24 @@ describe('Plugin', () => {
                 .catch(done)
             })
 
+            it('should propagate context', async () => {
+              const expectedSpanPromise = agent.use(traces => {
+                const span = traces[0][0]
+
+                expect(span).to.include({
+                  name: 'kafka.consume',
+                  service: 'test-kafka',
+                  resource: testTopic
+                })
+
+                expect(parseInt(span.parent_id.toString())).to.be.gt(0)
+              }, 10000)
+
+              await consumer.run({ eachMessage: () => {} })
+              await sendMessages(kafka, testTopic, messages)
+              await expectedSpanPromise
+            })
+
             it('should be instrumented w/ error', async () => {
               const fakeError = new Error('Oh No!')
               const expectedSpanPromise = expectSpanWithDefaults({
@@ -542,7 +560,7 @@ function expectSpanWithDefaults (expected) {
     service,
     meta: expected.meta
   }, expected)
-  return expectSomeSpan(agent, expected)
+  return expectSomeSpan(agent, expected, 10000)
 }
 
 async function sendMessages (kafka, topic, messages) {
