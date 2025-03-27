@@ -67,6 +67,12 @@
       "versions": ["^4"]
     }
   ],
+  "@confluentinc/kafka-javascript": [
+    {
+      "name": "kafkajs",
+      "versions": [">=1.4.0"]
+    }
+  ],
   "cypress": [
     {
       "name": "cypress",
