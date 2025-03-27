@@ -64,9 +64,7 @@ function getRewriter (telemetryVerbosity) {
         csiMethods,
         telemetryVerbosity: getName(telemetryVerbosity),
         chainSourceMap,
-        orchestrion,
-        logger: console,
-        logLevel: 'ERROR'
+        orchestrion
       })
     } catch (e) {
       log.error('Unable to initialize Rewriter', e)
