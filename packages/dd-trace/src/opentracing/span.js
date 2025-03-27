@@ -361,7 +361,7 @@ class DatadogSpan {
           .padEnd(16, '0')
       }
 
-      if(this._parentTracer._config.tracePropagationBehaviorExtract !== 'continue'){
+      if(this._parentTracer._config.tracePropagationBehaviorExtract === 'restart'){
         spanContext._baggageItems = baggage
       }
     }
