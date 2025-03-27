@@ -122,19 +122,11 @@ describe('module', () => {
         config.apiKey = originalApiKey
       })
 
-      it('throws an error', async () => {
-        try {
-          await new Promise((resolve) => {
-            llmobsModule.enable(config)
-            resolve()
-          })
-          throw new Error('Expected enable to throw an error')
-        } catch (e) {
-          expect(e.message).to.equal(
-            'Cannot send LLM Observability data without a running agent or without a Datadog API key.\n' +
-            'Ensure this configuration is set before running your application.'
-          )
-        }
+      it('throws an error', () => {
+        expect(() => llmobsModule.enable(config)).to.throw(
+          'Cannot send LLM Observability data without a running agent or without a Datadog API key.\n' +
+          'Ensure this configuration is set before running your application.'
+        )
       })
     })
 
