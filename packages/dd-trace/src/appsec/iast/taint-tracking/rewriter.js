@@ -1,72 +1,72 @@
 'use strict'
 
+const fs = require('fs')
+
 const Module = require('module')
 const { pathToFileURL } = require('url')
 const { MessageChannel } = require('worker_threads')
 const shimmer = require('../../../../../datadog-shimmer')
-const { isPrivateModule, isNotLibraryFile } = require('./filter')
+const { isPrivateModule, isLibraryFile } = require('./filter')
 const { csiMethods } = require('./csi-methods')
 const { getName } = require('../telemetry/verbosity')
-const { getRewriteFunction, incrementTelemetryIfNeeded } = require('./rewriter-telemetry')
+const telemetry = require('../telemetry')
+const { incrementTelemetryIfNeeded } = require('./rewriter-telemetry')
 const dc = require('dc-polyfill')
 const log = require('../../../log')
 const { isMainThread } = require('worker_threads')
 const { LOG_MESSAGE, REWRITTEN_MESSAGE } = require('./constants')
+const orchestrion = require('../../../../../datadog-instrumentations/src/orchestrion-config')
 
+let config
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')
 let rewriter
 let getPrepareStackTrace, cacheRewrittenSourceMap
 let kSymbolPrepareStackTrace
 let esmRewriterEnabled = false
 
-let getRewriterOriginalPathAndLineFromSourceMap = function (path, line, column) {
-  return { path, line, column }
-}
-
 function isFlagPresent (flag) {
   return process.env.NODE_OPTIONS?.includes(flag) ||
     process.execArgv?.some(arg => arg.includes(flag))
 }
 
-function getGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, getOriginalPathAndLineFromSourceMap) {
-  if (chainSourceMap) {
-    return function (path, line, column) {
+let getRewriterOriginalPathAndLineFromSourceMap = function (path, line, column) {
+  return { path, line, column }
+}
+
+function setGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, { getOriginalPathAndLineFromSourceMap }) {
+  if (!getOriginalPathAndLineFromSourceMap) return
+
+  getRewriterOriginalPathAndLineFromSourceMap = chainSourceMap ? (path, line, column) => {
       // if --enable-source-maps is present stacktraces of the rewritten files contain the original path, file and
       // column because the sourcemap chaining is done during the rewriting process so we can skip it
-      if (isPrivateModule(path) && isNotLibraryFile(path)) {
+      if (isPrivateModule(path) && !isLibraryFile(path)) {
         return { path, line, column }
       } else {
         return getOriginalPathAndLineFromSourceMap(path, line, column)
       }
-    }
-  } else {
-    return getOriginalPathAndLineFromSourceMap
-  }
+    } : getOriginalPathAndLineFromSourceMap
 }
 
 function getRewriter (telemetryVerbosity) {
   if (!rewriter) {
     try {
-      const iastRewriter = require('@datadog/native-iast-rewriter')
+      const iastRewriter = require('@datadog/wasm-js-rewriter')
       const Rewriter = iastRewriter.Rewriter
       getPrepareStackTrace = iastRewriter.getPrepareStackTrace
       kSymbolPrepareStackTrace = iastRewriter.kSymbolPrepareStackTrace
       cacheRewrittenSourceMap = iastRewriter.cacheRewrittenSourceMap
 
       const chainSourceMap = isFlagPresent('--enable-source-maps')
-      const getOriginalPathAndLineFromSourceMap = iastRewriter.getOriginalPathAndLineFromSourceMap
-      if (getOriginalPathAndLineFromSourceMap) {
-        getRewriterOriginalPathAndLineFromSourceMap =
-          getGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, getOriginalPathAndLineFromSourceMap)
-      }
+      setGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, iastRewriter)
 
       rewriter = new Rewriter({
         csiMethods,
         telemetryVerbosity: getName(telemetryVerbosity),
-        chainSourceMap
+        chainSourceMap,
+        orchestrion
       })
     } catch (e) {
-      log.error('[ASM] Unable to initialize TaintTracking Rewriter', e)
+      log.error('Unable to initialize Rewriter', e)
     }
   }
   return rewriter
@@ -89,22 +89,34 @@ function getPrepareStackTraceAccessor () {
 }
 
 function getCompileMethodFn (compileMethod) {
-  const rewriteFn = getRewriteFunction(rewriter)
   return function (content, filename) {
     try {
-      if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
-        const rewritten = rewriteFn(content, filename)
-
-        if (rewritten?.literalsResult && hardcodedSecretCh.hasSubscribers) {
-          hardcodedSecretCh.publish(rewritten.literalsResult)
+      let passes
+      if (isLibraryFile(filename)) {
+        return compileMethod.apply(this, [content, filename])
+      }
+      if (isPrivateModule(filename)) {
+        // TODO error tracking needs to be added based on config
+        passes = ['error_tracking']
+        if (config.iast?.enabled) {
+          passes.push('iast')
         }
+      } else {
+        passes = ['orchestrion']
+      }
+      const rewritten = rewriter.rewrite(content, filename, passes)
 
-        if (rewritten?.content) {
-          return compileMethod.apply(this, [rewritten.content, filename])
-        }
+      incrementTelemetryIfNeeded(rewritten.metrics)
+
+      if (rewritten?.literalsResult && hardcodedSecretCh.hasSubscribers) {
+        hardcodedSecretCh.publish(rewritten.literalsResult)
+      }
+
+      if (rewritten?.content) {
+        return compileMethod.apply(this, [rewritten.content, filename])
       }
     } catch (e) {
-      log.error('[ASM] Error rewriting file %s', filename, e)
+      log.error('Error rewriting file %s', filename, e)
     }
     return compileMethod.apply(this, [content, filename])
   }
@@ -141,7 +153,7 @@ function enableRewriter (telemetryVerbosity) {
 
     enableEsmRewriter(telemetryVerbosity)
   } catch (e) {
-    log.error('[ASM] Error enabling TaintTracking Rewriter', e)
+    log.error('Error enabling Rewriter', e)
   }
 }
 
@@ -175,29 +187,28 @@ function enableEsmRewriter (telemetryVerbosity) {
     port1.unref()
     port2.unref()
 
-    const chainSourceMap = isFlagPresent('--enable-source-maps')
-    const data = {
-      port: port2,
-      csiMethods,
-      telemetryVerbosity,
-      chainSourceMap
-    }
-
     try {
       Module.register('./rewriter-esm.mjs', {
         parentURL: pathToFileURL(__filename),
         transferList: [port2],
-        data
+        data: {
+          port: port2,
+          csiMethods,
+          telemetryVerbosity,
+          chainSourceMap: isFlagPresent('--enable-source-maps'),
+          orchestrion,
+          iastEnabled: config?.iast?.enabled
+        }
       })
     } catch (e) {
-      log.error('[ASM] Error enabling ESM Rewriter', e)
+      log.error('Error enabling ESM Rewriter', e)
       port1.close()
       port2.close()
     }
   }
 }
 
-function disableRewriter () {
+function disable () {
   shimmer.unwrap(Module.prototype, '_compile')
 
   if (!Error.prepareStackTrace?.[kSymbolPrepareStackTrace]) return
@@ -207,7 +218,7 @@ function disableRewriter () {
 
     Error.prepareStackTrace = originalPrepareStackTrace
   } catch (e) {
-    log.warn('[ASM] Error disabling TaintTracking rewriter', e)
+    log.warn('Error disabling Rewriter', e)
   }
 }
 
@@ -215,6 +226,11 @@ function getOriginalPathAndLineFromSourceMap ({ path, line, column }) {
   return getRewriterOriginalPathAndLineFromSourceMap(path, line, column)
 }
 
+function enable (configArg) {
+  config = configArg
+  enableRewriter(telemetry.verbosity || 'OFF')
+}
+
 module.exports = {
-  enableRewriter, disableRewriter, getOriginalPathAndLineFromSourceMap
+  enable, disable, getOriginalPathAndLineFromSourceMap
 }

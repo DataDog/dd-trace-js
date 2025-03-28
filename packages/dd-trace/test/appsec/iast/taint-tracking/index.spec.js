@@ -29,7 +29,6 @@ describe('IAST TaintTracking', () => {
 
   beforeEach(() => {
     taintTracking = proxyquire('../../../../src/appsec/iast/taint-tracking/', {
-      './rewriter': rewriter,
       './operations': taintTrackingOperations,
       './plugin': taintTrackingPlugin
     })
@@ -39,7 +38,6 @@ describe('IAST TaintTracking', () => {
 
   it('Should enable rewriter, taint tracking operations and plugin', () => {
     taintTracking.enableTaintTracking(config.iast)
-    expect(rewriter.enableRewriter).to.be.calledOnce
     expect(taintTrackingOperations.enableTaintOperations).to.be.calledOnce
     expect(taintTrackingPlugin.enable).to.be.calledOnce
     expect(taintTrackingOperations.setMaxTransactions)
@@ -48,7 +46,6 @@ describe('IAST TaintTracking', () => {
 
   it('Should disable both rewriter, taint tracking operations, plugin', () => {
     taintTracking.disableTaintTracking()
-    expect(rewriter.disableRewriter).to.be.calledOnce
     expect(taintTrackingOperations.disableTaintOperations).to.be.calledOnce
     expect(taintTrackingPlugin.disable).to.be.calledOnce
   })
