@@ -144,6 +144,7 @@ const testCases = [
   [{ eq: [{ getmember: [{ ref: 'obj' }, 'foo'] }, { ref: 'undefined' }] }, { obj: { foo: undefined } }, true],
   [{ eq: [{ getmember: [{ ref: 'obj' }, 'foo'] }, { ref: 'undefined' }] }, { obj: {} }, true],
   [{ eq: [{ getmember: [{ ref: 'obj' }, 'foo'] }, { ref: 'undefined' }] }, { obj: { foo: null } }, false],
+  [{ eq: [{ or: [true, false] }, { and: [true, false] }] }, {}, false],
 
   [{ ne: [{ ref: 'str' }, 'foo'] }, { str: 'foo' }, false],
   [{ ne: [{ ref: 'str' }, 'foo'] }, { str: 'bar' }, true],
@@ -153,6 +154,7 @@ const testCases = [
   [{ ne: [{ ref: 'str' }, 'foo'] }, { str: new String('foo') }, true], // eslint-disable-line no-new-wrappers
   [{ ne: [{ ref: 'bool' }, true] }, { bool: true }, false],
   [{ ne: [{ ref: 'nil' }, null] }, { nil: null }, false],
+  [{ ne: [{ or: [false, true] }, { and: [true, false] }] }, {}, true],
 
   [{ gt: [{ ref: 'num' }, 42] }, { num: 43 }, true],
   [{ gt: [{ ref: 'num' }, 42] }, { num: 42 }, false],
@@ -160,6 +162,7 @@ const testCases = [
   [{ gt: [{ ref: 'str' }, 'a'] }, { str: 'b' }, true],
   [{ gt: [{ ref: 'str' }, 'a'] }, { str: 'a' }, false],
   [{ gt: [{ ref: 'str' }, 'b'] }, { str: 'a' }, false],
+  [{ gt: [{ or: [2, 0] }, { and: [1, 1] }] }, {}, true],
 
   [{ ge: [{ ref: 'num' }, 42] }, { num: 43 }, true],
   [{ ge: [{ ref: 'num' }, 42] }, { num: 42 }, true],
@@ -167,6 +170,7 @@ const testCases = [
   [{ ge: [{ ref: 'str' }, 'a'] }, { str: 'b' }, true],
   [{ ge: [{ ref: 'str' }, 'a'] }, { str: 'a' }, true],
   [{ ge: [{ ref: 'str' }, 'b'] }, { str: 'a' }, false],
+  [{ ge: [{ or: [1, 0] }, { and: [1, 2] }] }, {}, false],
 
   [{ lt: [{ ref: 'num' }, 42] }, { num: 43 }, false],
   [{ lt: [{ ref: 'num' }, 42] }, { num: 42 }, false],
@@ -174,6 +178,7 @@ const testCases = [
   [{ lt: [{ ref: 'str' }, 'a'] }, { str: 'b' }, false],
   [{ lt: [{ ref: 'str' }, 'a'] }, { str: 'a' }, false],
   [{ lt: [{ ref: 'str' }, 'b'] }, { str: 'a' }, true],
+  [{ lt: [{ or: [1, 0] }, { and: [1, 0] }] }, {}, false],
 
   [{ le: [{ ref: 'num' }, 42] }, { num: 43 }, false],
   [{ le: [{ ref: 'num' }, 42] }, { num: 42 }, true],
@@ -181,6 +186,7 @@ const testCases = [
   [{ le: [{ ref: 'str' }, 'a'] }, { str: 'b' }, false],
   [{ le: [{ ref: 'str' }, 'a'] }, { str: 'a' }, true],
   [{ le: [{ ref: 'str' }, 'b'] }, { str: 'a' }, true],
+  [{ le: [{ or: [2, 0] }, { and: [1, 1] }] }, {}, false],
 
   [{ substring: [{ ref: 'str' }, 4, 7] }, { str: 'hello world' }, 'hello world'.substring(4, 7)],
   [{ substring: [{ ref: 'str' }, 4] }, { str: 'hello world' }, 'hello world'.substring(4)],
@@ -375,7 +381,11 @@ describe('Expresion language condition compilation', function () {
         expect(() => fn(...args)).to.throw(expected.constructor, expected.message)
       } else {
         const result = runWithDebug(fn, args)
-        expect(result).to.deep.equal(expected)
+        if (typeof expected === 'object') {
+          expect(result).to.deep.equal(expected)
+        } else {
+          expect(result).to.equal(expected)
+        }
       }
     })
   }
@@ -391,7 +401,7 @@ describe('Expresion language condition compilation', function () {
         return result
       `)
       const result = runWithDebug(fn)
-      expect(result).to.deep.equal(expected)
+      expect(result).to.equal(expected)
     })
   }
 
