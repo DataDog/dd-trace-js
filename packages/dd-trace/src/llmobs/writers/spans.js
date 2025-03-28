@@ -45,7 +45,7 @@ class LLMObsSpanWriter extends BaseWriter {
       this.flush()
     }
 
-    super.append(event, eventSizeBytes)
+    super.append(event, processedEventSizeBytes)
   }
 
   makePayload (events) {
