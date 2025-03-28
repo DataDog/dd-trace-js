@@ -96,13 +96,15 @@ describe('Appsec Rasp Telemetry metrics', () => {
           waf_version: '1.0.0',
           event_rules_version: '2.0.0'
         })
-        expect(track).to.have.been.calledWith(42)
+        expect(track.firstCall).to.have.been.calledWith(42)
 
         expect(distribution).to.have.been.calledWith('rasp.duration', {
           waf_version: '1.0.0',
           event_rules_version: '2.0.0'
         })
-        expect(track).to.have.been.calledWith(42)
+        expect(track.secondCall).to.have.been.calledWith(42)
+
+        track.resetHistory()
 
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 35,
@@ -115,13 +117,13 @@ describe('Appsec Rasp Telemetry metrics', () => {
           waf_version: '1.0.0',
           event_rules_version: '2.0.0'
         })
-        expect(track).to.have.been.calledWith(35)
+        expect(track.firstCall).to.have.been.calledWith(35)
 
         expect(distribution).to.have.been.calledWith('rasp.duration', {
           waf_version: '1.0.0',
           event_rules_version: '2.0.0'
         })
-        expect(track).to.have.been.calledWith(77)
+        expect(track.secondCall).to.have.been.calledWith(77)
       })
 
       it('should track rasp.duration_ext', () => {
