@@ -2,7 +2,6 @@
 
 module.exports = compile
 
-// TODO: Should we add checks for `Symbol.toPrimitive`?
 // TODO: Consider storing some of these functions on `process` so they can be reused across probes
 function compile (node) {
   if (node === null || typeof node === 'number' || typeof node === 'boolean' || typeof node === 'string') {
@@ -51,10 +50,14 @@ function compile (node) {
     switch (type) {
       case 'eq': return `(${args[0]}) === (${args[1]})`
       case 'ne': return `(${args[0]}) !== (${args[1]})`
-      case 'gt': return `(${args[0]}) > (${args[1]})`
-      case 'ge': return `(${args[0]}) >= (${args[1]})`
-      case 'lt': return `(${args[0]}) < (${args[1]})`
-      case 'le': return `(${args[0]}) <= (${args[1]})`
+      case 'gt':
+        return `${guardAgainstToPrimitiveSideEffects(args[0])} > ${guardAgainstToPrimitiveSideEffects(args[1])}`
+      case 'ge':
+        return `${guardAgainstToPrimitiveSideEffects(args[0])} >= ${guardAgainstToPrimitiveSideEffects(args[1])}`
+      case 'lt':
+        return `${guardAgainstToPrimitiveSideEffects(args[0])} < ${guardAgainstToPrimitiveSideEffects(args[1])}`
+      case 'le':
+        return `${guardAgainstToPrimitiveSideEffects(args[0])} <= ${guardAgainstToPrimitiveSideEffects(args[1])}`
       case 'any': return iterateOn('some', ...args)
       case 'all': return iterateOn('every', ...args)
       case 'and': return `(${args.join(') && (')})`
@@ -160,4 +163,14 @@ function guardAgainstPropertyAccessSideEffects (variable, propertyName) {
       return val[key]
     }
   })(${variable}, ${propertyName})`
+}
+
+function guardAgainstToPrimitiveSideEffects (variable) {
+  return `((val) => {
+    if (typeof val === 'object' && val !== null && val[Symbol.toPrimitive] !== undefined) {
+      throw new Error('Possibility of side effect due to Symbol.toPrimitive')
+    } else {
+      return val
+    }
+  })(${variable})`
 }

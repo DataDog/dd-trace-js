@@ -11,6 +11,11 @@ class SideEffectObject {
   }
 }
 const weakKey = { weak: 'key' }
+const objectWithToPrimitiveSymbol = Object.create(Object.prototype, {
+  [Symbol.toPrimitive]: {
+    value: () => { throw new Error('This should never throw!') }
+  }
+})
 
 process[Symbol.for('datadog:isProxy')] = require('util').types.isProxy
 
@@ -163,6 +168,11 @@ const testCases = [
   [{ gt: [{ ref: 'str' }, 'a'] }, { str: 'a' }, false],
   [{ gt: [{ ref: 'str' }, 'b'] }, { str: 'a' }, false],
   [{ gt: [{ or: [2, 0] }, { and: [1, 1] }] }, {}, true],
+  [
+    { gt: [{ ref: 'obj' }, 5] },
+    { obj: objectWithToPrimitiveSymbol },
+    new Error('Possibility of side effect due to Symbol.toPrimitive')
+  ],
 
   [{ ge: [{ ref: 'num' }, 42] }, { num: 43 }, true],
   [{ ge: [{ ref: 'num' }, 42] }, { num: 42 }, true],
@@ -171,6 +181,11 @@ const testCases = [
   [{ ge: [{ ref: 'str' }, 'a'] }, { str: 'a' }, true],
   [{ ge: [{ ref: 'str' }, 'b'] }, { str: 'a' }, false],
   [{ ge: [{ or: [1, 0] }, { and: [1, 2] }] }, {}, false],
+  [
+    { ge: [{ ref: 'obj' }, 5] },
+    { obj: objectWithToPrimitiveSymbol },
+    new Error('Possibility of side effect due to Symbol.toPrimitive')
+  ],
 
   [{ lt: [{ ref: 'num' }, 42] }, { num: 43 }, false],
   [{ lt: [{ ref: 'num' }, 42] }, { num: 42 }, false],
@@ -179,6 +194,11 @@ const testCases = [
   [{ lt: [{ ref: 'str' }, 'a'] }, { str: 'a' }, false],
   [{ lt: [{ ref: 'str' }, 'b'] }, { str: 'a' }, true],
   [{ lt: [{ or: [1, 0] }, { and: [1, 0] }] }, {}, false],
+  [
+    { lt: [{ ref: 'obj' }, 5] },
+    { obj: objectWithToPrimitiveSymbol },
+    new Error('Possibility of side effect due to Symbol.toPrimitive')
+  ],
 
   [{ le: [{ ref: 'num' }, 42] }, { num: 43 }, false],
   [{ le: [{ ref: 'num' }, 42] }, { num: 42 }, true],
@@ -187,6 +207,11 @@ const testCases = [
   [{ le: [{ ref: 'str' }, 'a'] }, { str: 'a' }, true],
   [{ le: [{ ref: 'str' }, 'b'] }, { str: 'a' }, true],
   [{ le: [{ or: [2, 0] }, { and: [1, 1] }] }, {}, false],
+  [
+    { le: [{ ref: 'obj' }, 5] },
+    { obj: objectWithToPrimitiveSymbol },
+    new Error('Possibility of side effect due to Symbol.toPrimitive')
+  ],
 
   [{ substring: [{ ref: 'str' }, 4, 7] }, { str: 'hello world' }, 'hello world'.substring(4, 7)],
   [{ substring: [{ ref: 'str' }, 4] }, { str: 'hello world' }, 'hello world'.substring(4)],
