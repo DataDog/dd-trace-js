@@ -209,13 +209,13 @@ const testCases = [
   ],
 
   [{ matches: [{ ref: 'foo' }, '[0-9]+'] }, { foo: '42' }, true],
-  [{ matches: [{ ref: 'foo' }, '[0-9]+'] }, { foo: {} }, new TypeError('Variable foo is not a string')],
+  [{ matches: [{ ref: 'foo' }, '[0-9]+'] }, { foo: {} }, new TypeError('Variable is not a string')],
   [{ matches: [{ ref: 'foo' }, { ref: 'regex' }] }, { foo: '42', regex: /[0-9]+/ }, true],
   [{ matches: [{ ref: 'foo' }, { ref: 'regex' }] }, { foo: '42', regex: overloadMethod(/[0-9]+/, 'test') }, true],
   [
     { matches: [{ ref: 'foo' }, { ref: 'regex' }] },
     { foo: '42', regex: overloadMethod({}, Symbol.match) },
-    new TypeError('Variable regex is not a string or RegExp')
+    new TypeError('Variable is not a string or RegExp')
   ],
   [{ matches: [{ ref: 'foo' }, { ref: 'regex' }] }, { foo: '42', regex: overloadMethod(/[0-9]+/, Symbol.match) }, true],
 
