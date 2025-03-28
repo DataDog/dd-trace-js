@@ -134,8 +134,8 @@ function isString (variable) {
   return `typeof ${variable} === 'string' || ${variable} instanceof String`
 }
 
-function isCollection (variable) { // TODO: Support TypedArrays
-  return `Array.isArray(${variable}) || ${variable} instanceof Set || ${variable} instanceof WeakSet`
+function isCollection (variable) {
+  return `${isArrayOrTypedArray(variable)} || ${variable} instanceof Set || ${variable} instanceof WeakSet`
 }
 
 function isArrayOrTypedArray (variable) {
