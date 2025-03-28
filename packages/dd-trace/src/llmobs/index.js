@@ -54,15 +54,10 @@ function enable (config) {
   injectCh.subscribe(handleLLMObsParentIdInjection)
 
   setAgentStrategy(config, useAgentless => {
-    if (useAgentless && !config.apiKey) {
+    if (useAgentless && !(config.apiKey && config.site)) {
       throw new Error(
-        'Cannot send LLM Observability data without a running agent or without a Datadog API key.\n' +
-        'Ensure this configuration is set before running your application.'
-      )
-    } else if (useAgentless && !config.site) {
-      throw new Error(
-        'Cannot send LLM Observability data without a running agent or without a Datadog site.\n' +
-        'Ensure this configuration is set before running your application.'
+        'Cannot send LLM Observability data without a running agent or without both a Datadog API key and site.\n' +
+        'Ensure these configurations are set before running your application.'
       )
     }
 

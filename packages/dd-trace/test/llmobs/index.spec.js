@@ -94,16 +94,22 @@ describe('module', () => {
   })
 
   describe('with agentlessEnabled set to `true`', () => {
-    describe('if no api key is provided', () => {
+    describe('when no api key is provided', () => {
       it('throws an error', () => {
         expect(() => llmobsModule.enable({
           llmobs: {
             agentlessEnabled: true
           }
         })).to.throw(
-          'Cannot send LLM Observability data without a running agent or without a Datadog API key.\n' +
-          'Ensure this configuration is set before running your application.'
+          'Cannot send LLM Observability data without a running agent or without both a Datadog API key and site.\n' +
+          'Ensure these configurations are set before running your application.'
         )
+      })
+    })
+
+    describe('when no site is provided', () => {
+      it('throws an error', () => {
+        expect(() => llmobsModule.enable({ llmobs: { agentlessEnabled: true, apiKey: 'test' } })).to.throw()
       })
     })
 
@@ -152,7 +158,13 @@ describe('module', () => {
 
         describe('when no API key is provided', () => {
           it('throws an error', () => {
-            expect(() => llmobsModule.enable({ llmobs: { mlApp: 'test' } })).to.throw()
+            expect(() => llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' } })).to.throw()
+          })
+        })
+
+        describe('when no site is provided', () => {
+          it('throws an error', () => {
+            expect(() => llmobsModule.enable({ llmobs: { mlApp: 'test', apiKey: 'test' } })).to.throw()
           })
         })
 
@@ -195,10 +207,16 @@ describe('module', () => {
 
       describe('when no API key is provided', () => {
         it('throws an error', () => {
-          expect(() => llmobsModule.enable({ llmobs: { mlApp: 'test' } })).to.throw(
-            'Cannot send LLM Observability data without a running agent or without a Datadog API key.\n' +
-            'Ensure this configuration is set before running your application.'
+          expect(() => llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' } })).to.throw(
+            'Cannot send LLM Observability data without a running agent or without both a Datadog API key and site.\n' +
+            'Ensure these configurations are set before running your application.'
           )
+        })
+      })
+
+      describe('when no site is provided', () => {
+        it('throws an error', () => {
+          expect(() => llmobsModule.enable({ llmobs: {}, apiKey: 'test' })).to.throw()
         })
       })
 
