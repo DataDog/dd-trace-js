@@ -395,7 +395,7 @@ function convertSpanEventAttributeValues (key, value, depth = 0) {
       if (convertedArray.length > 0) {
         return {
           type: 4,
-          array_value: convertedArray
+          array_value: { values: convertedArray }
         }
       } else {
         // If all elements were unsupported, return undefined
