@@ -36,8 +36,6 @@ class Writer {
     // eslint-disable-next-line
     // https://github.com/cucumber/cucumber-js/blob/5ce371870b677fe3d1a14915dc535688946f734c/src/runtime/parallel/run_worker.ts#L13
     if (process.send) { // it only works if process.send is available
-      // TODO: remove this comment.
-      // Using `onDone` is important because otherwise the worker might shut down before the payload is sent.
       process.send([this._interprocessCode, data], () => {
         onDone()
       })

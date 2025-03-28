@@ -186,14 +186,6 @@ class PlaywrightPlugin extends CiPlugin {
             trace_id: id(span.trace_id),
             parent_id: id(span.parent_id)
           }
-          // TODO: remove this comment
-          // Since tests are generated in the worker but not test suites, the test module and the test session,
-          // We need to re-serialize the test span to include the necessary tags:
-          // - test_session_id
-          // - test_module_id
-          // - test_command
-          // - test_module
-          // - test_suite_id
           if (span.name === 'playwright.test') {
             // TODO: remove this comment
             // TODO: Let's pass rootDir, repositoryRoot, command, session id and module id as env vars
@@ -322,9 +314,6 @@ class PlaywrightPlugin extends CiPlugin {
 
       finishAllTraceSpans(span)
       if (process.env.DD_PLAYWRIGHT_WORKER) {
-        // TODO: remove this comment.
-        // This happens on every test, but it's way faster than a normal flush because it's just
-        // a `process.send` to the main process.
         this.tracer._exporter.flush(onDone)
       }
     })
@@ -346,8 +335,6 @@ class PlaywrightPlugin extends CiPlugin {
       extraTags[TEST_BROWSER_NAME] = browserName
     }
 
-    // TODO: remove this comment
-    // if we pass certain parameters as env vars we don't need this anymore.
     extraTags.test_suite_absolute_path = testSuiteAbsolutePath
 
     return super.startTestSpan(testName, testSuite, testSuiteSpan, extraTags)

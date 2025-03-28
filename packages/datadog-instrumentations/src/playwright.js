@@ -772,9 +772,6 @@ addHook({
     // We add a new listener to `this.process`, which is represents the worker
     this.process.on('message', (message) => {
       // These messages are [code, payload]. The payload is test data
-      // TODO: remove this comment
-      // It's not recommended that workers report directly to the intake or the agent,
-      // since they're more likely to be shut down quickly. `process.send` is more reliable.
       if (Array.isArray(message) && message[0] === PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE) {
         workerReportCh.publish(message[1])
       }
@@ -815,29 +812,22 @@ addHook({
     // Probably yet another test worker exporter is needed in addition to the ones for mocha, jest and cucumber
     // it's probably hard to tell that's a playwright worker though, as I don't think there is a specific env variable
     const testAsyncResource = new AsyncResource('bound-anonymous-fn')
+    // TODO - In the future we may need to implement a mechanism to send test properties
+    // to the worker process before _runTest is called
     testAsyncResource.runInAsyncScope(() => {
       testStartCh.publish({
         testName,
         testSuiteAbsolutePath,
         testSourceLine,
         browserName
-        // TODO: remove this comment
-        // TODO: modifications to `test` (like adding _ddIsDisabled) happen in the main process
-        // and are _not_ propagated to the worker, so test management breaks.
-        // isDisabled: test._ddIsDisabled
       })
 
       res = _runTest.apply(this, arguments)
 
-      // TODO: remove this comment
-      // we need to grab `testInfo` before awaiting for `res`, otherwise `this._currentTest` will be empty
       testInfo = this._currentTest
     })
     await res
 
-    // TODO: remove this comment
-    // `testInfo` has `steps` because they're not usable, as they have no timing info
-    // This is why we need to manually fill `steps` by intercepting `WorkerMain#dispatchEvent`
     const { status, error, annotations, retry, testId } = testInfo
 
     // testInfo.errors could be better than "error",
@@ -894,8 +884,6 @@ addHook({
       })
     })
 
-    // TODO: remove this comment
-    // Important, or the worker will exit before the flush is done
     await flushPromise
 
     return res
