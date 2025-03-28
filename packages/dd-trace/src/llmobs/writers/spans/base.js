@@ -41,12 +41,12 @@ class LLMObsSpanWriter extends BaseWriter {
   }
 
   makePayload (events) {
-    return {
+    return events.map(event => ({
       '_dd.stage': 'raw',
       '_dd.tracer_version': tracerVersion,
       event_type: this._eventType,
-      spans: events
-    }
+      spans: [event]
+    }))
   }
 
   _truncateSpanEvent (event) {
