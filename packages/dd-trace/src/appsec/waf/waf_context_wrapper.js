@@ -38,7 +38,7 @@ class WAFContextWrapper {
     if (userId) {
       const cachedAction = this.cachedUserIdActions.get(userId)
       if (cachedAction) {
-        return cachedAction
+        return { actions: cachedAction }
       }
     }
 
@@ -142,7 +142,7 @@ class WAFContextWrapper {
 
       Reporter.reportDerivatives(result.derivatives)
 
-      return result.actions
+      return result
     } catch (err) {
       log.error('[ASM] Error while running the AppSec WAF', err)
 

@@ -49,10 +49,6 @@ function trackRaspMetrics (store, metrics, raspRule) {
     telemetryMetrics.rulesVersion = metrics.rulesVersion
   }
 
-  if (metrics.ruleTriggered) {
-    telemetryMetrics.ruleTriggered = true
-  }
-
   appsecMetrics.count('rasp.rule.eval', tags).inc(1)
 
   if (metrics.errorCode) {
@@ -68,7 +64,6 @@ function trackRaspMetrics (store, metrics, raspRule) {
 
 function trackRaspRuleMatch (store, raspRule, blockTriggered, blocked) {
   const telemetryMetrics = store[DD_TELEMETRY_REQUEST_METRICS]
-  if (!telemetryMetrics.ruleTriggered) return
 
   const tags = {
     waf_version: telemetryMetrics.wafVersion,
