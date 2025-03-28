@@ -2,6 +2,8 @@
 
 module.exports = compile
 
+// TODO: Should we add checks for `Symbol.toPrimitive`?
+// TODO: Consider storing some of these functions on `process` so they can be reused across probes
 function compile (node) {
   if (node === null || typeof node === 'number' || typeof node === 'boolean' || typeof node === 'string') {
     return JSON.stringify(node)
@@ -36,11 +38,11 @@ function compile (node) {
       }
     })(${value[1]})`
   } else if (type === 'len' || type === 'count') {
-    return `(($dd_val) => {
-      if (${isString('$dd_val')} || ${isArrayOrTypedArray('$dd_val')}) {
-        return ${guardAgainstPropertyAccessSideEffects('$dd_val', '"length"')}
-      } else if ($dd_val instanceof Set || $dd_val instanceof Map) {
-        return ${guardAgainstPropertyAccessSideEffects('$dd_val', '"size"')}
+    return `((val) => {
+      if (${isString('val')} || ${isArrayOrTypedArray('val')}) {
+        return ${guardAgainstPropertyAccessSideEffects('val', '"length"')}
+      } else if (val instanceof Set || val instanceof Map) {
+        return ${guardAgainstPropertyAccessSideEffects('val', '"size"')}
       } else {
         throw new TypeError('Variable does not support len/count')
       }
@@ -82,12 +84,12 @@ function compile (node) {
             throw new TypeError('Variable ${args[0]} does not support contains')
           }
         })()`
-      case 'matches': return `(($dd_str, $dd_regex) => {
-          if (${isString('$dd_str')}) {
-            if ($dd_regex instanceof RegExp) {
-              return ${callMethodOnPrototype('$dd_regex', 'test', '$dd_str')}
-            } else if (${isString('$dd_regex')}) {
-              return ${callMethodOnPrototype('$dd_str', 'match', '$dd_regex')} !== null
+      case 'matches': return `((str, regex) => {
+          if (${isString('str')}) {
+            if (regex instanceof RegExp) {
+              return ${callMethodOnPrototype('regex', 'test', 'str')}
+            } else if (${isString('regex')}) {
+              return ${callMethodOnPrototype('str', 'match', 'regex')} !== null
             } else {
               throw new TypeError('Regular expression must be either a string or an instance of RegExp')
             }
@@ -103,9 +105,9 @@ function compile (node) {
                 return acc
               }, {})
         })(${args[0]})`
-      case 'substring': return `(($dd_str) => {
-          if (${isString('$dd_str')}) {
-            return ${callMethodOnPrototype('$dd_str', 'substring', args[1], args[2])}
+      case 'substring': return `((str) => {
+          if (${isString('str')}) {
+            return ${callMethodOnPrototype('str', 'substring', args[1], args[2])}
           } else {
             throw new TypeError('Variable is not a string')
           }
