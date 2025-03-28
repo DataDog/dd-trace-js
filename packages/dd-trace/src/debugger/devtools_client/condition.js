@@ -25,18 +25,7 @@ function compile (node) {
       }
     })()`
   } else if (type === 'instanceof') {
-    // TODO: Consider just calling Function.prototype[Symbol.hasInstance] directly
-    return `(($dd_class) => {
-      if (
-        $dd_class &&
-        typeof $dd_class[Symbol.hasInstance] === 'function' &&
-        $dd_class[Symbol.hasInstance] !== Function.prototype[Symbol.hasInstance]
-      ) {
-        throw new Error('Possibility of side effect')
-      } else {
-        return ${compile(value[0])} instanceof $dd_class
-      }
-    })(${value[1]})`
+    return `Function.prototype[Symbol.hasInstance].call(${value[1]}, ${compile(value[0])})`
   } else if (type === 'len' || type === 'count') {
     return `((val) => {
       if (${isString('val')} || ${isArrayOrTypedArray('val')}) {
