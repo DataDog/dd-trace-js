@@ -134,30 +134,30 @@ function isArrayOrTypedArray (variable) {
 }
 
 function accessProperty (variable, keyOrIndex, allowMapAccess) {
-  return `(() => {
-    if (${variable} instanceof Set || ${variable} instanceof WeakSet) {
+  return `((val, key) => {
+    if (val instanceof Set || val instanceof WeakSet) {
       throw new Error('Accessing a Set or WeakSet is not allowed')
-    } else if (${variable} instanceof Map || ${variable} instanceof WeakMap) {
+    } else if (val instanceof Map || val instanceof WeakMap) {
       ${allowMapAccess
-        ? `return ${callMethodOnPrototype(variable, 'get', keyOrIndex)}`
+        ? `return ${callMethodOnPrototype('val', 'get', 'key')}`
         : 'throw new Error(\'Accessing a Map or WeakMap is not allowed\')'}
     } else {
-      return ${guardAgainstPropertyAccessSideEffects(variable, keyOrIndex)}
+      return ${guardAgainstPropertyAccessSideEffects('val', 'key')}
     }
-  })()`
+  })(${variable}, ${keyOrIndex})`
 }
 
 function guardAgainstPropertyAccessSideEffects (variable, propertyName) {
-  return `(() => {
+  return `((val, key) => {
     const isProxy = process[Symbol.for('datadog:isProxy')]
     if (
       !isProxy ||
-      isProxy(${variable}) ||
-      Object.getOwnPropertyDescriptor(${variable}, ${propertyName})?.get !== undefined
+      isProxy(val) ||
+      Object.getOwnPropertyDescriptor(val, key)?.get !== undefined
     ) {
       throw new Error('Possibility of side effect')
     } else {
-      return ${variable}[${propertyName}]
+      return val[key]
     }
-  })()`
+  })(${variable}, ${propertyName})`
 }
