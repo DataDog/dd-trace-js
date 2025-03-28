@@ -83,7 +83,8 @@ describe('integrations', () => {
 
       return agent.load('google-cloud-vertexai', {}, {
         llmobs: {
-          mlApp: 'test'
+          mlApp: 'test',
+          agentlessEnabled: false
         }
       })
     })
