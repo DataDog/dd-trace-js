@@ -2,7 +2,6 @@
 
 module.exports = compile
 
-// TODO: Support `new String()` all the places where we already support a regular string?
 function compile (node) {
   if (node === null || typeof node === 'number' || typeof node === 'boolean' || typeof node === 'string') {
     return JSON.stringify(node)
@@ -38,12 +37,8 @@ function compile (node) {
     })(${value[1]})`
   } else if (type === 'len' || type === 'count') {
     return `(($dd_val) => {
-      if (
-        typeof $dd_val === 'string' ||
-        Array.isArray($dd_val) ||
-        $dd_val instanceof Object.getPrototypeOf(Int8Array)
-      ) {
-        return $dd_val.length
+      if (${isString('$dd_val')} || ${isArrayOrTypedArray('$dd_val')}) {
+        return ${guardAgainstPropertyAccessSideEffects('$dd_val', '"length"')}
       } else if ($dd_val instanceof Set || $dd_val instanceof Map) {
         return ${guardAgainstPropertyAccessSideEffects('$dd_val', '"size"')}
       } else {
@@ -73,12 +68,10 @@ function compile (node) {
       case 'all': return iterateOn('every', ...args)
       case 'and': return `(${args.join(') && (')})`
       case 'or': return `(${args.join(') || (')})`
-      case 'startsWith': return `${args[0]}.startsWith(${args[1]})`
-      case 'endsWith': return `${args[0]}.endsWith(${args[1]})`
+      case 'startsWith': return `${callMethodOnPrototype(args[0], 'startsWith', args[1])}`
+      case 'endsWith': return `${callMethodOnPrototype(args[0], 'endsWith', args[1])}`
       case 'contains': return `(() => {
-          if (typeof ${args[0]} === 'string') {
-            return ${args[0]}.includes(${args[1]})
-          } else if (Array.isArray(${args[0]}) || ${args[0]} instanceof Object.getPrototypeOf(Int8Array)) {
+          if (${isString(args[0])} || ${isArrayOrTypedArray(args[0])}) {
             return ${callMethodOnPrototype(args[0], 'includes', args[1])}
           } else if (
             ${args[0]} instanceof Set || ${args[0]} instanceof WeakSet ||
@@ -90,13 +83,13 @@ function compile (node) {
           }
         })()`
       case 'matches': return `(($dd_str, $dd_regex) => {
-          if (typeof $dd_str === 'string') {
+          if (${isString('$dd_str')}) {
             if ($dd_regex instanceof RegExp) {
               return ${callMethodOnPrototype('$dd_regex', 'test', '$dd_str')}
-            } else if (typeof $dd_regex === 'string') {
-              return $dd_str.match($dd_regex) !== null
+            } else if (${isString('$dd_regex')}) {
+              return ${callMethodOnPrototype('$dd_str', 'match', '$dd_regex')} !== null
             } else {
-              throw new TypeError('Variable is not a string or RegExp')
+              throw new TypeError('Regular expression must be either a string or an instance of RegExp')
             }
           } else {
             throw new TypeError('Variable is not a string')
@@ -111,8 +104,8 @@ function compile (node) {
               }, {})
         })(${args[0]})`
       case 'substring': return `(($dd_str) => {
-          if (typeof $dd_str === 'string') {
-            return $dd_str.substring(${args[1]}, ${args[2]})
+          if (${isString('$dd_str')}) {
+            return ${callMethodOnPrototype('$dd_str', 'substring', args[1], args[2])}
           } else {
             throw new TypeError('Variable is not a string')
           }
@@ -137,8 +130,16 @@ function iterateOn (fnName, variable, callbackCode) {
   })(${variable})`
 }
 
-function isCollection (variable) {
+function isString (variable) {
+  return `typeof ${variable} === 'string' || ${variable} instanceof String`
+}
+
+function isCollection (variable) { // TODO: Support TypedArrays
   return `Array.isArray(${variable}) || ${variable} instanceof Set || ${variable} instanceof WeakSet`
+}
+
+function isArrayOrTypedArray (variable) {
+  return `Array.isArray(${variable}) || ${variable} instanceof Object.getPrototypeOf(Int8Array)`
 }
 
 function accessProperty (variable, keyOrIndex, allowMapAccess) {

@@ -51,6 +51,8 @@ const testCases = [
   ],
 
   [{ len: { ref: 'str' } }, { str: 'hello' }, 5],
+  [{ len: { ref: 'str' } }, { str: String('hello') }, 5],
+  [{ len: { ref: 'str' } }, { str: new String('hello') }, 5], // eslint-disable-line no-new-wrappers
   [{ len: { ref: 'arr' } }, { arr: [1, 2, 3] }, 3],
   [{ len: { ref: 'set' } }, { set: new Set([1, 2]) }, 2],
   [
@@ -74,6 +76,12 @@ const testCases = [
     new TypeError('Variable does not support len/count')
   ],
   [{ len: { getmember: [{ ref: 'obj' }, 'arr'] } }, { obj: { arr: Array(10).fill(0) } }, 10],
+  [{ len: { getmember: [{ ref: 'obj' }, 'tarr'] } }, { obj: { tarr: new Int8Array([10, 20, 30]) } }, 3],
+  [
+    { len: { getmember: [{ ref: 'obj' }, 'tarr'] } },
+    { obj: { tarr: overloadPropertyWithGetter(new Int8Array([10, 20, 30]), 'length') } },
+    new Error('Possibility of side effect')
+  ],
   [
     { len: { getmember: [{ ref: 'obj' }, 'unknownProp'] } },
     { obj: {} },
@@ -123,8 +131,12 @@ const testCases = [
     new Error('Possibility of side effect')
   ],
 
-  [{ eq: [{ ref: 'hits' }, true] }, { hits: true }, true],
-  [{ eq: [{ ref: 'hits' }, null] }, { hits: null }, true],
+  [{ eq: [{ ref: 'str' }, 'foo'] }, { str: 'foo' }, true],
+  [{ eq: [{ ref: 'str' }, 'foo'] }, { str: String('foo') }, true],
+  // TODO: Is this the expected behavior?
+  [{ eq: [{ ref: 'str' }, 'foo'] }, { str: new String('foo') }, false], // eslint-disable-line no-new-wrappers
+  [{ eq: [{ ref: 'bool' }, true] }, { bool: true }, true],
+  [{ eq: [{ ref: 'nil' }, null] }, { nil: null }, true],
 
   [{ substring: [{ ref: 'str' }, 4, 7] }, { str: 'hello world' }, 'hello world'.substring(4, 7)],
   [{ substring: [{ ref: 'str' }, 4] }, { str: 'hello world' }, 'hello world'.substring(4)],
@@ -132,6 +144,14 @@ const testCases = [
   [{ substring: [{ ref: 'str' }, 7, 4] }, { str: 'hello world' }, 'hello world'.substring(7, 4)],
   [{ substring: [{ ref: 'str' }, -1, 100] }, { str: 'hello world' }, 'hello world'.substring(-1, 100)],
   [{ substring: [{ ref: 'invalid' }, 4, 7] }, { invalid: {} }, new TypeError('Variable is not a string')],
+  [{ substring: [{ ref: 'str' }, 4, 7] }, { str: String('hello world') }, 'hello world'.substring(4, 7)],
+  // eslint-disable-next-line no-new-wrappers
+  [{ substring: [{ ref: 'str' }, 4, 7] }, { str: new String('hello world') }, 'hello world'.substring(4, 7)],
+  [
+    { substring: [{ ref: 'str' }, 4, 7] },
+    { str: overloadMethod(new String('hello world'), 'substring') }, // eslint-disable-line no-new-wrappers
+    'hello world'.substring(4, 7)
+  ],
 
   [{ any: [{ ref: 'collection' }, { isEmpty: { ref: '@it' } }] }, { collection: ['foo', 'bar', ''] }, true],
   [{ any: [{ ref: 'coll' }, { isEmpty: { ref: '@value' } }] }, { coll: { 0: 'foo', 1: 'bar', 2: '' } }, true],
@@ -143,11 +163,27 @@ const testCases = [
   [{ startsWith: [{ ref: 'str' }, 'world'] }, { str: 'hello world!' }, false],
   [{ startsWith: [{ ref: 'str' }, { ref: 'prefix' }] }, { str: 'hello world!', prefix: 'hello' }, true],
   [{ startsWith: [{ getmember: [{ ref: 'obj' }, 'str'] }, 'hello'] }, { obj: { str: 'hello world!' } }, true],
+  [{ startsWith: [{ ref: 'str' }, 'hello'] }, { str: String('hello world!') }, true],
+  [{ startsWith: [{ ref: 'str' }, 'world'] }, { str: String('hello world!') }, false],
+  // eslint-disable-next-line no-new-wrappers
+  [{ startsWith: [{ ref: 'str' }, 'hello'] }, { str: new String('hello world!') }, true],
+  // eslint-disable-next-line no-new-wrappers
+  [{ startsWith: [{ ref: 'str' }, 'world'] }, { str: new String('hello world!') }, false],
+  // eslint-disable-next-line no-new-wrappers
+  [{ startsWith: [{ ref: 'str' }, 'hello'] }, { str: overloadMethod(new String('hello world!'), 'startsWith') }, true],
 
   [{ endsWith: [{ ref: 'str' }, 'hello'] }, { str: 'hello world!' }, false],
   [{ endsWith: [{ ref: 'str' }, 'world!'] }, { str: 'hello world!' }, true],
   [{ endsWith: [{ ref: 'str' }, { ref: 'suffix' }] }, { str: 'hello world!', suffix: 'world!' }, true],
   [{ endsWith: [{ getmember: [{ ref: 'obj' }, 'str'] }, 'world!'] }, { obj: { str: 'hello world!' } }, true],
+  [{ endsWith: [{ ref: 'str' }, 'hello'] }, { str: String('hello world!') }, false],
+  [{ endsWith: [{ ref: 'str' }, 'world!'] }, { str: String('hello world!') }, true],
+  // eslint-disable-next-line no-new-wrappers
+  [{ endsWith: [{ ref: 'str' }, 'hello'] }, { str: new String('hello world!') }, false],
+  // eslint-disable-next-line no-new-wrappers
+  [{ endsWith: [{ ref: 'str' }, 'world!'] }, { str: new String('hello world!') }, true],
+  // eslint-disable-next-line no-new-wrappers
+  [{ endsWith: [{ ref: 'str' }, 'world!'] }, { str: overloadMethod(new String('hello world!'), 'endsWith') }, true],
 
   [
     { filter: [{ ref: 'collection' }, { not: { isEmpty: { ref: '@it' } } }] },
@@ -172,6 +208,14 @@ const testCases = [
 
   [{ contains: [{ ref: 'str' }, 'world'] }, { str: 'hello world' }, true],
   [{ contains: [{ ref: 'str' }, 'missing'] }, { str: 'hello world' }, false],
+  [{ contains: [{ ref: 'str' }, 'world'] }, { str: String('hello world') }, true],
+  [{ contains: [{ ref: 'str' }, 'missing'] }, { str: String('hello world') }, false],
+  // eslint-disable-next-line no-new-wrappers
+  [{ contains: [{ ref: 'str' }, 'world'] }, { str: new String('hello world') }, true],
+  // eslint-disable-next-line no-new-wrappers
+  [{ contains: [{ ref: 'str' }, 'missing'] }, { str: new String('hello world') }, false],
+  // eslint-disable-next-line no-new-wrappers
+  [{ contains: [{ ref: 'str' }, 'world'] }, { str: overloadMethod(new String('hello world'), 'includes') }, true],
   [{ contains: [{ ref: 'arr' }, 'foo'] }, { arr: ['foo', 'bar'] }, true],
   [{ contains: [{ ref: 'arr' }, 'missing'] }, { arr: ['foo', 'bar'] }, false],
   [{ contains: [{ ref: 'arr' }, 'foo'] }, { arr: overloadMethod(['foo', 'bar'], 'includes') }, true],
@@ -209,13 +253,26 @@ const testCases = [
   ],
 
   [{ matches: [{ ref: 'foo' }, '[0-9]+'] }, { foo: '42' }, true],
+  [{ matches: [{ ref: 'foo' }, '[0-9]+'] }, { foo: String('42') }, true],
+  // eslint-disable-next-line no-new-wrappers
+  [{ matches: [{ ref: 'foo' }, '[0-9]+'] }, { foo: new String('42') }, true],
+  // eslint-disable-next-line no-new-wrappers
+  [{ matches: [{ ref: 'foo' }, '[0-9]+'] }, { foo: overloadMethod(new String('42'), 'match') }, true],
   [{ matches: [{ ref: 'foo' }, '[0-9]+'] }, { foo: {} }, new TypeError('Variable is not a string')],
   [{ matches: [{ ref: 'foo' }, { ref: 'regex' }] }, { foo: '42', regex: /[0-9]+/ }, true],
   [{ matches: [{ ref: 'foo' }, { ref: 'regex' }] }, { foo: '42', regex: overloadMethod(/[0-9]+/, 'test') }, true],
+  [{ matches: [{ ref: 'foo' }, { ref: 'regex' }] }, { foo: '42', regex: String('[0-9]+') }, true],
+  // eslint-disable-next-line no-new-wrappers
+  [{ matches: [{ ref: 'foo' }, { ref: 'regex' }] }, { foo: '42', regex: new String('[0-9]+') }, true],
+  [
+    { matches: [{ ref: 'foo' }, { ref: 'regex' }] },
+    { foo: '42', regex: overloadMethod(new String('[0-9]+'), 'match') }, // eslint-disable-line no-new-wrappers
+    true
+  ],
   [
     { matches: [{ ref: 'foo' }, { ref: 'regex' }] },
     { foo: '42', regex: overloadMethod({}, Symbol.match) },
-    new TypeError('Variable is not a string or RegExp')
+    new TypeError('Regular expression must be either a string or an instance of RegExp')
   ],
   [{ matches: [{ ref: 'foo' }, { ref: 'regex' }] }, { foo: '42', regex: overloadMethod(/[0-9]+/, Symbol.match) }, true],
 
