@@ -101,8 +101,8 @@ function compile (node) {
             throw new TypeError('Variable is not a string')
           }
         })(${args[0]})`
-      case 'getmember': return accessProperty(...args, false)
-      case 'index': return accessProperty(...args, true)
+      case 'getmember': return accessProperty(args[0], args[1], false)
+      case 'index': return accessProperty(args[0], args[1], true)
     }
   }
 
