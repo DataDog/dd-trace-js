@@ -25,38 +25,38 @@ function compile (node) {
     })()`
   } else if (type === 'instanceof') {
     // TODO: Consider just calling Function.prototype[Symbol.hasInstance] directly
-    return `((klass) => {
+    return `(($dd_class) => {
       if (
-        klass &&
-        typeof klass[Symbol.hasInstance] === 'function' &&
-        klass[Symbol.hasInstance] !== Function.prototype[Symbol.hasInstance]
+        $dd_class &&
+        typeof $dd_class[Symbol.hasInstance] === 'function' &&
+        $dd_class[Symbol.hasInstance] !== Function.prototype[Symbol.hasInstance]
       ) {
         throw new Error('Possibility of side effect')
       } else {
-        return ${compile(value[0])} instanceof klass
+        return ${compile(value[0])} instanceof $dd_class
       }
     })(${value[1]})`
   } else if (type === 'len' || type === 'count') {
-    return `((val) => {
+    return `(($dd_val) => {
       if (
-        typeof val === 'string' ||
-        Array.isArray(val) ||
-        val instanceof Object.getPrototypeOf(Int8Array)
+        typeof $dd_val === 'string' ||
+        Array.isArray($dd_val) ||
+        $dd_val instanceof Object.getPrototypeOf(Int8Array)
       ) {
-        return val.length
-      } else if (val instanceof Set || val instanceof Map) {
-        return ${guardAgainstPropertyAccessSideEffects('val', '"size"')}
+        return $dd_val.length
+      } else if ($dd_val instanceof Set || $dd_val instanceof Map) {
+        return ${guardAgainstPropertyAccessSideEffects('$dd_val', '"size"')}
       } else {
         throw new TypeError('Variable does not support len/count')
       }
     })(${compile(value)})`
   } else if (type === 'ref') {
     if (value === '@it') {
-      return 'it'
+      return '$dd_it'
     } else if (value === '@key') {
-      return 'key'
+      return '$dd_key'
     } else if (value === '@value') {
-      return 'value'
+      return '$dd_value'
     } else {
       return value
     }
@@ -89,34 +89,34 @@ function compile (node) {
             throw new TypeError('Variable ${args[0]} does not support contains')
           }
         })()`
-      case 'matches': return `(() => {
-        if (typeof ${args[0]} === 'string') {
-          if (${args[1]} instanceof RegExp) {
-            return ${callMethodOnPrototype(args[1], 'test', args[0])}
-          } else if (typeof ${args[1]} === 'string') {
-            return ${args[0]}.match(${args[1]}) !== null
+      case 'matches': return `(($dd_str, $dd_regex) => {
+          if (typeof $dd_str === 'string') {
+            if ($dd_regex instanceof RegExp) {
+              return ${callMethodOnPrototype('$dd_regex', 'test', '$dd_str')}
+            } else if (typeof $dd_regex === 'string') {
+              return $dd_str.match($dd_regex) !== null
+            } else {
+              throw new TypeError('Variable is not a string or RegExp')
+            }
           } else {
-            throw new TypeError('Variable ${args[1]} is not a string or RegExp')
+            throw new TypeError('Variable is not a string')
           }
-        } else {
-          throw new TypeError('Variable ${args[0]} is not a string')
-        }
-      })()`
-      case 'filter': return `((val) => {
-          return ${isCollection('val')}
-            ? Array.from(val).filter((it) => ${args[1]})
-            : Object.entries(val).filter(([key, value]) => ${args[1]}).reduce((acc, [key, value]) => {
-              acc[key] = value
-              return acc
-            }, {})
+        })(${args[0]}, ${args[1]})`
+      case 'filter': return `(($dd_var) => {
+          return ${isCollection('$dd_var')}
+            ? Array.from($dd_var).filter(($dd_it) => ${args[1]})
+            : Object.entries($dd_var).filter(([$dd_key, $dd_value]) => ${args[1]}).reduce((acc, [k, v]) => {
+                acc[k] = v
+                return acc
+              }, {})
         })(${args[0]})`
-      case 'substring': return `((val) => {
-        if (typeof val === 'string') {
-          return val.substring(${args[1]}, ${args[2]})
-        } else {
-          throw new TypeError('Variable is not a string')
-        }
-      })(${args[0]})`
+      case 'substring': return `(($dd_str) => {
+          if (typeof $dd_str === 'string') {
+            return $dd_str.substring(${args[1]}, ${args[2]})
+          } else {
+            throw new TypeError('Variable is not a string')
+          }
+        })(${args[0]})`
       case 'getmember': return accessProperty(...args, false)
       case 'index': return accessProperty(...args, true)
     }
@@ -130,10 +130,10 @@ function callMethodOnPrototype (variable, methodName, ...args) {
 }
 
 function iterateOn (fnName, variable, callbackCode) {
-  return `((val) => {
-    return ${isCollection('val')}
-      ? Array.from(val).${fnName}((it) => ${callbackCode})
-      : Object.entries(val).${fnName}(([key, value]) => ${callbackCode})
+  return `(($dd_val) => {
+    return ${isCollection('$dd_val')}
+      ? Array.from($dd_val).${fnName}(($dd_it) => ${callbackCode})
+      : Object.entries($dd_val).${fnName}(([$dd_key, $dd_value]) => ${callbackCode})
   })(${variable})`
 }
 
