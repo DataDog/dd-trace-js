@@ -49,12 +49,12 @@ function compile (node) {
   } else if (Array.isArray(value)) {
     const args = value.map(compile)
     switch (type) {
-      case 'eq': return `${args[0]} === ${args[1]}`
-      case 'ne': return `${args[0]} !== ${args[1]}`
-      case 'gt': return `${args[0]} > ${args[1]}`
-      case 'ge': return `${args[0]} >= ${args[1]}`
-      case 'lt': return `${args[0]} < ${args[1]}`
-      case 'le': return `${args[0]} <= ${args[1]}`
+      case 'eq': return `(${args[0]}) === (${args[1]})`
+      case 'ne': return `(${args[0]}) !== (${args[1]})`
+      case 'gt': return `(${args[0]}) > (${args[1]})`
+      case 'ge': return `(${args[0]}) >= (${args[1]})`
+      case 'lt': return `(${args[0]}) < (${args[1]})`
+      case 'le': return `(${args[0]}) <= (${args[1]})`
       case 'any': return iterateOn('some', ...args)
       case 'all': return iterateOn('every', ...args)
       case 'and': return `(${args.join(') && (')})`
