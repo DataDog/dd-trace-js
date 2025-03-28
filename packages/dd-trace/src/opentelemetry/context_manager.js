@@ -12,6 +12,7 @@ class ContextManager {
     this._store = storage('opentelemetry')
   }
 
+  // converts dd to otel
   active () {
     const activeSpan = tracer.scope().active()
     const store = this._store.getStore()
@@ -54,6 +55,7 @@ class ContextManager {
       : wrappedContext
   }
 
+  // converts otel to dd
   with (context, fn, thisArg, ...args) {
     const span = trace.getSpan(context)
     const ddScope = tracer.scope()
