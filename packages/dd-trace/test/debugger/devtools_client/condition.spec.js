@@ -76,10 +76,10 @@ const testCases = [
     new TypeError('Variable does not support len/count')
   ],
   [{ len: { getmember: [{ ref: 'obj' }, 'arr'] } }, { obj: { arr: Array(10).fill(0) } }, 10],
-  [{ len: { getmember: [{ ref: 'obj' }, 'tarr'] } }, { obj: { tarr: new Int8Array([10, 20, 30]) } }, 3],
+  [{ len: { getmember: [{ ref: 'obj' }, 'tarr'] } }, { obj: { tarr: new Int16Array([10, 20, 30]) } }, 3],
   [
     { len: { getmember: [{ ref: 'obj' }, 'tarr'] } },
-    { obj: { tarr: overloadPropertyWithGetter(new Int8Array([10, 20, 30]), 'length') } },
+    { obj: { tarr: overloadPropertyWithGetter(new Int16Array([10, 20, 30]), 'length') } },
     new Error('Possibility of side effect')
   ],
   [
@@ -132,11 +132,55 @@ const testCases = [
   ],
 
   [{ eq: [{ ref: 'str' }, 'foo'] }, { str: 'foo' }, true],
+  [{ eq: [{ ref: 'str' }, 'foo'] }, { str: 'bar' }, false],
   [{ eq: [{ ref: 'str' }, 'foo'] }, { str: String('foo') }, true],
+  [{ eq: [{ ref: 'str' }, 'foo'] }, { str: String('bar') }, false],
   // TODO: Is this the expected behavior?
   [{ eq: [{ ref: 'str' }, 'foo'] }, { str: new String('foo') }, false], // eslint-disable-line no-new-wrappers
   [{ eq: [{ ref: 'bool' }, true] }, { bool: true }, true],
   [{ eq: [{ ref: 'nil' }, null] }, { nil: null }, true],
+  [{ eq: [{ ref: 'foo' }, { ref: 'undefined' }] }, { foo: undefined }, true],
+  [{ eq: [{ ref: 'foo' }, { ref: 'undefined' }] }, { foo: null }, false],
+  [{ eq: [{ getmember: [{ ref: 'obj' }, 'foo'] }, { ref: 'undefined' }] }, { obj: { foo: undefined } }, true],
+  [{ eq: [{ getmember: [{ ref: 'obj' }, 'foo'] }, { ref: 'undefined' }] }, { obj: {} }, true],
+  [{ eq: [{ getmember: [{ ref: 'obj' }, 'foo'] }, { ref: 'undefined' }] }, { obj: { foo: null } }, false],
+
+  [{ ne: [{ ref: 'str' }, 'foo'] }, { str: 'foo' }, false],
+  [{ ne: [{ ref: 'str' }, 'foo'] }, { str: 'bar' }, true],
+  [{ ne: [{ ref: 'str' }, 'foo'] }, { str: String('foo') }, false],
+  [{ ne: [{ ref: 'str' }, 'foo'] }, { str: String('bar') }, true],
+  // TODO: Is this the expected behavior?
+  [{ ne: [{ ref: 'str' }, 'foo'] }, { str: new String('foo') }, true], // eslint-disable-line no-new-wrappers
+  [{ ne: [{ ref: 'bool' }, true] }, { bool: true }, false],
+  [{ ne: [{ ref: 'nil' }, null] }, { nil: null }, false],
+
+  [{ gt: [{ ref: 'num' }, 42] }, { num: 43 }, true],
+  [{ gt: [{ ref: 'num' }, 42] }, { num: 42 }, false],
+  [{ gt: [{ ref: 'num' }, 42] }, { num: 41 }, false],
+  [{ gt: [{ ref: 'str' }, 'a'] }, { str: 'b' }, true],
+  [{ gt: [{ ref: 'str' }, 'a'] }, { str: 'a' }, false],
+  [{ gt: [{ ref: 'str' }, 'b'] }, { str: 'a' }, false],
+
+  [{ ge: [{ ref: 'num' }, 42] }, { num: 43 }, true],
+  [{ ge: [{ ref: 'num' }, 42] }, { num: 42 }, true],
+  [{ ge: [{ ref: 'num' }, 42] }, { num: 41 }, false],
+  [{ ge: [{ ref: 'str' }, 'a'] }, { str: 'b' }, true],
+  [{ ge: [{ ref: 'str' }, 'a'] }, { str: 'a' }, true],
+  [{ ge: [{ ref: 'str' }, 'b'] }, { str: 'a' }, false],
+
+  [{ lt: [{ ref: 'num' }, 42] }, { num: 43 }, false],
+  [{ lt: [{ ref: 'num' }, 42] }, { num: 42 }, false],
+  [{ lt: [{ ref: 'num' }, 42] }, { num: 41 }, true],
+  [{ lt: [{ ref: 'str' }, 'a'] }, { str: 'b' }, false],
+  [{ lt: [{ ref: 'str' }, 'a'] }, { str: 'a' }, false],
+  [{ lt: [{ ref: 'str' }, 'b'] }, { str: 'a' }, true],
+
+  [{ le: [{ ref: 'num' }, 42] }, { num: 43 }, false],
+  [{ le: [{ ref: 'num' }, 42] }, { num: 42 }, true],
+  [{ le: [{ ref: 'num' }, 42] }, { num: 41 }, true],
+  [{ le: [{ ref: 'str' }, 'a'] }, { str: 'b' }, false],
+  [{ le: [{ ref: 'str' }, 'a'] }, { str: 'a' }, true],
+  [{ le: [{ ref: 'str' }, 'b'] }, { str: 'a' }, true],
 
   [{ substring: [{ ref: 'str' }, 4, 7] }, { str: 'hello world' }, 'hello world'.substring(4, 7)],
   [{ substring: [{ ref: 'str' }, 4] }, { str: 'hello world' }, 'hello world'.substring(4)],
@@ -153,11 +197,19 @@ const testCases = [
     'hello world'.substring(4, 7)
   ],
 
-  [{ any: [{ ref: 'collection' }, { isEmpty: { ref: '@it' } }] }, { collection: ['foo', 'bar', ''] }, true],
-  [{ any: [{ ref: 'coll' }, { isEmpty: { ref: '@value' } }] }, { coll: { 0: 'foo', 1: 'bar', 2: '' } }, true],
-  [{ any: [{ ref: 'coll' }, { isEmpty: { ref: '@value' } }] }, { coll: { 0: 'foo', 1: 'bar', 2: 'baz' } }, false],
-  [{ any: [{ ref: 'coll' }, { isEmpty: { ref: '@key' } }] }, { coll: { foo: 0, bar: 1, '': 2 } }, true],
-  [{ any: [{ ref: 'coll' }, { isEmpty: { ref: '@key' } }] }, { coll: { foo: 0, bar: 1, baz: 2 } }, false],
+  [{ any: [{ ref: 'arr' }, { isEmpty: { ref: '@it' } }] }, { arr: ['foo', 'bar', ''] }, true],
+  [{ any: [{ ref: 'arr' }, { isEmpty: { ref: '@it' } }] }, { arr: ['foo', 'bar', 'baz'] }, false],
+  [{ any: [{ ref: 'obj' }, { isEmpty: { ref: '@value' } }] }, { obj: { 0: 'foo', 1: 'bar', 2: '' } }, true],
+  [{ any: [{ ref: 'obj' }, { isEmpty: { ref: '@value' } }] }, { obj: { 0: 'foo', 1: 'bar', 2: 'baz' } }, false],
+  [{ any: [{ ref: 'obj' }, { isEmpty: { ref: '@key' } }] }, { obj: { foo: 0, bar: 1, '': 2 } }, true],
+  [{ any: [{ ref: 'obj' }, { isEmpty: { ref: '@key' } }] }, { obj: { foo: 0, bar: 1, baz: 2 } }, false],
+
+  [{ all: [{ ref: 'arr' }, { isEmpty: { ref: '@it' } }] }, { arr: ['foo', ''] }, false],
+  [{ all: [{ ref: 'arr' }, { isEmpty: { ref: '@it' } }] }, { arr: ['', ''] }, true],
+  [{ all: [{ ref: 'obj' }, { isEmpty: { ref: '@value' } }] }, { obj: { 0: 'foo', 1: '' } }, false],
+  [{ all: [{ ref: 'obj' }, { isEmpty: { ref: '@value' } }] }, { obj: { 0: '', 1: '' } }, true],
+  [{ all: [{ ref: 'obj' }, { isEmpty: { ref: '@key' } }] }, { obj: { foo: 0 } }, false],
+  [{ all: [{ ref: 'obj' }, { isEmpty: { ref: '@key' } }] }, { obj: { '': 0 } }, true],
 
   [{ startsWith: [{ ref: 'str' }, 'hello'] }, { str: 'hello world!' }, true],
   [{ startsWith: [{ ref: 'str' }, 'world'] }, { str: 'hello world!' }, false],
@@ -219,9 +271,9 @@ const testCases = [
   [{ contains: [{ ref: 'arr' }, 'foo'] }, { arr: ['foo', 'bar'] }, true],
   [{ contains: [{ ref: 'arr' }, 'missing'] }, { arr: ['foo', 'bar'] }, false],
   [{ contains: [{ ref: 'arr' }, 'foo'] }, { arr: overloadMethod(['foo', 'bar'], 'includes') }, true],
-  [{ contains: [{ ref: 'tarr' }, 10] }, { tarr: new Int8Array([10, 20]) }, true],
-  [{ contains: [{ ref: 'tarr' }, 30] }, { tarr: new Int8Array([10, 20]) }, false],
-  [{ contains: [{ ref: 'tarr' }, 10] }, { tarr: overloadMethod(new Int8Array([10, 20]), 'includes') }, true],
+  [{ contains: [{ ref: 'tarr' }, 10] }, { tarr: new Int16Array([10, 20]) }, true],
+  [{ contains: [{ ref: 'tarr' }, 30] }, { tarr: new Int16Array([10, 20]) }, false],
+  [{ contains: [{ ref: 'tarr' }, 10] }, { tarr: overloadMethod(new Int16Array([10, 20]), 'includes') }, true],
   [{ contains: [{ ref: 'set' }, 'foo'] }, { set: new Set(['foo', 'bar']) }, true],
   [{ contains: [{ ref: 'set' }, 'missing'] }, { set: new Set(['foo', 'bar']) }, false],
   [{ contains: [{ ref: 'set' }, 'foo'] }, { set: overloadMethod(new Set(['foo', 'bar']), 'has') }, true],
@@ -275,13 +327,6 @@ const testCases = [
     new TypeError('Regular expression must be either a string or an instance of RegExp')
   ],
   [{ matches: [{ ref: 'foo' }, { ref: 'regex' }] }, { foo: '42', regex: overloadMethod(/[0-9]+/, Symbol.match) }, true],
-
-  // Undefined comparison
-  [{ eq: [{ ref: 'foo' }, { ref: 'undefined' }] }, { foo: undefined }, true],
-  [{ eq: [{ ref: 'foo' }, { ref: 'undefined' }] }, { foo: null }, false],
-  [{ eq: [{ getmember: [{ ref: 'obj' }, 'foo'] }, { ref: 'undefined' }] }, { obj: { foo: undefined } }, true],
-  [{ eq: [{ getmember: [{ ref: 'obj' }, 'foo'] }, { ref: 'undefined' }] }, { obj: {} }, true],
-  [{ eq: [{ getmember: [{ ref: 'obj' }, 'foo'] }, { ref: 'undefined' }] }, { obj: { foo: null } }, false],
 
   // Literal values
   [42, {}, 42],
