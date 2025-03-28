@@ -72,18 +72,18 @@ function compile (node) {
       case 'or': return `(${args.join(') || (')})`
       case 'startsWith': return `${callMethodOnPrototype(args[0], 'startsWith', args[1])}`
       case 'endsWith': return `${callMethodOnPrototype(args[0], 'endsWith', args[1])}`
-      case 'contains': return `(() => {
-          if (${isString(args[0])} || ${isArrayOrTypedArray(args[0])}) {
-            return ${callMethodOnPrototype(args[0], 'includes', args[1])}
+      case 'contains': return `((obj, elm) => {
+          if (${isString('obj')} || ${isArrayOrTypedArray('obj')}) {
+            return ${callMethodOnPrototype('obj', 'includes', 'elm')}
           } else if (
-            ${args[0]} instanceof Set || ${args[0]} instanceof WeakSet ||
-            ${args[0]} instanceof Map || ${args[0]} instanceof WeakMap
+            obj instanceof Set || obj instanceof WeakSet ||
+            obj instanceof Map || obj instanceof WeakMap
           ) {
-            return ${callMethodOnPrototype(args[0], 'has', args[1])}
+            return ${callMethodOnPrototype('obj', 'has', 'elm')}
           } else {
-            throw new TypeError('Variable ${args[0]} does not support contains')
+            throw new TypeError('Variable does not support contains')
           }
-        })()`
+        })(${args[0]}, ${args[1]})`
       case 'matches': return `((str, regex) => {
           if (${isString('str')}) {
             if (regex instanceof RegExp) {

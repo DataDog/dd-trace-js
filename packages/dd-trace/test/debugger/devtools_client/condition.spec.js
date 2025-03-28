@@ -293,12 +293,12 @@ const testCases = [
   [
     { contains: [{ ref: 'obj' }, 'foo'] },
     { obj: { foo: 'bar' } },
-    new TypeError('Variable obj does not support contains')
+    new TypeError('Variable does not support contains')
   ],
   [
     { contains: [{ ref: 'obj' }, 'missing'] },
     { obj: { foo: 'bar' } },
-    new TypeError('Variable obj does not support contains')
+    new TypeError('Variable does not support contains')
   ],
 
   [{ matches: [{ ref: 'foo' }, '[0-9]+'] }, { foo: '42' }, true],
