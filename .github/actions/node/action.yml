@@ -11,3 +11,4 @@ runs:
     - uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.version == 'eol' && '16' || inputs.version == 'oldest' && '18' || inputs.version == 'maintenance' && '20' || inputs.version == 'active' && '22' || inputs.version }}
+        check-latest: true
