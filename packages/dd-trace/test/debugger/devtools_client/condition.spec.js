@@ -237,24 +237,21 @@ const testCases = [
   // eslint-disable-next-line no-new-wrappers
   [{ endsWith: [{ ref: 'str' }, 'world!'] }, { str: overloadMethod(new String('hello world!'), 'endsWith') }, true],
 
+  [{ filter: [{ ref: 'arr' }, { not: { isEmpty: { ref: '@it' } } }] }, { arr: ['foo', 'bar', ''] }, ['foo', 'bar']],
+  [{ filter: [{ ref: 'tarr' }, { gt: [{ ref: '@it' }, 15] }] }, { tarr: new Int16Array([10, 20, 30]) }, [20, 30]],
   [
-    { filter: [{ ref: 'collection' }, { not: { isEmpty: { ref: '@it' } } }] },
-    { collection: ['foo', 'bar', ''] },
+    { filter: [{ ref: 'set' }, { not: { isEmpty: { ref: '@it' } } }] },
+    { set: new Set(['foo', 'bar', '']) },
     ['foo', 'bar']
   ],
   [
-    { filter: [{ ref: 'collection' }, { not: { isEmpty: { ref: '@it' } } }] },
-    { collection: new Set(['foo', 'bar', '']) },
-    ['foo', 'bar']
-  ],
-  [
-    { filter: [{ ref: 'collection' }, { not: { isEmpty: { ref: '@value' } } }] },
-    { collection: { 1: 'foo', 2: 'bar', 3: '' } },
+    { filter: [{ ref: 'obj' }, { not: { isEmpty: { ref: '@value' } } }] },
+    { obj: { 1: 'foo', 2: 'bar', 3: '' } },
     { 1: 'foo', 2: 'bar' }
   ],
   [
-    { filter: [{ ref: 'collection' }, { not: { isEmpty: { ref: '@key' } } }] },
-    { collection: { foo: 1, bar: 2, '': 3 } },
+    { filter: [{ ref: 'obj' }, { not: { isEmpty: { ref: '@key' } } }] },
+    { obj: { foo: 1, bar: 2, '': 3 } },
     { foo: 1, bar: 2 }
   ],
 
