@@ -339,11 +339,7 @@ const testCases = [
   [{ instanceof: [{ ref: 'bar' }, 'Object'] }, { bar: {} }, true],
   [{ instanceof: [{ ref: 'bar' }, 'Error'] }, { bar: new Error() }, true],
   [{ instanceof: [{ ref: 'bar' }, 'CustomObject'] }, { bar: new CustomObject(), CustomObject }, true],
-  [
-    { instanceof: [{ ref: 'bar' }, 'SideEffectObject'] },
-    { bar: new SideEffectObject(), SideEffectObject },
-    new Error('Possibility of side effect')
-  ],
+  [{ instanceof: [{ ref: 'bar' }, 'SideEffectObject'] }, { bar: new SideEffectObject(), SideEffectObject }, true],
 
   // Proxies
   [
