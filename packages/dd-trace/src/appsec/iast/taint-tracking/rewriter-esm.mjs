@@ -3,7 +3,7 @@
 import path from 'path'
 import { URL } from 'url'
 import { getName } from '../telemetry/verbosity.js'
-import { isLibraryFile, isPrivateModule } from './filter.js'
+import { isDdTrace, isPrivateModule } from './filter.js'
 import constants from './constants.js'
 
 const currentUrl = new URL(import.meta.url)
@@ -11,12 +11,10 @@ const ddTraceDir = path.join(currentUrl.pathname, '..', '..', '..', '..', '..', 
 
 let port, rewriter, iastEnabled
 
-let orchestrionConfig
-
 export async function initialize (data) {
   if (rewriter) return Promise.reject(new Error('ALREADY INITIALIZED'))
 
-  const { csiMethods, telemetryVerbosity, chainSourceMap, orchestrion } = data
+  const { csiMethods, telemetryVerbosity, chainSourceMap, orchestrionConfig } = data
   port = data.port
   iastEnabled = data.iastEnabled
 
@@ -28,9 +26,8 @@ export async function initialize (data) {
     csiMethods,
     telemetryVerbosity: getName(telemetryVerbosity),
     chainSourceMap,
-    orchestrion
+    orchestrion: orchestrionConfig
   })
-  orchestrionConfig = orchestrion
 }
 
 export async function load (url, context, nextLoad) {
@@ -42,10 +39,10 @@ export async function load (url, context, nextLoad) {
 
   let passes
   try {
-    if (isLibraryFile(url)) {
+    if (isDdTrace(url)) {
       return result
     }
-    if (isPrivateModule(url) && isLibraryFile(url)) {
+    if (isPrivateModule(url) && isDdTrace(url)) {
       // TODO error tracking needs to be added based on config
       passes = ['error_tracking']
       if (iastEnabled) {

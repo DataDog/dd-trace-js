@@ -17,7 +17,7 @@ const openAiBaseCompletionInfo = { base: 'https://api.openai.com', path: '/v1/co
 const openAiBaseChatInfo = { base: 'https://api.openai.com', path: '/v1/chat/completions' }
 const openAiBaseEmbeddingInfo = { base: 'https://api.openai.com', path: '/v1/embeddings' }
 
-let isLibraryFile = iastFilter.isLibraryFile
+let isDdTrace = iastFilter.isDdTrace
 
 describe('Plugin', () => {
   let langchainOpenai
@@ -48,17 +48,17 @@ describe('Plugin', () => {
   describe('langchain', () => {
     withVersions('langchain', ['@langchain/core'], version => {
       before(() => {
-        iastFilter.isLibraryFile = file => {
+        iastFilter.isDdTrace = file => {
           if (file.includes('dd-trace-js/versions/')) {
             return false
           }
-          return isLibraryFile(file)
+          return isDdTrace(file)
         }
         return agent.load('langchain')
       })
 
       after(() => {
-        iastFilter.isLibraryFile = isLibraryFile
+        iastFilter.isDdTrace = isDdTrace
         // wiping in order to read new env vars for the config each time
         return agent.close({ ritmReset: false })
       })

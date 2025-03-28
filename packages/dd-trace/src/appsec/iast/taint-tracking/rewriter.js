@@ -6,7 +6,7 @@ const Module = require('module')
 const { pathToFileURL } = require('url')
 const { MessageChannel } = require('worker_threads')
 const shimmer = require('../../../../../datadog-shimmer')
-const { isPrivateModule, isLibraryFile } = require('./filter')
+const { isPrivateModule, isDdTrace } = require('./filter')
 const { csiMethods } = require('./csi-methods')
 const { getName } = require('../telemetry/verbosity')
 const telemetry = require('../telemetry')
@@ -15,7 +15,7 @@ const dc = require('dc-polyfill')
 const log = require('../../../log')
 const { isMainThread } = require('worker_threads')
 const { LOG_MESSAGE, REWRITTEN_MESSAGE } = require('./constants')
-const orchestrion = require('../../../../../datadog-instrumentations/src/orchestrion-config')
+const orchestrionConfig = require('../../../../../datadog-instrumentations/src/orchestrion-config')
 
 let config
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')
@@ -40,7 +40,7 @@ function setGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, { getOr
   getRewriterOriginalPathAndLineFromSourceMap = chainSourceMap ? (path, line, column) => {
       // if --enable-source-maps is present stacktraces of the rewritten files contain the original path, file and
       // column because the sourcemap chaining is done during the rewriting process so we can skip it
-      if (isPrivateModule(path) && !isLibraryFile(path)) {
+      if (isPrivateModule(path) && !isDdTrace(path)) {
         return { path, line, column }
       } else {
         return getOriginalPathAndLineFromSourceMap(path, line, column)
@@ -64,7 +64,7 @@ function getRewriter (telemetryVerbosity) {
         csiMethods,
         telemetryVerbosity: getName(telemetryVerbosity),
         chainSourceMap,
-        orchestrion
+        orchestrion: orchestrionConfig
       })
     } catch (e) {
       log.error('Unable to initialize Rewriter', e)
@@ -93,7 +93,7 @@ function getCompileMethodFn (compileMethod) {
   let delegate = function (content, filename) {
     try {
       let passes
-      if (isLibraryFile(filename)) {
+      if (isDdTrace(filename)) {
         return compileMethod.apply(this, [content, filename])
       }
       if (isPrivateModule(filename)) {
@@ -207,7 +207,7 @@ function enableEsmRewriter (telemetryVerbosity) {
           csiMethods,
           telemetryVerbosity,
           chainSourceMap: isFlagPresent('--enable-source-maps'),
-          orchestrion,
+          orchestrionConfig,
           iastEnabled: config?.iast?.enabled
         }
       })

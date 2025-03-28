@@ -31,7 +31,7 @@ const openAiBaseCompletionInfo = { base: 'https://api.openai.com', path: '/v1/co
 const openAiBaseChatInfo = { base: 'https://api.openai.com', path: '/v1/chat/completions' }
 const openAiBaseEmbeddingInfo = { base: 'https://api.openai.com', path: '/v1/embeddings' }
 
-const isLibraryFile = iastFilter.isLibraryFile
+const isDdTrace = iastFilter.isDdTrace
 
 describe('integrations', () => {
   let langchainOpenai
@@ -63,11 +63,11 @@ describe('integrations', () => {
 
   describe('langchain', () => {
     before(async () => {
-      iastFilter.isLibraryFile = file => {
+      iastFilter.isDdTrace = file => {
         if (file.includes('dd-trace-js/versions/')) {
           return false
         }
-        return isLibraryFile(file)
+        return isDdTrace(file)
       }
 
       sinon.stub(LLMObsAgentProxySpanWriter.prototype, 'append')
@@ -92,7 +92,7 @@ describe('integrations', () => {
     })
 
     after(() => {
-      iastFilter.isLibraryFile = isLibraryFile
+      iastFilter.isDdTrace = isDdTrace
       require('../../../../../dd-trace').llmobs.disable() // unsubscribe from all events
       sinon.restore()
       return agent.close({ ritmReset: false, wipe: true })
