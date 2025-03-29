@@ -2,6 +2,7 @@
 
 const { getGeneratedPosition } = require('./source-maps')
 const session = require('./session')
+const compileCondition = require('./condition')
 const { MAX_SNAPSHOTS_PER_SECOND_PER_PROBE, MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE } = require('./defaults')
 const { findScriptFromPartialPath, probes, breakpoints } = require('./state')
 const log = require('../../log')
@@ -47,12 +48,15 @@ async function addBreakpoint (probe) {
     url, lineNumber, columnNumber, probe.id, probe.version
   )
 
+  const condition = probe.when && compileCondition(probe.when)
+
   const { breakpointId } = await session.post('Debugger.setBreakpoint', {
     location: {
       scriptId,
       lineNumber: lineNumber - 1, // Beware! lineNumber is zero-indexed
       columnNumber
-    }
+    },
+    condition
   })
 
   probes.set(probe.id, breakpointId)
