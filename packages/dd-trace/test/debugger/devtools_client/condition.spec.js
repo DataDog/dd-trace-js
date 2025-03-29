@@ -19,8 +19,10 @@ class EvilRegex extends RegExp {
 process[Symbol.for('datadog:isProxy')] = require('util').types.isProxy
 
 const literals = [
+  [null, {}, null],
   [42, {}, 42],
-  [true, {}, true]
+  [true, {}, true],
+  ['foo', {}, 'foo']
 ]
 
 const references = [
