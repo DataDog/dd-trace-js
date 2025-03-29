@@ -5,7 +5,7 @@ require('../../setup/mocha')
 const compile = require('../../../src/debugger/devtools_client/condition')
 
 class CustomObject {}
-class SideEffectObject {
+class HasInstanceSideEffect {
   static [Symbol.hasInstance] () {
     throw new Error('This should never throw!')
   }
@@ -16,6 +16,11 @@ const objectWithToPrimitiveSymbol = Object.create(Object.prototype, {
     value: () => { throw new Error('This should never throw!') }
   }
 })
+class EvilRegex extends RegExp {
+  exec (str) {
+    throw new Error('This should never throw!')
+  }
+}
 
 process[Symbol.for('datadog:isProxy')] = require('util').types.isProxy
 
@@ -42,12 +47,12 @@ const testCases = [
   [
     { getmember: [{ ref: 'map' }, 'foo'] },
     { map: new Map([['foo', 'bar']]) },
-    new Error('Accessing a Map or WeakMap is not allowed')
+    new Error('Accessing a Map is not allowed')
   ],
   [
     { getmember: [{ ref: 'wmap' }, { ref: 'key' }] },
     { key: weakKey, wmap: new WeakMap([[weakKey, 'bar']]) },
-    new Error('Accessing a Map or WeakMap is not allowed')
+    new Error('Accessing a WeakMap is not allowed')
   ],
   [
     { getmember: [{ ref: 'obj' }, 'getter'] },
@@ -74,11 +79,12 @@ const testCases = [
   [
     { len: { ref: 'wset' } },
     { wset: new WeakSet([weakKey]) },
-    new TypeError('Variable does not support len/count')],
+    new TypeError('Cannot get length or size of string/collection')
+  ],
   [
     { len: { ref: 'wmap' } },
     { wmap: new WeakMap([[weakKey, 2]]) },
-    new TypeError('Variable does not support len/count')
+    new TypeError('Cannot get length or size of string/collection')
   ],
   [{ len: { getmember: [{ ref: 'obj' }, 'arr'] } }, { obj: { arr: Array(10).fill(0) } }, 10],
   [{ len: { getmember: [{ ref: 'obj' }, 'tarr'] } }, { obj: { tarr: new Int16Array([10, 20, 30]) } }, 3],
@@ -90,7 +96,7 @@ const testCases = [
   [
     { len: { getmember: [{ ref: 'obj' }, 'unknownProp'] } },
     { obj: {} },
-    new TypeError('Variable does not support len/count')
+    new TypeError('Cannot get length or size of string/collection')
   ],
   [{ len: { ref: 'invalid' } }, {}, new ReferenceError('invalid is not defined')],
 
@@ -136,6 +142,26 @@ const testCases = [
     new Error('Possibility of side effect')
   ],
 
+  [{ isEmpty: { ref: 'str' } }, { str: '' }, true],
+  [{ isEmpty: { ref: 'str' } }, { str: 'hello' }, false],
+  [{ isEmpty: { ref: 'str' } }, { str: String('') }, true],
+  [{ isEmpty: { ref: 'str' } }, { str: String('hello') }, false],
+  [{ isEmpty: { ref: 'str' } }, { str: new String('') }, true], // eslint-disable-line no-new-wrappers
+  [{ isEmpty: { ref: 'str' } }, { str: new String('hello') }, false], // eslint-disable-line no-new-wrappers
+  [{ isEmpty: { ref: 'arr' } }, { arr: [] }, true],
+  [{ isEmpty: { ref: 'arr' } }, { arr: [1, 2, 3] }, false],
+  [{ isEmpty: { ref: 'tarr' } }, { tarr: new Int32Array(0) }, true],
+  [{ isEmpty: { ref: 'tarr' } }, { tarr: new Int32Array([1, 2, 3]) }, false],
+  [{ isEmpty: { ref: 'set' } }, { set: new Set() }, true],
+  [{ isEmpty: { ref: 'set' } }, { set: new Set([1, 2, 3]) }, false],
+  [{ isEmpty: { ref: 'map' } }, { map: new Map() }, true],
+  [{ isEmpty: { ref: 'map' } }, { map: new Map([['a', 1], ['b', 2]]) }, false],
+  [
+    { isEmpty: { ref: 'obj' } },
+    { obj: new WeakSet() },
+    new TypeError('Cannot get length or size of string/collection')
+  ],
+
   [{ eq: [{ ref: 'str' }, 'foo'] }, { str: 'foo' }, true],
   [{ eq: [{ ref: 'str' }, 'foo'] }, { str: 'bar' }, false],
   [{ eq: [{ ref: 'str' }, 'foo'] }, { str: String('foo') }, true],
@@ -171,7 +197,42 @@ const testCases = [
   [
     { gt: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
-    new Error('Possibility of side effect due to Symbol.toPrimitive')
+    new Error('Possibility of side effect due to coercion method')
+  ],
+  [
+    { gt: [5, { ref: 'obj' }] },
+    { obj: objectWithToPrimitiveSymbol },
+    new Error('Possibility of side effect due to coercion method')
+  ],
+  [
+    { gt: [{ ref: 'obj' }, 5] },
+    { obj: { valueOf () { throw new Error('This should never throw!') } } },
+    new Error('Possibility of side effect due to coercion method')
+  ],
+  [
+    { gt: [5, { ref: 'obj' }] },
+    { obj: { valueOf () { throw new Error('This should never throw!') } } },
+    new Error('Possibility of side effect due to coercion method')
+  ],
+  [
+    { gt: [{ ref: 'obj' }, 5] },
+    { obj: { toString () { throw new Error('This should never throw!') } } },
+    new Error('Possibility of side effect due to coercion method')
+  ],
+  [
+    { gt: [5, { ref: 'obj' }] },
+    { obj: { toString () { throw new Error('This should never throw!') } } },
+    new Error('Possibility of side effect due to coercion method')
+  ],
+  [
+    { gt: [{ ref: 'obj' }, 5] },
+    { obj: new Proxy({}, { get (_, p) { if (p === 'valueOf') throw new Error('This should never throw!') } }) },
+    new Error('Possibility of side effect')
+  ],
+  [
+    { gt: [5, { ref: 'obj' }] },
+    { obj: new Proxy({}, { get (_, p) { if (p === 'valueOf') throw new Error('This should never throw!') } }) },
+    new Error('Possibility of side effect')
   ],
 
   [{ ge: [{ ref: 'num' }, 42] }, { num: 43 }, true],
@@ -184,7 +245,17 @@ const testCases = [
   [
     { ge: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
-    new Error('Possibility of side effect due to Symbol.toPrimitive')
+    new Error('Possibility of side effect due to coercion method')
+  ],
+  [
+    { ge: [{ ref: 'obj' }, 5] },
+    { obj: { valueOf () { throw new Error('This should never throw!') } } },
+    new Error('Possibility of side effect due to coercion method')
+  ],
+  [
+    { ge: [{ ref: 'obj' }, 5] },
+    { obj: { toString () { throw new Error('This should never throw!') } } },
+    new Error('Possibility of side effect due to coercion method')
   ],
 
   [{ lt: [{ ref: 'num' }, 42] }, { num: 43 }, false],
@@ -197,7 +268,17 @@ const testCases = [
   [
     { lt: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
-    new Error('Possibility of side effect due to Symbol.toPrimitive')
+    new Error('Possibility of side effect due to coercion method')
+  ],
+  [
+    { lt: [{ ref: 'obj' }, 5] },
+    { obj: { valueOf () { throw new Error('This should never throw!') } } },
+    new Error('Possibility of side effect due to coercion method')
+  ],
+  [
+    { lt: [{ ref: 'obj' }, 5] },
+    { obj: { toString () { throw new Error('This should never throw!') } } },
+    new Error('Possibility of side effect due to coercion method')
   ],
 
   [{ le: [{ ref: 'num' }, 42] }, { num: 43 }, false],
@@ -210,7 +291,17 @@ const testCases = [
   [
     { le: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
-    new Error('Possibility of side effect due to Symbol.toPrimitive')
+    new Error('Possibility of side effect due to coercion method')
+  ],
+  [
+    { le: [{ ref: 'obj' }, 5] },
+    { obj: { valueOf () { throw new Error('This should never throw!') } } },
+    new Error('Possibility of side effect due to coercion method')
+  ],
+  [
+    { le: [{ ref: 'obj' }, 5] },
+    { obj: { toString () { throw new Error('This should never throw!') } } },
+    new Error('Possibility of side effect due to coercion method')
   ],
 
   [{ substring: [{ ref: 'str' }, 4, 7] }, { str: 'hello world' }, 'hello world'.substring(4, 7)],
@@ -225,6 +316,11 @@ const testCases = [
   [
     { substring: [{ ref: 'str' }, 4, 7] },
     { str: overloadMethod(new String('hello world'), 'substring') }, // eslint-disable-line no-new-wrappers
+    'hello world'.substring(4, 7)
+  ],
+  [
+    { substring: [{ ref: 'str' }, 4, 7] },
+    { str: new (createClassWithOverloadedMethodInPrototypeChain(String, 'substring'))('hello world') },
     'hello world'.substring(4, 7)
   ],
 
@@ -254,6 +350,21 @@ const testCases = [
   [{ startsWith: [{ ref: 'str' }, 'world'] }, { str: new String('hello world!') }, false],
   // eslint-disable-next-line no-new-wrappers
   [{ startsWith: [{ ref: 'str' }, 'hello'] }, { str: overloadMethod(new String('hello world!'), 'startsWith') }, true],
+  [
+    { startsWith: [{ ref: 'str' }, 'hello'] },
+    { str: Object.create({ startsWith () { throw new Error('This should never throw!') } }) },
+    new TypeError('Variable is not a string')
+  ],
+  [
+    { startsWith: ['hello world!', { ref: 'str' }] },
+    { str: { toString () { throw new Error('This should never throw!') } } },
+    new TypeError('Variable is not a string')
+  ],
+  [
+    { startsWith: [{ ref: 'str' }, 'hello'] },
+    { str: new (createClassWithOverloadedMethodInPrototypeChain(String, 'startsWith'))('hello world!') },
+    true
+  ],
 
   [{ endsWith: [{ ref: 'str' }, 'hello'] }, { str: 'hello world!' }, false],
   [{ endsWith: [{ ref: 'str' }, 'world!'] }, { str: 'hello world!' }, true],
@@ -267,6 +378,21 @@ const testCases = [
   [{ endsWith: [{ ref: 'str' }, 'world!'] }, { str: new String('hello world!') }, true],
   // eslint-disable-next-line no-new-wrappers
   [{ endsWith: [{ ref: 'str' }, 'world!'] }, { str: overloadMethod(new String('hello world!'), 'endsWith') }, true],
+  [
+    { endsWith: [{ ref: 'str' }, 'hello'] },
+    { str: Object.create({ endsWith () { throw new Error('This should never throw!') } }) },
+    new TypeError('Variable is not a string')
+  ],
+  [
+    { endsWith: ['hello world!', { ref: 'str' }] },
+    { str: { toString () { throw new Error('This should never throw!') } } },
+    new TypeError('Variable is not a string')
+  ],
+  [
+    { endsWith: [{ ref: 'str' }, 'world!'] },
+    { str: new (createClassWithOverloadedMethodInPrototypeChain(String, 'endsWith'))('hello world!') },
+    true
+  ],
 
   [{ filter: [{ ref: 'arr' }, { not: { isEmpty: { ref: '@it' } } }] }, { arr: ['foo', 'bar', ''] }, ['foo', 'bar']],
   [{ filter: [{ ref: 'tarr' }, { gt: [{ ref: '@it' }, 15] }] }, { tarr: new Int16Array([10, 20, 30]) }, [20, 30]],
@@ -286,16 +412,16 @@ const testCases = [
     { foo: 1, bar: 2 }
   ],
 
-  [{ contains: [{ ref: 'str' }, 'world'] }, { str: 'hello world' }, true],
-  [{ contains: [{ ref: 'str' }, 'missing'] }, { str: 'hello world' }, false],
-  [{ contains: [{ ref: 'str' }, 'world'] }, { str: String('hello world') }, true],
-  [{ contains: [{ ref: 'str' }, 'missing'] }, { str: String('hello world') }, false],
+  [{ contains: [{ ref: 'str' }, 'world'] }, { str: 'hello world!' }, true],
+  [{ contains: [{ ref: 'str' }, 'missing'] }, { str: 'hello world!' }, false],
+  [{ contains: [{ ref: 'str' }, 'world'] }, { str: String('hello world!') }, true],
+  [{ contains: [{ ref: 'str' }, 'missing'] }, { str: String('hello world!') }, false],
   // eslint-disable-next-line no-new-wrappers
-  [{ contains: [{ ref: 'str' }, 'world'] }, { str: new String('hello world') }, true],
+  [{ contains: [{ ref: 'str' }, 'world'] }, { str: new String('hello world!') }, true],
   // eslint-disable-next-line no-new-wrappers
-  [{ contains: [{ ref: 'str' }, 'missing'] }, { str: new String('hello world') }, false],
+  [{ contains: [{ ref: 'str' }, 'missing'] }, { str: new String('hello world!') }, false],
   // eslint-disable-next-line no-new-wrappers
-  [{ contains: [{ ref: 'str' }, 'world'] }, { str: overloadMethod(new String('hello world'), 'includes') }, true],
+  [{ contains: [{ ref: 'str' }, 'world'] }, { str: overloadMethod(new String('hello world!'), 'includes') }, true],
   [{ contains: [{ ref: 'arr' }, 'foo'] }, { arr: ['foo', 'bar'] }, true],
   [{ contains: [{ ref: 'arr' }, 'missing'] }, { arr: ['foo', 'bar'] }, false],
   [{ contains: [{ ref: 'arr' }, 'foo'] }, { arr: overloadMethod(['foo', 'bar'], 'includes') }, true],
@@ -331,6 +457,31 @@ const testCases = [
     { obj: { foo: 'bar' } },
     new TypeError('Variable does not support contains')
   ],
+  [
+    { contains: [{ ref: 'str' }, 'world'] },
+    { str: new (createClassWithOverloadedMethodInPrototypeChain(String, 'includes'))('hello world!') },
+    true
+  ],
+  [
+    { contains: [{ ref: 'arr' }, 'foo'] },
+    { arr: new (createClassWithOverloadedMethodInPrototypeChain(Array, 'includes'))('foo', 'bar') },
+    true
+  ],
+  [
+    { contains: [{ ref: 'tarr' }, 10] },
+    { tarr: new (createClassWithOverloadedMethodInPrototypeChain(Int32Array, 'includes'))([10, 20]) },
+    true
+  ],
+  [
+    { contains: [{ ref: 'set' }, 'foo'] },
+    { set: new (createClassWithOverloadedMethodInPrototypeChain(Set, 'has'))(['foo', 'bar']) },
+    true
+  ],
+  [
+    { contains: [{ ref: 'map' }, 'foo'] },
+    { map: new (createClassWithOverloadedMethodInPrototypeChain(Map, 'has'))([['foo', 'bar']]) },
+    true
+  ],
 
   [{ matches: [{ ref: 'foo' }, '[0-9]+'] }, { foo: '42' }, true],
   [{ matches: [{ ref: 'foo' }, '[0-9]+'] }, { foo: String('42') }, true],
@@ -355,6 +506,16 @@ const testCases = [
     new TypeError('Regular expression must be either a string or an instance of RegExp')
   ],
   [{ matches: [{ ref: 'foo' }, { ref: 'regex' }] }, { foo: '42', regex: overloadMethod(/[0-9]+/, Symbol.match) }, true],
+  [
+    { matches: [{ ref: 'foo' }, '[0-9]+'] },
+    { foo: new (createClassWithOverloadedMethodInPrototypeChain(String, 'match'))('42') },
+    true
+  ],
+  [
+    { matches: ['42', { ref: 'regex' }] },
+    { regex: new EvilRegex('[0-9]+') },
+    new TypeError('Regular expression must be either a string or an instance of RegExp')
+  ],
 
   // Literal values
   [42, {}, 42],
@@ -370,7 +531,11 @@ const testCases = [
   [{ instanceof: [{ ref: 'bar' }, 'Object'] }, { bar: {} }, true],
   [{ instanceof: [{ ref: 'bar' }, 'Error'] }, { bar: new Error() }, true],
   [{ instanceof: [{ ref: 'bar' }, 'CustomObject'] }, { bar: new CustomObject(), CustomObject }, true],
-  [{ instanceof: [{ ref: 'bar' }, 'SideEffectObject'] }, { bar: new SideEffectObject(), SideEffectObject }, true],
+  [
+    { instanceof: [{ ref: 'bar' }, 'HasInstanceSideEffect'] },
+    { bar: new HasInstanceSideEffect(), HasInstanceSideEffect },
+    true
+  ],
 
   // Proxies
   [
@@ -464,4 +629,14 @@ function overloadPropertyWithGetter (obj, propName) {
 function overloadMethod (obj, methodName) {
   obj[methodName] = () => { throw new Error('This should never throw!') }
   return obj
+}
+
+function createClassWithOverloadedMethodInPrototypeChain (Builtin, propName) {
+  class Klass extends Builtin {
+    [propName] () { throw new Error('This should never throw!') }
+  }
+
+  class SubKlass extends Klass {}
+
+  return SubKlass
 }
