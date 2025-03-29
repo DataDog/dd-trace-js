@@ -16,6 +16,7 @@ class EvilRegex extends RegExp {
   exec () { throw new Error('This should never throw!') }
 }
 
+// Mock the presence of `isProxy` as it would be available when DI is active in the tracer
 process[Symbol.for('datadog:isProxy')] = require('util').types.isProxy
 
 const literals = [
