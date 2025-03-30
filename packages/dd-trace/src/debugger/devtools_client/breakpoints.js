@@ -48,7 +48,7 @@ async function addBreakpoint (probe) {
     url, lineNumber, columnNumber, probe.id, probe.version
   )
 
-  const condition = probe.when && compileCondition(probe.when)
+  const condition = probe.when?.json && compileCondition(probe.when.json)
 
   const { breakpointId } = await session.post('Debugger.setBreakpoint', {
     location: {

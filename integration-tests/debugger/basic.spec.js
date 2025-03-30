@@ -400,7 +400,7 @@ describe('Dynamic Instrumentation', function () {
         })
 
         t.agent.addRemoteConfig(t.generateRemoteConfig({
-          when: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] }
+          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } }
         }))
       })
 
@@ -419,7 +419,7 @@ describe('Dynamic Instrumentation', function () {
         })
 
         t.agent.addRemoteConfig(t.generateRemoteConfig({
-          when: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] }
+          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } }
         }))
       })
     })
