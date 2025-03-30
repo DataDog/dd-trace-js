@@ -422,6 +422,21 @@ describe('Dynamic Instrumentation', function () {
           when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } }
         }))
       })
+
+      it('should report error if condition is invalid', function (done) {
+        t.agent.on('debugger-diagnostics', ({ payload }) => {
+          payload.forEach(({ debugger: { diagnostics } }) => {
+            if (diagnostics.status === 'ERROR') {
+              assert.strictEqual(diagnostics.exception.message, 'Cannot compile expression: original dsl')
+              done()
+            }
+          })
+        })
+
+        t.agent.addRemoteConfig(t.generateRemoteConfig({
+          when: { dsl: 'original dsl', json: { ref: 'this is not a valid ref' } }
+        }))
+      })
     })
 
     describe('race conditions', function () {
