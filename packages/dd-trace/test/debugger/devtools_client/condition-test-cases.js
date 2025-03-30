@@ -22,6 +22,79 @@ const literals = [
 const references = [
   [{ ref: 'foo' }, { foo: 42 }, 42],
   [{ ref: 'foo' }, {}, new ReferenceError('foo is not defined')],
+
+  // Reserved words, but we allow them as they can be useful
+  [{ ref: 'this' }, {}, global], // Unless bound, `this` defaults to the global object
+  { ast: { ref: 'super' }, expected: 'super', execute: false },
+
+  // Litterals, but we allow them as they can be useful
+  [{ ref: 'undefined' }, {}, undefined],
+  [{ ref: 'Infinity' }, {}, Infinity],
+
+  // Old standard reserved words, no need to disallow them
+  [{ ref: 'abstract' }, { abstract: 42 }, 42],
+
+  // Input sanitization
+  {
+    ast: { ref: 'break' },
+    vars: { foo: { bar: 42 } },
+    expected: new SyntaxError('Illegal identifier: break'),
+    execute: false
+  },
+  {
+    ast: { ref: 'let' },
+    vars: { foo: { bar: 42 } },
+    expected: new SyntaxError('Illegal identifier: let'),
+    execute: false
+  },
+  {
+    ast: { ref: 'await' },
+    vars: { foo: { bar: 42 } },
+    expected: new SyntaxError('Illegal identifier: await'),
+    execute: false
+  },
+  {
+    ast: { ref: 'enum' },
+    vars: { foo: { bar: 42 } },
+    expected: new SyntaxError('Illegal identifier: enum'),
+    execute: false
+  },
+  {
+    ast: { ref: 'implements' },
+    vars: { foo: { bar: 42 } },
+    expected: new SyntaxError('Illegal identifier: implements'),
+    execute: false
+  },
+  { ast: { ref: 'NaN' }, expected: new SyntaxError('Illegal identifier: NaN'), execute: false },
+  {
+    ast: { ref: 'foo.bar' },
+    vars: { foo: { bar: 42 } },
+    expected: new SyntaxError('Illegal identifier: foo.bar'),
+    execute: false
+  },
+  {
+    ast: { ref: 'foo()' },
+    vars: { foo: () => {} },
+    expected: new SyntaxError('Illegal identifier: foo()'),
+    execute: false
+  },
+  {
+    ast: { ref: 'foo; bar' },
+    vars: { foo: 1, bar: 2 },
+    expected: new SyntaxError('Illegal identifier: foo; bar'),
+    execute: false
+  },
+  {
+    ast: { ref: 'foo\nbar' },
+    vars: { foo: 1, bar: 2 },
+    expected: new SyntaxError('Illegal identifier: foo\nbar'),
+    execute: false
+  },
+  {
+    ast: { ref: 'throw new Error()' },
+    expected: new SyntaxError('Illegal identifier: throw new Error()'),
+    execute: false
+  }
 ]
 
 const propertyAccess = [
@@ -56,6 +129,12 @@ const propertyAccess = [
     { obj: Object.create(Object.prototype, { getter: { get () { return 'x' } } }) },
     new Error('Possibility of side effect')
   ],
+  {
+    before: () => { process[Symbol.for('datadog:isProxy')] = undefined },
+    ast: { getmember: [{ ref: 'proxy' }, 'foo'] },
+    vars: { proxy: {} },
+    expected: new Error('Possibility of side effect')
+  },
 
   [{ index: [{ ref: 'arr' }, 1] }, { arr: ['foo', 'bar'] }, 'bar'],
   [{ index: [{ ref: 'arr' }, 100] }, { arr: ['foo', 'bar'] }, undefined], // Should throw according to spec
@@ -553,32 +632,16 @@ const typeAndDefinitionChecks = [
 
   [{ isDefined: 'foo' }, { bar: 42 }, false],
   [{ isDefined: 'bar' }, { bar: 42 }, true],
-  [{ isDefined: 'bar' }, { bar: undefined }, true]
-]
-
-const isDefined = [
-  [{ isDefined: 'foo' }, 'const foo = undefined', false],
-  [{ isDefined: 'foo' }, 'const foo = 42', false],
-  [{ isDefined: 'foo' }, 'let foo', false],
-  [{ isDefined: 'foo' }, 'let foo = undefined', false],
-  [{ isDefined: 'foo' }, 'let foo = 42', false],
-  [{ isDefined: 'foo' }, 'var foo', true], // var is hoisted
-  [{ isDefined: 'foo' }, 'var foo = undefined', true], // var is hoisted
-  [{ isDefined: 'foo' }, 'var foo = 42', true], // var is hoisted
-  [{ isDefined: 'foo' }, '', false]
-]
-
-const compileTimeErrors = [
-  [{ ref: 'break' }, { foo: { bar: 42 } }, new SyntaxError('Illegal identifier: break')],
-  [{ ref: 'let' }, { foo: { bar: 42 } }, new SyntaxError('Illegal identifier: let')],
-  [{ ref: 'await' }, { foo: { bar: 42 } }, new SyntaxError('Illegal identifier: await')],
-  [{ ref: 'enum' }, { foo: { bar: 42 } }, new SyntaxError('Illegal identifier: enum')],
-  [{ ref: 'implements' }, { foo: { bar: 42 } }, new SyntaxError('Illegal identifier: implements')],
-  [{ ref: 'foo.bar' }, { foo: { bar: 42 } }, new SyntaxError('Illegal identifier: foo.bar')],
-  [{ ref: 'foo()' }, { foo: () => {} }, new SyntaxError('Illegal identifier: foo()')],
-  [{ ref: 'foo; bar' }, { foo: 1, bar: 2 }, new SyntaxError('Illegal identifier: foo; bar')],
-  [{ ref: 'foo\nbar' }, { foo: 1, bar: 2 }, new SyntaxError('Illegal identifier: foo\nbar')],
-  [{ ref: 'throw new Error()' }, {}, new SyntaxError('Illegal identifier: throw new Error()')]
+  [{ isDefined: 'bar' }, { bar: undefined }, true],
+  { ast: { isDefined: 'foo' }, suffix: 'const foo = undefined', expected: false },
+  { ast: { isDefined: 'foo' }, suffix: 'const foo = 42', expected: false },
+  { ast: { isDefined: 'foo' }, suffix: 'let foo', expected: false },
+  { ast: { isDefined: 'foo' }, suffix: 'let foo = undefined', expected: false },
+  { ast: { isDefined: 'foo' }, suffix: 'let foo = 42', expected: false },
+  { ast: { isDefined: 'foo' }, suffix: 'var foo', expected: true }, // var is hoisted
+  { ast: { isDefined: 'foo' }, suffix: 'var foo = undefined', expected: true }, // var is hoisted
+  { ast: { isDefined: 'foo' }, suffix: 'var foo = 42', expected: true }, // var is hoisted
+  { ast: { isDefined: 'foo' }, suffix: '', expected: false }
 ]
 
 function overloadPropertyWithGetter (obj, propName) {
@@ -614,7 +677,5 @@ module.exports = {
   logicalOperators,
   collectionOperations,
   membershipAndMatching,
-  typeAndDefinitionChecks,
-  isDefined,
-  compileTimeErrors
+  typeAndDefinitionChecks
 }

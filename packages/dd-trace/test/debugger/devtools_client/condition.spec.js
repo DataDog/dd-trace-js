@@ -13,16 +13,21 @@ const {
   logicalOperators,
   collectionOperations,
   membershipAndMatching,
-  typeAndDefinitionChecks,
-  isDefined,
-  compileTimeErrors
+  typeAndDefinitionChecks
 } = require('./condition-test-cases')
 const compile = require('../../../src/debugger/devtools_client/condition')
 
-// Each test case is a tuple of [ast, data, expected] where:
+// Each test case is either a tuple of [ast, vars, expected] where:
 // - `ast` is the abstract syntax tree to be compiled
-// - `data` is an object mapping variable names to their values
+// - `vars` is an object mapping variable names to their values
 // - `expected` is the expected result of the compiled expression
+// or an object with the following possible properties:
+// - `before` is a function to be called before the test case
+// - `ast` is the abstract syntax tree to be compiled
+// - `vars` is an object mapping variable names to their values
+// - `suffix` is a string to be appended to the compiled expression
+// - `expected` is the expected result of the compiled expression
+// - `execute` is a boolean indicating whether the compiled code should be executed
 const testCases = [
   ...literals,
   ...references,
@@ -37,37 +42,50 @@ const testCases = [
   ...typeAndDefinitionChecks
 ]
 
-// Each test case is a tuple of [ast, suffix, expected] where:
-// - `ast` is the abstract syntax tree to be compiled
-// - `suffix` is a suffix expression to be appended to the compiled code (variables defined after the compiled code)
-// - `expected` is the expected result of the compiled code
-const isDefinedTestCases = [
-  ...isDefined
-]
-
-// Each test case is a tuple of [ast, data, expected] where:
-// - `ast` is the abstract syntax tree to be compiled
-// - `data` is an object mapping variable names to their values
-// - `expected` is the expected error when compiling the expression
-const compileTimeErrorTestCases = [
-  ...compileTimeErrors
-]
-
 describe('Expresion language condition compilation', function () {
-  before(() => {
+  beforeEach(() => {
     // Mock the presence of `isProxy` as it would be available when DI is active in the tracer
     process[Symbol.for('datadog:isProxy')] = require('util').types.isProxy
   })
 
-  for (const [ast, data, expected] of testCases) {
-    it(generateTestCaseName(ast, data, expected), function () {
-      const fn = new Function(...Object.keys(data), `return ${compile(ast)}`) // eslint-disable-line no-new-func
-      const args = Object.values(data)
+  for (const testCase of testCases) {
+    let before, ast, vars, suffix, expected, execute
+    if (Array.isArray(testCase)) {
+      [ast, vars, expected] = testCase
+    } else {
+      // Allow for more expressive test cases in situations where the default tuple is not enough
+      ({ before, ast, vars = {}, suffix, expected, execute = true } = testCase)
+    }
+
+    it(generateTestCaseName(ast, vars, expected), function () {
+      if (before) {
+        before()
+      }
+
+      if (execute === false) {
+        if (expected instanceof Error) {
+          expect(() => compile(ast)).to.throw(expected.constructor, expected.message)
+        } else {
+          expect(compile(ast)).to.equal(expected)
+        }
+        return
+      }
+
+      const code = suffix
+        ? `const result = (() => {
+            return ${compile(ast)}
+          })()
+          ${suffix}
+          return result`
+        : `return ${compile(ast)}`
+      const fn = new Function(...Object.keys(vars), code) // eslint-disable-line no-new-func
+      const args = Object.values(vars)
+
       if (expected instanceof Error) {
         expect(() => fn(...args)).to.throw(expected.constructor, expected.message)
       } else {
         const result = runWithDebug(fn, args)
-        if (typeof expected === 'object') {
+        if (expected !== null && typeof expected === 'object') {
           expect(result).to.deep.equal(expected)
         } else {
           expect(result).to.equal(expected)
@@ -75,34 +93,6 @@ describe('Expresion language condition compilation', function () {
       }
     })
   }
-
-  for (const [ast, suffix, expected] of isDefinedTestCases) {
-    it(generateTestCaseName(ast, suffix, expected), function () {
-      // eslint-disable-next-line no-new-func
-      const fn = new Function(`
-        const result = (() => {
-          return ${compile(ast)}
-        })()
-        ${suffix}
-        return result
-      `)
-      const result = runWithDebug(fn)
-      expect(result).to.equal(expected)
-    })
-  }
-
-  for (const [ast, data, expected] of compileTimeErrorTestCases) {
-    it(generateTestCaseName(ast, data, expected), function () {
-      expect(() => compile(ast)).to.throw(expected.constructor, expected.message)
-    })
-  }
-
-  it('should abort if isProxy is not available on the global scope', function () {
-    process[Symbol.for('datadog:isProxy')] = undefined
-    const ast = { getmember: [{ ref: 'proxy' }, 'foo'] }
-    const fn = new Function('proxy', `return ${compile(ast)}`) // eslint-disable-line no-new-func
-    expect(fn).to.throw(Error, 'Possibility of side effect')
-  })
 })
 
 function generateTestCaseName (ast, dataOrSuffix, expected) {

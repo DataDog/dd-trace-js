@@ -5,8 +5,8 @@ module.exports = compile
 const identifierRegex = /^[@a-zA-Z_$][\w$]*$/
 
 // The following identifiers have purposefully not been included in this list:
-// - The reserved words `this`, `false`, `null`, `super`, `true`, as they can have valid use cases as `ref` values
-// - The literals `undefined`, `NaN`, `Infinity` as they can be useful as `ref` values, especially to check if a
+// - The reserved words `this` and `super` as they can have valid use cases as `ref` values
+// - The literals `undefined`, `Infinity` as they can be useful as `ref` values, especially to check if a
 //   variable is `undefined`.
 // - The following future reserved words in older standards, as they can now be used safely:
 //   `abstract`, `boolean`, `byte`, `char`, `double`, `final`, `float`, `goto`, `int`, `long`, `native`, `short`,
@@ -14,8 +14,8 @@ const identifierRegex = /^[@a-zA-Z_$][\w$]*$/
 const reservedWords = new Set([
   // Reserved words
   'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default', 'delete', 'do', 'else', 'export',
-  'extends', 'finally', 'for', 'function', 'if', 'import', 'in', 'instanceof', 'new', 'return', 'switch', 'throw',
-  'try', 'typeof', 'var', 'void', 'while', 'with',
+  'extends', 'false', 'finally', 'for', 'function', 'if', 'import', 'in', 'instanceof', 'new', 'null', 'return',
+  'switch', 'throw', 'true', 'try', 'typeof', 'var', 'void', 'while', 'with',
 
   // Reserved in strict mode
   'let', 'static', 'yield',
@@ -27,7 +27,10 @@ const reservedWords = new Set([
   'enum',
 
   // Future reserved words in strict mode
-  'implements', 'interface', 'package', 'private', 'protected', 'public'
+  'implements', 'interface', 'package', 'private', 'protected', 'public',
+
+  // Litterals
+  'NaN'
 ])
 
 // TODO: Consider storing some of these functions on `process` so they can be reused across probes
