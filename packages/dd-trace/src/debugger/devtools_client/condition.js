@@ -4,17 +4,18 @@ module.exports = compile
 
 const identifierRegex = /^[@a-zA-Z_$][\w$]*$/
 
-// The following identifiers have purposefully not been included in this list
+// The following identifiers have purposefully not been included in this list:
+// - The reserved words `this`, `false`, `null`, `super`, `true`, as they can have valid use cases as `ref` values
 // - The literals `undefined`, `NaN`, `Infinity` as they can be useful as `ref` values, especially to check if a
 //   variable is `undefined`.
 // - The following future reserved words in older standards, as they can now be used safely:
 //   `abstract`, `boolean`, `byte`, `char`, `double`, `final`, `float`, `goto`, `int`, `long`, `native`, `short`,
-//   `synchronized`, `throws`, `transient`, `volatile`
+//   `synchronized`, `throws`, `transient`, `volatile`.
 const reservedWords = new Set([
   // Reserved words
   'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default', 'delete', 'do', 'else', 'export',
-  'extends', 'false', 'finally', 'for', 'function', 'if', 'import', 'in', 'instanceof', 'new', 'null', 'return',
-  'super', 'switch', 'this', 'throw', 'true', 'try', 'typeof', 'var', 'void', 'while', 'with',
+  'extends', 'finally', 'for', 'function', 'if', 'import', 'in', 'instanceof', 'new', 'return', 'switch', 'throw',
+  'try', 'typeof', 'var', 'void', 'while', 'with',
 
   // Reserved in strict mode
   'let', 'static', 'yield',
