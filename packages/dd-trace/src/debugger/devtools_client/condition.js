@@ -2,6 +2,33 @@
 
 module.exports = compile
 
+const identifierRegex = /^[@a-zA-Z_$][\w$]*$/
+
+// The following identifiers have purposefully not been included in this list
+// - The literals `undefined`, `NaN`, `Infinity` as they can be useful as `ref` values, especially to check if a
+//   variable is `undefined`.
+// - The following future reserved words in older standards, as they can now be used safely:
+//   `abstract`, `boolean`, `byte`, `char`, `double`, `final`, `float`, `goto`, `int`, `long`, `native`, `short`,
+//   `synchronized`, `throws`, `transient`, `volatile`
+const reservedWords = new Set([
+  // Reserved words
+  'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default', 'delete', 'do', 'else', 'export',
+  'extends', 'false', 'finally', 'for', 'function', 'if', 'import', 'in', 'instanceof', 'new', 'null', 'return',
+  'super', 'switch', 'this', 'throw', 'true', 'try', 'typeof', 'var', 'void', 'while', 'with',
+
+  // Reserved in strict mode
+  'let', 'static', 'yield',
+
+  // Reserved in module code or async function bodies:
+  'await',
+
+  // Future reserved words
+  'enum',
+
+  // Future reserved words in strict mode
+  'implements', 'interface', 'package', 'private', 'protected', 'public'
+])
+
 // TODO: Consider storing some of these functions on `process` so they can be reused across probes
 function compile (node) {
   if (node === null || typeof node === 'number' || typeof node === 'boolean' || typeof node === 'string') {
@@ -35,7 +62,7 @@ function compile (node) {
     } else if (value === '@value') {
       return '$dd_value'
     } else {
-      return value
+      return assertIdentifier(value)
     }
   } else if (Array.isArray(value)) {
     const args = value.map(compile)
@@ -196,4 +223,11 @@ function assertString (variable) {
       throw new TypeError('Variable is not a string')
     }
   })(${variable})`
+}
+
+function assertIdentifier (value) {
+  if (!identifierRegex.test(value) || reservedWords.has(value)) {
+    throw new SyntaxError(`Illegal identifier: ${value}`)
+  }
+  return value
 }
