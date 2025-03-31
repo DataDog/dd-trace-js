@@ -12,3 +12,4 @@ runs:
       with:
         node-version: ${{ inputs.version == 'eol' && '16' || inputs.version == 'oldest' && '18' || inputs.version == 'maintenance' && '20' || inputs.version == 'active' && '22' || inputs.version }}
         check-latest: true
+        registry-url: ${{ inputs.registry-url || 'https://registry.npmjs.org' }}
