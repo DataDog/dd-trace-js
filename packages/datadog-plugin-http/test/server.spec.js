@@ -262,7 +262,7 @@ describe('Plugin', () => {
             client: false,
             server: {
               clientIpEnabled: true,
-              clientIpHeader: 'x-forwarded-for'
+              clientIpHeader: 'my-custom-header-with-client-ip'
             }
           })
             .then(() => {
@@ -286,7 +286,7 @@ describe('Plugin', () => {
 
           axios.get(`http://localhost:${port}/user`, {
             headers: {
-              'x-forwarded-for': '8.8.8.8'
+              'my-custom-header-with-client-ip': '8.8.8.8'
             }
           }).catch(done)
         })
