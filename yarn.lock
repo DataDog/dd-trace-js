@@ -399,10 +399,10 @@
   resolved "https://registry.yarnpkg.com/@datadog/sketches-js/-/sketches-js-2.1.1.tgz#9ec2251b3c932b4f43e1d164461fa6cb6f28b7d0"
   integrity sha512-d5RjycE+MObE/hU+8OM5Zp4VjTwiPLRa8299fj7muOmR16fb942z8byoMbCErnGh0lBevvgkGrLclQDvINbIyg==
 
-"@datadog/wasm-js-rewriter@3.0.0":
-  version "3.0.0"
-  resolved "https://registry.yarnpkg.com/@datadog/wasm-js-rewriter/-/wasm-js-rewriter-3.0.0.tgz#9fa31c0c9dd3e11d9bf3ccf1882ddf20079dbcc9"
-  integrity sha512-Q1pgmwguqE3mKb4dujXkgvImyEj4D2RlYkgK1i+gG5Fmbn/ChvggzrfiLglm9YQ3dhb2J0owOt7cJcOI+rt7HA==
+"@datadog/wasm-js-rewriter@3.1.0":
+  version "3.1.0"
+  resolved "https://registry.yarnpkg.com/@datadog/wasm-js-rewriter/-/wasm-js-rewriter-3.1.0.tgz#88662cc997417bcda09bd8940c1c8235f4de3726"
+  integrity sha512-OE3QUGTriE3vhVxGRt2Df0Uk0xCd0OjqXb5Tjs9TdIvJu6VxYstxszdfyVK2+VHub5vGYY0ErJ4vkSB8z+3KPg==
   dependencies:
     lru-cache "^7.14.0"
     node-gyp-build "^4.5.0"
