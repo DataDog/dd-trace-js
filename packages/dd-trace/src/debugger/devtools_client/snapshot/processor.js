@@ -139,7 +139,7 @@ function toString (str, maxLength) {
 
   return {
     type: 'string',
-    value: str.slice(0, Math.max(0, maxLength)),
+    value: str.slice(0, maxLength),
     truncated: true,
     size
   }

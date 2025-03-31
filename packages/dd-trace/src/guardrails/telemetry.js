@@ -31,7 +31,7 @@ var metadata = {
   pid: process.pid
 }
 
-var seen = new Set([])
+var seen = new Set()
 function hasSeen (point) {
   if (point.name === 'abort') {
     // This one can only be sent once, regardless of tags

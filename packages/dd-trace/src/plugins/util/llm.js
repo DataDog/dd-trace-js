@@ -12,7 +12,7 @@ function normalize (text, limit = 128) {
     .replace(RE_TAB, '\\t')
 
   if (text.length > limit) {
-    return text.slice(0, Math.max(0, limit)) + '...'
+    return text.slice(0, limit) + '...'
   }
 
   return text
