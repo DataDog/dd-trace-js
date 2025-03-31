@@ -8,7 +8,7 @@ function getResourceName (method, fields = {}) {
     fields.queue,
     fields.source,
     fields.destination
-  ].filter(val => val).join(' ')
+  ].filter(Boolean).join(' ')
 }
 
 module.exports = { getResourceName }

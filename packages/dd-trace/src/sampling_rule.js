@@ -69,7 +69,7 @@ function resourceLocator (span) {
 }
 
 class SamplingRule {
-  constructor ({ name, service, resource, tags, sampleRate = 1.0, provenance = undefined, maxPerSecond } = {}) {
+  constructor ({ name, service, resource, tags, sampleRate = 1, provenance, maxPerSecond } = {}) {
     this.matchers = []
 
     if (name) {
@@ -112,7 +112,7 @@ class SamplingRule {
 
   match (span) {
     for (const matcher of this.matchers) {
-      if (!matcher.match(span)) {
+      if (!span.test(matcher)) {
         return false
       }
     }

@@ -27,7 +27,7 @@ class NetTCPPlugin extends ClientPlugin {
 
     this.startSpan('tcp.connect', {
       service: this.config.service,
-      resource: [host, port].filter(val => val).join(':'),
+      resource: [host, port].filter(Boolean).join(':'),
       kind: 'client',
       meta: {
         'tcp.remote.host': host,

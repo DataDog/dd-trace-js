@@ -4,7 +4,7 @@ const types = require('./types')
 const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
-const nodeMajor = parseInt(process.versions.node.split('.')[0])
+const nodeMajor = Number.parseInt(process.versions.node.split('.')[0])
 
 const startChannel = channel('apm:grpc:server:request:start')
 const asyncStartChannel = channel('apm:grpc:server:request:asyncStart')

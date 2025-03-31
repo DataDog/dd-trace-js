@@ -2,8 +2,8 @@
 
 const config = require('../config')
 
-const excludedIdentifiers = config.dynamicInstrumentation.redactionExcludedIdentifiers
-  .map((name) => normalizeName(name))
+const excludedIdentifiers = new Set(config.dynamicInstrumentation.redactionExcludedIdentifiers
+  .map((name) => normalizeName(name)))
 
 const REDACTED_IDENTIFIERS = new Set(
   [
@@ -98,7 +98,7 @@ const REDACTED_IDENTIFIERS = new Set(
     ...config.dynamicInstrumentation.redactedIdentifiers
   ]
     .map((name) => normalizeName(name))
-    .filter((name) => excludedIdentifiers.includes(name) === false)
+    .filter((name) => excludedIdentifiers.has(name) === false)
 )
 
 function normalizeName (name, isSymbol) {

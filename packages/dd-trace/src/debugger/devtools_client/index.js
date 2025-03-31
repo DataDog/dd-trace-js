@@ -1,6 +1,6 @@
 'use strict'
 
-const { randomUUID } = require('crypto')
+const { randomUUID } = require('node:crypto')
 const { breakpoints } = require('./state')
 const session = require('./session')
 const { getLocalStateForCallFrame } = require('./snapshot')
@@ -35,8 +35,8 @@ session.on('Debugger.paused', async ({ params }) => {
 
   let maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength
 
-  // V8 doesn't allow seting more than one breakpoint at a specific location, however, it's possible to set two
-  // breakpoints just next to eachother that will "snap" to the same logical location, which in turn will be hit at the
+  // V8 doesn't allow setting more than one breakpoint at a specific location, however, it's possible to set two
+  // breakpoints just next to each other that will "snap" to the same logical location, which in turn will be hit at the
   // same time. E.g. index.js:1:1 and index.js:1:2.
   // TODO: Investigate if it will improve performance to create a fast-path for when there's only a single breakpoint
   let sampled = false
@@ -105,7 +105,7 @@ session.on('Debugger.paused', async ({ params }) => {
 
   log.debug(
     '[debugger:devtools_client] Finished processing breakpoints - main thread paused for: %d ms',
-    Number(diff) / 1000000
+    Number(diff) / 1_000_000
   )
 
   // Due to the highly optimized algorithm above, the `probes` array might have gaps

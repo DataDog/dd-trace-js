@@ -1,8 +1,8 @@
 'use strict'
 
-const { join, dirname } = require('path')
-const { readFileSync } = require('fs')
-const { readFile } = require('fs/promises')
+const { join, dirname } = require('node:path')
+const { readFileSync } = require('node:fs')
+const { readFile } = require('node:fs/promises')
 const { SourceMapConsumer } = require('source-map')
 const { NODE_MAJOR } = require('../../../../../version')
 
@@ -54,7 +54,7 @@ function setCacheTTL () {
 
   cacheTimer = setTimeout(function () {
     cacheTimer = null
-    if (Date.now() - cacheTime < 2_500) {
+    if (Date.now() - cacheTime < 2500) {
       // If the last cache entry was added recently, keep the cache alive
       setCacheTTL()
     } else {
@@ -62,7 +62,7 @@ function setCacheTTL () {
       // Clear cache a few seconds after it was last used
       cache.clear()
     }
-  }, 5_000).unref()
+  }, 5000).unref()
 }
 
 function loadInlineSourceMap (data) {

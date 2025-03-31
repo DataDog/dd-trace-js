@@ -1,7 +1,7 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
-const path = require('path')
+const path = require('node:path')
 const satisfies = require('semifies')
 const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
@@ -26,7 +26,7 @@ const disabledInstrumentations = new Set(
 // Check for DD_TRACE_<INTEGRATION>_ENABLED environment variables
 for (const [key, value] of Object.entries(process.env)) {
   const match = key.match(/^DD_TRACE_(.+)_ENABLED$/)
-  if (match && (value.toLowerCase() === 'false' || value === '0')) {
+  if (match && (value?.toLowerCase() === 'false' || value === '0')) {
     const integration = match[1].toLowerCase()
     disabledInstrumentations.add(integration)
   }
@@ -109,9 +109,7 @@ for (const packageName of names) {
           log.error('Error getting version for "%s": %s', name, e.message, e)
           continue
         }
-        if (typeof namesAndSuccesses[`${name}@${version}`] === 'undefined') {
-          namesAndSuccesses[`${name}@${version}`] = false
-        }
+        namesAndSuccesses[`${name}@${version}`] ??= false
 
         if (matchVersion(version, versions)) {
           // Check if the hook already has a set moduleExport
@@ -168,7 +166,7 @@ function getVersion (moduleBaseDir) {
 }
 
 function filename (name, file) {
-  return [name, file].filter(val => val).join('/')
+  return [name, file].filter(Boolean).join('/')
 }
 
 module.exports = {

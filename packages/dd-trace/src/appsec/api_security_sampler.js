@@ -15,7 +15,7 @@ let enabled
 let sampledRequests
 
 class NoopTTLCache {
-  clear () { }
+  clear () {}
   set (_key, _value) { return undefined }
   has (_key) { return false }
 }

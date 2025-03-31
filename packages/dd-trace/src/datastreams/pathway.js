@@ -1,7 +1,7 @@
 // encoding used here is sha256
 // other languages use FNV1
 // this inconsistency is ok because hashes do not need to be consistent across services
-const crypto = require('crypto')
+const crypto = require('node:crypto')
 const { encodeVarint, decodeVarint } = require('./encoding')
 const LRUCache = require('lru-cache')
 const log = require('../log')
@@ -77,19 +77,19 @@ function decodePathwayContextBase64 (pathwayContext) {
   return decodePathwayContext(encodedPathway)
 }
 
-class DsmPathwayCodec {
+const DsmPathwayCodec = {
   // we use a class for encoding / decoding in case we update our encoding/decoding. A class will make updates easier
   // instead of using individual functions.
-  static encode (dataStreamsContext, carrier) {
+  encode (dataStreamsContext, carrier) {
     if (!dataStreamsContext || !dataStreamsContext.hash) {
       return
     }
     carrier[CONTEXT_PROPAGATION_KEY_BASE64] = encodePathwayContextBase64(dataStreamsContext)
 
     log.debug(() => `Injected into DSM carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
-  }
+  },
 
-  static decode (carrier) {
+  decode (carrier) {
     log.debug(() => `Attempting extract from DSM carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
 
     if (carrier == null) return

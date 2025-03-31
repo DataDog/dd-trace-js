@@ -72,7 +72,7 @@ function getProvidedContext () {
       testManagementTests,
       isFlakyTestRetriesEnabled
     }
-  } catch (e) {
+  } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
     return {
       isDiEnabled: false,
@@ -122,7 +122,6 @@ function getSessionStatus (state) {
   return 'pass'
 }
 
-// eslint-disable-next-line
 // From https://github.com/vitest-dev/vitest/blob/51c04e2f44d91322b334f8ccbcdb368facc3f8ec/packages/runner/src/run.ts#L243-L250
 function getVitestTestStatus (test, retryCount) {
   if (test.result.state !== 'fail') {
@@ -199,7 +198,7 @@ function getSortWrapper (sort) {
         isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
         testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
       }
-    } catch (e) {
+    } catch {
       isFlakyTestRetriesEnabled = false
       isEarlyFlakeDetectionEnabled = false
       isDiEnabled = false
@@ -244,7 +243,7 @@ function getSortWrapper (sort) {
             workspaceProject._provided._ddKnownTests = knownTests.vitest || {}
             workspaceProject._provided._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
             workspaceProject._provided._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
-          } catch (e) {
+          } catch {
             log.warn('Could not send known tests to workers so Early Flake Detection will not work.')
           }
         }
@@ -258,7 +257,7 @@ function getSortWrapper (sort) {
       try {
         const workspaceProject = this.ctx.getCoreWorkspaceProject()
         workspaceProject._provided._ddIsDiEnabled = isDiEnabled
-      } catch (e) {
+      } catch {
         log.warn('Could not send Dynamic Instrumentation configuration to workers.')
       }
     }
@@ -272,7 +271,7 @@ function getSortWrapper (sort) {
           workspaceProject._provided._ddIsTestManagementTestsEnabled = isTestManagementTestsEnabled
           workspaceProject._provided._ddTestManagementAttemptToFixRetries = testManagementAttemptToFixRetries
           workspaceProject._provided._ddTestManagementTests = testManagementTests
-        } catch (e) {
+        } catch {
           log.warn('Could not send test management tests to workers so Test Management will not work.')
         }
       } else {
@@ -289,7 +288,7 @@ function getSortWrapper (sort) {
 
         try {
           testCodeCoverageLinesTotal = totalCodeCoverage.getCoverageSummary().lines.pct
-        } catch (e) {
+        } catch {
           // ignore errors
         }
         return totalCodeCoverage

@@ -1,4 +1,4 @@
-const os = require('os')
+const os = require('node:os')
 const { version } = require('./pkg')
 const pkg = require('../../../package.json')
 
@@ -23,8 +23,8 @@ class SpanAggStats {
     this.topLevelHits = 0
     this.errors = 0
     this.duration = 0
-    this.okDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
-    this.errorDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
+    this.okDistribution = new LogCollapsingLowestDenseDDSketch(0.007_75)
+    this.errorDistribution = new LogCollapsingLowestDenseDDSketch(0.007_75)
   }
 
   record (span) {

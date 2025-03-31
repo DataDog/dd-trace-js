@@ -1,5 +1,5 @@
-const os = require('os')
-const fs = require('fs')
+const os = require('node:os')
+const fs = require('node:fs')
 
 class StableConfig {
   constructor () {
@@ -27,7 +27,7 @@ class StableConfig {
     try {
       libdatadog = require('@datadog/libdatadog')
       this.wasm_loaded = true
-    } catch (e) {
+    } catch {
       this.warnings.push('Can\'t load libdatadog library')
       return
     }

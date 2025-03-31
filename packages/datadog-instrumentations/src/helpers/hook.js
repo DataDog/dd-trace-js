@@ -1,6 +1,6 @@
 'use strict'
 
-const path = require('path')
+const path = require('node:path')
 const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
 
@@ -22,7 +22,7 @@ function Hook (modules, hookOptions, onrequire) {
   this._patched = Object.create(null)
 
   const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
-    const parts = [moduleBaseDir, moduleName].filter(v => v)
+    const parts = [moduleBaseDir, moduleName].filter(Boolean)
     const filename = path.join(...parts)
 
     if (this._patched[filename]) return moduleExports

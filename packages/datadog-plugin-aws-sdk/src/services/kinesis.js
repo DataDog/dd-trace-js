@@ -128,12 +128,12 @@ class Kinesis extends BaseAwsSdkPlugin {
   _tryParse (body) {
     try {
       return JSON.parse(body)
-    } catch (e) {
+    } catch {
       log.info('Not JSON string. Trying Base64 encoded JSON string')
     }
     try {
       return JSON.parse(Buffer.from(body, 'base64').toString('ascii'), true)
-    } catch (e) {
+    } catch {
       return null
     }
   }
@@ -192,7 +192,7 @@ class Kinesis extends BaseAwsSdkPlugin {
       const byteSize = finalData.length
       // Kinesis max payload size is 1MB
       // So we must ensure adding DD context won't go over that (512b is an estimate)
-      if (byteSize >= 1048576) {
+      if (byteSize >= 1_048_576) {
         log.info('Payload size too large to pass context')
         return
       }

@@ -6,8 +6,8 @@ const {
     breakpointHitChannel,
     breakpointRemoveChannel
   }
-} = require('worker_threads')
-const { randomUUID } = require('crypto')
+} = require('node:worker_threads')
+const { randomUUID } = require('node:crypto')
 
 // TODO: move debugger/devtools_client/session to common place
 const session = require('../../../debugger/devtools_client/session')
@@ -75,12 +75,12 @@ breakpointSetChannel.on('message', async (probe) => {
 async function removeBreakpoint (probeId) {
   if (!sessionStarted) {
     // We should not get in this state, but abort if we do, so the code doesn't fail unexpected
-    throw Error(`Cannot remove probe ${probeId}: Debugger not started`)
+    throw new Error(`Cannot remove probe ${probeId}: Debugger not started`)
   }
 
   const breakpointId = probeIdToBreakpointId.get(probeId)
   if (!breakpointId) {
-    throw Error(`Unknown probe id: ${probeId}`)
+    throw new Error(`Unknown probe id: ${probeId}`)
   }
   await session.post('Debugger.removeBreakpoint', { breakpointId })
   probeIdToBreakpointId.delete(probeId)

@@ -71,7 +71,7 @@ function notString () {
 }
 
 function isValidCsiMethod (fn, protos) {
-  return protos.some(proto => fn === proto)
+  return protos.includes(fn)
 }
 
 function getCsiFn (cb, getContext, ...protos) {
@@ -90,7 +90,7 @@ function getCsiFn (cb, getContext, ...protos) {
 function csiMethodsDefaults (names, excluded, getContext) {
   const impl = {}
   names.forEach(name => {
-    if (excluded.indexOf(name) !== -1) return
+    if (excluded.includes(name)) return
     impl[name] = getCsiFn(
       (transactionId, res, target, ...rest) => TaintedUtils[name](transactionId, res, target, ...rest),
       getContext,

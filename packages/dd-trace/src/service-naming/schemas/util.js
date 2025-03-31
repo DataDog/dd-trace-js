@@ -3,7 +3,7 @@ function identityService ({ tracerService }) {
 }
 
 function getFormattedHostString ({ host, port }) {
-  return [host, port].filter(val => val).join(':')
+  return [host, port].filter(Boolean).join(':')
 }
 
 function httpPluginClientService ({ tracerService, pluginConfig, sessionDetails }) {
