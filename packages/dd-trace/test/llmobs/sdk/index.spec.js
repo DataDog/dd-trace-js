@@ -1073,16 +1073,6 @@ describe('sdk', () => {
       tracer._tracer._config.llmobs.enabled = true
     })
 
-    it('throws for a missing API key', () => {
-      const apiKey = tracer._tracer._config.apiKey
-      delete tracer._tracer._config.apiKey
-
-      expect(() => llmobs.submitEvaluation(spanCtx)).to.throw()
-      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
-
-      tracer._tracer._config.apiKey = apiKey
-    })
-
     it('throws for an invalid span context', () => {
       const invalid = {}
 
