@@ -47,7 +47,7 @@ function analyzeCommandInjection ({ file, fileArgs, shell, abortController }) {
   const result = waf.run({ ephemeral }, req, raspRule)
 
   const res = store?.res
-  handleResult(result, req, res, abortController, config)
+  handleResult(result, req, res, abortController, config, raspRule)
 }
 
 module.exports = {
