@@ -246,6 +246,10 @@ jobs:
       - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
 
   confluentinc-kafka-javascript:
+    strategy:
+      matrix:
+        # using node versions matrix since this plugin testing fails due to install differences between node versions
+        node-version: ['18', '20', '22', 'latest']
     runs-on: ubuntu-latest
     services:
       kafka:
@@ -270,7 +274,17 @@ jobs:
       SERVICES: kafka
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
+      - uses: ./.github/actions/testagent/start
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
+        with:
+          node-version: ${{ matrix.node-version }}
+      - uses: ./.github/actions/install
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
+      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
 
   cookie-parser:
     runs-on: ubuntu-latest
