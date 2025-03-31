@@ -115,6 +115,7 @@ class Config {
     this.flushInterval = flushInterval
     this.uploadTimeout = uploadTimeout
     this.sourceMap = sourceMap
+    this.tracing = options.tracing
     this.debugSourceMaps = isTrue(coalesce(options.debugSourceMaps, DD_PROFILING_DEBUG_SOURCE_MAPS, false))
     this.endpointCollectionEnabled = isTrue(coalesce(options.endpointCollection,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,

@@ -72,8 +72,11 @@ class NativeWallProfiler {
     this.type = 'wall'
     this._samplingIntervalMicros = options.samplingInterval || 1e6 / 99 // 99hz
     this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
-    this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
-    this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
+
+    // Code hotspots and endpoint collection only make sense when tracing is turned on
+    this._codeHotspotsEnabled = !!options.tracing && !!options.codeHotspotsEnabled
+    this._endpointCollectionEnabled = !!options.tracing && !!options.endpointCollectionEnabled
+
     this._timelineEnabled = !!options.timelineEnabled
     this._cpuProfilingEnabled = !!options.cpuProfilingEnabled
     // We need to capture span data into the sample context for either code hotspots
@@ -112,8 +115,6 @@ class NativeWallProfiler {
   start ({ mapper } = {}) {
     if (this._started) return
 
-    ensureChannelsActivated()
-
     this._mapper = mapper
     this._pprof = require('@datadog/pprof')
     kSampleCount = this._pprof.time.constants.kSampleCount
@@ -142,6 +143,8 @@ class NativeWallProfiler {
       if (this._captureSpanData) {
         this._profilerState = this._pprof.time.getState()
         this._lastSampleCount = 0
+
+        ensureChannelsActivated()
 
         beforeCh.subscribe(this._enter)
         enterCh.subscribe(this._enter)
