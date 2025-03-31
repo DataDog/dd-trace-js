@@ -255,6 +255,53 @@ describe('Plugin', () => {
           axios.get(`http://localhost:${port}/health`).catch(done)
         })
       })
+
+      describe('with client IP header configuration', () => {
+        beforeEach(() => {
+          return agent.load('http', {
+            client: false,
+            server: {
+              clientIpEnabled: true,
+              clientIpHeader: 'x-forwarded-for'
+            }
+          })
+            .then(() => {
+              http = require(pluginToBeLoaded)
+            })
+        })
+
+        beforeEach(done => {
+          const server = new http.Server(listener)
+          appListener = server
+            .listen(port, 'localhost', () => done())
+        })
+
+        it('should add the client IP tag when header is present', done => {
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta).to.have.property('http.client_ip', '8.8.8.8')
+            })
+            .then(done)
+            .catch(done)
+
+          axios.get(`http://localhost:${port}/user`, {
+            headers: {
+              'x-forwarded-for': '8.8.8.8'
+            }
+          }).catch(done)
+        })
+
+        it('should not add the client IP tag when header is not present', done => {
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta).to.not.have.property('http.client_ip')
+            })
+            .then(done)
+            .catch(done)
+
+          axios.get(`http://localhost:${port}/user`).catch(done)
+        })
+      })
     })
   })
 })
