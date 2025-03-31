@@ -357,7 +357,7 @@ function formatSpanEvents (span) {
           delete spanEvent.attributes[key] // delete from attributes if undefined
         }
       }
-      if (Object.entries(spanEvent.attributes).length === 0) {
+      if (Object.keys(spanEvent.attributes).length === 0) {
         delete spanEvent.attributes
       }
     }
@@ -370,26 +370,37 @@ function convertSpanEventAttributeValues (key, value, depth = 0) {
       type: 0,
       string_value: value
     }
-  } else if (typeof value === 'boolean') {
+  }
+
+  if (typeof value === 'boolean') {
     return {
       type: 1,
       bool_value: value
     }
-  } else if (Number.isInteger(value)) {
-    return {
-      type: 2,
-      int_value: value
+  }
+
+  if (typeof value === 'number') {
+    if (Number.isInteger(value)) {
+      return {
+        type: 2,
+        int_value: value
+      }
     }
-  } else if (typeof value === 'number') {
     return {
       type: 3,
       double_value: value
     }
-  } else if (Array.isArray(value)) {
+  }
+
+  if (Array.isArray(value)) {
     if (depth === 0) {
-      const convertedArray = value
-        .map((val) => convertSpanEventAttributeValues(key, val, 1))
-        .filter((convertedVal) => convertedVal !== undefined)
+      const convertedArray = []
+      for (const val of value) {
+        const convertedVal = convertSpanEventAttributeValues(key, val, 1)
+        if (convertedVal !== undefined) {
+          convertedArray.push(convertedVal)
+        }
+      }
 
       // Only include array_value if there are valid elements
       if (convertedArray.length > 0) {
@@ -397,21 +408,17 @@ function convertSpanEventAttributeValues (key, value, depth = 0) {
           type: 4,
           array_value: convertedArray
         }
-      } else {
-        // If all elements were unsupported, return undefined
-        return undefined
       }
+      // If all elements were unsupported, return undefined
     } else {
       memoizedLogDebug(key, 'Encountered nested array data type for span event v0.4 encoding. ' +
         `Skipping encoding key: ${key}: with value: ${typeof value}.`
       )
-      return undefined
     }
   } else {
     memoizedLogDebug(key, 'Encountered unsupported data type for span event v0.4 encoding, key: ' +
        `${key}: with value: ${typeof value}. Skipping encoding of pair.`
     )
-    return undefined
   }
 }
 
