@@ -176,108 +176,121 @@ class LLMObsTagger {
   }
 
   _tagDocuments (span, data, key) {
-    if (data) {
-      if (!Array.isArray(data)) {
-        data = [data]
+    if (!data) {
+      return
+    }
+
+    if (!Array.isArray(data)) {
+      data = [data]
+    }
+
+    const documents = []
+    for (const document of data) {
+      if (document == null || typeof document !== 'object') {
+        this._handleFailure('Documents must be a string, object, or list of objects.', 'invalid_embedding_io')
+        continue
       }
 
-      const documents = data.map(document => {
-        if (typeof document === 'string') {
-          return { text: document }
-        }
-
-        if (document == null || typeof document !== 'object') {
-          this._handleFailure('Documents must be a string, object, or list of objects.', 'invalid_embedding_io')
-          return undefined
-        }
-
-        const { text, name, id, score } = document
-        let validDocument = true
-
-        if (typeof text !== 'string') {
-          this._handleFailure('Document text must be a string.', 'invalid_embedding_io')
-          validDocument = false
-        }
-
-        const documentObj = { text }
-
-        validDocument = this._tagConditionalString(name, 'Document name', documentObj, 'name') && validDocument
-        validDocument = this._tagConditionalString(id, 'Document ID', documentObj, 'id') && validDocument
-        validDocument = this._tagConditionalNumber(score, 'Document score', documentObj, 'score') && validDocument
-
-        return validDocument ? documentObj : undefined
-      }).filter(doc => !!doc)
-
-      if (documents.length) {
-        this._setTag(span, key, documents)
+      if (typeof document === 'string') {
+        documents.push({ text: document })
       }
+
+      const { text, name, id, score } = document
+
+      if (typeof text !== 'string') {
+        this._handleFailure('Document text must be a string.', 'invalid_embedding_io')
+        continue
+      }
+
+      const documentObj = { text }
+
+      const validDocument = this._tagConditionalString(name, 'Document name', documentObj, 'name') &&
+                            this._tagConditionalString(id, 'Document ID', documentObj, 'id') &&
+                            this._tagConditionalNumber(score, 'Document score', documentObj, 'score')
+
+      if (validDocument) {
+        documents.push(documentObj)
+      }
+    }
+
+    if (documents.length) {
+      this._setTag(span, key, documents)
     }
   }
 
+  #filterToolCalls (toolCalls) {
+    if (!Array.isArray(toolCalls)) {
+      toolCalls = [toolCalls]
+    }
+
+    const filteredToolCalls = []
+    for (const toolCall of toolCalls) {
+      if (typeof toolCall !== 'object') {
+        this._handleFailure('Tool call must be an object.', 'invalid_io_messages')
+        continue
+      }
+
+      const { name, arguments: args, toolId, type } = toolCall
+      const toolCallObj = {}
+
+      const validTool = this._tagConditionalString(name, 'Tool name', toolCallObj, 'name') &&
+                        this._tagConditionalObject(args, 'Tool arguments', toolCallObj, 'arguments') &&
+                        this._tagConditionalString(toolId, 'Tool ID', toolCallObj, 'tool_id') &&
+                        this._tagConditionalString(type, 'Tool type', toolCallObj, 'type')
+
+      if (validTool) {
+        filteredToolCalls.push(toolCallObj)
+      }
+    }
+    return filteredToolCalls
+  }
+
   _tagMessages (span, data, key) {
-    if (data) {
-      if (!Array.isArray(data)) {
-        data = [data]
+    if (!data) {
+      return
+    }
+    if (!Array.isArray(data)) {
+      data = [data]
+    }
+
+    const messages = []
+
+    for (const message of data) {
+      if (message == null || typeof message !== 'object') {
+        this._handleFailure('Messages must be a string, object, or list of objects', 'invalid_io_messages')
+        continue
       }
 
-      const messages = data.map(message => {
-        if (typeof message === 'string') {
-          return { content: message }
-        }
-
-        if (message == null || typeof message !== 'object') {
-          this._handleFailure('Messages must be a string, object, or list of objects', 'invalid_io_messages')
-          return undefined
-        }
-
-        let validMessage = true
-
-        const { content = '', role } = message
-        let toolCalls = message.toolCalls
-        const messageObj = { content }
-
-        if (typeof content !== 'string') {
-          this._handleFailure('Message content must be a string.', 'invalid_io_messages')
-          validMessage = false
-        }
-
-        validMessage = this._tagConditionalString(role, 'Message role', messageObj, 'role') && validMessage
-
-        if (toolCalls) {
-          if (!Array.isArray(toolCalls)) {
-            toolCalls = [toolCalls]
-          }
-
-          const filteredToolCalls = toolCalls.map(toolCall => {
-            if (typeof toolCall !== 'object') {
-              this._handleFailure('Tool call must be an object.', 'invalid_io_messages')
-              return undefined
-            }
-
-            let validTool = true
-
-            const { name, arguments: args, toolId, type } = toolCall
-            const toolCallObj = {}
-
-            validTool = this._tagConditionalString(name, 'Tool name', toolCallObj, 'name') && validTool
-            validTool = this._tagConditionalObject(args, 'Tool arguments', toolCallObj, 'arguments') && validTool
-            validTool = this._tagConditionalString(toolId, 'Tool ID', toolCallObj, 'tool_id') && validTool
-            validTool = this._tagConditionalString(type, 'Tool type', toolCallObj, 'type') && validTool
-
-            return validTool ? toolCallObj : undefined
-          }).filter(toolCall => !!toolCall)
-
-          if (filteredToolCalls.length) {
-            messageObj.tool_calls = filteredToolCalls
-          }
-        }
-
-        return validMessage ? messageObj : undefined
-      }).filter(msg => !!msg)
-
-      if (messages.length) {
-        this._setTag(span, key, messages)
+      if (typeof message === 'string') {
+        messages.push({ content: message })
       }
+
+      const { content = '', role } = message
+      const toolCalls = message.toolCalls
+      const messageObj = { content }
+
+      if (typeof content !== 'string') {
+        this._handleFailure('Message content must be a string.', 'invalid_io_messages')
+        continue
+      }
+
+      const validMessage = this._tagConditionalString(role, 'Message role', messageObj, 'role')
+
+      if (toolCalls) {
+        const filteredToolCalls = this.#filterToolCalls(toolCalls)
+
+        if (filteredToolCalls.length) {
+          messageObj.tool_calls = filteredToolCalls
+        }
+      }
+
+      if (validMessage) {
+        messages.push(messageObj)
+      }
+    }
+
+    if (messages.length) {
+      this._setTag(span, key, messages)
     }
   }
 

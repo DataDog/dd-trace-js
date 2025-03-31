@@ -29,8 +29,9 @@ class HstsHeaderMissingAnalyzer extends MissingHeaderAnalyzer {
     }
 
     const semicolonIndex = headerValue.indexOf(';')
-    let timestampString
-    timestampString = semicolonIndex !== -1 ? headerValue.substring(HEADER_VALID_PREFIX.length + 1, semicolonIndex) : headerValue.slice(Math.max(0, HEADER_VALID_PREFIX.length + 1))
+    const timestampString = semicolonIndex !== -1
+      ? headerValue.slice(HEADER_VALID_PREFIX.length + 1, semicolonIndex)
+      : headerValue.slice(HEADER_VALID_PREFIX.length + 1)
 
     const timestamp = Number.parseInt(timestampString)
     // eslint-disable-next-line eqeqeq

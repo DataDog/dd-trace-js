@@ -129,9 +129,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       { channelName: 'datadog:url:parse:finish' },
       ({ input, base, parsed, isURL }) => {
         const iastContext = getIastContext(storage('legacy').getStore())
-        let ranges
-
-        ranges = base ? getRanges(iastContext, base) : getRanges(iastContext, input)
+        const ranges = getRanges(iastContext, base || input)
 
         if (ranges?.length) {
           if (isURL) {

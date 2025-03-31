@@ -131,7 +131,9 @@ class MochaPlugin extends CiPlugin {
         testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
         this.telemetry.count(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
       }
-      testSuiteMetadata[TEST_SOURCE_FILE] = this.repositoryRoot !== this.sourceRoot && !!this.repositoryRoot ? getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot) : testSuite
+      testSuiteMetadata[TEST_SOURCE_FILE] = this.repositoryRoot !== this.sourceRoot && !!this.repositoryRoot
+        ? getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+        : testSuite
       if (testSuiteMetadata[TEST_SOURCE_FILE]) {
         testSuiteMetadata[TEST_SOURCE_START] = 1
       }
@@ -494,7 +496,9 @@ class MochaPlugin extends CiPlugin {
     const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
     const testSuiteSpan = this._testSuites.get(testSuite)
 
-    extraTags[TEST_SOURCE_FILE] = this.repositoryRoot !== this.sourceRoot && !!this.repositoryRoot ? getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot) : testSuite
+    extraTags[TEST_SOURCE_FILE] = this.repositoryRoot !== this.sourceRoot && !!this.repositoryRoot
+      ? getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      : testSuite
 
     if (isNew) {
       extraTags[TEST_IS_NEW] = 'true'
