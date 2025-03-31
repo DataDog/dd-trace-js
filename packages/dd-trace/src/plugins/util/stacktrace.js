@@ -1,6 +1,6 @@
 'use strict'
 
-const { relative, sep, isAbsolute } = require('node:path')
+const { relative, sep, isAbsolute } = require('path')
 
 const cwd = process.cwd()
 

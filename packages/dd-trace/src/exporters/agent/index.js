@@ -1,6 +1,6 @@
 'use strict'
 
-const { URL, format } = require('node:url')
+const { URL, format } = require('url')
 const log = require('../../log')
 const Writer = require('./writer')
 

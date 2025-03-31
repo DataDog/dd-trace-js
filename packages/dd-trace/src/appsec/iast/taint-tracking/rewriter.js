@@ -1,8 +1,8 @@
 'use strict'
 
-const Module = require('node:module')
-const { pathToFileURL } = require('node:url')
-const { MessageChannel } = require('node:worker_threads')
+const Module = require('module')
+const { pathToFileURL } = require('url')
+const { MessageChannel } = require('worker_threads')
 const shimmer = require('../../../../../datadog-shimmer')
 const { isPrivateModule, isDdTrace } = require('./filter')
 const { csiMethods } = require('./csi-methods')
@@ -11,7 +11,7 @@ const telemetry = require('../telemetry')
 const { incrementTelemetryIfNeeded } = require('./rewriter-telemetry')
 const dc = require('dc-polyfill')
 const log = require('../../../log')
-const { isMainThread } = require('node:worker_threads')
+const { isMainThread } = require('worker_threads')
 const { LOG_MESSAGE, REWRITTEN_MESSAGE } = require('./constants')
 const orchestrionConfig = require('../../../../../datadog-instrumentations/src/orchestrion-config')
 

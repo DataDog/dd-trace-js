@@ -1,8 +1,8 @@
 'use strict'
 
 const retry = require('retry')
-const { request: httpRequest } = require('node:http')
-const { request: httpsRequest } = require('node:https')
+const { request: httpRequest } = require('http')
+const { request: httpsRequest } = require('https')
 const { EventSerializer } = require('./event_serializer')
 
 // TODO: avoid using dd-trace internals. Make this a separate module?
@@ -10,8 +10,8 @@ const docker = require('../../exporters/common/docker')
 const FormData = require('../../exporters/common/form-data')
 const { storage } = require('../../../../datadog-core')
 const version = require('../../../../../package.json').version
-const { urlToHttpOptions } = require('node:url')
-const perf = require('node:perf_hooks').performance
+const { urlToHttpOptions } = require('url')
+const perf = require('perf_hooks').performance
 
 const telemetryMetrics = require('../../telemetry/metrics')
 const profilersNamespace = telemetryMetrics.manager.namespace('profilers')

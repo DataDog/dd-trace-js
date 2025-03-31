@@ -1,6 +1,6 @@
 'use strict'
 
-const { format } = require('node:util')
+const { format } = require('util')
 
 class Log {
   constructor (message, args, cause, delegate) {

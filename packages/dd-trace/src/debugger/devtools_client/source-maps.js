@@ -1,8 +1,8 @@
 'use strict'
 
-const { join, dirname } = require('node:path')
-const { readFileSync } = require('node:fs')
-const { readFile } = require('node:fs/promises')
+const { join, dirname } = require('path')
+const { readFileSync } = require('fs')
+const { readFile } = require('fs/promises')
 const { SourceMapConsumer } = require('source-map')
 
 const cache = new Map()

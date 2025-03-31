@@ -1,6 +1,6 @@
 'use strict'
 
-const path = require('node:path')
+const path = require('path')
 
 function isTrue (str) {
   str = String(str).toLowerCase()

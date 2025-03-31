@@ -1,4 +1,4 @@
-const { readFileSync } = require('node:fs')
+const { readFileSync } = require('fs')
 const {
   GIT_BRANCH,
   GIT_COMMIT_SHA,

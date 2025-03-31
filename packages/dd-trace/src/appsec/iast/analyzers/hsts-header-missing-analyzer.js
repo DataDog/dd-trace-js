@@ -19,23 +19,21 @@ class HstsHeaderMissingAnalyzer extends MissingHeaderAnalyzer {
   }
 
   _isHeaderValid (headerValue) {
-    if (!headerValue) {
-      return false
-    }
     headerValue = headerValue.trim()
 
-    if (!headerValue.startsWith(HEADER_VALID_PREFIX)) {
+    if (!headerValue?.startsWith(HEADER_VALID_PREFIX)) {
       return false
     }
 
     const semicolonIndex = headerValue.indexOf(';')
-    const timestampString = semicolonIndex !== -1
-      ? headerValue.slice(HEADER_VALID_PREFIX.length + 1, semicolonIndex)
-      : headerValue.slice(HEADER_VALID_PREFIX.length + 1)
+    const timestampString = headerValue.slice(
+      HEADER_VALID_PREFIX.length + 1,
+      semicolonIndex === -1 ? headerValue.length : semicolonIndex
+    )
 
     const timestamp = Number.parseInt(timestampString)
     // eslint-disable-next-line eqeqeq
-    return timestamp == timestampString && timestamp > 0
+    return timestamp > 0 && timestamp == timestampString
   }
 
   _isHttpsProtocol (req) {

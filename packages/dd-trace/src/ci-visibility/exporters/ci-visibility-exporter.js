@@ -1,6 +1,6 @@
 'use strict'
 
-const URL = require('node:url').URL
+const URL = require('url').URL
 
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')

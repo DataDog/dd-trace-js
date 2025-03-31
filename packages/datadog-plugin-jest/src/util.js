@@ -1,4 +1,4 @@
-const { readFileSync } = require('node:fs')
+const { readFileSync } = require('fs')
 const { parse, extract } = require('jest-docblock')
 
 const { getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')

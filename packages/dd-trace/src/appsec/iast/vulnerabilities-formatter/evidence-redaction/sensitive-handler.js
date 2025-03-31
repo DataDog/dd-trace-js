@@ -169,7 +169,7 @@ class SensitiveHandler {
     }
 
     if (start < value.length) {
-      this.writeValuePart(valueParts, value.slice(Math.max(0, start)))
+      this.writeValuePart(valueParts, value.slice(start))
     }
 
     return { redactedValueParts: valueParts, redactedSources }
@@ -239,10 +239,10 @@ class SensitiveHandler {
           if (_sourceRedactionContext.start > 0) {
             valueParts.push({
               source: sourceIndex,
-              value: _value.slice(0, Math.max(0, _sourceRedactionContext.start - offset))
+              value: _value.slice(0, _sourceRedactionContext.start - offset)
             })
 
-            _value = _value.slice(Math.max(0, _sourceRedactionContext.start - offset))
+            _value = _value.slice(_sourceRedactionContext.start - offset)
             offset = _sourceRedactionContext.start
           }
 

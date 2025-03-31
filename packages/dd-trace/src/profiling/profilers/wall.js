@@ -34,7 +34,7 @@ let channelsActivated = false
 function ensureChannelsActivated () {
   if (channelsActivated) return
 
-  const { AsyncLocalStorage, createHook } = require('node:async_hooks')
+  const { AsyncLocalStorage, createHook } = require('async_hooks')
   const shimmer = require('../../../../datadog-shimmer')
 
   createHook({ before: () => beforeCh.publish() }).enable()

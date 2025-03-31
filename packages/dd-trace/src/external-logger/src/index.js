@@ -1,6 +1,6 @@
 const tracerLogger = require('../../log')// path to require tracer logger
 
-const https = require('node:https')
+const https = require('https')
 
 class ExternalLogger {
   // Note: these attribute names match the corresponding entry in the JSON payload.

@@ -57,14 +57,14 @@ class VulnerabilityFormatter {
 
     evidence.ranges.forEach((range, rangeIndex) => {
       if (fromIndex < range.start) {
-        valueParts.push({ value: evidence.value.substring(fromIndex, range.start) })
+        valueParts.push({ value: evidence.value.slice(fromIndex, range.start) })
       }
-      valueParts.push({ value: evidence.value.substring(range.start, range.end), source: sourcesIndexes[rangeIndex] })
+      valueParts.push({ value: evidence.value.slice(range.start, range.end), source: sourcesIndexes[rangeIndex] })
       fromIndex = range.end
     })
 
     if (fromIndex < evidence.value.length) {
-      valueParts.push({ value: evidence.value.slice(Math.max(0, fromIndex)) })
+      valueParts.push({ value: evidence.value.slice(fromIndex) })
     }
 
     return { valueParts }

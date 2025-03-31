@@ -1,7 +1,7 @@
 'use strict'
 
-const path = require('node:path')
-const process = require('node:process')
+const path = require('path')
+const process = require('process')
 const { calculateDDBasePath } = require('../../util')
 const pathLine = {
   getNodeModulesPaths,

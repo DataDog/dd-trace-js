@@ -1,6 +1,6 @@
 'use strict'
 
-const path = require('node:path')
+const path = require('path')
 
 const { getNodeModulesPaths } = require('../path-line')
 const Analyzer = require('./vulnerability-analyzer')

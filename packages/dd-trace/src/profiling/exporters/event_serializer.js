@@ -1,5 +1,5 @@
-const os = require('node:os')
-const perf = require('node:perf_hooks').performance
+const os = require('os')
+const perf = require('perf_hooks').performance
 const version = require('../../../../../package.json').version
 
 const libuvThreadPoolSize = (() => {

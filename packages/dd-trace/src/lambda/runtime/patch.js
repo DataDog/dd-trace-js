@@ -1,6 +1,6 @@
 'use strict'
 
-const path = require('node:path')
+const path = require('path')
 
 const { _extractModuleNameAndHandlerPath, _extractModuleRootAndHandler, _getLambdaFilePaths } = require('./ritm')
 const { datadog } = require('../handler')

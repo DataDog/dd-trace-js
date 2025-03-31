@@ -1,6 +1,6 @@
 'use strict'
 
-const path = require('node:path')
+const path = require('path')
 const dc = require('dc-polyfill')
 const { storage } = require('../../../../../datadog-core')
 const shimmer = require('../../../../../datadog-shimmer')

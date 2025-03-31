@@ -1,6 +1,6 @@
 'use strict'
 
-const { join, dirname } = require('node:path')
+const { join, dirname } = require('path')
 const { loadSourceMapSync } = require('./source-maps')
 const session = require('./session')
 const log = require('../../log')

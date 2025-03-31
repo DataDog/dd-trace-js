@@ -1,7 +1,7 @@
 'use strict'
 
-const { BlockList } = require('node:net')
-const net = require('node:net')
+const { BlockList } = require('net')
+const net = require('net')
 
 const ipHeaderList = [
   'x-forwarded-for',

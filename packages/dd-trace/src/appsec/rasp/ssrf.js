@@ -1,6 +1,6 @@
 'use strict'
 
-const { format } = require('node:url')
+const { format } = require('url')
 const { httpClientRequestStart } = require('../channels')
 const { storage } = require('../../../../datadog-core')
 const addresses = require('../addresses')
