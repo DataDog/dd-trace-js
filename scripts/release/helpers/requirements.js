@@ -4,7 +4,7 @@
 
 const { join } = require('path')
 const { existsSync, readFileSync } = require('fs')
-const { default: getApplicationConfigPath } = require('application-config-path')
+const getApplicationConfigPath = require('application-config-path')
 const { capture, fatal, run } = require('./terminal')
 
 // Check that the `git` CLI is installed.

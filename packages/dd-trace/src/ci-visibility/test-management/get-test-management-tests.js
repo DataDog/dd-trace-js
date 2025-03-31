@@ -6,7 +6,8 @@ function getTestManagementTests ({
   isEvpProxy,
   evpProxyPrefix,
   isGzipCompatible,
-  repositoryUrl
+  repositoryUrl,
+  commitMessage
 }, done) {
   const options = {
     path: '/api/v2/test/libraries/test-management/tests',
@@ -39,7 +40,8 @@ function getTestManagementTests ({
       id: id().toString(10),
       type: 'ci_app_libraries_tests_request',
       attributes: {
-        repository_url: repositoryUrl
+        repository_url: repositoryUrl,
+        commit_message: commitMessage
       }
     }
   })
