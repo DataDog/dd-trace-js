@@ -74,8 +74,9 @@ function hookModule (filename, module, controlsByFile) {
         return
       }
 
-      let wrapper
-      wrapper = type === SANITIZER_TYPE ? wrapSanitizer(target, secureMarks) : wrapInputValidator(target, parameters, secureMarks)
+      const wrapper = type === SANITIZER_TYPE
+        ? wrapSanitizer(target, secureMarks)
+        : wrapInputValidator(target, parameters, secureMarks)
 
       if (methodName) {
         parent[methodName] = wrapper

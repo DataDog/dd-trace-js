@@ -589,7 +589,7 @@ class Config {
     this._setValue(defaults, 'instrumentation_config_id', undefined)
     this._setValue(defaults, 'aws.dynamoDb.tablePrimaryKeys', undefined)
     this._setValue(defaults, 'vertexai.spanCharLimit', 128)
-    this._setValue(defaults, 'vertexai.spanPromptCompletionSampleRate', 1.0)
+    this._setValue(defaults, 'vertexai.spanPromptCompletionSampleRate', 1)
     this._setValue(defaults, 'trace.aws.addSpanPointers', true)
     this._setValue(defaults, 'trace.nativeSpanEvents', false)
   }

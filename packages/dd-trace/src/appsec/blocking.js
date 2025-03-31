@@ -93,7 +93,9 @@ function getBlockWithContentData (req, specificType, actionParameters) {
 }
 
 function getBlockingData (req, specificType, actionParameters) {
-  return actionParameters?.location ? getBlockWithRedirectData(actionParameters) : getBlockWithContentData(req, specificType, actionParameters)
+  return actionParameters?.location
+    ? getBlockWithRedirectData(actionParameters)
+    : getBlockWithContentData(req, specificType, actionParameters)
 }
 
 function block (req, res, rootSpan, abortController, actionParameters = defaultBlockingActionParameters) {
@@ -136,11 +138,11 @@ function getBlockingAction (actions) {
 }
 
 function setTemplates (config) {
-  templateHtml = config.appsec.blockedTemplateHtml ? config.appsec.blockedTemplateHtml : blockedTemplates.html
+  templateHtml = config.appsec.blockedTemplateHtml || blockedTemplates.html
 
-  templateJson = config.appsec.blockedTemplateJson ? config.appsec.blockedTemplateJson : blockedTemplates.json
+  templateJson = config.appsec.blockedTemplateJson || blockedTemplates.json
 
-  templateGraphqlJson = config.appsec.blockedTemplateGraphql ? config.appsec.blockedTemplateGraphql : blockedTemplates.graphqlJson
+  templateGraphqlJson = config.appsec.blockedTemplateGraphql || blockedTemplates.graphqlJson
 }
 
 function isBlocked (res) {

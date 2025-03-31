@@ -33,11 +33,12 @@ function getGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, getOrig
     return function (path, line, column) {
       // if --enable-source-maps is present stacktraces of the rewritten files contain the original path, file and
       // column because the sourcemap chaining is done during the rewriting process so we can skip it
-      return isPrivateModule(path) && isNotLibraryFile(path) ? { path, line, column } : getOriginalPathAndLineFromSourceMap(path, line, column)
+      return isPrivateModule(path) && isNotLibraryFile(path)
+        ? { path, line, column }
+        : getOriginalPathAndLineFromSourceMap(path, line, column)
     }
-  } else {
-    return getOriginalPathAndLineFromSourceMap
   }
+  return getOriginalPathAndLineFromSourceMap
 }
 
 function getRewriter (telemetryVerbosity) {
