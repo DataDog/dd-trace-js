@@ -30,52 +30,6 @@ describe('Plugin', () => {
         return agent.close({ ritmReset: false })
       })
 
-      describe('with custom configuration', () => {
-        beforeEach(() => {
-          return agent.load('http', {}, {
-            clientIpEnabled: true,
-            clientIpHeader: 'my-custom-header-with-client-ip'
-          }).then(() => {
-            http = require(pluginToBeLoaded)
-          })
-        })
-
-        beforeEach(done => {
-          const server = new http.Server(listener)
-          appListener = server
-            .listen(0, 'localhost', () => {
-              port = appListener.address().port
-              done()
-            })
-        })
-
-        it('should add the client IP tag when header is present', done => {
-          agent
-            .use(traces => {
-              expect(traces[0][0].meta).to.have.property('http.client_ip', '8.8.8.8')
-            })
-            .then(done)
-            .catch(done)
-
-          axios.get(`http://localhost:${port}/user`, {
-            headers: {
-              'my-custom-header-with-client-ip': '8.8.8.8'
-            }
-          }).catch(done)
-        })
-
-        it('should not add the client IP tag when header is not present', done => {
-          agent
-            .use(traces => {
-              expect(traces[0][0].meta).to.not.have.property('http.client_ip')
-            })
-            .then(done)
-            .catch(done)
-
-          axios.get(`http://localhost:${port}/user`).catch(done)
-        })
-      })
-
       describe('canceled request', () => {
         beforeEach(() => {
           listener = (req, res) => {
@@ -299,6 +253,53 @@ describe('Plugin', () => {
           }, 100)
 
           axios.get(`http://localhost:${port}/health`).catch(done)
+        })
+      })
+
+      describe('with client IP header configuration', () => {
+        beforeEach(() => {
+          return agent.load('http', {
+            client: false,
+            server: {
+              clientIpEnabled: true,
+              clientIpHeader: 'my-custom-header-with-client-ip'
+            }
+          })
+            .then(() => {
+              http = require(pluginToBeLoaded)
+            })
+        })
+
+        beforeEach(done => {
+          const server = new http.Server(listener)
+          appListener = server
+            .listen(port, 'localhost', () => done())
+        })
+
+        it('should add the client IP tag when header is present', done => {
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta).to.have.property('http.client_ip', '8.8.8.8')
+            })
+            .then(done)
+            .catch(done)
+
+          axios.get(`http://localhost:${port}/user`, {
+            headers: {
+              'my-custom-header-with-client-ip': '8.8.8.8'
+            }
+          }).catch(done)
+        })
+
+        it('should not add the client IP tag when header is not present', done => {
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta).to.not.have.property('http.client_ip')
+            })
+            .then(done)
+            .catch(done)
+
+          axios.get(`http://localhost:${port}/user`).catch(done)
         })
       })
     })
