@@ -44,25 +44,26 @@ class AbortError extends Error {
   }
 }
 
+const types = new Set(['query', 'mutation', 'subscription'])
+
 function getOperation (document, operationName) {
   if (!document || !Array.isArray(document.definitions)) {
     return
   }
 
-  const definitions = document.definitions.filter(Boolean)
-  const types = new Set(['query', 'mutation', 'subscription'])
-
-  return operationName
-    ? definitions
-      .filter(def => types.has(def.operation))
-      .find(def => operationName === (def.name && def.name.value))
-    : definitions.find(def => types.has(def.operation))
+  for (const definition of document.definitions) {
+    if (definition && types.has(definition.operation)) {
+      if (!operationName || definition.name?.value === operationName) {
+        return definition
+      }
+    }
+  }
 }
 
 function normalizeArgs (args, defaultFieldResolver) {
   if (args.length !== 1) return normalizePositional(args, defaultFieldResolver)
 
-  args[0].contextValue = args[0].contextValue || {}
+  args[0].contextValue ||= {}
   args[0].fieldResolver = wrapResolve(args[0].fieldResolver || defaultFieldResolver)
 
   return args[0]

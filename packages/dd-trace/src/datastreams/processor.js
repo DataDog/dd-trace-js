@@ -1,4 +1,4 @@
-const os = require('node:os')
+const os = require('os')
 const pkg = require('../../../../package.json')
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')

@@ -86,23 +86,23 @@ class LLMObsTagger {
   // TODO: similarly for the following `tag` methods,
   // how can we transition from a span weakmap to core API functionality
   tagLLMIO (span, inputData, outputData) {
-    this._tagMessages(span, inputData, INPUT_MESSAGES)
-    this._tagMessages(span, outputData, OUTPUT_MESSAGES)
+    this.#tagMessages(span, inputData, INPUT_MESSAGES)
+    this.#tagMessages(span, outputData, OUTPUT_MESSAGES)
   }
 
   tagEmbeddingIO (span, inputData, outputData) {
-    this._tagDocuments(span, inputData, INPUT_DOCUMENTS)
-    this._tagText(span, outputData, OUTPUT_VALUE)
+    this.#tagDocuments(span, inputData, INPUT_DOCUMENTS)
+    this.#tagText(span, outputData, OUTPUT_VALUE)
   }
 
   tagRetrievalIO (span, inputData, outputData) {
-    this._tagText(span, inputData, INPUT_VALUE)
-    this._tagDocuments(span, outputData, OUTPUT_DOCUMENTS)
+    this.#tagText(span, inputData, INPUT_VALUE)
+    this.#tagDocuments(span, outputData, OUTPUT_DOCUMENTS)
   }
 
   tagTextIO (span, inputData, outputData) {
-    this._tagText(span, inputData, INPUT_VALUE)
-    this._tagText(span, outputData, OUTPUT_VALUE)
+    this.#tagText(span, inputData, INPUT_VALUE)
+    this.#tagText(span, outputData, OUTPUT_VALUE)
   }
 
   tagMetadata (span, metadata) {
@@ -135,7 +135,7 @@ class LLMObsTagger {
       if (typeof value === 'number') {
         filterdMetrics[processedKey] = value
       } else {
-        this._handleFailure(`Value for metric '${key}' must be a number, instead got ${value}`, 'invalid_metrics')
+        this.#handleFailure(`Value for metric '${key}' must be a number, instead got ${value}`, 'invalid_metrics')
       }
     }
 
@@ -160,7 +160,7 @@ class LLMObsTagger {
     this._setTag(span, SPAN_KIND, newKind)
   }
 
-  _tagText (span, data, key) {
+  #tagText (span, data, key) {
     if (data) {
       if (typeof data === 'string') {
         this._setTag(span, key, data)
@@ -169,13 +169,13 @@ class LLMObsTagger {
           this._setTag(span, key, JSON.stringify(data))
         } catch {
           const type = key === INPUT_VALUE ? 'input' : 'output'
-          this._handleFailure(`Failed to parse ${type} value, must be JSON serializable.`, 'invalid_io_text')
+          this.#handleFailure(`Failed to parse ${type} value, must be JSON serializable.`, 'invalid_io_text')
         }
       }
     }
   }
 
-  _tagDocuments (span, data, key) {
+  #tagDocuments (span, data, key) {
     if (!data) {
       return
     }
@@ -186,29 +186,30 @@ class LLMObsTagger {
 
     const documents = []
     for (const document of data) {
-      if (document == null || typeof document !== 'object') {
-        this._handleFailure('Documents must be a string, object, or list of objects.', 'invalid_embedding_io')
+      if (typeof document === 'string') {
+        documents.push({ text: document })
         continue
       }
 
-      if (typeof document === 'string') {
-        documents.push({ text: document })
+      if (document == null || typeof document !== 'object') {
+        this.#handleFailure('Documents must be a string, object, or list of objects.', 'invalid_embedding_io')
+        continue
       }
 
       const { text, name, id, score } = document
 
-      if (typeof text !== 'string') {
-        this._handleFailure('Document text must be a string.', 'invalid_embedding_io')
-        continue
+      const valid = typeof text === 'string'
+      if (!valid) {
+        this.#handleFailure('Document text must be a string.', 'invalid_embedding_io')
       }
 
       const documentObj = { text }
 
-      const validDocument = this._tagConditionalString(name, 'Document name', documentObj, 'name') &&
-                            this._tagConditionalString(id, 'Document ID', documentObj, 'id') &&
-                            this._tagConditionalNumber(score, 'Document score', documentObj, 'score')
+      const condition1 = this.#tagConditionalString(name, 'Document name', documentObj, 'name')
+      const condition2 = this.#tagConditionalString(id, 'Document ID', documentObj, 'id')
+      const condition3 = this.#tagConditionalNumber(score, 'Document score', documentObj, 'score')
 
-      if (validDocument) {
+      if (valid && condition1 && condition2 && condition3) {
         documents.push(documentObj)
       }
     }
@@ -226,26 +227,26 @@ class LLMObsTagger {
     const filteredToolCalls = []
     for (const toolCall of toolCalls) {
       if (typeof toolCall !== 'object') {
-        this._handleFailure('Tool call must be an object.', 'invalid_io_messages')
+        this.#handleFailure('Tool call must be an object.', 'invalid_io_messages')
         continue
       }
 
       const { name, arguments: args, toolId, type } = toolCall
       const toolCallObj = {}
 
-      const validTool = this._tagConditionalString(name, 'Tool name', toolCallObj, 'name') &&
-                        this._tagConditionalObject(args, 'Tool arguments', toolCallObj, 'arguments') &&
-                        this._tagConditionalString(toolId, 'Tool ID', toolCallObj, 'tool_id') &&
-                        this._tagConditionalString(type, 'Tool type', toolCallObj, 'type')
+      const condition1 = this.#tagConditionalString(name, 'Tool name', toolCallObj, 'name')
+      const condition2 = this.#tagConditionalObject(args, 'Tool arguments', toolCallObj, 'arguments')
+      const condition3 = this.#tagConditionalString(toolId, 'Tool ID', toolCallObj, 'tool_id')
+      const condition4 = this.#tagConditionalString(type, 'Tool type', toolCallObj, 'type')
 
-      if (validTool) {
+      if (condition1 && condition2 && condition3 && condition4) {
         filteredToolCalls.push(toolCallObj)
       }
     }
     return filteredToolCalls
   }
 
-  _tagMessages (span, data, key) {
+  #tagMessages (span, data, key) {
     if (!data) {
       return
     }
@@ -256,25 +257,25 @@ class LLMObsTagger {
     const messages = []
 
     for (const message of data) {
-      if (message == null || typeof message !== 'object') {
-        this._handleFailure('Messages must be a string, object, or list of objects', 'invalid_io_messages')
-        continue
-      }
-
       if (typeof message === 'string') {
         messages.push({ content: message })
+        continue
+      }
+      if (message == null || typeof message !== 'object') {
+        this.#handleFailure('Messages must be a string, object, or list of objects', 'invalid_io_messages')
+        continue
       }
 
       const { content = '', role } = message
       const toolCalls = message.toolCalls
       const messageObj = { content }
 
-      if (typeof content !== 'string') {
-        this._handleFailure('Message content must be a string.', 'invalid_io_messages')
-        continue
+      const valid = typeof content === 'string'
+      if (!valid) {
+        this.#handleFailure('Message content must be a string.', 'invalid_io_messages')
       }
 
-      const validMessage = this._tagConditionalString(role, 'Message role', messageObj, 'role')
+      const condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
 
       if (toolCalls) {
         const filteredToolCalls = this.#filterToolCalls(toolCalls)
@@ -284,7 +285,7 @@ class LLMObsTagger {
         }
       }
 
-      if (validMessage) {
+      if (valid && condition) {
         messages.push(messageObj)
       }
     }
@@ -294,30 +295,30 @@ class LLMObsTagger {
     }
   }
 
-  _tagConditionalString (data, type, carrier, key) {
+  #tagConditionalString (data, type, carrier, key) {
     if (!data) return true
     if (typeof data !== 'string') {
-      this._handleFailure(`"${type}" must be a string.`)
+      this.#handleFailure(`"${type}" must be a string.`)
       return false
     }
     carrier[key] = data
     return true
   }
 
-  _tagConditionalNumber (data, type, carrier, key) {
+  #tagConditionalNumber (data, type, carrier, key) {
     if (!data) return true
     if (typeof data !== 'number') {
-      this._handleFailure(`"${type}" must be a number.`)
+      this.#handleFailure(`"${type}" must be a number.`)
       return false
     }
     carrier[key] = data
     return true
   }
 
-  _tagConditionalObject (data, type, carrier, key) {
+  #tagConditionalObject (data, type, carrier, key) {
     if (!data) return true
     if (typeof data !== 'object') {
-      this._handleFailure(`"${type}" must be an object.`)
+      this.#handleFailure(`"${type}" must be an object.`)
       return false
     }
     carrier[key] = data
@@ -326,7 +327,7 @@ class LLMObsTagger {
 
   // any public-facing LLMObs APIs using this tagger should not soft fail
   // auto-instrumentation should soft fail
-  _handleFailure (msg, errorTag) {
+  #handleFailure (msg, errorTag) {
     if (this.softFail) {
       log.warn(msg)
     } else {
@@ -341,7 +342,7 @@ class LLMObsTagger {
   _register (span) {
     if (!this._config.llmobs.enabled) return
     if (registry.has(span)) {
-      this._handleFailure(`LLMObs Span "${span._name}" already registered.`)
+      this.#handleFailure(`LLMObs Span "${span._name}" already registered.`)
       return
     }
 
@@ -351,7 +352,7 @@ class LLMObsTagger {
   _setTag (span, key, value) {
     if (!this._config.llmobs.enabled) return
     if (!registry.has(span)) {
-      this._handleFailure(`Span "${span._name}" must be an LLMObs generated span.`)
+      this.#handleFailure(`Span "${span._name}" must be an LLMObs generated span.`)
       return
     }
 

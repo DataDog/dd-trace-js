@@ -6,8 +6,8 @@ const {
     breakpointHitChannel,
     breakpointRemoveChannel
   }
-} = require('node:worker_threads')
-const { randomUUID } = require('node:crypto')
+} = require('worker_threads')
+const { randomUUID } = require('crypto')
 
 // TODO: move debugger/devtools_client/session to common place
 const session = require('../../../debugger/devtools_client/session')

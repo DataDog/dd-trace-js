@@ -1,6 +1,6 @@
 'use strict'
 
-const fs = require('node:fs')
+const fs = require('fs')
 
 const { DD_EXTERNAL_ENV } = process.env
 

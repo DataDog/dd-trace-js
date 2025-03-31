@@ -1,9 +1,9 @@
 'use strict'
 
-const fs = require('node:fs')
-const os = require('node:os')
+const fs = require('fs')
+const os = require('os')
 const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
-const { URL } = require('node:url')
+const { URL } = require('url')
 const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')

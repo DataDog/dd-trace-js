@@ -1,9 +1,9 @@
 const pkg = require('../../../../package.json')
 const log = require('../log')
 const request = require('../exporters/common/request')
-const { URL, format } = require('node:url')
+const { URL, format } = require('url')
 const { MsgpackEncoder } = require('../msgpack')
-const zlib = require('node:zlib')
+const zlib = require('zlib')
 
 const msgpack = new MsgpackEncoder()
 

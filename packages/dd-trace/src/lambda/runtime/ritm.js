@@ -7,7 +7,7 @@
  */
 'use strict'
 
-const path = require('node:path')
+const path = require('path')
 
 const log = require('../../log')
 const Hook = require('../../../../datadog-instrumentations/src/helpers/hook')

@@ -1,6 +1,6 @@
 'use strict'
 
-const { urlToHttpOptions } = require('node:url')
+const { urlToHttpOptions } = require('url')
 
 // TODO: Remove `urlToHttpOptions` polyfill once we drop support for the older Cypress versions that uses a built-in
 // version of Node.js doesn't include that function.

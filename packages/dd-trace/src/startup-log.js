@@ -2,8 +2,8 @@
 
 const { info, warn } = require('./log/writer')
 
-const os = require('node:os')
-const { inspect } = require('node:util')
+const os = require('os')
+const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
 
 const errors = {}

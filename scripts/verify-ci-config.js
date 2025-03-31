@@ -5,7 +5,7 @@ const fs = require('fs')
 const path = require('path')
 const util = require('util')
 const yaml = require('yaml')
-const semver = require('semver')
+const semver = require('semifies')
 const { execSync } = require('child_process')
 const Module = require('module')
 const { getAllInstrumentations } = require('../packages/dd-trace/test/setup/helpers/load-inst')
@@ -94,13 +94,9 @@ function getRangesFromYaml (job) {
     if (job.strategy.matrix.include) {
       possibilities.push(...job.strategy.matrix.include)
     }
-    return possibilities.map(possibility => {
-      if (possibility.range) {
-        return [possibility.range].flat()
-      } else {
-        return undefined
-      }
-    }).flat()
+    return possibilities.flatMap(possibility => {
+      return [possibility.range]?.flat()
+    })
   }
 
   return null

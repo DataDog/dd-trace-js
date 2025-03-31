@@ -1,6 +1,6 @@
 'use strict'
 
-const { types } = require('node:util')
+const { types } = require('util')
 
 function getSizeOrZero (obj) {
   if (typeof obj === 'string') {

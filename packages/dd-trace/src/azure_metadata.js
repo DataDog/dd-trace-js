@@ -2,7 +2,7 @@
 
 // Modeled after https://github.com/DataDog/libdatadog/blob/f3994857a59bb5679a65967138c5a3aec418a65f/ddcommon/src/azure_app_services.rs
 
-const os = require('node:os')
+const os = require('os')
 const { getIsAzureFunction } = require('./serverless')
 
 function extractSubscriptionID (ownerName) {

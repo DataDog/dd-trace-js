@@ -6,7 +6,7 @@ const { enable: enableFsPlugin, disable: disableFsPlugin, RASP_MODULE } = requir
 const { FS_OPERATION_PATH } = require('../addresses')
 const waf = require('../waf')
 const { RULE_TYPES, handleResult } = require('./utils')
-const { isAbsolute } = require('node:path')
+const { isAbsolute } = require('path')
 
 let config
 let enabled

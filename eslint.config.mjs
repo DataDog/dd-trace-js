@@ -46,10 +46,11 @@ export default [
       'integration-tests/debugger/target-app/source-map-support/typescript.js', // Generated
       'integration-tests/esbuild/out.js', // Generated
       'integration-tests/esbuild/aws-sdk-out.js', // Generated
-      'packages/dd-trace/src/payload-tagging/jsonpath-plus.js' // Vendored
+      'packages/dd-trace/src/payload-tagging/jsonpath-plus.js', // Vendored
+      'packages/dd-trace/src/guardrails/**/*' // Guardrails contain very old JS
     ]
   },
-  { name: '@eslint/js/recommnded', ...eslintPluginJs.configs.recommended },
+  { name: '@eslint/js/recommended', ...eslintPluginJs.configs.recommended },
   ...compat.extends('standard').map((config, i) => ({ name: config.name || `standard/${i + 1}`, ...config })),
   {
     name: 'dd-trace/defaults',

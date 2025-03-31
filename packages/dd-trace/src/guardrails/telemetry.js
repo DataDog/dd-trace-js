@@ -3,8 +3,8 @@
 /* eslint-disable no-var */
 /* eslint-disable object-shorthand */
 
-var fs = require('node:fs')
-var spawn = require('node:child_process').spawn
+var fs = require('fs')
+var spawn = require('child_process').spawn
 var tracerVersion = require('../../../../package.json').version
 var log = require('./log')
 
@@ -28,16 +28,16 @@ var metadata = {
   pid: process.pid
 }
 
-var seen = new Set([])
+var seen = []
 function hasSeen (point) {
   if (point.name === 'abort') {
     // This one can only be sent once, regardless of tags
-    return seen.has('abort')
+    return seen.includes('abort')
   }
   if (point.name === 'abort.integration') {
     // For now, this is the only other one we want to dedupe
     var compiledPoint = point.name + point.tags.join('')
-    return seen.has(compiledPoint)
+    return seen.includes(compiledPoint)
   }
   return false
 }
@@ -47,7 +47,7 @@ function sendTelemetry (name, tags) {
   if (typeof name === 'string') {
     points = [{ name: name, tags: tags || [] }]
   }
-  if (['1', 'true', 'True'].includes(process.env.DD_INJECT_FORCE)) {
+  if (['1', 'true', 'True'].indexOf(process.env.DD_INJECT_FORCE) !== -1) {
     points = points.filter(function (p) { return ['error', 'complete'].includes(p.name) })
   }
   points = points.filter(function (p) { return !hasSeen(p) })

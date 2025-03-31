@@ -1,7 +1,7 @@
 'use strict'
 
 const coalesce = require('koalas')
-const { inspect } = require('node:util')
+const { inspect } = require('util')
 const { isTrue } = require('../util')
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')

@@ -1,6 +1,6 @@
 'use strict'
 
-const crypto = require('node:crypto')
+const crypto = require('crypto')
 const log = require('../../dd-trace/src/log')
 
 /**

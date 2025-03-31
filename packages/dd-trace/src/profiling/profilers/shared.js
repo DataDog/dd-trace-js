@@ -1,6 +1,6 @@
 'use strict'
 
-const { isMainThread, threadId } = require('node:worker_threads')
+const { isMainThread, threadId } = require('worker_threads')
 
 const END_TIMESTAMP_LABEL = 'end_timestamp_ns'
 const THREAD_NAME_LABEL = 'thread name'

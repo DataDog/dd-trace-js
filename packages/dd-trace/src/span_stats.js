@@ -1,4 +1,4 @@
-const os = require('node:os')
+const os = require('os')
 const { version } = require('./pkg')
 const pkg = require('../../../package.json')
 
