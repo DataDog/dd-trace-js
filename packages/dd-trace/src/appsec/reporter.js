@@ -6,10 +6,12 @@ const web = require('../plugins/util/web')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const {
   incrementWafInitMetric,
-  updateWafRequestsMetricTags,
-  updateRaspRequestsMetricTags,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,
+  updateWafRequestsMetricTags,
+  updateRaspRequestsMetricTags,
+  updateRaspRuleSkippedMetricTags,
+  updateRateLimitedMetric,
   getRequestMetrics
 } = require('./telemetry')
 const zlib = require('zlib')
@@ -149,6 +151,8 @@ function reportAttack (attackData) {
 
   if (limiter.isAllowed()) {
     keepTrace(rootSpan, ASM)
+  } else {
+    updateRateLimitedMetric(req)
   }
 
   // TODO: maybe add this to format.js later (to take decision as late as possible)
@@ -291,6 +295,7 @@ module.exports = {
   reportMetrics,
   reportAttack,
   reportWafUpdate: incrementWafUpdatesMetric,
+  reportRaspRuleSkipped: updateRaspRuleSkippedMetricTags,
   reportDerivatives,
   finishRequest,
   setRateLimit,

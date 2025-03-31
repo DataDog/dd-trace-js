@@ -25,6 +25,10 @@ class WAFContextWrapper {
   run ({ persistent, ephemeral }, raspRule) {
     if (this.ddwafContext.disposed) {
       log.warn('[ASM] Calling run on a disposed context')
+      if (raspRule) {
+        Reporter.reportRaspRuleSkipped(raspRule, 'after-request')
+      }
+
       return
     }
 

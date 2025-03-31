@@ -6,6 +6,7 @@ const { URL, format } = require('url')
 const logger = require('../../log')
 
 const { encodeUnicode } = require('../util')
+const telemetry = require('../telemetry')
 const log = require('../../log')
 
 class BaseLLMObsWriter {
@@ -45,6 +46,7 @@ class BaseLLMObsWriter {
   append (event, byteLength) {
     if (this._buffer.length >= this._bufferLimit) {
       logger.warn(`${this.constructor.name} event buffer full (limit is ${this._bufferLimit}), dropping event`)
+      telemetry.recordDroppedPayload(1, this._eventType, 'buffer_full')
       return
     }
 
@@ -76,10 +78,12 @@ class BaseLLMObsWriter {
         logger.error(
           'Error sending %d LLMObs %s events to %s: %s', events.length, this._eventType, this._url, err.message, err
         )
+        telemetry.recordDroppedPayload(events.length, this._eventType, 'request_error')
       } else if (code >= 300) {
         logger.error(
           'Error sending %d LLMObs %s events to %s: %s', events.length, this._eventType, this._url, code
         )
+        telemetry.recordDroppedPayload(events.length, this._eventType, 'http_error')
       } else {
         logger.debug(`Sent ${events.length} LLMObs ${this._eventType} events to ${this._url}`)
       }

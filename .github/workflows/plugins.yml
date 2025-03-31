@@ -894,7 +894,7 @@ jobs:
           - 1521:1521
           - 5500:5500
       testagent:
-        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.16.0
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.21.1
         env:
           LOG_LEVEL: DEBUG
           TRACE_LANGUAGE: javascript
@@ -918,7 +918,6 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
         with:
-          cache: yarn
           node-version: '16'
       - uses: ./.github/actions/install
       - run: yarn config set ignore-engines true
