@@ -111,7 +111,7 @@ function getObjectValue (obj, maxLength) {
       return toMap(obj.className, obj.properties, maxLength)
     case 'weakset':
       return toSet(obj.className, obj.properties, maxLength)
-      // case 'iterator': // TODO: I've not been able to trigger this subtype
+    // case 'iterator': // TODO: I've not been able to trigger this subtype
     // case 'dataview': // TODO: Looks like the internal ArrayBuffer is only accessible via the `buffer` getter
     // case 'webassemblymemory': // TODO: Looks like the internal ArrayBuffer is only accessible via the `buffer` getter
     // case 'wasmvalue': // TODO: I've not been able to trigger this subtype
