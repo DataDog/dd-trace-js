@@ -523,7 +523,6 @@ describe('Plugin', () => {
                     partition,
                     offset: Number(message.offset)
                   }
-                  await consumer.disconnect()
                 }
               })
               await new Promise(resolve => setTimeout(resolve, 50)) // Let eachMessage be called
@@ -537,16 +536,18 @@ describe('Plugin', () => {
                * No choice but to reinitialize everything, because the only way to flush eachMessage
                * calls is to disconnect.
                */
-              consumer.connect()
-              await sendMessages(kafka, testTopic, messages)
-              await consumer.run({
+              const newConsumer = kafka.consumer({
+                kafkaJS: { groupId: 'test-group', autoCommit: false }
+              })
+              await newConsumer.connect()
+              await sendMessages(kafka, testTopic, [{ key: 'key1', value: 'test2' }])
+              await newConsumer.run({
                 eachMessage: async () => {
-                  await consumer.disconnect()
-                },
-                autoCommit: false
+                  await newConsumer.disconnect()
+                }
               })
               setOffsetSpy.resetHistory()
-              await consumer.commitOffsets([commitMeta])
+              await newConsumer.commitOffsets()
 
               // Check our work
               const runArg = setOffsetSpy.lastCall.args[0]

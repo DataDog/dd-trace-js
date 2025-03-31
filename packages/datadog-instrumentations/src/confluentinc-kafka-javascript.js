@@ -25,6 +25,9 @@ const channels = {
   batchConsumerCommit: channel('apm:@confluentinc/kafka-javascript:consume-batch:commit')
 }
 
+// we need to store the offset per partition per topic for the consumer to track offsets for DSM
+const latestConsumerOffsets = new Map()
+
 // Customize the instrumentation for Confluent Kafka JavaScript
 addHook({ name: '@confluentinc/kafka-javascript', versions: ['>=1.0.0'] }, (module) => {
   // Hook native module classes first
@@ -108,7 +111,6 @@ function instrumentBaseModule (module) {
               if (typeof callback === 'function') {
                 return consume.call(this, numMessages, function wrappedCallback (err, messages) {
                   if (messages && messages.length > 0) {
-                    const commitList = []
                     messages.forEach(message => {
                       channels.consumerStart.publish({
                         topic: message.topic,
@@ -116,15 +118,8 @@ function instrumentBaseModule (module) {
                         message,
                         groupId
                       })
-                      commitList.push({
-                        topic: message.topic,
-                        partition: message.partition,
-                        offset: message.offset,
-                        groupId
-                      })
+                      updateLatestOffset(message.topic, message.partition, message.offset, groupId)
                     })
-
-                    channels.consumerCommit.publish(commitList)
                   }
 
                   if (err) {
@@ -147,6 +142,11 @@ function instrumentBaseModule (module) {
               return consume.apply(this, arguments)
             }
           })
+
+          // Wrap the commit method for handling offset commits
+          if (consumer && typeof consumer.commit === 'function') {
+            shimmer.wrap(consumer, 'commit', wrapCommit)
+          }
         }
 
         return consumer
@@ -299,6 +299,11 @@ function instrumentKafkaJS (kafkaJS) {
                 })
               }
 
+              // Wrap the commit method for handling offset commits
+              if (consumer && typeof consumer.commitOffsets === 'function') {
+                shimmer.wrap(consumer, 'commitOffsets', wrapCommit)
+              }
+
               return consumer
             }
           })
@@ -310,6 +315,19 @@ function instrumentKafkaJS (kafkaJS) {
   }
 }
 
+function wrapCommit (commit) {
+  return function wrappedCommit (options) {
+    if (!channels.consumerCommit.hasSubscribers) {
+      return commit.apply(this, arguments)
+    }
+
+    const result = commit.apply(this, arguments)
+    channels.consumerCommit.publish(getLatestOffsets())
+    latestConsumerOffsets.clear()
+    return result
+  }
+}
+
 function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, getPayload) {
   return function wrappedKafkaCallback (payload) {
     const commitPayload = getPayload(payload)
@@ -318,7 +336,7 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
     return asyncResource.runInAsyncScope(() => {
       startCh.publish(commitPayload)
 
-      commitCh.publish([commitPayload])
+      updateLatestOffset(commitPayload.topic, commitPayload.partition, commitPayload.offset, commitPayload.groupId)
 
       try {
         const result = callback.apply(this, arguments)
@@ -345,4 +363,18 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
       }
     })
   }
+}
+
+function updateLatestOffset (topic, partition, offset, groupId) {
+  const key = `${topic}:${partition}`
+  latestConsumerOffsets.set(key, {
+    topic,
+    partition,
+    offset,
+    groupId
+  })
+}
+
+function getLatestOffsets () {
+  return Array.from(latestConsumerOffsets.values())
 }
