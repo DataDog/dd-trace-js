@@ -71,12 +71,13 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
   }
 
   _isExcluded (location) {
-    let ret = true
-    if (location && location.path) {
+    if (location?.path) {
       // Exclude from reporting those vulnerabilities which location is from an internal fs call
-      ret = location.isInternal ? this.internalExclusionList.some(elem => location.path.includes(elem)) : this.exclusionList.some(elem => location.path.includes(elem))
+      return location.isInternal
+        ? this.internalExclusionList.some(elem => location.path.includes(elem))
+        : this.exclusionList.some(elem => location.path.includes(elem))
     }
-    return ret
+    return true
   }
 
   analyze (value) {

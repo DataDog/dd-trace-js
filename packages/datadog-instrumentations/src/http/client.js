@@ -144,7 +144,9 @@ function patch (http, methodName) {
   }
 
   function combineOptions (inputURL, inputOptions) {
-    return inputOptions !== null && typeof inputOptions === 'object' ? Object.assign(inputURL || {}, inputOptions) : inputURL
+    return inputOptions !== null && typeof inputOptions === 'object'
+      ? Object.assign(inputURL || {}, inputOptions)
+      : inputURL
   }
   function normalizeHeaders (options) {
     options.headers = options.headers || {}

@@ -99,18 +99,17 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
         } else {
           currentLevelClone[key] = val
         }
-      } else if (Array.isArray(val)) {
-        currentLevelClone[key] = []
       } else {
-        currentLevelClone[key] = {}
+        currentLevelClone[key] = Array.isArray(val) ? [] : {}
       }
     })
 
     value = JSON.stringify(cloneObj, null, 2)
 
     if (counter > 0) {
-      let keysRegex
-      keysRegex = loadSensitiveRanges ? KEYS_REGEX_WITH_SENSITIVE_RANGES : KEYS_REGEX_WITHOUT_SENSITIVE_RANGES
+      const keysRegex = loadSensitiveRanges
+        ? KEYS_REGEX_WITH_SENSITIVE_RANGES
+        : KEYS_REGEX_WITHOUT_SENSITIVE_RANGES
       keysRegex.lastIndex = 0
 
       let regexRes = keysRegex.exec(value)

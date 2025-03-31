@@ -143,7 +143,9 @@ module.exports = {
       if (JOB_NAME) {
         // Job names can contain parameters, e.g. jobName/KEY1=VALUE1,KEY2=VALUE2/branchName
         const jobNameAndParams = JOB_NAME.split('/')
-        finalPipelineName = jobNameAndParams.length > 1 && jobNameAndParams[1].includes('=') ? jobNameAndParams[0] : JOB_NAME.replace(`/${ref}`, '')
+        finalPipelineName = jobNameAndParams.length > 1 && jobNameAndParams[1].includes('=')
+          ? jobNameAndParams[0]
+          : JOB_NAME.replace(`/${ref}`, '')
         tags[CI_PIPELINE_NAME] = finalPipelineName
       }
     }

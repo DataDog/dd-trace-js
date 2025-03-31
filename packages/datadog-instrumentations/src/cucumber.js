@@ -577,8 +577,9 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 // Handles EFD in both the main process and the worker process.
 function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = false, isWorker = false) {
   return async function () {
-    let pickle
-    pickle = isNewerCucumberVersion ? arguments[0].pickle : this.eventDataCollector.getPickle(arguments[0])
+    const pickle = isNewerCucumberVersion
+      ? arguments[0].pickle
+      : this.eventDataCollector.getPickle(arguments[0])
 
     const testFileAbsolutePath = pickle.uri
     const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
@@ -717,9 +718,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
       }
     }
 
-    let envelope
-
-    envelope = isNewVersion ? message.envelope : message.jsonEnvelope
+    const envelope = isNewVersion ? message.envelope : message.jsonEnvelope
 
     if (!envelope) {
       return parseWorkerMessageFunction.apply(this, arguments)

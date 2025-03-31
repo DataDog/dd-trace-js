@@ -44,8 +44,7 @@ class SeleniumPlugin extends CiPlugin {
       if (!span) {
         return
       }
-      let testSpan
-      testSpan = isTestSpan(span) ? span : getTestSpanFromTrace(span.context()._trace)
+      const testSpan = isTestSpan(span) ? span : getTestSpanFromTrace(span.context()._trace)
       if (!testSpan) {
         return
       }
