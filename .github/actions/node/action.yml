@@ -8,6 +8,8 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
       with:
         node-version: ${{ inputs.version == 'eol' && '16' || inputs.version == 'oldest' && '18' || inputs.version == 'maintenance' && '20' || inputs.version == 'active' && '22' || inputs.version }}
+        check-latest: true
+        registry-url: ${{ inputs.registry-url || 'https://registry.npmjs.org' }}
