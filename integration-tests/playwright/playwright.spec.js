@@ -906,7 +906,7 @@ versions.forEach((version) => {
     })
 
     if (version === 'latest') {
-      context('test management', () => {
+      context.only('test management', () => {
         context('attempt to fix', () => {
           beforeEach(() => {
             receiver.setTestManagementTests({
@@ -1040,6 +1040,8 @@ versions.forEach((version) => {
                 stdio: 'pipe'
               }
             )
+
+            childProcess.stdout.pipe(process.stdout)
 
             childProcess.on('exit', (exitCode) => {
               testAssertionsPromise.then(() => {
@@ -1188,6 +1190,8 @@ versions.forEach((version) => {
               }
             )
 
+            childProcess.stdout.pipe(process.stdout)
+
             childProcess.on('exit', (exitCode) => {
               testAssertionsPromise.then(() => {
                 if (isDisabling) {
@@ -1278,6 +1282,8 @@ versions.forEach((version) => {
                 stdio: 'pipe'
               }
             )
+
+            childProcess.stdout.pipe(process.stdout)
 
             childProcess.on('exit', (exitCode) => {
               testAssertionsPromise.then(() => {
