@@ -1420,38 +1420,38 @@ versions.forEach((version) => {
         })
       })
 
-      // context('correlation between tests and RUM sessions', () => {
-      //   it('can correlate tests and RUM sessions', (done) => {
-      //     const receiverPromise = receiver
-      //       .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-      //         const events = payloads.flatMap(({ payload }) => payload.events)
-      //         const playwrightTest = events.find(event => event.type === 'test').content
-      //         assert.include(playwrightTest.meta, {
-      //           [TEST_BROWSER_NAME]: 'chromium',
-      //           [TEST_TYPE]: 'browser',
-      //           [TEST_IS_RUM_ACTIVE]: 'true'
-      //         })
-      //         assert.property(playwrightTest.meta, TEST_BROWSER_VERSION)
-      //       })
+      context('correlation between tests and RUM sessions', () => {
+        it.only('can correlate tests and RUM sessions', (done) => {
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const playwrightTest = events.find(event => event.type === 'test').content
+              assert.include(playwrightTest.meta, {
+                [TEST_BROWSER_NAME]: 'chromium',
+                [TEST_TYPE]: 'browser',
+                [TEST_IS_RUM_ACTIVE]: 'true'
+              })
+              assert.property(playwrightTest.meta, TEST_BROWSER_VERSION)
+            })
 
-      //     childProcess = exec(
-      //       './node_modules/.bin/playwright test -c playwright.config.js active-test-span-rum-test.js',
-      //       {
-      //         cwd,
-      //         env: {
-      //           ...getCiVisAgentlessConfig(receiver.port),
-      //           PW_BASE_URL: `http://localhost:${webAppPort}`,
-      //           TEST_DIR: './ci-visibility/playwright-tests-rum'
-      //         },
-      //         stdio: 'pipe'
-      //       }
-      //     )
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js active-test-span-rum-test.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-rum'
+              },
+              stdio: 'pipe'
+            }
+          )
 
-      //     childProcess.on('exit', () => {
-      //       receiverPromise.then(() => done()).catch(done)
-      //     })
-      //   })
-      // })
+          childProcess.on('exit', () => {
+            receiverPromise.then(() => done()).catch(done)
+          })
+        })
+      })
     }
   })
 })
