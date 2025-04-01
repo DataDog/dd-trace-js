@@ -51,6 +51,7 @@ if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
 }
 
 const seenCombo = new Set()
+const successfullyPatchedCombos = new Set()
 
 // TODO: make this more efficient
 for (const packageName of names) {
@@ -117,33 +118,42 @@ for (const packageName of names) {
           // Check if the hook already has a set moduleExport
           if (hook[HOOK_SYMBOL].has(moduleExports)) {
             namesAndSuccesses[`${name}@${version}`] = true
-            return moduleExports
-          }
+            successfullyPatchedCombos.add(`${name}@${version}`)
+          } else {
+            let patchSuccess = false
+            try {
+              loadChannel.publish({ name, version, file })
+              // Send the name and version of the module back to the callback because now addHook
+              // takes in an array of names so by passing the name the callback will know which
+              // module name is being used
+              moduleExports = hook(moduleExports, version, name)
+              // Set the moduleExports in the hooks weakmap
+              hook[HOOK_SYMBOL].set(moduleExports, name)
+              patchSuccess = true
+            } catch (e) {
+              log.info('Error during ddtrace instrumentation of application, aborting.')
+              log.info(e)
+              telemetry('error', [
+                `error_type:${e.constructor.name}`,
+                `integration:${name}`,
+                `integration_version:${version}`
+              ])
+            }
 
-          try {
-            loadChannel.publish({ name, version, file })
-            // Send the name and version of the module back to the callback because now addHook
-            // takes in an array of names so by passing the name the callback will know which module name is being used
-            moduleExports = hook(moduleExports, version, name)
-            // Set the moduleExports in the hooks weakmap
-            hook[HOOK_SYMBOL].set(moduleExports, name)
-          } catch (e) {
-            log.info('Error during ddtrace instrumentation of application, aborting.')
-            log.info(e)
-            telemetry('error', [
-              `error_type:${e.constructor.name}`,
-              `integration:${name}`,
-              `integration_version:${version}`
-            ])
+            if (patchSuccess) {
+              namesAndSuccesses[`${name}@${version}`] = true
+              successfullyPatchedCombos.add(`${name}@${version}`)
+            } else {
+              // Patch failed, do nothing extra here regarding success tracking
+            }
           }
-          namesAndSuccesses[`${name}@${version}`] = true
         }
       }
     }
     for (const nameVersion of Object.keys(namesAndSuccesses)) {
       const [name, version] = nameVersion.split('@')
       const success = namesAndSuccesses[nameVersion]
-      if (!success && !seenCombo.has(nameVersion)) {
+      if (!success && !seenCombo.has(nameVersion) && !successfullyPatchedCombos.has(nameVersion)) {
         telemetry('abort.integration', [
           `integration:${name}`,
           `integration_version:${version}`
