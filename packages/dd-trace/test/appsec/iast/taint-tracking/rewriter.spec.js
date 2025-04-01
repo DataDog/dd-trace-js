@@ -9,7 +9,7 @@ describe('IAST Rewriter', () => {
   it('Addon should return a rewritter instance', () => {
     let rewriter = null
     expect(() => {
-      rewriter = require('@datadog/native-iast-rewriter')
+      rewriter = require('@datadog/wasm-js-rewriter')
     }).to.not.throw(Error)
     expect(rewriter).to.not.be.null
   })
@@ -66,7 +66,7 @@ describe('IAST Rewriter', () => {
       }
 
       rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {
-        '@datadog/native-iast-rewriter': {
+        '@datadog/wasm-js-rewriter': {
           Rewriter,
           getPrepareStackTrace: function (fn) {
             const testWrap = function testWrappedPrepareStackTrace (error, callsites) {
@@ -338,7 +338,7 @@ describe('IAST Rewriter', () => {
     beforeEach(() => {
       getOriginalPathAndLineFromSourceMap = sinon.spy()
       rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {
-        '@datadog/native-iast-rewriter': {
+        '@datadog/wasm-js-rewriter': {
           getOriginalPathAndLineFromSourceMap
         }
       })
