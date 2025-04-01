@@ -622,41 +622,6 @@ function runnerHook (runnerExport, playwrightVersion) {
 
   return runnerExport
 }
-// TODO - CLEAN THIS UP
-// function handleBeforeEachHook (originalBeforeEachHook) {
-//   const symbols = Object.getOwnPropertySymbols(originalBeforeEachHook)
-//   const wrappedFunction = async function ({ page }) {
-//     const response = await originalBeforeEachHook.apply(this, arguments)
-
-//     const isRumActive = await page.evaluate(() => {
-//       if (window.DD_RUM && window.DD_RUM.getInternalContext) {
-//         return !!window.DD_RUM.getInternalContext()
-//       } else {
-//         return false
-//       }
-//     })
-
-//     if (isRumActive) {
-//       testPageGotoCh.publish({
-//         isRumActive,
-//         page
-//       })
-//     }
-
-//     return response
-//   }
-
-//   // Copy over all symbols from the original function to the wrapped function
-//   // We need to add 'page' to the symbols that don't already have it
-//   symbols.forEach(symbol => {
-//     if (!originalBeforeEachHook[symbol].includes('page')) {
-//       originalBeforeEachHook[symbol].push('page')
-//     }
-//     wrappedFunction[symbol] = originalBeforeEachHook[symbol]
-//   })
-
-//   return wrappedFunction
-// }
 
 function handleAfterEachHook (originalAfterEachHook) {
   const symbols = Object.getOwnPropertySymbols(originalAfterEachHook)
@@ -938,29 +903,15 @@ addHook({
         browserName
       })
 
-      // TODO - CLEAN THIS UP
-      // let beforeEachHook = true
       let afterEachHook = true
 
-      // // We intercept the beforeEach hook to add a correlation between the test and the RUM session
+      // We intercept the afterEach hook to add a correlation between the test and the RUM session
       for (const hook of test.parent._hooks) {
-      // if (hook.type === 'beforeEach') {
-      //   hook.fn = handleBeforeEachHook(hook.fn)
-      //   beforeEachHook = false
-      // } else if (hook.type === 'afterEach') {
         if (hook.type === 'afterEach') {
           hook.fn = handleAfterEachHook(hook.fn)
           afterEachHook = false
         }
       }
-
-      // In cases where the beforeEach or afterEach hook is not defined, we need to add it
-      // if (beforeEachHook) {
-      //   test.parent._hooks.push({
-      //     type: 'beforeEach',
-      //     fn: handleBeforeEachHook(() => {})
-      //   })
-      // }
 
       if (afterEachHook) {
         test.parent._hooks.push({
