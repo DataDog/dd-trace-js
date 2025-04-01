@@ -63,6 +63,8 @@ const otelDdEnvMapping = {
 
 const VALID_PROPAGATION_STYLES = new Set(['datadog', 'tracecontext', 'b3', 'b3 single header', 'none'])
 
+const VALID_PROPAGATION_BEHAVIOR_EXTRACT = new Set(['continue', 'restart', 'ignore'])
+
 const VALID_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error'])
 
 function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
@@ -584,6 +586,7 @@ class Config {
     this._setValue(defaults, 'traceId128BitGenerationEnabled', true)
     this._setValue(defaults, 'traceId128BitLoggingEnabled', true)
     this._setValue(defaults, 'tracePropagationExtractFirst', false)
+    this._setValue(defaults, 'tracePropagationBehaviorExtract', 'continue')
     this._setValue(defaults, 'tracePropagationStyle.inject', ['datadog', 'tracecontext', 'baggage'])
     this._setValue(defaults, 'tracePropagationStyle.extract', ['datadog', 'tracecontext', 'baggage'])
     this._setValue(defaults, 'tracePropagationStyle.otelPropagators', false)
@@ -746,6 +749,7 @@ class Config {
       DD_TRACE_PARTIAL_FLUSH_MIN_SPANS,
       DD_TRACE_PEER_SERVICE_MAPPING,
       DD_TRACE_PROPAGATION_EXTRACT_FIRST,
+      DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT,
       DD_TRACE_PROPAGATION_STYLE,
       DD_TRACE_PROPAGATION_STYLE_INJECT,
       DD_TRACE_PROPAGATION_STYLE_EXTRACT,
@@ -967,6 +971,11 @@ class Config {
     this._setBoolean(env, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     this._setBoolean(env, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
     this._setBoolean(env, 'tracePropagationExtractFirst', DD_TRACE_PROPAGATION_EXTRACT_FIRST)
+    const stringPropagationBehaviorExtract = String(DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT)
+    this._setValue(env, 'tracePropagationBehaviorExtract',
+      VALID_PROPAGATION_BEHAVIOR_EXTRACT.has(stringPropagationBehaviorExtract)
+        ? stringPropagationBehaviorExtract
+        : 'continue')
     this._setBoolean(env, 'tracePropagationStyle.otelPropagators',
       DD_TRACE_PROPAGATION_STYLE ||
       DD_TRACE_PROPAGATION_STYLE_INJECT ||
@@ -1114,6 +1123,13 @@ class Config {
     this._setTags(opts, 'tags', tags)
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
+    if (options.tracePropagationBehaviorExtract) {
+      const stringPropagationBehaviorExtract = String(options.tracePropagationBehaviorExtract)
+      this._setValue(opts, 'tracePropagationBehaviorExtract',
+        VALID_PROPAGATION_BEHAVIOR_EXTRACT.has(stringPropagationBehaviorExtract)
+          ? stringPropagationBehaviorExtract
+          : 'continue')
+    }
     this._setString(opts, 'version', options.version || tags.version)
     this._setBoolean(opts, 'inferredProxyServicesEnabled', options.inferredProxyServicesEnabled)
     this._setBoolean(opts, 'graphqlErrorExtensions', options.graphqlErrorExtensions)

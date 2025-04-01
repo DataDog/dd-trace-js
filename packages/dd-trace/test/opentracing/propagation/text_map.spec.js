@@ -788,6 +788,40 @@ describe('TextMapPropagator', () => {
       expect(first._links[0].attributes.context_headers).to.equal('datadog')
     })
 
+    it('should reset span links when Trace_Propagation_Behavior_Extract is set to ignore', () => {
+      // The following traceids should by default create a span link
+      const traceId = '1111aaaa2222bbbb3333cccc4444dddd'
+      const spanId = '5555eeee6666ffff'
+      textMap.traceparent = `00-${traceId}-${spanId}-01`
+
+      config.tracePropagationBehaviorExtract = 'ignore'
+      config.tracePropagationStyle.extract = ['tracecontext', 'datadog']
+
+      const first = propagator.extract(textMap)
+
+      // No span links should occur when we return from extract
+      expect(first._links.length).to.equal(0)
+    })
+
+    it('should set span link to extracted trace when Trace_Propagation_Behavior_Extract is set to restart', () => {
+      // The following traceids should by default create a span link
+      const traceId = '1111aaaa2222bbbb3333cccc4444dddd'
+      const spanId = '5555eeee6666ffff'
+      textMap.traceparent = `00-${traceId}-${spanId}-01`
+
+      config.tracePropagationBehaviorExtract = 'restart'
+      config.tracePropagationStyle.extract = ['tracecontext', 'datadog']
+
+      const first = propagator.extract(textMap)
+
+      // No span links should occur when we return from extract
+      expect(first._links.length).to.equal(1)
+      expect(first._links[0].context.toTraceId(true)).to.equal(traceId)
+      expect(first._links[0].context.toSpanId(true)).to.equal(spanId)
+      expect(first._links[0].attributes.reason).to.equal('propagation_behavior_extract')
+      expect(first._links[0].attributes.context_headers).to.equal('tracecontext')
+    })
+
     it('should log extraction', () => {
       const carrier = textMap
 
