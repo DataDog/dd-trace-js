@@ -61,7 +61,7 @@ describe('opentelemetry', () => {
       '@opentelemetry/instrumentation',
       '@opentelemetry/instrumentation-http',
       '@opentelemetry/instrumentation-express@0.47.1',
-      'express'
+      'express@4'
     ]
     if (satisfies(process.version.slice(1), '>=14')) {
       dependencies.push('@opentelemetry/sdk-node')
