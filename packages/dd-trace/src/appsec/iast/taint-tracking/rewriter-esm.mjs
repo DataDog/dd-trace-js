@@ -17,7 +17,7 @@ export async function initialize (data) {
   const { csiMethods, telemetryVerbosity, chainSourceMap } = data
   port = data.port
 
-  const iastRewriter = await import('@datadog/native-iast-rewriter')
+  const iastRewriter = await import('@datadog/wasm-js-rewriter')
 
   const { NonCacheRewriter } = iastRewriter.default
 
