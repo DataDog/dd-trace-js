@@ -88,15 +88,15 @@ function compile (node) {
             return String.prototype.includes.call(obj, elm)
           } else if (Array.isArray(obj)) {
             return Array.prototype.includes.call(obj, elm)
-          } else if (obj instanceof Object.getPrototypeOf(Int8Array)) {
+          } else if (${isTypedArray('obj')}) {
             return Object.getPrototypeOf(Int8Array.prototype).includes.call(obj, elm)
-          } else if (obj instanceof Set) {
+          } else if (${isInstanceOfCoreType('Set', 'obj')}) {
             return Set.prototype.has.call(obj, elm)
-          } else if (obj instanceof WeakSet) {
+          } else if (${isInstanceOfCoreType('WeakSet', 'obj')}) {
             return WeakSet.prototype.has.call(obj, elm)
-          } else if (obj instanceof Map) {
+          } else if (${isInstanceOfCoreType('Map', 'obj')}) {
             return Map.prototype.has.call(obj, elm)
-          } else if (obj instanceof WeakMap) {
+          } else if (${isInstanceOfCoreType('WeakMap', 'obj')}) {
             return WeakMap.prototype.has.call(obj, elm)
           } else {
             throw new TypeError('Variable does not support contains')
@@ -146,22 +146,31 @@ function iterateOn (fnName, variable, callbackCode) {
 }
 
 function isString (variable) {
-  return `typeof ${variable} === 'string' || ${variable} instanceof String`
+  return `(typeof ${variable} === 'string' || ${variable} instanceof String)`
 }
 
 function isIterableCollection (variable) {
-  return `${isArrayOrTypedArray(variable)} || ${variable} instanceof Set || ${variable} instanceof WeakSet`
+  return `(${isArrayOrTypedArray(variable)} || ${isInstanceOfCoreType('Set', variable)} || ` +
+    `${isInstanceOfCoreType('WeakSet', variable)})`
 }
 
 function isArrayOrTypedArray (variable) {
-  return `(Array.isArray(${variable}) || ${variable} instanceof Object.getPrototypeOf(Int8Array))`
+  return `(Array.isArray(${variable}) || ${isTypedArray(variable)})`
+}
+
+function isTypedArray (variable) {
+  return isInstanceOfCoreType('TypedArray', variable, `${variable} instanceof Object.getPrototypeOf(Int8Array)`)
+}
+
+function isInstanceOfCoreType (type, variable, fallback = `${variable} instanceof ${type}`) {
+  return `(process[Symbol.for('datadog:node:util:types')]?.is${type}?.(${variable}) ?? ${fallback})`
 }
 
 function getSize (variable) {
   return `((val) => {
     if (${isString('val')} || ${isArrayOrTypedArray('val')}) {
       return ${guardAgainstPropertyAccessSideEffects('val', '"length"')}
-    } else if (val instanceof Set || val instanceof Map) {
+    } else if (${isInstanceOfCoreType('Set', 'val')} || ${isInstanceOfCoreType('Map', 'val')}) {
       return ${guardAgainstPropertyAccessSideEffects('val', '"size"')}
     } else {
       throw new TypeError('Cannot get length or size of string/collection')
@@ -171,13 +180,13 @@ function getSize (variable) {
 
 function accessProperty (variable, keyOrIndex, allowMapAccess) {
   return `((val, key) => {
-    if (val instanceof Set || val instanceof WeakSet) {
+    if (${isInstanceOfCoreType('Set', 'val')} || ${isInstanceOfCoreType('WeakSet', 'val')}) {
       throw new Error('Accessing a Set or WeakSet is not allowed')
-    } else if (val instanceof Map) {
+    } else if (${isInstanceOfCoreType('Map', 'val')}) {
       ${allowMapAccess
         ? 'return Map.prototype.get.call(val, key)'
         : 'throw new Error(\'Accessing a Map is not allowed\')'}
-    } else if (val instanceof WeakMap) {
+    } else if (${isInstanceOfCoreType('WeakMap', 'val')}) {
       ${allowMapAccess
         ? 'return WeakMap.prototype.get.call(val, key)'
         : 'throw new Error(\'Accessing a WeakMap is not allowed\')'}
@@ -189,7 +198,10 @@ function accessProperty (variable, keyOrIndex, allowMapAccess) {
 
 function guardAgainstPropertyAccessSideEffects (variable, propertyName) {
   return `((val, key) => {
-    if (${maybeProxy('val')} || Object.getOwnPropertyDescriptor(val, key)?.get !== undefined) {
+    if (
+      ${isInstanceOfCoreType('Proxy', 'val', 'true')} ||
+      Object.getOwnPropertyDescriptor(val, key)?.get !== undefined
+    ) {
       throw new Error('Possibility of side effect')
     } else {
       return val[key]
@@ -201,7 +213,7 @@ function guardAgainstCoercionSideEffects (variable) {
   return `((val) => {
     if (
       typeof val === 'object' && val !== null && (
-        ${maybeProxy('val')} ||
+        ${isInstanceOfCoreType('Proxy', 'val', 'true')} ||
         val[Symbol.toPrimitive] !== undefined ||
         val.valueOf !== Object.prototype.valueOf ||
         val.toString !== Object.prototype.toString
@@ -212,10 +224,6 @@ function guardAgainstCoercionSideEffects (variable) {
       return val
     }
   })(${variable})`
-}
-
-function maybeProxy (variable) {
-  return `(process[Symbol.for('datadog:isProxy')]?.(${variable}) ?? true)`
 }
 
 function assertString (variable) {

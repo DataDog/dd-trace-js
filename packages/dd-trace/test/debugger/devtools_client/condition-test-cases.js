@@ -130,7 +130,7 @@ const propertyAccess = [
     new Error('Possibility of side effect')
   ],
   {
-    before: () => { process[Symbol.for('datadog:isProxy')] = undefined },
+    before: () => { process[Symbol.for('datadog:node:util:types')] = undefined },
     ast: { getmember: [{ ref: 'proxy' }, 'foo'] },
     vars: { proxy: {} },
     expected: new Error('Possibility of side effect')
