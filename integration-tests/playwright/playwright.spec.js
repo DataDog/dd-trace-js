@@ -1447,8 +1447,6 @@ versions.forEach((version) => {
             }
           )
 
-          childProcess.stdout.pipe(process.stdout)
-
           childProcess.on('exit', () => {
             receiverPromise.then(() => done()).catch(done)
           })
