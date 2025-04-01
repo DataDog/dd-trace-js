@@ -627,30 +627,36 @@ function handleAfterEachHook (originalAfterEachHook) {
   const symbols = Object.getOwnPropertySymbols(originalAfterEachHook)
 
   const wrappedFunction = async function ({ page }) {
-    const isRumActive = await page.evaluate(() => {
-      if (window.DD_RUM && window.DD_RUM.stopSession) {
-        window.DD_RUM.stopSession()
-        return true
-      } else {
-        return false
+    if (page) {
+      try {
+        const isRumActive = await page.evaluate(() => {
+          if (window.DD_RUM && window.DD_RUM.stopSession) {
+            window.DD_RUM.stopSession()
+            return true
+          } else {
+            return false
+          }
+        })
+
+        if (isRumActive) {
+          const url = page.url()
+          const domain = new URL(url).hostname
+
+          await page.context().addCookies([{
+            name: 'datadog-ci-visibility-test-execution-id',
+            value: '',
+            domain,
+            expires: 0,
+            path: '/'
+          }])
+        }
+
+        // This is needed to enable RUM sending data
+        await page.waitForTimeout(500)
+      } catch (e) {
+        // Ignore errors during RUM instrumentation
       }
-    })
-
-    if (isRumActive) {
-      const url = page.url()
-      const domain = new URL(url).hostname
-
-      await page.context().addCookies([{
-        name: 'datadog-ci-visibility-test-execution-id',
-        value: '',
-        domain,
-        expires: 0,
-        path: '/'
-      }])
     }
-
-    // This is needed to enable RUM sending data
-    await page.waitForTimeout(500)
 
     return await originalAfterEachHook.apply(this, arguments)
   }
@@ -902,7 +908,7 @@ addHook({
     if (afterEachHook) {
       test.parent._hooks.push({
         type: 'afterEach',
-        fn: handleAfterEachHook(async () => {}),
+        fn: handleAfterEachHook(async function () {}),
         title: 'afterEach hook',
         _ddHook: true
       })
