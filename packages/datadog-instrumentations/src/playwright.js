@@ -627,38 +627,36 @@ function handleAfterEachHook (originalAfterEachHook) {
   const symbols = Object.getOwnPropertySymbols(originalAfterEachHook)
 
   const wrappedFunction = async function ({ page }) {
-    if (page) {
-      try {
-        const isRumActive = await page.evaluate(() => {
-          if (window.DD_RUM && window.DD_RUM.stopSession) {
-            window.DD_RUM.stopSession()
-            return true
-          } else {
-            return false
-          }
-        })
-
-        if (isRumActive) {
-          const url = page.url()
-          const domain = new URL(url).hostname
-
-          await page.context().addCookies([{
-            name: 'datadog-ci-visibility-test-execution-id',
-            value: '',
-            domain,
-            expires: 0,
-            path: '/'
-          }])
+    try {
+      const isRumActive = await page.evaluate(() => {
+        if (window.DD_RUM && window.DD_RUM.stopSession) {
+          window.DD_RUM.stopSession()
+          return true
+        } else {
+          return false
         }
+      })
 
-        // This is needed to enable RUM sending data
-        await page.waitForTimeout(500)
-      } catch (e) {
-        // Ignore errors during RUM instrumentation
+      if (isRumActive) {
+        const url = page.url()
+        const domain = new URL(url).hostname
+
+        await page.context().addCookies([{
+          name: 'datadog-ci-visibility-test-execution-id',
+          value: '',
+          domain,
+          expires: 0,
+          path: '/'
+        }])
       }
+
+      // This is needed to enable RUM sending data
+      await page.waitForTimeout(500)
+    } catch (e) {
+      // Ignore errors during RUM instrumentation
     }
 
-    return await originalAfterEachHook.apply(this, arguments)
+    return Promise.resolve(originalAfterEachHook.apply(this, arguments))
   }
 
   // Copy over all symbols from the original function to the wrapped function
@@ -899,16 +897,18 @@ addHook({
     // We intercept the afterEach hook to add a correlation between the test and the RUM session
     for (const hook of test.parent._hooks) {
       if (hook.type === 'afterEach' && !hook._ddHook) {
-        hook.fn = handleAfterEachHook(hook.fn)
+        const wrappedAfterEachHook = handleAfterEachHook(hook.fn)
+        hook.fn = wrappedAfterEachHook
         hook._ddHook = true
         afterEachHook = false
       }
     }
 
     if (afterEachHook) {
+      const wrappedAfterEachHook = handleAfterEachHook(async function () {})
       test.parent._hooks.push({
         type: 'afterEach',
-        fn: handleAfterEachHook(async function () {}),
+        fn: wrappedAfterEachHook,
         title: 'afterEach hook',
         _ddHook: true
       })
