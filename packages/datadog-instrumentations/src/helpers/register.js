@@ -67,6 +67,8 @@ for (const packageName of names) {
     hook = hook.fn
   }
 
+  const allVersions = {}
+
   Hook([packageName], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
 
@@ -101,22 +103,25 @@ for (const packageName of names) {
         matchesFile = matchesFile || new RegExp(fullFilePattern).test(moduleName)
       }
 
-      if (matchesFile) {
-        let version = moduleVersion
-        try {
-          version = version || getVersion(moduleBaseDir)
-        } catch (e) {
-          log.error('Error getting version for "%s": %s', name, e.message, e)
-          continue
-        }
-        if (typeof namesAndSuccesses[`${name}@${version}`] === 'undefined') {
-          namesAndSuccesses[`${name}@${version}`] = false
-        }
+      let version = moduleVersion || allVersions[moduleBaseDir]
+      try {
+        version = version || getVersion(moduleBaseDir)
+        allVersions[moduleBaseDir] = version
+      } catch (e) {
+        log.error('Error getting version for "%s": %s', name, e.message, e)
+        continue
+      }
 
-        if (matchVersion(version, versions)) {
+      if (typeof namesAndSuccesses[`${name}@${version}`] === 'undefined') {
+        namesAndSuccesses[`${name}@${version}`] = false
+      }
+
+      if (matchVersion(version, versions)) {
+        namesAndSuccesses[`${name}@${version}`] = true
+
+        if (matchesFile) {
           // Check if the hook already has a set moduleExport
           if (hook[HOOK_SYMBOL].has(moduleExports)) {
-            namesAndSuccesses[`${name}@${version}`] = true
             return moduleExports
           }
 
@@ -136,7 +141,6 @@ for (const packageName of names) {
               `integration_version:${version}`
             ])
           }
-          namesAndSuccesses[`${name}@${version}`] = true
         }
       }
     }
