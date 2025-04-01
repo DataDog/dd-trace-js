@@ -9,6 +9,7 @@ const log = require('../../../dd-trace/src/log')
 const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
+const { getPackageLinks } = require('./instrument')
 
 const {
   DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
@@ -52,6 +53,7 @@ if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
 
 const seenCombo = new Set()
 const successfullyPatchedCombos = new Set()
+const packageLinks = getPackageLinks()
 
 // TODO: make this more efficient
 for (const packageName of names) {
@@ -153,13 +155,39 @@ for (const packageName of names) {
     for (const nameVersion of Object.keys(namesAndSuccesses)) {
       const [name, version] = nameVersion.split('@')
       const success = namesAndSuccesses[nameVersion]
-      if (!success && !seenCombo.has(nameVersion) && !successfullyPatchedCombos.has(nameVersion)) {
-        telemetry('abort.integration', [
-          `integration:${name}`,
-          `integration_version:${version}`
-        ])
-        log.info('Found incompatible integration version: %s', nameVersion)
-        seenCombo.add(nameVersion)
+
+      // Check if combo has already been seen or is globally successful (direct match)
+      if (seenCombo.has(nameVersion) || successfullyPatchedCombos.has(nameVersion)) {
+        continue
+      }
+
+      // If locally unsuccessful, check linked packages for global success
+      if (!success) {
+        let linkedSuccess = false
+        const links = packageLinks.get(name)
+        if (links) {
+          for (const childName of links) {
+            const childPrefix = `${childName}@`
+            for (const patchedCombo of successfullyPatchedCombos) {
+              if (patchedCombo.startsWith(childPrefix)) {
+                linkedSuccess = true
+                break
+              }
+            }
+            if (linkedSuccess) break
+          }
+        }
+
+        // Only log if locally unsuccessful AND not seen AND not globally successful
+        // (directly or via any linked child prefix)
+        if (!linkedSuccess) {
+          telemetry('abort.integration', [
+            `integration:${name}`,
+            `integration_version:${version}`
+          ])
+          log.info('Found incompatible integration version: %s', nameVersion)
+          seenCombo.add(nameVersion)
+        }
       }
     }
 

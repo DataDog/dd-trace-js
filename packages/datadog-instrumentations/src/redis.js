@@ -3,9 +3,12 @@
 const {
   channel,
   addHook,
-  AsyncResource
+  AsyncResource,
+  registerPackageLink
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+
+registerPackageLink('redis', ['@redis/client', '@node-redis/client'])
 
 const startCh = channel('apm:redis:command:start')
 const finishCh = channel('apm:redis:command:finish')
