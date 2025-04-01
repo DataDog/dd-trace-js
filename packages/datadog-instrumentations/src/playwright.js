@@ -849,13 +849,13 @@ addHook({
     })
 
     if (isRumActive) {
-      const testAsyncResource = new AsyncResource('bound-anonymous-fn')
-      testAsyncResource.runInAsyncScope(() => {
-        testPageGotoCh.publish({
-          isRumActive,
-          page
-        })
+      // const testAsyncResource = new AsyncResource('bound-anonymous-fn')
+      // testAsyncResource.runInAsyncScope(() => {
+      testPageGotoCh.publish({
+        isRumActive,
+        page
       })
+      // })
     }
 
     return response
