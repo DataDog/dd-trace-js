@@ -117,8 +117,8 @@ function compile (node) {
       case 'filter': return `(($dd_var) => {
           return ${isIterableCollection('$dd_var')}
             ? Array.from($dd_var).filter(($dd_it) => ${args[1]})
-            : Object.entries($dd_var).filter(([$dd_key, $dd_value]) => ${args[1]}).reduce((acc, [k, v]) => {
-                acc[k] = v
+            : Object.entries($dd_var).reduce((acc, [$dd_key, $dd_value]) => {
+                if (${args[1]}) acc[$dd_key] = $dd_value
                 return acc
               }, {})
         })(${args[0]})`
