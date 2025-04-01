@@ -180,9 +180,7 @@ function getSize (variable) {
 
 function accessProperty (variable, keyOrIndex, allowMapAccess) {
   return `((val, key) => {
-    if (${isInstanceOfCoreType('Set', 'val')} || ${isInstanceOfCoreType('WeakSet', 'val')}) {
-      throw new Error('Accessing a Set or WeakSet is not allowed')
-    } else if (${isInstanceOfCoreType('Map', 'val')}) {
+    if (${isInstanceOfCoreType('Map', 'val')}) {
       ${allowMapAccess
         ? 'return Map.prototype.get.call(val, key)'
         : 'throw new Error(\'Accessing a Map is not allowed\')'}
@@ -190,6 +188,8 @@ function accessProperty (variable, keyOrIndex, allowMapAccess) {
       ${allowMapAccess
         ? 'return WeakMap.prototype.get.call(val, key)'
         : 'throw new Error(\'Accessing a WeakMap is not allowed\')'}
+    } else if (${isInstanceOfCoreType('Set', 'val')} || ${isInstanceOfCoreType('WeakSet', 'val')}) {
+      throw new Error('Accessing a Set or WeakSet is not allowed')
     } else {
       return ${guardAgainstPropertyAccessSideEffects('val', 'key')}
     }
