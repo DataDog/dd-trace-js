@@ -61,7 +61,7 @@ describe('opentelemetry', () => {
       '@opentelemetry/instrumentation',
       '@opentelemetry/instrumentation-http',
       '@opentelemetry/instrumentation-express@0.47.1',
-      'express@4'
+      'express@4' // TODO: Remove pinning once our tests support Express v5
     ]
     if (satisfies(process.version.slice(1), '>=14')) {
       dependencies.push('@opentelemetry/sdk-node')
