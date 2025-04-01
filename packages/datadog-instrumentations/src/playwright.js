@@ -623,51 +623,51 @@ function runnerHook (runnerExport, playwrightVersion) {
   return runnerExport
 }
 
-function handleAfterEachHook (originalAfterEachHook) {
-  const symbols = Object.getOwnPropertySymbols(originalAfterEachHook)
+// function handleAfterEachHook (originalAfterEachHook) {
+//   const symbols = Object.getOwnPropertySymbols(originalAfterEachHook)
 
-  const wrappedFunction = async function ({ page }) {
-    const response = await originalAfterEachHook.apply(this, arguments)
+//   const wrappedFunction = async function ({ page }) {
+//     const response = await originalAfterEachHook.apply(this, arguments)
 
-    const isRumActive = await page.evaluate(() => {
-      if (window.DD_RUM && window.DD_RUM.stopSession) {
-        window.DD_RUM.stopSession()
-        return true
-      } else {
-        return false
-      }
-    })
+//     const isRumActive = await page.evaluate(() => {
+//       if (window.DD_RUM && window.DD_RUM.stopSession) {
+//         window.DD_RUM.stopSession()
+//         return true
+//       } else {
+//         return false
+//       }
+//     })
 
-    if (isRumActive) {
-      const url = page.url()
-      const domain = new URL(url).hostname
+//     if (isRumActive) {
+//       const url = page.url()
+//       const domain = new URL(url).hostname
 
-      await page.context().addCookies([{
-        name: 'datadog-ci-visibility-test-execution-id',
-        value: '',
-        domain,
-        expires: 0,
-        path: '/'
-      }])
-    }
+//       await page.context().addCookies([{
+//         name: 'datadog-ci-visibility-test-execution-id',
+//         value: '',
+//         domain,
+//         expires: 0,
+//         path: '/'
+//       }])
+//     }
 
-    // This is needed to enable RUM sending data
-    await page.waitForTimeout(500)
+//     // This is needed to enable RUM sending data
+//     await page.waitForTimeout(500)
 
-    return response
-  }
+//     return response
+//   }
 
-  // Copy over all symbols from the original function to the wrapped function
-  // We need to add 'page' to the symbols that don't already have it
-  symbols.forEach(symbol => {
-    if (!originalAfterEachHook[symbol].includes('page')) {
-      originalAfterEachHook[symbol].push('page')
-    }
-    wrappedFunction[symbol] = originalAfterEachHook[symbol]
-  })
+//   // Copy over all symbols from the original function to the wrapped function
+//   // We need to add 'page' to the symbols that don't already have it
+//   symbols.forEach(symbol => {
+//     if (!originalAfterEachHook[symbol].includes('page')) {
+//       originalAfterEachHook[symbol].push('page')
+//     }
+//     wrappedFunction[symbol] = originalAfterEachHook[symbol]
+//   })
 
-  return wrappedFunction
-}
+//   return wrappedFunction
+// }
 
 addHook({
   name: '@playwright/test',
@@ -830,39 +830,39 @@ addHook({
   return processHostPackage
 })
 
-addHook({
-  name: 'playwright-core',
-  file: 'lib/client/page.js',
-  versions: ['>=1.38.0']
-}, (pagePackage) => {
-  shimmer.wrap(pagePackage.Page.prototype, 'goto', goto => async function (url, options) {
-    const response = await goto.apply(this, arguments)
+// addHook({
+//   name: 'playwright-core',
+//   file: 'lib/client/page.js',
+//   versions: ['>=1.38.0']
+// }, (pagePackage) => {
+//   shimmer.wrap(pagePackage.Page.prototype, 'goto', goto => async function (url, options) {
+//     const response = await goto.apply(this, arguments)
 
-    const page = this
+//     const page = this
 
-    const isRumActive = await page.evaluate(() => {
-      if (window.DD_RUM && window.DD_RUM.getInternalContext) {
-        return !!window.DD_RUM.getInternalContext()
-      } else {
-        return false
-      }
-    })
+//     const isRumActive = await page.evaluate(() => {
+//       if (window.DD_RUM && window.DD_RUM.getInternalContext) {
+//         return !!window.DD_RUM.getInternalContext()
+//       } else {
+//         return false
+//       }
+//     })
 
-    if (isRumActive) {
-      // const testAsyncResource = new AsyncResource('bound-anonymous-fn')
-      // testAsyncResource.runInAsyncScope(() => {
-      testPageGotoCh.publish({
-        isRumActive,
-        page
-      })
-      // })
-    }
+//     if (isRumActive) {
+//       const testAsyncResource = new AsyncResource('bound-anonymous-fn')
+//       testAsyncResource.runInAsyncScope(() => {
+//         testPageGotoCh.publish({
+//           isRumActive,
+//           page
+//         })
+//       })
+//     }
 
-    return response
-  })
+//     return response
+//   })
 
-  return pagePackage
-})
+//   return pagePackage
+// })
 
 // Only in worker
 addHook({
@@ -903,25 +903,25 @@ addHook({
         browserName
       })
 
-      let afterEachHook = true
+      // let afterEachHook = true
 
-      // We intercept the afterEach hook to add a correlation between the test and the RUM session
-      for (const hook of test.parent._hooks) {
-        if (hook.type === 'afterEach' && !hook._ddHook) {
-          hook.fn = handleAfterEachHook(hook.fn)
-          hook._ddHook = true
-          afterEachHook = false
-        }
-      }
+      // // We intercept the afterEach hook to add a correlation between the test and the RUM session
+      // for (const hook of test.parent._hooks) {
+      //   if (hook.type === 'afterEach' && !hook._ddHook) {
+      //     hook.fn = handleAfterEachHook(hook.fn)
+      //     hook._ddHook = true
+      //     afterEachHook = false
+      //   }
+      // }
 
-      if (afterEachHook) {
-        test.parent._hooks.push({
-          type: 'afterEach',
-          fn: handleAfterEachHook(() => {}),
-          title: 'afterEach hook',
-          _ddHook: true
-        })
-      }
+      // if (afterEachHook) {
+      //   test.parent._hooks.push({
+      //     type: 'afterEach',
+      //     fn: handleAfterEachHook(() => {}),
+      //     title: 'afterEach hook',
+      //     _ddHook: true
+      //   })
+      // }
 
       res = _runTest.apply(this, arguments)
 
