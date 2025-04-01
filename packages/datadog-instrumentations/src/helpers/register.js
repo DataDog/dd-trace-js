@@ -50,7 +50,40 @@ if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
   setImmediate(checkRequireCache.checkForPotentialConflicts)
 }
 
+// This function captures the instrumentation file name for a given package by parsing the hook require
+// function given the module name. It is used to ensure that instrumentations such as redis
+// that have several different modules being hooked, ie: 'redis' main package, and @redis/client submodule
+// return a consistent instrumentation name. This is used later to ensure that atleast some portion of
+// the integration was successfully instrumented. Prevents incorrect `Found incompatible integration version: ` messages
+// Example:
+//                  redis -> "() => require('../redis')" -> redis
+//          @redis/client -> "() => require('../redis')" -> redis
+//
+function parseHookInstrumentationFileName (packageName) {
+  let hook = hooks[packageName]
+  if (hook.fn) {
+    hook = hook.fn
+  }
+  const hookString = hook.toString()
+
+  const regex = /require\('([^']*)'\)/
+  const match = hookString.match(regex)
+
+  // try to capture the hook require file location.
+  if (match && match[1]) {
+    let moduleName = match[1]
+    // Remove leading '../' if present
+    if (moduleName.startsWith('../')) {
+      moduleName = moduleName.substring(3)
+    }
+    return moduleName
+  }
+
+  return null
+}
+
 const seenCombo = new Set()
+const allVersions = {}
 
 // TODO: make this more efficient
 for (const packageName of names) {
@@ -67,7 +100,8 @@ for (const packageName of names) {
     hook = hook.fn
   }
 
-  const allVersions = {}
+  // get the instrumentation file name to save all hooked versions
+  const instrumentationFileName = parseHookInstrumentationFileName(packageName)
 
   Hook([packageName], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
@@ -104,9 +138,10 @@ for (const packageName of names) {
       }
 
       let version = moduleVersion || allVersions[moduleBaseDir]
+
       try {
         version = version || getVersion(moduleBaseDir)
-        allVersions[moduleBaseDir] = version
+        allVersions[instrumentationFileName] = allVersions[instrumentationFileName] || false
       } catch (e) {
         log.error('Error getting version for "%s": %s', name, e.message, e)
         continue
@@ -118,6 +153,7 @@ for (const packageName of names) {
 
       if (matchVersion(version, versions)) {
         namesAndSuccesses[`${name}@${version}`] = true
+        allVersions[instrumentationFileName] = true
 
         if (matchesFile) {
           // Check if the hook already has a set moduleExport
@@ -147,7 +183,8 @@ for (const packageName of names) {
     for (const nameVersion of Object.keys(namesAndSuccesses)) {
       const [name, version] = nameVersion.split('@')
       const success = namesAndSuccesses[nameVersion]
-      if (!success && !seenCombo.has(nameVersion)) {
+      // we check allVersions to see if any version of the integration was successfully instrumented
+      if (!success && !seenCombo.has(nameVersion) && !allVersions[instrumentationFileName]) {
         telemetry('abort.integration', [
           `integration:${name}`,
           `integration_version:${version}`
