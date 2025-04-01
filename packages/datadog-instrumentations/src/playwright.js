@@ -830,39 +830,39 @@ addHook({
   return processHostPackage
 })
 
-// addHook({
-//   name: 'playwright-core',
-//   file: 'lib/client/page.js',
-//   versions: ['>=1.38.0']
-// }, (pagePackage) => {
-//   shimmer.wrap(pagePackage.Page.prototype, 'goto', goto => async function (url, options) {
-//     const response = await goto.apply(this, arguments)
+addHook({
+  name: 'playwright-core',
+  file: 'lib/client/page.js',
+  versions: ['>=1.38.0']
+}, (pagePackage) => {
+  shimmer.wrap(pagePackage.Page.prototype, 'goto', goto => async function (url, options) {
+    const response = await goto.apply(this, arguments)
 
-//     const page = this
+    const page = this
 
-//     const isRumActive = await page.evaluate(() => {
-//       if (window.DD_RUM && window.DD_RUM.getInternalContext) {
-//         return !!window.DD_RUM.getInternalContext()
-//       } else {
-//         return false
-//       }
-//     })
+    const isRumActive = await page.evaluate(() => {
+      if (window.DD_RUM && window.DD_RUM.getInternalContext) {
+        return !!window.DD_RUM.getInternalContext()
+      } else {
+        return false
+      }
+    })
 
-//     if (isRumActive) {
-//       const testAsyncResource = new AsyncResource('bound-anonymous-fn')
-//       testAsyncResource.runInAsyncScope(() => {
-//         testPageGotoCh.publish({
-//           isRumActive,
-//           page
-//         })
-//       })
-//     }
+    if (isRumActive) {
+      // const testAsyncResource = new AsyncResource('bound-anonymous-fn')
+      // testAsyncResource.runInAsyncScope(() => {
+      testPageGotoCh.publish({
+        isRumActive,
+        page
+      })
+      // })
+    }
 
-//     return response
-//   })
+    return response
+  })
 
-//   return pagePackage
-// })
+  return pagePackage
+})
 
 // Only in worker
 addHook({
