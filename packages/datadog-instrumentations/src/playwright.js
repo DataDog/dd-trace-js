@@ -626,37 +626,45 @@ function runnerHook (runnerExport, playwrightVersion) {
 function handleAfterEachHook (originalAfterEachHook) {
   const symbols = Object.getOwnPropertySymbols(originalAfterEachHook)
 
-  const wrappedFunction = async function ({ page }) {
-    try {
-      const isRumActive = await page.evaluate(() => {
-        if (window.DD_RUM && window.DD_RUM.stopSession) {
-          window.DD_RUM.stopSession()
-          return true
-        } else {
-          return false
+  const wrappedFunction = async function () {
+    const originalArgs = arguments
+    const page = arguments[0]?.page
+
+    if (page) {
+      try {
+        const isRumActive = await page.evaluate(() => {
+          if (window.DD_RUM && window.DD_RUM.stopSession) {
+            window.DD_RUM.stopSession()
+            return true
+          } else {
+            return false
+          }
+        })
+
+        if (isRumActive) {
+          const url = page.url()
+          const domain = new URL(url).hostname
+
+          await page.context().addCookies([{
+            name: 'datadog-ci-visibility-test-execution-id',
+            value: '',
+            domain,
+            expires: 0,
+            path: '/'
+          }])
         }
-      })
 
-      if (isRumActive) {
-        const url = page.url()
-        const domain = new URL(url).hostname
-
-        await page.context().addCookies([{
-          name: 'datadog-ci-visibility-test-execution-id',
-          value: '',
-          domain,
-          expires: 0,
-          path: '/'
-        }])
+        // This is needed to enable RUM sending data
+        await page.waitForTimeout(500)
+      } catch (e) {
+        // ignore errors
       }
-
-      // This is needed to enable RUM sending data
-      await page.waitForTimeout(500)
-    } catch (e) {
-      // Ignore errors during RUM instrumentation
     }
 
-    return Promise.resolve(originalAfterEachHook.apply(this, arguments))
+    // Instead of apply with arguments, create a manually bound function
+    // and call it - this avoids issues with promise rejection handling in Node 18
+    const boundFn = originalAfterEachHook.bind(this)
+    return await boundFn(...originalArgs)
   }
 
   // Copy over all symbols from the original function to the wrapped function
