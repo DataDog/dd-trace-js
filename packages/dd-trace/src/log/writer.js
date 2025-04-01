@@ -13,6 +13,7 @@ const defaultLogger = {
 let enabled = false
 let logger = defaultLogger
 let logChannel = new LogChannel()
+let stackTraceLimitFunction
 
 function withNoop (fn) {
   const store = storage('legacy').getStore()
@@ -61,12 +62,28 @@ function getErrorLog (err) {
   }
 }
 
+function setStackTraceLimitFunction (fn) {
+  if (typeof fn !== 'function') {
+    throw new TypeError('stackTraceLimitFunction must be a function')
+  }
+  stackTraceLimitFunction = fn
+}
+
 function onError (err) {
   const { formatted, cause } = getErrorLog(err)
 
   // calling twice logger.error() because Error cause is only available in nodejs v16.9.0
   // TODO: replace it with Error(message, { cause }) when cause has broad support
-  if (formatted) withNoop(() => logger.error(new Error(formatted)))
+  if (formatted) {
+    withNoop(() => {
+      const l = Error.stackTraceLimit
+      Error.stackTraceLimit = 0
+      const e = new Error(formatted)
+      Error.stackTraceLimit = l
+      Error.captureStackTrace(e, stackTraceLimitFunction)
+      logger.error(e)
+    })
+  }
   if (cause) withNoop(() => logger.error(cause))
 }
 
@@ -122,4 +139,4 @@ function trace (...args) {
   onTrace(Log.parse(...args))
 }
 
-module.exports = { use, toggle, reset, error, warn, info, debug, trace }
+module.exports = { use, toggle, reset, error, warn, info, debug, trace, setStackTraceLimitFunction }
