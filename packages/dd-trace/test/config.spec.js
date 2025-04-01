@@ -958,6 +958,7 @@ describe('Config', () => {
       },
       traceId128BitGenerationEnabled: true,
       traceId128BitLoggingEnabled: true,
+      tracePropagationBehaviorExtract: 'restart',
       llmobs: {
         mlApp: 'myMlApp',
         agentlessEnabled: true,
@@ -1101,6 +1102,7 @@ describe('Config', () => {
       { name: 'stats.enabled', value: false, origin: 'calculated' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'code' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'code' },
+      { name: 'tracePropagationBehaviorExtract', value: 'restart', origin: 'code' },
       { name: 'version', value: '0.1.0', origin: 'code' },
       { name: 'llmobs.mlApp', value: 'myMlApp', origin: 'code' },
       { name: 'llmobs.agentlessEnabled', value: true, origin: 'code' }
@@ -1279,6 +1281,7 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_TRACEPARENT_ENABLED = 'true'
     process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'datadog'
     process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'datadog'
+    process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
     process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
@@ -1405,6 +1408,7 @@ describe('Config', () => {
       },
       traceId128BitGenerationEnabled: false,
       traceId128BitLoggingEnabled: false,
+      tracePropagationBehaviorExtract: 'ignore',
       llmobs: {
         mlApp: 'myOtherMlApp',
         agentlessEnabled: false
@@ -1433,6 +1437,7 @@ describe('Config', () => {
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
     expect(config).to.have.property('traceId128BitGenerationEnabled', false)
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
+    expect(config).to.have.property('tracePropagationBehaviorExtract', 'ignore')
     expect(config.tags).to.include({ foo: 'foo' })
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
     expect(config).to.have.deep.property('serviceMapping', { b: 'bb' })
