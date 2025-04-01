@@ -907,8 +907,9 @@ addHook({
 
       // We intercept the afterEach hook to add a correlation between the test and the RUM session
       for (const hook of test.parent._hooks) {
-        if (hook.type === 'afterEach') {
+        if (hook.type === 'afterEach' && !hook._ddHook) {
           hook.fn = handleAfterEachHook(hook.fn)
+          hook._ddHook = true
           afterEachHook = false
         }
       }
@@ -917,7 +918,8 @@ addHook({
         test.parent._hooks.push({
           type: 'afterEach',
           fn: handleAfterEachHook(() => {}),
-          title: 'afterEach hook'
+          title: 'afterEach hook',
+          _ddHook: true
         })
       }
 
