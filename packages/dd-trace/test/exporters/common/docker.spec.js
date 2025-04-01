@@ -6,6 +6,7 @@ describe('docker', () => {
   let docker
   let fs
   let carrier
+  let externalEnv
 
   beforeEach(() => {
     fs = {
@@ -13,6 +14,11 @@ describe('docker', () => {
       statSync: sinon.stub()
     }
     carrier = {}
+    externalEnv = process.env.DD_EXTERNAL_ENV
+  })
+
+  afterEach(() => {
+    process.env.DD_EXTERNAL_ENV = externalEnv
   })
 
   it('should not inject IDs when the cgroup cannot be read', () => {
@@ -34,7 +40,7 @@ describe('docker', () => {
     docker.inject(carrier)
 
     expect(carrier['Datadog-Container-Id']).to.equal(id)
-    expect(carrier['Datadog-Entity-ID']).to.equal(`cid-${id}`)
+    expect(carrier['Datadog-Entity-ID']).to.equal(`ci-${id}`)
   })
 
   it('should support IDs with UUID format', () => {
@@ -48,7 +54,7 @@ describe('docker', () => {
     docker.inject(carrier)
 
     expect(carrier['Datadog-Container-Id']).to.equal(id)
-    expect(carrier['Datadog-Entity-ID']).to.equal(`cid-${id}`)
+    expect(carrier['Datadog-Entity-ID']).to.equal(`ci-${id}`)
   })
 
   it('should support IDs with ECS task format', () => {
@@ -62,7 +68,7 @@ describe('docker', () => {
     docker.inject(carrier)
 
     expect(carrier['Datadog-Container-Id']).to.equal(id)
-    expect(carrier['Datadog-Entity-ID']).to.equal(`cid-${id}`)
+    expect(carrier['Datadog-Entity-ID']).to.equal(`ci-${id}`)
   })
 
   it('should support IDs with Kubernetes format', () => {
@@ -76,7 +82,7 @@ describe('docker', () => {
     docker.inject(carrier)
 
     expect(carrier['Datadog-Container-Id']).to.equal(id)
-    expect(carrier['Datadog-Entity-ID']).to.equal(`cid-${id}`)
+    expect(carrier['Datadog-Entity-ID']).to.equal(`ci-${id}`)
   })
 
   it('should support finding IDs on any line of the cgroup', () => {
@@ -92,7 +98,7 @@ describe('docker', () => {
     docker.inject(carrier)
 
     expect(carrier['Datadog-Container-Id']).to.equal(id)
-    expect(carrier['Datadog-Entity-ID']).to.equal(`cid-${id}`)
+    expect(carrier['Datadog-Entity-ID']).to.equal(`ci-${id}`)
   })
 
   it('should support Control Group v2', () => {
@@ -106,7 +112,7 @@ describe('docker', () => {
     docker.inject(carrier)
 
     expect(carrier['Datadog-Container-Id']).to.equal(id)
-    expect(carrier['Datadog-Entity-ID']).to.equal(`cid-${id}`)
+    expect(carrier['Datadog-Entity-ID']).to.equal(`ci-${id}`)
   })
 
   it('should support Cloud Foundry', () => {
@@ -120,7 +126,7 @@ describe('docker', () => {
     docker.inject(carrier)
 
     expect(carrier['Datadog-Container-Id']).to.equal(id)
-    expect(carrier['Datadog-Entity-ID']).to.equal(`cid-${id}`)
+    expect(carrier['Datadog-Entity-ID']).to.equal(`ci-${id}`)
   })
 
   it('should support inode when the ID is not available', () => {
@@ -136,5 +142,14 @@ describe('docker', () => {
 
     expect(carrier['Datadog-Container-Id']).to.be.undefined
     expect(carrier['Datadog-Entity-ID']).to.equal(`in-${ino}`)
+  })
+
+  it('should support external env', () => {
+    process.env.DD_EXTERNAL_ENV = 'test'
+
+    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker.inject(carrier)
+
+    expect(carrier['Datadog-External-Env']).to.equal('test')
   })
 })

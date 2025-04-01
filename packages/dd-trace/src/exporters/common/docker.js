@@ -2,6 +2,8 @@
 
 const fs = require('fs')
 
+const { DD_EXTERNAL_ENV } = process.env
+
 // The second part is the PCF / Garden regexp. We currently assume no suffix($) to avoid matching pod UIDs
 // See https://github.com/DataDog/datadog-agent/blob/7.40.x/pkg/util/cgroups/reader.go#L50
 const uuidSource =
@@ -51,9 +53,13 @@ module.exports = {
   inject (carrier) {
     if (entityId) {
       carrier['Datadog-Container-Id'] = entityId
-      carrier['Datadog-Entity-ID'] = `cid-${entityId}`
+      carrier['Datadog-Entity-ID'] = `ci-${entityId}`
     } else if (inode) {
       carrier['Datadog-Entity-ID'] = `in-${inode}`
+    }
+
+    if (DD_EXTERNAL_ENV) {
+      carrier['Datadog-External-Env'] = DD_EXTERNAL_ENV
     }
   }
 }
