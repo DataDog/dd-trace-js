@@ -18,7 +18,7 @@ function processProperties (props, maxLength) {
   const result = {}
 
   for (const prop of props) {
-    // TODO: Hack to avoid periods in keys, as EVP doesn't support that. A better solution can be implemented later)
+    // TODO: Hack to avoid periods in keys, as EVP doesn't support that. A better solution can be implemented later
     let name = prop.name
     if (name.includes('.')) {
       name = name.replaceAll('.', '_')
