@@ -11,7 +11,7 @@ describe('ESM Security controls', () => {
 
   before(async function () {
     this.timeout(process.platform === 'win32' ? 90000 : 30000)
-    sandbox = await createSandbox(['express'])
+    sandbox = await createSandbox(['express@4'])
     appPort = await getPort()
     cwd = sandbox.folder
     appFile = path.join(cwd, 'appsec', 'esm-security-controls', 'index.mjs')
