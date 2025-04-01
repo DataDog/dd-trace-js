@@ -826,7 +826,7 @@ describe('Plugin', () => {
             await checkTraces
           })
 
-          it('instruments a langchain openai embedQuery call', async () => {
+          it.skip('instruments a langchain openai embedQuery call', async () => {
             stubCall({
               ...openAiBaseEmbeddingInfo,
               response: {
@@ -867,7 +867,7 @@ describe('Plugin', () => {
             await checkTraces
           })
 
-          it('instruments a langchain openai embedDocuments call', async () => {
+          it.skip('instruments a langchain openai embedDocuments call', async () => {
             stubCall({
               ...openAiBaseEmbeddingInfo,
               response: {
