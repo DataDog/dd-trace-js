@@ -155,7 +155,7 @@ function isIterableCollection (variable) {
 }
 
 function isArrayOrTypedArray (variable) {
-  return `Array.isArray(${variable}) || ${variable} instanceof Object.getPrototypeOf(Int8Array)`
+  return `(Array.isArray(${variable}) || ${variable} instanceof Object.getPrototypeOf(Int8Array))`
 }
 
 function getSize (variable) {
