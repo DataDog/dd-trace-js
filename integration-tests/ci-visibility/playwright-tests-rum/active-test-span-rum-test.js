@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test')
 
-beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page }) => {
   await page.goto(process.env.PW_BASE_URL)
 })
 
