@@ -104,10 +104,9 @@ function compile (node) {
         })(${args[0]}, ${args[1]})`
       case 'matches': return `((str, regex) => {
           if (${isString('str')}) {
-            if (Object.getPrototypeOf(regex) === RegExp.prototype) {
-              return RegExp.prototype.test.call(regex, str)
-            } else if (${isString('regex')}) {
-              return String.prototype.match.call(str, regex) !== null
+            const regexIsString = ${isString('regex')}
+            if (regexIsString || Object.getPrototypeOf(regex) === RegExp.prototype) {
+              return RegExp.prototype.test.call(regexIsString ? new RegExp(regex) : regex, str)
             } else {
               throw new TypeError('Regular expression must be either a string or an instance of RegExp')
             }
