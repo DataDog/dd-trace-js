@@ -251,7 +251,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should not add client IP tag when header is missing', done => {
+        it('should not add client IP tag when header is missing or a different header is used', done => {
           const app = new Koa()
 
           app.use(async (ctx) => {
@@ -269,7 +269,11 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios.get(`http://localhost:${port}/user`).catch(done)
+            axios.get(`http://localhost:${port}/user`, {
+              headers: {
+                'x-other-custom-client-ip-header': '8.8.8.8'
+              }
+            }).catch(done)
           })
         })
 
