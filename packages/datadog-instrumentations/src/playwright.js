@@ -916,7 +916,8 @@ addHook({
       if (afterEachHook) {
         test.parent._hooks.push({
           type: 'afterEach',
-          fn: handleAfterEachHook(() => {})
+          fn: handleAfterEachHook(() => {}),
+          title: 'afterEach hook'
         })
       }
 
