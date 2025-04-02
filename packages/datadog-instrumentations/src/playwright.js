@@ -884,7 +884,7 @@ addHook({
 
     let existAfterEachHook = false
 
-    // // We intercept the afterEach hook to add a correlation between the test and the RUM session
+    // We try to find an existing afterEach hook with _ddHook to avoid adding a new one
     for (const hook of test.parent._hooks) {
       if (hook.type === 'afterEach' && hook._ddHook) {
         existAfterEachHook = true
@@ -892,7 +892,7 @@ addHook({
       }
     }
 
-    // In cases where there is no afterHook with _ddHook, we need to add one
+    // In cases where there is no afterEach hook with _ddHook, we need to add one
     if (!existAfterEachHook) {
       const wrappedAfterEachHook = createAfterEachHook()
       test.parent._hooks.push({
