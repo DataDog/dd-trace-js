@@ -389,16 +389,27 @@ describe('profiler', () => {
             continue
           }
           const spanData = { rootSpanId, endpoint, asyncId }
+          // Record async ID so we can verify we encountered 9 different values.
+          // Async ID can be sporadically missing if sampling hits an intrinsified
+          // function.
+          if (asyncId !== undefined) {
+            asyncIds.add(asyncId)
+          }
           const existingSpanData = spans.get(spanId)
           if (existingSpanData) {
             // Span's root span, endpoint, and async ID must be consistent
             // across samples.
-            assert.deepEqual(spanData, existingSpanData, encoded)
+            assert.equal(existingSpanData.rootSpanId, rootSpanId, encoded)
+            assert.equal(existingSpanData.endpoint, endpoint, encoded)
+            // Account for asyncID sporadically missing
+            if (existingSpanData.asyncId === undefined) {
+              existingSpanData.asyncId = asyncId
+            } else if (asyncId !== undefined) {
+              assert.equal(existingSpanData.asyncId, asyncId, encoded)
+            }
           } else {
             // New span id, store span data
             spans.set(spanId, spanData)
-            // Record async ID so we can verify we encountered 9 different values
-            asyncIds.add(asyncId)
             // Verify endpoint value
             const endpointVal = strings.strings[endpoint]
             switch (endpointVal) {
