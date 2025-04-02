@@ -660,8 +660,7 @@ function createAfterEachHook (emptyAsyncFunction) {
       }
     }
 
-    // This avoids issues with promise rejection handling in Node 18
-    // const emptyAsyncFunction = async function () {}
+    // This avoids issues with promise rejection handling in older versions of Node
     const boundFn = emptyAsyncFunction.bind(this)
     return await boundFn(...originalArgs)
   }
