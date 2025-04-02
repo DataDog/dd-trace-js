@@ -79,7 +79,7 @@ function setup ({ env, testApp, testAppSource } = {}) {
   })
 
   after(async function () {
-    await sandbox.remove()
+    await sandbox?.remove()
   })
 
   beforeEach(async function () {

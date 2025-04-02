@@ -42,7 +42,17 @@ const {
   DI_DEBUG_ERROR_LINE_SUFFIX,
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   TEST_MANAGEMENT_ENABLED,
-  TEST_MANAGEMENT_IS_QUARANTINED
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -2937,70 +2947,546 @@ describe('jest CommonJS', () => {
     })
   })
 
-  context('quarantine', () => {
-    beforeEach(() => {
-      receiver.setQuarantinedTests({
-        jest: {
-          suites: {
-            'ci-visibility/quarantine/test-quarantine-1.js': {
-              tests: {
-                'quarantine tests can quarantine a test': {
-                  properties: {
-                    quarantined: true
+  context('test management', () => {
+    context('attempt to fix', () => {
+      beforeEach(() => {
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-attempt-to-fix-1.js': {
+                tests: {
+                  'attempt to fix tests can attempt to fix a test': {
+                    properties: {
+                      attempt_to_fix: true
+                    }
                   }
                 }
               }
             }
           }
-        }
+        })
       })
-    })
 
-    const getTestAssertions = (isQuarantining, isParallel) =>
-      receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const testSession = events.find(event => event.type === 'test_session_end').content
+      const getTestAssertions = ({
+        isAttemptToFix,
+        isParallel,
+        isQuarantined,
+        isDisabled,
+        shouldAlwaysPass,
+        shouldFailSometimes
+      }) =>
+        receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
 
-          if (isQuarantining) {
-            assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
-          } else {
-            assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+            if (isAttemptToFix) {
+              assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+            } else {
+              assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+            }
+
+            const resourceNames = tests.map(span => span.resource)
+
+            assert.includeMembers(resourceNames,
+              [
+                'ci-visibility/test-management/test-attempt-to-fix-1.js.attempt to fix tests can attempt to fix a test'
+              ]
+            )
+
+            if (isParallel) {
+              // Parallel mode in jest requires more than a single test suite
+              // Here we check that the second test suite is actually running,
+              // so we can be sure that parallel mode is on
+              const parallelTestName = 'ci-visibility/test-management/test-attempt-to-fix-2.js.' +
+                'attempt to fix tests 2 can attempt to fix a test'
+              assert.includeMembers(resourceNames, [parallelTestName])
+            }
+
+            const retriedTests = tests.filter(
+              test => test.meta[TEST_NAME] === 'attempt to fix tests can attempt to fix a test'
+            )
+
+            for (let i = 0; i < retriedTests.length; i++) {
+              const test = retriedTests[i]
+              if (!isAttemptToFix) {
+                assert.notProperty(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX)
+                assert.notProperty(test.meta, TEST_IS_RETRY)
+                assert.notProperty(test.meta, TEST_RETRY_REASON)
+                continue
+              }
+
+              if (isQuarantined) {
+                assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+              }
+
+              if (isDisabled) {
+                assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
+              }
+
+              const isFirstAttempt = i === 0
+              const isLastAttempt = i === retriedTests.length - 1
+              assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
+
+              if (isFirstAttempt) {
+                assert.notProperty(test.meta, TEST_IS_RETRY)
+                assert.notProperty(test.meta, TEST_RETRY_REASON)
+              } else {
+                assert.propertyVal(test.meta, TEST_IS_RETRY, 'true')
+                assert.propertyVal(test.meta, TEST_RETRY_REASON, 'attempt_to_fix')
+              }
+
+              if (isLastAttempt) {
+                if (shouldAlwaysPass) {
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+                } else if (shouldFailSometimes) {
+                  assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
+                  assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                } else {
+                  assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
+                }
+              }
+            }
+          })
+
+      const runAttemptToFixTest = (done, {
+        isAttemptToFix,
+        isQuarantined,
+        isDisabled,
+        shouldAlwaysPass,
+        shouldFailSometimes,
+        extraEnvVars = {},
+        isParallel = false
+      } = {}) => {
+        let stdout = ''
+        const testAssertionsPromise = getTestAssertions({
+          isAttemptToFix,
+          isParallel,
+          isQuarantined,
+          isDisabled,
+          shouldAlwaysPass,
+          shouldFailSometimes
+        })
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-attempt-to-fix-1',
+              SHOULD_CHECK_RESULTS: '1',
+              ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
+              ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {}),
+              ...extraEnvVars
+            },
+            stdio: 'inherit'
           }
+        )
 
-          const resourceNames = tests.map(span => span.resource)
+        childProcess.stderr.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
 
-          assert.includeMembers(resourceNames,
-            [
-              'ci-visibility/quarantine/test-quarantine-1.js.quarantine tests can quarantine a test',
-              'ci-visibility/quarantine/test-quarantine-1.js.quarantine tests can pass normally'
-            ]
-          )
+        childProcess.stdout.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
 
-          if (isParallel) {
-            // Parallel mode in jest requires more than a single test suite
-            // Here we check that the second test suite is actually running, so we can be sure that parallel mode is on
-            assert.includeMembers(resourceNames, [
-              'ci-visibility/quarantine/test-quarantine-2.js.quarantine tests 2 can quarantine a test',
-              'ci-visibility/quarantine/test-quarantine-2.js.quarantine tests 2 can pass normally'
-            ])
-          }
+        childProcess.on('exit', exitCode => {
+          testAssertionsPromise.then(() => {
+            assert.include(stdout, 'I am running when attempt to fix')
+            if (isQuarantined || shouldAlwaysPass || isDisabled) {
+              // even though a test fails, the exit code is 0 because the test is quarantined
+              assert.equal(exitCode, 0)
+            } else {
+              assert.equal(exitCode, 1)
+            }
+            done()
+          }).catch(done)
+        })
+      }
 
-          const failedTest = tests.find(
-            test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
-          )
-          assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+      it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
-          if (isQuarantining) {
-            assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
-          } else {
-            assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+        runAttemptToFixTest(done, { isAttemptToFix: true })
+      })
+
+      it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+        runAttemptToFixTest(done, { isAttemptToFix: true, shouldAlwaysPass: true })
+      })
+
+      it('can attempt to fix and not mark last attempt if attempts both pass and fail', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+        runAttemptToFixTest(done, { isAttemptToFix: true, shouldFailSometimes: true })
+      })
+
+      it('does not attempt to fix tests if test management is not enabled', (done) => {
+        receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
+
+        runAttemptToFixTest(done)
+      })
+
+      it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+        runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
+      })
+
+      it('does not fail retry if a test is quarantined', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-attempt-to-fix-1.js': {
+                tests: {
+                  'attempt to fix tests can attempt to fix a test': {
+                    properties: {
+                      attempt_to_fix: true,
+                      quarantined: true
+                    }
+                  }
+                }
+              }
+            }
           }
         })
 
-    const runQuarantineTest = (done, isQuarantining, extraEnvVars = {}, isParallel = false) => {
-      const testAssertionsPromise = getTestAssertions(isQuarantining, isParallel)
+        runAttemptToFixTest(done, { isAttemptToFix: true, isQuarantined: true })
+      })
+
+      it('does not fail retry if a test is disabled', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-attempt-to-fix-1.js': {
+                tests: {
+                  'attempt to fix tests can attempt to fix a test': {
+                    properties: {
+                      attempt_to_fix: true,
+                      disabled: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        })
+
+        runAttemptToFixTest(done, { isAttemptToFix: true, isDisabled: true })
+      })
+
+      it('can attempt to fix in parallel mode', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+        runAttemptToFixTest(
+          done,
+          {
+            isAttemptToFix: true,
+            isParallel: true,
+            extraEnvVars: {
+              // we need to run more than 1 suite for parallel mode to kick in
+              TESTS_TO_RUN: 'test-management/test-attempt-to-fix',
+              RUN_IN_PARALLEL: true
+            }
+          }
+        )
+      })
+    })
+
+    context('disabled', () => {
+      beforeEach(() => {
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-disabled-1.js': {
+                tests: {
+                  'disable tests can disable a test': {
+                    properties: {
+                      disabled: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        })
+      })
+
+      const getTestAssertions = (isDisabling, isParallel) =>
+        receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            if (isDisabling) {
+              assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+            } else {
+              assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+            }
+
+            const resourceNames = tests.map(span => span.resource)
+
+            assert.includeMembers(resourceNames,
+              [
+                'ci-visibility/test-management/test-disabled-1.js.disable tests can disable a test'
+              ]
+            )
+
+            if (isParallel) {
+              // Parallel mode in jest requires more than a single test suite
+              // Here we check that the second test suite is actually running,
+              // so we can be sure that parallel mode is on
+              assert.includeMembers(resourceNames, [
+                'ci-visibility/test-management/test-disabled-2.js.disable tests 2 can disable a test'
+              ])
+            }
+
+            const skippedTest = tests.find(
+              test => test.meta[TEST_NAME] === 'disable tests can disable a test'
+            )
+
+            if (isDisabling) {
+              assert.equal(skippedTest.meta[TEST_STATUS], 'skip')
+              assert.propertyVal(skippedTest.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
+            } else {
+              assert.equal(skippedTest.meta[TEST_STATUS], 'fail')
+              assert.notProperty(skippedTest.meta, TEST_MANAGEMENT_IS_DISABLED)
+            }
+          })
+
+      const runDisableTest = (done, isDisabling, extraEnvVars = {}, isParallel = false) => {
+        let stdout = ''
+        const testAssertionsPromise = getTestAssertions(isDisabling, isParallel)
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-disabled-1',
+              SHOULD_CHECK_RESULTS: '1',
+              ...extraEnvVars
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        // jest uses stderr to output logs
+        childProcess.stderr.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        childProcess.on('exit', exitCode => {
+          testAssertionsPromise.then(() => {
+            if (isDisabling) {
+              assert.notInclude(stdout, 'I am running')
+              // even though a test fails, the exit code is 0 because the test is disabled
+              assert.equal(exitCode, 0)
+            } else {
+              assert.include(stdout, 'I am running')
+              assert.equal(exitCode, 1)
+            }
+            done()
+          }).catch(done)
+        })
+      }
+
+      it('can disable tests', (done) => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        runDisableTest(done, true)
+      })
+
+      it('pass if disable is not enabled', (done) => {
+        receiver.setSettings({ test_management: { enabled: false } })
+
+        runDisableTest(done, false)
+      })
+
+      it('does not enable disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        runDisableTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+      })
+
+      it('can disable in parallel mode', (done) => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        runDisableTest(
+          done,
+          true,
+          {
+            // we need to run more than 1 suite for parallel mode to kick in
+            TESTS_TO_RUN: 'test-management/test-disabled',
+            RUN_IN_PARALLEL: true
+          },
+          true
+        )
+      })
+    })
+
+    context('quarantine', () => {
+      beforeEach(() => {
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-quarantine-1.js': {
+                tests: {
+                  'quarantine tests can quarantine a test': {
+                    properties: {
+                      quarantined: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        })
+      })
+
+      const getTestAssertions = (isQuarantining, isParallel) =>
+        receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            if (isQuarantining) {
+              assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+            } else {
+              assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+            }
+
+            const resourceNames = tests.map(span => span.resource)
+
+            assert.includeMembers(resourceNames,
+              [
+                'ci-visibility/test-management/test-quarantine-1.js.quarantine tests can quarantine a test',
+                'ci-visibility/test-management/test-quarantine-1.js.quarantine tests can pass normally'
+              ]
+            )
+
+            if (isParallel) {
+              // Parallel mode in jest requires more than a single test suite
+              // Here we check that the second test suite is actually running,
+              // so we can be sure that parallel mode is on
+              assert.includeMembers(resourceNames, [
+                'ci-visibility/test-management/test-quarantine-2.js.quarantine tests 2 can quarantine a test',
+                'ci-visibility/test-management/test-quarantine-2.js.quarantine tests 2 can pass normally'
+              ])
+            }
+
+            const failedTest = tests.find(
+              test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
+            )
+            assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+
+            if (isQuarantining) {
+              assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+            } else {
+              assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+            }
+          })
+
+      const runQuarantineTest = (done, isQuarantining, extraEnvVars = {}, isParallel = false) => {
+        let stdout = ''
+        const testAssertionsPromise = getTestAssertions(isQuarantining, isParallel)
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-quarantine-1',
+              SHOULD_CHECK_RESULTS: '1',
+              ...extraEnvVars
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        // jest uses stderr to output logs
+        childProcess.stderr.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        childProcess.on('exit', exitCode => {
+          testAssertionsPromise.then(() => {
+            // it runs regardless of quarantine status
+            assert.include(stdout, 'I am running when quarantined')
+            if (isQuarantining) {
+              // even though a test fails, the exit code is 0 because the test is quarantined
+              assert.equal(exitCode, 0)
+            } else {
+              assert.equal(exitCode, 1)
+            }
+            done()
+          }).catch(done)
+        })
+      }
+
+      it('can quarantine tests', (done) => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        runQuarantineTest(done, true)
+      })
+
+      it('fails if quarantine is not enabled', (done) => {
+        receiver.setSettings({ test_management: { enabled: false } })
+
+        runQuarantineTest(done, false)
+      })
+
+      it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+      })
+
+      it('can quarantine in parallel mode', (done) => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        runQuarantineTest(
+          done,
+          true,
+          {
+            // we need to run more than 1 suite for parallel mode to kick in
+            TESTS_TO_RUN: 'test-management/test-quarantine',
+            RUN_IN_PARALLEL: true
+          },
+          true
+        )
+      })
+    })
+  })
+
+  context('libraries capabilities', () => {
+    it('adds capabilities to tests', (done) => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+          assert.isNotEmpty(metadataDicts)
+          metadataDicts.forEach(metadata => {
+            assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
+            assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
+            assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
+            assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
+            assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
+            assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '2')
+            // capabilities logic does not overwrite test session name
+            assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
+          })
+        })
 
       childProcess = exec(
         runTestsWithCoverageCommand,
@@ -3008,58 +3494,17 @@ describe('jest CommonJS', () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'quarantine/test-quarantine-1',
-            SHOULD_CHECK_RESULTS: '1',
-            ...extraEnvVars
+            DD_TEST_SESSION_NAME: 'my-test-session-name'
           },
           stdio: 'inherit'
         }
       )
 
-      childProcess.on('exit', exitCode => {
-        testAssertionsPromise.then(() => {
-          if (isQuarantining) {
-            // even though a test fails, the exit code is 1 because the test is quarantined
-            assert.equal(exitCode, 0)
-          } else {
-            assert.equal(exitCode, 1)
-          }
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
           done()
         }).catch(done)
       })
-    }
-
-    it('can quarantine tests', (done) => {
-      receiver.setSettings({ test_management: { enabled: true } })
-
-      runQuarantineTest(done, true)
-    })
-
-    it('fails if quarantine is not enabled', (done) => {
-      receiver.setSettings({ test_management: { enabled: false } })
-
-      runQuarantineTest(done, false)
-    })
-
-    it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
-      receiver.setSettings({ test_management: { enabled: true } })
-
-      runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
-    })
-
-    it('can quarantine in parallel mode', (done) => {
-      receiver.setSettings({ test_management: { enabled: true } })
-
-      runQuarantineTest(
-        done,
-        true,
-        {
-          // we need to run more than 1 suite for parallel mode to kick in
-          TESTS_TO_RUN: 'quarantine/test-quarantine',
-          RUN_IN_PARALLEL: true
-        },
-        true
-      )
     })
   })
 })

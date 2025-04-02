@@ -24,6 +24,8 @@ const satisfiesStream = version => semver.intersects('>4.1.0', version)
 
 describe('integrations', () => {
   let openai
+  let azureOpenai
+  let deepseekOpenai
 
   describe('openai', () => {
     before(() => {
@@ -69,6 +71,26 @@ describe('integrations', () => {
         openai = new OpenAI({
           apiKey: 'test'
         })
+
+        const AzureOpenAI = OpenAI.AzureOpenAI ?? OpenAI
+        if (OpenAI.AzureOpenAI) {
+          azureOpenai = new AzureOpenAI({
+            endpoint: 'https://dd.openai.azure.com/',
+            apiKey: 'test',
+            apiVersion: '2024-05-01-preview'
+          })
+        } else {
+          azureOpenai = new OpenAI({
+            baseURL: 'https://dd.openai.azure.com/',
+            apiKey: 'test',
+            apiVersion: '2024-05-01-preview'
+          })
+        }
+
+        deepseekOpenai = new OpenAI({
+          baseURL: 'https://api.deepseek.com/',
+          apiKey: 'test'
+        })
       })
 
       it('submits a completion span', async () => {
@@ -92,7 +114,7 @@ describe('integrations', () => {
           const expected = expectedLLMObsLLMSpanEvent({
             span,
             spanKind: 'llm',
-            name: 'openai.createCompletion',
+            name: 'OpenAI.createCompletion',
             inputMessages: [
               { content: 'How are you?' }
             ],
@@ -103,7 +125,7 @@ describe('integrations', () => {
             modelName: 'text-davinci-002',
             modelProvider: 'openai',
             metadata: {},
-            tags: { ml_app: 'test', language: 'javascript' }
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
           })
 
           expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -147,7 +169,7 @@ describe('integrations', () => {
           const expected = expectedLLMObsLLMSpanEvent({
             span,
             spanKind: 'llm',
-            name: 'openai.createChatCompletion',
+            name: 'OpenAI.createChatCompletion',
             inputMessages: [
               { role: 'system', content: 'You are a helpful assistant' },
               { role: 'user', content: 'How are you?' }
@@ -159,7 +181,7 @@ describe('integrations', () => {
             modelName: 'gpt-3.5-turbo-0301',
             modelProvider: 'openai',
             metadata: {},
-            tags: { ml_app: 'test', language: 'javascript' }
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
           })
 
           expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -200,7 +222,7 @@ describe('integrations', () => {
           const expected = expectedLLMObsLLMSpanEvent({
             span,
             spanKind: 'embedding',
-            name: 'openai.createEmbedding',
+            name: 'OpenAI.createEmbedding',
             inputDocuments: [
               { text: 'Hello, world!' }
             ],
@@ -209,7 +231,7 @@ describe('integrations', () => {
             modelName: 'text-embedding-ada-002-v2',
             modelProvider: 'openai',
             metadata: { encoding_format: 'float' },
-            tags: { ml_app: 'test', language: 'javascript' }
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
           })
 
           expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -217,7 +239,8 @@ describe('integrations', () => {
 
         await openai.embeddings.create({
           model: 'text-embedding-ada-002-v2',
-          input: 'Hello, world!'
+          input: 'Hello, world!',
+          encoding_format: 'float'
         })
 
         await checkSpan
@@ -264,7 +287,7 @@ describe('integrations', () => {
             const expected = expectedLLMObsLLMSpanEvent({
               span,
               spanKind: 'llm',
-              name: 'openai.createChatCompletion',
+              name: 'OpenAI.createChatCompletion',
               modelName: 'gpt-3.5-turbo-0301',
               modelProvider: 'openai',
               inputMessages: [{ role: 'user', content: 'What is SpongeBob SquarePants\'s origin?' }],
@@ -284,7 +307,7 @@ describe('integrations', () => {
                 ]
               }],
               metadata: { tool_choice: 'auto' },
-              tags: { ml_app: 'test', language: 'javascript' },
+              tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
               tokenMetrics: { input_tokens: 37, output_tokens: 10, total_tokens: 47 }
             })
 
@@ -322,7 +345,7 @@ describe('integrations', () => {
             const expected = expectedLLMObsLLMSpanEvent({
               span,
               spanKind: 'llm',
-              name: 'openai.createCompletion',
+              name: 'OpenAI.createCompletion',
               inputMessages: [
                 { content: 'Can you say this is a test?' }
               ],
@@ -333,7 +356,7 @@ describe('integrations', () => {
               modelName: 'text-davinci-002',
               modelProvider: 'openai',
               metadata: { temperature: 0.5, stream: true },
-              tags: { ml_app: 'test', language: 'javascript' }
+              tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
             })
 
             expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -373,7 +396,7 @@ describe('integrations', () => {
             const expected = expectedLLMObsLLMSpanEvent({
               span,
               spanKind: 'llm',
-              name: 'openai.createChatCompletion',
+              name: 'OpenAI.createChatCompletion',
               inputMessages: [
                 { role: 'user', content: 'Hello' }
               ],
@@ -384,7 +407,7 @@ describe('integrations', () => {
               modelName: 'gpt-3.5-turbo-0301',
               modelProvider: 'openai',
               metadata: { stream: true },
-              tags: { ml_app: 'test', language: 'javascript' }
+              tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
             })
 
             expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -424,7 +447,7 @@ describe('integrations', () => {
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
                 spanKind: 'llm',
-                name: 'openai.createChatCompletion',
+                name: 'OpenAI.createChatCompletion',
                 modelName: 'gpt-3.5-turbo-0301',
                 modelProvider: 'openai',
                 inputMessages: [{ role: 'user', content: 'What function would you call to finish this?' }],
@@ -441,7 +464,7 @@ describe('integrations', () => {
                   ]
                 }],
                 metadata: { tool_choice: 'auto', stream: true },
-                tags: { ml_app: 'test', language: 'javascript' },
+                tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
                 tokenMetrics: { input_tokens: 9, output_tokens: 5, total_tokens: 14 }
               })
 
@@ -479,13 +502,13 @@ describe('integrations', () => {
           const expected = expectedLLMObsLLMSpanEvent({
             span,
             spanKind: 'llm',
-            name: 'openai.createCompletion',
+            name: 'OpenAI.createCompletion',
             inputMessages: [{ content: 'Hello' }],
             outputMessages: [{ content: '' }],
             modelName: 'gpt-3.5-turbo',
             modelProvider: 'openai',
             metadata: { max_tokens: 50 },
-            tags: { ml_app: 'test', language: 'javascript' },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
             error,
             errorType: error.type || error.name,
             errorMessage: error.message,
@@ -521,13 +544,13 @@ describe('integrations', () => {
           const expected = expectedLLMObsLLMSpanEvent({
             span,
             spanKind: 'llm',
-            name: 'openai.createChatCompletion',
+            name: 'OpenAI.createChatCompletion',
             inputMessages: [{ role: 'user', content: 'Hello' }],
             outputMessages: [{ content: '' }],
             modelName: 'gpt-3.5-turbo',
             modelProvider: 'openai',
             metadata: { max_tokens: 50 },
-            tags: { ml_app: 'test', language: 'javascript' },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
             error,
             errorType: error.type || error.name,
             errorMessage: error.message,
@@ -546,6 +569,55 @@ describe('integrations', () => {
         } catch (e) {
           error = e
         }
+
+        await checkSpan
+      })
+
+      it('submits an AzureOpenAI completion', async () => {
+        const isFromAzureOpenAIClass = azureOpenai.constructor.name === 'AzureOpenAI'
+        const postEndpoint = isFromAzureOpenAIClass
+          ? '//openai/deployments/some-model/chat/completions'
+          : '/chat/completions'
+        const query = isFromAzureOpenAIClass
+          ? { 'api-version': '2024-05-01-preview' }
+          : {}
+
+        nock('https://dd.openai.azure.com:443')
+          .post(postEndpoint)
+          .query(query)
+          .reply(200, {})
+
+        const checkSpan = agent.use(traces => {
+          const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+
+          expect(spanEvent).to.have.property('name', 'AzureOpenAI.createChatCompletion')
+          expect(spanEvent.meta).to.have.property('model_provider', 'azure_openai')
+        })
+
+        await azureOpenai.chat.completions.create({
+          model: 'some-model',
+          messages: []
+        })
+
+        await checkSpan
+      })
+
+      it('submits an DeepSeek completion', async () => {
+        nock('https://api.deepseek.com:443')
+          .post('/chat/completions')
+          .reply(200, {})
+
+        const checkSpan = agent.use(traces => {
+          const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+
+          expect(spanEvent).to.have.property('name', 'DeepSeek.createChatCompletion')
+          expect(spanEvent.meta).to.have.property('model_provider', 'deepseek')
+        })
+
+        await deepseekOpenai.chat.completions.create({
+          model: 'some-model',
+          messages: []
+        })
 
         await checkSpan
       })

@@ -58,6 +58,7 @@ const TEST_IS_RETRY = 'test.is_retry'
 const TEST_EARLY_FLAKE_ENABLED = 'test.early_flake.enabled'
 const TEST_EARLY_FLAKE_ABORT_REASON = 'test.early_flake.abort_reason'
 const TEST_RETRY_REASON = 'test.retry_reason'
+const TEST_HAS_FAILED_ALL_RETRIES = 'test.has_failed_all_retries'
 
 const CI_APP_ORIGIN = 'ciapp-test'
 
@@ -95,9 +96,23 @@ const CUCUMBER_WORKER_TRACE_PAYLOAD_CODE = 70
 // mocha worker variables
 const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
 
+// playwright worker variables
+const PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE = 90
+
 // Early flake detection util strings
 const EFD_STRING = "Retried by Datadog's Early Flake Detection"
 const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
+
+// Library Capabilities Tagging
+const DD_CAPABILITIES_TEST_IMPACT_ANALYSIS = '_dd.library_capabilities.test_impact_analysis'
+const DD_CAPABILITIES_EARLY_FLAKE_DETECTION = '_dd.library_capabilities.early_flake_detection'
+const DD_CAPABILITIES_AUTO_TEST_RETRIES = '_dd.library_capabilities.auto_test_retries'
+const DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE = '_dd.library_capabilities.test_management.quarantine'
+const DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE = '_dd.library_capabilities.test_management.disable'
+const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities.test_management.attempt_to_fix'
+const UNSUPPORTED_TIA_FRAMEWORKS = ['playwright', 'vitest']
+const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = ['cucumber', 'mocha']
+const UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE = ['mocha']
 
 const TEST_LEVEL_EVENT_TYPES = [
   'test',
@@ -115,8 +130,16 @@ const DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX = 'snapshot_id'
 const DI_DEBUG_ERROR_FILE_SUFFIX = 'file'
 const DI_DEBUG_ERROR_LINE_SUFFIX = 'line'
 
+// Test Management tags
+const TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX = 'test.test_management.is_attempt_to_fix'
+const TEST_MANAGEMENT_IS_DISABLED = 'test.test_management.is_test_disabled'
 const TEST_MANAGEMENT_IS_QUARANTINED = 'test.test_management.is_quarantined'
 const TEST_MANAGEMENT_ENABLED = 'test.test_management.enabled'
+const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_fix_passed'
+
+// Test Management utils strings
+const ATTEMPT_TO_FIX_STRING = "Retried by Datadog's Test Management"
+const ATTEMPT_TEST_NAME_REGEX = new RegExp(ATTEMPT_TO_FIX_STRING + ' \\(#\\d+\\): ', 'g')
 
 module.exports = {
   TEST_CODE_OWNERS,
@@ -142,6 +165,7 @@ module.exports = {
   JEST_WORKER_LOGS_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
+  PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
   TEST_IS_NEW,
@@ -149,6 +173,7 @@ module.exports = {
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_RETRY_REASON,
+  TEST_HAS_FAILED_ALL_RETRIES,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -186,13 +211,21 @@ module.exports = {
   EFD_STRING,
   EFD_TEST_NAME_REGEX,
   removeEfdStringFromTestName,
+  removeAttemptToFixStringFromTestName,
   addEfdStringToTestName,
+  addAttemptToFixStringToTestName,
   getIsFaultyEarlyFlakeDetection,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
   TEST_BROWSER_VERSION,
   getTestSessionName,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   TEST_LEVEL_EVENT_TYPES,
   getNumFromKnownTests,
   getFileAndLineNumberFromError,
@@ -203,8 +236,12 @@ module.exports = {
   DI_DEBUG_ERROR_LINE_SUFFIX,
   getFormattedError,
   DD_TEST_IS_USER_PROVIDED_SERVICE,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
-  TEST_MANAGEMENT_ENABLED
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  getLibraryCapabilitiesTags
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -612,8 +649,16 @@ function addEfdStringToTestName (testName, numAttempt) {
   return `${EFD_STRING} (#${numAttempt}): ${testName}`
 }
 
+function addAttemptToFixStringToTestName (testName, numAttempt) {
+  return `${ATTEMPT_TO_FIX_STRING} (#${numAttempt}): ${testName}`
+}
+
 function removeEfdStringFromTestName (testName) {
   return testName.replace(EFD_TEST_NAME_REGEX, '')
+}
+
+function removeAttemptToFixStringFromTestName (testName) {
+  return testName.replace(ATTEMPT_TEST_NAME_REGEX, '')
 }
 
 function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {
@@ -707,4 +752,34 @@ function getFormattedError (error, repositoryRoot) {
   newError.name = error.name
 
   return newError
+}
+
+function getLibraryCapabilitiesTags (testFramework, isParallel) {
+  function isTiaSupported (testFramework, isParallel) {
+    if (UNSUPPORTED_TIA_FRAMEWORKS.includes(testFramework)) {
+      return false
+    }
+    if (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.includes(testFramework)) {
+      return false
+    }
+    return true
+  }
+
+  function isAttemptToFixSupported (testFramework, isParallel) {
+    if (isParallel && UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE.includes(testFramework)) {
+      return false
+    }
+    return true
+  }
+
+  return {
+    [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework, isParallel) ? '1' : undefined,
+    [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',
+    [DD_CAPABILITIES_AUTO_TEST_RETRIES]: '1',
+    [DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE]: '1',
+    [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: '1',
+    [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: isAttemptToFixSupported(testFramework, isParallel)
+      ? '2'
+      : undefined
+  }
 }

@@ -13,7 +13,9 @@ const {
   addEfdStringToTestName,
   removeEfdStringFromTestName,
   getIsFaultyEarlyFlakeDetection,
-  JEST_WORKER_LOGS_PAYLOAD_CODE
+  JEST_WORKER_LOGS_PAYLOAD_CODE,
+  addAttemptToFixStringToTestName,
+  removeAttemptToFixStringFromTestName
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   getFormattedJestTestParameters,
@@ -43,7 +45,7 @@ const testErrCh = channel('ci:jest:test:err')
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
 const knownTestsCh = channel('ci:jest:known-tests')
-const quarantinedTestsCh = channel('ci:jest:quarantined-tests')
+const testManagementTestsCh = channel('ci:jest:test-management-tests')
 
 const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 
@@ -71,8 +73,9 @@ let earlyFlakeDetectionFaultyThreshold = 30
 let isEarlyFlakeDetectionFaulty = false
 let hasFilteredSkippableSuites = false
 let isKnownTestsEnabled = false
-let isQuarantinedTestsEnabled = false
-let quarantinedTests = {}
+let isTestManagementTestsEnabled = false
+let testManagementTests = {}
+let testManagementAttemptToFixRetries = 0
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -80,6 +83,7 @@ const asyncResources = new WeakMap()
 const originalTestFns = new WeakMap()
 const retriedTestsToNumAttempts = new Map()
 const newTestsTestStatuses = new Map()
+const attemptToFixRetriedTestsStatuses = new Map()
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 
@@ -110,7 +114,7 @@ function getTestEnvironmentOptions (config) {
   return {}
 }
 
-function getEfdStats (testStatuses) {
+function getTestStats (testStatuses) {
   return testStatuses.reduce((acc, testStatus) => {
     acc[testStatus]++
     return acc
@@ -143,7 +147,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.flakyTestRetriesCount = this.testEnvironmentOptions._ddFlakyTestRetriesCount
       this.isDiEnabled = this.testEnvironmentOptions._ddIsDiEnabled
       this.isKnownTestsEnabled = this.testEnvironmentOptions._ddIsKnownTestsEnabled
-      this.isQuarantinedTestsEnabled = this.testEnvironmentOptions._ddIsQuarantinedTestsEnabled
+      this.isTestManagementTestsEnabled = this.testEnvironmentOptions._ddIsTestManagementTestsEnabled
 
       if (this.isKnownTestsEnabled) {
         try {
@@ -166,15 +170,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
       }
 
-      if (this.isQuarantinedTestsEnabled) {
+      if (this.isTestManagementTestsEnabled) {
         try {
-          const hasQuarantinedTests = !!quarantinedTests.jest
-          this.quarantinedTestsForThisSuite = hasQuarantinedTests
-            ? this.getQuarantinedTestsForSuite(quarantinedTests.jest.suites?.[this.testSuite]?.tests)
-            : this.getQuarantinedTestsForSuite(this.testEnvironmentOptions._ddQuarantinedTests)
+          const hasTestManagementTests = !!testManagementTests.jest
+          testManagementAttemptToFixRetries = this.testEnvironmentOptions._ddTestManagementAttemptToFixRetries
+          this.testManagementTestsForThisSuite = hasTestManagementTests
+            ? this.getTestManagementTestsForSuite(testManagementTests.jest.suites?.[this.testSuite]?.tests)
+            : this.getTestManagementTestsForSuite(this.testEnvironmentOptions._ddTestManagementTests)
         } catch (e) {
-          log.error('Error parsing quarantined tests', e)
-          this.isQuarantinedTestsEnabled = false
+          log.error('Error parsing test management tests', e)
+          this.isTestManagementTestsEnabled = false
         }
       }
     }
@@ -209,32 +214,69 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       return knownTestsForSuite
     }
 
-    getQuarantinedTestsForSuite (quarantined) {
-      if (this.quarantinedTestsForThisSuite) {
-        return this.quarantinedTestsForThisSuite
+    getTestManagementTestsForSuite (testManagementTests) {
+      if (this.testManagementTestsForThisSuite) {
+        return this.testManagementTestsForThisSuite
       }
-      if (!quarantined) {
-        return []
-      }
-      let quarantinedTestsForSuite = quarantined
-      // If jest is using workers, quarantined tests are serialized to json.
-      // If jest runs in band, they are not.
-      if (typeof quarantinedTestsForSuite === 'string') {
-        quarantinedTestsForSuite = JSON.parse(quarantinedTestsForSuite)
-      }
-      return Object.entries(quarantinedTestsForSuite).reduce((acc, [testName, { properties }]) => {
-        if (properties?.quarantined) {
-          acc.push(testName)
+      if (!testManagementTests) {
+        return {
+          attemptToFix: [],
+          disabled: [],
+          quarantined: []
         }
-        return acc
-      }, [])
+      }
+      let testManagementTestsForSuite = testManagementTests
+      // If jest is using workers, test management tests are serialized to json.
+      // If jest runs in band, they are not.
+      if (typeof testManagementTestsForSuite === 'string') {
+        testManagementTestsForSuite = JSON.parse(testManagementTestsForSuite)
+      }
+
+      const result = {
+        attemptToFix: [],
+        disabled: [],
+        quarantined: []
+      }
+
+      Object.entries(testManagementTestsForSuite).forEach(([testName, { properties }]) => {
+        if (properties?.attempt_to_fix) {
+          result.attemptToFix.push(testName)
+        }
+        if (properties?.disabled) {
+          result.disabled.push(testName)
+        }
+        if (properties?.quarantined) {
+          result.quarantined.push(testName)
+        }
+      })
+
+      return result
     }
 
-    // Add the `add_test` event we don't have the test object yet, so
+    // Generic function to handle test retries
+    retryTest (testName, retryCount, addRetryStringToTestName, retryType, event) {
+      // Retrying snapshots has proven to be problematic, so we'll skip them for now
+      // We'll still detect new tests, but we won't retry them.
+      // TODO: do not bail out of retrying tests for the whole test suite
+      if (this.getHasSnapshotTests()) {
+        log.warn(`${retryType} is disabled for suites with snapshots`)
+        return
+      }
+
+      for (let retryIndex = 0; retryIndex < retryCount; retryIndex++) {
+        if (this.global.test) {
+          this.global.test(addRetryStringToTestName(testName, retryIndex), event.fn, event.timeout)
+        } else {
+          log.error(`${retryType} could not retry test because global.test is undefined`)
+        }
+      }
+    }
+
+    // At the `add_test` event we don't have the test object yet, so we can't use it
     getTestNameFromAddTestEvent (event, state) {
       const describeSuffix = getJestTestName(state.currentDescribeBlock)
       const fullTestName = describeSuffix ? `${describeSuffix} ${event.testName}` : event.testName
-      return removeEfdStringFromTestName(fullTestName)
+      return removeAttemptToFixStringFromTestName(removeEfdStringFromTestName(fullTestName))
     }
 
     async handleTestEvent (event, state) {
@@ -260,25 +302,42 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (event.name === 'test_start') {
         let isNewTest = false
         let numEfdRetry = null
+        let numOfAttemptsToFixRetries = null
         const testParameters = getTestParametersString(this.nameToParams, event.test.name)
         // Async resource for this test is created here
         // It is used later on by the test_done handler
         const asyncResource = new AsyncResource('bound-anonymous-fn')
         asyncResources.set(event.test, asyncResource)
         const testName = getJestTestName(event.test)
+        const originalTestName = removeEfdStringFromTestName(removeAttemptToFixStringFromTestName(testName))
+
+        let isAttemptToFix = false
+        let isDisabled = false
+        let isQuarantined = false
+        if (this.isTestManagementTestsEnabled) {
+          isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(originalTestName)
+          isDisabled = this.testManagementTestsForThisSuite?.disabled?.includes(originalTestName)
+          isQuarantined = this.testManagementTestsForThisSuite?.quarantined?.includes(originalTestName)
+          if (isAttemptToFix) {
+            numOfAttemptsToFixRetries = retriedTestsToNumAttempts.get(originalTestName)
+            retriedTestsToNumAttempts.set(originalTestName, numOfAttemptsToFixRetries + 1)
+          } else if (isDisabled) {
+            event.test.mode = 'skip'
+          }
+        }
 
         if (this.isKnownTestsEnabled) {
-          const originalTestName = removeEfdStringFromTestName(testName)
           isNewTest = retriedTestsToNumAttempts.has(originalTestName)
           if (isNewTest) {
             numEfdRetry = retriedTestsToNumAttempts.get(originalTestName)
             retriedTestsToNumAttempts.set(originalTestName, numEfdRetry + 1)
           }
         }
+
         const isJestRetry = event.test?.invocations > 1
         asyncResource.runInAsyncScope(() => {
           testStartCh.publish({
-            name: removeEfdStringFromTestName(testName),
+            name: originalTestName,
             suite: this.testSuite,
             testSourceFile: this.testSourceFile,
             displayName: this.displayName,
@@ -286,34 +345,46 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             frameworkVersion: jestVersion,
             isNew: isNewTest,
             isEfdRetry: numEfdRetry > 0,
-            isJestRetry
+            isAttemptToFix,
+            isAttemptToFixRetry: numOfAttemptsToFixRetries > 0,
+            isJestRetry,
+            isDisabled,
+            isQuarantined
           })
           originalTestFns.set(event.test, event.test.fn)
           event.test.fn = asyncResource.bind(event.test.fn)
         })
       }
+
       if (event.name === 'add_test') {
+        const originalTestName = this.getTestNameFromAddTestEvent(event, state)
+
+        const isSkipped = event.mode === 'todo' || event.mode === 'skip'
+        if (this.isTestManagementTestsEnabled) {
+          const isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(originalTestName)
+          if (isAttemptToFix && !isSkipped && !retriedTestsToNumAttempts.has(originalTestName)) {
+            retriedTestsToNumAttempts.set(originalTestName, 0)
+            this.retryTest(
+              event.testName,
+              testManagementAttemptToFixRetries,
+              addAttemptToFixStringToTestName,
+              'Test Management (Attempt to Fix)',
+              event
+            )
+          }
+        }
         if (this.isKnownTestsEnabled) {
-          const testName = this.getTestNameFromAddTestEvent(event, state)
-          const isNew = !this.knownTestsForThisSuite?.includes(testName)
-          const isSkipped = event.mode === 'todo' || event.mode === 'skip'
-          if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testName)) {
-            retriedTestsToNumAttempts.set(testName, 0)
+          const isNew = !this.knownTestsForThisSuite?.includes(originalTestName)
+          if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(originalTestName)) {
+            retriedTestsToNumAttempts.set(originalTestName, 0)
             if (this.isEarlyFlakeDetectionEnabled) {
-              // Retrying snapshots has proven to be problematic, so we'll skip them for now
-              // We'll still detect new tests, but we won't retry them.
-              // TODO: do not bail out of EFD with the whole test suite
-              if (this.getHasSnapshotTests()) {
-                log.warn('Early flake detection is disabled for suites with snapshots')
-                return
-              }
-              for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
-                if (this.global.test) {
-                  this.global.test(addEfdStringToTestName(event.testName, retryIndex), event.fn, event.timeout)
-                } else {
-                  log.error('Early flake detection could not retry test because global.test is undefined')
-                }
-              }
+              this.retryTest(
+                event.testName,
+                earlyFlakeDetectionNumRetries,
+                addEfdStringToTestName,
+                'Early flake detection',
+                event
+              )
             }
           }
         }
@@ -325,6 +396,32 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
         // restore in case it is retried
         event.test.fn = originalTestFns.get(event.test)
+
+        let attemptToFixPassed = false
+        let failedAllTests = false
+        if (this.isTestManagementTestsEnabled) {
+          const testName = getJestTestName(event.test)
+          const originalTestName = removeAttemptToFixStringFromTestName(testName)
+          const isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(originalTestName)
+          if (isAttemptToFix) {
+            if (attemptToFixRetriedTestsStatuses.has(originalTestName)) {
+              attemptToFixRetriedTestsStatuses.get(originalTestName).push(status)
+            } else {
+              attemptToFixRetriedTestsStatuses.set(originalTestName, [status])
+            }
+            const testStatuses = attemptToFixRetriedTestsStatuses.get(originalTestName)
+            // Check if this is the last attempt to fix.
+            // If it is, we'll set the failedAllTests flag to true if all the tests failed
+            // If all tests passed, we'll set the attemptToFixPassed flag to true
+            if (testStatuses.length === testManagementAttemptToFixRetries + 1) {
+              if (testStatuses.every(status => status === 'fail')) {
+                failedAllTests = true
+              } else if (testStatuses.every(status => status === 'pass')) {
+                attemptToFixPassed = true
+              }
+            }
+          }
+        }
 
         // We'll store the test statuses of the retries
         if (this.isKnownTestsEnabled) {
@@ -338,12 +435,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
               newTestsTestStatuses.set(originalTestName, [status])
             }
           }
-        }
-        let isQuarantined = false
-
-        if (this.isQuarantinedTestsEnabled) {
-          const testName = getJestTestName(event.test)
-          isQuarantined = this.quarantinedTestsForThisSuite?.includes(testName)
         }
 
         const promises = {}
@@ -379,7 +470,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           testFinishCh.publish({
             status,
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite),
-            isQuarantined
+            attemptToFixPassed,
+            failedAllTests
           })
         })
 
@@ -391,12 +483,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const asyncResource = new AsyncResource('bound-anonymous-fn')
         asyncResource.runInAsyncScope(() => {
           testSkippedCh.publish({
-            name: getJestTestName(event.test),
-            suite: this.testSuite,
-            testSourceFile: this.testSourceFile,
-            displayName: this.displayName,
-            frameworkVersion: jestVersion,
-            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
+            test: {
+              name: getJestTestName(event.test),
+              suite: this.testSuite,
+              testSourceFile: this.testSourceFile,
+              displayName: this.displayName,
+              frameworkVersion: jestVersion,
+              testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
+            },
+            isDisabled: this.testManagementTestsForThisSuite?.disabled?.includes(getJestTestName(event.test))
           })
         })
       }
@@ -528,7 +623,8 @@ function cliWrapper (cli, jestVersion) {
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
         earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
-        isQuarantinedTestsEnabled = libraryConfig.isQuarantinedTestsEnabled
+        isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
+        testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
       }
     } catch (err) {
       log.error('Jest library configuration error', err)
@@ -576,22 +672,22 @@ function cliWrapper (cli, jestVersion) {
       }
     }
 
-    if (isQuarantinedTestsEnabled) {
-      const quarantinedTestsPromise = new Promise((resolve) => {
+    if (isTestManagementTestsEnabled) {
+      const testManagementTestsPromise = new Promise((resolve) => {
         onDone = resolve
       })
 
       sessionAsyncResource.runInAsyncScope(() => {
-        quarantinedTestsCh.publish({ onDone })
+        testManagementTestsCh.publish({ onDone })
       })
 
       try {
-        const { err, quarantinedTests: receivedQuarantinedTests } = await quarantinedTestsPromise
+        const { err, testManagementTests: receivedTestManagementTests } = await testManagementTestsPromise
         if (!err) {
-          quarantinedTests = receivedQuarantinedTests
+          testManagementTests = receivedTestManagementTests
         }
       } catch (err) {
-        log.error('Jest quarantined tests error', err)
+        log.error('Jest test management tests error', err)
       }
     }
 
@@ -664,7 +760,7 @@ function cliWrapper (cli, jestVersion) {
         error,
         isEarlyFlakeDetectionEnabled,
         isEarlyFlakeDetectionFaulty,
-        isQuarantinedTestsEnabled,
+        isTestManagementTestsEnabled,
         onDone
       })
     })
@@ -687,7 +783,7 @@ function cliWrapper (cli, jestVersion) {
     if (isEarlyFlakeDetectionEnabled) {
       let numFailedTestsToIgnore = 0
       for (const testStatuses of newTestsTestStatuses.values()) {
-        const { pass, fail } = getEfdStats(testStatuses)
+        const { pass, fail } = getTestStats(testStatuses)
         if (pass > 0) { // as long as one passes, we'll consider the test passed
           numFailedTestsToIgnore += fail
         }
@@ -698,33 +794,45 @@ function cliWrapper (cli, jestVersion) {
       }
     }
 
-    if (isQuarantinedTestsEnabled) {
+    if (isTestManagementTestsEnabled) {
       const failedTests = result
         .results
         .testResults.flatMap(({ testResults, testFilePath: testSuiteAbsolutePath }) => (
-          testResults.map(({ fullName: testName, status }) => ({ testName, testSuiteAbsolutePath, status }))
+          testResults.map(({ fullName: testName, status }) => (
+            { testName, testSuiteAbsolutePath, status }
+          ))
         ))
         .filter(({ status }) => status === 'failed')
 
       let numFailedQuarantinedTests = 0
+      let numFailedQuarantinedOrDisabledAttemptedToFixTests = 0
 
       for (const { testName, testSuiteAbsolutePath } of failedTests) {
         const testSuite = getTestSuitePath(testSuiteAbsolutePath, result.globalConfig.rootDir)
-        const isQuarantined = quarantinedTests
+        const originalName = removeAttemptToFixStringFromTestName(testName)
+        const testManagementTest = testManagementTests
           ?.jest
           ?.suites
           ?.[testSuite]
           ?.tests
-          ?.[testName]
+          ?.[originalName]
           ?.properties
-          ?.quarantined
-        if (isQuarantined) {
+        // This uses `attempt_to_fix` because this is always the main process and it's not formatted in camelCase
+        if (testManagementTest?.attempt_to_fix && (testManagementTest?.quarantined || testManagementTest?.disabled)) {
+          numFailedQuarantinedOrDisabledAttemptedToFixTests++
+        } else if (testManagementTest?.quarantined) {
           numFailedQuarantinedTests++
         }
       }
 
       // If every test that failed was quarantined, we'll consider the suite passed
-      if (numFailedQuarantinedTests !== 0 && result.results.numFailedTests === numFailedQuarantinedTests) {
+      // Note that if a test is attempted to fix,
+      // it's considered quarantined both if it's disabled and if it's quarantined (it'll run but its status is ignored)
+      if (
+        (numFailedQuarantinedOrDisabledAttemptedToFixTests !== 0 || numFailedQuarantinedTests !== 0) &&
+        result.results.numFailedTests ===
+          numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
+      ) {
         result.results.success = true
       }
     }
@@ -922,8 +1030,9 @@ addHook({
       _ddFlakyTestRetriesCount,
       _ddIsDiEnabled,
       _ddIsKnownTestsEnabled,
-      _ddIsQuarantinedTestsEnabled,
-      _ddQuarantinedTests,
+      _ddIsTestManagementTestsEnabled,
+      _ddTestManagementTests,
+      _ddTestManagementAttemptToFixRetries,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 
@@ -1037,7 +1146,7 @@ addHook({
 /*
 * This hook does three things:
 * - Pass known tests to the workers.
-* - Pass quarantined tests to the workers.
+* - Pass test management tests to the workers.
 * - Receive trace, coverage and logs payloads from the workers.
 */
 addHook({
@@ -1047,7 +1156,7 @@ addHook({
 }, (childProcessWorker) => {
   const ChildProcessWorker = childProcessWorker.default
   shimmer.wrap(ChildProcessWorker.prototype, 'send', send => function (request) {
-    if (!isKnownTestsEnabled && !isQuarantinedTestsEnabled) {
+    if (!isKnownTestsEnabled && !isTestManagementTestsEnabled) {
       return send.apply(this, arguments)
     }
     const [type] = request
@@ -1068,14 +1177,14 @@ addHook({
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
       const suiteKnownTests = knownTests?.jest?.[testSuite] || []
 
-      const suiteQuarantinedTests = quarantinedTests.jest?.suites?.[testSuite]?.tests || {}
+      const suiteTestManagementTests = testManagementTests.jest?.suites?.[testSuite]?.tests || {}
 
       args[0].config = {
         ...config,
         testEnvironmentOptions: {
           ...config.testEnvironmentOptions,
           _ddKnownTests: suiteKnownTests,
-          _ddQuarantinedTests: suiteQuarantinedTests
+          _ddTestManagementTests: suiteTestManagementTests
         }
       }
     }

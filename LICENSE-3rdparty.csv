@@ -2,7 +2,7 @@ Component,Origin,License,Copyright
 require,@datadog/libdatadog,Apache license 2.0,Copyright 2024 Datadog Inc.
 require,@datadog/native-appsec,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@datadog/native-metrics,Apache license 2.0,Copyright 2018 Datadog Inc.
-require,@datadog/native-iast-rewriter,Apache license 2.0,Copyright 2018 Datadog Inc.
+require,@datadog/wasm-js-rewriter,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@datadog/native-iast-taint-tracking,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@datadog/pprof,Apache license 2.0,Copyright 2019 Google Inc.
 require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
@@ -32,6 +32,7 @@ require,shell-quote,mit,Copyright (c) 2013 James Halliday
 require,source-map,BSD-3-Clause,Copyright (c) 2009-2011, Mozilla Foundation and contributors
 require,ttl-set,MIT,Copyright (c) 2024 Thomas Watson
 dev,@apollo/server,MIT,Copyright (c) 2016-2020 Apollo Graph, Inc. (Formerly Meteor Development Group, Inc.)
+dev,@babel/helpers,MIT,Copyright (c) 2014-present Sebastian McKenzie and other contributors
 dev,@types/node,MIT,Copyright Authors
 dev,@eslint/eslintrc,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,@eslint/js,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>

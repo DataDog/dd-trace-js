@@ -20,7 +20,7 @@ jobs:
   aerospike:
     strategy:
       matrix:
-        node-version: [16]
+        node-version: [eol]
         range: ['>=4.0.0 <5.2.0']
         aerospike-image: [ce-5.7.0.15]
         test-image: [ubuntu-22.04]
@@ -58,9 +58,9 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/testagent/start
-      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
+      - uses: ./.github/actions/node
         with:
-          node-version: ${{ matrix.node-version }}
+          version: ${{ matrix.node-version }}
       - run: yarn config set ignore-engines true
       - name: Install dependencies
         uses: ./.github/actions/install
@@ -124,7 +124,7 @@ jobs:
   aws-sdk:
     strategy:
       matrix:
-        node-version: ['18', 'latest']
+        node-version: [oldest, 'latest']
     runs-on: ubuntu-latest
     services:
       localstack:
@@ -163,9 +163,9 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/testagent/start
-      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
+      - uses: ./.github/actions/node
         with:
-          node-version: ${{ matrix.node-version }}
+          version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - if: always()
@@ -256,7 +256,7 @@ jobs:
   couchbase:
     strategy:
       matrix:
-        node-version: [16]
+        node-version: [eol]
         range: ['^2.6.12', '^3.0.7', '>=4.0.0 <4.2.0']
         include:
           - node-version: 18
@@ -276,9 +276,9 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/testagent/start
-      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
+      - uses: ./.github/actions/node
         with:
-          node-version: ${{ matrix.node-version }}
+          version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
       - run: yarn config set ignore-engines true
       - run: yarn test:plugins:ci --ignore-engines
@@ -440,6 +440,14 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test
 
+  google-cloud-vertexai:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: google-cloud-vertexai
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/plugins/test
+
   graphql:
     runs-on: ubuntu-latest
     env:
@@ -467,16 +475,16 @@ jobs:
   http:
     strategy:
       matrix:
-        node-version: ['18', '20', 'latest']
+        node-version: [oldest, maintenance, 'latest']
     runs-on: ubuntu-latest
     env:
       PLUGINS: http
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/testagent/start
-      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
+      - uses: ./.github/actions/node
         with:
-          node-version: ${{ matrix.node-version }}
+          version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - if: always()
@@ -845,7 +853,7 @@ jobs:
           - 1521:1521
           - 5500:5500
       testagent:
-        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.16.0
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.21.1
         env:
           LOG_LEVEL: DEBUG
           TRACE_LANGUAGE: javascript
@@ -867,10 +875,9 @@ jobs:
           curl -LO https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
           tar -xf node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
+      - uses: ./.github/actions/node
         with:
-          cache: yarn
-          node-version: '16'
+          version: eol
       - uses: ./.github/actions/install
       - run: yarn config set ignore-engines true
       - run: yarn services --ignore-engines

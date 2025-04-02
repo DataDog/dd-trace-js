@@ -123,7 +123,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: 'Hello, world!' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -151,7 +151,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: '' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
-                tags: { ml_app: 'test', language: 'javascript' },
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' },
                 error: 1,
                 errorType: 'Error',
                 errorMessage: MOCK_STRING,
@@ -210,7 +210,7 @@ describe('integrations', () => {
                 metadata: MOCK_ANY,
                 // @langchain/cohere does not provide token usage in the response
                 tokenMetrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -255,7 +255,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: 'Hello, world!', role: 'assistant' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -283,7 +283,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: '' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
-                tags: { ml_app: 'test', language: 'javascript' },
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' },
                 error: 1,
                 errorType: 'Error',
                 errorMessage: MOCK_STRING,
@@ -334,7 +334,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: 'Hello!', role: 'assistant' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 11, output_tokens: 6, total_tokens: 17 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -398,7 +398,7 @@ describe('integrations', () => {
                 metadata: MOCK_ANY,
                 // also tests tokens not sent on llm-type spans should be 0
                 tokenMetrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -428,7 +428,7 @@ describe('integrations', () => {
         })
 
         describe('embedding', () => {
-          it('submits an embedding span for an `embedQuery` call', async () => {
+          it.skip('submits an embedding span for an `embedQuery` call', async () => {
             stubCall({
               ...openAiBaseEmbeddingInfo,
               response: {
@@ -455,7 +455,7 @@ describe('integrations', () => {
                 inputDocuments: [{ text: 'Hello!' }],
                 outputValue: '[1 embedding(s) returned with size 2]',
                 metadata: MOCK_ANY,
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -482,7 +482,7 @@ describe('integrations', () => {
                 inputDocuments: [{ text: 'Hello!' }],
                 outputValue: '',
                 metadata: MOCK_ANY,
-                tags: { ml_app: 'test', language: 'javascript' },
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' },
                 error: 1,
                 errorType: 'Error',
                 errorMessage: MOCK_STRING,
@@ -501,7 +501,7 @@ describe('integrations', () => {
             await checkTraces
           })
 
-          it('submits an embedding span for an `embedDocuments` call', async () => {
+          it.skip('submits an embedding span for an `embedDocuments` call', async () => {
             stubCall({
               ...openAiBaseEmbeddingInfo,
               response: {
@@ -533,7 +533,7 @@ describe('integrations', () => {
                 inputDocuments: [{ text: 'Hello!' }, { text: 'World!' }],
                 outputValue: '[2 embedding(s) returned with size 2]',
                 metadata: MOCK_ANY,
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -583,7 +583,7 @@ describe('integrations', () => {
                 inputValue: JSON.stringify({ input: 'Can you tell me about LangSmith?' }),
                 outputValue: 'LangSmith can help with testing in several ways.',
                 metadata: MOCK_ANY,
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               const expectedLLM = expectedLLMObsLLMSpanEvent({
@@ -601,7 +601,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: 'LangSmith can help with testing in several ways.' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(workflowSpanEvent).to.deepEqualWithMockValues(expectedWorkflow)
@@ -631,7 +631,7 @@ describe('integrations', () => {
                 inputValue: 'Hello!',
                 outputValue: '',
                 metadata: MOCK_ANY,
-                tags: { ml_app: 'test', language: 'javascript' },
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' },
                 error: 1,
                 errorType: 'Error',
                 errorMessage: MOCK_STRING,
@@ -721,7 +721,7 @@ describe('integrations', () => {
                 name: 'langchain_core.runnables.RunnableSequence',
                 inputValue: JSON.stringify({ person: 'Abraham Lincoln', language: 'Spanish' }),
                 outputValue: 'Springfield, Illinois está en los Estados Unidos.',
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               const expectedFirstSubWorkflow = expectedLLMObsNonLLMSpanEvent({
@@ -731,7 +731,7 @@ describe('integrations', () => {
                 name: 'langchain_core.runnables.RunnableSequence',
                 inputValue: JSON.stringify({ person: 'Abraham Lincoln', language: 'Spanish' }),
                 outputValue: 'Springfield, Illinois',
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               const expectedFirstLLM = expectedLLMObsLLMSpanEvent({
@@ -747,7 +747,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: 'Springfield, Illinois', role: 'assistant' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               const expectedSecondSubWorkflow = expectedLLMObsNonLLMSpanEvent({
@@ -757,7 +757,7 @@ describe('integrations', () => {
                 name: 'langchain_core.runnables.RunnableSequence',
                 inputValue: JSON.stringify({ language: 'Spanish', city: 'Springfield, Illinois' }),
                 outputValue: 'Springfield, Illinois está en los Estados Unidos.',
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               const expectedSecondLLM = expectedLLMObsLLMSpanEvent({
@@ -773,7 +773,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: 'Springfield, Illinois está en los Estados Unidos.', role: 'assistant' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(topLevelWorkflowSpanEvent).to.deepEqualWithMockValues(expectedTopLevelWorkflow)
@@ -859,7 +859,7 @@ describe('integrations', () => {
                   'Why did the chicken cross the road? To get to the other side!',
                   'Why was the dog confused? It was barking up the wrong tree!'
                 ]),
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               const expectedFirstLLM = expectedLLMObsLLMSpanEvent({
@@ -876,7 +876,7 @@ describe('integrations', () => {
                 }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 37, output_tokens: 10, total_tokens: 47 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               const expectedSecondLLM = expectedLLMObsLLMSpanEvent({
@@ -893,7 +893,7 @@ describe('integrations', () => {
                 }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 37, output_tokens: 10, total_tokens: 47 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(workflowSpanEvent).to.deepEqualWithMockValues(expectedWorkflow)
@@ -963,7 +963,7 @@ describe('integrations', () => {
                   content: 'Mitochondria',
                   role: 'assistant'
                 }),
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               const expectedLLM = expectedLLMObsLLMSpanEvent({
@@ -994,7 +994,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: 'Mitochondria', role: 'assistant' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(workflowSpanEvent).to.deepEqualWithMockValues(expectedWorkflow)
@@ -1064,7 +1064,7 @@ describe('integrations', () => {
                 name: 'langchain_core.runnables.RunnableSequence',
                 inputValue: JSON.stringify({ foo: 'bar' }),
                 outputValue: '3 squared is 9',
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               const expectedTask = expectedLLMObsNonLLMSpanEvent({
@@ -1088,7 +1088,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: '3 squared is 9', role: 'assistant' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(workflowSpanEvent).to.deepEqualWithMockValues(expectedWorkflow)

@@ -6,8 +6,9 @@ const satisfies = require('semifies')
 const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
-const checkRequireCache = require('../check_require_cache')
+const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
+const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
 
 const {
   DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
@@ -60,6 +61,8 @@ for (const packageName of names) {
   let hook = hooks[packageName]
 
   if (typeof hook === 'object') {
+    if (hook.serverless === false && isInServerlessEnvironment()) continue
+
     hookOptions.internals = hook.esmFirst
     hook = hook.fn
   }
@@ -155,7 +158,7 @@ for (const packageName of names) {
 }
 
 function matchVersion (version, ranges) {
-  return !version || (ranges && ranges.some(range => satisfies(version, range)))
+  return !version || !ranges || ranges.some(range => satisfies(version, range))
 }
 
 function getVersion (moduleBaseDir) {

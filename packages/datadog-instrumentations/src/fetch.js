@@ -17,7 +17,7 @@ if (globalThis.fetch) {
 
     const ch = tracingChannel('apm:fetch:request')
     const wrapFetch = createWrapFetch(globalThis.Request, ch, () => {
-      channel('dd-trace:instrumentation:load').publish({ name: 'fetch' })
+      channel('dd-trace:instrumentation:load').publish({ name: 'global:fetch' })
     })
 
     fetch = wrapFetch(globalFetch)

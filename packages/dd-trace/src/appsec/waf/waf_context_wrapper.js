@@ -17,14 +17,18 @@ class WAFContextWrapper {
     this.wafTimeout = wafTimeout
     this.wafVersion = wafVersion
     this.rulesVersion = rulesVersion
-    this.addressesToSkip = new Set()
     this.knownAddresses = knownAddresses
+    this.addressesToSkip = new Set()
     this.cachedUserIdActions = new Map()
   }
 
   run ({ persistent, ephemeral }, raspRule) {
     if (this.ddwafContext.disposed) {
       log.warn('[ASM] Calling run on a disposed context')
+      if (raspRule) {
+        Reporter.reportRaspRuleSkipped(raspRule, 'after-request')
+      }
+
       return
     }
 
@@ -77,12 +81,43 @@ class WAFContextWrapper {
 
     if (!payloadHasData) return
 
+    const metrics = {
+      rulesVersion: this.rulesVersion,
+      wafVersion: this.wafVersion,
+      wafTimeout: false,
+      duration: 0,
+      durationExt: 0,
+      blockTriggered: false,
+      ruleTriggered: false,
+      errorCode: null,
+      maxTruncatedString: null,
+      maxTruncatedContainerSize: null,
+      maxTruncatedContainerDepth: null
+    }
+
     try {
       const start = process.hrtime.bigint()
 
       const result = this.ddwafContext.run(payload, this.wafTimeout)
 
       const end = process.hrtime.bigint()
+
+      metrics.durationExt = parseInt(end - start) / 1e3
+
+      if (typeof result.errorCode === 'number' && result.errorCode < 0) {
+        const error = new Error('WAF code error')
+        error.errorCode = result.errorCode
+
+        throw error
+      }
+
+      if (result.metrics) {
+        const { maxTruncatedString, maxTruncatedContainerSize, maxTruncatedContainerDepth } = result.metrics
+
+        if (maxTruncatedString) metrics.maxTruncatedString = maxTruncatedString
+        if (maxTruncatedContainerSize) metrics.maxTruncatedContainerSize = maxTruncatedContainerSize
+        if (maxTruncatedContainerDepth) metrics.maxTruncatedContainerDepth = maxTruncatedContainerDepth
+      }
 
       this.addressesToSkip = newAddressesToSkip
 
@@ -96,15 +131,10 @@ class WAFContextWrapper {
         this.setUserIdCache(userId, result)
       }
 
-      Reporter.reportMetrics({
-        duration: result.totalRuntime / 1e3,
-        durationExt: parseInt(end - start) / 1e3,
-        rulesVersion: this.rulesVersion,
-        ruleTriggered,
-        blockTriggered,
-        wafVersion: this.wafVersion,
-        wafTimeout: result.timeout
-      }, raspRule)
+      metrics.duration = result.totalRuntime / 1e3
+      metrics.blockTriggered = blockTriggered
+      metrics.ruleTriggered = ruleTriggered
+      metrics.wafTimeout = result.timeout
 
       if (ruleTriggered) {
         Reporter.reportAttack(JSON.stringify(result.events))
@@ -112,13 +142,17 @@ class WAFContextWrapper {
 
       Reporter.reportDerivatives(result.derivatives)
 
+      return result.actions
+    } catch (err) {
+      log.error('[ASM] Error while running the AppSec WAF', err)
+
+      metrics.errorCode = err.errorCode ?? -127
+    } finally {
       if (wafRunFinished.hasSubscribers) {
         wafRunFinished.publish({ payload })
       }
 
-      return result.actions
-    } catch (err) {
-      log.error('[ASM] Error while running the AppSec WAF', err)
+      Reporter.reportMetrics(metrics, raspRule)
     }
   }
 

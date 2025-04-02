@@ -14,6 +14,7 @@ const Span = require('../opentracing/span')
 
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
+const telemetry = require('./telemetry')
 
 const LLMObsTagger = require('./tagger')
 
@@ -88,6 +89,8 @@ class LLMObs extends NoopLLMObs {
 
     const kind = validateKind(options.kind) // will throw if kind is undefined or not an expected kind
 
+    telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: false, kind })
+
     // name is required for spans generated with `trace`
     // while `kind` is required, this should never throw (as otherwise it would have thrown above)
     const name = options.name || kind
@@ -102,12 +105,12 @@ class LLMObs extends NoopLLMObs {
 
     if (fn.length > 1) {
       return this._tracer.trace(name, spanOptions, (span, cb) =>
-        this._activate(span, { kind, options: llmobsOptions }, () => fn(span, cb))
+        this._activate(span, { kind, ...llmobsOptions }, () => fn(span, cb))
       )
     }
 
     return this._tracer.trace(name, spanOptions, span =>
-      this._activate(span, { kind, options: llmobsOptions }, () => fn(span))
+      this._activate(span, { kind, ...llmobsOptions }, () => fn(span))
     )
   }
 
@@ -133,6 +136,8 @@ class LLMObs extends NoopLLMObs {
     const llmobs = this
 
     function wrapped () {
+      telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: false, kind })
+
       const span = llmobs._tracer.scope().active()
       const fnArgs = arguments
 
@@ -161,7 +166,7 @@ class LLMObs extends NoopLLMObs {
       }
 
       try {
-        const result = llmobs._activate(span, { kind, options: llmobsOptions }, () => fn.apply(this, fnArgs))
+        const result = llmobs._activate(span, { kind, ...llmobsOptions }, () => fn.apply(this, fnArgs))
 
         if (result && typeof result.then === 'function') {
           return result.then(
@@ -425,6 +430,7 @@ class LLMObs extends NoopLLMObs {
       modelProvider,
       sessionId,
       mlApp,
+      _decorator,
       ...spanOptions
     } = options
 
@@ -433,6 +439,7 @@ class LLMObs extends NoopLLMObs {
       modelName,
       modelProvider,
       sessionId,
+      _decorator,
       spanOptions
     }
   }

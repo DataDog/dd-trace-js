@@ -1,8 +1,13 @@
 'use strict'
 
 const { DD_TELEMETRY_REQUEST_METRICS } = require('./common')
-const { addRaspRequestMetrics, trackRaspMetrics } = require('./rasp')
-const { incrementMissingUserId, incrementMissingUserLogin } = require('./user')
+const { incrementMissingUserId, incrementMissingUserLogin, incrementSdkEvent } = require('./user')
+const {
+  addRaspRequestMetrics,
+  trackRaspMetrics,
+  trackRaspRuleMatch,
+  trackRaspRuleSkipped
+} = require('./rasp')
 const {
   addWafRequestMetrics,
   trackWafMetrics,
@@ -30,7 +35,14 @@ function newStore () {
       durationExt: 0,
       raspDuration: 0,
       raspDurationExt: 0,
-      raspEvalCount: 0
+      raspEvalCount: 0,
+      wafTimeouts: 0,
+      raspTimeouts: 0,
+      wafErrorCode: null,
+      raspErrorCode: null,
+      wafVersion: null,
+      rulesVersion: null,
+      ruleTriggered: null
     }
   }
 }
@@ -54,7 +66,21 @@ function updateRaspRequestsMetricTags (metrics, req, raspRule) {
 
   if (!enabled) return
 
-  trackRaspMetrics(metrics, raspRule)
+  trackRaspMetrics(store, metrics, raspRule)
+}
+
+function updateRaspRuleMatchMetricTags (req, raspRule, blockTriggered, blocked) {
+  if (!enabled || !req) return
+
+  const store = getStore(req)
+
+  trackRaspRuleMatch(store, raspRule, blockTriggered, blocked)
+}
+
+function updateRaspRuleSkippedMetricTags (raspRule, reason) {
+  if (!enabled) return
+
+  trackRaspRuleSkipped(raspRule, reason)
 }
 
 function updateWafRequestsMetricTags (metrics, req) {
@@ -70,16 +96,30 @@ function updateWafRequestsMetricTags (metrics, req) {
   return trackWafMetrics(store, metrics)
 }
 
-function incrementWafInitMetric (wafVersion, rulesVersion) {
+function updateRateLimitedMetric (req) {
   if (!enabled) return
 
-  incrementWafInit(wafVersion, rulesVersion)
+  const store = getStore(req)
+  trackWafMetrics(store, { rateLimited: true })
 }
 
-function incrementWafUpdatesMetric (wafVersion, rulesVersion) {
+function updateBlockFailureMetric (req) {
   if (!enabled) return
 
-  incrementWafUpdates(wafVersion, rulesVersion)
+  const store = getStore(req)
+  trackWafMetrics(store, { blockFailed: true })
+}
+
+function incrementWafInitMetric (wafVersion, rulesVersion, success) {
+  if (!enabled) return
+
+  incrementWafInit(wafVersion, rulesVersion, success)
+}
+
+function incrementWafUpdatesMetric (wafVersion, rulesVersion, success) {
+  if (!enabled) return
+
+  incrementWafUpdates(wafVersion, rulesVersion, success)
 }
 
 function incrementWafRequestsMetric (req) {
@@ -103,6 +143,12 @@ function incrementMissingUserIdMetric (framework, eventType) {
   incrementMissingUserId(framework, eventType)
 }
 
+function incrementSdkEventMetric (framework, eventType) {
+  if (!enabled) return
+
+  incrementSdkEvent(framework, eventType)
+}
+
 function getRequestMetrics (req) {
   if (req) {
     const store = getStore(req)
@@ -115,12 +161,17 @@ module.exports = {
   disable,
 
   updateWafRequestsMetricTags,
+  updateRateLimitedMetric,
+  updateBlockFailureMetric,
   updateRaspRequestsMetricTags,
+  updateRaspRuleMatchMetricTags,
+  updateRaspRuleSkippedMetricTags,
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,
   incrementMissingUserLoginMetric,
   incrementMissingUserIdMetric,
+  incrementSdkEventMetric,
 
   getRequestMetrics
 }

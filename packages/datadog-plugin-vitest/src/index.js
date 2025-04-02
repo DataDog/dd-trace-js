@@ -20,7 +20,12 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
-  TEST_MANAGEMENT_IS_QUARANTINED
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  TEST_HAS_FAILED_ALL_RETRIES,
+  getLibraryCapabilitiesTags
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -50,18 +55,30 @@ class VitestPlugin extends CiPlugin {
       onDone(!testsForThisTestSuite.includes(testName))
     })
 
-    this.addSub('ci:vitest:test:is-quarantined', ({ quarantinedTests, testSuiteAbsolutePath, testName, onDone }) => {
+    this.addSub('ci:vitest:test:is-attempt-to-fix', ({
+      testManagementTests,
+      testSuiteAbsolutePath,
+      testName,
+      onDone
+    }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const isQuarantined = quarantinedTests
-        ?.vitest
-        ?.suites
-        ?.[testSuite]
-        ?.tests
-        ?.[testName]
-        ?.properties
-        ?.quarantined
+      const { isAttemptToFix } = this.getTestProperties(testManagementTests, testSuite, testName)
 
-      onDone(isQuarantined ?? false)
+      onDone(isAttemptToFix ?? false)
+    })
+
+    this.addSub('ci:vitest:test:is-disabled', ({ testManagementTests, testSuiteAbsolutePath, testName, onDone }) => {
+      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const { isDisabled } = this.getTestProperties(testManagementTests, testSuite, testName)
+
+      onDone(isDisabled)
+    })
+
+    this.addSub('ci:vitest:test:is-quarantined', ({ testManagementTests, testSuiteAbsolutePath, testName, onDone }) => {
+      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const { isQuarantined } = this.getTestProperties(testManagementTests, testSuite, testName)
+
+      onDone(isQuarantined)
     })
 
     this.addSub('ci:vitest:is-early-flake-detection-faulty', ({
@@ -82,9 +99,12 @@ class VitestPlugin extends CiPlugin {
       testSuiteAbsolutePath,
       isRetry,
       isNew,
+      isAttemptToFix,
       isQuarantined,
+      isDisabled,
       mightHitProbe,
-      isRetryReasonEfd
+      isRetryReasonEfd,
+      isRetryReasonAttemptToFix
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const store = storage('legacy').getStore()
@@ -101,8 +121,17 @@ class VitestPlugin extends CiPlugin {
       if (isRetryReasonEfd) {
         extraTags[TEST_RETRY_REASON] = 'efd'
       }
+      if (isAttemptToFix) {
+        extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
+      }
+      if (isRetryReasonAttemptToFix) {
+        extraTags[TEST_RETRY_REASON] = 'attempt_to_fix'
+      }
       if (isQuarantined) {
         extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
+      }
+      if (isDisabled) {
+        extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
       }
 
       const span = this.startTestSpan(
@@ -121,7 +150,7 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:test:finish-time', ({ status, task }) => {
+    this.addSub('ci:vitest:test:finish-time', ({ status, task, attemptToFixPassed }) => {
       const store = storage('legacy').getStore()
       const span = store?.span
 
@@ -129,6 +158,11 @@ class VitestPlugin extends CiPlugin {
       // this is because the test might fail at a `afterEach` hook
       if (span) {
         span.setTag(TEST_STATUS, status)
+
+        if (attemptToFixPassed) {
+          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+        }
+
         this.taskToFinishTime.set(task, span._getTime())
       }
     })
@@ -147,7 +181,7 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:test:error', ({ duration, error, shouldSetProbe, promises }) => {
+    this.addSub('ci:vitest:test:error', ({ duration, error, shouldSetProbe, promises, hasFailedAllRetries }) => {
       const store = storage('legacy').getStore()
       const span = store?.span
 
@@ -169,6 +203,9 @@ class VitestPlugin extends CiPlugin {
         if (error) {
           span.setTag('error', error)
         }
+        if (hasFailedAllRetries) {
+          span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+        }
         if (duration) {
           span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
         } else {
@@ -178,7 +215,7 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:test:skip', ({ testName, testSuiteAbsolutePath, isNew }) => {
+    this.addSub('ci:vitest:test:skip', ({ testName, testSuiteAbsolutePath, isNew, isDisabled }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const testSpan = this.startTestSpan(
         testName,
@@ -188,6 +225,7 @@ class VitestPlugin extends CiPlugin {
           [TEST_SOURCE_FILE]: testSuite,
           [TEST_SOURCE_START]: 1, // we can't get the proper start line in vitest
           [TEST_STATUS]: 'skip',
+          ...(isDisabled ? { [TEST_MANAGEMENT_IS_DISABLED]: 'true' } : {}),
           ...(isNew ? { [TEST_IS_NEW]: 'true' } : {})
         }
       )
@@ -197,7 +235,10 @@ class VitestPlugin extends CiPlugin {
       testSpan.finish()
     })
 
-    this.addSub('ci:vitest:test-suite:start', ({ testSuiteAbsolutePath, frameworkVersion }) => {
+    this.addSub('ci:vitest:test-suite:start', ({
+      testSuiteAbsolutePath,
+      frameworkVersion
+    }) => {
       this.command = process.env.DD_CIVISIBILITY_TEST_COMMAND
       this.frameworkVersion = frameworkVersion
       const testSessionSpanContext = this.tracer.extract('text_map', {
@@ -213,8 +254,13 @@ class VitestPlugin extends CiPlugin {
           [TEST_SESSION_NAME]: testSessionName
         }
       }
-      if (this.tracer._exporter.setMetadataTags) {
-        this.tracer._exporter.setMetadataTags(metadataTags)
+      if (this.tracer._exporter.addMetadataTags) {
+        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id)
+        metadataTags.test = {
+          ...metadataTags.test,
+          ...libraryCapabilitiesTags
+        }
+        this.tracer._exporter.addMetadataTags(metadataTags)
       }
 
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
@@ -277,7 +323,7 @@ class VitestPlugin extends CiPlugin {
       testCodeCoverageLinesTotal,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
-      isQuarantinedTestsEnabled,
+      isTestManagementTestsEnabled,
       onFinish
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -296,7 +342,7 @@ class VitestPlugin extends CiPlugin {
       if (isEarlyFlakeDetectionFaulty) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
       }
-      if (isQuarantinedTestsEnabled) {
+      if (isTestManagementTestsEnabled) {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
       this.testModuleSpan.finish()
@@ -304,9 +350,19 @@ class VitestPlugin extends CiPlugin {
       this.testSessionSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
-      this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
+      this.telemetry.count(TELEMETRY_TEST_SESSION, {
+        provider: this.ciProviderName,
+        autoInjected: !!process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER
+      })
       this.tracer._exporter.flush(onFinish)
     })
+  }
+
+  getTestProperties (testManagementTests, testSuite, testName) {
+    const { attempt_to_fix: isAttemptToFix, disabled: isDisabled, quarantined: isQuarantined } =
+      testManagementTests?.vitest?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
+
+    return { isAttemptToFix, isDisabled, isQuarantined }
   }
 }
 

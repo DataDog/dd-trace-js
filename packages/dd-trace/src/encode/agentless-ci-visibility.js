@@ -48,8 +48,15 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this.reset()
   }
 
-  setMetadataTags (tags) {
-    this.metadataTags = tags
+  addMetadataTags (tags) {
+    ALLOWED_CONTENT_TYPES.forEach(type => {
+      if (tags[type]) {
+        this.metadataTags[type] = {
+          ...this.metadataTags[type],
+          ...tags[type]
+        }
+      }
+    })
   }
 
   _encodeTestSuite (bytes, content) {

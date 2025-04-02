@@ -367,70 +367,145 @@ describe('dogstatsd', () => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.gauge('test.avg', 10, { foo: 'bar' })
+      client.gauge('test.avg', 10, { foo: 'bar' })
       client.flush()
 
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g|#foo:bar\n')
     })
 
+    it('.gauge() with tags', () => {
+      client = new CustomMetrics({ dogstatsd: {} })
+
+      client.gauge('test.avg', 10, { foo: 'bar' })
+      client.gauge('test.avg', 10, { foo: 'bar', baz: 'qux' })
+      client.gauge('test.avg', 20, { foo: 'bar', baz: 'qux' })
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal([
+        'test.avg:10|g|#foo:bar',
+        'test.avg:20|g|#foo:bar,baz:qux'
+      ].join('\n') + '\n')
+    })
+
     it('.increment()', () => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.increment('test.count', 10)
+      client.increment('test.count', 10)
       client.flush()
 
       expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:10|c\n')
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:20|c\n')
     })
 
     it('.increment() with default', () => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.increment('test.count')
+      client.increment('test.count')
       client.flush()
 
       expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:1|c\n')
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:2|c\n')
+    })
+
+    it('.increment() with tags', () => {
+      client = new CustomMetrics({ dogstatsd: {} })
+
+      client.increment('test.count', 10, { foo: 'bar' })
+      client.increment('test.count', 10, { foo: 'bar', baz: 'qux' })
+      client.increment('test.count', 10, { foo: 'bar', baz: 'qux' })
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal([
+        'test.count:10|c|#foo:bar',
+        'test.count:20|c|#foo:bar,baz:qux'
+      ].join('\n') + '\n')
     })
 
     it('.decrement()', () => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.decrement('test.count', 10)
+      client.decrement('test.count', 10)
       client.flush()
 
       expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:-10|c\n')
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:-20|c\n')
     })
 
     it('.decrement() with default', () => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.decrement('test.count')
+      client.decrement('test.count')
       client.flush()
 
       expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:-1|c\n')
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:-2|c\n')
     })
 
     it('.distribution()', () => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.distribution('test.dist', 10)
+      client.distribution('test.dist', 10)
       client.flush()
 
       expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.dist:10|d\n')
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.dist:10|d\ntest.dist:10|d\n')
     })
 
     it('.histogram()', () => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.histogram('test.histogram', 10)
+      client.histogram('test.histogram', 10)
       client.flush()
 
       expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.histogram:10|h\n')
+      expect(udp4.send.firstCall.args[0].toString()).to.equal([
+        'test.histogram.min:10|g',
+        'test.histogram.max:10|g',
+        'test.histogram.sum:20|c',
+        'test.histogram.total:20|c',
+        'test.histogram.avg:10|g',
+        'test.histogram.count:2|c',
+        'test.histogram.median:10.074696689511441|g',
+        'test.histogram.95percentile:10.074696689511441|g'
+      ].join('\n') + '\n')
+    })
+
+    it('.histogram() with tags', () => {
+      client = new CustomMetrics({ dogstatsd: {} })
+
+      client.histogram('test.histogram', 10, { foo: 'bar' })
+      client.histogram('test.histogram', 10, { foo: 'bar', baz: 'qux' })
+      client.histogram('test.histogram', 10, { foo: 'bar', baz: 'qux' })
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal([
+        'test.histogram.min:10|g|#foo:bar',
+        'test.histogram.max:10|g|#foo:bar',
+        'test.histogram.sum:10|c|#foo:bar',
+        'test.histogram.total:10|c|#foo:bar',
+        'test.histogram.avg:10|g|#foo:bar',
+        'test.histogram.count:1|c|#foo:bar',
+        'test.histogram.median:10.074696689511441|g|#foo:bar',
+        'test.histogram.95percentile:10.074696689511441|g|#foo:bar',
+        'test.histogram.min:10|g|#foo:bar,baz:qux',
+        'test.histogram.max:10|g|#foo:bar,baz:qux',
+        'test.histogram.sum:20|c|#foo:bar,baz:qux',
+        'test.histogram.total:20|c|#foo:bar,baz:qux',
+        'test.histogram.avg:10|g|#foo:bar,baz:qux',
+        'test.histogram.count:2|c|#foo:bar,baz:qux',
+        'test.histogram.median:10.074696689511441|g|#foo:bar,baz:qux',
+        'test.histogram.95percentile:10.074696689511441|g|#foo:bar,baz:qux'
+      ].join('\n') + '\n')
     })
 
     it('should flush via interval', () => {

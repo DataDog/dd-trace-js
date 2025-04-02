@@ -26,7 +26,11 @@ const {
   getFormattedError,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
-  TEST_MANAGEMENT_IS_QUARANTINED
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  TEST_HAS_FAILED_ALL_RETRIES
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -108,7 +112,7 @@ class JestPlugin extends CiPlugin {
       error,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
-      isQuarantinedTestsEnabled,
+      isTestManagementTestsEnabled,
       onDone
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -140,7 +144,7 @@ class JestPlugin extends CiPlugin {
       if (isEarlyFlakeDetectionFaulty) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
       }
-      if (isQuarantinedTestsEnabled) {
+      if (isTestManagementTestsEnabled) {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
 
@@ -150,7 +154,10 @@ class JestPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
 
-      this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
+      this.telemetry.count(TELEMETRY_TEST_SESSION, {
+        provider: this.ciProviderName,
+        autoInjected: !!process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER
+      })
 
       this.tracer._exporter.flush(() => {
         if (onDone) {
@@ -172,7 +179,8 @@ class JestPlugin extends CiPlugin {
         config._ddEarlyFlakeDetectionNumRetries = this.libraryConfig?.earlyFlakeDetectionNumRetries ?? 0
         config._ddRepositoryRoot = this.repositoryRoot
         config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
-        config._ddIsQuarantinedTestsEnabled = this.libraryConfig?.isQuarantinedTestsEnabled ?? false
+        config._ddIsTestManagementTestsEnabled = this.libraryConfig?.isTestManagementEnabled ?? false
+        config._ddTestManagementAttemptToFixRetries = this.libraryConfig?.testManagementAttemptToFixRetries ?? 0
         config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
         config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
         config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
@@ -332,14 +340,22 @@ class JestPlugin extends CiPlugin {
       this.activeTestSpan = span
     })
 
-    this.addSub('ci:jest:test:finish', ({ status, testStartLine, isQuarantined }) => {
+    this.addSub('ci:jest:test:finish', ({
+      status,
+      testStartLine,
+      attemptToFixPassed,
+      failedAllTests
+    }) => {
       const span = storage('legacy').getStore().span
       span.setTag(TEST_STATUS, status)
       if (testStartLine) {
         span.setTag(TEST_SOURCE_START, testStartLine)
       }
-      if (isQuarantined) {
-        span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+      if (attemptToFixPassed) {
+        span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+      }
+      if (failedAllTests) {
+        span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
       }
 
       const spanTags = span.context()._tags
@@ -377,9 +393,17 @@ class JestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:jest:test:skip', (test) => {
+    this.addSub('ci:jest:test:skip', ({
+      test,
+      isDisabled
+    }) => {
       const span = this.startTestSpan(test)
       span.setTag(TEST_STATUS, 'skip')
+
+      if (isDisabled) {
+        span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
+      }
+
       span.finish()
     })
   }
@@ -395,7 +419,11 @@ class JestPlugin extends CiPlugin {
       testSourceFile,
       isNew,
       isEfdRetry,
-      isJestRetry
+      isAttemptToFix,
+      isAttemptToFixRetry,
+      isJestRetry,
+      isDisabled,
+      isQuarantined
     } = test
 
     const extraTags = {
@@ -411,6 +439,23 @@ class JestPlugin extends CiPlugin {
 
     if (displayName) {
       extraTags[JEST_DISPLAY_NAME] = displayName
+    }
+
+    if (isAttemptToFix) {
+      extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
+    }
+
+    if (isAttemptToFixRetry) {
+      extraTags[TEST_IS_RETRY] = 'true'
+      extraTags[TEST_RETRY_REASON] = 'attempt_to_fix'
+    }
+
+    if (isDisabled) {
+      extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
+    }
+
+    if (isQuarantined) {
+      extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
     }
 
     if (isNew) {

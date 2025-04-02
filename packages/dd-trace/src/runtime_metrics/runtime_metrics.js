@@ -4,13 +4,14 @@
 
 const v8 = require('v8')
 const os = require('os')
-const { DogStatsDClient } = require('../dogstatsd')
+const { DogStatsDClient, MetricsAggregationClient } = require('../dogstatsd')
 const log = require('../log')
 const Histogram = require('../histogram')
 const { performance, PerformanceObserver } = require('perf_hooks')
 
 const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
-const INTERVAL = 10 * 1000
+const { DD_RUNTIME_METRICS_FLUSH_INTERVAL = '10000' } = process.env
+const INTERVAL = parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
 
 // Node >=16 has PerformanceObserver with `gc` type, but <16.7 had a critical bug.
 // See: https://github.com/nodejs/node/issues/39548
@@ -25,9 +26,6 @@ let interval
 let client
 let time
 let cpuUsage
-let gauges
-let counters
-let histograms
 let elu
 
 reset()
@@ -49,7 +47,7 @@ const runtimeMetrics = module.exports = {
       nativeMetrics = null
     }
 
-    client = new DogStatsDClient(clientConfig)
+    client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
 
     time = process.hrtime()
 
@@ -98,42 +96,19 @@ const runtimeMetrics = module.exports = {
   },
 
   boolean (name, value, tag) {
-    this.gauge(name, value ? 1 : 0, tag)
+    client && client.boolean(name, value, tag)
   },
 
   histogram (name, value, tag) {
-    if (!client) return
-
-    histograms[name] = histograms[name] || new Map()
-
-    if (!histograms[name].has(tag)) {
-      histograms[name].set(tag, new Histogram())
-    }
-
-    histograms[name].get(tag).record(value)
+    client && client.histogram(name, value, tag)
   },
 
   count (name, count, tag, monotonic = false) {
-    if (!client) return
-    if (typeof tag === 'boolean') {
-      monotonic = tag
-      tag = undefined
-    }
-
-    const map = monotonic ? counters : gauges
-
-    map[name] = map[name] || new Map()
-
-    const value = map[name].get(tag) || 0
-
-    map[name].set(tag, value + count)
+    client && client.count(name, count, tag, monotonic)
   },
 
   gauge (name, value, tag) {
-    if (!client) return
-
-    gauges[name] = gauges[name] || new Map()
-    gauges[name].set(tag, value)
+    client && client.gauge(name, value, tag)
   },
 
   increment (name, tag, monotonic) {
@@ -150,9 +125,6 @@ function reset () {
   client = null
   time = null
   cpuUsage = null
-  gauges = {}
-  counters = {}
-  histograms = {}
   nativeMetrics = null
   gcObserver && gcObserver.disconnect()
   gcObserver = null
@@ -240,37 +212,10 @@ function captureGCMetrics () {
   histogram('runtime.node.gc.pause', pauseAll)
 
   for (const type in pause) {
-    histogram('runtime.node.gc.pause.by.type', pause[type], [`gc_type:${type}`])
+    histogram('runtime.node.gc.pause.by.type', pause[type], `gc_type:${type}`)
   }
 
   gcProfiler.start()
-}
-
-function captureGauges () {
-  Object.keys(gauges).forEach(name => {
-    gauges[name].forEach((value, tag) => {
-      client.gauge(name, value, tag && [tag])
-    })
-  })
-}
-
-function captureCounters () {
-  Object.keys(counters).forEach(name => {
-    counters[name].forEach((value, tag) => {
-      client.increment(name, value, tag && [tag])
-    })
-  })
-
-  counters = {}
-}
-
-function captureHistograms () {
-  Object.keys(histograms).forEach(name => {
-    histograms[name].forEach((stats, tag) => {
-      histogram(name, stats, tag && [tag])
-      stats.reset()
-    })
-  })
 }
 
 /**
@@ -295,9 +240,6 @@ function captureCommonMetrics () {
   captureMemoryUsage()
   captureProcess()
   captureHeapStats()
-  captureGauges()
-  captureCounters()
-  captureHistograms()
   captureELU()
   captureGCMetrics()
 }
@@ -324,36 +266,29 @@ function captureNativeMetrics () {
     if (type === 'all') {
       histogram('runtime.node.gc.pause', stats.gc[type])
     } else {
-      histogram('runtime.node.gc.pause.by.type', stats.gc[type], [`gc_type:${type}`])
+      histogram('runtime.node.gc.pause.by.type', stats.gc[type], `gc_type:${type}`)
     }
   })
 
   for (let i = 0, l = spaces.length; i < l; i++) {
-    const tags = [`heap_space:${spaces[i].space_name}`]
+    const tag = `heap_space:${spaces[i].space_name}`
 
-    client.gauge('runtime.node.heap.size.by.space', spaces[i].space_size, tags)
-    client.gauge('runtime.node.heap.used_size.by.space', spaces[i].space_used_size, tags)
-    client.gauge('runtime.node.heap.available_size.by.space', spaces[i].space_available_size, tags)
-    client.gauge('runtime.node.heap.physical_size.by.space', spaces[i].physical_space_size, tags)
+    client.gauge('runtime.node.heap.size.by.space', spaces[i].space_size, tag)
+    client.gauge('runtime.node.heap.used_size.by.space', spaces[i].space_used_size, tag)
+    client.gauge('runtime.node.heap.available_size.by.space', spaces[i].space_available_size, tag)
+    client.gauge('runtime.node.heap.physical_size.by.space', spaces[i].physical_space_size, tag)
   }
 }
 
-function histogram (name, stats, tags) {
-  tags = [].concat(tags)
-
-  // Stats can contain garbage data when a value was never recorded.
-  if (stats.count === 0) {
-    stats = { max: 0, min: 0, sum: 0, avg: 0, median: 0, p95: 0, count: 0 }
-  }
-
-  client.gauge(`${name}.min`, stats.min, tags)
-  client.gauge(`${name}.max`, stats.max, tags)
-  client.increment(`${name}.sum`, stats.sum, tags)
-  client.increment(`${name}.total`, stats.sum, tags)
-  client.gauge(`${name}.avg`, stats.avg, tags)
-  client.increment(`${name}.count`, stats.count, tags)
-  client.gauge(`${name}.median`, stats.median, tags)
-  client.gauge(`${name}.95percentile`, stats.p95, tags)
+function histogram (name, stats, tag) {
+  client.gauge(`${name}.min`, stats.min, tag)
+  client.gauge(`${name}.max`, stats.max, tag)
+  client.increment(`${name}.sum`, stats.sum, tag)
+  client.increment(`${name}.total`, stats.sum, tag)
+  client.gauge(`${name}.avg`, stats.avg, tag)
+  client.increment(`${name}.count`, stats.count, tag)
+  client.gauge(`${name}.median`, stats.median, tag)
+  client.gauge(`${name}.95percentile`, stats.p95, tag)
 }
 
 function startGCObserver () {

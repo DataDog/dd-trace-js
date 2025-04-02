@@ -88,7 +88,7 @@ describe('integrations', () => {
           const expected = expectedLLMObsLLMSpanEvent({
             span,
             spanKind: 'llm',
-            name: 'openai.createCompletion',
+            name: 'OpenAI.createCompletion',
             inputMessages: [
               { content: 'How are you?' }
             ],
@@ -99,7 +99,7 @@ describe('integrations', () => {
             modelName: 'text-davinci-002',
             modelProvider: 'openai',
             metadata: {},
-            tags: { ml_app: 'test', language: 'javascript' }
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
           })
 
           expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -144,7 +144,7 @@ describe('integrations', () => {
             const expected = expectedLLMObsLLMSpanEvent({
               span,
               spanKind: 'llm',
-              name: 'openai.createChatCompletion',
+              name: 'OpenAI.createChatCompletion',
               inputMessages: [
                 { role: 'system', content: 'You are a helpful assistant' },
                 { role: 'user', content: 'How are you?' }
@@ -156,7 +156,7 @@ describe('integrations', () => {
               modelName: 'gpt-3.5-turbo-0301',
               modelProvider: 'openai',
               metadata: {},
-              tags: { ml_app: 'test', language: 'javascript' }
+              tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
             })
 
             expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -198,7 +198,7 @@ describe('integrations', () => {
           const expected = expectedLLMObsLLMSpanEvent({
             span,
             spanKind: 'embedding',
-            name: 'openai.createEmbedding',
+            name: 'OpenAI.createEmbedding',
             inputDocuments: [
               { text: 'Hello, world!' }
             ],
@@ -207,7 +207,7 @@ describe('integrations', () => {
             modelName: 'text-embedding-ada-002-v2',
             modelProvider: 'openai',
             metadata: { encoding_format: 'float' },
-            tags: { ml_app: 'test', language: 'javascript' }
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
           })
 
           expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -256,7 +256,7 @@ describe('integrations', () => {
             const expected = expectedLLMObsLLMSpanEvent({
               span,
               spanKind: 'llm',
-              name: 'openai.createChatCompletion',
+              name: 'OpenAI.createChatCompletion',
               modelName: 'gpt-3.5-turbo-0301',
               modelProvider: 'openai',
               inputMessages: [{ role: 'user', content: 'What is SpongeBob SquarePants\'s origin?' }],
@@ -274,7 +274,7 @@ describe('integrations', () => {
                 ]
               }],
               metadata: { function_call: 'auto' },
-              tags: { ml_app: 'test', language: 'javascript' },
+              tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
               tokenMetrics: { input_tokens: 37, output_tokens: 10, total_tokens: 47 }
             })
 
@@ -305,13 +305,13 @@ describe('integrations', () => {
           const expected = expectedLLMObsLLMSpanEvent({
             span,
             spanKind: 'llm',
-            name: 'openai.createCompletion',
+            name: 'OpenAI.createCompletion',
             inputMessages: [{ content: 'Hello' }],
             outputMessages: [{ content: '' }],
             modelName: 'gpt-3.5-turbo',
             modelProvider: 'openai',
             metadata: { max_tokens: 50 },
-            tags: { ml_app: 'test', language: 'javascript' },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
             error,
             errorType: error.type || error.name,
             errorMessage: error.message,
@@ -348,13 +348,13 @@ describe('integrations', () => {
             const expected = expectedLLMObsLLMSpanEvent({
               span,
               spanKind: 'llm',
-              name: 'openai.createChatCompletion',
+              name: 'OpenAI.createChatCompletion',
               inputMessages: [{ role: 'user', content: 'Hello' }],
               outputMessages: [{ content: '' }],
               modelName: 'gpt-3.5-turbo',
               modelProvider: 'openai',
               metadata: { max_tokens: 50 },
-              tags: { ml_app: 'test', language: 'javascript' },
+              tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
               error,
               errorType: error.type || error.name,
               errorMessage: error.message,

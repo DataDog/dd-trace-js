@@ -17,7 +17,6 @@ const {
   TEST_CODE_OWNERS,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
-  removeEfdStringFromTestName,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
@@ -33,7 +32,11 @@ const {
   TEST_BROWSER_DRIVER,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
-  TEST_MANAGEMENT_IS_QUARANTINED
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -198,7 +201,14 @@ class MochaPlugin extends CiPlugin {
       this.tracer._exporter.flush()
     })
 
-    this.addSub('ci:mocha:test:finish', ({ status, hasBeenRetried, isLastRetry }) => {
+    this.addSub('ci:mocha:test:finish', ({
+      status,
+      hasBeenRetried,
+      isLastRetry,
+      hasFailedAllRetries,
+      attemptToFixPassed,
+      isAttemptToFixRetry
+    }) => {
       const store = storage('legacy').getStore()
       const span = store?.span
 
@@ -206,6 +216,16 @@ class MochaPlugin extends CiPlugin {
         span.setTag(TEST_STATUS, status)
         if (hasBeenRetried) {
           span.setTag(TEST_IS_RETRY, 'true')
+        }
+        if (hasFailedAllRetries) {
+          span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+        }
+        if (attemptToFixPassed) {
+          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+        }
+        if (isAttemptToFixRetry) {
+          span.setTag(TEST_IS_RETRY, 'true')
+          span.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
         }
 
         const spanTags = span.context()._tags
@@ -311,7 +331,7 @@ class MochaPlugin extends CiPlugin {
       error,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
-      isQuarantinedTestsEnabled,
+      isTestManagementEnabled,
       isParallel
     }) => {
       if (this.testSessionSpan) {
@@ -328,7 +348,7 @@ class MochaPlugin extends CiPlugin {
           this.testSessionSpan.setTag(MOCHA_IS_PARALLEL, 'true')
         }
 
-        if (isQuarantinedTestsEnabled) {
+        if (isTestManagementEnabled) {
           this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
         }
 
@@ -359,7 +379,10 @@ class MochaPlugin extends CiPlugin {
         this.testSessionSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
         finishAllTraceSpans(this.testSessionSpan)
-        this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
+        this.telemetry.count(TELEMETRY_TEST_SESSION, {
+          provider: this.ciProviderName,
+          autoInjected: !!process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER
+        })
       }
       this.libraryConfig = null
       this.tracer._exporter.flush()
@@ -399,16 +422,17 @@ class MochaPlugin extends CiPlugin {
 
   startTestSpan (testInfo) {
     const {
+      testName,
       testSuiteAbsolutePath,
       title,
       isNew,
       isEfdRetry,
       testStartLine,
       isParallel,
+      isAttemptToFix,
+      isDisabled,
       isQuarantined
     } = testInfo
-
-    const testName = removeEfdStringFromTestName(testInfo.testName)
 
     const extraTags = {}
     const testParametersString = getTestParametersString(this._testTitleToParams, title)
@@ -422,6 +446,14 @@ class MochaPlugin extends CiPlugin {
 
     if (isParallel) {
       extraTags[MOCHA_IS_PARALLEL] = 'true'
+    }
+
+    if (isAttemptToFix) {
+      extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
+    }
+
+    if (isDisabled) {
+      extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
     }
 
     if (isQuarantined) {

@@ -6,6 +6,7 @@ const dgram = require('dgram')
 const isIP = require('net').isIP
 const log = require('./log')
 const { URL, format } = require('url')
+const Histogram = require('./histogram')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
 
@@ -193,6 +194,150 @@ class DogStatsDClient {
   }
 }
 
+class MetricsAggregationClient {
+  constructor (client) {
+    this._client = client
+
+    this.reset()
+  }
+
+  flush () {
+    this._captureCounters()
+    this._captureGauges()
+    this._captureHistograms()
+
+    this._client.flush()
+  }
+
+  reset () {
+    this._counters = new Map()
+    this._gauges = new Map()
+    this._histograms = new Map()
+  }
+
+  // TODO: Aggerate with a histogram and send the buckets to the client.
+  distribution (name, value, tags) {
+    this._client.distribution(name, value, tags)
+  }
+
+  boolean (name, value, tags) {
+    this.gauge(name, value ? 1 : 0, tags)
+  }
+
+  histogram (name, value, tags) {
+    const node = this._ensureTree(this._histograms, name, tags, null)
+
+    if (!node.value) {
+      node.value = new Histogram()
+    }
+
+    node.value.record(value)
+  }
+
+  count (name, count, tags = [], monotonic = true) {
+    if (typeof tags === 'boolean') {
+      monotonic = tags
+      tags = []
+    }
+
+    const container = monotonic ? this._counters : this._gauges
+    const node = this._ensureTree(container, name, tags, 0)
+
+    node.value = node.value + count
+  }
+
+  gauge (name, value, tags) {
+    const node = this._ensureTree(this._gauges, name, tags, 0)
+
+    node.value = value
+  }
+
+  increment (name, count = 1, tags) {
+    this.count(name, count, tags)
+  }
+
+  decrement (name, count = 1, tags) {
+    this.count(name, -count, tags)
+  }
+
+  _captureGauges () {
+    this._captureTree(this._gauges, (node, name, tags) => {
+      this._client.gauge(name, node.value, tags)
+    })
+  }
+
+  _captureCounters () {
+    this._captureTree(this._counters, (node, name, tags) => {
+      this._client.increment(name, node.value, tags)
+    })
+
+    this._counters.clear()
+  }
+
+  _captureHistograms () {
+    this._captureTree(this._histograms, (node, name, tags) => {
+      let stats = node.value
+
+      // Stats can contain garbage data when a value was never recorded.
+      if (stats.count === 0) {
+        stats = { max: 0, min: 0, sum: 0, avg: 0, median: 0, p95: 0, count: 0 }
+      }
+
+      this._client.gauge(`${name}.min`, stats.min, tags)
+      this._client.gauge(`${name}.max`, stats.max, tags)
+      this._client.increment(`${name}.sum`, stats.sum, tags)
+      this._client.increment(`${name}.total`, stats.sum, tags)
+      this._client.gauge(`${name}.avg`, stats.avg, tags)
+      this._client.increment(`${name}.count`, stats.count, tags)
+      this._client.gauge(`${name}.median`, stats.median, tags)
+      this._client.gauge(`${name}.95percentile`, stats.p95, tags)
+
+      node.value.reset()
+    })
+  }
+
+  _captureTree (tree, fn) {
+    for (const [name, root] of tree) {
+      this._captureNode(root, name, [], fn)
+    }
+  }
+
+  _captureNode (node, name, tags, fn) {
+    if (node.touched) {
+      fn(node, name, tags)
+    }
+
+    for (const [tag, next] of node.nodes) {
+      this._captureNode(next, name, tags.concat(tag), fn)
+    }
+  }
+
+  _ensureTree (tree, name, tags, value) {
+    tags = tags ? [].concat(tags) : []
+
+    let node = this._ensureNode(tree, name, value)
+
+    for (const tag of tags) {
+      node = this._ensureNode(node.nodes, tag, value)
+    }
+
+    node.touched = true
+
+    return node
+  }
+
+  _ensureNode (container, key, value) {
+    let node = container.get(key)
+
+    if (!node) {
+      node = { nodes: new Map(), touched: false, value }
+      container.set(key, node)
+    }
+
+    return node
+  }
+}
+
 /**
  * This is a simplified user-facing proxy to the underlying DogStatsDClient instance
  *
@@ -201,7 +346,7 @@ class DogStatsDClient {
 class CustomMetrics {
   constructor (config) {
     const clientConfig = DogStatsDClient.generateClientConfig(config)
-    this.dogstatsd = new DogStatsDClient(clientConfig)
+    this._client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
 
     const flush = this.flush.bind(this)
 
@@ -212,47 +357,27 @@ class CustomMetrics {
   }
 
   increment (stat, value = 1, tags) {
-    return this.dogstatsd.increment(
-      stat,
-      value,
-      CustomMetrics.tagTranslator(tags)
-    )
+    this._client.increment(stat, value, CustomMetrics.tagTranslator(tags))
   }
 
   decrement (stat, value = 1, tags) {
-    return this.dogstatsd.decrement(
-      stat,
-      value,
-      CustomMetrics.tagTranslator(tags)
-    )
+    this._client.decrement(stat, value, CustomMetrics.tagTranslator(tags))
   }
 
   gauge (stat, value, tags) {
-    return this.dogstatsd.gauge(
-      stat,
-      value,
-      CustomMetrics.tagTranslator(tags)
-    )
+    this._client.gauge(stat, value, CustomMetrics.tagTranslator(tags))
   }
 
   distribution (stat, value, tags) {
-    return this.dogstatsd.distribution(
-      stat,
-      value,
-      CustomMetrics.tagTranslator(tags)
-    )
+    this._client.distribution(stat, value, CustomMetrics.tagTranslator(tags))
   }
 
   histogram (stat, value, tags) {
-    return this.dogstatsd.histogram(
-      stat,
-      value,
-      CustomMetrics.tagTranslator(tags)
-    )
+    this._client.histogram(stat, value, CustomMetrics.tagTranslator(tags))
   }
 
   flush () {
-    return this.dogstatsd.flush()
+    return this._client.flush()
   }
 
   /**
@@ -274,5 +399,6 @@ class CustomMetrics {
 
 module.exports = {
   DogStatsDClient,
-  CustomMetrics
+  CustomMetrics,
+  MetricsAggregationClient
 }

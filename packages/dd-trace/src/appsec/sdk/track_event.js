@@ -7,6 +7,7 @@ const waf = require('../waf')
 const { keepTrace } = require('../../priority_sampler')
 const addresses = require('../addresses')
 const { ASM } = require('../../standalone/product')
+const { incrementSdkEventMetric } = require('../telemetry')
 const telemetryMetrics = require('../../telemetry/metrics')
 
 const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
@@ -29,6 +30,8 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
     log.warn('[ASM] Invalid user provided to trackUserLoginSuccessEvent')
     return
   }
+
+  incrementSdkEventMetric('login_success')
 
   const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
@@ -69,6 +72,8 @@ function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
 
   runWaf('users.login.failure', { login: userId })
 
+  incrementSdkEventMetric('login_failure')
+
   increaseSdkEventMetric('login_failure', 'v1')
 }
 
@@ -79,6 +84,8 @@ function trackCustomEvent (tracer, eventName, metadata) {
   }
 
   trackEvent(eventName, metadata, 'trackCustomEvent', getRootSpan(tracer))
+
+  incrementSdkEventMetric('custom')
 
   if (eventName === 'users.login.success' || eventName === 'users.login.failure') {
     runWaf(eventName)

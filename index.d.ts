@@ -165,6 +165,7 @@ interface Plugins {
   "fetch": tracer.plugins.fetch;
   "generic-pool": tracer.plugins.generic_pool;
   "google-cloud-pubsub": tracer.plugins.google_cloud_pubsub;
+  "google-cloud-vertexai": tracer.plugins.google_cloud_vertexai;
   "graphql": tracer.plugins.graphql;
   "grpc": tracer.plugins.grpc;
   "hapi": tracer.plugins.hapi;
@@ -1409,6 +1410,12 @@ declare namespace tracer {
      */
     interface google_cloud_pubsub extends Integration {}
 
+    /**
+     * This plugin automatically instruments the
+     * [@google-cloud/vertexai](https://github.com/googleapis/nodejs-vertexai) module.
+     */
+    interface google_cloud_vertexai extends Integration {}
+
     /** @hidden */
     interface ExecutionArgs {
       schema: any,
@@ -2379,7 +2386,7 @@ declare namespace tracer {
        * ```javascript
        * llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'gpt-4o', modelProvider: 'openai' }, () => {
        *  llmobs.annotate({
-       *    inputData: [{ content: 'system prompt, role: 'system' }, { content: 'user prompt', role: 'user' }],
+       *    inputData: [{ content: 'system prompt', role: 'system' }, { content: 'user prompt', role: 'user' }],
        *    outputData: { content: 'response', role: 'ai' },
        *    metadata: { temperature: 0.7 },
        *    tags: { host: 'localhost' },

@@ -34,7 +34,7 @@ function analyzeSsrf (ctx) {
   const result = waf.run({ ephemeral }, req, raspRule)
 
   const res = store?.res
-  handleResult(result, req, res, ctx.abortController, config)
+  handleResult(result, req, res, ctx.abortController, config, raspRule)
 }
 
 module.exports = { enable, disable }
