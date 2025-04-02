@@ -12,6 +12,8 @@ const {
 } = require('../../util')
 const chai = require('chai')
 
+const semver = require('semver')
+
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
 
 const nock = require('nock')
@@ -36,6 +38,15 @@ describe('integrations', () => {
   let langchainOutputParsers
   let langchainPrompts
   let langchainRunnables
+
+  /**
+   * In OpenAI 4.91.0, the default response format for embeddings was changed from `float` to `base64`.
+   * We do not have control in @langchain/openai embeddings to change this for an individual call,
+   * so we need to check the version and stub the response accordingly. If the OpenAI version installed with
+   * @langchain/openai is less than 4.91.0, we stub the response to be a float array of zeros.
+   * If it is 4.91.0 or greater, we stub with a pre-recorded fixture of a 1536 base64 encoded embedding.
+   */
+  let langchainOpenaiOpenAiVersion
 
   let llmobs
 
@@ -91,6 +102,11 @@ describe('integrations', () => {
             .get('@langchain/core/prompts')
           langchainRunnables = require(`../../../../../../versions/@langchain/core@${version}`)
             .get('@langchain/core/runnables')
+
+          langchainOpenaiOpenAiVersion =
+            require(`../../../../../../versions/@langchain/openai@${version}`)
+              .get('openai/version')
+              .VERSION
         })
 
         describe('llm', () => {
@@ -428,18 +444,26 @@ describe('integrations', () => {
         })
 
         describe('embedding', () => {
-          it.skip('submits an embedding span for an `embedQuery` call', async () => {
-            stubCall({
-              ...openAiBaseEmbeddingInfo,
-              response: {
-                object: 'list',
-                data: [{
-                  object: 'embedding',
-                  index: 0,
-                  embedding: [-0.0034387498, -0.026400521]
-                }]
-              }
-            })
+          it('submits an embedding span for an `embedQuery` call', async () => {
+            if (semver.satisfies(langchainOpenaiOpenAiVersion, '>=4.91.0')) {
+              stubCall({
+                ...openAiBaseEmbeddingInfo,
+                response: require('../../../../../datadog-plugin-langchain/test/fixtures/single-embedding.json')
+              })
+            } else {
+              stubCall({
+                ...openAiBaseEmbeddingInfo,
+                response: {
+                  object: 'list',
+                  data: [{
+                    object: 'embedding',
+                    index: 0,
+                    embedding: Array(1536).fill(0)
+                  }]
+                }
+              })
+            }
+
             const embeddings = new langchainOpenai.OpenAIEmbeddings()
 
             const checkTraces = agent.use(traces => {
@@ -453,7 +477,7 @@ describe('integrations', () => {
                 modelProvider: 'openai',
                 name: 'langchain.embeddings.openai.OpenAIEmbeddings',
                 inputDocuments: [{ text: 'Hello!' }],
-                outputValue: '[1 embedding(s) returned with size 2]',
+                outputValue: '[1 embedding(s) returned with size 1536]',
                 metadata: MOCK_ANY,
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
@@ -501,22 +525,29 @@ describe('integrations', () => {
             await checkTraces
           })
 
-          it.skip('submits an embedding span for an `embedDocuments` call', async () => {
-            stubCall({
-              ...openAiBaseEmbeddingInfo,
-              response: {
-                object: 'list',
-                data: [{
-                  object: 'embedding',
-                  index: 0,
-                  embedding: [-0.0034387498, -0.026400521]
-                }, {
-                  object: 'embedding',
-                  index: 1,
-                  embedding: [-0.026400521, -0.0034387498]
-                }]
-              }
-            })
+          it('submits an embedding span for an `embedDocuments` call', async () => {
+            if (semver.satisfies(langchainOpenaiOpenAiVersion, '>=4.91.0')) {
+              stubCall({
+                ...openAiBaseEmbeddingInfo,
+                response: require('../../../../../datadog-plugin-langchain/test/fixtures/double-embedding.json')
+              })
+            } else {
+              stubCall({
+                ...openAiBaseEmbeddingInfo,
+                response: {
+                  object: 'list',
+                  data: [{
+                    object: 'embedding',
+                    index: 0,
+                    embedding: Array(1536).fill(0)
+                  }, {
+                    object: 'embedding',
+                    index: 1,
+                    embedding: Array(1536).fill(0)
+                  }]
+                }
+              })
+            }
 
             const embeddings = new langchainOpenai.OpenAIEmbeddings()
 
@@ -531,7 +562,7 @@ describe('integrations', () => {
                 modelProvider: 'openai',
                 name: 'langchain.embeddings.openai.OpenAIEmbeddings',
                 inputDocuments: [{ text: 'Hello!' }, { text: 'World!' }],
-                outputValue: '[2 embedding(s) returned with size 2]',
+                outputValue: '[2 embedding(s) returned with size 1536]',
                 metadata: MOCK_ANY,
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
