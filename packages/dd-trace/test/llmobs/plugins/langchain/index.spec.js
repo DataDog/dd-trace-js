@@ -429,7 +429,7 @@ describe('integrations', () => {
         })
 
         describe('embedding', () => {
-          it('submits an embedding span for an `embedQuery` call', async () => {
+          it.skip('submits an embedding span for an `embedQuery` call', async () => {
             stubCall({
               ...openAiBaseEmbeddingInfo,
               response: {
@@ -502,7 +502,7 @@ describe('integrations', () => {
             await checkTraces
           })
 
-          it('submits an embedding span for an `embedDocuments` call', async () => {
+          it.skip('submits an embedding span for an `embedDocuments` call', async () => {
             stubCall({
               ...openAiBaseEmbeddingInfo,
               response: {

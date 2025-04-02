@@ -240,7 +240,8 @@ describe('integrations', () => {
 
         await openai.embeddings.create({
           model: 'text-embedding-ada-002-v2',
-          input: 'Hello, world!'
+          input: 'Hello, world!',
+          encoding_format: 'float'
         })
 
         await checkSpan

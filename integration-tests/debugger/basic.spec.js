@@ -391,6 +391,54 @@ describe('Dynamic Instrumentation', function () {
       })
     })
 
+    describe('condition', function () {
+      beforeEach(t.triggerBreakpoint)
+
+      it('should trigger when condition is met', function (done) {
+        t.agent.on('debugger-input', (x) => {
+          done()
+        })
+
+        t.agent.addRemoteConfig(t.generateRemoteConfig({
+          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } }
+        }))
+      })
+
+      it('should not trigger when condition is not met', function (done) {
+        t.agent.on('debugger-diagnostics', ({ payload }) => {
+          payload.forEach((event) => {
+            if (event.debugger.diagnostics.status === 'INSTALLED') {
+              // Can't know if the probe didn't trigger, so just wait a bit and see if the test fails in the mean time
+              setTimeout(done, 2000)
+            }
+          })
+        })
+
+        t.agent.on('debugger-input', () => {
+          assert.fail('Should not trigger when condition is not met')
+        })
+
+        t.agent.addRemoteConfig(t.generateRemoteConfig({
+          when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } }
+        }))
+      })
+
+      it('should report error if condition is invalid', function (done) {
+        t.agent.on('debugger-diagnostics', ({ payload }) => {
+          payload.forEach(({ debugger: { diagnostics } }) => {
+            if (diagnostics.status === 'ERROR') {
+              assert.strictEqual(diagnostics.exception.message, 'Cannot compile expression: original dsl')
+              done()
+            }
+          })
+        })
+
+        t.agent.addRemoteConfig(t.generateRemoteConfig({
+          when: { dsl: 'original dsl', json: { ref: 'this is not a valid ref' } }
+        }))
+      })
+    })
+
     describe('race conditions', function () {
       it('should remove the last breakpoint completely before trying to add a new one', function (done) {
         const rcConfig2 = t.generateRemoteConfig()
