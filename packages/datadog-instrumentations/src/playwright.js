@@ -623,50 +623,48 @@ function runnerHook (runnerExport, playwrightVersion) {
   return runnerExport
 }
 
-function createAfterEachHook () {
+function createAfterEachHook (emptyAsyncFunction) {
   // It is important to pass the page object to the function to make it available in the async function
   // See: https://github.com/microsoft/playwright/blob/release-1.38/packages/playwright/src/common/fixtures.ts#L234
   const wrappedFunction = async function ({ page }) {
-    if (!page) return
+    const originalArgs = arguments
 
-    try {
-      // Make sure all promises have explicit error handling for Node.js 18
-      const isRumActive = page.evaluate(() => {
-        if (window.DD_RUM && window.DD_RUM.stopSession) {
-          window.DD_RUM.stopSession()
-          return true
-        } else {
-          return false
+    if (page) {
+      try {
+        const isRumActive = await page.evaluate(() => {
+          if (window.DD_RUM && window.DD_RUM.stopSession) {
+            window.DD_RUM.stopSession()
+            return true
+          } else {
+            return false
+          }
+        })
+
+        if (isRumActive) {
+          const url = page.url()
+          const domain = new URL(url).hostname
+
+          await page.context().addCookies([{
+            name: 'datadog-ci-visibility-test-execution-id',
+            value: '',
+            domain,
+            expires: 0,
+            path: '/'
+          }])
         }
-      })
 
-      if (isRumActive) {
-        const url = page.url()
-        const domain = new URL(url).hostname
-
-        await page.context().addCookies([{
-          name: 'datadog-ci-visibility-test-execution-id',
-          value: '',
-          domain,
-          expires: 0,
-          path: '/'
-        }])
+        // This is needed to enable RUM sending data
+        await page.waitForTimeout(500)
+      } catch (e) {
+        // ignore errors
       }
-
-      // This is needed to enable RUM sending data
-      await page.waitForTimeout(500)
-    } catch (e) {
-      // ignore errors
     }
 
     // This avoids issues with promise rejection handling in Node 18
-    const emptyAsyncFunction = async function () {}
+    // const emptyAsyncFunction = async function () {}
     const boundFn = emptyAsyncFunction.bind(this)
-    return await boundFn(...arguments)
+    return await boundFn(...originalArgs)
   }
-
-  // We need to add 'page' to the symbol to mimic a real afterEach hook
-  wrappedFunction[Symbol.for('signature')] = ['page']
 
   return wrappedFunction
 }
@@ -900,7 +898,7 @@ addHook({
 
     // In cases where there is no afterEach hook with _ddHook, we need to add one
     if (!existAfterEachHook) {
-      const wrappedAfterEachHook = createAfterEachHook()
+      const wrappedAfterEachHook = createAfterEachHook(async function () {})
       test.parent._hooks.push({
         type: 'afterEach',
         fn: wrappedAfterEachHook,
