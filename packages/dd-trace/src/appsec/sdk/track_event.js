@@ -8,18 +8,6 @@ const { keepTrace } = require('../../priority_sampler')
 const addresses = require('../addresses')
 const { ASM } = require('../../standalone/product')
 const { incrementSdkEventMetric } = require('../telemetry')
-const telemetryMetrics = require('../../telemetry/metrics')
-
-const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
-
-function increaseSdkEventMetric (eventType, version) {
-  const tags = {
-    event_type: eventType,
-    sdk_version: version
-  }
-
-  appsecMetrics.count('sdk.event', tags).inc(1)
-}
 
 /**
  * @deprecated in favor of trackUserLoginSuccessV2
@@ -31,7 +19,7 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
     return
   }
 
-  incrementSdkEventMetric('login_success')
+  incrementSdkEventMetric('login_success', 'v1')
 
   const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
@@ -48,8 +36,6 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
   trackEvent('users.login.success', metadata, 'trackUserLoginSuccessEvent', rootSpan)
 
   runWaf('users.login.success', { id: user.id, login })
-
-  increaseSdkEventMetric('login_success', 'v1')
 }
 
 /**
@@ -72,9 +58,7 @@ function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
 
   runWaf('users.login.failure', { login: userId })
 
-  incrementSdkEventMetric('login_failure')
-
-  increaseSdkEventMetric('login_failure', 'v1')
+  incrementSdkEventMetric('login_failure', 'v1')
 }
 
 function trackCustomEvent (tracer, eventName, metadata) {
@@ -85,13 +69,11 @@ function trackCustomEvent (tracer, eventName, metadata) {
 
   trackEvent(eventName, metadata, 'trackCustomEvent', getRootSpan(tracer))
 
-  incrementSdkEventMetric('custom')
+  incrementSdkEventMetric('custom', 'v1')
 
   if (eventName === 'users.login.success' || eventName === 'users.login.failure') {
     runWaf(eventName)
   }
-
-  increaseSdkEventMetric('custom', 'v1')
 }
 
 function trackUserLoginSuccessV2 (tracer, login, user, metadata) {
@@ -129,7 +111,7 @@ function trackUserLoginSuccessV2 (tracer, login, user, metadata) {
 
   runWaf('users.login.success', wafData)
 
-  increaseSdkEventMetric('login_success', 'v2')
+  incrementSdkEventMetric('login_success', 'v2')
 }
 
 function trackUserLoginFailureV2 (tracer, login, exists, metadata) {
@@ -161,7 +143,7 @@ function trackUserLoginFailureV2 (tracer, login, exists, metadata) {
 
   runWaf('users.login.failure', wafData)
 
-  increaseSdkEventMetric('login_failure', 'v2')
+  incrementSdkEventMetric('login_failure', 'v2')
 }
 
 function flattenFields (fields, sdkMethodName, depth = 0) {

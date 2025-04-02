@@ -113,7 +113,7 @@ describe('track_event - Internal API', () => {
       expect(log.warn)
         .to.have.been.calledOnceWithExactly('[ASM] Root span not available in trackUserLoginSuccessEvent')
       expect(setUserTagsSdk).to.not.have.been.called
-      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWith('login_success')
+      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWithExactly('login_success', 'v1')
     })
 
     it('should call setUser and addTags with metadata', () => {
@@ -145,7 +145,7 @@ describe('track_event - Internal API', () => {
           [USER_LOGIN]: 'user_id'
         }
       })
-      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWith('login_success')
+      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWithExactly('login_success', 'v1')
     })
 
     it('should call setUser and addTags without metadata', () => {
@@ -169,7 +169,7 @@ describe('track_event - Internal API', () => {
           [USER_LOGIN]: 'user_id'
         }
       })
-      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWith('login_success')
+      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWithExactly('login_success', 'v1')
     })
 
     it('should call waf with user login', () => {
@@ -193,19 +193,7 @@ describe('track_event - Internal API', () => {
           [USER_LOGIN]: 'user_login'
         }
       })
-      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWith('login_success')
-    })
-
-    it('should increase metrics for "sdk.event" for v1', () => {
-      const user = { id: 'user_id', login: 'user_login' }
-
-      trackUserLoginSuccessEvent(tracer, user)
-
-      expect(count).to.have.been.calledOnceWithExactly('sdk.event', {
-        event_type: 'login_success',
-        sdk_version: 'v1'
-      })
-      expect(inc).to.have.been.calledOnceWithExactly(1)
+      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWithExactly('login_success', 'v1')
     })
   })
 
@@ -232,7 +220,7 @@ describe('track_event - Internal API', () => {
       expect(log.warn)
         .to.have.been.calledOnceWithExactly('[ASM] Root span not available in %s', 'trackUserLoginFailureEvent')
       expect(setUserTagsSdk).to.not.have.been.called
-      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWith('login_failure')
+      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWithExactly('login_failure', 'v1')
     })
 
     it('should call addTags with metadata', () => {
@@ -262,7 +250,7 @@ describe('track_event - Internal API', () => {
           [USER_LOGIN]: 'user_id'
         }
       })
-      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWith('login_failure')
+      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWithExactly('login_failure', 'v1')
     })
 
     it('should send false `usr.exists` property when the user does not exist', () => {
@@ -292,7 +280,7 @@ describe('track_event - Internal API', () => {
           [USER_LOGIN]: 'user_id'
         }
       })
-      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWith('login_failure')
+      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWithExactly('login_failure', 'v1')
     })
 
     it('should call addTags without metadata', () => {
@@ -315,17 +303,7 @@ describe('track_event - Internal API', () => {
           [USER_LOGIN]: 'user_id'
         }
       })
-      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWith('login_failure')
-    })
-
-    it('should increase metrics for "sdk.event" for v1', () => {
-      trackUserLoginFailureEvent(tracer, 'user_id', true)
-
-      expect(count).to.have.been.calledOnceWithExactly('sdk.event', {
-        event_type: 'login_failure',
-        sdk_version: 'v1'
-      })
-      expect(inc).to.have.been.calledOnceWithExactly(1)
+      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWithExactly('login_failure', 'v1')
     })
   })
 
@@ -352,7 +330,7 @@ describe('track_event - Internal API', () => {
       expect(log.warn)
         .to.have.been.calledOnceWithExactly('[ASM] Root span not available in %s', 'trackCustomEvent')
       expect(setUserTagsSdk).to.not.have.been.called
-      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWith('custom')
+      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWithExactly('custom', 'v1')
     })
 
     it('should call addTags with metadata', () => {
@@ -372,7 +350,7 @@ describe('track_event - Internal API', () => {
       expect(prioritySampler.setPriority)
         .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
       expect(waf.run).to.not.have.been.called
-      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWith('custom')
+      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWithExactly('custom', 'v1')
     })
 
     it('should call addTags without metadata', () => {
@@ -387,17 +365,7 @@ describe('track_event - Internal API', () => {
       expect(waf.run).to.not.have.been.called
       expect(prioritySampler.setPriority)
         .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
-      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWith('custom')
-    })
-
-    it('should increase metrics for "sdk.event" for v1', () => {
-      trackCustomEvent(tracer, 'custom_event')
-
-      expect(count).to.have.been.calledOnceWithExactly('sdk.event', {
-        event_type: 'custom',
-        sdk_version: 'v1'
-      })
-      expect(inc).to.have.been.calledOnceWithExactly(1)
+      expect(telemetry.incrementSdkEventMetric).to.have.been.calledWithExactly('custom', 'v1')
     })
 
     it('should call to the waf when event name is "users.login.success"', () => {
@@ -662,11 +630,7 @@ describe('track_event - Internal API', () => {
       it('should update the metrics', () => {
         trackUserLoginSuccessV2(tracer, 'login')
 
-        expect(count).to.have.been.calledOnceWithExactly('sdk.event', {
-          event_type: 'login_success',
-          sdk_version: 'v2'
-        })
-        expect(inc).to.have.been.calledOnceWithExactly(1)
+        expect(telemetry.incrementSdkEventMetric).to.have.been.calledWithExactly('login_success', 'v2')
       })
     })
 
@@ -899,11 +863,7 @@ describe('track_event - Internal API', () => {
       it('should update the metrics', () => {
         trackUserLoginFailureV2(tracer, 'login', true)
 
-        expect(count).to.have.been.calledOnceWithExactly('sdk.event', {
-          event_type: 'login_failure',
-          sdk_version: 'v2'
-        })
-        expect(inc).to.have.been.calledOnceWithExactly(1)
+        expect(telemetry.incrementSdkEventMetric).to.have.been.calledWithExactly('login_failure', 'v2')
       })
     })
   })
