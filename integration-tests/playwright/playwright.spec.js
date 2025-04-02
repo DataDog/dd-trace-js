@@ -1041,8 +1041,6 @@ versions.forEach((version) => {
               }
             )
 
-            childProcess.stdout.pipe(process.stdout)
-
             childProcess.on('exit', (exitCode) => {
               testAssertionsPromise.then(() => {
                 if (isQuarantined || isDisabled || shouldAlwaysPass) {

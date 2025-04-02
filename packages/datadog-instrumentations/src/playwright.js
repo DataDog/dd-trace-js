@@ -916,12 +916,11 @@ addHook({
 
       // In cases where there is no afterEach hook with _ddHook, we need to add one
       if (!existAfterEachHook) {
-        // const wrappedAfterEachHook = createAfterEachHook(async function () {})
         test.parent._hooks.push({
           type: 'afterEach',
           fn: async function ({ page }) {
-            if (page) {
-              try {
+            try {
+              if (page) {
                 const isRumActive = await page.evaluate(() => {
                   if (window.DD_RUM && window.DD_RUM.stopSession) {
                     window.DD_RUM.stopSession()
@@ -946,11 +945,10 @@ addHook({
                 }
 
                 // This is needed to enable RUM sending data
-                await page.waitForTimeout(500)
-              } catch (e) {
-                console.error(e)
-                // ignore errors
+                // await page.waitForTimeout(500)
               }
+            } catch (e) {
+              // ignore errors
             }
           },
           title: 'afterEach hook',
