@@ -623,13 +623,10 @@ function runnerHook (runnerExport, playwrightVersion) {
   return runnerExport
 }
 
-function handleAfterEachHook (originalAfterEachHook) {
-  const symbols = Object.getOwnPropertySymbols(originalAfterEachHook)
-
-  const wrappedFunction = async function () {
-    const originalArgs = arguments
-    const page = arguments[0]?.page
-
+function createAfterEachHook () {
+  // It is important to pass the page object to the function to make it available in the async function
+  // See: https://github.com/microsoft/playwright/blob/release-1.38/packages/playwright/src/common/fixtures.ts#L234
+  const wrappedFunction = async function ({ page }) {
     if (page) {
       try {
         const isRumActive = await page.evaluate(() => {
@@ -660,21 +657,10 @@ function handleAfterEachHook (originalAfterEachHook) {
         // ignore errors
       }
     }
-
-    // Instead of apply with arguments, create a manually bound function
-    // and call it - this avoids issues with promise rejection handling in Node 18
-    const boundFn = originalAfterEachHook.bind(this)
-    return await boundFn(...originalArgs)
   }
 
-  // Copy over all symbols from the original function to the wrapped function
-  // We need to add 'page' to the symbols that don't already have it
-  symbols.forEach(symbol => {
-    if (!originalAfterEachHook[symbol].includes('page')) {
-      originalAfterEachHook[symbol].push('page')
-    }
-    wrappedFunction[symbol] = originalAfterEachHook[symbol]
-  })
+  // We need to add 'page' to the symbol to mimic a real afterEach hook
+  wrappedFunction[Symbol.for('signature')] = ['page']
 
   return wrappedFunction
 }
@@ -896,20 +882,19 @@ addHook({
     const testName = getTestFullname(test)
     const browserName = this._project.project.name
 
-    let afterEachHook = true
+    let existAfterEachHook = false
 
-    // We intercept the afterEach hook to add a correlation between the test and the RUM session
+    // // We intercept the afterEach hook to add a correlation between the test and the RUM session
     for (const hook of test.parent._hooks) {
-      if (hook.type === 'afterEach' && !hook._ddHook) {
-        const wrappedAfterEachHook = handleAfterEachHook(hook.fn)
-        hook.fn = wrappedAfterEachHook
-        hook._ddHook = true
-        afterEachHook = false
+      if (hook.type === 'afterEach' && hook._ddHook) {
+        existAfterEachHook = true
+        break
       }
     }
 
-    if (afterEachHook) {
-      const wrappedAfterEachHook = handleAfterEachHook(async function () {})
+    // In cases where there is no afterHook with _ddHook, we need to add one
+    if (!existAfterEachHook) {
+      const wrappedAfterEachHook = createAfterEachHook()
       test.parent._hooks.push({
         type: 'afterEach',
         fn: wrappedAfterEachHook,
