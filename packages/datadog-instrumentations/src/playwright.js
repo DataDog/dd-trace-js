@@ -638,23 +638,25 @@ function createAfterEachHook (emptyAsyncFunction) {
           } else {
             return false
           }
-        })
+        }).catch(() => false)
 
         if (isRumActive) {
           const url = page.url()
-          const domain = new URL(url).hostname
-
-          await page.context().addCookies([{
-            name: 'datadog-ci-visibility-test-execution-id',
-            value: '',
-            domain,
-            expires: 0,
-            path: '/'
-          }])
+          let domain = ''
+          if (url) {
+            domain = new URL(url).hostname
+            await page.context().addCookies([{
+              name: 'datadog-ci-visibility-test-execution-id',
+              value: '',
+              domain,
+              expires: 0,
+              path: '/'
+            }]).catch(() => {})
+          }
         }
 
         // This is needed to enable RUM sending data
-        await page.waitForTimeout(500)
+        await page.waitForTimeout(500).catch(() => {})
       } catch (e) {
         // ignore errors
       }
@@ -662,7 +664,10 @@ function createAfterEachHook (emptyAsyncFunction) {
 
     // This avoids issues with promise rejection handling in older versions of Node
     const boundFn = emptyAsyncFunction.bind(this)
-    return await boundFn(...originalArgs)
+    return await boundFn(...originalArgs).catch(e => {
+      // Explicitly catch and re-throw to ensure proper handling
+      throw e
+    })
   }
 
   return wrappedFunction
