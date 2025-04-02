@@ -1,9 +1,24 @@
-name: Release Proposal PR check
+name: Release Proposal
 
 on:
-  pull_request:
-    branches:
-      - v[0-9]+.x
+  workflow_dispatch:
+    inputs:
+      release-line:
+        description: 'Release line'
+        required: true
+        default: 5
+        type: choice
+        options:
+          - 5
+      increment:
+        description: 'Version increment'
+        required: true
+        default: auto
+        type: choice
+        options:
+          - auto
+          - minor
+          - patch
 jobs:
   check_labels:
     runs-on: ubuntu-latest
@@ -16,4 +31,4 @@ jobs:
       - run: |
           mkdir -p ~/.config/changelog-maker
           echo "{\"token\":\"${{secrets.GITHUB_TOKEN}}\",\"user\":\"${{github.actor}}\"}" > ~/.config/changelog-maker/config.json
-      - run: node ./scripts/check-proposal-labels.js
+      - run: node scripts/release/proposal ${{ inputs.release-line }} -y --{{ inputs.increment }}

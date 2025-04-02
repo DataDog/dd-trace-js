@@ -26,8 +26,10 @@ if (!releaseLine || releaseLine === 'help' || flags.help) {
   log(
     'Usage: node scripts/release/proposal <release-line>\n',
     'Options:',
+    '  -y         Always accept prompts.',
     '  --debug    Print raw commands and their outputs.',
     '  --help     Show this help.',
+    '  --auto     Automatically detect version increment. (this is default)',
     '  --minor    Force a minor release.',
     '  --patch    Force a patch release.'
   )
@@ -138,8 +140,10 @@ try {
 
   pass(notesFile)
 
-  // Stop and ask the user if they want to proceed with pushing everything upstream.
-  checkpoint('Push the release upstream and create/update PR?')
+  if (!flags.y) {
+    // Stop and ask the user if they want to proceed with pushing everything upstream.
+    checkpoint('Push the release upstream and create/update PR?')
+  }
 
   start('Push proposal upstream')
 
