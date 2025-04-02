@@ -1,7 +1,7 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.14.1"
+    "rules_version": "1.14.2"
   },
   "rules": [
     {
@@ -5503,9 +5503,13 @@
                   "x-middleware-subrequest"
                 ]
               }
-            ]
+            ],
+            "regex": ".*",
+            "options": {
+              "min_length": 1
+            }
           },
-          "operator": "exists"
+          "operator": "match_regex"
         },
         {
           "parameters": {
