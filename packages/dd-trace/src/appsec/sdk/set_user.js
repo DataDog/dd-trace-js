@@ -9,10 +9,6 @@ function setUserTags (user, rootSpan) {
   for (const k of Object.keys(user)) {
     rootSpan.setTag(`usr.${k}`, '' + user[k])
   }
-}
-
-function setUserTagsSdk (user, rootSpan) {
-  setUserTags(user, rootSpan)
 
   rootSpan.setTag('_dd.appsec.user.collection_mode', 'sdk')
 }
@@ -29,7 +25,7 @@ function setUser (tracer, user) {
     return
   }
 
-  setUserTagsSdk(user, rootSpan)
+  setUserTags(user, rootSpan)
 
   const persistent = {
     [addresses.USER_ID]: '' + user.id
@@ -43,7 +39,6 @@ function setUser (tracer, user) {
 }
 
 module.exports = {
-  setUserTagsSdk,
   setUserTags,
   setUser
 }

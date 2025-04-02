@@ -2,7 +2,7 @@
 
 const log = require('../../log')
 const { getRootSpan } = require('./utils')
-const { setUserTagsSdk } = require('./set_user')
+const { setUserTags } = require('./set_user')
 const waf = require('../waf')
 const { keepTrace } = require('../../priority_sampler')
 const addresses = require('../addresses')
@@ -27,7 +27,7 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
     return
   }
 
-  setUserTagsSdk(user, rootSpan)
+  setUserTags(user, rootSpan)
 
   const login = user.login ?? user.id
 
@@ -102,7 +102,7 @@ function trackUserLoginSuccessV2 (tracer, login, user, metadata) {
 
     if (user.id) {
       wafData.id = user.id
-      setUserTagsSdk(user, rootSpan)
+      setUserTags(user, rootSpan)
       metadata.usr = user
     }
   }
