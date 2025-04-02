@@ -9,6 +9,10 @@ class MongodbCorePlugin extends DatabasePlugin {
   // should be removed if one day this will be fixed
   static get peerServicePrecursors () { return [] }
   start ({ ns, ops, options = {}, name }) {
+    // heartbeat commands can be disabled if this.config.disableMongoHeartbeat is true
+    if (isHeartbeatDisabled(ops, this.config)) {
+      return
+    }
     const query = getQuery(ops)
     const resource = truncate(getResource(this, ns, query, name))
     const service = this.serviceName({ pluginConfig: this.config })
@@ -151,6 +155,16 @@ function isBSON (val) {
 
 function isBinary (val) {
   return val && val._bsontype === 'Binary'
+}
+
+function isHeartbeatDisabled (ops, config) {
+  // do nothing if disableMongoHeartbeat is not set to true
+  if (config.disableMongoHeartbeat !== true) {
+    return false
+  }
+
+  // Check if it's a heartbeat command hello: 1 or helloOk: 1
+  return ops && typeof ops === 'object' && (ops.hello === 1 || ops.helloOk === true)
 }
 
 module.exports = MongodbCorePlugin

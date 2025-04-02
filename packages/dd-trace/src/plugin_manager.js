@@ -139,7 +139,10 @@ module.exports = class PluginManager {
       ciVisAgentlessLogSubmissionEnabled,
       isTestDynamicInstrumentationEnabled,
       isServiceUserProvided,
-      middlewareTracingEnabled
+      middlewareTracingEnabled,
+      trace: {
+        disableMongoHeartbeat
+      }
     } = this._tracerConfig
 
     const sharedConfig = {
@@ -153,7 +156,8 @@ module.exports = class PluginManager {
       ciVisibilityTestSessionName,
       ciVisAgentlessLogSubmissionEnabled,
       isTestDynamicInstrumentationEnabled,
-      isServiceUserProvided
+      isServiceUserProvided,
+      disableMongoHeartbeat
     }
 
     if (logInjection !== undefined) {
