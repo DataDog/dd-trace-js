@@ -623,55 +623,55 @@ function runnerHook (runnerExport, playwrightVersion) {
   return runnerExport
 }
 
-function createAfterEachHook (emptyAsyncFunction) {
-  // It is important to pass the page object to the function to make it available in the async function
-  // See: https://github.com/microsoft/playwright/blob/release-1.38/packages/playwright/src/common/fixtures.ts#L234
-  const wrappedFunction = async function ({ page }) {
-    const originalArgs = arguments
+// TODO - CLEAN UP THIS CODE
+// function createAfterEachHook (emptyAsyncFunction) {
+//   // It is important to pass the page object to the function to make it available in the async function
+//   // See: https://github.com/microsoft/playwright/blob/release-1.38/packages/playwright/src/common/fixtures.ts#L234
+//   const wrappedFunction = async function ({ page }) {
+//     const originalArgs = arguments
 
-    if (page) {
-      try {
-        const isRumActive = await page.evaluate(() => {
-          if (window.DD_RUM && window.DD_RUM.stopSession) {
-            window.DD_RUM.stopSession()
-            return true
-          } else {
-            return false
-          }
-        }).catch(() => false)
+//     if (page) {
+//       try {
+//         const isRumActive = await page.evaluate(() => {
+//           if (window.DD_RUM && window.DD_RUM.stopSession) {
+//             window.DD_RUM.stopSession()
+//             return true
+//           } else {
+//             return false
+//           }
+//         }).catch(() => false)
 
-        if (isRumActive) {
-          const url = page.url()
-          let domain = ''
-          if (url) {
-            domain = new URL(url).hostname
-            await page.context().addCookies([{
-              name: 'datadog-ci-visibility-test-execution-id',
-              value: '',
-              domain,
-              expires: 0,
-              path: '/'
-            }]).catch(() => {})
-          }
-        }
+//         if (isRumActive) {
+//           const url = page.url()
+//           if (url) {
+//             const domain = new URL(url).hostname
+//             await page.context().addCookies([{
+//               name: 'datadog-ci-visibility-test-execution-id',
+//               value: '',
+//               domain,
+//               expires: 0,
+//               path: '/'
+//             }]).catch(() => {})
+//           }
+//         }
 
-        // This is needed to enable RUM sending data
-        await page.waitForTimeout(500).catch(() => {})
-      } catch (e) {
-        // ignore errors
-      }
-    }
+//         // This is needed to enable RUM sending data
+//         await page.waitForTimeout(500).catch(() => {})
+//       } catch (e) {
+//         // ignore errors
+//       }
+//     }
 
-    // This avoids issues with promise rejection handling in older versions of Node
-    const boundFn = emptyAsyncFunction.bind(this)
-    return await boundFn(...originalArgs).catch(e => {
-      // Explicitly catch and re-throw to ensure proper handling
-      throw e
-    })
-  }
+//     // This avoids issues with promise rejection handling in older versions of Node
+//     const boundFn = emptyAsyncFunction.bind(this)
+//     return await boundFn(...originalArgs).catch(e => {
+//       // Explicitly catch and re-throw to ensure proper handling
+//       throw e
+//     })
+//   }
 
-  return wrappedFunction
-}
+//   return wrappedFunction
+// }
 
 addHook({
   name: '@playwright/test',
@@ -890,30 +890,6 @@ addHook({
     const testName = getTestFullname(test)
     const browserName = this._project.project.name
 
-    // We only need to add an afterEach hook if the test is not an attempt to fix retry
-    if (!test._ddIsAttemptToFixRetry) {
-      let existAfterEachHook = false
-
-      // We try to find an existing afterEach hook with _ddHook to avoid adding a new one
-      for (const hook of test.parent._hooks) {
-        if (hook.type === 'afterEach' && hook._ddHook) {
-          existAfterEachHook = true
-          break
-        }
-      }
-
-      // In cases where there is no afterEach hook with _ddHook, we need to add one
-      if (!existAfterEachHook) {
-        const wrappedAfterEachHook = createAfterEachHook(async function () {})
-        test.parent._hooks.push({
-          type: 'afterEach',
-          fn: wrappedAfterEachHook,
-          title: 'afterEach hook',
-          _ddHook: true
-        })
-      }
-    }
-
     // If test events are created in the worker process I need to stop creating it in the main process
     // Probably yet another test worker exporter is needed in addition to the ones for mocha, jest and cucumber
     // it's probably hard to tell that's a playwright worker though, as I don't think there is a specific env variable
@@ -927,6 +903,60 @@ addHook({
         testSourceLine,
         browserName
       })
+
+      let existAfterEachHook = false
+
+      // We try to find an existing afterEach hook with _ddHook to avoid adding a new one
+      for (const hook of test.parent._hooks) {
+        if (hook.type === 'afterEach' && hook._ddHook) {
+          existAfterEachHook = true
+          break
+        }
+      }
+
+      // In cases where there is no afterEach hook with _ddHook, we need to add one
+      if (!existAfterEachHook) {
+        // const wrappedAfterEachHook = createAfterEachHook(async function () {})
+        test.parent._hooks.push({
+          type: 'afterEach',
+          fn: async function ({ page }) {
+            if (page) {
+              try {
+                const isRumActive = await page.evaluate(() => {
+                  if (window.DD_RUM && window.DD_RUM.stopSession) {
+                    window.DD_RUM.stopSession()
+                    return true
+                  } else {
+                    return false
+                  }
+                })
+
+                if (isRumActive) {
+                  const url = page.url()
+                  if (url) {
+                    const domain = new URL(url).hostname
+                    await page.context().addCookies([{
+                      name: 'datadog-ci-visibility-test-execution-id',
+                      value: '',
+                      domain,
+                      expires: 0,
+                      path: '/'
+                    }])
+                  }
+                }
+
+                // This is needed to enable RUM sending data
+                await page.waitForTimeout(500)
+              } catch (e) {
+                console.error(e)
+                // ignore errors
+              }
+            }
+          },
+          title: 'afterEach hook',
+          _ddHook: true
+        })
+      }
 
       res = _runTest.apply(this, arguments)
 

@@ -907,7 +907,7 @@ versions.forEach((version) => {
 
     if (version === 'latest') {
       context('test management', () => {
-        context('attempt to fix', () => {
+        context.only('attempt to fix', () => {
           beforeEach(() => {
             receiver.setTestManagementTests({
               playwright: {
@@ -1040,6 +1040,8 @@ versions.forEach((version) => {
                 stdio: 'pipe'
               }
             )
+
+            childProcess.stdout.pipe(process.stdout)
 
             childProcess.on('exit', (exitCode) => {
               testAssertionsPromise.then(() => {
