@@ -22,6 +22,7 @@ class Config {
       DD_AGENT_HOST,
       DD_ENV,
       DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED, // used for testing
+      DD_PROFILING_ASYNC_ID_ENABLED,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_CPU_ENABLED,
       DD_PROFILING_DEBUG_SOURCE_MAPS,
@@ -178,6 +179,9 @@ class Config {
     checkOptionWithSamplingContextAllowed(this.timelineEnabled, 'Timeline view')
     this.timelineSamplingEnabled = isTrue(coalesce(options.timelineSamplingEnabled,
       DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED, true))
+
+    this.asyncIdEnabled = isTrue(coalesce(options.asyncIdEnabled,
+      DD_PROFILING_ASYNC_ID_ENABLED, this.timelineEnabled))
 
     this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,

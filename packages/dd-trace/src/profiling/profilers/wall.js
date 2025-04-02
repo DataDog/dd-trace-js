@@ -75,6 +75,7 @@ class NativeWallProfiler {
     this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
     this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
     this._timelineEnabled = !!options.timelineEnabled
+    this._asyncIdEnabled = !!options.asyncIdEnabled
     this._cpuProfilingEnabled = !!options.cpuProfilingEnabled
     // We need to capture span data into the sample context for either code hotspots
     // or endpoint collection.
@@ -133,7 +134,8 @@ class NativeWallProfiler {
       withContexts: this._withContexts,
       lineNumbers: false,
       workaroundV8Bug: this._v8ProfilerBugWorkaroundEnabled,
-      collectCpuTime: this._cpuProfilingEnabled
+      collectCpuTime: this._cpuProfilingEnabled,
+      collectAsyncId: this._asyncIdEnabled
     })
 
     if (this._withContexts) {
