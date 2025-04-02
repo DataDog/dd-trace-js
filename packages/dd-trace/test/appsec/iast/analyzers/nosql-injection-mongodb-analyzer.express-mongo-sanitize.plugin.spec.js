@@ -7,6 +7,9 @@ const path = require('path')
 const semver = require('semver')
 const { prepareTestServerForIastInExpress } = require('../utils')
 const agent = require('../../../plugins/agent')
+const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
+const { storage } = require('../../../../../datadog-core')
+const { isTainted } = require('../../../../src/appsec/iast/taint-tracking/operations')
 
 describe('nosql injection detection in mongodb - whole feature', () => {
   // https://github.com/fiznool/express-mongo-sanitize/issues/200
@@ -117,6 +120,24 @@ describe('nosql injection detection in mongodb - whole feature', () => {
                   $eq: req.query.key
                 }
               })
+              res.end()
+            },
+            vulnerability: 'NOSQL_MONGODB_INJECTION',
+            makeRequest: (done, config) => {
+              axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+            }
+          })
+
+          testThatRequestHasNoVulnerability({
+            testDescription: 'should not have NOSQL_MONGODB_INJECTION vulnerability with modified tainted string',
+            fn: async (req, res) => {
+              const data = req.query.key
+              const modifiedData = _ddiast.plusOperator('modified' + data, 'modified', data)
+
+              await collection.find({
+                key: modifiedData
+              })
+
               res.end()
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
