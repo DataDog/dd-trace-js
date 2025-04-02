@@ -627,36 +627,53 @@ function createAfterEachHook () {
   // It is important to pass the page object to the function to make it available in the async function
   // See: https://github.com/microsoft/playwright/blob/release-1.38/packages/playwright/src/common/fixtures.ts#L234
   const wrappedFunction = async function ({ page }) {
-    if (page) {
-      try {
-        const isRumActive = await page.evaluate(() => {
-          if (window.DD_RUM && window.DD_RUM.stopSession) {
-            window.DD_RUM.stopSession()
-            return true
-          } else {
+    if (!page) return
+
+    // Create a single Promise.all to handle all async operations with proper error handling for Node.js 18
+    await Promise.all([
+      (async () => {
+        try {
+          const isRumActive = await page.evaluate(() => {
+            if (window.DD_RUM && window.DD_RUM.stopSession) {
+              window.DD_RUM.stopSession()
+              return true
+            }
             return false
+          }).catch(() => false)
+
+          if (isRumActive) {
+            try {
+              const url = page.url()
+              const domain = new URL(url).hostname
+
+              await page.context().addCookies([{
+                name: 'datadog-ci-visibility-test-execution-id',
+                value: '',
+                domain,
+                expires: 0,
+                path: '/'
+              }]).catch(() => { /* ignore */ })
+            } catch {
+              // ignore errors
+            }
           }
-        })
-
-        if (isRumActive) {
-          const url = page.url()
-          const domain = new URL(url).hostname
-
-          await page.context().addCookies([{
-            name: 'datadog-ci-visibility-test-execution-id',
-            value: '',
-            domain,
-            expires: 0,
-            path: '/'
-          }])
+        } catch {
+          // ignore errors
         }
+      })(),
 
-        // This is needed to enable RUM sending data
-        await page.waitForTimeout(500)
-      } catch (e) {
-        // ignore errors
-      }
-    }
+      // Wait for timeout separately to ensure it completes even if the RUM operations fail
+      (async () => {
+        try {
+          // This is needed to enable RUM sending data
+          await page.waitForTimeout(500)
+        } catch {
+          // ignore errors
+        }
+      })()
+    ]).catch(() => {
+      // ignore errors
+    })
   }
 
   // We need to add 'page' to the symbol to mimic a real afterEach hook
