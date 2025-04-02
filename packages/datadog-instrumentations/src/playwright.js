@@ -885,25 +885,28 @@ addHook({
     const testName = getTestFullname(test)
     const browserName = this._project.project.name
 
-    let existAfterEachHook = false
+    // We only need to add an afterEach hook if the test is not an attempt to fix retry
+    if (!test._ddIsAttemptToFixRetry) {
+      let existAfterEachHook = false
 
-    // We try to find an existing afterEach hook with _ddHook to avoid adding a new one
-    for (const hook of test.parent._hooks) {
-      if (hook.type === 'afterEach' && hook._ddHook) {
-        existAfterEachHook = true
-        break
+      // We try to find an existing afterEach hook with _ddHook to avoid adding a new one
+      for (const hook of test.parent._hooks) {
+        if (hook.type === 'afterEach' && hook._ddHook) {
+          existAfterEachHook = true
+          break
+        }
       }
-    }
 
-    // In cases where there is no afterEach hook with _ddHook, we need to add one
-    if (!existAfterEachHook) {
-      const wrappedAfterEachHook = createAfterEachHook(async function () {})
-      test.parent._hooks.push({
-        type: 'afterEach',
-        fn: wrappedAfterEachHook,
-        title: 'afterEach hook',
-        _ddHook: true
-      })
+      // In cases where there is no afterEach hook with _ddHook, we need to add one
+      if (!existAfterEachHook) {
+        const wrappedAfterEachHook = createAfterEachHook(async function () {})
+        test.parent._hooks.push({
+          type: 'afterEach',
+          fn: wrappedAfterEachHook,
+          title: 'afterEach hook',
+          _ddHook: true
+        })
+      }
     }
 
     // If test events are created in the worker process I need to stop creating it in the main process
