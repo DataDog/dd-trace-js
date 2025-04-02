@@ -623,56 +623,6 @@ function runnerHook (runnerExport, playwrightVersion) {
   return runnerExport
 }
 
-// TODO - CLEAN UP THIS CODE
-// function createAfterEachHook (emptyAsyncFunction) {
-//   // It is important to pass the page object to the function to make it available in the async function
-//   // See: https://github.com/microsoft/playwright/blob/release-1.38/packages/playwright/src/common/fixtures.ts#L234
-//   const wrappedFunction = async function ({ page }) {
-//     const originalArgs = arguments
-
-//     if (page) {
-//       try {
-//         const isRumActive = await page.evaluate(() => {
-//           if (window.DD_RUM && window.DD_RUM.stopSession) {
-//             window.DD_RUM.stopSession()
-//             return true
-//           } else {
-//             return false
-//           }
-//         }).catch(() => false)
-
-//         if (isRumActive) {
-//           const url = page.url()
-//           if (url) {
-//             const domain = new URL(url).hostname
-//             await page.context().addCookies([{
-//               name: 'datadog-ci-visibility-test-execution-id',
-//               value: '',
-//               domain,
-//               expires: 0,
-//               path: '/'
-//             }]).catch(() => {})
-//           }
-//         }
-
-//         // This is needed to enable RUM sending data
-//         await page.waitForTimeout(500).catch(() => {})
-//       } catch (e) {
-//         // ignore errors
-//       }
-//     }
-
-//     // This avoids issues with promise rejection handling in older versions of Node
-//     const boundFn = emptyAsyncFunction.bind(this)
-//     return await boundFn(...originalArgs).catch(e => {
-//       // Explicitly catch and re-throw to ensure proper handling
-//       throw e
-//     })
-//   }
-
-//   return wrappedFunction
-// }
-
 addHook({
   name: '@playwright/test',
   file: 'lib/runner.js',
@@ -943,9 +893,6 @@ addHook({
                     }])
                   }
                 }
-
-                // This is needed to enable RUM sending data
-                // await page.waitForTimeout(500)
               }
             } catch (e) {
               // ignore errors

@@ -907,7 +907,7 @@ versions.forEach((version) => {
 
     if (version === 'latest') {
       context('test management', () => {
-        context.only('attempt to fix', () => {
+        context('attempt to fix', () => {
           beforeEach(() => {
             receiver.setTestManagementTests({
               playwright: {
