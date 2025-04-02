@@ -629,51 +629,40 @@ function createAfterEachHook () {
   const wrappedFunction = async function ({ page }) {
     if (!page) return
 
-    // Create a single Promise.all to handle all async operations with proper error handling for Node.js 18
-    await Promise.all([
-      (async () => {
-        try {
-          const isRumActive = await page.evaluate(() => {
-            if (window.DD_RUM && window.DD_RUM.stopSession) {
-              window.DD_RUM.stopSession()
-              return true
-            }
-            return false
-          }).catch(() => false)
-
-          if (isRumActive) {
-            try {
-              const url = page.url()
-              const domain = new URL(url).hostname
-
-              await page.context().addCookies([{
-                name: 'datadog-ci-visibility-test-execution-id',
-                value: '',
-                domain,
-                expires: 0,
-                path: '/'
-              }]).catch(() => { /* ignore */ })
-            } catch {
-              // ignore errors
-            }
-          }
-        } catch {
-          // ignore errors
+    try {
+      // Make sure all promises have explicit error handling for Node.js 18
+      const isRumActive = page.evaluate(() => {
+        if (window.DD_RUM && window.DD_RUM.stopSession) {
+          window.DD_RUM.stopSession()
+          return true
+        } else {
+          return false
         }
-      })(),
+      })
 
-      // Wait for timeout separately to ensure it completes even if the RUM operations fail
-      (async () => {
-        try {
-          // This is needed to enable RUM sending data
-          await page.waitForTimeout(500)
-        } catch {
-          // ignore errors
-        }
-      })()
-    ]).catch(() => {
+      if (isRumActive) {
+        const url = page.url()
+        const domain = new URL(url).hostname
+
+        await page.context().addCookies([{
+          name: 'datadog-ci-visibility-test-execution-id',
+          value: '',
+          domain,
+          expires: 0,
+          path: '/'
+        }])
+      }
+
+      // This is needed to enable RUM sending data
+      await page.waitForTimeout(500)
+    } catch (e) {
       // ignore errors
-    })
+    }
+
+    // This avoids issues with promise rejection handling in Node 18
+    const emptyAsyncFunction = async function () {}
+    const boundFn = emptyAsyncFunction.bind(this)
+    return await boundFn(...arguments)
   }
 
   // We need to add 'page' to the symbol to mimic a real afterEach hook
