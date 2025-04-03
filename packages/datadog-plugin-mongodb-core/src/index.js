@@ -1,6 +1,7 @@
 'use strict'
 
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const coalesce = require('koalas')
 
 class MongodbCorePlugin extends DatabasePlugin {
   static get id () { return 'mongodb-core' }
@@ -8,6 +9,16 @@ class MongodbCorePlugin extends DatabasePlugin {
   // avoid using db.name for peer.service since it includes the collection name
   // should be removed if one day this will be fixed
   static get peerServicePrecursors () { return [] }
+
+  configure (config) {
+    super.configure(config)
+    this.config.disableMongoHeartbeat = coalesce(
+      config.disableMongoHeartbeat,
+      process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED,
+      false
+    )
+  }
+
   start ({ ns, ops, options = {}, name }) {
     // heartbeat commands can be disabled if this.config.disableMongoHeartbeat is true
     if (isHeartbeatDisabled(ops, this.config)) {
