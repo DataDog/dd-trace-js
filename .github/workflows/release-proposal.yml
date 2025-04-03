@@ -1,4 +1,4 @@
-name: Release Proposal
+name: '[Release Proposal]'
 
 on:
   workflow_dispatch:
