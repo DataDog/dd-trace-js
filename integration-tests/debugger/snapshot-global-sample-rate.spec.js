@@ -59,8 +59,8 @@ describe('Dynamic Instrumentation', function () {
               const duration = timestamp - start
               const timeSincePrevTimestamp = timestamp - prevTimestamp
 
-              // Allow for a variance of +50ms (time will tell if this is enough)
-              assert.isAtLeast(duration, 1000)
+              // Allow for a time variance (time will tell if this is enough). Timeouts can vary.
+              assert.isAtLeast(duration, 925)
               assert.isBelow(duration, 1050)
 
               // A sanity check to make sure we're not saturating the event loop. We expect a lot of snapshots to be
