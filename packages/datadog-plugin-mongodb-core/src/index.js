@@ -12,15 +12,15 @@ class MongodbCorePlugin extends DatabasePlugin {
 
   configure (config) {
     super.configure(config)
-    this.config.disableMongoHeartbeat = coalesce(
-      config.disableMongoHeartbeat,
+    this.config.mongoHeartbeatDisabled = coalesce(
+      config.mongoHeartbeatDisabled,
       process.env.DD_TRACE_MONGO_HEARTBEAT_DISABLED,
       false
     )
   }
 
   start ({ ns, ops, options = {}, name }) {
-    // heartbeat commands can be disabled if this.config.disableMongoHeartbeat is true
+    // heartbeat commands can be disabled if this.config.mongoHeartbeatDisabled is true
     if (isHeartbeatDisabled(ops, this.config)) {
       return
     }
@@ -169,8 +169,8 @@ function isBinary (val) {
 }
 
 function isHeartbeatDisabled (ops, config) {
-  // do nothing if disableMongoHeartbeat is not set to true
-  if (config.disableMongoHeartbeat !== true) {
+  // do nothing if mongoHeartbeatDisabled is not set to true
+  if (config.mongoHeartbeatDisabled !== true) {
     return false
   }
 
