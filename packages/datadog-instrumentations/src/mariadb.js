@@ -155,6 +155,8 @@ function wrapPoolMethod (createConnection) {
 
 const name = 'mariadb'
 
+// TODO: Open the version range again as soon as we support newer versions.
+// That applies to all places where we limit the version to 3.4.1
 addHook({ name, file: 'lib/cmd/query.js', versions: ['>=3 <3.4.1'] }, (Query) => {
   return wrapCommand(Query)
 })
