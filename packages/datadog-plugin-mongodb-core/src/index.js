@@ -14,7 +14,7 @@ class MongodbCorePlugin extends DatabasePlugin {
     super.configure(config)
     this.config.disableMongoHeartbeat = coalesce(
       config.disableMongoHeartbeat,
-      process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED,
+      process.env.DD_TRACE_MONGO_HEARTBEAT_DISABLED,
       false
     )
   }
