@@ -155,15 +155,15 @@ function wrapPoolMethod (createConnection) {
 
 const name = 'mariadb'
 
-addHook({ name, file: 'lib/cmd/query.js', versions: ['>=3'] }, (Query) => {
+addHook({ name, file: 'lib/cmd/query.js', versions: ['>=3 <3.4.1'] }, (Query) => {
   return wrapCommand(Query)
 })
 
-addHook({ name, file: 'lib/cmd/execute.js', versions: ['>=3'] }, (Execute) => {
+addHook({ name, file: 'lib/cmd/execute.js', versions: ['>=3 <3.4.1'] }, (Execute) => {
   return wrapCommand(Execute)
 })
 
-addHook({ name, file: 'lib/pool.js', versions: ['>=3'] }, (Pool) => {
+addHook({ name, file: 'lib/pool.js', versions: ['>=3 <3.4.1'] }, (Pool) => {
   shimmer.wrap(Pool.prototype, '_createConnection', wrapPoolMethod)
 
   return Pool
