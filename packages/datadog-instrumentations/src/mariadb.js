@@ -153,19 +153,35 @@ function wrapPoolMethod (createConnection) {
   }
 }
 
+function wrapPoolGetConnectionMethod (getConnection) {
+  return function wrappedGetConnection () {
+    const callbackResource = new AsyncResource('bound-anonymous-fn')
+    const cb = arguments[arguments.length - 1]
+    if (typeof cb !== 'function') return getConnection.apply(this, arguments)
+
+    arguments[arguments.length - 1] = callbackResource.bind(cb)
+
+    return getConnection.apply(this, arguments)
+  }
+}
+
 const name = 'mariadb'
 
-// TODO: Open the version range again as soon as we support newer versions.
-// That applies to all places where we limit the version to 3.4.1
-addHook({ name, file: 'lib/cmd/query.js', versions: ['>=3 <3.4.1'] }, (Query) => {
+addHook({ name, file: 'lib/cmd/query.js', versions: ['>=3'] }, (Query) => {
   return wrapCommand(Query)
 })
 
-addHook({ name, file: 'lib/cmd/execute.js', versions: ['>=3 <3.4.1'] }, (Execute) => {
+addHook({ name, file: 'lib/cmd/execute.js', versions: ['>=3'] }, (Execute) => {
   return wrapCommand(Execute)
 })
 
-addHook({ name, file: 'lib/pool.js', versions: ['>=3 <3.4.1'] }, (Pool) => {
+addHook({ name, file: 'lib/pool.js', versions: ['>=3.4.1'] }, (Pool) => {
+  shimmer.wrap(Pool.prototype, 'getConnection', wrapPoolGetConnectionMethod)
+
+  return Pool
+})
+
+addHook({ name, file: 'lib/pool.js', versions: ['>=3'] }, (Pool) => {
   shimmer.wrap(Pool.prototype, '_createConnection', wrapPoolMethod)
 
   return Pool
