@@ -343,6 +343,7 @@ describe('profiler', () => {
       const threadNameValue = strings.dedup('Main Event Loop')
       const nonJSThreadNameValue = strings.dedup('Non-JS threads')
 
+      const asyncIdWorks = require('semifies')(process.versions.node, '>=22.10.0')
       for (const sample of profile.sample) {
         let ts, spanId, rootSpanId, endpoint, threadName, threadId, osThreadId, asyncId
         for (const label of sample.label) {
@@ -401,11 +402,13 @@ describe('profiler', () => {
             // across samples.
             assert.equal(existingSpanData.rootSpanId, rootSpanId, encoded)
             assert.equal(existingSpanData.endpoint, endpoint, encoded)
-            // Account for asyncID sporadically missing
-            if (existingSpanData.asyncId === undefined) {
-              existingSpanData.asyncId = asyncId
-            } else if (asyncId !== undefined) {
-              assert.equal(existingSpanData.asyncId, asyncId, encoded)
+            if (asyncIdWorks) {
+              // Account for asyncID sporadically missing
+              if (existingSpanData.asyncId === undefined) {
+                existingSpanData.asyncId = asyncId
+              } else if (asyncId !== undefined) {
+                assert.equal(existingSpanData.asyncId, asyncId, encoded)
+              }
             }
           } else {
             // New span id, store span data
@@ -427,7 +430,7 @@ describe('profiler', () => {
       // Need to have a total of 9 different spans, with 9 different async IDs,
       // 3 different root spans, and 3 different endpoints.
       assert.equal(spans.size, 9, encoded)
-      assert.equal(asyncIds.size, 9, encoded)
+      assert.equal(asyncIds.size, asyncIdWorks ? 9 : 0, encoded)
       assert.equal(rootSpans.size, 3, encoded)
       assert.equal(endpoints.size, 3, encoded)
     })
