@@ -79,7 +79,7 @@ describe('opentelemetry', () => {
     await sandbox.remove()
   })
 
-  it('should not capture telemetry DD and OTEL vars dont conflict', () => {
+  it("should not capture telemetry DD and OTEL vars don't conflict", () => {
     proc = fork(join(cwd, 'opentelemetry/basic.js'), {
       cwd,
       env: {
