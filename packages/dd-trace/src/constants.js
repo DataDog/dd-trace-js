@@ -26,6 +26,7 @@ module.exports = {
   ERROR_TYPE: 'error.type',
   ERROR_MESSAGE: 'error.message',
   ERROR_STACK: 'error.stack',
+  IGNORE_OTEL_ERROR: Symbol('ignore.otel.error'),
   COMPONENT: 'component',
   CLIENT_PORT_KEY: 'network.destination.port',
   PEER_SERVICE_KEY: 'peer.service',
