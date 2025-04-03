@@ -175,6 +175,7 @@ addHook({ name, file: 'lib/cmd/execute.js', versions: ['>=3'] }, (Execute) => {
   return wrapCommand(Execute)
 })
 
+// in 3.4.1 getConnection method start to use callbacks instead of promises
 addHook({ name, file: 'lib/pool.js', versions: ['>=3.4.1'] }, (Pool) => {
   shimmer.wrap(Pool.prototype, 'getConnection', wrapPoolGetConnectionMethod)
 
