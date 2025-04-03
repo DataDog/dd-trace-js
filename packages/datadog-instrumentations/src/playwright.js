@@ -23,6 +23,7 @@ const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 
 const workerReportCh = channel('ci:playwright:worker:report')
+const testPageGotoCh = channel('ci:playwright:test:page-goto')
 
 const testToAr = new WeakMap()
 const testSuiteToAr = new Map()
@@ -783,6 +784,37 @@ addHook({
   return processHostPackage
 })
 
+addHook({
+  name: 'playwright-core',
+  file: 'lib/client/page.js',
+  versions: ['>=1.38.0']
+}, (pagePackage) => {
+  shimmer.wrap(pagePackage.Page.prototype, 'goto', goto => async function (url, options) {
+    const response = await goto.apply(this, arguments)
+
+    const page = this
+
+    const isRumActive = await page.evaluate(() => {
+      if (window.DD_RUM && window.DD_RUM.getInternalContext) {
+        return !!window.DD_RUM.getInternalContext()
+      } else {
+        return false
+      }
+    })
+
+    if (isRumActive) {
+      testPageGotoCh.publish({
+        isRumActive,
+        page
+      })
+    }
+
+    return response
+  })
+
+  return pagePackage
+})
+
 // Only in worker
 addHook({
   name: 'playwright',
@@ -821,6 +853,55 @@ addHook({
         testSourceLine,
         browserName
       })
+
+      let existAfterEachHook = false
+
+      // We try to find an existing afterEach hook with _ddHook to avoid adding a new one
+      for (const hook of test.parent._hooks) {
+        if (hook.type === 'afterEach' && hook._ddHook) {
+          existAfterEachHook = true
+          break
+        }
+      }
+
+      // In cases where there is no afterEach hook with _ddHook, we need to add one
+      if (!existAfterEachHook) {
+        test.parent._hooks.push({
+          type: 'afterEach',
+          fn: async function ({ page }) {
+            try {
+              if (page) {
+                const isRumActive = await page.evaluate(() => {
+                  if (window.DD_RUM && window.DD_RUM.stopSession) {
+                    window.DD_RUM.stopSession()
+                    return true
+                  } else {
+                    return false
+                  }
+                })
+
+                if (isRumActive) {
+                  const url = page.url()
+                  if (url) {
+                    const domain = new URL(url).hostname
+                    await page.context().addCookies([{
+                      name: 'datadog-ci-visibility-test-execution-id',
+                      value: '',
+                      domain,
+                      expires: 0,
+                      path: '/'
+                    }])
+                  }
+                }
+              }
+            } catch (e) {
+              // ignore errors
+            }
+          },
+          title: 'afterEach hook',
+          _ddHook: true
+        })
+      }
 
       res = _runTest.apply(this, arguments)
 
