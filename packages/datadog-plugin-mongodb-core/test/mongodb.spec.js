@@ -460,11 +460,11 @@ describe('Plugin', () => {
         })
       })
 
-      describe('with mongoHeartbeatDisabled configuration', () => {
-        describe('when enabled', () => {
+      describe('with heartbeatEnabled configuration', () => {
+        describe('when heartbeat tracing is disabled', () => {
           before(() => {
             return agent.load('mongodb-core', {
-              mongoHeartbeatDisabled: true
+              heartbeatEnabled: false
             })
           })
 
@@ -502,10 +502,10 @@ describe('Plugin', () => {
           })
         })
 
-        describe('when disabled (default)', () => {
+        describe('when heartbeat tracing is enabled (default)', () => {
           before(() => {
             return agent.load('mongodb-core', {
-              mongoHeartbeatDisabled: false
+              heartbeatEnabled: true
             })
           })
 

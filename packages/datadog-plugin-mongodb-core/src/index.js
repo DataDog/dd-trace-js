@@ -12,16 +12,16 @@ class MongodbCorePlugin extends DatabasePlugin {
 
   configure (config) {
     super.configure(config)
-    this.config.mongoHeartbeatDisabled = coalesce(
-      config.mongoHeartbeatDisabled,
-      process.env.DD_TRACE_MONGO_HEARTBEAT_DISABLED,
-      false
+    this.config.heartbeatEnabled = coalesce(
+      config.heartbeatEnabled,
+      process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED,
+      true
     )
   }
 
   start ({ ns, ops, options = {}, name }) {
-    // heartbeat commands can be disabled if this.config.mongoHeartbeatDisabled is true
-    if (isHeartbeatDisabled(ops, this.config)) {
+    // heartbeat commands can be disabled if this.config.heartbeatEnabled is false
+    if (!this.config.heartbeatEnabled && isHeartbeat(ops, this.config)) {
       return
     }
     const query = getQuery(ops)
@@ -168,12 +168,7 @@ function isBinary (val) {
   return val && val._bsontype === 'Binary'
 }
 
-function isHeartbeatDisabled (ops, config) {
-  // do nothing if mongoHeartbeatDisabled is not set to true
-  if (config.mongoHeartbeatDisabled !== true) {
-    return false
-  }
-
+function isHeartbeat (ops, config) {
   // Check if it's a heartbeat command hello: 1 or helloOk: 1
   return ops && typeof ops === 'object' && (ops.hello === 1 || ops.helloOk === true)
 }
