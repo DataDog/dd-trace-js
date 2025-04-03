@@ -155,10 +155,10 @@ function wrapPoolMethod (createConnection) {
 
 function wrapPoolGetConnectionMethod (getConnection) {
   return function wrappedGetConnection () {
-    const callbackResource = new AsyncResource('bound-anonymous-fn')
     const cb = arguments[arguments.length - 1]
     if (typeof cb !== 'function') return getConnection.apply(this, arguments)
 
+    const callbackResource = new AsyncResource('bound-anonymous-fn')
     arguments[arguments.length - 1] = callbackResource.bind(cb)
 
     return getConnection.apply(this, arguments)
