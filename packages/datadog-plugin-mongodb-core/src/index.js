@@ -1,6 +1,7 @@
 'use strict'
 
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const coalesce = require('koalas')
 
 class MongodbCorePlugin extends DatabasePlugin {
   static get id () { return 'mongodb-core' }
@@ -8,7 +9,21 @@ class MongodbCorePlugin extends DatabasePlugin {
   // avoid using db.name for peer.service since it includes the collection name
   // should be removed if one day this will be fixed
   static get peerServicePrecursors () { return [] }
+
+  configure (config) {
+    super.configure(config)
+    this.config.heartbeatEnabled = coalesce(
+      config.heartbeatEnabled,
+      process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED,
+      true
+    )
+  }
+
   start ({ ns, ops, options = {}, name }) {
+    // heartbeat commands can be disabled if this.config.heartbeatEnabled is false
+    if (!this.config.heartbeatEnabled && isHeartbeat(ops, this.config)) {
+      return
+    }
     const query = getQuery(ops)
     const resource = truncate(getResource(this, ns, query, name))
     const service = this.serviceName({ pluginConfig: this.config })
@@ -151,6 +166,11 @@ function isBSON (val) {
 
 function isBinary (val) {
   return val && val._bsontype === 'Binary'
+}
+
+function isHeartbeat (ops, config) {
+  // Check if it's a heartbeat command hello: 1 or helloOk: 1
+  return ops && typeof ops === 'object' && (ops.hello === 1 || ops.helloOk === true)
 }
 
 module.exports = MongodbCorePlugin
