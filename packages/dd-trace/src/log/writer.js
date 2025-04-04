@@ -1,6 +1,5 @@
 'use strict'
 
-const { storage } = require('../../../datadog-core')
 const { LogChannel } = require('./channels')
 const { Log } = require('./log')
 const defaultLogger = {
@@ -13,13 +12,16 @@ const defaultLogger = {
 let enabled = false
 let logger = defaultLogger
 let logChannel = new LogChannel()
+const middlewares = []
 
-function withNoop (fn) {
-  const store = storage('legacy').getStore()
+function addMiddleware (fn) {
+  middlewares.push(fn)
+}
 
-  storage('legacy').enterWith({ noop: true })
-  fn()
-  storage('legacy').enterWith(store)
+function applyMiddlewares (fn) {
+  (function next (index) {
+    middlewares.length > index ? middlewares[index](next.bind(null, index + 1)) : fn()
+  })(0)
 }
 
 function unsubscribeAll () {
@@ -66,34 +68,34 @@ function onError (err) {
 
   // calling twice logger.error() because Error cause is only available in nodejs v16.9.0
   // TODO: replace it with Error(message, { cause }) when cause has broad support
-  if (formatted) withNoop(() => logger.error(new Error(formatted)))
-  if (cause) withNoop(() => logger.error(cause))
+  if (formatted) applyMiddlewares(() => logger.error(new Error(formatted)))
+  if (cause) applyMiddlewares(() => logger.error(cause))
 }
 
 function onWarn (log) {
   const { formatted, cause } = getErrorLog(log)
-  if (formatted) withNoop(() => logger.warn(formatted))
-  if (cause) withNoop(() => logger.warn(cause))
+  if (formatted) applyMiddlewares(() => logger.warn(formatted))
+  if (cause) applyMiddlewares(() => logger.warn(cause))
 }
 
 function onInfo (log) {
   const { formatted, cause } = getErrorLog(log)
-  if (formatted) withNoop(() => logger.info(formatted))
-  if (cause) withNoop(() => logger.info(cause))
+  if (formatted) applyMiddlewares(() => logger.info(formatted))
+  if (cause) applyMiddlewares(() => logger.info(cause))
 }
 
 function onDebug (log) {
   const { formatted, cause } = getErrorLog(log)
-  if (formatted) withNoop(() => logger.debug(formatted))
-  if (cause) withNoop(() => logger.debug(cause))
+  if (formatted) applyMiddlewares(() => logger.debug(formatted))
+  if (cause) applyMiddlewares(() => logger.debug(cause))
 }
 
 function onTrace (log) {
   const { formatted, cause } = getErrorLog(log)
   // Using logger.debug() because not all loggers have trace level,
   // and console.trace() has a completely different meaning.
-  if (formatted) withNoop(() => logger.debug(formatted))
-  if (cause) withNoop(() => logger.debug(cause))
+  if (formatted) applyMiddlewares(() => logger.debug(formatted))
+  if (cause) applyMiddlewares(() => logger.debug(cause))
 }
 
 function error (...args) {
@@ -122,4 +124,4 @@ function trace (...args) {
   onTrace(Log.parse(...args))
 }
 
-module.exports = { use, toggle, reset, error, warn, info, debug, trace }
+module.exports = { addMiddleware, use, toggle, reset, error, warn, info, debug, trace }
