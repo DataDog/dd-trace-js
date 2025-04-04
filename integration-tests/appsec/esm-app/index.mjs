@@ -1,4 +1,5 @@
 'use strict'
+/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['module.register'] }] */
 
 import childProcess from 'node:child_process'
 import express from 'express'
