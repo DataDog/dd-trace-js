@@ -10,7 +10,7 @@ const tags = {
   language: 'javascript'
 }
 
-const AgentProxyWriter = require('../../../src/llmobs/writers/spans/agentProxy')
+const SpanWriter = require('../../../src/llmobs/writers/spans')
 const EvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
 
 const tracerVersion = require('../../../../../package.json').version
@@ -24,7 +24,7 @@ describe('end to end sdk integration tests', () => {
     payloadGenerator()
     return {
       spans: tracer._tracer._processor.process.args.map(args => args[0]).reverse(), // spans finish in reverse order
-      llmobsSpans: AgentProxyWriter.prototype.append.args?.map(args => args[0]),
+      llmobsSpans: SpanWriter.prototype.append.args?.map(args => args[0]),
       evaluationMetrics: EvalMetricsWriter.prototype.append.args?.map(args => args[0])
     }
   }
@@ -41,7 +41,8 @@ describe('end to end sdk integration tests', () => {
     tracer = require('../../../../dd-trace')
     tracer.init({
       llmobs: {
-        mlApp: 'test'
+        mlApp: 'test',
+        agentlessEnabled: false
       }
     })
 
@@ -52,20 +53,21 @@ describe('end to end sdk integration tests', () => {
     llmobs = tracer.llmobs
     if (!llmobs.enabled) {
       llmobs.enable({
-        mlApp: 'test'
+        mlApp: 'test',
+        agentlessEnabled: false
       })
     }
 
     tracer._tracer._config.apiKey = 'test'
 
     sinon.spy(tracer._tracer._processor, 'process')
-    sinon.stub(AgentProxyWriter.prototype, 'append')
+    sinon.stub(SpanWriter.prototype, 'append')
     sinon.stub(EvalMetricsWriter.prototype, 'append')
   })
 
   afterEach(() => {
     tracer._tracer._processor.process.resetHistory()
-    AgentProxyWriter.prototype.append.resetHistory()
+    SpanWriter.prototype.append.resetHistory()
     EvalMetricsWriter.prototype.append.resetHistory()
 
     process.removeAllListeners('beforeExit')

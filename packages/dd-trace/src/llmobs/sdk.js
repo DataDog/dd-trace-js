@@ -287,13 +287,6 @@ class LLMObs extends NoopLLMObs {
   submitEvaluation (llmobsSpanContext, options = {}) {
     if (!this.enabled) return
 
-    if (!this._config.apiKey) {
-      throw new Error(
-        'DD_API_KEY is required for sending evaluation metrics. Evaluation metric data will not be sent.\n' +
-        'Ensure this configuration is set before running your application.'
-      )
-    }
-
     const { traceId, spanId } = llmobsSpanContext
     if (!traceId || !spanId) {
       throw new Error(

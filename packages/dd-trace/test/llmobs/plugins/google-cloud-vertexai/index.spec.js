@@ -1,6 +1,6 @@
 'use strict'
 
-const LLMObsAgentProxySpanWriter = require('../../../../src/llmobs/writers/spans/agentProxy')
+const LLMObsSpanWriter = require('../../../../src/llmobs/writers/spans')
 const agent = require('../../../plugins/agent')
 const {
   expectedLLMObsLLMSpanEvent,
@@ -76,20 +76,21 @@ describe('integrations', () => {
 
   describe('vertexai', () => {
     before(async () => {
-      sinon.stub(LLMObsAgentProxySpanWriter.prototype, 'append')
+      sinon.stub(LLMObsSpanWriter.prototype, 'append')
 
       // reduce errors related to too many listeners
       process.removeAllListeners('beforeExit')
 
       return agent.load('google-cloud-vertexai', {}, {
         llmobs: {
-          mlApp: 'test'
+          mlApp: 'test',
+          agentlessEnabled: false
         }
       })
     })
 
     afterEach(() => {
-      LLMObsAgentProxySpanWriter.prototype.append.reset()
+      LLMObsSpanWriter.prototype.append.reset()
     })
 
     after(() => {
@@ -131,7 +132,7 @@ describe('integrations', () => {
         it('makes a successful call', async () => {
           const checkTraces = agent.use(traces => {
             const span = traces[0][0]
-            const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+            const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
             const expected = expectedLLMObsLLMSpanEvent({
               span,
@@ -171,7 +172,7 @@ describe('integrations', () => {
         it('makes a successful call', async () => {
           const checkTraces = agent.use(traces => {
             const span = traces[0][0]
-            const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+            const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
             const expected = expectedLLMObsLLMSpanEvent({
               span,
@@ -221,7 +222,7 @@ describe('integrations', () => {
           it('makes a successful call', async () => {
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const inputMessages = []
 
