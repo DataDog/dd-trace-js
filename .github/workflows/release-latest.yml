@@ -23,7 +23,7 @@ jobs:
     outputs:
       pkgjson: ${{ steps.pkg.outputs.json }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/node
       - run: npm publish --provenance
       - id: pkg
@@ -42,7 +42,7 @@ jobs:
       contents: write
     needs: ['publish']
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/node
       - id: pkg
         run: |
@@ -55,7 +55,7 @@ jobs:
           yarn
           yarn build
           mv out /tmp/out
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
         with:
           ref: gh-pages
       - name: Deploy

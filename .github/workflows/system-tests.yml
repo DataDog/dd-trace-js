@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout dd-trace-js
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: ./.github/actions/checkout
         with:
           path: dd-trace-js
       - name: Pack dd-trace-js
@@ -51,11 +51,11 @@ jobs:
 
     steps:
       - name: Checkout system tests
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: ./.github/actions/checkout
         with:
           repository: 'DataDog/system-tests'
       - name: Checkout dd-trace-js
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: ./.github/actions/checkout
         with:
           path: 'binaries/dd-trace-js'
       - name: Build runner

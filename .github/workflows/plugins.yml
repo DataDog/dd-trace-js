@@ -56,7 +56,7 @@ jobs:
       SERVICES: aerospike
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -87,7 +87,7 @@ jobs:
       SERVICES: qpid
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test-and-upstream
 
   amqplib:
@@ -101,7 +101,7 @@ jobs:
       PLUGINS: amqplib
       SERVICES: rabbitmq
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test-and-upstream
 
   apollo:
@@ -109,7 +109,7 @@ jobs:
     env:
       PLUGINS: apollo
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test-and-upstream
 
   avsc:
@@ -118,7 +118,7 @@ jobs:
       PLUGINS: avsc
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test-and-upstream
 
   aws-sdk:
@@ -161,7 +161,7 @@ jobs:
       SERVICES: localstack localstack-legacy
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -179,7 +179,7 @@ jobs:
     env:
       PLUGINS: axios
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/upstream
 
   azure-functions:
@@ -187,7 +187,7 @@ jobs:
     env:
       PLUGINS: azure-functions
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   bluebird:
@@ -195,7 +195,7 @@ jobs:
     env:
       PLUGINS: bluebird
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   body-parser:
@@ -203,7 +203,7 @@ jobs:
     env:
       PLUGINS: body-parser
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   bunyan:
@@ -211,7 +211,7 @@ jobs:
     env:
       PLUGINS: bunyan
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test-and-upstream
 
   cassandra:
@@ -225,7 +225,7 @@ jobs:
       PLUGINS: cassandra-driver
       SERVICES: cassandra
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   child_process:
@@ -233,7 +233,7 @@ jobs:
     env:
       PLUGINS: child_process
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
@@ -250,7 +250,7 @@ jobs:
     env:
       PLUGINS: cookie-parser
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   couchbase:
@@ -274,7 +274,7 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
       DD_INJECT_FORCE: 'true'
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -289,7 +289,7 @@ jobs:
     env:
       PLUGINS: connect
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test-and-upstream
 
   cucumber:
@@ -297,7 +297,7 @@ jobs:
     env:
       PLUGINS: cucumber
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   # TODO: fix performance issues and test more Node versions
@@ -306,7 +306,7 @@ jobs:
     env:
       PLUGINS: cypress
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
@@ -322,7 +322,7 @@ jobs:
     env:
       PLUGINS: dd-trace-api
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   dns:
@@ -330,7 +330,7 @@ jobs:
     env:
       PLUGINS: dns
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -360,7 +360,7 @@ jobs:
       PLUGINS: elasticsearch
       SERVICES: elasticsearch
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
@@ -376,7 +376,7 @@ jobs:
     env:
       PLUGINS: express
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   express-mongo-sanitize:
@@ -391,7 +391,7 @@ jobs:
       PACKAGE_NAMES: express-mongo-sanitize
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   fastify:
@@ -399,7 +399,7 @@ jobs:
     env:
       PLUGINS: fastify
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   fetch:
@@ -407,7 +407,7 @@ jobs:
     env:
       PLUGINS: fetch
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   fs:
@@ -415,7 +415,7 @@ jobs:
     env:
       PLUGINS: fs
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   generic-pool:
@@ -423,7 +423,7 @@ jobs:
     env:
       PLUGINS: generic-pool
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   google-cloud-pubsub:
@@ -437,7 +437,7 @@ jobs:
       PLUGINS: google-cloud-pubsub
       SERVICES: gpubsub
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   google-cloud-vertexai:
@@ -445,7 +445,7 @@ jobs:
     env:
       PLUGINS: google-cloud-vertexai
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   graphql:
@@ -453,7 +453,7 @@ jobs:
     env:
       PLUGINS: graphql
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test-and-upstream
 
   grpc:
@@ -461,7 +461,7 @@ jobs:
     env:
       PLUGINS: grpc
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   hapi:
@@ -469,7 +469,7 @@ jobs:
     env:
       PLUGINS: hapi
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   http:
@@ -480,7 +480,7 @@ jobs:
     env:
       PLUGINS: http
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -498,7 +498,7 @@ jobs:
     env:
       PLUGINS: http2
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -521,7 +521,7 @@ jobs:
     env:
       PLUGINS: jest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
@@ -556,7 +556,7 @@ jobs:
       PLUGINS: kafkajs
       SERVICES: kafka
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   knex:
@@ -564,7 +564,7 @@ jobs:
     env:
       PLUGINS: knex
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   koa:
@@ -572,7 +572,7 @@ jobs:
     env:
       PLUGINS: koa
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test-and-upstream
 
   langchain:
@@ -580,7 +580,7 @@ jobs:
     env:
       PLUGINS: langchain
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -610,7 +610,7 @@ jobs:
       PLUGINS: limitd-client
       SERVICES: limitd
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   mariadb:
@@ -627,7 +627,7 @@ jobs:
       PLUGINS: mariadb
       SERVICES: mariadb
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   memcached:
@@ -641,7 +641,7 @@ jobs:
       PLUGINS: memcached
       SERVICES: memcached
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   microgateway-core:
@@ -649,7 +649,7 @@ jobs:
     env:
       PLUGINS: microgateway-core
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   mocha:
@@ -657,7 +657,7 @@ jobs:
     env:
       PLUGINS: mocha
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   moleculer:
@@ -665,7 +665,7 @@ jobs:
     env:
       PLUGINS: moleculer
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   mongodb:
@@ -680,7 +680,7 @@ jobs:
       PACKAGE_NAMES: mongodb
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   mongodb-core:
@@ -695,7 +695,7 @@ jobs:
       PACKAGE_NAMES: mongodb-core,express-mongo-sanitize
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   mongoose:
@@ -709,7 +709,7 @@ jobs:
       PLUGINS: mongoose
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   mysql:
@@ -726,7 +726,7 @@ jobs:
       PLUGINS: mysql
       SERVICES: mysql
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   mysql2:
@@ -743,7 +743,7 @@ jobs:
       PLUGINS: mysql2
       SERVICES: mysql2
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   net:
@@ -751,7 +751,7 @@ jobs:
     env:
       PLUGINS: net
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -799,7 +799,7 @@ jobs:
       PLUGINS: next
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
@@ -815,7 +815,7 @@ jobs:
     env:
       PLUGINS: openai
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   opensearch:
@@ -832,7 +832,7 @@ jobs:
       PLUGINS: opensearch
       SERVICES: opensearch
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   # TODO: Install the Oracle client on the host and test Node >=16.
@@ -866,7 +866,7 @@ jobs:
       SERVICES: oracledb
       DD_TEST_AGENT_URL: http://testagent:9126
       DD_INJECT_FORCE: 'true'
-      # Needed to fix issue with `actions/checkout@v3: https://github.com/actions/checkout/issues/1590
+      # Needed to fix issue with `./.github/actions/checkout
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
       # https://github.com/actions/runner/issues/2906#issuecomment-2109514798
@@ -874,7 +874,7 @@ jobs:
         run: |
           curl -LO https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
           tar -xf node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/node
         with:
           version: eol
@@ -889,7 +889,7 @@ jobs:
     env:
       PLUGINS: paperplane
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -906,7 +906,7 @@ jobs:
     env:
       PLUGINS: pino
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
@@ -934,7 +934,7 @@ jobs:
       PLUGINS: pg
       SERVICES: postgres
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   promise:
@@ -942,7 +942,7 @@ jobs:
     env:
       PLUGINS: promise
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test-and-upstream
 
   promise-js:
@@ -950,7 +950,7 @@ jobs:
     env:
       PLUGINS: promise-js
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   protobufjs:
@@ -959,7 +959,7 @@ jobs:
       PLUGINS: protobufjs
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test-and-upstream
 
   q:
@@ -967,7 +967,7 @@ jobs:
     env:
       PLUGINS: q
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   redis:
@@ -981,7 +981,7 @@ jobs:
       PLUGINS: redis|ioredis # TODO: move ioredis to its own job
       SERVICES: redis
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   restify:
@@ -989,7 +989,7 @@ jobs:
     env:
       PLUGINS: restify
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   rhea:
@@ -1007,7 +1007,7 @@ jobs:
       SERVICES: qpid
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test-and-upstream
 
   router:
@@ -1015,7 +1015,7 @@ jobs:
     env:
       PLUGINS: router
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   sharedb:
@@ -1023,7 +1023,7 @@ jobs:
     env:
       PLUGINS: sharedb
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
@@ -1049,7 +1049,7 @@ jobs:
       PLUGINS: tedious
       SERVICES: mssql
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
@@ -1066,7 +1066,7 @@ jobs:
     env:
       PLUGINS: undici
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   url:
@@ -1074,7 +1074,7 @@ jobs:
     env:
       PLUGINS: url
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   when:
@@ -1082,7 +1082,7 @@ jobs:
     env:
       PLUGINS: when
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
 
   winston:
@@ -1090,5 +1090,5 @@ jobs:
     env:
       PLUGINS: winston
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/plugins/test
