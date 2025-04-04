@@ -357,15 +357,15 @@ class TextMapPropagator {
 
     if (this._config.tracePropagationBehaviorExtract !== 'continue') {
       context._links = []
-      if (this._config.tracePropagationBehaviorExtract === 'restart') {
-        context._links.push({
-          context,
-          attributes:
-          {
-            reason: 'propagation_behavior_extract', context_headers: style
-          }
-        })
-      }
+    } else if (this._config.tracePropagationBehaviorExtract === 'restart') {
+      context._links = []
+      context._links.push({
+        context,
+        attributes:
+        {
+          reason: 'propagation_behavior_extract', context_headers: style
+        }
+      })
     }
 
     return context || this._extractSqsdContext(carrier)
