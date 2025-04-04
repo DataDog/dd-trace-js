@@ -13,7 +13,7 @@ const defaultLogger = {
 let enabled = false
 let logger = defaultLogger
 let logChannel = new LogChannel()
-let stackTraceLimitFunction
+let stackTraceLimitFunction = onError
 
 function withNoop (fn) {
   const store = storage('legacy').getStore()
