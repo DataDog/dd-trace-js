@@ -172,6 +172,7 @@ interface Plugins {
   "http": tracer.plugins.http;
   "http2": tracer.plugins.http2;
   "ioredis": tracer.plugins.ioredis;
+  "iovalkey": tracer.plugins.iovalkey;
   "jest": tracer.plugins.jest;
   "kafkajs": tracer.plugins.kafkajs
   "knex": tracer.plugins.knex;
@@ -1551,6 +1552,53 @@ declare namespace tracer {
      * [ioredis](https://github.com/luin/ioredis) module.
      */
     interface ioredis extends Instrumentation {
+      /**
+       * List of commands that should be instrumented. Commands must be in
+       * lowercase for example 'xread'.
+       *
+       * @default /^.*$/
+       */
+      allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+      /**
+       * Deprecated in favor of `allowlist`.
+       *
+       * @deprecated
+       * @hidden
+       */
+      whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+      /**
+       * List of commands that should not be instrumented. Takes precedence over
+       * allowlist if a command matches an entry in both. Commands must be in
+       * lowercase for example 'xread'.
+       *
+       * @default []
+       */
+      blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+      /**
+       * Deprecated in favor of `blocklist`.
+       *
+       * @deprecated
+       * @hidden
+       */
+      blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+      /**
+       * Whether to use a different service name for each Redis instance based
+       * on the configured connection name of the client.
+       *
+       * @default false
+       */
+      splitByInstance?: boolean;
+    }
+
+    /**
+     * This plugin automatically instruments the
+     * [iovalkey](https://github.com/valkey-io/iovalkey) module.
+     */
+    interface iovalkey extends Instrumentation {
       /**
        * List of commands that should be instrumented. Commands must be in
        * lowercase for example 'xread'.
