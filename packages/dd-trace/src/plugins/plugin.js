@@ -11,7 +11,8 @@ class Subscription {
     this._channel = dc.channel(event)
     this._handler = (message, name) => {
       const store = storage('legacy').getStore()
-      if (!store || !store.noop) {
+      const noop = storage('noop').getStore()
+      if (!store || !noop) {
         handler(message, name)
       }
     }
@@ -33,8 +34,9 @@ class StoreBinding {
     this._channel = dc.channel(event)
     this._transform = data => {
       const store = storage('legacy').getStore()
+      const noop = storage('noop').getStore()
 
-      return !store || !store.noop
+      return !store || !noop
         ? transform(data)
         : store
     }
@@ -71,7 +73,7 @@ module.exports = class Plugin {
   // TODO: Implement filters on resource name for all plugins.
   /** Prevents creation of spans here and for all async descendants. */
   skip () {
-    storage('legacy').enterWith({ noop: true })
+    storage('noop').enterWith(true)
   }
 
   addSub (channelName, handler) {
