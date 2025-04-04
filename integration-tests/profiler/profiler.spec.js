@@ -355,7 +355,12 @@ describe('profiler', () => {
             case threadNameKey: threadName = label.str; break
             case threadIdKey: threadId = label.str; break
             case osThreadIdKey: osThreadId = label.str; break
-            case asyncIdKey: asyncId = label.num; break
+            case asyncIdKey:
+              asyncId = label.num
+              if (asyncId === 0) {
+                asyncId = undefined
+              }
+              break
             default: assert.fail(`Unexpected label key ${strings.dedup(label.key)} ${encoded}`)
           }
         }
