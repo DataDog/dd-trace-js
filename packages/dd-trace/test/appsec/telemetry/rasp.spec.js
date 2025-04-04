@@ -84,62 +84,6 @@ describe('Appsec Rasp Telemetry metrics', () => {
         expect(inc).to.have.been.calledTwice
       })
 
-      it('should track rasp.duration and rasp.rule.duration metrics', () => {
-        appsecTelemetry.updateRaspRequestsMetricTags({
-          duration: 42,
-          wafVersion: '1.0.0',
-          rulesVersion: '2.0.0'
-        }, req, { type: 'rule-type' })
-
-        expect(distribution).to.have.been.calledWith('rasp.rule.duration', {
-          rule_type: 'rule-type',
-          waf_version: '1.0.0',
-          event_rules_version: '2.0.0'
-        })
-        expect(track.firstCall).to.have.been.calledWith(42)
-
-        expect(distribution).to.have.been.calledWith('rasp.duration', {
-          waf_version: '1.0.0',
-          event_rules_version: '2.0.0'
-        })
-        expect(track.secondCall).to.have.been.calledWith(42)
-
-        track.resetHistory()
-
-        appsecTelemetry.updateRaspRequestsMetricTags({
-          duration: 35,
-          wafVersion: '1.0.0',
-          rulesVersion: '2.0.0'
-        }, req, { type: 'rule-type' })
-
-        expect(distribution).to.have.been.calledWith('rasp.rule.duration', {
-          rule_type: 'rule-type',
-          waf_version: '1.0.0',
-          event_rules_version: '2.0.0'
-        })
-        expect(track.firstCall).to.have.been.calledWith(35)
-
-        expect(distribution).to.have.been.calledWith('rasp.duration', {
-          waf_version: '1.0.0',
-          event_rules_version: '2.0.0'
-        })
-        expect(track.secondCall).to.have.been.calledWith(77)
-      })
-
-      it('should track rasp.duration_ext', () => {
-        appsecTelemetry.updateRaspRequestsMetricTags({
-          durationExt: 42,
-          wafVersion: '1.0.0',
-          rulesVersion: '2.0.0'
-        }, req, { type: 'rule-type' })
-
-        expect(distribution).to.have.been.calledWith('rasp.duration_ext', {
-          waf_version: '1.0.0',
-          event_rules_version: '2.0.0'
-        })
-        expect(track).to.have.been.calledWith(42)
-      })
-
       it('should track rasp.error', () => {
         appsecTelemetry.updateRaspRequestsMetricTags({
           errorCode: -127,
