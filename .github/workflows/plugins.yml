@@ -70,7 +70,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.range_clean }}
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   amqp10:
     runs-on: ubuntu-latest
@@ -172,7 +172,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   axios:
     runs-on: ubuntu-latest
@@ -243,7 +243,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   cookie-parser:
     runs-on: ubuntu-latest
@@ -282,7 +282,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn config set ignore-engines true
       - run: yarn test:plugins:ci --ignore-engines
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   connect:
     runs-on: ubuntu-latest
@@ -315,7 +315,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   dd-trace-api:
     runs-on: ubuntu-latest
@@ -345,7 +345,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   elasticsearch:
     runs-on: ubuntu-latest
@@ -369,7 +369,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   express:
     runs-on: ubuntu-latest
@@ -491,7 +491,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   http2:
     runs-on: ubuntu-latest
@@ -513,7 +513,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   # TODO: fix performance issues and test more Node versions
   jest:
@@ -530,7 +530,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   kafkajs:
     runs-on: ubuntu-latest
@@ -589,7 +589,7 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:plugins:ci
         shell: bash
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -766,7 +766,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   # TODO: fix performance issues and test more Node versions
   next:
@@ -808,7 +808,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.version }}-${{ matrix.range_clean }}
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   openai:
     runs-on: ubuntu-latest
@@ -882,7 +882,7 @@ jobs:
       - run: yarn config set ignore-engines true
       - run: yarn services --ignore-engines
       - run: yarn test:plugins --ignore-engines
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   paperplane:
     runs-on: ubuntu-latest
@@ -898,7 +898,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   # TODO: re-enable upstream tests if it ever stops being flaky
   pino:
@@ -918,7 +918,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   postgres:
     runs-on: ubuntu-latest
@@ -1032,7 +1032,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   tedious:
     runs-on: ubuntu-latest
@@ -1059,7 +1059,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   undici:
     runs-on: ubuntu-latest

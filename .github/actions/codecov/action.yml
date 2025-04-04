@@ -1,0 +1,6 @@
+name: Codecov
+description: Run Codecov
+runs:
+  using: composite
+  steps:
+    - ./.github/actions/codecov

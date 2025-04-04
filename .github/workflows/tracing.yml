@@ -21,7 +21,7 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: yarn test:trace:core:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   ubuntu:
     runs-on: ubuntu-latest
@@ -36,7 +36,7 @@ jobs:
       - run: yarn test:trace:core:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:trace:core:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
 
   windows:
     runs-on: windows-latest
@@ -47,4 +47,4 @@ jobs:
         with:
           cache: 'true'
       - run: yarn test:trace:core:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: ./.github/actions/codecov
