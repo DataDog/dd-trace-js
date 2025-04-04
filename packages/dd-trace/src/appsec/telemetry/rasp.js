@@ -55,18 +55,6 @@ function trackRaspMetrics (store, metrics, raspRule) {
 
   appsecMetrics.count('rasp.rule.eval', tags).inc(1)
 
-  if (metrics.duration) {
-    appsecMetrics.distribution('rasp.rule.duration', tags).track(metrics.duration)
-
-    const raspDuration = telemetryMetrics.raspDuration
-    appsecMetrics.distribution('rasp.duration', versionsTags).track(raspDuration)
-  }
-
-  if (metrics.durationExt) {
-    const raspDurationExt = telemetryMetrics.raspDurationExt
-    appsecMetrics.distribution('rasp.duration_ext', versionsTags).track(raspDurationExt)
-  }
-
   if (metrics.errorCode) {
     const errorTags = { ...tags, waf_error: metrics.errorCode }
 
