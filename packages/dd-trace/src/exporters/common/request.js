@@ -15,7 +15,6 @@ const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 
 const maxActiveRequests = 8
-const containerId = docker.id()
 
 let activeRequests = 0
 
@@ -63,9 +62,7 @@ function request (data, options, callback) {
     options.headers['Content-Length'] = byteLength(dataArray)
   }
 
-  if (containerId) {
-    options.headers['Datadog-Container-ID'] = containerId
-  }
+  docker.inject(options.headers)
 
   options.agent = isSecure ? httpsAgent : httpAgent
 
