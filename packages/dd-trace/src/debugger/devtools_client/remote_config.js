@@ -1,6 +1,7 @@
 'use strict'
 
 const { workerData: { rcPort } } = require('node:worker_threads')
+const lock = require('./lock')()
 const { addBreakpoint, removeBreakpoint } = require('./breakpoints')
 const { ackReceived, ackInstalled, ackError } = require('./status')
 const log = require('../../log')
@@ -97,11 +98,4 @@ async function processMsg (action, probe) {
   } finally {
     release()
   }
-}
-
-async function lock () {
-  if (lock.p) await lock.p
-  let resolve
-  lock.p = new Promise((_resolve) => { resolve = _resolve }).then(() => { lock.p = null })
-  return resolve
 }
