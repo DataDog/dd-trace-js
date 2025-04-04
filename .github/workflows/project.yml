@@ -23,7 +23,7 @@ jobs:
         version: [oldest, maintenance, active, latest]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -39,7 +39,7 @@ jobs:
         version: [14.0.0, 14, 16.0.0, eol, 18.0.0, 18.1.0, 20.0.0, 22.0.0]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -52,7 +52,7 @@ jobs:
         version: ['0.8', '0.10', '0.12', '4', '6', '8', '10', '12']
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -71,7 +71,7 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -93,7 +93,7 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -137,7 +137,7 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -157,7 +157,7 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: yarn test:integration:vitest
@@ -167,7 +167,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: yarn lint
@@ -175,7 +175,7 @@ jobs:
   typescript:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: yarn type:test
@@ -184,7 +184,7 @@ jobs:
   verify-yaml:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/checkout
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: node scripts/verify-ci-config.js
