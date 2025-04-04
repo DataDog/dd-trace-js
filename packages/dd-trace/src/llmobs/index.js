@@ -4,6 +4,7 @@ const log = require('../log')
 const { PROPAGATED_PARENT_ID_KEY } = require('./constants/tags')
 const { storage } = require('./storage')
 
+const telemetry = require('./telemetry')
 const LLMObsSpanProcessor = require('./span_processor')
 
 const telemetry = require('./telemetry')
@@ -80,11 +81,15 @@ function createSpanWriter (config) {
 }
 
 function handleFlush () {
+  let err = ''
   try {
     spanWriter.flush()
     evalWriter.flush()
   } catch (e) {
+    err = 'writer_flush_error'
     log.warn(`Failed to flush LLMObs spans and evaluation metrics: ${e.message}`)
+  } finally {
+    telemetry.recordUserFlush(err)
   }
 }
 
