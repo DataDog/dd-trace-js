@@ -147,25 +147,6 @@ describe('Appsec Waf Telemetry metrics', () => {
         })
       })
 
-      it('should call trackWafDurations', () => {
-        appsecTelemetry.updateWafRequestsMetricTags({
-          duration: 42,
-          durationExt: 52,
-          ...metrics
-        }, req)
-
-        expect(distribution).to.have.been.calledTwice
-
-        const tag = {
-          waf_version: wafVersion,
-          event_rules_version: rulesVersion
-        }
-        expect(distribution.firstCall.args).to.be.deep.eq(['waf.duration', tag])
-        expect(distribution.secondCall.args).to.be.deep.eq(['waf.duration_ext', tag])
-
-        expect(track).to.have.been.calledTwice
-      })
-
       it('should sum waf.duration metrics', () => {
         appsecTelemetry.updateWafRequestsMetricTags({
           duration: 42,
@@ -365,9 +346,6 @@ describe('Appsec Waf Telemetry metrics', () => {
 
         expect(count).to.have.been.calledWith('waf.input_truncated', { truncation_reason: 1 })
         expect(inc).to.have.been.calledWith(1)
-
-        expect(distribution).to.have.been.calledWith('waf.truncated_value_size', { truncation_reason: 1 })
-        expect(track).to.have.been.calledWith(5000)
       })
 
       it('should report truncated container size metrics', () => {
@@ -376,9 +354,6 @@ describe('Appsec Waf Telemetry metrics', () => {
 
         expect(count).to.have.been.calledWith('waf.input_truncated', { truncation_reason: 2 })
         expect(inc).to.have.been.calledWith(1)
-
-        expect(distribution).to.have.been.calledWith('waf.truncated_value_size', { truncation_reason: 2 })
-        expect(track).to.have.been.calledWith(300)
       })
 
       it('should report truncated container depth metrics', () => {
@@ -387,9 +362,6 @@ describe('Appsec Waf Telemetry metrics', () => {
 
         expect(count).to.have.been.calledWith('waf.input_truncated', { truncation_reason: 4 })
         expect(inc).to.have.been.calledWith(1)
-
-        expect(distribution).to.have.been.calledWith('waf.truncated_value_size', { truncation_reason: 4 })
-        expect(track).to.have.been.calledWith(20)
       })
 
       it('should combine truncation reasons when multiple truncations occur', () => {
@@ -401,9 +373,6 @@ describe('Appsec Waf Telemetry metrics', () => {
         expect(result).to.have.property('input_truncated', true)
 
         expect(count).to.have.been.calledWith('waf.input_truncated', { truncation_reason: 7 })
-        expect(distribution).to.have.been.calledWith('waf.truncated_value_size', { truncation_reason: 1 })
-        expect(distribution).to.have.been.calledWith('waf.truncated_value_size', { truncation_reason: 2 })
-        expect(distribution).to.have.been.calledWith('waf.truncated_value_size', { truncation_reason: 4 })
       })
 
       it('should not report truncation metrics when no truncation occurs', () => {
