@@ -50,7 +50,7 @@ function compile (node) {
   } else if (type === 'isDefined') {
     return `(() => {
       try {
-        ${value}
+        ${compile(value)}
         return true
       } catch {
         return false

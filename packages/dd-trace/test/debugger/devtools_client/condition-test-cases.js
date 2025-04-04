@@ -635,18 +635,19 @@ const typeAndDefinitionChecks = [
     execute: false
   },
 
-  [{ isDefined: 'foo' }, { bar: 42 }, false],
-  [{ isDefined: 'bar' }, { bar: 42 }, true],
-  [{ isDefined: 'bar' }, { bar: undefined }, true],
-  { ast: { isDefined: 'foo' }, suffix: 'const foo = undefined', expected: false },
-  { ast: { isDefined: 'foo' }, suffix: 'const foo = 42', expected: false },
-  { ast: { isDefined: 'foo' }, suffix: 'let foo', expected: false },
-  { ast: { isDefined: 'foo' }, suffix: 'let foo = undefined', expected: false },
-  { ast: { isDefined: 'foo' }, suffix: 'let foo = 42', expected: false },
-  { ast: { isDefined: 'foo' }, suffix: 'var foo', expected: true }, // var is hoisted
-  { ast: { isDefined: 'foo' }, suffix: 'var foo = undefined', expected: true }, // var is hoisted
-  { ast: { isDefined: 'foo' }, suffix: 'var foo = 42', expected: true }, // var is hoisted
-  { ast: { isDefined: 'foo' }, suffix: '', expected: false }
+  [{ isDefined: { ref: 'foo' } }, { bar: 42 }, false],
+  [{ isDefined: { ref: 'bar' } }, { bar: 42 }, true],
+  [{ isDefined: { ref: 'bar' } }, { bar: undefined }, true],
+  { ast: { isDefined: { ref: 'foo' } }, suffix: 'const foo = undefined', expected: false },
+  { ast: { isDefined: { ref: 'foo' } }, suffix: 'const foo = 42', expected: false },
+  { ast: { isDefined: { ref: 'foo' } }, suffix: 'let foo', expected: false },
+  { ast: { isDefined: { ref: 'foo' } }, suffix: 'let foo = undefined', expected: false },
+  { ast: { isDefined: { ref: 'foo' } }, suffix: 'let foo = 42', expected: false },
+  { ast: { isDefined: { ref: 'foo' } }, suffix: 'var foo', expected: true }, // var is hoisted
+  { ast: { isDefined: { ref: 'foo' } }, suffix: 'var foo = undefined', expected: true }, // var is hoisted
+  { ast: { isDefined: { ref: 'foo' } }, suffix: 'var foo = 42', expected: true }, // var is hoisted
+  { ast: { isDefined: { ref: 'foo' } }, suffix: 'function foo () {}', expected: true }, // function is hoisted
+  { ast: { isDefined: { ref: 'foo' } }, suffix: '', expected: false }
 ]
 
 function overloadPropertyWithGetter (obj, propName) {

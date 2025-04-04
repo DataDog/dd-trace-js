@@ -31,7 +31,9 @@ const {
   TEST_MODULE,
   TEST_SUITE,
   TEST_SUITE_ID,
-  TEST_NAME
+  TEST_NAME,
+  TEST_IS_RUM_ACTIVE,
+  TEST_BROWSER_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -147,6 +149,36 @@ class PlaywrightPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
 
+    this.addSub('ci:playwright:test:page-goto', ({
+      isRumActive,
+      page
+    }) => {
+      const store = storage('legacy').getStore()
+      const span = store && store.span
+      if (!span) return
+
+      if (isRumActive) {
+        span.setTag(TEST_IS_RUM_ACTIVE, 'true')
+
+        if (page) {
+          const browserVersion = page.context().browser().version()
+
+          if (browserVersion) {
+            span.setTag(TEST_BROWSER_VERSION, browserVersion)
+          }
+
+          const url = page.url()
+          const domain = new URL(url).hostname
+          page.context().addCookies([{
+            name: 'datadog-ci-visibility-test-execution-id',
+            value: span.context().toTraceId(),
+            domain,
+            path: '/'
+          }])
+        }
+      }
+    })
+
     this.addSub('ci:playwright:test:start', ({
       testName,
       testSuiteAbsolutePath,
@@ -240,6 +272,8 @@ class PlaywrightPlugin extends CiPlugin {
       const span = store && store.span
       if (!span) return
 
+      const isRUMActive = span.context()._tags[TEST_IS_RUM_ACTIVE]
+
       span.setTag(TEST_STATUS, testStatus)
 
       if (error) {
@@ -307,6 +341,7 @@ class PlaywrightPlugin extends CiPlugin {
         {
           hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS],
           isNew,
+          isRum: isRUMActive,
           browserDriver: 'playwright'
         }
       )
