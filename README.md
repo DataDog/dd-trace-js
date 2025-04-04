@@ -108,4 +108,4 @@ Please refer to the [SECURITY.md](https://github.com/DataDog/dd-trace-js/blob/ma
 
 Please refer to the [Node.js Custom Instrumentation using OpenTelemetry API](https://docs.datadoghq.com/tracing/trace_collection/custom_instrumentation/nodejs/otel/) document. It includes information on how to use the OpenTelemetry API with dd-trace-js.
 
-Note that our internal implementation of the OpenTelemetry API is currently set within the version range `>=1.0.0 <1.9.0`. This range will be updated at a regular cadence therefore, we recommend updating your tracer to the latest release to ensure up to date support.
+Note that our internal implementation of the OpenTelemetry API is currently set within a version range. This range will be updated at a regular cadence therefore, we recommend updating your tracer to the latest release to ensure up to date support.
