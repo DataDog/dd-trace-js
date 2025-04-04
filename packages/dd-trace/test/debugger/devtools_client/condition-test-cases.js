@@ -280,6 +280,7 @@ const equality = [
   [{ gt: [{ ref: 'str' }, 'a'] }, { str: 'a' }, false],
   [{ gt: [{ ref: 'str' }, 'b'] }, { str: 'a' }, false],
   [{ gt: [{ or: [2, 0] }, { and: [1, 1] }] }, {}, true],
+  { ast: { gt: [1, 2] }, expected: '1 > 2', execute: false },
   [
     { gt: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
@@ -328,6 +329,7 @@ const equality = [
   [{ ge: [{ ref: 'str' }, 'a'] }, { str: 'a' }, true],
   [{ ge: [{ ref: 'str' }, 'b'] }, { str: 'a' }, false],
   [{ ge: [{ or: [1, 0] }, { and: [1, 2] }] }, {}, false],
+  { ast: { ge: [1, 2] }, expected: '1 >= 2', execute: false },
   [
     { ge: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
@@ -351,6 +353,7 @@ const equality = [
   [{ lt: [{ ref: 'str' }, 'a'] }, { str: 'a' }, false],
   [{ lt: [{ ref: 'str' }, 'b'] }, { str: 'a' }, true],
   [{ lt: [{ or: [1, 0] }, { and: [1, 0] }] }, {}, false],
+  { ast: { lt: [1, 2] }, expected: '1 < 2', execute: false },
   [
     { lt: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
@@ -374,6 +377,7 @@ const equality = [
   [{ le: [{ ref: 'str' }, 'a'] }, { str: 'a' }, true],
   [{ le: [{ ref: 'str' }, 'b'] }, { str: 'a' }, true],
   [{ le: [{ or: [2, 0] }, { and: [1, 1] }] }, {}, false],
+  { ast: { le: [1, 2] }, expected: '1 <= 2', execute: false },
   [
     { le: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
