@@ -52,60 +52,57 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     const send = producer.send
     const bootstrapServers = this._brokers
 
-    const kafkaClusterIdPromise = getKafkaClusterId(this)
-
     producer.send = function () {
       const wrappedSend = (clusterId) => {
-        const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
-
-        return innerAsyncResource.runInAsyncScope(() => {
-          if (!producerStartCh.hasSubscribers) {
-            return send.apply(this, arguments)
-          }
-
-          try {
-            const { topic, messages = [] } = arguments[0]
-            for (const message of messages) {
-              if (message !== null && typeof message === 'object') {
-                message.headers = message.headers || {}
-              }
+        try {
+          const { topic, messages = [] } = arguments[0]
+          for (const message of messages) {
+            if (message !== null && typeof message === 'object') {
+              message.headers = message.headers || {}
             }
-            producerStartCh.publish({ topic, messages, bootstrapServers, clusterId })
-
-            const result = send.apply(this, arguments)
-
-            result.then(
-              innerAsyncResource.bind(res => {
-                producerFinishCh.publish(undefined)
-                producerCommitCh.publish(res)
-              }),
-              innerAsyncResource.bind(err => {
-                if (err) {
-                  producerErrorCh.publish(err)
-                }
-                producerFinishCh.publish(undefined)
-              })
-            )
-
-            return result
-          } catch (e) {
-            producerErrorCh.publish(e)
-            producerFinishCh.publish(undefined)
-            throw e
           }
-        })
+          producerStartCh.publish({ topic, messages, bootstrapServers, clusterId })
+
+          const result = send.apply(this, arguments)
+
+          result.then(
+            innerAsyncResource.bind(res => {
+              producerFinishCh.publish(undefined)
+              producerCommitCh.publish(res)
+            }),
+            innerAsyncResource.bind(err => {
+              if (err) {
+                producerErrorCh.publish(err)
+              }
+              producerFinishCh.publish(undefined)
+            })
+          )
+
+          return result
+        } catch (e) {
+          producerErrorCh.publish(e)
+          producerFinishCh.publish(undefined)
+          throw e
+        }
       }
 
-      if (!isPromise(kafkaClusterIdPromise)) {
-        // promise is already resolved
-        return wrappedSend(kafkaClusterIdPromise)
-      } else {
-        // promise is not resolved
-        return kafkaClusterIdPromise.then((clusterId) => {
+      const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
+
+      return innerAsyncResource.runInAsyncScope(() => {
+        if (!producerStartCh.hasSubscribers) {
+          return send.apply(this, arguments)
+        }
+
+        const clusterId = getKafkaClusterId(this)
+
+        if (clusterId) {
           return wrappedSend(clusterId)
-        })
-      }
+        }
+
+        return loadKafkaClusterId(this).then(clusterId => wrappedSend(clusterId))
+      })
     }
+
     return producer
   })
 
@@ -113,8 +110,6 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     if (!consumerStartCh.hasSubscribers) {
       return createConsumer.apply(this, arguments)
     }
-
-    const kafkaClusterIdPromise = getKafkaClusterId(this)
 
     const eachMessageExtractor = (args, clusterId) => {
       const { topic, partition, message } = args[0]
@@ -157,15 +152,13 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
         })
       }
 
-      if (!isPromise(kafkaClusterIdPromise)) {
-        // promise is already resolved
-        return wrapConsume(kafkaClusterIdPromise)
-      } else {
-        // promise is not resolved
-        return kafkaClusterIdPromise.then((clusterId) => {
-          return wrapConsume(clusterId)
-        })
+      const clusterId = getKafkaClusterId(this)
+
+      if (clusterId) {
+        return wrapConsume(clusterId)
       }
+
+      return loadKafkaClusterId(this).then(clusterId => wrapConsume(clusterId))
     }
     return consumer
   })
@@ -207,18 +200,18 @@ const wrappedCallback = (fn, startCh, finishCh, errorCh, extractArgs, clusterId)
 }
 
 const getKafkaClusterId = (kafka) => {
-  if (kafka._ddKafkaClusterId) {
-    return kafka._ddKafkaClusterId
-  }
+  return kafka._ddKafkaClusterId || null
+}
 
+const loadKafkaClusterId = (kafka) => {
   if (!kafka.admin) {
-    return null
+    return Promise.resolve(null)
   }
 
   const admin = kafka.admin()
 
   if (!admin.describeCluster) {
-    return null
+    return Promise.resolve(null)
   }
 
   return admin.connect()
@@ -231,11 +224,4 @@ const getKafkaClusterId = (kafka) => {
       admin.disconnect()
       return clusterId
     })
-    .catch((error) => {
-      throw error
-    })
-}
-
-function isPromise (obj) {
-  return !!obj && (typeof obj === 'object' || typeof obj === 'function') && typeof obj.then === 'function'
 }
