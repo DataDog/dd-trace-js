@@ -629,6 +629,11 @@ const typeAndDefinitionChecks = [
     { bar: new HasInstanceSideEffect(), HasInstanceSideEffect },
     true
   ],
+  {
+    ast: { instanceof: [{ ref: 'foo' }, 'foo.bar'] },
+    expected: new SyntaxError('Illegal identifier: foo.bar'),
+    execute: false
+  },
 
   [{ isDefined: { ref: 'foo' } }, { bar: 42 }, false],
   [{ isDefined: { ref: 'bar' } }, { bar: 42 }, true],
